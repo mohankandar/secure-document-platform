@@ -14,13 +14,13 @@
 
     <modules>
         <module>securedoc-domain</module>
-        <module>securedoc-application</module>
-        <module>securedoc-api</module>
-        <module>securedoc-infrastructure</module>
-        <module>securedoc-worker</module>
         <module>securedoc-ai</module>
         <module>securedoc-agent</module>
         <module>securedoc-redaction</module>
+        <module>securedoc-application</module>
+        <module>securedoc-infrastructure</module>
+        <module>securedoc-worker</module>
+        <module>securedoc-api</module>
         <module>securedoc-test-support</module>
     </modules>
 
@@ -42,6 +42,7 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                     <release>${java.version}</release>
+                    <parameters>true</parameters>
                 </configuration>
             </plugin>
         </plugins>

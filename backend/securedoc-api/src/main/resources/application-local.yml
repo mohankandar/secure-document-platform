@@ -1,0 +1,31 @@
+# Local/Demo configuration — do not use in production
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/securedoc
+    username: securedoc
+    password: securedoc_dev_password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+
+securedoc:
+  storage:
+    local:
+      root-path: ./securedoc-storage
+  demo:
+    tenant-id: "00000000-0000-0000-0000-000000000001"
+    tenant-name: "Local Demo Tenant"
+    tenant-slug: "local-demo"
+    actor-id: "00000000-0000-0000-0000-000000000099"
+
+logging:
+  level:
+    com.securedoc.platform: DEBUG

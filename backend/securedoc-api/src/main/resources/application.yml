@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: securedoc-platform
+  jpa:
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+  profiles:
+    active: local
+
+securedoc:
+  processing:
+    enabled: false
+  worker:
+    enabled: false
+    poll-interval-seconds: 30
+    batch-size: 5
+
+logging:
+  level:
+    com.securedoc.platform: INFO
+    org.springframework: WARN

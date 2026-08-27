@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- ==================== VAULT ENTRIES ==================== -->
+    <changeSet id="006-01-create-vault-entries" author="securedoc">
+        <createTable tableName="vault_entries">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="package_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="document_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="artifact_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="artifact_type" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="checksum_algorithm" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="checksum_value" type="VARCHAR(256)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="retention_min_days" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="retention_max_days" type="BIGINT"/>
+            <column name="legal_hold" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sealed" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sealed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="registered_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="vault_entries" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_vault_entries_tenant"/>
+        <addForeignKeyConstraint baseTableName="vault_entries" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_vault_entries_package"/>
+        <addForeignKeyConstraint baseTableName="vault_entries" baseColumnNames="document_id"
+                                 referencedTableName="documents" referencedColumnNames="id"
+                                 constraintName="fk_vault_entries_document"/>
+        <addForeignKeyConstraint baseTableName="vault_entries" baseColumnNames="artifact_id"
+                                 referencedTableName="artifacts" referencedColumnNames="id"
+                                 constraintName="fk_vault_entries_artifact"/>
+        <createIndex tableName="vault_entries" indexName="idx_vault_entries_tenant_id">
+            <column name="tenant_id"/>
+        </createIndex>
+        <createIndex tableName="vault_entries" indexName="idx_vault_entries_package_tenant">
+            <column name="package_id"/>
+            <column name="tenant_id"/>
+        </createIndex>
+        <createIndex tableName="vault_entries" indexName="idx_vault_entries_document_tenant">
+            <column name="document_id"/>
+            <column name="tenant_id"/>
+        </createIndex>
+        <createIndex tableName="vault_entries" indexName="idx_vault_entries_artifact_tenant">
+            <column name="artifact_id"/>
+            <column name="tenant_id"/>
+        </createIndex>
+        <addUniqueConstraint tableName="vault_entries"
+                             columnNames="document_id,artifact_type,tenant_id"
+                             constraintName="uq_vault_entries_doc_type_tenant"/>
+    </changeSet>
+
+    <!-- ==================== ACCESS REQUESTS ==================== -->
+    <changeSet id="006-02-create-access-requests" author="securedoc">
+        <createTable tableName="access_requests">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="vault_entry_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="artifact_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="requested_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="justification" type="VARCHAR(500)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="decided_by" type="UUID"/>
+            <column name="decision_reason" type="VARCHAR(500)"/>
+            <column name="requested_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="decided_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="access_requests" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_access_requests_tenant"/>
+        <addForeignKeyConstraint baseTableName="access_requests" baseColumnNames="vault_entry_id"
+                                 referencedTableName="vault_entries" referencedColumnNames="id"
+                                 constraintName="fk_access_requests_vault_entry"/>
+        <addForeignKeyConstraint baseTableName="access_requests" baseColumnNames="artifact_id"
+                                 referencedTableName="artifacts" referencedColumnNames="id"
+                                 constraintName="fk_access_requests_artifact"/>
+        <createIndex tableName="access_requests" indexName="idx_access_requests_tenant_id">
+            <column name="tenant_id"/>
+        </createIndex>
+        <createIndex tableName="access_requests" indexName="idx_access_requests_vault_entry_tenant">
+            <column name="vault_entry_id"/>
+            <column name="tenant_id"/>
+        </createIndex>
+        <createIndex tableName="access_requests" indexName="idx_access_requests_artifact_requester">
+            <column name="artifact_id"/>
+            <column name="requested_by"/>
+            <column name="status"/>
+            <column name="tenant_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

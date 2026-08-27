@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- ==================== REVIEW TASKS ==================== -->
+    <changeSet id="005-01-create-review-tasks" author="securedoc">
+        <createTable tableName="review_tasks">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="package_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="assigned_to" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="review_tasks" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_review_tasks_tenant"/>
+        <addForeignKeyConstraint baseTableName="review_tasks" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_review_tasks_package"/>
+        <createIndex tableName="review_tasks" indexName="idx_review_tasks_tenant_id">
+            <column name="tenant_id"/>
+        </createIndex>
+        <createIndex tableName="review_tasks" indexName="idx_review_tasks_package_id">
+            <column name="package_id"/>
+        </createIndex>
+        <createIndex tableName="review_tasks" indexName="idx_review_tasks_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

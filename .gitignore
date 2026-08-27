@@ -1,9 +1,11 @@
 # Build output
 target/
 build/
+aidlc-docs/
 
 # IDE
 .idea/
+.kiro/
 *.iml
 .vscode/
 *.swp
@@ -30,3 +32,12 @@ dist/
 
 # Docker volumes
 docker/data/
+# Local runtime artifacts
+securedoc-storage/
+**/securedoc-storage/
+# Handoff/release zip exclusions
+.git/
+.idea/
+.vscode/
+**/target/
+

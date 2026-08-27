@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Add nullable bounding box columns to findings for spatial redaction targets -->
+    <changeSet id="004-01-add-bbox-to-findings" author="securedoc">
+        <addColumn tableName="findings">
+            <column name="bbox_left" type="DOUBLE"/>
+            <column name="bbox_top" type="DOUBLE"/>
+            <column name="bbox_width" type="DOUBLE"/>
+            <column name="bbox_height" type="DOUBLE"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Add tenant_id column to findings (nullable initially for backfill) -->
+    <changeSet id="003-01-add-tenant-id-to-findings" author="securedoc">
+        <addColumn tableName="findings">
+            <column name="tenant_id" type="UUID"/>
+        </addColumn>
+    </changeSet>
+
+    <!-- Backfill tenant_id from the parent document's tenant_id -->
+    <changeSet id="003-02-backfill-findings-tenant-id" author="securedoc">
+        <sql>
+            UPDATE findings
+            SET tenant_id = d.tenant_id
+            FROM documents d
+            WHERE findings.document_id = d.id
+              AND findings.tenant_id IS NULL;
+        </sql>
+    </changeSet>
+
+    <!-- Make tenant_id NOT NULL -->
+    <changeSet id="003-03-findings-tenant-id-not-null" author="securedoc">
+        <addNotNullConstraint tableName="findings" columnName="tenant_id" columnDataType="UUID"/>
+    </changeSet>
+
+    <!-- Add FK to tenants -->
+    <changeSet id="003-04-findings-tenant-fk" author="securedoc">
+        <addForeignKeyConstraint baseTableName="findings" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_findings_tenant"/>
+    </changeSet>
+
+    <!-- Add composite index on (tenant_id, document_id) -->
+    <changeSet id="003-05-findings-tenant-document-index" author="securedoc">
+        <createIndex tableName="findings" indexName="idx_findings_tenant_document">
+            <column name="tenant_id"/>
+            <column name="document_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Add index on (tenant_id, entity_type) -->
+    <changeSet id="003-06-findings-tenant-entity-type-index" author="securedoc">
+        <createIndex tableName="findings" indexName="idx_findings_tenant_entity_type">
+            <column name="tenant_id"/>
+            <column name="entity_type"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
