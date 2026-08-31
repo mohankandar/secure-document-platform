@@ -15,17 +15,18 @@ public interface PackageRepository {
 
     void save(DocumentPackage documentPackage);
 
-    Optional<DocumentPackage> findById(PackageId id);
-
     Optional<DocumentPackage> findByIdAndTenantId(PackageId id, TenantId tenantId);
 
     List<DocumentPackage> findByTenantId(TenantId tenantId, int offset, int limit);
 
     long countByTenantId(TenantId tenantId);
 
+    Optional<DocumentPackage> findByTenantIdAndIntakeFingerprint(TenantId tenantId, String fingerprint);
+
     /**
-     * Finds packages with the given status, up to the specified limit.
-     * Used by the processing worker to discover submitted packages.
+     * Internal/system work-discovery operation used by ProcessingWorker.
+     * Returns packages with the given status for background processing.
+     * After discovery, processing must continue using each package's own tenantId.
      */
     List<DocumentPackage> findByStatus(PackageStatus status, int limit);
 }

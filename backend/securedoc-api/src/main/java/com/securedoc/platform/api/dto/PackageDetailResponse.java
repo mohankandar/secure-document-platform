@@ -8,9 +8,9 @@ public record PackageDetailResponse(
         String packageId,
         String packageType,
         String status,
-        Map<String, String> metadata,
+        List<BusinessIdentifierResponse> businessIdentifiers,
+        Map<String,String> metadata,
         List<DocumentSummaryResponse> documents,
         Instant createdAt,
         Instant updatedAt
-) {
-}
+) {}

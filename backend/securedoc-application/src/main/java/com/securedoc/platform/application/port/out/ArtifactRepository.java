@@ -15,11 +15,7 @@ public interface ArtifactRepository {
 
     void save(Artifact artifact);
 
-    Optional<Artifact> findById(ArtifactId id);
-
     Optional<Artifact> findByIdAndTenantId(ArtifactId id, TenantId tenantId);
-
-    List<Artifact> findByDocumentId(DocumentId documentId);
 
     List<Artifact> findByDocumentIdAndTenantId(DocumentId documentId, TenantId tenantId);
 }

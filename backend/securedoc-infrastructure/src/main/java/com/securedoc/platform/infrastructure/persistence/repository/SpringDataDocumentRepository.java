@@ -11,7 +11,5 @@ public interface SpringDataDocumentRepository extends JpaRepository<DocumentEnti
 
     Optional<DocumentEntity> findByIdAndTenantId(UUID id, UUID tenantId);
 
-    List<DocumentEntity> findByPackageId(UUID packageId);
-
     List<DocumentEntity> findByPackageIdAndTenantId(UUID packageId, UUID tenantId);
 }

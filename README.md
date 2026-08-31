@@ -1,62 +1,35 @@
-# SecureDoc Platform
+# Secure Document Platform
 
-**Codename**: LexaVault  
-**Market Name**: TBD  
-**First Version Target**: Local/Demo
+Generic codebase for the LexaVault project codename. Market-facing naming is intentionally not hardcoded into reusable code.
 
-## Overview
+## Current V1 Direction
 
-SecureDoc Platform is a secure document intelligence, redaction, human review, vault, and audit platform.
+An AI-first automatic secure document-redaction platform:
 
-### Planned Capabilities
-
-- Manual document/package upload
-- Shared-folder and API-based intake (future)
-- Document processing (OCR, text extraction)
-- Sensitive-data detection
-- Policy-driven redaction
-- Human review workflows
-- Secure vault registration
-- Controlled access and download
-- Audit timeline
-- Tenant-aware configuration
-
-## Project Structure
-
-```
-secure-document-platform/
-  backend/           — Java 21, Maven multi-module, modular monolith
-  frontend/          — React + TypeScript (placeholder, not scaffolded yet)
-  docker/            — Local infrastructure (PostgreSQL, etc.)
-  docs/              — Requirements, architecture, ADRs, timeline
-  scripts/           — Build and utility scripts
-  .kiro/             — Kiro steering and specs
+```text
+PDF -> native extraction/OCR -> AI semantic discovery + deterministic evidence
+    -> policy/confidence -> permanent redaction -> verification -> delivery
 ```
 
-## Architecture
+AI independently analyzes every normalized document. Deterministic recognizers/validators strengthen structured findings but do not gate AI discovery. High-confidence straight-through processing requires no human approval by default; only specific uncertain findings are routed to focused review.
 
-Modular monolith with clean/hexagonal boundaries. See `docs/architecture/` for details.
+## Repository Guidance
 
-## Naming Strategy
+Before development, read:
 
-- `LexaVault` is the internal project codename only
-- Code uses generic namespace: `com.securedoc.platform.*`
-- Market/product name will be decided separately
-- No codename references in code packages or class names
+- `.kiro/steering/requirements-index.md`
+- `.kiro/specs/secure-document-platform-v1/unit-of-work.md`
+- `docs/architecture/06-core-automatic-redaction-pipeline.md`
 
-## Building
+Current construction status: **Units 16–25 are approved. There is no Unit 26 in the frozen V1 plan.** The project is in **Final V1 Security / Integration + Acceptance** with focused pre-acceptance runtime corrections only when real customer-package testing exposes a concrete defect. The current baseline includes the Ollama page-level retry correction, the 2026-08-31 DOB/SSN precision and Manual Review preview-diagnostic correction, and the focused credit-card precision correction documented under `docs/continuity/`. Provider-neutral/tenant-prompt refactoring remains intentionally deferred until the current credit-card precision rerun passes.
 
-```bash
-cd backend
-mvn clean compile
-```
+## Current Continuity / Final Acceptance
 
-## Local Infrastructure
+Before coding or verification, read `docs/continuity/README.md` and `docs/continuity/00_LexaVault_V1_Master_Current.md`.
 
-```bash
-docker compose -f docker/compose/postgres.yml up -d
-```
+LOCAL convenience scripts are available at the repository root:
 
-## IDP Framework
+- `Start-LexaVault-Local.ps1` / `start-local.cmd`
+- `Stop-LexaVault-Local.ps1` / `stop-local.cmd`
 
-The existing IDP (Internal Developer Platform) framework provides reusable enterprise plumbing. It is used only at edge modules (api, infrastructure, worker) — never in domain or application layers. Product-specific logic stays in SecureDoc modules.
+The current customer masking policy is tenant-configured for SSN, DOB, Credit Score and Credit Card Number, with a separate `maskSsnLastFour` option for contextual SSN-last-four exposure.

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="010-01-tenant-lifecycle-policy" author="securedoc">
+        <createTable tableName="tenant_lifecycle_policies">
+            <column name="tenant_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="original_retention_hours" type="INT" defaultValueNumeric="24"><constraints nullable="false"/></column>
+            <column name="redacted_cache_hours" type="INT" defaultValueNumeric="24"><constraints nullable="false"/></column>
+            <column name="never_exported_hold_hours" type="INT" defaultValueNumeric="72"><constraints nullable="false"/></column>
+            <column name="final_approval_required" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="tenant_lifecycle_policies" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_lifecycle_policy_tenant"/>
+    </changeSet>
+
+    <changeSet id="010-02-package-lifecycle" author="securedoc">
+        <createTable tableName="package_lifecycles">
+            <column name="package_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="successful_export_cycles" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="last_exported_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="original_delete_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="redacted_delete_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="technical_hold_until" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="redacted_purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="original_purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="final_approval_granted" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="package_lifecycles" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_package_lifecycle_package"/>
+        <addForeignKeyConstraint baseTableName="package_lifecycles" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_package_lifecycle_tenant"/>
+        <createIndex tableName="package_lifecycles" indexName="idx_package_lifecycle_redacted_delete">
+            <column name="redacted_delete_at"/><column name="redacted_purged_at"/>
+        </createIndex>
+        <createIndex tableName="package_lifecycles" indexName="idx_package_lifecycle_original_delete">
+            <column name="original_delete_at"/><column name="original_purged_at"/>
+        </createIndex>
+        <createIndex tableName="package_lifecycles" indexName="idx_package_lifecycle_technical_hold">
+            <column name="technical_hold_until"/><column name="purged_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="010-03-package-export-records" author="securedoc">
+        <createTable tableName="package_export_records">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="cycle_number" type="INT"><constraints nullable="false"/></column>
+            <column name="destination_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="exported_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="correlation_id" type="UUID"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="package_export_records" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_package_export_record_package"/>
+        <addForeignKeyConstraint baseTableName="package_export_records" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_package_export_record_tenant"/>
+        <addUniqueConstraint tableName="package_export_records" columnNames="tenant_id, package_id, cycle_number"
+                             constraintName="uq_package_export_cycle"/>
+        <createIndex tableName="package_export_records" indexName="idx_package_export_records_tenant_time">
+            <column name="tenant_id"/><column name="exported_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="010-04-document-export-records" author="securedoc">
+        <createTable tableName="document_export_records">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="export_record_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="document_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="file_name" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="size_bytes" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="checksum_algorithm" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="checksum_value" type="VARCHAR(256)"><constraints nullable="false"/></column>
+            <column name="destination_location" type="VARCHAR(2048)"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="document_export_records" baseColumnNames="export_record_id"
+                                 referencedTableName="package_export_records" referencedColumnNames="id"
+                                 constraintName="fk_document_export_record_export"/>
+        <addForeignKeyConstraint baseTableName="document_export_records" baseColumnNames="document_id"
+                                 referencedTableName="documents" referencedColumnNames="id"
+                                 constraintName="fk_document_export_record_document"/>
+        <addUniqueConstraint tableName="document_export_records" columnNames="export_record_id, document_id"
+                             constraintName="uq_document_export_record_document"/>
+        <createIndex tableName="document_export_records" indexName="idx_document_export_records_package">
+            <column name="tenant_id"/><column name="package_id"/><column name="document_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

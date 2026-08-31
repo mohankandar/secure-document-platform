@@ -6,9 +6,23 @@ import type {
   PackageStatusResult,
   DocumentUploadResult,
   ReviewTaskResult,
-  AccessRequestResult,
-  VaultEntryResult,
+  AuditRecordResult,
   ApiError,
+  FocusedReviewItem,
+  ReviewBoundingBox,
+  ReviewResolutionResult,
+  IdentifierDefinition,
+  BusinessAdminConfiguration,
+  BusinessAdminIdentifierDraft,
+  DashboardAdminColumnConfiguration,
+  SensitiveDataPolicyConfiguration,
+  LifecyclePolicyConfiguration,
+  PackageLifecycleSummary,
+  OperationsDashboard,
+  OperationalReports,
+  DashboardStage,
+  PlatformAdminOverview,
+  CurrentUser,
 } from '../types';
 
 class ApiClient {
@@ -37,7 +51,91 @@ class ApiClient {
     return response as unknown as T;
   }
 
+  async getCurrentUser(): Promise<CurrentUser> {
+    return this.request('/me');
+  }
+
   // --- Package intake ---
+
+  async listIdentifierDefinitions(): Promise<IdentifierDefinition[]> {
+    return this.request('/intake/identifier-definitions');
+  }
+
+
+  // --- Business Admin ---
+
+  async getBusinessAdminConfiguration(): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/configuration');
+  }
+
+  async updateBusinessIdentifiers(identifiers: BusinessAdminIdentifierDraft[]): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/identifiers', {
+      method: 'PUT',
+      body: JSON.stringify({ identifiers }),
+    });
+  }
+
+  async updateDashboardColumns(columns: DashboardAdminColumnConfiguration[]): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/dashboard-columns', {
+      method: 'PUT',
+      body: JSON.stringify({
+        columns: columns.map(({ key, allowed, defaultVisible }) => ({ key, allowed, defaultVisible })),
+      }),
+    });
+  }
+
+  async updateSensitiveDataPolicy(policy: SensitiveDataPolicyConfiguration): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/sensitive-data-policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    });
+  }
+
+  async updateLifecyclePolicy(policy: Pick<LifecyclePolicyConfiguration, 'originalRetentionHours' | 'redactedCacheHours' | 'neverExportedHoldHours' | 'finalApprovalRequired'>): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/lifecycle-policy', {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    });
+  }
+
+
+  // --- Shared operational dashboard + reports ---
+
+  async getOperationsDashboard(params: {
+    stage?: DashboardStage;
+    search?: string;
+    offset?: number;
+    limit?: number;
+    sort?: 'receivedAt' | 'updatedAt' | 'stage';
+    direction?: 'asc' | 'desc';
+  } = {}): Promise<OperationsDashboard> {
+    const query = new URLSearchParams();
+    if (params.stage) query.set('stage', params.stage);
+    if (params.search) query.set('search', params.search);
+    query.set('offset', String(params.offset ?? 0));
+    query.set('limit', String(params.limit ?? 25));
+    query.set('sort', params.sort ?? 'receivedAt');
+    query.set('direction', params.direction ?? 'desc');
+    return this.request(`/operations/dashboard?${query.toString()}`);
+  }
+
+  async getOperationalReports(): Promise<OperationalReports> {
+    return this.request('/operations/reports');
+  }
+
+  // --- IT / Platform Admin (Unit 24) ---
+
+  async getPlatformAdminOverview(): Promise<PlatformAdminOverview> {
+    return this.request('/platform-admin/overview');
+  }
+
+  async runPlatformHealthCheck(): Promise<PlatformAdminOverview> {
+    return this.request('/platform-admin/health-check', { method: 'POST' });
+  }
+
+  async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number }> {
+    return this.request('/platform-admin/watched-folder/scan', { method: 'POST' });
+  }
 
   async listPackages(): Promise<PackageSummary[]> {
     return this.request('/packages');
@@ -45,6 +143,25 @@ class ApiClient {
 
   async getPackage(packageId: string): Promise<PackageDetail> {
     return this.request(`/packages/${packageId}`);
+  }
+
+  async getPackageLifecycle(packageId: string): Promise<PackageLifecycleSummary> {
+    return this.request(`/packages/${packageId}/lifecycle`);
+  }
+
+  async reprocessPackage(packageId: string): Promise<{ packageId: string; status: string; nextExportCycle: number }> {
+    return this.request(`/packages/${packageId}/reprocess`, { method: 'POST' });
+  }
+
+  async approvePackageDelivery(packageId: string): Promise<{ packageId: string; status: string }> {
+    return this.request(`/packages/${packageId}/approve-delivery`, { method: 'POST' });
+  }
+
+  async extendTechnicalHold(packageId: string, holdHoursFromNow: number): Promise<PackageLifecycleSummary> {
+    return this.request(`/packages/${packageId}/technical-hold`, {
+      method: 'POST',
+      body: JSON.stringify({ holdHoursFromNow }),
+    });
   }
 
   async createPackage(data: CreatePackageRequest): Promise<PackageStatusResult> {
@@ -89,7 +206,56 @@ class ApiClient {
     return this.request(`/packages/${packageId}/finalize`, { method: 'POST' });
   }
 
-  // --- Review ---
+  // --- Focused Manual Review ---
+
+  async listReviewItems(limit = 50): Promise<FocusedReviewItem[]> {
+    return this.request(`/review-items?limit=${limit}`);
+  }
+
+  async getReviewPagePreview(findingId: string): Promise<Blob> {
+    const url = `${this.baseUrl}/review-items/${findingId}/page-preview`;
+    const response = await fetch(url, {
+      headers: { ...baseHeaders(), Accept: 'image/png, application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const raw = await response.text();
+      let parsed: ApiError | null = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw) as ApiError;
+        } catch {
+          // Some container/security failures may return a non-JSON 4xx body.
+        }
+      }
+      if (parsed?.message) throw parsed;
+      throw { message: `HTTP ${response.status}: ${response.statusText}` } as ApiError;
+    }
+    return response.blob();
+  }
+
+  async confirmReviewItem(
+    findingId: string,
+    boundingBox?: ReviewBoundingBox,
+    reason = 'Reviewer confirmed sensitive content'
+  ): Promise<ReviewResolutionResult> {
+    return this.request(`/review-items/${findingId}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, boundingBox: boundingBox || null }),
+    });
+  }
+
+  async dismissReviewItem(
+    findingId: string,
+    reason = 'Reviewer marked item as not sensitive'
+  ): Promise<ReviewResolutionResult> {
+    return this.request(`/review-items/${findingId}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  // --- Legacy review endpoints (not used by the V1 workbench) ---
 
   async createReviewTask(packageId: string): Promise<ReviewTaskResult> {
     return this.request('/review-tasks', {
@@ -141,43 +307,7 @@ class ApiClient {
     });
   }
 
-  // --- Vault / Access ---
-
-  async registerVaultEntry(packageId: string, documentId: string, artifactId: string): Promise<VaultEntryResult> {
-    return this.request('/vault/entries', {
-      method: 'POST',
-      body: JSON.stringify({ packageId, documentId, artifactId }),
-    });
-  }
-
-  async requestArtifactAccess(vaultEntryId: string, artifactId: string, justification: string, durationHours?: number): Promise<AccessRequestResult> {
-    return this.request('/artifact-access-requests', {
-      method: 'POST',
-      body: JSON.stringify({ vaultEntryId, artifactId, justification, durationHours: durationHours || 24 }),
-    });
-  }
-
-  async listAccessRequests(): Promise<AccessRequestResult[]> {
-    return this.request('/artifact-access-requests');
-  }
-
-  async getAccessRequest(requestId: string): Promise<AccessRequestResult> {
-    return this.request(`/artifact-access-requests/${requestId}`);
-  }
-
-  async approveAccessRequest(requestId: string, reason?: string): Promise<AccessRequestResult> {
-    return this.request(`/artifact-access-requests/${requestId}/approve`, {
-      method: 'POST',
-      body: JSON.stringify({ reason: reason || '' }),
-    });
-  }
-
-  async denyAccessRequest(requestId: string, reason: string): Promise<AccessRequestResult> {
-    return this.request(`/artifact-access-requests/${requestId}/deny`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-  }
+  // Legacy original/vault access workflow is intentionally not part of the V1 UI.
 
   async downloadRedactedArtifact(documentId: string): Promise<Blob> {
     const url = `${this.baseUrl}/documents/${documentId}/artifacts/redacted/content`;
@@ -194,19 +324,19 @@ class ApiClient {
     return response.blob();
   }
 
-  async downloadOriginalArtifact(documentId: string): Promise<Blob> {
-    const url = `${this.baseUrl}/documents/${documentId}/artifacts/original/content`;
-    const response = await fetch(url, { headers: baseHeaders() });
-    if (!response.ok) {
-      let error: ApiError = { message: 'Download failed' };
-      try {
-        error = await response.json();
-      } catch {
-        error.message = `HTTP ${response.status}: ${response.statusText}`;
-      }
-      throw error;
+
+
+  // --- Audit ---
+
+  async listAuditRecords(filters?: Record<string, string>): Promise<AuditRecordResult[]> {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
     }
-    return response.blob();
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/audit-records${query}`);
   }
 }
 

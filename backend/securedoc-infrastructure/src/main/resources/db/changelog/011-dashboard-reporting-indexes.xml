@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="011-01-dashboard-package-indexes" author="openai">
+        <createIndex tableName="document_packages" indexName="idx_document_packages_tenant_created">
+            <column name="tenant_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <createIndex tableName="document_packages" indexName="idx_document_packages_tenant_status_created">
+            <column name="tenant_id"/>
+            <column name="status"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="011-02-dashboard-identifier-search-support" author="openai">
+        <createIndex tableName="business_record_identifiers" indexName="idx_business_record_identifiers_tenant_record">
+            <column name="tenant_id"/>
+            <column name="business_record_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="011-03-dashboard-column-settings" author="openai">
+        <createTable tableName="dashboard_column_settings">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="column_key" type="VARCHAR(180)"><constraints nullable="false"/></column>
+            <column name="allowed_flag" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="default_visible_flag" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="display_order" type="INTEGER"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="dashboard_column_settings" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_dashboard_column_settings_tenant"/>
+        <addUniqueConstraint tableName="dashboard_column_settings" columnNames="tenant_id,column_key"
+                             constraintName="uq_dashboard_column_settings_tenant_key"/>
+        <createIndex tableName="dashboard_column_settings" indexName="idx_dashboard_column_settings_tenant_order">
+            <column name="tenant_id"/>
+            <column name="display_order"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

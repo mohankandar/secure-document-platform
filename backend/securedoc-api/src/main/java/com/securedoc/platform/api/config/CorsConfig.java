@@ -12,7 +12,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * This is NOT intended for production use.
  */
 @Configuration
-@Profile({"local", "demo", "default"})
+@Profile({"local", "demo"})
 public class CorsConfig {
 
     @Bean

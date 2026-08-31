@@ -40,13 +40,6 @@ public class ArtifactDownloadController {
         return downloadArtifact(documentId, ArtifactType.REDACTED, httpRequest);
     }
 
-    @GetMapping("/{documentId}/artifacts/original/content")
-    public ResponseEntity<InputStreamResource> downloadOriginal(
-            @PathVariable String documentId,
-            HttpServletRequest httpRequest) {
-        return downloadArtifact(documentId, ArtifactType.ORIGINAL, httpRequest);
-    }
-
     private ResponseEntity<InputStreamResource> downloadArtifact(
             String documentId, ArtifactType artifactType, HttpServletRequest httpRequest) {
 

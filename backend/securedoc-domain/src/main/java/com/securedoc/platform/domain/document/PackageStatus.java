@@ -14,11 +14,17 @@ public enum PackageStatus {
     /** Processing in progress (OCR, detection, redaction). */
     PROCESSING,
 
-    /** Processing complete, awaiting human review. */
+    /** Straight-through processing and delivery completed successfully. */
+    COMPLETED,
+
+    /** Processing paused because one or more findings require human review. */
     PENDING_REVIEW,
 
     /** Human review in progress. */
     IN_REVIEW,
+
+    /** All document work is complete but policy requires final approval before delivery. */
+    PENDING_FINAL_APPROVAL,
 
     /** Review approved, ready for vault registration. */
     APPROVED,

@@ -1,6 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import com.securedoc.platform.api.security.RequireRole;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.DecideArtifactAccessRequestUseCase;
 import com.securedoc.platform.application.port.in.GetArtifactAccessRequestQuery;
@@ -29,6 +31,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
+@ConditionalOnProperty(name = "securedoc.security.mode", havingValue = "LOCAL")
 @RequestMapping("/api/v1/artifact-access-requests")
 public class ArtifactAccessRequestController {
 
@@ -92,6 +95,7 @@ public class ArtifactAccessRequestController {
 
     @PostMapping("/{requestId}/approve")
     @Transactional
+    @RequireRole({"APPROVER"})
     public ResponseEntity<Map<String, Object>> approve(
             @PathVariable String requestId,
             @RequestBody(required = false) Map<String, String> body,
@@ -111,6 +115,7 @@ public class ArtifactAccessRequestController {
 
     @PostMapping("/{requestId}/deny")
     @Transactional
+    @RequireRole({"APPROVER"})
     public ResponseEntity<Map<String, Object>> deny(
             @PathVariable String requestId,
             @RequestBody Map<String, String> body,

@@ -9,6 +9,7 @@ import com.securedoc.platform.domain.document.PackageMetadata;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.document.PackageType;
 import com.securedoc.platform.domain.identity.ActorId;
+import com.securedoc.platform.domain.identity.BusinessRecordId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.persistence.entity.DocumentPackageEntity;
@@ -30,6 +31,9 @@ public final class DocumentPackageMapper {
                 PackageId.of(entity.getId()),
                 TenantId.of(entity.getTenantId()),
                 PackageType.valueOf(entity.getPackageType()),
+                entity.getBusinessRecordId() == null ? null : BusinessRecordId.of(entity.getBusinessRecordId()),
+                entity.getIntakeFingerprint(),
+                entity.getSourceReference(),
                 ActorId.of(entity.getCreatedBy()),
                 entity.getCreatedAt(),
                 PackageStatus.valueOf(entity.getStatus()),
@@ -44,6 +48,9 @@ public final class DocumentPackageMapper {
         entity.setId(pkg.id().value());
         entity.setTenantId(pkg.tenantId().value());
         entity.setPackageType(pkg.packageType().name());
+        entity.setBusinessRecordId(pkg.businessRecordId().map(BusinessRecordId::value).orElse(null));
+        entity.setIntakeFingerprint(pkg.intakeFingerprint().orElse(null));
+        entity.setSourceReference(pkg.sourceReference().orElse(null));
         entity.setStatus(pkg.status().name());
         entity.setMetadataJson(serializeMetadata(pkg.metadata()));
         entity.setCreatedBy(pkg.submittedBy().value());
@@ -58,6 +65,9 @@ public final class DocumentPackageMapper {
      */
     public static void updateEntity(DocumentPackage pkg, DocumentPackageEntity entity) {
         entity.setStatus(pkg.status().name());
+        entity.setBusinessRecordId(pkg.businessRecordId().map(BusinessRecordId::value).orElse(null));
+        entity.setIntakeFingerprint(pkg.intakeFingerprint().orElse(null));
+        entity.setSourceReference(pkg.sourceReference().orElse(null));
         entity.setMetadataJson(serializeMetadata(pkg.metadata()));
         entity.setUpdatedAt(pkg.updatedAt());
     }

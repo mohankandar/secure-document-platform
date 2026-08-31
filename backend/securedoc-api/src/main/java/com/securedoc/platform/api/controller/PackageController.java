@@ -2,6 +2,7 @@ package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.CreatePackageRequest;
+import com.securedoc.platform.api.dto.BusinessIdentifierResponse;
 import com.securedoc.platform.api.dto.CreatePackageResponse;
 import com.securedoc.platform.api.dto.DocumentSummaryResponse;
 import com.securedoc.platform.api.dto.PackageDetailResponse;
@@ -21,7 +22,9 @@ import com.securedoc.platform.application.port.in.CreatePackageUseCase;
 import com.securedoc.platform.application.port.in.GetPackageQuery;
 import com.securedoc.platform.application.port.in.ListPackagesQuery;
 import com.securedoc.platform.application.port.in.SubmitPackageUseCase;
+import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.in.UploadDocumentUseCase;
+import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.domain.document.PackageType;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -50,6 +53,7 @@ public class PackageController {
     private final CreatePackageUseCase createPackageUseCase;
     private final UploadDocumentUseCase uploadDocumentUseCase;
     private final SubmitPackageUseCase submitPackageUseCase;
+    private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
     private final GetPackageQuery getPackageQuery;
     private final ListPackagesQuery listPackagesQuery;
     private final RequestContextResolver contextResolver;
@@ -57,12 +61,14 @@ public class PackageController {
     public PackageController(CreatePackageUseCase createPackageUseCase,
                               UploadDocumentUseCase uploadDocumentUseCase,
                               SubmitPackageUseCase submitPackageUseCase,
+                              TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
                               GetPackageQuery getPackageQuery,
                               ListPackagesQuery listPackagesQuery,
                               RequestContextResolver contextResolver) {
         this.createPackageUseCase = createPackageUseCase;
         this.uploadDocumentUseCase = uploadDocumentUseCase;
         this.submitPackageUseCase = submitPackageUseCase;
+        this.triggerPackageProcessingUseCase = triggerPackageProcessingUseCase;
         this.getPackageQuery = getPackageQuery;
         this.listPackagesQuery = listPackagesQuery;
         this.contextResolver = contextResolver;
@@ -77,8 +83,12 @@ public class PackageController {
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(httpRequest);
         CorrelationId correlationId = contextResolver.resolveCorrelationId(httpRequest);
         PackageType packageType = PackageType.valueOf(request.packageType());
+        if (packageType == PackageType.FOLDER_INTAKE) {
+            throw new com.securedoc.platform.application.exception.ValidationException(
+                    "Watched-folder batches must be created from a trigger/manifest scan");
+        }
 
-        CreatePackageCommand command = CreatePackageCommand.of(packageType, request.metadata(), correlationId);
+        CreatePackageCommand command = CreatePackageCommand.of(packageType, request.businessIdentifiers(), request.metadata(), correlationId);
         CreatePackageResult result = createPackageUseCase.execute(command, principal);
 
         CreatePackageResponse response = new CreatePackageResponse(
@@ -118,7 +128,6 @@ public class PackageController {
     }
 
     @PostMapping("/{packageId}/submit")
-    @Transactional
     public ResponseEntity<SubmitPackageResponse> submitPackage(
             @PathVariable String packageId,
             HttpServletRequest httpRequest) {
@@ -130,8 +139,15 @@ public class PackageController {
         SubmitPackageCommand command = SubmitPackageCommand.of(pkgId, correlationId);
         submitPackageUseCase.execute(command, principal);
 
+        // Straight-through processing: automatically run the pipeline on submit
+        // (extract → detect → locate → policy → redact → export). No manual trigger needed.
+        triggerPackageProcessingUseCase.execute(
+                TriggerPackageProcessingCommand.of(pkgId, principal.tenantId(),
+                        principal.actorId(), correlationId));
+
+        PackageDetail finalDetail = getPackageQuery.execute(pkgId, principal);
         SubmitPackageResponse response = new SubmitPackageResponse(
-                packageId, "SUBMITTED"
+                packageId, finalDetail.status().name()
         );
         return ResponseEntity.ok(response);
     }
@@ -162,6 +178,7 @@ public class PackageController {
                 detail.packageId().toString(),
                 detail.packageType().name(),
                 detail.status().name(),
+                detail.businessIdentifiers().stream().map(i -> new BusinessIdentifierResponse(i.key(), i.label(), i.value(), i.primary(), i.searchable(), i.displayable(), i.displayOrder())).toList(),
                 detail.metadata(),
                 docs,
                 detail.createdAt(),
@@ -186,6 +203,7 @@ public class PackageController {
                         s.packageId().toString(),
                         s.packageType().name(),
                         s.status().name(),
+                        s.businessIdentifiers().stream().map(i -> new BusinessIdentifierResponse(i.key(), i.label(), i.value(), i.primary(), i.searchable(), i.displayable(), i.displayOrder())).toList(),
                         s.documentCount(),
                         s.createdAt(),
                         s.updatedAt()

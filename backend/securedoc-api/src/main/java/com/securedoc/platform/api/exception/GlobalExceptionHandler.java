@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.exception;
 
+import com.securedoc.platform.api.context.SecurityContextException;
 import com.securedoc.platform.api.dto.ApiErrorResponse;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.application.exception.ApplicationException;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.UUID;
@@ -30,8 +32,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(ValidationException ex, HttpServletRequest request) {
+        String correlationId = correlationIdForError(request);
+        log.warn("REQUEST_VALIDATION_REJECTED path={} code={} message={} correlation={}",
+                request == null ? "unknown" : request.getRequestURI(), ex.errorCode(), ex.getMessage(), correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
+                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+    }
+
+    @ExceptionHandler(SecurityContextException.class)
+    public ResponseEntity<ApiErrorResponse> handleSecurityContext(SecurityContextException ex,
+                                                                   HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrorResponse.of("SECURITY_CONTEXT_INVALID", "Authenticated identity is not authorized for this tenant/application",
+                        correlationIdForError(request)));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -74,7 +87,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException ex,
                                                                   HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("INVALID_ARGUMENT", ex.getMessage(), correlationIdForError(request)));
+                .body(ApiErrorResponse.of("INVALID_ARGUMENT", "Invalid request parameter",
+                        correlationIdForError(request)));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                                HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiErrorResponse.of("INVALID_ARGUMENT", "Invalid request parameter",
+                        correlationIdForError(request)));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

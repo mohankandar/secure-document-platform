@@ -11,7 +11,5 @@ public interface SpringDataArtifactRepository extends JpaRepository<ArtifactEnti
 
     Optional<ArtifactEntity> findByIdAndTenantId(UUID id, UUID tenantId);
 
-    List<ArtifactEntity> findByDocumentId(UUID documentId);
-
     List<ArtifactEntity> findByDocumentIdAndTenantId(UUID documentId, UUID tenantId);
 }

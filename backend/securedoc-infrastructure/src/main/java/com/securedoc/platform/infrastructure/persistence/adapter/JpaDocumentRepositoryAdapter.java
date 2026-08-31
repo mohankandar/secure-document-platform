@@ -24,7 +24,8 @@ public class JpaDocumentRepositoryAdapter implements DocumentRepository {
 
     @Override
     public void save(Document document) {
-        Optional<DocumentEntity> existing = jpaRepo.findById(document.id().value());
+        Optional<DocumentEntity> existing = jpaRepo.findByIdAndTenantId(
+                document.id().value(), document.tenantId().value());
         if (existing.isPresent()) {
             DocumentMapper.updateEntity(document, existing.get());
             jpaRepo.save(existing.get());
@@ -34,22 +35,9 @@ public class JpaDocumentRepositoryAdapter implements DocumentRepository {
     }
 
     @Override
-    public Optional<Document> findById(DocumentId id) {
-        return jpaRepo.findById(id.value()).map(DocumentMapper::toDomain);
-    }
-
-    @Override
     public Optional<Document> findByIdAndTenantId(DocumentId id, TenantId tenantId) {
         return jpaRepo.findByIdAndTenantId(id.value(), tenantId.value())
                 .map(DocumentMapper::toDomain);
-    }
-
-    @Override
-    public List<Document> findByPackageId(PackageId packageId) {
-        return jpaRepo.findByPackageId(packageId.value())
-                .stream()
-                .map(DocumentMapper::toDomain)
-                .toList();
     }
 
     @Override

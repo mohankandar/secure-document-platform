@@ -114,6 +114,17 @@ public final class Document {
         updatedAt = Instant.now();
     }
 
+
+    /** Prepares a successfully processed document for another processing cycle using the retained original. */
+    public void prepareForReprocessing() {
+        if (status != DocumentStatus.PROCESSED) {
+            throw new IllegalStateException("Only a processed document can be reprocessed");
+        }
+        pages.clear();
+        status = DocumentStatus.UPLOADED;
+        updatedAt = Instant.now();
+    }
+
     public void fail() {
         status = DocumentStatus.FAILED;
         updatedAt = Instant.now();

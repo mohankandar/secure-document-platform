@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="008-01-business-identifier-definitions" author="securedoc">
+        <createTable tableName="business_identifier_definitions">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="identifier_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="label" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="required_flag" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="primary_flag" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="searchable_flag" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="extractable_flag" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="displayable_flag" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="display_order" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="active_flag" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="business_identifier_definitions" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_business_identifier_definition_tenant"/>
+        <addUniqueConstraint tableName="business_identifier_definitions" columnNames="tenant_id, identifier_key"
+                             constraintName="uq_business_identifier_definition_key"/>
+        <createIndex tableName="business_identifier_definitions" indexName="idx_business_identifier_definitions_tenant_order">
+            <column name="tenant_id"/><column name="display_order"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008-02-business-records" author="securedoc">
+        <createTable tableName="business_records">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="business_records" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_business_records_tenant"/>
+        <createIndex tableName="business_records" indexName="idx_business_records_tenant">
+            <column name="tenant_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008-03-business-record-identifiers" author="securedoc">
+        <createTable tableName="business_record_identifiers">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="business_record_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="definition_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="identifier_value" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="normalized_value" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="business_record_identifiers" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_business_record_identifier_tenant"/>
+        <addForeignKeyConstraint baseTableName="business_record_identifiers" baseColumnNames="business_record_id"
+                                 referencedTableName="business_records" referencedColumnNames="id"
+                                 constraintName="fk_business_record_identifier_record"/>
+        <addForeignKeyConstraint baseTableName="business_record_identifiers" baseColumnNames="definition_id"
+                                 referencedTableName="business_identifier_definitions" referencedColumnNames="id"
+                                 constraintName="fk_business_record_identifier_definition"/>
+        <addUniqueConstraint tableName="business_record_identifiers" columnNames="tenant_id, definition_id, normalized_value"
+                             constraintName="uq_business_identifier_value"/>
+        <addUniqueConstraint tableName="business_record_identifiers" columnNames="business_record_id, definition_id"
+                             constraintName="uq_business_record_definition"/>
+        <createIndex tableName="business_record_identifiers" indexName="idx_business_record_identifiers_record">
+            <column name="business_record_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008-04-link-intake-batch" author="securedoc">
+        <addColumn tableName="document_packages">
+            <column name="business_record_id" type="UUID"/>
+            <column name="intake_fingerprint" type="VARCHAR(64)"/>
+            <column name="source_reference" type="VARCHAR(1024)"/>
+        </addColumn>
+        <addForeignKeyConstraint baseTableName="document_packages" baseColumnNames="business_record_id"
+                                 referencedTableName="business_records" referencedColumnNames="id"
+                                 constraintName="fk_document_package_business_record"/>
+        <addUniqueConstraint tableName="document_packages" columnNames="tenant_id, intake_fingerprint"
+                             constraintName="uq_document_package_intake_fingerprint"/>
+        <createIndex tableName="document_packages" indexName="idx_document_packages_business_record">
+            <column name="tenant_id"/><column name="business_record_id"/><column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008-05-intake-observations" author="securedoc">
+        <createTable tableName="intake_observations">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="source_reference" type="VARCHAR(1024)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(50)"><constraints nullable="false"/></column>
+            <column name="reason_code" type="VARCHAR(100)"/>
+            <column name="fingerprint" type="VARCHAR(64)"/>
+            <column name="package_id" type="UUID"/>
+            <column name="first_seen_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="visible_after" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="intake_observations" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_intake_observation_tenant"/>
+        <createIndex tableName="intake_observations" indexName="idx_intake_observation_tenant_source">
+            <column name="tenant_id"/><column name="source_reference"/><column name="updated_at"/>
+        </createIndex>
+        <createIndex tableName="intake_observations" indexName="idx_intake_observation_tenant_status">
+            <column name="tenant_id"/><column name="status"/><column name="updated_at"/>
+        </createIndex>
+    </changeSet>
+    <changeSet id="008-06-one-active-primary-identifier" author="securedoc" dbms="postgresql">
+        <sql>
+            CREATE UNIQUE INDEX uq_business_identifier_one_active_primary
+                ON business_identifier_definitions (tenant_id)
+                WHERE primary_flag = TRUE AND active_flag = TRUE;
+        </sql>
+        <rollback>
+            <sql>DROP INDEX IF EXISTS uq_business_identifier_one_active_primary;</sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

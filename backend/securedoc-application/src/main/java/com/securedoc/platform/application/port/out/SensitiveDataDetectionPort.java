@@ -3,11 +3,11 @@ package com.securedoc.platform.application.port.out;
 import java.util.List;
 
 /**
- * Outbound port for detecting sensitive data in text content.
- * Implementation is infrastructure-specific (local regex rules, cloud AI later).
+ * Outbound port for deterministic/rule-based sensitive-data recognition and validation.
+ * This port runs in parallel with the AI-first {@link SensitiveContentAnalysisPort}; it is
+ * supporting evidence and must not gate semantic AI discovery.
  *
- * <p>The application layer depends only on this interface — never on
- * regex implementation details or external detection SDKs.
+ * <p>The application layer depends only on this interface — never on regex implementation details.
  */
 public interface SensitiveDataDetectionPort {
 
@@ -84,3 +84,4 @@ public interface SensitiveDataDetectionPort {
         }
     }
 }
+

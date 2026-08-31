@@ -16,5 +16,7 @@ public interface SpringDataDocumentPackageRepository extends JpaRepository<Docum
 
     long countByTenantId(UUID tenantId);
 
+    Optional<DocumentPackageEntity> findByTenantIdAndIntakeFingerprint(UUID tenantId, String intakeFingerprint);
+
     List<DocumentPackageEntity> findByStatus(String status, Pageable pageable);
 }

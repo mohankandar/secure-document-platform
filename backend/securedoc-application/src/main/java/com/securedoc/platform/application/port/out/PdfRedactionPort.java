@@ -24,7 +24,8 @@ public interface PdfRedactionPort {
      * </ul>
      *
      * @param originalPdf the original PDF content
-     * @param targets     the areas to redact (page number + normalized bounding box)
+     * @param targets     the areas to redact (page number + normalized bounding box); may be empty
+     *                    to produce a verified burn-flat safe output when no sensitive findings exist
      * @return the redacted PDF content as bytes
      */
     RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets);

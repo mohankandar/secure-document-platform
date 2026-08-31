@@ -24,7 +24,8 @@ public class JpaArtifactRepositoryAdapter implements ArtifactRepository {
 
     @Override
     public void save(Artifact artifact) {
-        Optional<ArtifactEntity> existing = jpaRepo.findById(artifact.id().value());
+        Optional<ArtifactEntity> existing = jpaRepo.findByIdAndTenantId(
+                artifact.id().value(), artifact.tenantId().value());
         if (existing.isPresent()) {
             ArtifactMapper.updateEntity(artifact, existing.get());
             jpaRepo.save(existing.get());
@@ -34,22 +35,9 @@ public class JpaArtifactRepositoryAdapter implements ArtifactRepository {
     }
 
     @Override
-    public Optional<Artifact> findById(ArtifactId id) {
-        return jpaRepo.findById(id.value()).map(ArtifactMapper::toDomain);
-    }
-
-    @Override
     public Optional<Artifact> findByIdAndTenantId(ArtifactId id, TenantId tenantId) {
         return jpaRepo.findByIdAndTenantId(id.value(), tenantId.value())
                 .map(ArtifactMapper::toDomain);
-    }
-
-    @Override
-    public List<Artifact> findByDocumentId(DocumentId documentId) {
-        return jpaRepo.findByDocumentId(documentId.value())
-                .stream()
-                .map(ArtifactMapper::toDomain)
-                .toList();
     }
 
     @Override

@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import type { PackageDetail, ApiError } from '../types';
+import type { PackageDetail, PackageLifecycleSummary, ApiError } from '../types';
 
 export default function PackageDetailPage() {
   const { packageId } = useParams<{ packageId: string }>();
   const [pkg, setPkg] = useState<PackageDetail | null>(null);
+  const [lifecycle, setLifecycle] = useState<PackageLifecycleSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -16,8 +17,12 @@ export default function PackageDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.getPackage(packageId);
+      const [data, lifecycleData] = await Promise.all([
+        apiClient.getPackage(packageId),
+        apiClient.getPackageLifecycle(packageId),
+      ]);
       setPkg(data);
+      setLifecycle(lifecycleData);
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Failed to load package');
@@ -34,8 +39,8 @@ export default function PackageDetailPage() {
     setSuccessMsg(null);
     setError(null);
     try {
-      const result = await apiClient.uploadDocument(packageId, file);
-      setSuccessMsg(`Document uploaded: ${result.documentId}`);
+      await apiClient.uploadDocument(packageId, file);
+      setSuccessMsg('Document uploaded successfully.');
       loadPackage();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -49,7 +54,7 @@ export default function PackageDetailPage() {
     setSuccessMsg(null);
     try {
       await apiClient.submitPackage(packageId);
-      setSuccessMsg('Package submitted for processing');
+      setSuccessMsg('Documents submitted. Automatic processing has run; the status below reflects the current outcome.');
       loadPackage();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -57,39 +62,41 @@ export default function PackageDetailPage() {
     }
   };
 
-  const handleProcess = async () => {
+  const handleApproveDelivery = async () => {
     if (!packageId) return;
     setError(null);
     setSuccessMsg(null);
     try {
-      await apiClient.triggerProcessing(packageId);
-      setSuccessMsg('Processing triggered. Refresh to see updated status.');
-      loadPackage();
+      await apiClient.approvePackageDelivery(packageId);
+      setSuccessMsg('Final delivery approved. Export resumed automatically.');
+      await loadPackage();
     } catch (err) {
       const apiErr = err as ApiError;
-      setError(apiErr.message || 'Processing trigger failed');
+      setError(apiErr.message || 'Unable to approve final delivery');
     }
   };
 
-  const handleFinalize = async () => {
+  const handleReprocess = async () => {
     if (!packageId) return;
     setError(null);
     setSuccessMsg(null);
     try {
-      const result = await apiClient.finalizePackage(packageId);
-      setSuccessMsg(`Package finalized: ${result.status}`);
-      loadPackage();
+      const result = await apiClient.reprocessPackage(packageId);
+      setSuccessMsg(`Reprocessing started for export cycle ${result.nextExportCycle}.`);
+      await loadPackage();
     } catch (err) {
       const apiErr = err as ApiError;
-      setError(apiErr.message || 'Finalize failed');
+      setError(apiErr.message || 'Unable to reprocess this intake');
     }
   };
+
+  const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : '—';
 
   if (loading && !pkg) return <p>Loading...</p>;
 
   return (
     <div>
-      <h1>Package Detail</h1>
+      <h1>Intake Details</h1>
 
       {error && <div className="error-msg">{error}</div>}
       {successMsg && <div className="success-msg">{successMsg}</div>}
@@ -99,8 +106,10 @@ export default function PackageDetailPage() {
           <div className="card">
             <table>
               <tbody>
-                <tr><td><strong>ID</strong></td><td>{pkg.packageId}</td></tr>
-                <tr><td><strong>Type</strong></td><td>{pkg.packageType}</td></tr>
+                {pkg.businessIdentifiers?.filter((i) => i.displayable).map((identifier) => (
+                  <tr key={identifier.key}><td><strong>{identifier.label}</strong></td><td>{identifier.value}</td></tr>
+                ))}
+                <tr><td><strong>Intake Source</strong></td><td>{pkg.packageType}</td></tr>
                 <tr>
                   <td><strong>Status</strong></td>
                   <td><span className={`badge badge-${pkg.status.toLowerCase()}`}>{pkg.status}</span></td>
@@ -121,35 +130,62 @@ export default function PackageDetailPage() {
               <div className="inline-actions">
                 <button className="primary" onClick={handleUpload}>Upload</button>
                 <button className="primary" onClick={handleSubmit} disabled={pkg.documentCount === 0}>
-                  Submit Package
+                  Submit Documents
                 </button>
               </div>
             </div>
           )}
 
-          {/* Process trigger — when SUBMITTED or continue redaction */}
-          {(pkg.status === 'SUBMITTED' || pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') && (
+          {(pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') && (
             <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Processing</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.5rem' }}>
-                {pkg.status === 'SUBMITTED'
-                  ? 'Trigger document processing (extract text, detect sensitive data). Documents needing redaction will wait for bounding boxes from review.'
-                  : 'Continue redaction for documents where findings have been confirmed and bounding boxes provided during review.'}
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Manual Review Required</h2>
+              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
+                One or more findings need a human decision. High-confidence findings do not need to be re-reviewed.
               </p>
-              <button className="primary" onClick={handleProcess}>
-                {pkg.status === 'SUBMITTED' ? 'Trigger Processing' : 'Continue Processing (Redact)'}
-              </button>
+              <Link className="button-link primary" to="/review">Open Manual Review</Link>
             </div>
           )}
 
-          {/* Finalize — when PENDING_REVIEW or IN_REVIEW */}
-          {(pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') && (
+          {pkg.status === 'PENDING_FINAL_APPROVAL' && (
             <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Finalize Package</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.5rem' }}>
-                Verify all documents are processed and all findings resolved, then approve for vault.
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Ready for Final Delivery Approval</h2>
+              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
+                Redaction and verification are complete. Tenant policy requires an Approver before the package is delivered.
               </p>
-              <button className="primary" onClick={handleFinalize}>Finalize &amp; Approve</button>
+              <button className="primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
+            </div>
+          )}
+
+          {pkg.status === 'COMPLETED' && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Completed</h2>
+              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: lifecycle?.canReprocess ? '0.75rem' : 0 }}>
+                Processing, verification, and delivery completed successfully.
+              </p>
+              {lifecycle?.canReprocess && (
+                <button className="secondary" onClick={() => void handleReprocess()}>Reprocess from Retained Original</button>
+              )}
+            </div>
+          )}
+
+          {lifecycle && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Delivery & Retention</h2>
+              <table>
+                <tbody>
+                  <tr><td><strong>Successful exports</strong></td><td>{lifecycle.successfulExportCycles} of {lifecycle.maximumExportCycles}</td></tr>
+                  <tr><td><strong>Last destination</strong></td><td>{lifecycle.lastDestinationType || '—'}</td></tr>
+                  <tr><td><strong>Last exported</strong></td><td>{formatTime(lifecycle.lastExportedAt)}</td></tr>
+                  <tr><td><strong>Original retained until</strong></td><td>{formatTime(lifecycle.originalDeleteAt)}</td></tr>
+                  <tr><td><strong>Internal redacted copy until</strong></td><td>{formatTime(lifecycle.redactedDeleteAt)}</td></tr>
+                  {lifecycle.technicalHoldUntil && (
+                    <tr><td><strong>Technical hold until</strong></td><td>{formatTime(lifecycle.technicalHoldUntil)}</td></tr>
+                  )}
+                  {lifecycle.purgedAt && (
+                    <tr><td><strong>Internal artifacts purged</strong></td><td>{formatTime(lifecycle.purgedAt)}</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
 
@@ -160,7 +196,7 @@ export default function PackageDetailPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Document ID</th>
+                    <th>Document</th>
                     <th>Status</th>
                     <th>Type</th>
                     <th>MIME</th>
@@ -170,7 +206,7 @@ export default function PackageDetailPage() {
                 <tbody>
                   {pkg.documents.map((doc) => (
                     <tr key={doc.documentId}>
-                      <td>{doc.documentId.substring(0, 8)}...</td>
+                      <td>{doc.fileName || 'Document'}</td>
                       <td>
                         <span className={`badge badge-${doc.status.toLowerCase()}`}>
                           {doc.status}

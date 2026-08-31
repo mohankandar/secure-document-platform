@@ -15,11 +15,7 @@ public interface DocumentRepository {
 
     void save(Document document);
 
-    Optional<Document> findById(DocumentId id);
-
     Optional<Document> findByIdAndTenantId(DocumentId id, TenantId tenantId);
-
-    List<Document> findByPackageId(PackageId packageId);
 
     List<Document> findByPackageIdAndTenantId(PackageId packageId, TenantId tenantId);
 }

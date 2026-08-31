@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.security.RequireRole;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.FinalizePackageUseCase;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
@@ -41,12 +42,14 @@ public class PackageWorkflowController {
     }
 
     /**
-     * Manually triggers processing for a package.
-     * For local/demo use when the worker is disabled.
-     * Supports: SUBMITTED (full pipeline), PENDING_REVIEW/IN_REVIEW (continue redaction).
+     * Internal/local continuation endpoint. Normal manual intake automatically starts processing
+     * on submit; this endpoint remains for explicit recovery/continuation after review while the
+     * asynchronous worker/orchestration model is still evolving. Long-running AI/redaction I/O
+     * is intentionally not wrapped in a controller-level database transaction.
+     * Supports: SUBMITTED, PROCESSING, PENDING_REVIEW, and IN_REVIEW where domain rules allow it.
      */
     @PostMapping("/{packageId}/process")
-    @Transactional
+    @RequireRole({"APPROVER"})
     public ResponseEntity<Map<String, String>> triggerProcessing(
             @PathVariable String packageId,
             HttpServletRequest httpRequest) {
@@ -70,6 +73,7 @@ public class PackageWorkflowController {
      */
     @PostMapping("/{packageId}/finalize")
     @Transactional
+    @RequireRole({"APPROVER"})
     public ResponseEntity<Map<String, String>> finalizePackage(
             @PathVariable String packageId,
             HttpServletRequest httpRequest) {

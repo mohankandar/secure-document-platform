@@ -10,6 +10,7 @@ import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.application.port.out.FindingRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.PdfRedactionPort;
+import com.securedoc.platform.application.port.out.RedactionVerificationPort;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionOutput;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 import com.securedoc.platform.application.port.out.StoragePort;
@@ -35,6 +36,9 @@ import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.vo.Checksum;
 import com.securedoc.platform.domain.vo.MimeType;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -48,12 +52,13 @@ import java.util.UUID;
  * <p>Flow:
  * <ol>
  *   <li>Validate invariants (doc REDACTING, package PROCESSING)</li>
- *   <li>Load actionable findings with bounding boxes</li>
- *   <li>Build redaction targets from finding locations</li>
- *   <li>If no actionable targets: fail closed (cannot safely redact without locations)</li>
+ *   <li>Require all DETECTED findings to be resolved by policy/review</li>
+ *   <li>Build redaction targets from CONFIRMED findings only</li>
+ *   <li>Allow zero targets to create a burn-flat safe output when no redaction is required</li>
  *   <li>Read original PDF via StoragePort</li>
  *   <li>Call PdfRedactionPort to create burn-flat redacted PDF</li>
- *   <li>Store redacted PDF as REDACTED artifact</li>
+ *   <li>Verify the burn-flat output has no extractable text layer</li>
+ *   <li>Store verified PDF as REDACTED artifact</li>
  *   <li>Complete document processing lifecycle (REDACTING→PROCESSED)</li>
  *   <li>Publish event and audit</li>
  * </ol>
@@ -62,6 +67,7 @@ import java.util.UUID;
  */
 public final class DocumentRedactionService implements RedactDocumentUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(DocumentRedactionService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
     private static final String REDACTED_MIME_TYPE = "application/pdf";
 
@@ -71,6 +77,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     private final FindingRepository findingRepository;
     private final StoragePort storagePort;
     private final PdfRedactionPort pdfRedactionPort;
+    private final RedactionVerificationPort redactionVerificationPort;
     private final ChecksumPort checksumPort;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
@@ -81,6 +88,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                                      FindingRepository findingRepository,
                                      StoragePort storagePort,
                                      PdfRedactionPort pdfRedactionPort,
+                                     RedactionVerificationPort redactionVerificationPort,
                                      ChecksumPort checksumPort,
                                      DomainEventPublisher eventPublisher,
                                      AuditService auditService) {
@@ -90,6 +98,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         this.findingRepository = Objects.requireNonNull(findingRepository);
         this.storagePort = Objects.requireNonNull(storagePort);
         this.pdfRedactionPort = Objects.requireNonNull(pdfRedactionPort);
+        this.redactionVerificationPort = Objects.requireNonNull(redactionVerificationPort);
         this.checksumPort = Objects.requireNonNull(checksumPort);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
@@ -113,6 +122,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     }
 
     private RedactDocumentResult doRedaction(RedactDocumentCommand command, CorrelationId correlationId) {
+        long startedNanos = System.nanoTime();
         // 1. Load and validate document
         Document document = documentRepository
                 .findByIdAndTenantId(command.documentId(), command.tenantId())
@@ -139,33 +149,33 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
             throw new ValidationException("Document is not in REDACTING status");
         }
 
-        // 5. Load actionable findings for this document (tenant-scoped)
+        // 5. Load findings for this document (tenant-scoped). DETECTED means human review is
+        //    still required; never sweep a low-confidence finding into automatic redaction.
         List<Finding> allFindings = findingRepository.findByDocumentIdAndTenantId(
                 command.documentId(), command.tenantId());
 
-        List<Finding> actionableFindings = allFindings.stream()
-                .filter(f -> f.status() == FindingStatus.DETECTED || f.status() == FindingStatus.CONFIRMED)
-                .toList();
-
-        // 6. If no actionable findings, fail closed — do not create fake redacted artifact
-        if (actionableFindings.isEmpty()) {
-            failDocument(command, correlationId, "No active findings available for redaction");
-            return RedactDocumentResult.of(command.documentId(), null,
-                    DocumentStatus.FAILED, 0);
+        boolean hasUnreviewedFindings = allFindings.stream()
+                .anyMatch(f -> f.status() == FindingStatus.DETECTED);
+        if (hasUnreviewedFindings) {
+            throw new ValidationException("Document has findings that still require review");
         }
 
-        // 7. Verify ALL actionable findings have valid bounding boxes — fail closed if any lack one
-        boolean allHaveBounds = actionableFindings.stream()
-                .allMatch(f -> f.location().hasBoundingBox());
+        List<Finding> confirmedFindings = allFindings.stream()
+                .filter(f -> f.status() == FindingStatus.CONFIRMED)
+                .toList();
 
+        // 6. Every confirmed finding must have a trusted location. Zero confirmed findings is
+        //    valid: the engine still burn-flattens the PDF to create the customer's safe output.
+        boolean allHaveBounds = confirmedFindings.stream()
+                .allMatch(f -> f.location().hasBoundingBox());
         if (!allHaveBounds) {
             failDocument(command, correlationId, "Redaction location could not be determined");
             return RedactDocumentResult.of(command.documentId(), null,
                     DocumentStatus.FAILED, 0);
         }
 
-        // 8. Build redaction targets (guaranteed all have bounding boxes at this point)
-        List<RedactionTarget> targets = buildRedactionTargets(actionableFindings);
+        // 7. Build targets only from policy-confirmed findings.
+        List<RedactionTarget> targets = buildRedactionTargets(confirmedFindings);
 
         // 9. Load original artifact
         Artifact originalArtifact = artifactRepository
@@ -187,8 +197,36 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
             closeQuietly(pdfContent);
         }
 
-        // 11. Compute checksum for redacted content
+        // 11. Verify the generated artifact before it can be stored/exported. The expected
+        //     page count comes from source extraction (Document.pages), not from the redaction
+        //     adapter's own result, so a page-dropping redaction defect cannot self-validate.
+        int expectedSourcePageCount = document.pageCount();
+        if (expectedSourcePageCount < 1) {
+            throw new IllegalStateException("Source page count is unavailable for redaction verification");
+        }
+        if (redactionOutput.pagesRendered() != expectedSourcePageCount) {
+            throw new IllegalStateException("Redaction output page count does not match source");
+        }
+        if (redactionOutput.redactionsApplied() != targets.size()) {
+            throw new IllegalStateException("Redaction engine did not apply every expected target");
+        }
+
         byte[] redactedBytes = redactionOutput.redactedPdfContent();
+        RedactionVerificationPort.VerificationResult verification = redactionVerificationPort.verify(
+                redactedBytes, expectedSourcePageCount, targets);
+        if (!verification.safe()) {
+            throw new IllegalStateException("Redacted output failed security verification");
+        }
+        auditService.recordSuccess(
+                command.tenantId(), SYSTEM_ACTOR,
+                AuditAction.DOCUMENT_REDACTION_VERIFIED, "Document", command.documentId().toString(),
+                correlationId,
+                "Redaction verified: pages=" + verification.pageCount()
+                        + ", expectedRedactions=" + verification.expectedRedactionCount()
+                        + ", coveredRedactions=" + verification.coveredRedactionCount()
+                        + ", extractableText=false");
+
+        // 12. Compute checksum for verified redacted content.
         Checksum redactedChecksum = checksumPort.compute(new ByteArrayInputStream(redactedBytes));
 
         // 12. Create redacted artifact entity
@@ -224,14 +262,13 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         // 15. Complete document processing (REDACTING → PROCESSED)
         document.completeProcessing();
 
-        // 16. Mark redacted findings as REDACTED
-        for (Finding finding : actionableFindings) {
-            if (finding.status() == FindingStatus.DETECTED) {
-                finding.confirm(SYSTEM_ACTOR, null);
-            }
+        // 16. Mark only policy-confirmed findings as REDACTED.
+        for (Finding finding : confirmedFindings) {
             finding.markRedacted(SYSTEM_ACTOR);
         }
-        findingRepository.saveAll(actionableFindings);
+        if (!confirmedFindings.isEmpty()) {
+            findingRepository.saveAll(confirmedFindings);
+        }
 
         // 17. Persist document and artifact
         documentRepository.save(document);
@@ -255,6 +292,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                         + ", pages=" + redactionOutput.pagesRendered()
                         + ", artifactSize=" + redactedBytes.length
         );
+
+        log.info("DOCUMENT_REDACTION_COMPLETED document={} package={} targets={} verifiedTargets={} pages={} extractableText=false status={} durationMs={}",
+                command.documentId(), command.packageId(), targets.size(), verification.coveredRedactionCount(),
+                verification.pageCount(), document.status(), elapsedMillis(startedNanos));
 
         return RedactDocumentResult.of(
                 command.documentId(), redactedArtifact.id(),
@@ -280,8 +321,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     }
 
     private void handleFailure(RedactDocumentCommand command, CorrelationId correlationId, Exception e) {
-        String sanitizedReason = FailureReasonSanitizer.sanitize(e.getMessage());
-        failDocument(command, correlationId, sanitizedReason);
+        failDocument(command, correlationId, FailureReasonSanitizer.redactionFailed());
     }
 
     /**
@@ -324,6 +364,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         } catch (Exception ignored) {
             // Best-effort
         }
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000L;
     }
 
     private String buildStoragePath(String tenantId, String packageId, String documentId,

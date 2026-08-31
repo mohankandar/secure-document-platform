@@ -31,21 +31,14 @@ public class JpaPackageRepositoryAdapter implements PackageRepository {
 
     @Override
     public void save(DocumentPackage documentPackage) {
-        Optional<DocumentPackageEntity> existing = packageRepo.findById(documentPackage.id().value());
+        Optional<DocumentPackageEntity> existing = packageRepo.findByIdAndTenantId(
+                documentPackage.id().value(), documentPackage.tenantId().value());
         if (existing.isPresent()) {
-            // Update existing row — preserves JPA version
             DocumentPackageMapper.updateEntity(documentPackage, existing.get());
             packageRepo.save(existing.get());
         } else {
-            // Insert new row
             packageRepo.save(DocumentPackageMapper.toNewEntity(documentPackage));
         }
-    }
-
-    @Override
-    public Optional<DocumentPackage> findById(PackageId id) {
-        return packageRepo.findById(id.value())
-                .map(this::toDomainWithDocuments);
     }
 
     @Override
@@ -66,6 +59,13 @@ public class JpaPackageRepositoryAdapter implements PackageRepository {
     @Override
     public long countByTenantId(TenantId tenantId) {
         return packageRepo.countByTenantId(tenantId.value());
+    }
+
+
+    @Override
+    public Optional<DocumentPackage> findByTenantIdAndIntakeFingerprint(TenantId tenantId, String fingerprint) {
+        return packageRepo.findByTenantIdAndIntakeFingerprint(tenantId.value(), fingerprint)
+                .map(this::toDomainWithDocuments);
     }
 
     @Override

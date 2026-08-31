@@ -1,20 +1,23 @@
 package com.securedoc.platform.application.processing.service;
 
+import com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand;
+import com.securedoc.platform.application.detection.result.DetectSensitiveDataResult;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.export.command.ExportPackageDocumentsCommand;
+import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
+import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
+import com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult;
+import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
+import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
+import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
 import com.securedoc.platform.application.port.in.StartDocumentProcessingUseCase;
 import com.securedoc.platform.application.port.in.StartPackageProcessingUseCase;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
-import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
-import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.FindingRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
-import com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand;
-import com.securedoc.platform.application.detection.result.DetectSensitiveDataResult;
-import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
-import com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult;
 import com.securedoc.platform.application.processing.command.StartDocumentProcessingCommand;
 import com.securedoc.platform.application.processing.command.StartPackageProcessingCommand;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
@@ -22,6 +25,8 @@ import com.securedoc.platform.application.processing.result.ProcessingWorkItem;
 import com.securedoc.platform.application.processing.result.StartDocumentProcessingResult;
 import com.securedoc.platform.application.processing.result.StartPackageProcessingResult;
 import com.securedoc.platform.application.redaction.command.RedactDocumentCommand;
+import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
+import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.document.Document;
@@ -32,26 +37,33 @@ import com.securedoc.platform.domain.finding.Finding;
 import com.securedoc.platform.domain.finding.FindingStatus;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
+import com.securedoc.platform.domain.identity.DocumentId;
+import com.securedoc.platform.domain.identity.PackageId;
+import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.policy.PolicyDecision;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Application service that triggers package processing for the local/demo flow.
+ * Local/demo package orchestrator for the automatic processing path.
  *
- * <p>Supports two modes:
+ * <p>Important V1 semantics:
  * <ul>
- *   <li>SUBMITTED: full processing pipeline (start → extract → detect → redact)</li>
- *   <li>PENDING_REVIEW/IN_REVIEW: continue redaction for documents in REDACTING status
- *       when findings have bounding boxes</li>
+ *   <li>AI/detection and redaction are automatic when no finding needs review.</li>
+ *   <li>Low-confidence findings pause only the affected document in REDACTING.</li>
+ *   <li>Final delivery is held until every document in the submitted package is ready.</li>
+ *   <li>Delivery failure is a technical failure, never a successful completion.</li>
+ *   <li>Successful straight-through delivery ends in COMPLETED, not PENDING_REVIEW.</li>
  * </ul>
- *
- * <p>After processing, moves the package to PENDING_REVIEW if all documents
- * have reached a terminal state (PROCESSED or FAILED).
  */
 public final class TriggerPackageProcessingService implements TriggerPackageProcessingUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(TriggerPackageProcessingService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
 
     private final PackageRepository packageRepository;
@@ -62,17 +74,23 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final ExtractDocumentTextUseCase extractDocumentTextUseCase;
     private final DetectSensitiveDataUseCase detectSensitiveDataUseCase;
     private final RedactDocumentUseCase redactDocumentUseCase;
+    private final ExportPackageDocumentsUseCase exportPackageDocumentsUseCase;
+    private final SelectiveRetryExecutor selectiveRetryExecutor;
+    private final PackageLifecycleService lifecycleService;
     private final AuditService auditService;
 
     public TriggerPackageProcessingService(PackageRepository packageRepository,
-                                            DocumentRepository documentRepository,
-                                            FindingRepository findingRepository,
-                                            StartPackageProcessingUseCase startPackageProcessingUseCase,
-                                            StartDocumentProcessingUseCase startDocumentProcessingUseCase,
-                                            ExtractDocumentTextUseCase extractDocumentTextUseCase,
-                                            DetectSensitiveDataUseCase detectSensitiveDataUseCase,
-                                            RedactDocumentUseCase redactDocumentUseCase,
-                                            AuditService auditService) {
+                                           DocumentRepository documentRepository,
+                                           FindingRepository findingRepository,
+                                           StartPackageProcessingUseCase startPackageProcessingUseCase,
+                                           StartDocumentProcessingUseCase startDocumentProcessingUseCase,
+                                           ExtractDocumentTextUseCase extractDocumentTextUseCase,
+                                           DetectSensitiveDataUseCase detectSensitiveDataUseCase,
+                                           RedactDocumentUseCase redactDocumentUseCase,
+                                           ExportPackageDocumentsUseCase exportPackageDocumentsUseCase,
+                                           SelectiveRetryExecutor selectiveRetryExecutor,
+                                           PackageLifecycleService lifecycleService,
+                                           AuditService auditService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -81,222 +99,265 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.extractDocumentTextUseCase = Objects.requireNonNull(extractDocumentTextUseCase);
         this.detectSensitiveDataUseCase = Objects.requireNonNull(detectSensitiveDataUseCase);
         this.redactDocumentUseCase = Objects.requireNonNull(redactDocumentUseCase);
+        this.exportPackageDocumentsUseCase = Objects.requireNonNull(exportPackageDocumentsUseCase);
+        this.selectiveRetryExecutor = Objects.requireNonNull(selectiveRetryExecutor);
+        this.lifecycleService = Objects.requireNonNull(lifecycleService);
         this.auditService = Objects.requireNonNull(auditService);
     }
 
     @Override
     public void execute(TriggerPackageProcessingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
-
         DocumentPackage pkg = packageRepository
                 .findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
-        switch (pkg.status()) {
-            case SUBMITTED -> executeFullProcessing(command);
-            case PROCESSING -> executeContinueProcessing(command, pkg);
-            case PENDING_REVIEW, IN_REVIEW -> executeContinueRedaction(command, pkg);
-            default -> throw new ValidationException(
-                    "Cannot trigger processing for package in status: " + pkg.status());
+        long startedNanos = System.nanoTime();
+        log.info("PACKAGE_PROCESSING_STARTED package={} tenant={} status={} correlation={}",
+                command.packageId(), command.tenantId(), pkg.status(), command.correlationId());
+        try {
+            switch (pkg.status()) {
+                case SUBMITTED -> executeFullProcessing(command);
+                case PROCESSING -> executeContinueProcessing(command);
+                case PENDING_REVIEW, IN_REVIEW -> executeContinueAfterReview(command);
+                default -> throw new ValidationException(
+                        "Cannot trigger processing for package in status: " + pkg.status());
+            }
+        } finally {
+            PackageStatus finalStatus = null;
+            try {
+                finalStatus = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
+                        .map(DocumentPackage::status).orElse(null);
+            } catch (RuntimeException ignored) {
+                // Observability must never mask the real processing result/failure.
+            }
+            log.info("PACKAGE_PROCESSING_FINISHED package={} status={} durationMs={}",
+                    command.packageId(), finalStatus, elapsedMillis(startedNanos));
         }
     }
 
-    /**
-     * Full processing from SUBMITTED: start package, then process each document.
-     */
     private void executeFullProcessing(TriggerPackageProcessingCommand command) {
         CorrelationId correlationId = command.correlationId();
+        StartPackageProcessingResult result = startPackageProcessingUseCase.execute(
+                StartPackageProcessingCommand.of(command.packageId(), command.tenantId(), correlationId));
 
-        // 1. Start package processing (SUBMITTED → PROCESSING)
-        StartPackageProcessingCommand pkgCommand = StartPackageProcessingCommand.of(
-                command.packageId(), command.tenantId(), correlationId);
-        StartPackageProcessingResult result = startPackageProcessingUseCase.execute(pkgCommand);
-
-        // 2. Process each document
         for (ProcessingWorkItem workItem : result.workItems()) {
-            processDocument(workItem, command.packageId(), command.tenantId(), correlationId);
+            processDocument(workItem, correlationId);
         }
-
-        // 3. Complete package processing if all documents are done
         completePackageProcessingIfReady(command.packageId(), command.tenantId(), correlationId);
     }
 
-    /**
-     * Continue processing for a package already in PROCESSING (e.g., partial completion).
-     */
-    private void executeContinueProcessing(TriggerPackageProcessingCommand command, DocumentPackage pkg) {
-        CorrelationId correlationId = command.correlationId();
-
+    private void executeContinueProcessing(TriggerPackageProcessingCommand command) {
         List<Document> documents = documentRepository
                 .findByPackageIdAndTenantId(command.packageId(), command.tenantId());
-
-        for (Document doc : documents) {
-            if (doc.status() == DocumentStatus.REDACTING) {
-                attemptRedaction(doc, command.packageId(), command.tenantId(), correlationId);
+        for (Document document : documents) {
+            if (document.status() == DocumentStatus.REDACTING && !hasDetectedFindings(document.id(), command.tenantId())) {
+                attemptRedaction(document, command.packageId(), command.tenantId(), command.correlationId());
             }
         }
-
-        completePackageProcessingIfReady(command.packageId(), command.tenantId(), correlationId);
+        completePackageProcessingIfReady(command.packageId(), command.tenantId(), command.correlationId());
     }
 
-    /**
-     * Continue redaction for documents in REDACTING status after review has added bounding boxes.
-     * Temporarily moves the package back to PROCESSING for the redaction service to accept it.
-     */
-    private void executeContinueRedaction(TriggerPackageProcessingCommand command, DocumentPackage pkg) {
-        CorrelationId correlationId = command.correlationId();
-
-        List<Document> documents = documentRepository
-                .findByPackageIdAndTenantId(command.packageId(), command.tenantId());
-
-        List<Document> redactingDocs = documents.stream()
-                .filter(doc -> doc.status() == DocumentStatus.REDACTING)
+    private void executeContinueAfterReview(TriggerPackageProcessingCommand command) {
+        List<Document> redactingDocuments = documentRepository
+                .findByPackageIdAndTenantId(command.packageId(), command.tenantId())
+                .stream()
+                .filter(document -> document.status() == DocumentStatus.REDACTING)
                 .toList();
 
-        if (redactingDocs.isEmpty()) {
+        if (redactingDocuments.isEmpty()) {
             throw new ValidationException("No documents in REDACTING status require processing");
         }
 
-        // Validate all actionable findings have bounding boxes before proceeding
-        for (Document doc : redactingDocs) {
-            List<Finding> findings = findingRepository.findByDocumentIdAndTenantId(
-                    doc.id(), command.tenantId());
-            boolean hasUnreviewedFindings = findings.stream()
-                    .anyMatch(f -> f.status() == FindingStatus.DETECTED);
-            if (hasUnreviewedFindings) {
-                throw new ValidationException("Cannot continue redaction: document " + doc.id()
-                        + " has unreviewed DETECTED findings");
+        for (Document document : redactingDocuments) {
+            if (hasDetectedFindings(document.id(), command.tenantId())) {
+                throw new ValidationException("Cannot continue redaction: document " + document.id()
+                        + " still has findings requiring review");
             }
-            boolean actionableMissingBounds = findings.stream()
-                    .filter(f -> f.status() == FindingStatus.CONFIRMED)
-                    .anyMatch(f -> !f.location().hasBoundingBox());
-            if (actionableMissingBounds) {
-                throw new ValidationException("Cannot continue redaction: document " + doc.id()
-                        + " has confirmed findings without bounding boxes");
-            }
+            attemptRedaction(document, command.packageId(), command.tenantId(), command.correlationId());
         }
 
-        // Process each REDACTING document based on its finding state
-        for (Document doc : redactingDocs) {
-            List<Finding> findings = findingRepository.findByDocumentIdAndTenantId(
-                    doc.id(), command.tenantId());
-
-            boolean hasConfirmedFindings = findings.stream()
-                    .anyMatch(f -> f.status() == FindingStatus.CONFIRMED);
-
-            if (hasConfirmedFindings) {
-                // Confirmed findings with bounding boxes exist — run redaction
-                try {
-                    RedactDocumentCommand redactCommand = RedactDocumentCommand.of(
-                            doc.id(), command.packageId(), command.tenantId(), correlationId);
-                    redactDocumentUseCase.execute(redactCommand);
-                } catch (Exception e) {
-                    auditService.recordFailure(command.tenantId(), SYSTEM_ACTOR,
-                            AuditAction.DOCUMENT_PROCESSING_FAILED, "Document", doc.id().toString(),
-                            correlationId, "Post-review redaction failed for document");
-                }
-            } else {
-                // No confirmed findings remain — all were dismissed/overridden/already redacted.
-                // Complete the document without redaction (no redacted artifact needed).
-                doc.completeProcessing();
-                documentRepository.save(doc);
-
-                auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR,
-                        AuditAction.DOCUMENT_REDACTION_COMPLETED, "Document", doc.id().toString(),
-                        correlationId, "Document completed without redaction: all findings dismissed or resolved");
-            }
-        }
-
-        // After processing attempts, check if we can complete package processing
-        completePackageProcessingIfReady(command.packageId(), command.tenantId(), correlationId);
+        completePackageProcessingIfReady(command.packageId(), command.tenantId(), command.correlationId());
     }
 
-    private void processDocument(ProcessingWorkItem workItem, com.securedoc.platform.domain.identity.PackageId packageId,
-                                  com.securedoc.platform.domain.identity.TenantId tenantId, CorrelationId correlationId) {
+    private void processDocument(ProcessingWorkItem workItem, CorrelationId correlationId) {
         try {
-            // Start document processing (UPLOADED → EXTRACTING)
-            StartDocumentProcessingCommand docCommand = StartDocumentProcessingCommand.of(
-                    workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
-            StartDocumentProcessingResult docResult = startDocumentProcessingUseCase.execute(docCommand);
+            StartDocumentProcessingResult start = startDocumentProcessingUseCase.execute(
+                    StartDocumentProcessingCommand.of(
+                            workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId));
 
-            // Extract text
-            ExtractDocumentTextCommand extractCommand = ExtractDocumentTextCommand.of(
-                    workItem.documentId(), workItem.packageId(), workItem.tenantId(),
-                    docResult.lockKey(), docResult.lockToken(), correlationId);
-            ExtractDocumentTextResult extractResult = extractDocumentTextUseCase.execute(extractCommand);
+            ExtractDocumentTextResult extraction = extractDocumentTextUseCase.execute(
+                    ExtractDocumentTextCommand.of(
+                            workItem.documentId(), workItem.packageId(), workItem.tenantId(),
+                            start.lockKey(), start.lockToken(), correlationId));
 
-            // Detect sensitive data (if text was extracted)
-            if (extractResult.hasEmbeddedText()) {
-                DetectSensitiveDataCommand detectCommand = DetectSensitiveDataCommand.of(
-                        workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
-                DetectSensitiveDataResult detectResult = detectSensitiveDataUseCase.execute(detectCommand);
+            DetectSensitiveDataResult detection = detectSensitiveDataUseCase.execute(
+                    DetectSensitiveDataCommand.of(
+                            workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId));
 
-                // Redact only if detection moved to REDACTING AND all findings have bounding boxes
-                if (detectResult.requiresRedaction()
-                        && detectResult.resultingStatus() == DocumentStatus.REDACTING) {
-
-                    // Check if all actionable findings have bounding boxes
-                    List<Finding> findings = findingRepository.findByDocumentIdAndTenantId(
-                            workItem.documentId(), workItem.tenantId());
-                    boolean allHaveBounds = findings.stream()
-                            .filter(f -> f.status() == FindingStatus.DETECTED || f.status() == FindingStatus.CONFIRMED)
-                            .allMatch(f -> f.location().hasBoundingBox());
-
-                    if (allHaveBounds) {
-                        RedactDocumentCommand redactCommand = RedactDocumentCommand.of(
-                                workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
-                        redactDocumentUseCase.execute(redactCommand);
-                    }
-                    // If not all have bounding boxes, leave document in REDACTING
-                    // for human review to add bounding boxes later
-                }
+            if (detection.resultingStatus() == DocumentStatus.REDACTING
+                    && detection.overallDecision() != PolicyDecision.REVIEW) {
+                attemptRedactionById(workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
             }
+            // REVIEW intentionally remains REDACTING until only confirmed/dismissed findings remain.
         } catch (Exception e) {
-            // Individual document failures don't block the batch
+            markDocumentFailedIfNeeded(workItem.documentId(), workItem.tenantId(), correlationId,
+                    TechnicalFailureClassifier.safeAuditDetail(e, "Document processing failed"));
         }
     }
 
-    private void attemptRedaction(Document doc, com.securedoc.platform.domain.identity.PackageId packageId,
-                                   com.securedoc.platform.domain.identity.TenantId tenantId, CorrelationId correlationId) {
+    private void attemptRedaction(Document document, PackageId packageId,
+                                  TenantId tenantId, CorrelationId correlationId) {
+        attemptRedactionById(document.id(), packageId, tenantId, correlationId);
+    }
+
+    private void attemptRedactionById(DocumentId documentId, PackageId packageId,
+                                      TenantId tenantId, CorrelationId correlationId) {
         try {
-            RedactDocumentCommand redactCommand = RedactDocumentCommand.of(
-                    doc.id(), packageId, tenantId, correlationId);
-            redactDocumentUseCase.execute(redactCommand);
+            redactDocumentUseCase.execute(
+                    RedactDocumentCommand.of(documentId, packageId, tenantId, correlationId));
+        } catch (ValidationException e) {
+            // A review precondition is not a technical failure; surface it to the caller.
+            throw e;
         } catch (Exception e) {
-            // Individual document failures don't block the batch
+            markDocumentFailedIfNeeded(documentId, tenantId, correlationId,
+                    TechnicalFailureClassifier.safeAuditDetail(e, "Document redaction failed"));
         }
+    }
+
+    private boolean hasDetectedFindings(DocumentId documentId, TenantId tenantId) {
+        return findingRepository.findByDocumentIdAndTenantId(documentId, tenantId)
+                .stream()
+                .anyMatch(finding -> finding.status() == FindingStatus.DETECTED);
     }
 
     /**
-     * After processing, moves the package from PROCESSING to PENDING_REVIEW
-     * if all documents have reached a state where the next step is human review or finalization.
-     * Valid states: PROCESSED, FAILED, or REDACTING (waiting for bounding boxes/review).
-     * Does not transition if any document is still UPLOADED, EXTRACTING, or DETECTING.
+     * Resolves review/technical/success package state and performs final batch-gated delivery.
+     * Delivery is attempted only after every document is PROCESSED and no finding requires review.
      */
-    private void completePackageProcessingIfReady(com.securedoc.platform.domain.identity.PackageId packageId,
-                                                   com.securedoc.platform.domain.identity.TenantId tenantId,
-                                                   CorrelationId correlationId) {
-        DocumentPackage pkg = packageRepository
-                .findByIdAndTenantId(packageId, tenantId)
-                .orElse(null);
-        if (pkg == null || pkg.status() != PackageStatus.PROCESSING) {
+    private void completePackageProcessingIfReady(PackageId packageId, TenantId tenantId,
+                                                  CorrelationId correlationId) {
+        DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
+        if (pkg == null || (pkg.status() != PackageStatus.PROCESSING
+                && pkg.status() != PackageStatus.PENDING_REVIEW
+                && pkg.status() != PackageStatus.IN_REVIEW)) {
             return;
         }
 
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
-        boolean allReadyForNextStep = !documents.isEmpty() && documents.stream()
-                .allMatch(doc -> doc.status() == DocumentStatus.PROCESSED
-                        || doc.status() == DocumentStatus.FAILED
-                        || doc.status() == DocumentStatus.REDACTING);
+        if (documents.isEmpty()) {
+            return;
+        }
 
-        if (allReadyForNextStep) {
-            pkg.completeProcessing(); // PROCESSING → PENDING_REVIEW
+        boolean anyWorking = documents.stream().anyMatch(document ->
+                document.status() == DocumentStatus.UPLOADED
+                        || document.status() == DocumentStatus.EXTRACTING
+                        || document.status() == DocumentStatus.DETECTING);
+        if (anyWorking) {
+            return;
+        }
+
+        boolean anyFailed = documents.stream().anyMatch(document -> document.status() == DocumentStatus.FAILED);
+        if (anyFailed) {
+            failPackage(pkg, tenantId, packageId, correlationId,
+                    "Package requires technical attention: one or more documents failed");
+            return;
+        }
+
+        boolean requiresReview = documents.stream().anyMatch(document -> hasDetectedFindings(document.id(), tenantId));
+        if (requiresReview) {
+            if (pkg.status() == PackageStatus.PROCESSING) {
+                pkg.completeProcessing(); // PROCESSING -> PENDING_REVIEW only for a real review condition
+                packageRepository.save(pkg);
+                auditService.recordSuccess(
+                        tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_COMPLETED,
+                        "DocumentPackage", packageId.toString(), correlationId,
+                        "Package processing paused: manual review required");
+            }
+            return;
+        }
+
+        boolean anyAwaitingRedaction = documents.stream()
+                .anyMatch(document -> document.status() == DocumentStatus.REDACTING);
+        if (anyAwaitingRedaction) {
+            return;
+        }
+
+        boolean allProcessed = documents.stream()
+                .allMatch(document -> document.status() == DocumentStatus.PROCESSED);
+        if (!allProcessed) {
+            return;
+        }
+
+        // Optional trust-building mode: all document work is complete, but customer delivery
+        // is held until an APPROVER explicitly releases this export cycle.
+        if (lifecycleService.requiresFinalApproval(packageId, tenantId)) {
+            if (pkg.status() != PackageStatus.PENDING_FINAL_APPROVAL) {
+                pkg.holdForFinalApproval();
+                packageRepository.save(pkg);
+                auditService.recordSuccess(
+                        tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_FINAL_APPROVAL_REQUIRED,
+                        "DocumentPackage", packageId.toString(), correlationId,
+                        "Package ready for delivery; final approval required");
+            }
+            return;
+        }
+
+        // Batch gate: the destination receives the complete package atomically. No individual
+        // document becomes visible until every staged document has been written successfully.
+        try {
+            selectiveRetryExecutor.execute(() -> exportPackageDocumentsUseCase.execute(
+                    ExportPackageDocumentsCommand.of(packageId, tenantId, correlationId)));
+        } catch (Exception e) {
+            failPackage(pkg, tenantId, packageId, correlationId,
+                    TechnicalFailureClassifier.safeAuditDetail(
+                            e, "Package delivery failed; technical attention required"));
+            return;
+        }
+
+        pkg.completeSuccessfully();
+        packageRepository.save(pkg);
+        auditService.recordSuccess(
+                tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_COMPLETED,
+                "DocumentPackage", packageId.toString(), correlationId,
+                "Package processing and delivery completed: " + documents.size() + " document(s)");
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000L;
+    }
+
+    private void markDocumentFailedIfNeeded(DocumentId documentId, TenantId tenantId,
+                                            CorrelationId correlationId, String safeReason) {
+        Document document = documentRepository.findByIdAndTenantId(documentId, tenantId).orElse(null);
+        if (document == null || document.status() == DocumentStatus.FAILED) {
+            return;
+        }
+        document.fail();
+        documentRepository.save(document);
+        auditService.recordFailure(
+                tenantId, SYSTEM_ACTOR, AuditAction.DOCUMENT_PROCESSING_FAILED,
+                "Document", documentId.toString(), correlationId, safeReason);
+    }
+
+    private void markDocumentFailed(DocumentId documentId, TenantId tenantId,
+                                    CorrelationId correlationId, String safeReason) {
+        markDocumentFailedIfNeeded(documentId, tenantId, correlationId, safeReason);
+    }
+
+    private void failPackage(DocumentPackage pkg, TenantId tenantId, PackageId packageId,
+                             CorrelationId correlationId, String safeReason) {
+        if (pkg.status() != PackageStatus.FAILED) {
+            pkg.fail();
             packageRepository.save(pkg);
-
-            auditService.recordSuccess(tenantId, SYSTEM_ACTOR,
-                    AuditAction.PACKAGE_PROCESSING_COMPLETED, "DocumentPackage", packageId.toString(),
-                    correlationId,
-                    "Package processing completed: " + documents.size() + " document(s)");
+        }
+        auditService.recordFailure(
+                tenantId, SYSTEM_ACTOR, AuditAction.DOCUMENT_PROCESSING_FAILED,
+                "DocumentPackage", packageId.toString(), correlationId, safeReason);
+        try {
+            lifecycleService.recordTechnicalFailure(packageId, tenantId, correlationId);
+        } catch (Exception ignored) {
+            // Failure classification/state remains authoritative even if lifecycle scheduling itself fails.
         }
     }
 }

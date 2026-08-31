@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.security.RequireRole;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.ConfirmFindingUseCase;
 import com.securedoc.platform.application.port.in.DismissFindingUseCase;
@@ -44,6 +45,7 @@ public class FindingReviewController {
 
     @PostMapping("/{findingId}/confirm")
     @Transactional
+    @RequireRole({"REVIEWER"})
     public ResponseEntity<Map<String, String>> confirmFinding(
             @PathVariable String findingId,
             @RequestBody Map<String, String> body,
@@ -64,6 +66,7 @@ public class FindingReviewController {
 
     @PostMapping("/{findingId}/dismiss")
     @Transactional
+    @RequireRole({"REVIEWER"})
     public ResponseEntity<Map<String, String>> dismissFinding(
             @PathVariable String findingId,
             @RequestBody Map<String, String> body,
@@ -84,6 +87,7 @@ public class FindingReviewController {
 
     @PostMapping("/{findingId}/bounding-box")
     @Transactional
+    @RequireRole({"REVIEWER"})
     public ResponseEntity<Map<String, String>> updateBoundingBox(
             @PathVariable String findingId,
             @RequestBody Map<String, Object> body,

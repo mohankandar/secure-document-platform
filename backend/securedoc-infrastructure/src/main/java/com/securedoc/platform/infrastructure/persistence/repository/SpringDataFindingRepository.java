@@ -2,6 +2,7 @@ package com.securedoc.platform.infrastructure.persistence.repository;
 
 import com.securedoc.platform.infrastructure.persistence.entity.FindingEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,4 +13,7 @@ public interface SpringDataFindingRepository extends JpaRepository<FindingEntity
     Optional<FindingEntity> findByIdAndTenantId(UUID id, UUID tenantId);
 
     List<FindingEntity> findByDocumentIdAndTenantId(UUID documentId, UUID tenantId);
+
+    @Transactional
+    long deleteByDocumentIdAndTenantId(UUID documentId, UUID tenantId);
 }

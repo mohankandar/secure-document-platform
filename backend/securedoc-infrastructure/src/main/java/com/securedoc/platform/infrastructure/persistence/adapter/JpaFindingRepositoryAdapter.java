@@ -40,10 +40,13 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
 
     @Override
     public void saveAll(List<Finding> findings) {
-        List<FindingEntity> entities = findings.stream()
-                .map(this::toNewEntity)
-                .toList();
-        jpaRepo.saveAll(entities);
+        // Upsert each finding individually so an already-persisted finding is updated in place
+        // (preserving its JPA @Version) instead of being merged as a fresh version=0 entity, which
+        // would raise StaleObjectStateException when the row already exists at a higher version
+        // (e.g. a finding confirmed during focused review and then marked REDACTED on resume).
+        for (Finding finding : findings) {
+            save(finding);
+        }
     }
 
     @Override
@@ -58,6 +61,11 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
                 .stream()
                 .map(this::toDomain)
                 .toList();
+    }
+
+    @Override
+    public void deleteByDocumentIdAndTenantId(DocumentId documentId, TenantId tenantId) {
+        jpaRepo.deleteByDocumentIdAndTenantId(documentId.value(), tenantId.value());
     }
 
     private FindingEntity toNewEntity(Finding finding) {

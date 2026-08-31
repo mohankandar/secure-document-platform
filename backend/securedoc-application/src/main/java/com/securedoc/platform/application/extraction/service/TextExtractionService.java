@@ -17,6 +17,7 @@ import com.securedoc.platform.application.port.out.TextExtractionPort;
 import com.securedoc.platform.application.port.out.TextExtractionPort.PageText;
 import com.securedoc.platform.application.port.out.TextExtractionPort.TextExtractionOutput;
 import com.securedoc.platform.application.processing.service.FailureReasonSanitizer;
+import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.artifact.Artifact;
 import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
@@ -41,6 +42,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Application service implementing text extraction from document artifacts.
  *
@@ -52,9 +56,10 @@ import java.util.UUID;
  */
 public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
+    private static final Logger log = LoggerFactory.getLogger(TextExtractionService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
     private static final String TEXT_MIME_TYPE = "text/plain";
-    private static final String NO_EMBEDDED_TEXT_REASON = "No embedded text found; OCR provider required";
+    private static final String NO_READABLE_TEXT_REASON = "No readable text could be normalized from a non-blank document";
 
     private final DocumentRepository documentRepository;
     private final PackageRepository packageRepository;
@@ -140,6 +145,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
     private ExtractDocumentTextResult extractAndComplete(ExtractDocumentTextCommand command,
                                                           ExtractionContext context) {
+        long startedNanos = System.nanoTime();
         Document document = context.document();
 
         TextExtractionOutput extractionOutput;
@@ -151,8 +157,8 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
             throw new ExtractionProcessingException("Text extraction failed", e);
         }
 
-        if (!extractionOutput.hasEmbeddedText() || extractionOutput.totalCharacterCount() == 0) {
-            return handleNoEmbeddedText(command, document, extractionOutput);
+        if (extractionOutput.pages().isEmpty()) {
+            return handleNoReadableText(command, document, extractionOutput);
         }
 
         List<Page> pages = extractionOutput.pages().stream()
@@ -215,18 +221,27 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 command.correlationId(),
                 "Extraction completed: pages=" + extractionOutput.pageCount()
                         + ", chars=" + extractionOutput.totalCharacterCount()
-                        + ", hasText=" + extractionOutput.hasEmbeddedText()
+                        + ", hasText=" + extractionOutput.hasUsableText()
+                        + ", embeddedText=" + extractionOutput.hasEmbeddedText()
+                        + ", usedOcr=" + extractionOutput.usedOcr()
+                        + ", nativePages=" + extractionOutput.nativePageCount()
+                        + ", ocrPages=" + extractionOutput.ocrPageCount()
         );
 
         releaseLockQuietly(command);
 
+        log.info("DOCUMENT_EXTRACTION_COMPLETED document={} package={} pages={} nativePages={} ocrPages={} chars={} durationMs={}",
+                command.documentId(), command.packageId(), extractionOutput.pageCount(),
+                extractionOutput.nativePageCount(), extractionOutput.ocrPageCount(),
+                extractionOutput.totalCharacterCount(), elapsedMillis(startedNanos));
+
         return ExtractDocumentTextResult.of(
                 command.documentId(), textArtifact.id(),
                 extractionOutput.pageCount(), extractionOutput.totalCharacterCount(),
-                extractionOutput.hasEmbeddedText());
+                extractionOutput.hasUsableText(), extractionOutput.hasEmbeddedText(), extractionOutput.usedOcr());
     }
 
-    private ExtractDocumentTextResult handleNoEmbeddedText(ExtractDocumentTextCommand command,
+    private ExtractDocumentTextResult handleNoReadableText(ExtractDocumentTextCommand command,
                                                             Document document,
                                                             TextExtractionOutput extractionOutput) {
         document.fail();
@@ -234,7 +249,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
         TextExtractionFailedEvent failEvent = TextExtractionFailedEvent.of(
                 command.documentId(), command.packageId(), command.tenantId(),
-                NO_EMBEDDED_TEXT_REASON, command.correlationId());
+                NO_READABLE_TEXT_REASON, command.correlationId());
         eventPublisher.publish(failEvent);
 
         auditService.recordFailure(
@@ -244,20 +259,21 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 "Document",
                 command.documentId().toString(),
                 command.correlationId(),
-                "Text extraction failed: " + NO_EMBEDDED_TEXT_REASON
+                "Text extraction failed: " + NO_READABLE_TEXT_REASON
         );
 
         releaseLockQuietly(command);
 
         return ExtractDocumentTextResult.of(
                 command.documentId(), null,
-                extractionOutput.pageCount(), 0, false);
+                extractionOutput.pageCount(), 0, false,
+                extractionOutput.hasEmbeddedText(), extractionOutput.usedOcr());
     }
 
     private void handleProcessingFailure(ExtractDocumentTextCommand command,
                                           Document document,
                                           RuntimeException failure) {
-        String sanitizedReason = FailureReasonSanitizer.sanitize(failure.getMessage());
+        String safeReason = TechnicalFailureClassifier.safeAuditDetail(failure, FailureReasonSanitizer.textExtractionFailed());
 
         try {
             document.fail();
@@ -269,7 +285,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
         try {
             TextExtractionFailedEvent event = TextExtractionFailedEvent.of(
                     command.documentId(), command.packageId(), command.tenantId(),
-                    sanitizedReason, command.correlationId());
+                    safeReason, command.correlationId());
             eventPublisher.publish(event);
         } catch (RuntimeException ignored) {
             // Best-effort — do not mask the original processing failure.
@@ -283,7 +299,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                     "Document",
                     command.documentId().toString(),
                     command.correlationId(),
-                    "Text extraction failed: " + sanitizedReason
+                    safeReason
             );
         } catch (RuntimeException ignored) {
             // Best-effort — do not mask the original processing failure.
@@ -298,6 +314,10 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
         } catch (RuntimeException ignored) {
             // Best-effort cleanup only.
         }
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000L;
     }
 
     private String buildStoragePath(String tenantId, String packageId, String documentId,

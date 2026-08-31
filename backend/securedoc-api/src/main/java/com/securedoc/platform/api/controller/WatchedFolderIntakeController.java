@@ -1,0 +1,43 @@
+package com.securedoc.platform.api.controller;
+
+import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.dto.IntakeObservationResponse;
+import com.securedoc.platform.api.dto.WatchedFolderScanResponse;
+import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.application.intake.watched.WatchedFolderIntakeService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+/** IT-facing local watched-folder scan surface. Unit 24 owns connection/scheduling configuration. */
+@RestController
+@RequestMapping("/api/v1/intake/watched-folder")
+public class WatchedFolderIntakeController {
+    private final WatchedFolderIntakeService intakeService;
+    private final RequestContextResolver contextResolver;
+    public WatchedFolderIntakeController(WatchedFolderIntakeService intakeService,
+                                         RequestContextResolver contextResolver) {
+        this.intakeService=intakeService; this.contextResolver=contextResolver;
+    }
+
+    @PostMapping("/scan")
+    @RequireRole({"PLATFORM_ADMIN"})
+    public ResponseEntity<WatchedFolderScanResponse> scan(HttpServletRequest request) {
+        var principal=contextResolver.resolvePrincipal(request);
+        var result=intakeService.scan(principal,contextResolver.resolveCorrelationId(request));
+        return ResponseEntity.ok(new WatchedFolderScanResponse(result.discovered(),result.waitingForTrigger(),
+                result.accepted(),result.rejected(),result.duplicates()));
+    }
+
+    @GetMapping("/observations")
+    @RequireRole({"PLATFORM_ADMIN"})
+    public ResponseEntity<List<IntakeObservationResponse>> observations(@RequestParam(defaultValue="50") int limit,
+                                                                         HttpServletRequest request) {
+        var principal=contextResolver.resolvePrincipal(request);
+        var result=intakeService.listVisible(principal,limit).stream().map(o->new IntakeObservationResponse(
+                o.status().name(),o.reasonCode()==null?null:o.reasonCode().name(),o.sourceReference(),
+                o.packageId()==null?null:o.packageId().toString(),o.firstSeenAt(),o.visibleAfter(),o.updatedAt())).toList();
+        return ResponseEntity.ok(result);
+    }
+}

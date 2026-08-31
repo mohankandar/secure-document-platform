@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="009-01-tenant-redaction-policy" author="securedoc">
+        <createTable tableName="tenant_redaction_policies">
+            <column name="tenant_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="auto_redact_threshold" type="DOUBLE PRECISION" defaultValueNumeric="0.800"><constraints nullable="false"/></column>
+            <column name="review_mode" type="VARCHAR(40)" defaultValue="UNCERTAIN_ONLY"><constraints nullable="false"/></column>
+            <column name="ssn_enabled" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="date_of_birth_enabled" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="credit_card_number_enabled" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="credit_score_enabled" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="tenant_redaction_policies" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_redaction_policy_tenant"/>
+    </changeSet>
+
+</databaseChangeLog>

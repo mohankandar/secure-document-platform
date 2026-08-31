@@ -23,6 +23,15 @@ public class DocumentPackageEntity {
     @Column(name = "package_type", nullable = false)
     private String packageType;
 
+    @Column(name = "business_record_id")
+    private UUID businessRecordId;
+
+    @Column(name = "intake_fingerprint")
+    private String intakeFingerprint;
+
+    @Column(name = "source_reference")
+    private String sourceReference;
+
     @Column(name = "status", nullable = false)
     private String status;
 
@@ -53,6 +62,15 @@ public class DocumentPackageEntity {
 
     public String getPackageType() { return packageType; }
     public void setPackageType(String packageType) { this.packageType = packageType; }
+
+    public UUID getBusinessRecordId() { return businessRecordId; }
+    public void setBusinessRecordId(UUID businessRecordId) { this.businessRecordId = businessRecordId; }
+
+    public String getIntakeFingerprint() { return intakeFingerprint; }
+    public void setIntakeFingerprint(String intakeFingerprint) { this.intakeFingerprint = intakeFingerprint; }
+
+    public String getSourceReference() { return sourceReference; }
+    public void setSourceReference(String sourceReference) { this.sourceReference = sourceReference; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

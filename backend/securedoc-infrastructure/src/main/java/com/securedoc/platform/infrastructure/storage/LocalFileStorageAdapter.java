@@ -1,5 +1,8 @@
 package com.securedoc.platform.infrastructure.storage;
 
+import com.securedoc.platform.application.exception.TechnicalDependency;
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -7,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -26,7 +28,7 @@ public class LocalFileStorageAdapter implements StoragePort {
         try {
             Files.createDirectories(rootPath);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to create storage root: " + rootPath, e);
+            throw storageFailure(false, "Failed to initialize local storage", e);
         }
     }
 
@@ -46,7 +48,7 @@ public class LocalFileStorageAdapter implements StoragePort {
             Files.createDirectories(targetFile.getParent());
             Files.copy(content, targetFile, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to store file: " + safePath, e);
+            throw storageFailure(true, "Failed to store artifact", e);
         }
 
         return ArtifactStorageReference.of("local", rootPath.toString(), safePath);
@@ -61,7 +63,7 @@ public class LocalFileStorageAdapter implements StoragePort {
         try {
             return Files.newInputStream(targetFile);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to read file: " + reference.key(), e);
+            throw storageFailure(true, "Failed to read artifact", e);
         }
     }
 
@@ -74,8 +76,13 @@ public class LocalFileStorageAdapter implements StoragePort {
         try {
             Files.deleteIfExists(targetFile);
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to delete file: " + reference.key(), e);
+            throw storageFailure(true, "Failed to delete artifact", e);
         }
+    }
+
+    private TechnicalDependencyException storageFailure(boolean retryable, String safeMessage, IOException cause) {
+        return new TechnicalDependencyException(
+                TechnicalDependency.STORAGE, TechnicalFailureCode.STORAGE_IO, retryable, safeMessage, cause);
     }
 
     private String sanitizePath(String path) {

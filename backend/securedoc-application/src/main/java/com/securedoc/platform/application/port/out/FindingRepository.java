@@ -21,4 +21,6 @@ public interface FindingRepository {
     Optional<Finding> findByIdAndTenantId(FindingId id, TenantId tenantId);
 
     List<Finding> findByDocumentIdAndTenantId(DocumentId documentId, TenantId tenantId);
+
+    void deleteByDocumentIdAndTenantId(DocumentId documentId, TenantId tenantId);
 }

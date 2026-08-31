@@ -11,5 +11,11 @@
     <include file="db/changelog/004-findings-bounding-box.xml"/>
     <include file="db/changelog/005-review-tasks-table.xml"/>
     <include file="db/changelog/006-vault-access-tables.xml"/>
+    <include file="db/changelog/007-audit-tenant-time-index.xml"/>
 
+    <include file="db/changelog/008-business-record-intake.xml"/>
+    <include file="db/changelog/009-business-admin-configuration.xml"/>
+    <include file="db/changelog/010-delivery-lifecycle.xml"/>
+    <include file="db/changelog/011-dashboard-reporting-indexes.xml"/>
+    <include file="db/changelog/012-ssn-last-four-policy.xml"/>
 </databaseChangeLog>

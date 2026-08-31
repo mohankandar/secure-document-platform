@@ -23,8 +23,14 @@ public enum EntityType {
     /** Email address. */
     EMAIL_ADDRESS,
 
-    /** Credit card or bank account number. */
+    /** Credit card number. Kept distinct from bank/account identifiers for tenant policy clarity. */
+    CREDIT_CARD_NUMBER,
+
+    /** Bank or other financial account number (not enabled by default in the V1 baseline). */
     FINANCIAL_ACCOUNT,
+
+    /** Credit score (contextually recognized numeric score). */
+    CREDIT_SCORE,
 
     /** Medical record number or health info. */
     MEDICAL_RECORD,

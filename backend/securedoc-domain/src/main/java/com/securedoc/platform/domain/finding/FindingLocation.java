@@ -34,6 +34,15 @@ public record FindingLocation(
     }
 
     /**
+     * Creates an explicitly unlocated page-level finding. This is used when semantic analysis
+     * identifies sensitive content but the exact occurrence cannot be mapped unambiguously to
+     * trusted page coordinates. Such findings must remain in review and must never be auto-redacted.
+     */
+    public static FindingLocation unlocated(int pageNumber) {
+        return new FindingLocation(pageNumber, 0, 0, null);
+    }
+
+    /**
      * Creates a location with both text offsets and spatial coordinates.
      */
     public static FindingLocation withBounds(int pageNumber, int startOffset, int endOffset,

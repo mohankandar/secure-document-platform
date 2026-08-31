@@ -47,12 +47,11 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
 
     @Override
     public RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets) {
-        if (targets == null || targets.isEmpty()) {
-            throw new IllegalArgumentException("Redaction targets must not be empty");
-        }
+        List<RedactionTarget> safeTargets = targets == null ? List.of() : targets;
 
-        // Group targets by page number for efficient processing
-        Map<Integer, List<RedactionTarget>> targetsByPage = targets.stream()
+        // Group targets by page number for efficient processing. An empty list is valid:
+        // the adapter still burn-flattens the source to create a safe output artifact.
+        Map<Integer, List<RedactionTarget>> targetsByPage = safeTargets.stream()
                 .collect(Collectors.groupingBy(RedactionTarget::pageNumber));
 
         try (PDDocument sourceDoc = Loader.loadPDF(originalPdf.readAllBytes())) {

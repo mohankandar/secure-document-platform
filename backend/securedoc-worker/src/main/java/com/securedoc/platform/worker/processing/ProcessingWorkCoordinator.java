@@ -20,6 +20,7 @@ import com.securedoc.platform.domain.document.DocumentStatus;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.policy.PolicyDecision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,8 +39,8 @@ import java.util.Objects;
  *   <li>Extract text from document (reads PDF, stores extracted text artifact)</li>
  * </ol>
  *
- * <p>No OCR, AI, or redaction logic is performed here — text extraction is
- * delegated to the application service which uses a TextExtractionPort.
+ * <p>No OCR, AI, or redaction implementation logic is performed here. Native/OCR
+ * normalization, AI discovery, and redaction are delegated through application ports.
  */
 public class ProcessingWorkCoordinator {
 
@@ -109,34 +110,31 @@ public class ProcessingWorkCoordinator {
                     docResult.lockKey(), docResult.lockToken(), correlationId);
             ExtractDocumentTextResult extractResult = extractDocumentTextUseCase.execute(extractCommand);
 
-            log.info("Text extraction complete for document={}: pages={}, chars={}, hasText={}",
+            log.info("Text normalization complete for document={}: pages={}, chars={}, hasText={}, embeddedText={}, usedOcr={}",
                     workItem.documentId(), extractResult.pageCount(),
-                    extractResult.characterCount(), extractResult.hasEmbeddedText());
+                    extractResult.characterCount(), extractResult.hasText(),
+                    extractResult.hasEmbeddedText(), extractResult.usedOcr());
 
-            // 2c. Run sensitive-data detection (if extraction produced text)
-            if (extractResult.hasEmbeddedText()) {
-                DetectSensitiveDataCommand detectCommand = DetectSensitiveDataCommand.of(
+            // 2c. Run sensitive-data detection. Empty/blank pages safely produce no findings.
+            DetectSensitiveDataCommand detectCommand = DetectSensitiveDataCommand.of(
+                    workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
+            DetectSensitiveDataResult detectResult = detectSensitiveDataUseCase.execute(detectCommand);
+
+            log.info("Detection complete for document={}: findings={}, requiresRedaction={}, decision={}",
+                    workItem.documentId(), detectResult.findingCount(),
+                    detectResult.requiresRedaction(), detectResult.overallDecision());
+
+            // 2d. Redact document if detection moved it to REDACTING and no review remains.
+            if (detectResult.requiresRedaction()
+                    && detectResult.overallDecision() != PolicyDecision.REVIEW
+                    && detectResult.resultingStatus() == DocumentStatus.REDACTING) {
+                RedactDocumentCommand redactCommand = RedactDocumentCommand.of(
                         workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
-                DetectSensitiveDataResult detectResult = detectSensitiveDataUseCase.execute(detectCommand);
+                RedactDocumentResult redactResult = redactDocumentUseCase.execute(redactCommand);
 
-                log.info("Detection complete for document={}: findings={}, requiresRedaction={}, decision={}",
-                        workItem.documentId(), detectResult.findingCount(),
-                        detectResult.requiresRedaction(), detectResult.overallDecision());
-
-                // 2d. Redact document if detection moved it to REDACTING
-                if (detectResult.requiresRedaction()
-                        && detectResult.resultingStatus() == DocumentStatus.REDACTING) {
-                    RedactDocumentCommand redactCommand = RedactDocumentCommand.of(
-                            workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId);
-                    RedactDocumentResult redactResult = redactDocumentUseCase.execute(redactCommand);
-
-                    log.info("Redaction complete for document={}: redactions={}, status={}",
-                            workItem.documentId(), redactResult.redactionCount(),
-                            redactResult.resultingStatus());
-                }
-            } else {
-                log.info("Skipping detection for document={} (no embedded text extracted)",
-                        workItem.documentId());
+                log.info("Redaction complete for document={}: redactions={}, status={}",
+                        workItem.documentId(), redactResult.redactionCount(),
+                        redactResult.resultingStatus());
             }
 
         } catch (Exception e) {

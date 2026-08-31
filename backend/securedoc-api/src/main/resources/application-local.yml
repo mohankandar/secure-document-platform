@@ -20,11 +20,46 @@ securedoc:
   storage:
     local:
       root-path: ./securedoc-storage
+  security:
+    mode: LOCAL
+    cors:
+      allowed-origins: http://localhost:5173
   demo:
     tenant-id: "00000000-0000-0000-0000-000000000001"
     tenant-name: "Local Demo Tenant"
     tenant-slug: "local-demo"
     actor-id: "00000000-0000-0000-0000-000000000099"
+
+  ai:
+    # Local gemma3:12b tuning validated from the 61-page acceptance-package failure:
+    # use lower client concurrency, allow slow pages more time, and retry only failed pages.
+    timeout-seconds: ${SECUREDOC_AI_TIMEOUT_SECONDS:180}
+    parallelism: ${SECUREDOC_AI_PARALLELISM:2}
+    page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
+    page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
+
+  delivery:
+    api:
+      require-authentication: false
+      require-https: false
+  intake:
+    watched-folder:
+      enabled: false
+      root-path: ./watched-intake
+      trigger-file-name: manifest.json
+      incomplete-visibility-minutes: 15
+      accepted-behavior: LEAVE
+      rejected-behavior: LEAVE
+      archive-directory: _archive
+      problem-directory: _problem
+
+  platform-admin:
+    # Scheduler stays off by default; enable explicitly for local watched-folder automation.
+    watched-folder-scheduling-enabled: false
+    watched-folder-scan-interval-ms: 60000
+    watched-folder-tenant-id: "00000000-0000-0000-0000-000000000001"
+    watched-folder-actor-id: "00000000-0000-0000-0000-000000000099"
+    watched-folder-actor-username: watched-folder-service
 
 logging:
   level:
