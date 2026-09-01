@@ -142,7 +142,7 @@ export default function PackageDetailPage() {
               <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
                 One or more findings need a human decision. High-confidence findings do not need to be re-reviewed.
               </p>
-              <Link className="button-link primary" to="/review">Open Manual Review</Link>
+              <Link className="button-link primary" to={`/review?packageId=${packageId}`}>Open Manual Review</Link>
             </div>
           )}
 

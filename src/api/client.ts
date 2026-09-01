@@ -8,7 +8,8 @@ import type {
   ReviewTaskResult,
   AuditRecordResult,
   ApiError,
-  FocusedReviewItem,
+  FocusedReviewQueue,
+  ReviewPagePreview,
   ReviewBoundingBox,
   ReviewResolutionResult,
   IdentifierDefinition,
@@ -157,6 +158,10 @@ class ApiClient {
     return this.request(`/packages/${packageId}/approve-delivery`, { method: 'POST' });
   }
 
+  async hidePackageFromDashboard(packageId: string): Promise<{ packageId: string; hiddenFromDashboard: boolean; hiddenAt: string }> {
+    return this.request(`/packages/${packageId}/dashboard-hide`, { method: 'POST' });
+  }
+
   async extendTechnicalHold(packageId: string, holdHoursFromNow: number): Promise<PackageLifecycleSummary> {
     return this.request(`/packages/${packageId}/technical-hold`, {
       method: 'POST',
@@ -208,11 +213,13 @@ class ApiClient {
 
   // --- Focused Manual Review ---
 
-  async listReviewItems(limit = 50): Promise<FocusedReviewItem[]> {
-    return this.request(`/review-items?limit=${limit}`);
+  async listReviewItems(limit = 50, packageId?: string): Promise<FocusedReviewQueue> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (packageId) params.set('packageId', packageId);
+    return this.request(`/review-items?${params.toString()}`);
   }
 
-  async getReviewPagePreview(findingId: string): Promise<Blob> {
+  async getReviewPagePreview(findingId: string): Promise<ReviewPagePreview> {
     const url = `${this.baseUrl}/review-items/${findingId}/page-preview`;
     const response = await fetch(url, {
       headers: { ...baseHeaders(), Accept: 'image/png, application/json' },
@@ -231,7 +238,11 @@ class ApiClient {
       if (parsed?.message) throw parsed;
       throw { message: `HTTP ${response.status}: ${response.statusText}` } as ApiError;
     }
-    return response.blob();
+    const pageNumber = Number(response.headers.get('X-Review-Page-Number'));
+    return {
+      blob: await response.blob(),
+      pageNumber: Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 0,
+    };
   }
 
   async confirmReviewItem(
