@@ -4,10 +4,10 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.ListReviewItemsQuery;
 import com.securedoc.platform.application.port.in.ResolveReviewItemUseCase;
-import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.FindingRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.review.command.ResolveReviewItemCommand;
@@ -16,6 +16,7 @@ import com.securedoc.platform.application.review.model.ReviewResolution;
 import com.securedoc.platform.application.review.result.ResolveReviewItemResult;
 import com.securedoc.platform.application.review.result.ReviewBoundingBoxSummary;
 import com.securedoc.platform.application.review.result.ReviewItemSummary;
+import com.securedoc.platform.application.review.result.ReviewQueueResult;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.business.ReviewMode;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * V1 finding-focused review service. It deliberately avoids assignment/create/start task mechanics:
@@ -45,39 +47,46 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
     private final DocumentRepository documentRepository;
     private final FindingRepository findingRepository;
     private final TenantRedactionPolicyRepository tenantRedactionPolicyRepository;
-    private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
+    private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final AuditService auditService;
 
     public FocusedReviewService(PackageRepository packageRepository,
                                 DocumentRepository documentRepository,
                                 FindingRepository findingRepository,
                                 TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
-                                TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+                                PackageProcessingDispatcher packageProcessingDispatcher,
                                 AuditService auditService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
         this.tenantRedactionPolicyRepository = Objects.requireNonNull(tenantRedactionPolicyRepository);
-        this.triggerPackageProcessingUseCase = Objects.requireNonNull(triggerPackageProcessingUseCase);
+        this.packageProcessingDispatcher = Objects.requireNonNull(packageProcessingDispatcher);
         this.auditService = Objects.requireNonNull(auditService);
     }
 
     @Override
-    public List<ReviewItemSummary> execute(TenantId tenantId, int limit) {
+    public ReviewQueueResult execute(TenantId tenantId, Optional<PackageId> packageId, int limit) {
         Objects.requireNonNull(tenantId);
+        Objects.requireNonNull(packageId);
         int safeLimit = Math.max(1, Math.min(100, limit));
         List<ReviewItemSummary> result = new ArrayList<>();
 
-        // V1 query path: scan recent tenant packages only. A dedicated indexed review projection can
-        // replace this when the operational Dashboard/query model is introduced.
-        List<DocumentPackage> packages = packageRepository.findByTenantId(tenantId, 0, 250);
+        // Global review stays tenant-wide. When entered from Intake Details, fetch only that package
+        // so the backend enforces the same package scope as the UI instead of client-side filtering.
+        List<DocumentPackage> packages = packageId
+                .map(id -> List.of(packageRepository.findByIdAndTenantId(id, tenantId)
+                        .orElseThrow(() -> new NotFoundException("DocumentPackage", id.toString()))))
+                .orElseGet(() -> packageRepository.findByTenantId(tenantId, 0, 250));
+
         for (DocumentPackage pkg : packages) {
             if (pkg.status() != PackageStatus.PENDING_REVIEW && pkg.status() != PackageStatus.IN_REVIEW) {
                 continue;
             }
             for (Document document : documentRepository.findByPackageIdAndTenantId(pkg.id(), tenantId)) {
                 for (Finding finding : findingRepository.findByDocumentIdAndTenantId(document.id(), tenantId)) {
-                    if (finding.status() != FindingStatus.DETECTED) {
+                    // Actionable queue means a finding that is still pending on a package that is still in review.
+                    // Historical confirmed/dismissed/redacted findings never contribute to the active count.
+                    if (finding.status() != FindingStatus.DETECTED || finding.location().pageNumber() < 1) {
                         continue;
                     }
                     result.add(toSummary(pkg.id(), document, finding));
@@ -85,13 +94,14 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
             }
         }
 
-        return result.stream()
+        List<ReviewItemSummary> sorted = result.stream()
                 .sorted(Comparator
                         .comparing((ReviewItemSummary item) -> item.packageId().toString())
                         .thenComparing(item -> item.documentId().toString())
-                        .thenComparingInt(ReviewItemSummary::pageNumber))
-                .limit(safeLimit)
+                        .thenComparingInt(ReviewItemSummary::pageNumber)
+                        .thenComparing(item -> item.findingId().toString()))
                 .toList();
+        return new ReviewQueueResult(sorted.stream().limit(safeLimit).toList(), sorted.size());
     }
 
     @Override
@@ -142,7 +152,16 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
 
         boolean processingResumed = false;
         if (!packageHasPendingFindings(pkg.id(), command.tenantId())) {
-            triggerPackageProcessingUseCase.execute(TriggerPackageProcessingCommand.of(
+            // The human decision is complete at this point. Move the package out of review immediately
+            // and dispatch the potentially slow redaction/verification/export continuation separately so
+            // the review HTTP response is not held open while background document work runs.
+            pkg.resumeProcessingAfterReview();
+            packageRepository.save(pkg);
+            auditService.recordSuccess(command.tenantId(), command.actorId(),
+                    AuditAction.PACKAGE_PROCESSING_STARTED, "DocumentPackage", pkg.id().toString(),
+                    command.correlationId(), "Package processing resumed after final manual-review decision");
+
+            packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
                     pkg.id(), command.tenantId(), command.actorId(), command.correlationId()));
             processingResumed = true;
         }

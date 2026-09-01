@@ -47,6 +47,12 @@ public class DocumentPackageEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "dashboard_hidden_at")
+    private Instant dashboardHiddenAt;
+
+    @Column(name = "dashboard_hidden_by")
+    private UUID dashboardHiddenBy;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -86,6 +92,12 @@ public class DocumentPackageEntity {
 
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+    public Instant getDashboardHiddenAt() { return dashboardHiddenAt; }
+    public void setDashboardHiddenAt(Instant dashboardHiddenAt) { this.dashboardHiddenAt = dashboardHiddenAt; }
+
+    public UUID getDashboardHiddenBy() { return dashboardHiddenBy; }
+    public void setDashboardHiddenBy(UUID dashboardHiddenBy) { this.dashboardHiddenBy = dashboardHiddenBy; }
 
     public Long getVersion() { return version; }
     public void setVersion(Long version) { this.version = version; }

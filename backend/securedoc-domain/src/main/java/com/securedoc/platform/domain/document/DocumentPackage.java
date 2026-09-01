@@ -130,6 +130,18 @@ public final class DocumentPackage {
         updatedAt = Instant.now();
     }
 
+    /**
+     * Returns a package to active processing after the final actionable review finding is resolved.
+     * Redaction/verification/delivery continue asynchronously in the V1 runtime.
+     */
+    public void resumeProcessingAfterReview() {
+        if (status != PackageStatus.PENDING_REVIEW && status != PackageStatus.IN_REVIEW) {
+            throw new IllegalStateException("Cannot resume post-review processing for package in status: " + status);
+        }
+        status = PackageStatus.PROCESSING;
+        updatedAt = Instant.now();
+    }
+
 
     /**
      * Completes a straight-through or post-review package after all documents are processed

@@ -88,7 +88,11 @@ public class SecurityConfig {
         configuration.setAllowedHeaders(properties.getMode() == SecurityMode.LOCAL
                 ? List.of("Authorization", "Content-Type", "X-Correlation-Id", "X-Tenant-Id", "X-Actor-Id", "X-Actor-Roles")
                 : List.of("Authorization", "Content-Type", "X-Correlation-Id"));
-        configuration.setExposedHeaders(List.of("X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of(
+                "X-Correlation-Id",
+                "X-Review-Page-Number",
+                "X-Review-Image-Width",
+                "X-Review-Image-Height"));
         configuration.setAllowCredentials(false);
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { apiClient } from '../api/client';
 import type {
   ApiError,
   FocusedReviewItem,
+  PackageDetail,
   ReviewBoundingBox,
   ReviewResolutionResult,
 } from '../types';
@@ -45,7 +47,11 @@ function boxChanged(a: ReviewBoundingBox | null, b: ReviewBoundingBox | null) {
 }
 
 export default function ReviewPage() {
+  const [searchParams] = useSearchParams();
+  const packageId = searchParams.get('packageId') || undefined;
   const [items, setItems] = useState<FocusedReviewItem[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [scopedPackage, setScopedPackage] = useState<PackageDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,14 +72,38 @@ export default function ReviewPage() {
     [items, selectedId]
   );
 
+  const scopedIdentifier = useMemo(() => {
+    if (!scopedPackage) return null;
+    return scopedPackage.businessIdentifiers
+      ?.filter((identifier) => identifier.displayable)
+      .sort((a, b) => Number(b.primary) - Number(a.primary) || a.displayOrder - b.displayOrder)[0] || null;
+  }, [scopedPackage]);
+
+  const reviewGroups = useMemo(() => {
+    const groups: Array<{ key: string; fileName: string; pageNumber: number; items: FocusedReviewItem[] }> = [];
+    const byKey = new Map<string, typeof groups[number]>();
+    for (const item of items) {
+      const key = `${item.documentId}:${item.pageNumber}`;
+      let group = byKey.get(key);
+      if (!group) {
+        group = { key, fileName: item.fileName, pageNumber: item.pageNumber, items: [] };
+        byKey.set(key, group);
+        groups.push(group);
+      }
+      group.items.push(item);
+    }
+    return groups;
+  }, [items]);
+
   const loadQueue = useCallback(async (preferredId?: string | null) => {
     setError(null);
     try {
-      const data = await apiClient.listReviewItems(100);
-      setItems(data);
-      const candidate = preferredId && data.some((item) => item.findingId === preferredId)
+      const queue = await apiClient.listReviewItems(100, packageId);
+      setItems(queue.items);
+      setTotalItems(queue.totalItems);
+      const candidate = preferredId && queue.items.some((item) => item.findingId === preferredId)
         ? preferredId
-        : data[0]?.findingId || null;
+        : queue.items[0]?.findingId || null;
       setSelectedId(candidate);
     } catch (err) {
       const apiErr = err as ApiError;
@@ -81,11 +111,23 @@ export default function ReviewPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [packageId]);
 
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
+
+  useEffect(() => {
+    let active = true;
+    if (!packageId) {
+      setScopedPackage(null);
+      return () => { active = false; };
+    }
+    apiClient.getPackage(packageId)
+      .then((pkg) => { if (active) setScopedPackage(pkg); })
+      .catch(() => { if (active) setScopedPackage(null); });
+    return () => { active = false; };
+  }, [packageId]);
 
   useEffect(() => {
     if (!selected) {
@@ -116,9 +158,12 @@ export default function ReviewPage() {
     let active = true;
     let localUrl: string | null = null;
     apiClient.getReviewPagePreview(selected.findingId)
-      .then((blob) => {
+      .then((preview) => {
         if (!active) return;
-        localUrl = URL.createObjectURL(blob);
+        if (preview.pageNumber !== selected.pageNumber) {
+          throw { message: `Preview page mismatch. Expected page ${selected.pageNumber}.` } as ApiError;
+        }
+        localUrl = URL.createObjectURL(preview.blob);
         setPreviewUrl((old) => {
           if (old) URL.revokeObjectURL(old);
           return localUrl;
@@ -128,7 +173,6 @@ export default function ReviewPage() {
         if (active) {
           const message = err.message || 'Unable to load the review page';
           setPreviewError(message);
-          setError(message);
         }
       })
       .finally(() => {
@@ -229,7 +273,7 @@ export default function ReviewPage() {
         result = await apiClient.dismissReviewItem(selected.findingId);
       }
       setSuccess(result.processingResumed
-        ? 'Review complete. Automatic processing has resumed.'
+        ? 'Review complete. Processing has resumed in the background.'
         : resolution === 'confirm'
           ? 'Finding confirmed. Continue with the remaining review items.'
           : 'Item marked not sensitive. Continue with the remaining review items.');
@@ -251,10 +295,22 @@ export default function ReviewPage() {
       <div className="review-header">
         <div>
           <h1>Manual Review</h1>
-          <p>Only findings that need a human decision appear here.</p>
+          {packageId ? (
+            <>
+              <p>Only findings for this intake appear here.</p>
+              {scopedIdentifier && (
+                <p className="review-scope-label">
+                  <strong>{scopedIdentifier.label}:</strong> {scopedIdentifier.value}
+                </p>
+              )}
+            </>
+          ) : (
+            <p>Only findings that currently need a human decision appear here.</p>
+          )}
         </div>
         <div className="review-header-actions">
-          <span className="review-count">{items.length} need attention</span>
+          <span className="review-count">{totalItems} need attention</span>
+          {packageId && <Link className="button-link secondary" to="/review">View all reviews</Link>}
           <button className="secondary" onClick={() => loadQueue(selectedId)}>Refresh</button>
         </div>
       </div>
@@ -266,26 +322,39 @@ export default function ReviewPage() {
         <div className="review-empty card">
           <div className="review-empty-icon">✓</div>
           <h2>You're all caught up</h2>
-          <p>There are no findings waiting for Manual Review.</p>
+          <p>{packageId
+            ? 'This intake has no findings currently waiting for Manual Review.'
+            : 'There are no findings currently waiting for Manual Review.'}</p>
+          {packageId && <Link className="button-link secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link>}
         </div>
       ) : (
         <div className="review-workbench-grid">
           <aside className="review-queue card">
             <div className="review-section-title">Needs attention</div>
+            {totalItems > items.length && (
+              <div className="review-queue-limit">Showing first {items.length} of {totalItems}</div>
+            )}
             <div className="review-queue-list">
-              {items.map((item) => (
-                <button
-                  key={item.findingId}
-                  className={`review-queue-item ${item.findingId === selectedId ? 'active' : ''}`}
-                  onClick={() => setSelectedId(item.findingId)}
-                >
-                  <div className="review-queue-type">{entityLabel(item.entityType)}</div>
-                  <div className="review-queue-file">{item.fileName}</div>
-                  <div className="review-queue-meta">
-                    <span>Page {item.pageNumber}</span>
-                    <span>{Math.round(item.confidence * 100)}%</span>
+              {reviewGroups.map((group) => (
+                <div className="review-page-group" key={group.key}>
+                  <div className="review-page-group-heading">
+                    <span>{group.fileName}</span>
+                    <strong>Page {group.pageNumber}</strong>
                   </div>
-                </button>
+                  {group.items.map((item) => (
+                    <button
+                      key={item.findingId}
+                      className={`review-queue-item ${item.findingId === selectedId ? 'active' : ''}`}
+                      onClick={() => setSelectedId(item.findingId)}
+                    >
+                      <div className="review-queue-type">{entityLabel(item.entityType)}</div>
+                      <div className="review-queue-meta">
+                        <span>{reasonLabel(item.reason)}</span>
+                        <span>{Math.round(item.confidence * 100)}%</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </aside>
@@ -306,8 +375,10 @@ export default function ReviewPage() {
                 <div className={`review-page-frame ${editing ? 'editing' : ''}`}>
                   {previewLoading && <div className="review-preview-loading">Rendering page…</div>}
                   {!previewLoading && previewError && (
-                    <div className="review-preview-loading">
-                      Preview unavailable: {previewError}
+                    <div className="review-preview-loading review-preview-error">
+                      <strong>Unable to render page {selected.pageNumber}.</strong>
+                      <span>{previewError}</span>
+                      <button className="secondary" onClick={() => loadQueue(selected.findingId)}>Refresh review item</button>
                     </div>
                   )}
                   {previewUrl && (
@@ -431,7 +502,7 @@ export default function ReviewPage() {
                 </div>
 
                 <p className="review-auto-note">
-                  When the last review item is resolved, processing resumes automatically.
+                  When the last review item is resolved, processing resumes automatically in the background.
                 </p>
               </>
             )}

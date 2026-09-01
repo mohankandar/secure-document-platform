@@ -123,6 +123,26 @@ Final V1 acceptance for this customer should include:
 
 
 
+
+## Tenant-Driven Prompt / AI Provider Routing Acceptance Delta — 2026-08-31
+
+The successful 61-page customer-package rerun validated the focused credit-card precision correction: final findings were exactly `CREDIT_SCORE=1` on page 59, the false page-31 card candidate was rejected by the PAN-shape guardrail, redaction verification passed, delivery succeeded, and the package completed. Provider/prompt separation may now proceed without reopening that precision behavior.
+
+Final Acceptance must additionally prove:
+
+1. Customer category policy is supplied to AI from `TenantRedactionPolicy`; `OllamaSensitiveContentAnalysisAdapter` does not own a hard-coded customer category prompt.
+2. Prompt composition includes only enabled tenant categories and honors `maskSsnLastFour`.
+3. AI provider/model configuration is independent from business redaction policy. Changing Gemma to Qwen under the same provider requires configuration only.
+4. Deployment default and explicit tenant AI profiles route by trusted tenant identity, never by caller-supplied production headers.
+5. Supported V1 provider transports are Ollama and OpenAI-compatible/vLLM. Customer-managed compatible endpoints use the same provider-neutral finding contract.
+6. AI API credentials are deployment-managed, never browser-managed, persisted in business policy, logged, audited, or returned by Platform Admin.
+7. `securedoc.ai.require-tenant-profile=true` fails closed for a tenant without an explicit AI profile and must not send its content to the default provider.
+8. `heuristic` remains local/development-only and is not allowed as tenant AI profile or secondary provider.
+9. Per-tenant AI profiles are deployment/restart managed for V1; no dynamic provider hot-swap or credential-editor UI is required.
+10. No Liquibase migration is expected from the tenant-AI/provider-routing delta itself. The later Dashboard visibility correction adds migration `013-dashboard-package-visibility.xml`; the current acceptance workspace therefore expects **36 changesets**.
+
+A proprietary customer AI protocol that is not OpenAI-compatible is outside the generic adapter contract and requires a dedicated provider adapter; this must not require changes to business policy/detection/redaction architecture.
+
 ## 4. Must-Pass Release-Candidate Acceptance Scenarios
 
 ### A. Digital PDF straight-through
@@ -506,3 +526,30 @@ The real 61-page customer-package run established additional must-pass acceptanc
 - The known actual contextual credit score on page 59 of the customer sample must remain discoverable.
 - Safe evidence-source logging must distinguish semantic raw/located/unlocated counts from deterministic counts without logging sensitive values.
 - Manual Review finding-scoped page preview must render for valid pending-review items. Any rejected preview must expose a safe specific reason/correlation instead of an opaque generic 400; security/status/original-availability checks must not be weakened to accomplish this.
+
+
+## Post-Unit-25 operational workflow acceptance addendum — 2026-08-31
+
+The following are now required V1 acceptance behaviors and do not change the frozen AI/redaction architecture:
+
+- Dashboard data must update automatically without full-page reload: approximately 5 seconds while processing, 30 seconds while idle, paused while the tab is hidden, immediate refresh on return/focus.
+- Package/Contract Details → Manual Review must be package-scoped at the backend; global Manual Review remains tenant-wide.
+- A selected review finding must render the exact one-based source PDF page and its stored/proposed bounding box. The client must reject a preview whose returned page metadata does not match the selected finding.
+- Stale or unavailable review preview state must fail safely with specific diagnostics and no raw sensitive content; it must not be represented as a misleading generic client bad-request state.
+- Manual Review active counts must exclude resolved/historical findings and packages no longer awaiting review.
+- Approver may choose `⋮` → `Remove from Dashboard` only for a completed/exported package. For V1 this means hide from normal Dashboard only. The package DB record, audit/lifecycle history, reports, and retention schedule remain; the existing retention lifecycle is the sole physical artifact purge mechanism.
+- Dashboard visibility must be stored independently from package lifecycle status.
+
+A controlled Manual Review runtime case may be created by temporarily using Business Admin `REVIEW_ALL`, processing a fresh sample, verifying the exact-page workbench, then restoring the normal review mode. This is preferred over weakening AI confidence/detection logic merely to force a review case.
+
+
+## Final-review-item responsiveness addendum — 2026-09-01
+
+- Saving the final actionable Manual Review decision must not keep the reviewer HTTP request open while PDF redaction, verification, and export run.
+- After the last decision is persisted, the package must leave review state and enter active `PROCESSING`; continuation is dispatched through the bounded V1 in-process processing dispatcher and the API returns promptly.
+- The existing `TriggerPackageProcessingUseCase` remains the only post-review redaction/verification/export orchestrator. No duplicate processing path is allowed.
+- The UI must visibly clear `Saving…`, report that review is complete and processing resumed in the background, and show no remaining actionable findings for the scoped package.
+- Dashboard polling must subsequently expose Processing -> Exported/Completed (or safe technical attention) without manual refresh.
+- Safe logs must include scheduled/started/completed/failed resume lifecycle metadata without raw sensitive values.
+- Exactly one post-review export cycle must occur.
+- The in-process dispatcher is an accepted V1 durability limitation; do not add a distributed broker solely for this correction.

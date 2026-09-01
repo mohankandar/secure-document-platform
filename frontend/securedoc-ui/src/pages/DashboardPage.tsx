@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { getCurrentRoles } from '../api/config';
@@ -79,6 +79,11 @@ export default function DashboardPage() {
   const [data, setData] = useState<OperationsDashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [openActionPackageId, setOpenActionPackageId] = useState<string | null>(null);
+  const [confirmHidePackageId, setConfirmHidePackageId] = useState<string | null>(null);
+  const [hidingPackageId, setHidingPackageId] = useState<string | null>(null);
   const [stage, setStage] = useState<DashboardStage>(() => safeStoredStage());
   const [search, setSearch] = useState(() => localStorage.getItem(SEARCH_KEY) || '');
   const [searchInput, setSearchInput] = useState(search);
@@ -95,14 +100,15 @@ export default function DashboardPage() {
   const [columnOrder, setColumnOrder] = useState<string[]>(() => savedColumnPreference.current || []);
   const requestId = useRef(0);
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async (silent = false) => {
     const id = ++requestId.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const result = await apiClient.getOperationsDashboard({ stage, search, offset, limit, sort, direction: 'desc' });
       if (id !== requestId.current) return;
       setData(result);
+      setLastRefreshedAt(new Date());
       setColumnOrder((existing) => {
         const available = new Set(result.columns.map((column) => column.key));
         if (hasInitializedColumnPreference.current) {
@@ -121,11 +127,11 @@ export default function DashboardPage() {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Failed to load dashboard');
     } finally {
-      if (id === requestId.current) setLoading(false);
+      if (!silent && id === requestId.current) setLoading(false);
     }
-  };
+  }, [stage, search, offset, limit, sort]);
 
-  useEffect(() => { loadDashboard(); }, [stage, search, offset, limit, sort]);
+  useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -137,7 +143,59 @@ export default function DashboardPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  useEffect(() => {
+    if (!openActionPackageId) return;
+    const closeOnOutsidePointer = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.dashboard-row-action')) setOpenActionPackageId(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenActionPackageId(null);
+    };
+    document.addEventListener('mousedown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openActionPackageId]);
+
+  useEffect(() => {
+    if (!confirmHidePackageId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !hidingPackageId) setConfirmHidePackageId(null);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [confirmHidePackageId, hidingPackageId]);
+
+  const hasActiveProcessing = (data?.overview.processing ?? 0) > 0;
+
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden) void loadDashboard(true);
+    };
+    const intervalMs = hasActiveProcessing ? 5000 : 30000;
+    const timer = window.setInterval(refresh, intervalMs);
+    const onVisibilityChange = () => { if (!document.hidden) refresh(); };
+    const onFocus = () => refresh();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [hasActiveProcessing, loadDashboard]);
+
   const availableColumns = data?.columns || [];
+  const primaryIdentifierColumn = availableColumns.find((column) => column.kind === 'IDENTIFIER' && column.primary);
+  const packagePendingRemoval = data?.items.find((item) => item.packageId === confirmHidePackageId) || null;
+  const removalIdentifierLabel = primaryIdentifierColumn?.label || 'Package';
+  const removalIdentifierValue = packagePendingRemoval && primaryIdentifierColumn?.key.startsWith('identifier:')
+    ? getIdentifier(packagePendingRemoval, primaryIdentifierColumn.key.slice('identifier:'.length))
+    : null;
+
   const visibleColumns = useMemo(() => {
     const byKey = new Map(availableColumns.map((column) => [column.key, column]));
     return columnOrder.map((key) => byKey.get(key)).filter((column): column is DashboardColumnDefinition => Boolean(column));
@@ -198,6 +256,70 @@ export default function DashboardPage() {
     setVisibleColumns(next);
   };
 
+  const hideCompletedPackage = async (packageId: string) => {
+    setError(null);
+    setNotice(null);
+    setHidingPackageId(packageId);
+    try {
+      await apiClient.hidePackageFromDashboard(packageId);
+      setConfirmHidePackageId(null);
+      setOpenActionPackageId(null);
+      setNotice('Package removed from the Dashboard. Database history and retention cleanup are unchanged.');
+      await loadDashboard();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || 'Unable to remove package from Dashboard');
+    } finally {
+      setHidingPackageId(null);
+    }
+  };
+
+  const requestDashboardRemoval = (packageId: string) => {
+    setOpenActionPackageId(null);
+    setConfirmHidePackageId(packageId);
+  };
+
+  const renderPackageAction = (item: DashboardItem) => {
+    const menuOpen = openActionPackageId === item.packageId;
+    const canRemove = item.status === 'COMPLETED';
+    return (
+      <div className="dashboard-row-action">
+        <button
+          className="dashboard-action-trigger"
+          type="button"
+          aria-label="Package actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setOpenActionPackageId((current) => current === item.packageId ? null : item.packageId)}
+        >
+          ⋮
+        </button>
+        {menuOpen && (
+          <div className="dashboard-action-menu" role="menu">
+            <Link
+              className="dashboard-action-menu-item"
+              role="menuitem"
+              to={`/packages/${item.packageId}`}
+              onClick={() => setOpenActionPackageId(null)}
+            >
+              View Details
+            </Link>
+            {canRemove && (
+              <button
+                className="dashboard-action-menu-item danger"
+                type="button"
+                role="menuitem"
+                onClick={() => requestDashboardRemoval(item.packageId)}
+              >
+                Remove from Dashboard
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderCell = (item: DashboardItem, column: DashboardColumnDefinition) => {
     if (column.key.startsWith('identifier:')) {
       const key = column.key.slice('identifier:'.length);
@@ -212,7 +334,7 @@ export default function DashboardPage() {
       case 'documents': return item.documentCount;
       case 'attention': {
         if (item.attention === 'REVIEW') return canReview
-          ? <Link className="attention-link attention-review" to="/review">Review</Link>
+          ? <Link className="attention-link attention-review" to={`/review?packageId=${item.packageId}`}>Review</Link>
           : <span className="attention-link attention-review">Needs review</span>;
         if (item.attention === 'APPROVAL') return canApprove
           ? <Link className="attention-link attention-approval" to={`/packages/${item.packageId}`}>Approval</Link>
@@ -236,6 +358,10 @@ export default function DashboardPage() {
           <p className="eyebrow">Document operations</p>
           <h1>Dashboard</h1>
           <p className="dashboard-subtitle">One place to track intake, review, delivery, and exceptions.</p>
+          <p className="dashboard-refresh-status">
+            Auto-refresh {hasActiveProcessing ? 'every 5 seconds while processing' : 'every 30 seconds while idle'}
+            {lastRefreshedAt ? ` · Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}
+          </p>
         </div>
         <div className="dashboard-header-actions">
           <Link to="/reports" className="button-link secondary">View Reports</Link>
@@ -244,6 +370,7 @@ export default function DashboardPage() {
       </header>
 
       {error && <div className="error-msg">{error}</div>}
+      {notice && <div className="success-msg">{notice}</div>}
 
       <section className={`overview-panel ${overviewCollapsed ? 'collapsed' : ''}`}>
         <div className="overview-title-row">
@@ -333,7 +460,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <button className="toolbar-button" onClick={loadDashboard} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+            <button className="toolbar-button" onClick={() => void loadDashboard()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
           </div>
         </div>
 
@@ -350,12 +477,16 @@ export default function DashboardPage() {
           ) : (
             <table className="operations-table">
               <thead>
-                <tr>{visibleColumns.map((column) => <th key={column.key}>{column.label}</th>)}</tr>
+                <tr>
+                  {visibleColumns.map((column) => <th key={column.key}>{column.label}</th>)}
+                  {canApprove && <th>Actions</th>}
+                </tr>
               </thead>
               <tbody>
                 {data.items.map((item) => (
                   <tr key={item.packageId}>
                     {visibleColumns.map((column) => <td key={column.key}>{renderCell(item, column)}</td>)}
+                    {canApprove && <td className="dashboard-actions-cell">{renderPackageAction(item)}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -379,6 +510,49 @@ export default function DashboardPage() {
           </div>
         </footer>
       </section>
+
+      {confirmHidePackageId && (
+        <div
+          className="dashboard-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !hidingPackageId) setConfirmHidePackageId(null);
+          }}
+        >
+          <section className="dashboard-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-dashboard-title">
+            <div className="dashboard-confirm-modal-handle" aria-hidden="true" />
+            <h2 id="remove-dashboard-title">Remove package from Dashboard?</h2>
+            {removalIdentifierValue && (
+              <p className="dashboard-confirm-identifier">
+                <span>{removalIdentifierLabel}</span>
+                <strong>{removalIdentifierValue}</strong>
+              </p>
+            )}
+            <p>
+              This package will be hidden from the normal Dashboard. Its database history and audit trail remain available,
+              and physical files continue to follow the existing retention policy.
+            </p>
+            <div className="dashboard-confirm-actions">
+              <button
+                className="dashboard-confirm-cancel"
+                type="button"
+                disabled={Boolean(hidingPackageId)}
+                onClick={() => setConfirmHidePackageId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="dashboard-confirm-remove"
+                type="button"
+                disabled={Boolean(hidingPackageId)}
+                onClick={() => void hideCompletedPackage(confirmHidePackageId)}
+              >
+                {hidingPackageId ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

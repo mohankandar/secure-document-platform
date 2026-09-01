@@ -9,10 +9,13 @@ import com.securedoc.platform.application.port.in.ResolveReviewItemUseCase;
 import com.securedoc.platform.application.review.command.ResolveReviewItemCommand;
 import com.securedoc.platform.application.review.model.ReviewResolution;
 import com.securedoc.platform.application.review.result.ResolveReviewItemResult;
+import com.securedoc.platform.application.review.result.ReviewBoundingBoxSummary;
 import com.securedoc.platform.application.review.result.ReviewItemSummary;
+import com.securedoc.platform.application.review.result.ReviewQueueResult;
 import com.securedoc.platform.application.review.result.ReviewPagePreviewResult;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.FindingId;
+import com.securedoc.platform.domain.identity.PackageId;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -55,11 +59,16 @@ public class FocusedReviewController {
 
     @GetMapping
     @RequireRole({"REVIEWER"})
-    public ResponseEntity<List<ReviewItemSummary>> list(
+    public ResponseEntity<ReviewQueueResponse> list(
             @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(required = false) String packageId,
             HttpServletRequest request) {
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
-        return ResponseEntity.ok(listReviewItemsQuery.execute(principal.tenantId(), limit));
+        Optional<PackageId> packageScope = packageId == null || packageId.isBlank()
+                ? Optional.empty()
+                : Optional.of(PackageId.of(UUID.fromString(packageId)));
+        ReviewQueueResult queue = listReviewItemsQuery.execute(principal.tenantId(), packageScope, limit);
+        return ResponseEntity.ok(ReviewQueueResponse.from(queue));
     }
 
     @GetMapping(value = "/{findingId}/page-preview", produces = MediaType.IMAGE_PNG_VALUE)
@@ -125,6 +134,47 @@ public class FocusedReviewController {
                 "packageId", result.packageId().toString(),
                 "status", result.status().name(),
                 "processingResumed", result.processingResumed()));
+    }
+
+
+    /**
+     * API-boundary DTOs deliberately flatten domain identifier value objects to UUID strings.
+     * Returning FindingId/PackageId/DocumentId records directly causes Jackson to serialize
+     * them as {"value":"..."}; the browser then interpolates [object Object] into review URLs.
+     */
+    public record ReviewQueueResponse(List<ReviewItemResponse> items, int totalItems) {
+        static ReviewQueueResponse from(ReviewQueueResult queue) {
+            return new ReviewQueueResponse(
+                    queue.items().stream().map(ReviewItemResponse::from).toList(),
+                    queue.totalItems());
+        }
+    }
+
+    public record ReviewItemResponse(
+            String findingId,
+            String packageId,
+            String documentId,
+            String fileName,
+            String entityType,
+            double confidence,
+            int pageNumber,
+            boolean hasBoundingBox,
+            ReviewBoundingBoxSummary boundingBox,
+            String reason
+    ) {
+        static ReviewItemResponse from(ReviewItemSummary item) {
+            return new ReviewItemResponse(
+                    item.findingId().toString(),
+                    item.packageId().toString(),
+                    item.documentId().toString(),
+                    item.fileName(),
+                    item.entityType().name(),
+                    item.confidence(),
+                    item.pageNumber(),
+                    item.hasBoundingBox(),
+                    item.boundingBox(),
+                    item.reason().name());
+        }
     }
 
     public record ConfirmRequest(String reason, BoundingBoxRequest boundingBox) {}

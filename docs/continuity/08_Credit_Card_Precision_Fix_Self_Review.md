@@ -1,3 +1,5 @@
+> **Runtime validation update — 2026-08-31:** PASS on the real 61-page customer PDF. AI completed with one final `CREDIT_SCORE` finding on page 59; page-31 false card candidate was rejected as `INVALID_PAN_SHAPE`; final `CREDIT_CARD_NUMBER=0`, `DATE_OF_BIRTH=0`, `SSN=0`; redaction verification and local delivery passed; package completed.
+
 # Focused Credit-Card Precision Fix — Self Review
 
 **Date:** 2026-08-31  

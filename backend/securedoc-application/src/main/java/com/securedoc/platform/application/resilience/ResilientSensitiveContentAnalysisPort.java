@@ -3,7 +3,6 @@ package com.securedoc.platform.application.resilience;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
 
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -25,14 +24,14 @@ public final class ResilientSensitiveContentAnalysisPort implements SensitiveCon
     }
 
     @Override
-    public AnalysisOutput analyze(List<PageContent> pages) {
+    public AnalysisOutput analyze(AnalysisRequest request) {
         try {
-            return retryExecutor.execute(() -> primary.analyze(pages));
+            return retryExecutor.execute(() -> primary.analyze(request));
         } catch (TechnicalDependencyException primaryFailure) {
             if (secondary == null) {
                 throw primaryFailure;
             }
-            return retryExecutor.execute(() -> secondary.analyze(pages));
+            return retryExecutor.execute(() -> secondary.analyze(request));
         }
     }
 }

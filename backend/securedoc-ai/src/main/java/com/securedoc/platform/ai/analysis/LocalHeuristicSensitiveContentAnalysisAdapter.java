@@ -2,9 +2,11 @@ package com.securedoc.platform.ai.analysis;
 
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
 
+import com.securedoc.platform.domain.finding.EntityType;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,17 +31,26 @@ public final class LocalHeuristicSensitiveContentAnalysisAdapter implements Sens
             "(?i)(?:credit\\s+score|fico(?:\\s+score)?|vantage(?:score)?(?:\\s+score)?)\\s*[:#-]?\\s*(\\d{3})");
 
     @Override
-    public AnalysisOutput analyze(List<PageContent> pages) {
+    public AnalysisOutput analyze(AnalysisRequest request) {
         List<DiscoveredSensitiveContent> findings = new ArrayList<>();
-        for (PageContent page : pages) {
+        Set<EntityType> enabled = request.policy().enabledEntityTypes();
+        for (PageContent page : request.pages()) {
             String text = page.text();
             if (text.isBlank()) {
                 continue;
             }
-            collect(text, page.pageNumber(), LABELED_SSN, "SSN", 0.97, findings, false);
-            collect(text, page.pageNumber(), LABELED_DOB, "DATE_OF_BIRTH", 0.94, findings, false);
-            collect(text, page.pageNumber(), LABELED_CARD, "CREDIT_CARD_NUMBER", 0.94, findings, true);
-            collectScores(text, page.pageNumber(), findings);
+            if (enabled.contains(EntityType.SSN)) {
+                collect(text, page.pageNumber(), LABELED_SSN, "SSN", 0.97, findings, false);
+            }
+            if (enabled.contains(EntityType.DATE_OF_BIRTH)) {
+                collect(text, page.pageNumber(), LABELED_DOB, "DATE_OF_BIRTH", 0.94, findings, false);
+            }
+            if (enabled.contains(EntityType.CREDIT_CARD_NUMBER)) {
+                collect(text, page.pageNumber(), LABELED_CARD, "CREDIT_CARD_NUMBER", 0.94, findings, true);
+            }
+            if (enabled.contains(EntityType.CREDIT_SCORE)) {
+                collectScores(text, page.pageNumber(), findings);
+            }
         }
         return new AnalysisOutput(findings);
     }

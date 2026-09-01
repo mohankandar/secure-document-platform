@@ -19,6 +19,7 @@ import com.securedoc.platform.application.port.out.AuditQueryPort;
 import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
 import com.securedoc.platform.application.port.in.FailDocumentProcessingUseCase;
 import com.securedoc.platform.application.port.in.GetPackageQuery;
+import com.securedoc.platform.application.port.in.HidePackageFromDashboardUseCase;
 import com.securedoc.platform.application.port.in.GetReviewPagePreviewQuery;
 import com.securedoc.platform.application.port.in.ListPackagesQuery;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
@@ -36,6 +37,8 @@ import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.application.port.out.FindingRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
+import com.securedoc.platform.application.port.out.PackageDashboardVisibilityPort;
 import com.securedoc.platform.application.port.out.OperationsReadPort;
 import com.securedoc.platform.application.port.out.DashboardColumnSettingsRepository;
 import com.securedoc.platform.application.port.out.PdfRedactionPort;
@@ -55,6 +58,7 @@ import com.securedoc.platform.application.detection.service.SensitiveDataDetecti
 import com.securedoc.platform.application.extraction.service.TextExtractionService;
 import com.securedoc.platform.application.redaction.service.DocumentRedactionService;
 import com.securedoc.platform.application.resilience.ResilientSensitiveContentAnalysisPort;
+import com.securedoc.platform.application.resilience.TenantRoutingSensitiveContentAnalysisPort;
 import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.review.service.FindingReviewService;
 import com.securedoc.platform.application.review.service.FocusedReviewService;
@@ -65,6 +69,7 @@ import com.securedoc.platform.application.processing.service.PackageFinalization
 import com.securedoc.platform.application.processing.service.PackageProcessingService;
 import com.securedoc.platform.application.processing.service.TriggerPackageProcessingService;
 import com.securedoc.platform.application.operations.service.OperationsQueryService;
+import com.securedoc.platform.application.operations.service.PackageDashboardVisibilityService;
 import com.securedoc.platform.application.operations.service.DashboardColumnConfigurationService;
 import com.securedoc.platform.application.export.service.PackageDocumentExportService;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
@@ -84,16 +89,25 @@ import com.securedoc.platform.application.service.TenantContextService;
 import com.securedoc.platform.application.service.UploadDocumentService;
 import com.securedoc.platform.ai.analysis.LocalHeuristicSensitiveContentAnalysisAdapter;
 import com.securedoc.platform.ai.analysis.OllamaSensitiveContentAnalysisAdapter;
+import com.securedoc.platform.ai.analysis.OpenAiCompatibleSensitiveContentAnalysisAdapter;
+import com.securedoc.platform.api.processing.InProcessPackageProcessingDispatcher;
+import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.resilience.TechnicalResilienceProperties;
 import com.securedoc.platform.worker.processing.ProcessingWorkCoordinator;
 import com.securedoc.platform.worker.processing.ProcessingWorker;
 import com.securedoc.platform.worker.processing.ProcessingWorkerConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Wires application services with infrastructure adapters.
@@ -294,17 +308,74 @@ public class ApplicationServiceConfig {
     public SensitiveContentAnalysisPort sensitiveContentAnalysisPort(
             AiRuntimeProperties properties,
             SelectiveRetryExecutor selectiveRetryExecutor) {
+        SensitiveContentAnalysisPort defaultProfile = buildResilientAnalysisProfile(
+                properties.getProvider(), properties.getBaseUrl(), properties.getModel(), properties.getApiKey(),
+                properties.getTimeoutSeconds(), properties.getParallelism(), properties.getPageMaxAttempts(),
+                properties.getPageRetryBackoffMs(),
+                properties.isSecondaryEnabled(), properties.getSecondaryProvider(),
+                properties.getSecondaryBaseUrl(), properties.getSecondaryModel(), properties.getSecondaryApiKey(),
+                properties.getSecondaryTimeoutSeconds(),
+                selectiveRetryExecutor, true);
+
+        Map<TenantId, SensitiveContentAnalysisPort> tenantProfiles = new LinkedHashMap<>();
+        for (Map.Entry<String, AiRuntimeProperties.TenantProfile> entry : properties.getTenantProfiles().entrySet()) {
+            final TenantId tenantId;
+            try {
+                tenantId = TenantId.fromString(entry.getKey());
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("Invalid tenant UUID in securedoc.ai.tenant-profiles: " + entry.getKey(), e);
+            }
+            AiRuntimeProperties.TenantProfile profile = entry.getValue();
+            if (profile == null) {
+                throw new IllegalArgumentException("AI tenant profile must not be null for tenant " + tenantId);
+            }
+
+            int timeoutSeconds = positiveOrDefault(profile.getTimeoutSeconds(), properties.getTimeoutSeconds());
+            int parallelism = positiveOrDefault(profile.getParallelism(), properties.getParallelism());
+            int pageMaxAttempts = positiveOrDefault(profile.getPageMaxAttempts(), properties.getPageMaxAttempts());
+            long pageBackoffMs = profile.getPageRetryBackoffMs() >= 0
+                    ? profile.getPageRetryBackoffMs()
+                    : properties.getPageRetryBackoffMs();
+            int secondaryTimeout = positiveOrDefault(profile.getSecondaryTimeoutSeconds(), timeoutSeconds);
+
+            SensitiveContentAnalysisPort tenantProfile = buildResilientAnalysisProfile(
+                    profile.getProvider(), profile.getBaseUrl(), profile.getModel(), profile.getApiKey(),
+                    timeoutSeconds, parallelism, pageMaxAttempts, pageBackoffMs,
+                    profile.isSecondaryEnabled(), profile.getSecondaryProvider(), profile.getSecondaryBaseUrl(),
+                    profile.getSecondaryModel(), profile.getSecondaryApiKey(), secondaryTimeout,
+                    selectiveRetryExecutor, false);
+            tenantProfiles.put(tenantId, tenantProfile);
+        }
+
+        return new TenantRoutingSensitiveContentAnalysisPort(
+                defaultProfile, tenantProfiles, properties.isRequireTenantProfile());
+    }
+
+    private SensitiveContentAnalysisPort buildResilientAnalysisProfile(
+            String provider,
+            String baseUrl,
+            String model,
+            String apiKey,
+            int timeoutSeconds,
+            int parallelism,
+            int pageMaxAttempts,
+            long pageRetryBackoffMs,
+            boolean secondaryEnabled,
+            String secondaryProvider,
+            String secondaryBaseUrl,
+            String secondaryModel,
+            String secondaryApiKey,
+            int secondaryTimeoutSeconds,
+            SelectiveRetryExecutor selectiveRetryExecutor,
+            boolean allowHeuristic) {
         SensitiveContentAnalysisPort primary = buildAnalysisProvider(
-                properties.getProvider(), properties.getBaseUrl(), properties.getModel(),
-                properties.getTimeoutSeconds(), properties.getParallelism(),
-                properties.getPageMaxAttempts(), properties.getPageRetryBackoffMs(), true);
+                provider, baseUrl, model, apiKey, timeoutSeconds, parallelism,
+                pageMaxAttempts, pageRetryBackoffMs, allowHeuristic);
         SensitiveContentAnalysisPort secondary = null;
-        if (properties.isSecondaryEnabled()) {
+        if (secondaryEnabled) {
             secondary = buildAnalysisProvider(
-                    properties.getSecondaryProvider(), properties.getSecondaryBaseUrl(),
-                    properties.getSecondaryModel(), properties.getSecondaryTimeoutSeconds(),
-                    properties.getParallelism(), properties.getPageMaxAttempts(),
-                    properties.getPageRetryBackoffMs(), false);
+                    secondaryProvider, secondaryBaseUrl, secondaryModel, secondaryApiKey,
+                    secondaryTimeoutSeconds, parallelism, pageMaxAttempts, pageRetryBackoffMs, false);
         }
         return new ResilientSensitiveContentAnalysisPort(primary, secondary, selectiveRetryExecutor);
     }
@@ -312,28 +383,36 @@ public class ApplicationServiceConfig {
     private SensitiveContentAnalysisPort buildAnalysisProvider(String providerValue,
                                                                String baseUrl,
                                                                String model,
+                                                               String apiKey,
                                                                int timeoutSeconds,
                                                                int parallelism,
                                                                int pageMaxAttempts,
                                                                long pageRetryBackoffMs,
                                                                boolean allowHeuristic) {
         String provider = providerValue == null ? "" : providerValue.trim().toLowerCase();
+        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds));
+        int boundedParallelism = Math.max(1, Math.min(16, parallelism));
+        int boundedPageAttempts = Math.max(1, Math.min(5, pageMaxAttempts));
+        Duration pageBackoff = Duration.ofMillis(Math.max(0L, pageRetryBackoffMs));
+
         return switch (provider) {
             case "ollama" -> new OllamaSensitiveContentAnalysisAdapter(
-                    baseUrl,
-                    model,
-                    Duration.ofSeconds(Math.max(1, timeoutSeconds)),
-                    Math.max(1, Math.min(16, parallelism)),
-                    Math.max(1, Math.min(5, pageMaxAttempts)),
-                    Duration.ofMillis(Math.max(0L, pageRetryBackoffMs)));
+                    baseUrl, model, timeout, boundedParallelism, boundedPageAttempts, pageBackoff);
+            case "openai-compatible", "openai_compatible", "vllm" ->
+                    new OpenAiCompatibleSensitiveContentAnalysisAdapter(
+                            baseUrl, model, apiKey, timeout, boundedParallelism, boundedPageAttempts, pageBackoff);
             case "heuristic" -> {
                 if (!allowHeuristic) {
-                    throw new IllegalArgumentException("Heuristic adapter cannot be configured as AI failover");
+                    throw new IllegalArgumentException("Heuristic adapter cannot be configured for a tenant or AI failover");
                 }
                 yield new LocalHeuristicSensitiveContentAnalysisAdapter();
             }
             default -> throw new IllegalArgumentException("Unsupported securedoc.ai provider: " + providerValue);
         };
+    }
+
+    private int positiveOrDefault(int value, int fallback) {
+        return value > 0 ? value : fallback;
     }
 
     // --- Detection service ---
@@ -378,6 +457,14 @@ public class ApplicationServiceConfig {
                 eventPublisher, auditService);
     }
 
+    @Bean
+    public HidePackageFromDashboardUseCase hidePackageFromDashboardUseCase(
+            PackageRepository packageRepository,
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort,
+            AuditService auditService) {
+        return new PackageDashboardVisibilityService(packageRepository, packageDashboardVisibilityPort, auditService);
+    }
+
     // --- Review services ---
 
     @Bean
@@ -409,10 +496,10 @@ public class ApplicationServiceConfig {
             DocumentRepository documentRepository,
             FindingRepository findingRepository,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
-            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+            PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService) {
         return new FocusedReviewService(packageRepository, documentRepository, findingRepository,
-                tenantRedactionPolicyRepository, triggerPackageProcessingUseCase, auditService);
+                tenantRedactionPolicyRepository, packageProcessingDispatcher, auditService);
     }
 
     @Bean
@@ -507,6 +594,31 @@ public class ApplicationServiceConfig {
                 exportPackageDocumentsUseCase, selectiveRetryExecutor, packageLifecycleService, auditService);
     }
 
+
+    /**
+     * Bounded V1 executor for post-review continuation. Keeping this separate from request threads
+     * prevents the final reviewer action from waiting on redaction, verification and export.
+     */
+    @Bean(name = "reviewResumeTaskExecutor")
+    public ThreadPoolTaskExecutor reviewResumeTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(100);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setThreadNamePrefix("review-resume-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        return executor;
+    }
+
+    @Bean
+    public PackageProcessingDispatcher packageProcessingDispatcher(
+            @Qualifier("reviewResumeTaskExecutor") TaskExecutor reviewResumeTaskExecutor,
+            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase) {
+        return new InProcessPackageProcessingDispatcher(
+                reviewResumeTaskExecutor, triggerPackageProcessingUseCase);
+    }
 
     @Bean
     public ExportPackageDocumentsUseCase exportPackageDocumentsUseCase(

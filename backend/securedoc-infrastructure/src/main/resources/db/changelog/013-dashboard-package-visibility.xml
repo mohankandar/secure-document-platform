@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="013-01-package-dashboard-visibility" author="securedoc">
+        <addColumn tableName="document_packages">
+            <column name="dashboard_hidden_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="dashboard_hidden_by" type="UUID"/>
+        </addColumn>
+        <createIndex tableName="document_packages" indexName="idx_document_packages_tenant_dashboard_hidden">
+            <column name="tenant_id"/>
+            <column name="dashboard_hidden_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

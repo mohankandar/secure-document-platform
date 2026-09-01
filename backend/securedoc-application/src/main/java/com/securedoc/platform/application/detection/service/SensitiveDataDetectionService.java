@@ -168,8 +168,11 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Truly blank pages were already safely inspected by native extraction/OCR and do not need
         // a meaningless model call.
         boolean hasTextBearingPage = pagesByNumber.values().stream().anyMatch(page -> !page.text().isBlank());
+        SensitiveContentAnalysisPort.AnalysisPolicy analysisPolicy =
+                new SensitiveContentAnalysisPort.AnalysisPolicy(enabledTypes, tenantPolicy.maskSsnLastFour());
         SensitiveContentAnalysisPort.AnalysisOutput semanticOutput = hasTextBearingPage
-                ? semanticAnalysisPort.analyze(semanticInputs)
+                ? semanticAnalysisPort.analyze(new SensitiveContentAnalysisPort.AnalysisRequest(
+                        command.tenantId(), semanticInputs, analysisPolicy))
                 : new SensitiveContentAnalysisPort.AnalysisOutput(List.of());
         DetectionOutput deterministicOutput = hasTextBearingPage
                 ? deterministicDetectionPort.detect(deterministicInputs)

@@ -18,4 +18,5 @@
     <include file="db/changelog/010-delivery-lifecycle.xml"/>
     <include file="db/changelog/011-dashboard-reporting-indexes.xml"/>
     <include file="db/changelog/012-ssn-last-four-policy.xml"/>
+    <include file="db/changelog/013-dashboard-package-visibility.xml"/>
 </databaseChangeLog>

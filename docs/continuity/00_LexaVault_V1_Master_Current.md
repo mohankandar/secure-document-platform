@@ -1,3 +1,15 @@
+# CURRENT RUNTIME CORRECTION — 2026-08-31 MANUAL REVIEW API IDENTIFIERS
+
+- Package Details → Manual Review scoping is runtime validated: only the selected contract/package is shown.
+- The source `ORIGINAL` artifact was confirmed physically present for the failing review package.
+- Chrome DevTools proved the HTTP 400 root cause: the browser requested `/api/v1/review-items/[object%20Object]/page-preview`.
+- `FocusedReviewController.list()` was exposing domain ID value objects directly; the frontend contract expected plain UUID strings.
+- The Manual Review API now uses explicit boundary DTOs that flatten `findingId`, `packageId`, and `documentId` to UUID strings.
+- The fix is intentionally narrow: no global identity serialization change and no AI/detection/redaction/storage/retention behavior change.
+- A focused serialization regression test was added. Local full build + page-24/page-31 runtime validation is still required.
+
+---
+
 
 ## ChatGPT ↔ Kiro Development Workflow — Credit-Saving Rule
 
@@ -82,7 +94,7 @@ The goal is to spend Kiro credits on **high-value independent verification**, no
 **Category:** AI-Powered Secure Document Redaction and Processing Platform  
 **Decision Freeze:** 2026-08-29 (product/architecture)  
 **Current Construction Update:** 2026-08-31  
-**Revision:** AI-first decisions + Units 16–25 approved + customer-policy/observability delta + Ollama page-retry correction + detection-precision/manual-review correction + focused credit-card precision correction implemented + Final V1 acceptance pending
+**Revision:** AI-first decisions + Units 16–25 approved + customer-policy/observability delta + Ollama reliability + detection/credit-card precision validated + tenant-driven prompt/provider routing + Dashboard/Manual Review/package-visibility correction implemented + Final V1 acceptance pending
 
 > This packet is generated from the current authoritative Markdown documents. Historical review PDFs and early unit notes may contain superseded assumptions.
 
@@ -94,9 +106,108 @@ The goal is to spend Kiro credits on **high-value independent verification**, no
 
 
 
+## Dashboard + Manual Review + Package Visibility Correction — 2026-08-31
+
+**Status: ChatGPT implemented on top of the locally validated tenant-AI/provider-routing baseline; local full build and focused runtime verification pending.**
+
+Frozen behavior in this delta:
+- Dashboard silently refreshes every 5 seconds while processing, every 30 seconds while idle, pauses while hidden, and refreshes on tab/window return.
+- Package Details/Dashboard review links open a backend-enforced package-scoped Manual Review; left-nav/global Manual Review remains tenant-wide.
+- Review items are grouped by document/page and the UI verifies the rendered page header matches the finding's exact one-based page.
+- Stale/non-renderable preview state returns safe `409 INVALID_STATE` diagnostics instead of misleading generic `HTTP 400` state errors.
+- Active review counts include only `DETECTED` findings on packages currently in `PENDING_REVIEW`/`IN_REVIEW`.
+- Approver `⋮` → `Remove from Dashboard` is Dashboard removal only for `COMPLETED` packages. The DB record, lifecycle/audit history, reports, and retention schedule remain. Existing retention cleanup alone handles physical artifact purge.
+- Liquibase `013-dashboard-package-visibility.xml` adds `dashboard_hidden_at` and `dashboard_hidden_by`; no processing status is repurposed as a UI-visibility flag.
+- No AI detection/prompt/provider/redaction behavior changed in this correction.
+
+See `11_Dashboard_Manual_Review_Lifecycle_Workflow_Correction.md` for implementation and focused runtime checks.
+
+## Tenant-Driven Prompt + Per-Tenant AI Provider/Model Routing — 2026-08-31
+
+**Status: ChatGPT implemented; full local Maven/frontend build and focused runtime verification required before Final Acceptance approval.**
+
+This change follows the successful real 61-page customer-package rerun. That rerun produced exactly one final finding (`CREDIT_SCORE` page 59), rejected the false page-31 credit-card candidate with `INVALID_PAN_SHAPE`, applied one verified permanent redaction, exported successfully, and finished `COMPLETED`. DOB/SSN/credit-card false positives were zero.
+
+### Problem being corrected
+
+`OllamaSensitiveContentAnalysisAdapter` previously owned the V1 category prompt directly. That made customer redaction semantics look like Ollama-specific behavior and would not scale correctly when tenants use different enabled categories, models, inference servers, or customer-managed AI endpoints.
+
+Two independent concerns are now separated:
+
+1. **Business redaction policy** — which categories/options the tenant wants analyzed/redacted. Business Admin remains the source of truth.
+2. **AI execution profile** — which provider transport, endpoint, model, timeout/concurrency and deployment-managed credential a tenant uses. This remains an IT/Platform/deployment concern.
+
+### Implemented architecture
+
+- `SensitiveContentAnalysisPort.AnalysisRequest` now carries `tenantId`, normalized pages, and an `AnalysisPolicy` derived from the tenant's live `TenantRedactionPolicy`.
+- `SensitiveContentPromptBuilder` is provider-neutral and composes only the tenant-enabled V1 categories. Disabled categories are not inserted into the model instructions.
+- `maskSsnLastFour` is carried into prompt composition. Full SSN remains a category behavior; last-four-only handling follows the tenant flag.
+- `OllamaSensitiveContentAnalysisAdapter` is now transport/model-specific only: Ollama request, timeout/page retry, response-envelope extraction and provider metadata. It no longer hard-codes the customer's four-category prompt.
+- Shared `SensitiveContentResponseParser` preserves exact-text anti-fabrication checks and the runtime-validated credit-card PAN-shape guardrail for all supported chat providers.
+- Added `OpenAiCompatibleSensitiveContentAnalysisAdapter` for vLLM and customer-managed OpenAI-compatible chat-completions endpoints. Bearer credentials are deployment-managed and never logged or exposed through Business Admin.
+- Added `TenantRoutingSensitiveContentAnalysisPort`. A tenant can use an explicitly configured AI profile while another tenant uses a different profile/model. Tenants without an explicit profile use the deployment default only when that fallback is allowed.
+- Added `securedoc.ai.require-tenant-profile`. When true, a tenant missing an explicit AI profile fails closed with a typed AI technical failure; its document content is not silently sent to the default provider.
+- Provider selection accepts `ollama`, `openai-compatible` / `openai_compatible`, and `vllm`. `heuristic` remains development-only and cannot be configured as a tenant profile or failover.
+- Model selection is a string owned by configuration. Switching Ollama from `gemma3:12b` to a Qwen model does not require application/domain code changes.
+- Existing generic environment variables are now supported: `SECUREDOC_AI_BASE_URL`, `SECUREDOC_AI_MODEL`, `SECUREDOC_AI_API_KEY`; legacy Ollama-specific local variables remain backward-compatible fallbacks.
+- The tenant-AI/provider-routing delta itself introduced no database migration. Tenant AI endpoint/model/credential profiles remain deployment-managed for V1; there is no browser credential vault or dynamic hot-swap UI. The later Dashboard visibility correction adds migration `013-dashboard-package-visibility.xml`, so the **current workspace total is 36 Liquibase changesets**.
+
+### Example deployment profiles
+
+Ollama + Qwen for one tenant:
+
+```yaml
+securedoc:
+  ai:
+    tenant-profiles:
+      "00000000-0000-0000-0000-000000000001":
+        provider: ollama
+        base-url: ${TENANT_A_AI_BASE_URL:http://localhost:11434}
+        model: ${TENANT_A_AI_MODEL:qwen3:14b}
+        timeout-seconds: 180
+        parallelism: 2
+```
+
+Customer-managed vLLM/OpenAI-compatible endpoint for another tenant:
+
+```yaml
+securedoc:
+  ai:
+    require-tenant-profile: true
+    tenant-profiles:
+      "11111111-1111-1111-1111-111111111111":
+        provider: openai-compatible
+        base-url: ${TENANT_B_AI_BASE_URL}
+        model: ${TENANT_B_AI_MODEL:Qwen/Qwen3-14B}
+        api-key: ${TENANT_B_AI_API_KEY:}
+        timeout-seconds: 180
+        parallelism: 4
+```
+
+The tenant's redaction categories are **not** repeated in this technical provider profile. They continue to come from `TenantRedactionPolicy`.
+
+### Scope boundary
+
+- No provider-neutral business-domain redesign beyond the existing analysis port.
+- No database-stored AI secrets.
+- No Business Admin control of endpoints/models/credentials.
+- No dynamic provider hot-swap. Configuration changes are deployment/restart managed in V1.
+- A customer AI service using a proprietary non-OpenAI-compatible protocol requires a dedicated adapter, but no change to tenant policy, detection, review or redaction pipelines.
+
+### Required verification
+
+1. Existing Ollama + `gemma3:12b` 61-page regression still produces the previously validated result.
+2. Prompt for a tenant with only `CREDIT_SCORE` enabled does not contain SSN/DOB/card instructions.
+3. `maskSsnLastFour=false` changes only the partial-SSN prompt behavior; full SSN category remains enabled when SSN is enabled.
+4. Same Ollama adapter starts with a different configured model name (for example Qwen) without code changes.
+5. OpenAI-compatible adapter calls `/v1/chat/completions`, parses the same finding contract, and sends an optional deployment bearer token without logging it.
+6. Tenant A routes to its profile and Tenant B routes independently/default as configured.
+7. `require-tenant-profile=true` rejects an unconfigured tenant before sending document text to the default provider.
+8. Existing credit-card precision, page retry, deterministic evidence, review/redaction and security behavior regressions remain green.
+
 ## Focused Credit-Card Precision Correction — 2026-08-31
 
-**Status: ChatGPT implemented; user rebuild/runtime rerun required before acceptance. Provider-neutral/tenant-prompt refactor is explicitly deferred until this precision test passes.**
+**Status: RUNTIME VALIDATED on the real 61-page customer PDF. Credit-card precision correction PASS.**
 
 The post-DOB/SSN precision rerun of the real 61-page customer PDF completed successfully with real Ollama `gemma3:12b` in ~386 seconds and produced only three final findings: one correct `CREDIT_SCORE` on page 59 and two incorrect `CREDIT_CARD_NUMBER` findings on pages 24 and 31. `DATE_OF_BIRTH=0` and `SSN=0`, proving the prior precision correction worked. Tenant filtering also correctly excluded deterministic email/phone findings because those categories are disabled for this customer.
 
@@ -123,7 +234,7 @@ Rebuild and process the same 61-page PDF again. Expected result for the inspecte
 - the page-24/page-31 barcode/control markers do not enter Manual Review;
 - if the model still proposes them, safe `AI_FINDING_REJECTED` diagnostics should show the rejected page/digit count without the value.
 
-Do **not** begin the provider-neutral/tenant-prompt refactor until this focused credit-card precision rerun is evaluated.
+The focused credit-card precision rerun passed; the previously deferred tenant-prompt/provider work is now the active pre-acceptance delta.
 
 ## Pre-Acceptance Detection Precision + Manual Review Preview Correction — 2026-08-31
 
@@ -447,7 +558,7 @@ Passed locally in the available environment:
 - focused new JUnit source compile using temporary JUnit stubs;
 - TypeScript changed-file syntax/transpile checks;
 - all XML/POM/Liquibase files parsed successfully;
-- Liquibase now contains **35 changeSets** including expected post-Unit-25 migration `012-ssn-last-four-policy.xml`;
+- At that pre-workflow-correction checkpoint Liquibase contained **35 changeSets** including `012-ssn-last-four-policy.xml`; the current workspace contains **36** after later migration `013-dashboard-package-visibility.xml`;
 - new logging statements contain safe metadata only and do not log raw finding/document values.
 
 A full Maven/Vite build is **not claimed** from ChatGPT's environment because Maven/dependency infrastructure is unavailable there. The user/Kiro environment must run the normal final backend/frontend builds before Release Candidate approval.
@@ -2334,3 +2445,20 @@ Key later decisions now captured in this master packet include:
 
 The `CURRENT PROJECT CONTINUITY UPDATE — 2026-08-30` section near the top of this file is the recommended new-thread entry point.
 
+
+### Dashboard package action UX polish (2026-08-31)
+
+- Approved cross-platform action pattern: a touch-friendly row `⋮` menu.
+- Menu contains `View Details` for package navigation and `Remove from Dashboard` only when removal is allowed.
+- `Remove from Dashboard` opens a confirmation modal on desktop and is styled to become a bottom-sheet style confirmation on small/touch layouts.
+- Removal does not delete the package DB record and does not physically purge artifacts; the existing retention lifecycle remains authoritative for file deletion.
+- The confirmation uses the tenant-configured primary business identifier label/value when available rather than hardcoding `Contract Number`.
+
+
+## Runtime Workflow Update — 2026-09-01: Final Review Item Async Resume
+
+Runtime testing has now validated package-scoped Manual Review, exact source-page rendering, Dashboard smart polling, and Approver Dashboard-only removal. The final review item exposed one additional UX defect: its finding decision was saved and the package exported successfully, but the browser remained on `Saving…` because `FocusedReviewService` synchronously invoked the complete post-review redaction/verification/export pipeline before returning the HTTP response.
+
+The correction keeps the human decision and slow document work separate. After the final actionable finding is saved, the package transitions to `PROCESSING`, the transition is audited, and a new provider-neutral `PackageProcessingDispatcher` dispatches the existing `TriggerPackageProcessingUseCase` through a bounded in-process executor. The review API can therefore return promptly while the existing processing orchestrator performs redaction, verification, and delivery in the background. Dashboard polling communicates Processing -> Exported/Completed. No duplicate redaction/export implementation, new retention path, AI/detection change, or distributed broker was introduced.
+
+Acceptance must verify that the last decision visibly leaves `Saving…` promptly, the review queue becomes empty, `REVIEW_PROCESSING_RESUME_SCHEDULED/STARTED/COMPLETED` are emitted without sensitive content, and exactly one export cycle results. The in-process dispatcher remains an explicit V1 limitation that may later be replaced by durable queue/outbox consumption.

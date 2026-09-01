@@ -180,6 +180,17 @@ export interface FocusedReviewItem {
   reason: 'LOW_CONFIDENCE' | 'LOCATION_UNCERTAIN' | 'POLICY_REVIEW' | string;
 }
 
+
+export interface FocusedReviewQueue {
+  items: FocusedReviewItem[];
+  totalItems: number;
+}
+
+export interface ReviewPagePreview {
+  blob: Blob;
+  pageNumber: number;
+}
+
 export interface ReviewResolutionResult {
   findingId: string;
   packageId: string;

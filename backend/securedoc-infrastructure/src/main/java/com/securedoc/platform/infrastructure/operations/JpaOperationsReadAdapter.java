@@ -37,10 +37,10 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     public DashboardPage loadDashboard(TenantId tenantId, DashboardStage stage, String search,
                                        int offset, int limit, String sortField, boolean descending) {
         UUID tenant = tenantId.value();
-        DashboardOverview overview = loadOverview(tenant);
+        DashboardOverview overview = loadOverview(tenant, true);
         List<DashboardColumnDefinition> columns = loadColumns(tenant);
 
-        String where = " p.tenant_id = :tenant " + stageClause(stage)
+        String where = " p.tenant_id = :tenant and p.dashboard_hidden_at is null " + stageClause(stage)
                 + (search == null || search.isBlank() ? "" : searchClause());
 
         Query countQuery = entityManager.createNativeQuery("select count(*) from document_packages p where " + where);
@@ -94,7 +94,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     @Override
     public OperationalReportSnapshot loadReports(TenantId tenantId, Instant now) {
         UUID tenant = tenantId.value();
-        DashboardOverview overview = loadOverview(tenant);
+        DashboardOverview overview = loadOverview(tenant, false);
 
         Object[] channels = row(entityManager.createNativeQuery("""
                 select count(*),
@@ -146,7 +146,8 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         );
     }
 
-    private DashboardOverview loadOverview(UUID tenant) {
+    private DashboardOverview loadOverview(UUID tenant, boolean dashboardVisibleOnly) {
+        String visibilityClause = dashboardVisibleOnly ? " and dashboard_hidden_at is null" : "";
         Object[] counts = row(entityManager.createNativeQuery("""
                 select count(*),
                        coalesce(sum(case when status in ('CREATED','SUBMITTED','PROCESSING','APPROVED','VAULTED') then 1 else 0 end),0),
@@ -155,8 +156,8 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                        coalesce(sum(case when status='COMPLETED' then 1 else 0 end),0),
                        coalesce(sum(case when status='FAILED' then 1 else 0 end),0),
                        coalesce(sum(case when status in ('REJECTED','CANCELLED') then 1 else 0 end),0)
-                  from document_packages where tenant_id=:tenant
-                """).setParameter("tenant", tenant).getSingleResult());
+                  from document_packages where tenant_id=:tenant%s
+                """.formatted(visibilityClause)).setParameter("tenant", tenant).getSingleResult());
         return new DashboardOverview(number(counts[0]), number(counts[1]), number(counts[2]), number(counts[3]),
                 number(counts[4]), number(counts[5]), number(counts[6]));
     }

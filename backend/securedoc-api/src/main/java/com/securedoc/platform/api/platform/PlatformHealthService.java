@@ -124,18 +124,30 @@ public class PlatformHealthService {
 
     private PlatformHealthItem aiHealth(boolean probe) {
         String provider = safe(ai.getProvider()).toLowerCase();
-        boolean configured = notBlank(ai.getProvider()) && ("heuristic".equals(provider) || notBlank(ai.getBaseUrl()));
-        if (!probe || !"ollama".equals(provider)) {
+        boolean heuristic = "heuristic".equals(provider);
+        boolean configured = notBlank(ai.getProvider())
+                && (heuristic || (notBlank(ai.getBaseUrl()) && notBlank(ai.getModel())));
+        if (!probe || heuristic || !configured) {
             return item("ai", "Sensitive-content AI", "AI", provider, configured ? "CONFIGURED" : "NOT_CONFIGURED",
                     configured, aiDetail());
         }
         try {
             var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
-            String base = ai.getBaseUrl().replaceAll("/+$", "");
-            var request = HttpRequest.newBuilder(URI.create(base + "/api/tags"))
-                    .timeout(Duration.ofSeconds(3)).GET().build();
+            HttpRequest.Builder requestBuilder;
+            if ("ollama".equals(provider)) {
+                String base = ai.getBaseUrl().replaceAll("/+$", "");
+                requestBuilder = HttpRequest.newBuilder(URI.create(base + "/api/tags"));
+            } else if ("openai-compatible".equals(provider) || "openai_compatible".equals(provider) || "vllm".equals(provider)) {
+                requestBuilder = HttpRequest.newBuilder(openAiModelsEndpoint(ai.getBaseUrl()));
+                if (notBlank(ai.getApiKey())) {
+                    requestBuilder.header("Authorization", "Bearer " + ai.getApiKey());
+                }
+            } else {
+                return item("ai", "Sensitive-content AI", "AI", provider, "NOT_CONFIGURED", false, aiDetail());
+            }
+            var request = requestBuilder.timeout(Duration.ofSeconds(3)).GET().build();
             int status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
-            boolean ok = status >= 200 && status < 500;
+            boolean ok = status >= 200 && status < 300;
             return item("ai", "Sensitive-content AI", "AI", provider, ok ? "HEALTHY" : "UNHEALTHY", configured,
                     aiDetail());
         } catch (Exception e) {
@@ -145,7 +157,21 @@ public class PlatformHealthService {
 
     private String aiDetail() {
         String model = safe(ai.getModel());
-        return model.isBlank() ? "Provider selected" : "Model: " + model;
+        int tenantProfiles = ai.getTenantProfiles().size();
+        String base = model.isBlank() ? "Provider selected" : "Default model: " + model;
+        return base + "; tenant profiles: " + tenantProfiles;
+    }
+
+    private URI openAiModelsEndpoint(String baseUrl) {
+        String normalized = safe(baseUrl).replaceAll("/+$", "");
+        if (normalized.endsWith("/v1")) {
+            return URI.create(normalized + "/models");
+        }
+        if (normalized.endsWith("/chat/completions")) {
+            int index = normalized.lastIndexOf("/chat/completions");
+            return URI.create(normalized.substring(0, index) + "/models");
+        }
+        return URI.create(normalized + "/v1/models");
     }
 
     private PlatformHealthItem ocrHealth(boolean probe) {

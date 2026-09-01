@@ -76,7 +76,7 @@ public final class ReviewPagePreviewService implements GetReviewPagePreviewQuery
                 .orElseThrow(() -> new NotFoundException("Finding", findingId.toString()));
         if (finding.status() != FindingStatus.DETECTED) {
             log.warn("REVIEW_PREVIEW_REJECTED finding={} reason=ITEM_NOT_PENDING status={}", findingId, finding.status());
-            throw new ValidationException("Review item is no longer pending");
+            throw new IllegalStateException("Review item is no longer pending; refresh the Manual Review queue");
         }
 
         Document document = documentRepository.findByIdAndTenantId(finding.documentId(), tenantId)
@@ -86,7 +86,7 @@ public final class ReviewPagePreviewService implements GetReviewPagePreviewQuery
         if (pkg.status() != PackageStatus.PENDING_REVIEW && pkg.status() != PackageStatus.IN_REVIEW) {
             log.warn("REVIEW_PREVIEW_REJECTED finding={} package={} reason=PACKAGE_NOT_IN_REVIEW status={}",
                     findingId, pkg.id(), pkg.status());
-            throw new ValidationException("Package is not awaiting manual review");
+            throw new IllegalStateException("Package is no longer awaiting manual review; refresh the Manual Review queue");
         }
 
         Artifact original = artifactRepository.findByDocumentIdAndTenantId(finding.documentId(), tenantId).stream()
@@ -97,12 +97,18 @@ public final class ReviewPagePreviewService implements GetReviewPagePreviewQuery
                 .orElseThrow(() -> {
                     log.warn("REVIEW_PREVIEW_REJECTED finding={} package={} document={} reason=ORIGINAL_UNAVAILABLE",
                             findingId, pkg.id(), finding.documentId());
-                    return new ValidationException("Original document is unavailable for review preview");
+                    return new IllegalStateException("Original document is unavailable for review preview");
                 });
 
         try (InputStream content = storagePort.retrieve(original.storageReference())) {
-            ReviewPageRenderPort.RenderedPage rendered = reviewPageRenderPort.render(
-                    content, finding.location().pageNumber());
+            ReviewPageRenderPort.RenderedPage rendered;
+            try {
+                rendered = reviewPageRenderPort.render(content, finding.location().pageNumber());
+            } catch (ValidationException ex) {
+                log.warn("REVIEW_PREVIEW_REJECTED finding={} package={} document={} page={} reason=PAGE_LOCATION_INVALID",
+                        findingId, pkg.id(), finding.documentId(), finding.location().pageNumber());
+                throw new IllegalStateException("The stored finding page is unavailable in the source document; refresh or reprocess the package", ex);
+            }
             log.info("REVIEW_PREVIEW_RENDERED finding={} package={} document={} page={} width={} height={}",
                     findingId, pkg.id(), finding.documentId(), finding.location().pageNumber(),
                     rendered.pixelWidth(), rendered.pixelHeight());

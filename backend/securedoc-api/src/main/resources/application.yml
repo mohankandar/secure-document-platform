@@ -37,19 +37,27 @@ securedoc:
     # AI-first discovery is part of the active V1 pipeline. Use "heuristic" only as an
     # explicit development fallback when no local model is available.
     provider: ${SECUREDOC_AI_PROVIDER:ollama}
-    base-url: ${SECUREDOC_AI_OLLAMA_BASE_URL:http://localhost:11434}
-    model: ${SECUREDOC_AI_OLLAMA_MODEL:qwen2.5:7b}
+    # Generic provider/model settings. Legacy OLLAMA_* env names remain supported as fallback.
+    base-url: ${SECUREDOC_AI_BASE_URL:${SECUREDOC_AI_OLLAMA_BASE_URL:http://localhost:11434}}
+    model: ${SECUREDOC_AI_MODEL:${SECUREDOC_AI_OLLAMA_MODEL:qwen2.5:7b}}
+    api-key: ${SECUREDOC_AI_API_KEY:}
     timeout-seconds: ${SECUREDOC_AI_TIMEOUT_SECONDS:60}
     # Page-level execution is bounded and configurable. Transient failures retry only the
     # affected page; successful pages are not replayed.
     parallelism: ${SECUREDOC_AI_PARALLELISM:2}
     page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
     page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
+    # Set true in multi-tenant deployments where each tenant must use an explicitly assigned AI endpoint.
+    require-tenant-profile: ${SECUREDOC_AI_REQUIRE_TENANT_PROFILE:false}
     secondary-enabled: ${SECUREDOC_AI_SECONDARY_ENABLED:false}
     secondary-provider: ${SECUREDOC_AI_SECONDARY_PROVIDER:ollama}
     secondary-base-url: ${SECUREDOC_AI_SECONDARY_BASE_URL:http://localhost:11434}
     secondary-model: ${SECUREDOC_AI_SECONDARY_MODEL:}
+    secondary-api-key: ${SECUREDOC_AI_SECONDARY_API_KEY:}
     secondary-timeout-seconds: ${SECUREDOC_AI_SECONDARY_TIMEOUT_SECONDS:60}
+    # Optional deployment-managed per-tenant profiles keyed by tenant UUID.
+    # Profiles select transport/model only; redaction categories remain Business Admin policy.
+    tenant-profiles: {}
   ocr:
     # Unit 17 local/on-prem OCR. Digital pages keep native PDF text; sparse/image pages use OCR.
     tesseract:

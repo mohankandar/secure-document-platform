@@ -4,27 +4,51 @@ Read these files before any future ChatGPT coding session or Kiro verification s
 
 1. `00_LexaVault_V1_Master_Current.md` — current project source-of-truth continuity packet.
 2. `01_Final_V1_Security_Integration_Acceptance_Freeze.md` — current frozen Final V1 acceptance scope.
-3. `02_Final_V1_Pre_Acceptance_Code_Review_Historical.md` — 2026-08-30 review that found no code change was needed at that time; **superseded** by the explicitly approved 2026-08-31 customer-policy/observability delta.
-4. `03_Final_V1_Pre_Acceptance_Policy_Observability_Update.md` — current post-Unit-25 pre-acceptance delta.
-5. `04_Final_V1_Kiro_Acceptance_Prompt_Current.md` — current credit-conscious Kiro acceptance prompt including SSN-last-four and safe-log verification.
-6. `05_Final_V1_Pre_Acceptance_Delta_Self_Review.md` — ChatGPT self-review/build evidence and explicit environment limitations.
-7. `06_Ollama_Page_Retry_Fix_Self_Review.md` — focused self-review for the 2026-08-31 large-PDF Ollama retry correction.
+3. `02_Final_V1_Pre_Acceptance_Code_Review_Historical.md` — historical 2026-08-30 pre-acceptance review; superseded where later runtime evidence/deltas apply.
+4. `03_Final_V1_Pre_Acceptance_Policy_Observability_Update.md` — customer-policy/safe-observability delta.
+5. `04_Final_V1_Kiro_Acceptance_Prompt_Current.md` — current credit-conscious Kiro verification prompt.
+6. `05_Final_V1_Pre_Acceptance_Delta_Self_Review.md` — original pre-acceptance delta self-review.
+7. `06_Ollama_Page_Retry_Fix_Self_Review.md` — page-level Ollama reliability correction.
+8. `07_Detection_Precision_Manual_Review_Preview_Fix.md` — DOB/SSN precision + Manual Review preview diagnostics correction.
+9. `08_Credit_Card_Precision_Fix_Self_Review.md` — credit-card precision correction, now runtime validated on the real 61-page customer package.
+10. `09_Tenant_AI_Policy_Provider_Routing_Self_Review.md` — current tenant-driven prompt + per-tenant provider/model routing delta.
+11. `10_Tenant_AI_Provider_Configuration_Guide.md` — deployment examples for Ollama/Gemma/Qwen, vLLM/OpenAI-compatible, per-tenant profiles, and fail-closed routing.
+12. `11_Dashboard_Manual_Review_Lifecycle_Workflow_Correction.md` — smart Dashboard refresh, package-scoped/exact-page Manual Review, actionable counts, and Approver Dashboard-only package removal.
+13. `12_Manual_Review_API_ID_Serialization_Fix.md` — runtime-proven `[object Object]` review-ID serialization defect and narrow API-boundary correction.
 
 ## Operating model
 
 - ChatGPT implements, self-reviews, documents and packages code.
 - Kiro performs independent structured verification and makes only minimal genuine-defect corrections.
 - Do not burn Kiro credits reimplementing approved work, broadly refactoring, generating generic tests, or exploring post-V1 features.
-- Unit 25 remains approved. The current source includes the pre-acceptance customer-policy/observability delta plus the focused Ollama page-retry reliability correction; both must be verified before V1 Release Candidate approval.
+- Unit 25 remains approved. Current post-Unit-25 pre-acceptance deltas require final verification before V1 Release Candidate approval.
 - There is no Unit 26 in the current frozen plan.
 
-## Current customer masking policy
+## Current runtime evidence
 
-Only SSN, DOB, Credit Score and Credit Card Number are enabled categories for the current customer. Name/email and other fields remain visible. SSN last-four-only exposure is controlled by the tenant `maskSsnLastFour` flag.
+The real 61-page customer PDF now completes with the expected precision result: one `CREDIT_SCORE` finding on page 59, no DOB/SSN/credit-card final false positives, verified permanent redaction, successful local delivery, package `COMPLETED`.
 
-- **Ollama large-PDF reliability (2026-08-31):** current master and acceptance freeze include the focused page-level retry/concurrency/timeout correction triggered by the real 61-page package test.
+Manual Review package scoping and exact-page rendering are runtime validated, and the `[object Object]` API-ID correction is runtime validated. Dashboard polling and Approver `Remove from Dashboard` are also runtime validated. A remaining final-review-item UX defect was then confirmed: the decision persisted and export succeeded, but the review request stayed on `Saving…` because post-review redaction/export ran synchronously on the request thread. The async-resume correction is now implemented and awaits local runtime validation.
+
+## Current AI architecture delta
+
+- Business Admin policy owns enabled redaction categories/options.
+- `SensitiveContentPromptBuilder` composes only those categories; Ollama does not own customer policy text.
+- Deployment/Platform configuration owns provider, endpoint, model and secrets.
+- Ollama and OpenAI-compatible/vLLM transports are supported.
+- Per-tenant profiles are deployment-managed in V1.
+- `require-tenant-profile=true` fails closed instead of sending an unconfigured tenant to the default AI endpoint.
+- No browser credential vault/hot swap and no DB migration were introduced.
 
 
-- `07_Detection_Precision_Manual_Review_Preview_Fix.md` — runtime-derived precision and Manual Review preview correction/self-review.
+## Current operational workflow delta
 
-- `08_Credit_Card_Precision_Fix_Self_Review.md` — focused page-24/page-31 credit-card false-positive correction; provider-neutral/tenant-prompt work remains deferred.
+- Dashboard smart polling: 5s active / 30s idle / paused hidden / refresh on return.
+- Contract/package entry to Manual Review is package-scoped; global review stays tenant-wide.
+- Exact review page is verified using response page metadata; stale preview state is reported safely.
+- Approver uses the row `⋮` menu → `Remove from Dashboard` for a `COMPLETED` package. This hides it from the normal Dashboard only; DB/audit/report history remains and existing retention cleanup handles physical files.
+
+- `13_Dashboard_Action_Menu_and_Remove_Confirmation.md` — approved `⋮` package actions and cross-platform confirmation UX.
+- `14_Dashboard_Action_Menu_Self_Review.md` — implementation/self-review for the approved dashboard package action UX polish.
+
+15. `15_Manual_Review_Last_Item_Async_Resume_Fix.md` — final-review-item non-blocking resume correction; reviewer save returns promptly while redaction/verification/export continue through the existing processing orchestrator.

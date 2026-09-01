@@ -1,5 +1,28 @@
 # Kiro Prompt — Final V1 Security / Integration + Acceptance
 
+# FOCUSED PRE-CHECK — TENANT PROMPT + AI PROVIDER ROUTING DELTA (2026-08-31)
+
+Before the broader Final Acceptance scenarios, independently verify this narrow post-credit-card-precision delta. Do not redesign or generalize it further.
+
+PASS/FAIL each item:
+
+1. `OllamaSensitiveContentAnalysisAdapter` contains no hard-coded tenant category prompt. Category instructions are composed by the provider-neutral prompt builder from the `AnalysisPolicy` supplied by application policy.
+2. `SensitiveDataDetectionService` loads the live `TenantRedactionPolicy` and sends trusted `tenantId`, enabled V1 categories and `maskSsnLastFour` into semantic analysis.
+3. A CREDIT_SCORE-only policy produces no SSN/DOB/CREDIT_CARD instructions. A disabled category must not be requested from the model.
+4. Existing Ollama + `gemma3:12b` behavior remains compatible, including page-level retry and the validated credit-card PAN-shape guardrail.
+5. Changing only the configured Ollama model string to a Qwen model does not require source changes. Do not spend credits downloading a large extra model unless it is already available; code/config proof is sufficient for this item.
+6. `openai-compatible` / `vllm` provider configuration reaches an OpenAI-compatible `/v1/chat/completions` endpoint and parses the same structured finding contract. Use a controlled local stub endpoint if no real vLLM endpoint is already available.
+7. Optional Bearer credential is sent only as an Authorization header. Prove the credential is absent from logs, audit, errors, Platform Admin payloads and frontend assets.
+8. Explicit tenant AI profile routes only that tenant to its configured provider/model. Another tenant follows its own profile/default according to configuration.
+9. With `SECUREDOC_AI_REQUIRE_TENANT_PROFILE=true`, an unconfigured tenant fails closed before its normalized document text reaches the default provider.
+10. `heuristic` cannot be configured as tenant provider or secondary failover.
+11. Tenant provider profiles remain deployment-managed; Business Admin owns redaction policy only. No browser secrets editor/hot swap has been introduced.
+12. The tenant-AI/provider-routing delta itself added no DB migration. The current workspace is now **36 Liquibase changesets** because the later Dashboard visibility correction adds migration `013-dashboard-package-visibility.xml`.
+13. Run the focused new tests plus existing `CreditCardPrecisionTest`, `OllamaPageRetryTest`, tenant security tests, backend `mvn clean verify`, frontend typecheck/build.
+
+If a defect is found, make only the smallest correction and report the exact file/reason/rerun. Do not begin any post-V1 AI-provider platform.
+
+
 The current workspace is the authoritative LexaVault V1 source after Unit 25 verification plus the approved 2026-08-31 pre-acceptance customer-policy/safe-observability delta, the focused Ollama large-PDF page-retry reliability correction, the DOB/SSN precision + Manual Review preview correction, and the focused credit-card precision correction.
 
 Current status:
@@ -10,7 +33,7 @@ Current status:
 - A small post-Unit-25 pre-acceptance delta adds tenant SSN-last-four policy, migration 012, safe high-level logs and LOCAL scripts
 - A focused reliability correction makes Ollama page concurrency configurable, uses a 180s LOCAL timeout, retries only failed pages, and prevents outer whole-document replay after page retry exhaustion
 - Final V1 Security / Integration + Acceptance is the ONLY verification task now
-- Provider-neutral / tenant-prompt refactoring is intentionally DEFERRED until the focused credit-card precision rerun passes; do not implement it in this verification
+- Provider-neutral tenant-prompt/provider routing is now IMPLEMENTED after the credit-card precision rerun passed; verify it, do not redesign it
 - There is NO Unit 26 in the current frozen plan
 
 ## TASK
@@ -31,6 +54,9 @@ Read these repository continuity documents before doing anything:
 6. `docs/continuity/07_Detection_Precision_Manual_Review_Preview_Fix.md`
 7. `docs/continuity/08_Credit_Card_Precision_Fix_Self_Review.md`
 8. `docs/timeline/35-pre-acceptance-credit-card-precision-fix-2026-08-31.md`
+9. `docs/continuity/09_Tenant_AI_Policy_Provider_Routing_Self_Review.md`
+10. `docs/continuity/10_Tenant_AI_Provider_Configuration_Guide.md`
+11. `docs/continuity/11_Dashboard_Manual_Review_Lifecycle_Workflow_Correction.md`
 
 Also use the existing Unit 16–25 steering/timeline documents only when a specific acceptance item needs implementation detail.
 
@@ -550,7 +576,7 @@ If no source change is required, state exactly:
 
 Return a numbered report with exactly these 39 items:
 
-1. Backend initial build/startup/Liquibase — including expected migration 012 and final 35-changeSet state
+1. Backend initial build/startup/Liquibase — including expected migrations 012 and 013 and final 36-changeSet state
 2. Frontend initial build
 3. Real provider health + confirmed Ollama `gemma3:12b`
 4. Digital PDF straight-through acceptance
@@ -614,3 +640,34 @@ During final verification, specifically prove:
 4. A full SSN and configured last-four-only SSN still work.
 5. Manual Review page preview succeeds for a valid pending-review finding. If a preview is intentionally made invalid/unavailable, verify safe specific diagnostics and no raw document/sensitive-value leakage.
 6. `FINDING_EVIDENCE_SUMMARY` contains only counts/types and no raw values.
+
+
+## Dashboard / Manual Review / package-visibility focused verification delta — 2026-08-31
+
+Verify these items inside the existing Final Acceptance report; do not add a new unit or redesign the workflow.
+
+1. Dashboard auto-refreshes data without a browser reload: 5-second cadence while active processing exists, 30-second cadence while idle, no polling while hidden, immediate refresh on visible/focus.
+2. Left-nav Manual Review remains tenant-wide. Package Details/Dashboard Review link passes a package scope and the backend returns only that authenticated tenant + package's actionable findings. Cross-tenant package IDs remain inaccessible.
+3. Controlled exact-page test: temporarily set the tenant to `REVIEW_ALL`, process a fresh test package, and prove selected finding page N renders page N with the bounding box/highlight. Confirm `REVIEW_PREVIEW_RENDERED ... page=N`. Restore the normal review mode afterward.
+   - Inspect the review queue JSON/request path and prove `findingId`, `packageId`, and `documentId` are plain UUID strings, never nested ID objects; preview/confirm/dismiss URLs must never contain `[object Object]`.
+4. Verify stale/non-renderable preview conditions produce safe specific `REVIEW_PREVIEW_REJECTED` diagnostics and a state conflict rather than exposing raw content or a generic misleading bad-request state.
+5. Active review count excludes findings no longer `DETECTED` and packages no longer `PENDING_REVIEW`/`IN_REVIEW`.
+6. As APPROVER, use the row `⋮` menu → `Remove from Dashboard` on one `COMPLETED` package. Prove it disappears from normal Dashboard/KPIs, remains in DB/history/reports, writes `PACKAGE_HIDDEN_FROM_DASHBOARD`, does not immediately delete files, and does not alter retention deadlines.
+7. Prove the existing retention lifecycle still performs physical cleanup; no second delete scheduler or direct physical-delete path was introduced.
+8. Confirm Liquibase migration `013-dashboard-package-visibility.xml` applies cleanly.
+9. Confirm no AI detection/prompt/provider/redaction source behavior changed as part of this delta.
+
+Map these checks into existing Final Report items 18 (Focused Manual Review), 23 (Lifecycle/retention/export), 24 (Dashboard/reporting), 27 (cross-tenant isolation), 30 (audit/leakage), 37 (hygiene), and 38 (changed files/build). Keep the exact 39-item report format.
+
+
+## Manual Review final-item async-resume verification delta — 2026-09-01
+
+Map this into Final Report item 18 (Focused Manual Review), item 24 (Dashboard/reporting), item 30 (audit/leakage), and item 38 (changed files/build). Do not add a new unit.
+
+1. Create/use a controlled package with at least two actionable review findings. Resolve a non-final item and verify normal immediate queue advancement.
+2. Resolve the final item and prove the resolve request returns promptly without waiting for redaction/export to finish; `Saving…` must clear and the UI must state that review is complete and processing resumed in the background.
+3. Verify the package transitions out of `PENDING_REVIEW`/`IN_REVIEW` into `PROCESSING`, the scoped queue becomes empty, and Dashboard polling shows Processing -> Exported/Completed (or correctly classified technical failure).
+4. Verify `REVIEW_PROCESSING_RESUME_SCHEDULED`, STARTED and COMPLETED are safe metadata-only logs. For a controlled failure, FAILED must disclose only safe metadata/error type.
+5. Verify post-review work still goes through the existing `TriggerPackageProcessingUseCase`; no duplicate redaction/export or second retention/delete path was introduced.
+6. Verify exactly one export cycle occurs after the final decision.
+7. Confirm AI prompt/provider/detection/redaction precision behavior is unchanged.
