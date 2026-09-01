@@ -125,6 +125,16 @@ public final class Document {
         updatedAt = Instant.now();
     }
 
+    /** Resets only a technically failed document so the retained original can be retried. */
+    public void prepareForTechnicalRetry() {
+        if (status != DocumentStatus.FAILED) {
+            throw new IllegalStateException("Only a failed document can be retried");
+        }
+        pages.clear();
+        status = DocumentStatus.UPLOADED;
+        updatedAt = Instant.now();
+    }
+
     public void fail() {
         status = DocumentStatus.FAILED;
         updatedAt = Instant.now();

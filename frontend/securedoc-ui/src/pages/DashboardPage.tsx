@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
-import { getCurrentRoles } from '../api/config';
+import { hasCurrentCapability } from '../api/config';
 import type {
   ApiError,
   DashboardColumnDefinition,
@@ -207,9 +207,10 @@ export default function DashboardPage() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalItems / limit)) : 1;
   const currentPage = Math.floor(offset / limit) + 1;
-  const currentRoles = getCurrentRoles().split(',').map((role) => role.trim());
-  const canReview = currentRoles.includes('REVIEWER') || currentRoles.includes('ADMIN');
-  const canApprove = currentRoles.includes('APPROVER') || currentRoles.includes('ADMIN');
+  const canReview = hasCurrentCapability('MANUAL_REVIEW');
+  const canApprove = hasCurrentCapability('PACKAGE_APPROVE_DELIVERY');
+  const canRemoveFromDashboard = hasCurrentCapability('PACKAGE_REMOVE_FROM_DASHBOARD');
+  const canViewTechnicalIssue = hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW');
 
   const selectStage = (nextStage: DashboardStage) => {
     setStage(nextStage);
@@ -281,7 +282,7 @@ export default function DashboardPage() {
 
   const renderPackageAction = (item: DashboardItem) => {
     const menuOpen = openActionPackageId === item.packageId;
-    const canRemove = item.status === 'COMPLETED';
+    const canRemove = item.status === 'COMPLETED' && canRemoveFromDashboard;
     return (
       <div className="dashboard-row-action">
         <button
@@ -339,7 +340,9 @@ export default function DashboardPage() {
         if (item.attention === 'APPROVAL') return canApprove
           ? <Link className="attention-link attention-approval" to={`/packages/${item.packageId}`}>Approval</Link>
           : <span className="attention-link attention-approval">Needs approval</span>;
-        if (item.attention === 'TECHNICAL') return <Link className="attention-link attention-technical" to={`/packages/${item.packageId}`}>Technical</Link>;
+        if (item.attention === 'TECHNICAL') return canViewTechnicalIssue
+          ? <Link className="attention-link attention-technical" to={`/technical-exceptions/${item.packageId}`}>Technical</Link>
+          : <span className="attention-link attention-technical">Technical attention</span>;
         if (item.attention === 'REJECTED') return <span className="attention-muted">Rejected</span>;
         return <span className="attention-none">—</span>;
       }

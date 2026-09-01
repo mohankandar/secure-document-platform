@@ -3,7 +3,8 @@ package com.securedoc.platform.api.controller;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.IntakeObservationResponse;
 import com.securedoc.platform.api.dto.WatchedFolderScanResponse;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.intake.watched.WatchedFolderIntakeService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -22,7 +23,7 @@ public class WatchedFolderIntakeController {
     }
 
     @PostMapping("/scan")
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<WatchedFolderScanResponse> scan(HttpServletRequest request) {
         var principal=contextResolver.resolvePrincipal(request);
         var result=intakeService.scan(principal,contextResolver.resolveCorrelationId(request));
@@ -31,7 +32,7 @@ public class WatchedFolderIntakeController {
     }
 
     @GetMapping("/observations")
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<List<IntakeObservationResponse>> observations(@RequestParam(defaultValue="50") int limit,
                                                                          HttpServletRequest request) {
         var principal=contextResolver.resolvePrincipal(request);

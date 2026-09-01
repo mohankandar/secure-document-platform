@@ -28,7 +28,7 @@ Read these files before any future ChatGPT coding session or Kiro verification s
 
 The real 61-page customer PDF now completes with the expected precision result: one `CREDIT_SCORE` finding on page 59, no DOB/SSN/credit-card final false positives, verified permanent redaction, successful local delivery, package `COMPLETED`.
 
-Manual Review package scoping and exact-page rendering are runtime validated, and the `[object Object]` API-ID correction is runtime validated. Dashboard polling and Approver `Remove from Dashboard` are also runtime validated. A remaining final-review-item UX defect was then confirmed: the decision persisted and export succeeded, but the review request stayed on `Saving…` because post-review redaction/export ran synchronously on the request thread. The async-resume correction is now implemented and awaits local runtime validation.
+Manual Review package scoping and exact-page rendering are runtime validated, and the `[object Object]` API-ID correction is runtime validated. Dashboard polling and Approver `Remove from Dashboard` are also runtime validated. The final-review-item async-resume correction is now runtime validated: the reviewer save returns promptly and redaction/verification/export continue successfully in the background. Dashboard polling, package-scoped exact-page Manual Review, and Approver `Remove from Dashboard` are also runtime validated. The current role/capability + Technical Attention delta is implemented and awaits local verification.
 
 ## Current AI architecture delta
 
@@ -52,3 +52,12 @@ Manual Review package scoping and exact-page rendering are runtime validated, an
 - `14_Dashboard_Action_Menu_Self_Review.md` — implementation/self-review for the approved dashboard package action UX polish.
 
 15. `15_Manual_Review_Last_Item_Async_Resume_Fix.md` — final-review-item non-blocking resume correction; reviewer save returns promptly while redaction/verification/export continue through the existing processing orchestrator.
+16. `16_Role_Capability_and_Technical_Attention_Workflow.md` — product-defined V1 role/capability mapping, three-admin role split, safe Technical Issue Details, and selective technical retry.
+
+17. `17_Role_Capability_Technical_Attention_Self_Review.md` — implementation self-review and focused manual verification matrix for the role/capability + Technical Attention delta.
+18. `18_Batch2_One_Page_Multi_PDF_Intake.md` — accepted one-page multi-PDF intake workflow.
+19. `19_Batch2_One_Page_Multi_PDF_Intake_Self_Review.md` — Batch 2 verification record.
+20. `20_Batch3_Breadcrumb_Navigation_Polish.md` — accepted breadcrumb/navigation scope.
+21. `21_Batch3_Breadcrumb_Navigation_Polish_Self_Review.md` — Batch 3 verification record.
+22. `22_Batch4_Executive_Operational_Reports.md` — Batch 4 reporting definitions, role model, filters, and exclusions.
+23. `23_Batch4_Reports_Self_Review.md` — Batch 4 verification status and manual acceptance matrix.

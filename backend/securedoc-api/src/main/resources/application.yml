@@ -31,7 +31,9 @@ securedoc:
         REVIEWER: ${SECUREDOC_SECURITY_ROLE_REVIEWER:securedoc-reviewer}
         APPROVER: ${SECUREDOC_SECURITY_ROLE_APPROVER:securedoc-approver}
         BUSINESS_ADMIN: ${SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN:securedoc-business-admin}
-        PLATFORM_ADMIN: ${SECUREDOC_SECURITY_ROLE_PLATFORM_ADMIN:securedoc-platform-admin}
+        TENANT_IT_ADMIN: ${SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN:securedoc-tenant-it-admin}
+        PLATFORM_OPERATIONS_ADMIN: ${SECUREDOC_SECURITY_ROLE_PLATFORM_OPERATIONS_ADMIN:securedoc-platform-operations-admin}
+        REPORT_VIEWER: ${SECUREDOC_SECURITY_ROLE_REPORT_VIEWER:securedoc-report-viewer}
         ADMIN: ${SECUREDOC_SECURITY_ROLE_ADMIN:}
   ai:
     # AI-first discovery is part of the active V1 pipeline. Use "heuristic" only as an

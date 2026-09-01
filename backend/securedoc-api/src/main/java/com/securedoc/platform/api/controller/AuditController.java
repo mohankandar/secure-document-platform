@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.audit.query.AuditRecordFilter;
 import com.securedoc.platform.application.audit.query.AuditRecordSummary;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
@@ -34,7 +35,7 @@ public class AuditController {
     }
 
     @GetMapping
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.AUDIT_VIEW)
     public ResponseEntity<List<Map<String, Object>>> listAuditRecords(
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String outcome,

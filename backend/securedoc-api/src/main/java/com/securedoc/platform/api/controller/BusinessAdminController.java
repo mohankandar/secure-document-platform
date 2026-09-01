@@ -6,7 +6,8 @@ import com.securedoc.platform.api.dto.UpdateBusinessIdentifiersRequest;
 import com.securedoc.platform.api.dto.UpdateSensitiveDataPolicyRequest;
 import com.securedoc.platform.api.dto.UpdateLifecyclePolicyRequest;
 import com.securedoc.platform.api.dto.UpdateDashboardColumnsRequest;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.business.admin.BusinessAdminConfigurationService;
 import com.securedoc.platform.application.business.admin.BusinessAdminConfigurationService.IdentifierConfigurationInput;
 import com.securedoc.platform.application.operations.model.DashboardColumnSetting;
@@ -45,14 +46,14 @@ public class BusinessAdminController {
     }
 
     @GetMapping("/configuration")
-    @RequireRole({"BUSINESS_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> getConfiguration(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
     @PutMapping("/identifiers")
-    @RequireRole({"BUSINESS_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateIdentifiers(
             @RequestBody UpdateBusinessIdentifiersRequest body,
             HttpServletRequest request) {
@@ -68,7 +69,7 @@ public class BusinessAdminController {
     }
 
     @PutMapping("/dashboard-columns")
-    @RequireRole({"BUSINESS_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateDashboardColumns(
             @RequestBody UpdateDashboardColumnsRequest body,
             HttpServletRequest request) {
@@ -85,7 +86,7 @@ public class BusinessAdminController {
     }
 
     @PutMapping("/sensitive-data-policy")
-    @RequireRole({"BUSINESS_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateSensitiveDataPolicy(
             @RequestBody UpdateSensitiveDataPolicyRequest body,
             HttpServletRequest request) {
@@ -108,7 +109,7 @@ public class BusinessAdminController {
     }
 
     @PutMapping("/lifecycle-policy")
-    @RequireRole({"BUSINESS_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateLifecyclePolicy(
             @RequestBody UpdateLifecyclePolicyRequest body, HttpServletRequest request) {
         if (body == null) throw new ValidationException("Lifecycle policy request is required");

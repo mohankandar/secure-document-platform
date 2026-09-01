@@ -90,7 +90,7 @@ public class WatchedFolderScheduler {
             return AuthenticatedPrincipal.of(
                     ActorId.of(UUID.fromString(platformAdmin.getWatchedFolderActorId())),
                     TenantId.of(UUID.fromString(platformAdmin.getWatchedFolderTenantId())),
-                    platformAdmin.getWatchedFolderActorUsername(), Set.of("PLATFORM_ADMIN"));
+                    platformAdmin.getWatchedFolderActorUsername(), Set.of("PLATFORM_OPERATIONS_ADMIN"));
         } catch (RuntimeException invalidConfiguration) {
             return null;
         }

@@ -6,9 +6,13 @@ export const DEFAULT_ACTOR_ID = '00000000-0000-0000-0000-000000000099';
 export const DEFAULT_ACTOR_ROLES = 'USER';
 
 let currentRoles = DEFAULT_ACTOR_ROLES;
+let currentCapabilities: string[] = [];
 
 export function setCurrentRoles(roles: string) { currentRoles = roles; }
 export function getCurrentRoles(): string { return currentRoles; }
+export function setCurrentCapabilities(capabilities: string[]) { currentCapabilities = [...capabilities]; }
+export function getCurrentCapabilities(): string[] { return [...currentCapabilities]; }
+export function hasCurrentCapability(capability: string): boolean { return currentCapabilities.includes(capability); }
 
 export function generateCorrelationId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();

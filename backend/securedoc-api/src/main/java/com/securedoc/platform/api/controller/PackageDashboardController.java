@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.operations.command.HidePackageFromDashboardCommand;
 import com.securedoc.platform.application.port.in.HidePackageFromDashboardUseCase;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -30,7 +31,7 @@ public class PackageDashboardController {
     }
 
     @PostMapping("/{packageId}/dashboard-hide")
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_REMOVE_FROM_DASHBOARD)
     public ResponseEntity<Map<String, Object>> hideFromDashboard(@PathVariable String packageId,
                                                                  HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);

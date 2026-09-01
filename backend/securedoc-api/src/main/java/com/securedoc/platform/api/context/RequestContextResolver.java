@@ -33,7 +33,8 @@ public class RequestContextResolver {
     private static final String HEADER_ACTOR_ROLES = "X-Actor-Roles";
 
     private static final Set<String> VALID_LOCAL_ROLES = Set.of(
-            "USER", "REVIEWER", "APPROVER", "BUSINESS_ADMIN", "PLATFORM_ADMIN", "ADMIN");
+            "USER", "REVIEWER", "APPROVER", "BUSINESS_ADMIN", "TENANT_IT_ADMIN",
+            "PLATFORM_OPERATIONS_ADMIN", "REPORT_VIEWER", "ADMIN");
 
     private final UUID demoTenantId;
     private final UUID demoActorId;

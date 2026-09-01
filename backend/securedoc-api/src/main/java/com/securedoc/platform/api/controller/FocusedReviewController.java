@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.GetReviewPagePreviewQuery;
 import com.securedoc.platform.application.port.in.ListReviewItemsQuery;
@@ -58,7 +59,7 @@ public class FocusedReviewController {
     }
 
     @GetMapping
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<ReviewQueueResponse> list(
             @RequestParam(defaultValue = "50") int limit,
             @RequestParam(required = false) String packageId,
@@ -72,7 +73,7 @@ public class FocusedReviewController {
     }
 
     @GetMapping(value = "/{findingId}/page-preview", produces = MediaType.IMAGE_PNG_VALUE)
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<byte[]> pagePreview(
             @PathVariable String findingId,
             HttpServletRequest request) {
@@ -91,7 +92,7 @@ public class FocusedReviewController {
     }
 
     @PostMapping("/{findingId}/confirm")
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<Map<String, Object>> confirm(
             @PathVariable String findingId,
             @RequestBody(required = false) ConfirmRequest body,
@@ -101,7 +102,7 @@ public class FocusedReviewController {
     }
 
     @PostMapping("/{findingId}/dismiss")
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<Map<String, Object>> dismiss(
             @PathVariable String findingId,
             @RequestBody(required = false) DismissRequest body,

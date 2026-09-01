@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { hasCurrentCapability } from '../api/config';
 import type { PackageDetail, PackageLifecycleSummary, ApiError } from '../types';
+import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
 
 export default function PackageDetailPage() {
   const { packageId } = useParams<{ packageId: string }>();
@@ -92,10 +94,23 @@ export default function PackageDetailPage() {
 
   const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : '—';
 
-  if (loading && !pkg) return <p>Loading...</p>;
+  const primaryIdentifier = pkg?.businessIdentifiers
+    ?.filter((identifier) => identifier.displayable)
+    .sort((a, b) => Number(b.primary) - Number(a.primary) || a.displayOrder - b.displayOrder)[0];
+  const intakeLabel = intakeBreadcrumbLabel(primaryIdentifier);
+
+  if (loading && !pkg) {
+    return (
+      <div>
+        <Breadcrumbs items={[{ label: 'Intake Details' }]} />
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: intakeLabel }]} />
       <h1>Intake Details</h1>
 
       {error && <div className="error-msg">{error}</div>}
@@ -142,7 +157,11 @@ export default function PackageDetailPage() {
               <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
                 One or more findings need a human decision. High-confidence findings do not need to be re-reviewed.
               </p>
-              <Link className="button-link primary" to={`/review?packageId=${packageId}`}>Open Manual Review</Link>
+              {hasCurrentCapability('MANUAL_REVIEW') ? (
+                <Link className="button-link primary" to={`/review?packageId=${packageId}`}>Open Manual Review</Link>
+              ) : (
+                <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>Waiting for an authorized reviewer.</p>
+              )}
             </div>
           )}
 
@@ -152,7 +171,11 @@ export default function PackageDetailPage() {
               <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
                 Redaction and verification are complete. Tenant policy requires an Approver before the package is delivered.
               </p>
-              <button className="primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
+              {hasCurrentCapability('PACKAGE_APPROVE_DELIVERY') ? (
+                <button className="primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
+              ) : (
+                <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>Waiting for an authorized approver.</p>
+              )}
             </div>
           )}
 
@@ -162,8 +185,20 @@ export default function PackageDetailPage() {
               <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: lifecycle?.canReprocess ? '0.75rem' : 0 }}>
                 Processing, verification, and delivery completed successfully.
               </p>
-              {lifecycle?.canReprocess && (
+              {lifecycle?.canReprocess && hasCurrentCapability('PACKAGE_REPROCESS') && (
                 <button className="secondary" onClick={() => void handleReprocess()}>Reprocess from Retained Original</button>
+              )}
+            </div>
+          )}
+
+          {pkg.status === 'FAILED' && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Technical Attention</h2>
+              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') ? '0.75rem' : 0 }}>
+                Processing stopped because of a technical issue. This is separate from business Manual Review.
+              </p>
+              {hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') && (
+                <Link className="button-link primary" to={`/technical-exceptions/${packageId}`}>View Technical Issue</Link>
               )}
             </div>
           )}

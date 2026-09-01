@@ -28,6 +28,8 @@ import com.securedoc.platform.application.port.in.StartPackageProcessingUseCase;
 import com.securedoc.platform.application.port.in.SubmitPackageUseCase;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.in.ReprocessPackageUseCase;
+import com.securedoc.platform.application.port.in.GetTechnicalExceptionQuery;
+import com.securedoc.platform.application.port.in.RetryTechnicalFailureUseCase;
 import com.securedoc.platform.application.port.in.ApproveFinalDeliveryUseCase;
 import com.securedoc.platform.application.port.in.UploadDocumentUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
@@ -75,6 +77,8 @@ import com.securedoc.platform.application.export.service.PackageDocumentExportSe
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.lifecycle.service.ReprocessPackageService;
 import com.securedoc.platform.application.lifecycle.service.FinalDeliveryApprovalService;
+import com.securedoc.platform.application.technical.service.TechnicalExceptionQueryService;
+import com.securedoc.platform.application.technical.service.RetryTechnicalFailureService;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.service.AuditService;
@@ -632,6 +636,31 @@ public class ApplicationServiceConfig {
                 storagePort, deliveryPort, packageLifecycleService, auditService);
     }
 
+
+    @Bean
+    public GetTechnicalExceptionQuery getTechnicalExceptionQuery(
+            PackageRepository packageRepository,
+            DocumentRepository documentRepository,
+            PackageLifecycleRepository packageLifecycleRepository,
+            ArtifactRepository artifactRepository,
+            AuditQueryPort auditQueryPort) {
+        return new TechnicalExceptionQueryService(
+                packageRepository, documentRepository, packageLifecycleRepository, artifactRepository, auditQueryPort);
+    }
+
+    @Bean
+    public RetryTechnicalFailureUseCase retryTechnicalFailureUseCase(
+            GetTechnicalExceptionQuery technicalExceptionQuery,
+            PackageRepository packageRepository,
+            DocumentRepository documentRepository,
+            FindingRepository findingRepository,
+            ArtifactRepository artifactRepository,
+            PackageLifecycleService packageLifecycleService,
+            PackageProcessingDispatcher packageProcessingDispatcher,
+            AuditService auditService) {
+        return new RetryTechnicalFailureService(technicalExceptionQuery, packageRepository, documentRepository,
+                findingRepository, artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService);
+    }
 
     @Bean
     public ReprocessPackageUseCase reprocessPackageUseCase(

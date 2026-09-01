@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { apiClient } from '../api/client';
+import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
 import type {
   ApiError,
   FocusedReviewItem,
@@ -78,6 +79,13 @@ export default function ReviewPage() {
       ?.filter((identifier) => identifier.displayable)
       .sort((a, b) => Number(b.primary) - Number(a.primary) || a.displayOrder - b.displayOrder)[0] || null;
   }, [scopedPackage]);
+
+  const breadcrumbItems = packageId
+    ? [
+        { label: intakeBreadcrumbLabel(scopedIdentifier), to: `/packages/${packageId}` },
+        { label: 'Manual Review' },
+      ]
+    : [{ label: 'Manual Review' }];
 
   const reviewGroups = useMemo(() => {
     const groups: Array<{ key: string; fileName: string; pageNumber: number; items: FocusedReviewItem[] }> = [];
@@ -287,11 +295,17 @@ export default function ReviewPage() {
   };
 
   if (loading) {
-    return <div className="review-loading">Loading Manual Review…</div>;
+    return (
+      <div className="review-page">
+        <Breadcrumbs items={breadcrumbItems} />
+        <div className="review-loading">Loading Manual Review…</div>
+      </div>
+    );
   }
 
   return (
     <div className="review-page">
+      <Breadcrumbs items={breadcrumbItems} />
       <div className="review-header">
         <div>
           <h1>Manual Review</h1>

@@ -187,6 +187,15 @@ public final class DocumentPackage {
         updatedAt = Instant.now();
     }
 
+    /** Returns a technically failed package to SUBMITTED so only reset/failed work is retried. */
+    public void prepareForTechnicalRetry() {
+        if (status != PackageStatus.FAILED) {
+            throw new IllegalStateException("Only a failed package can be retried");
+        }
+        status = PackageStatus.SUBMITTED;
+        updatedAt = Instant.now();
+    }
+
     public void startReview() {
         if (status != PackageStatus.PENDING_REVIEW) {
             throw new IllegalStateException("Cannot start review for package in status: " + status);

@@ -36,8 +36,24 @@ public final class OperationsQueryService implements GetOperationsDashboardQuery
     }
 
     @Override
-    public OperationalReportSnapshot execute(AuthenticatedPrincipal principal) {
+    public OperationalReportSnapshot execute(AuthenticatedPrincipal principal, Instant from, Instant to,
+                                             String source, String outcome) {
         Objects.requireNonNull(principal);
-        return readPort.loadReports(principal.tenantId(), Instant.now());
+        Instant safeTo = to == null ? Instant.now() : to;
+        Instant safeFrom = from == null ? safeTo.minusSeconds(30L * 24 * 60 * 60) : from;
+        if (!safeFrom.isBefore(safeTo)) throw new IllegalArgumentException("Report start must be before end");
+        if (safeFrom.isBefore(safeTo.minusSeconds(366L * 24 * 60 * 60))) {
+            throw new IllegalArgumentException("Report range cannot exceed 366 days");
+        }
+        String safeSource = source == null ? "ALL" : source.trim().toUpperCase();
+        if (!Set.of("ALL", "MANUAL_UPLOAD", "API_SUBMISSION", "FOLDER_INTAKE").contains(safeSource)) {
+            throw new IllegalArgumentException("Unsupported report source");
+        }
+        String safeOutcome = outcome == null ? "ALL" : outcome.trim().toUpperCase();
+        if (!Set.of("ALL", "PROCESSING", "NEEDS_REVIEW", "NEEDS_APPROVAL", "COMPLETED",
+                "TECHNICAL_ATTENTION", "REJECTED").contains(safeOutcome)) {
+            throw new IllegalArgumentException("Unsupported report outcome");
+        }
+        return readPort.loadReports(principal.tenantId(), Instant.now(), safeFrom, safeTo, safeSource, safeOutcome);
     }
 }

@@ -92,17 +92,61 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     }
 
     @Override
-    public OperationalReportSnapshot loadReports(TenantId tenantId, Instant now) {
+    public OperationalReportSnapshot loadReports(TenantId tenantId, Instant now, Instant from, Instant to,
+                                                  String source, String outcome) {
         UUID tenant = tenantId.value();
-        DashboardOverview overview = loadOverview(tenant, false);
+        DashboardOverview overview = loadReportOverview(tenant, source, outcome);
+        long seconds = Math.max(1L, to.getEpochSecond() - from.getEpochSecond());
+        Instant previousFrom = from.minusSeconds(seconds);
+        String sourceClause = sourceClause("p", source);
+        String outcomeClause = outcomeClause("p", outcome);
 
-        Object[] channels = row(entityManager.createNativeQuery("""
+        Object[] periodVolumes = periodVolumes(tenant, from, to, source, outcome);
+        Object[] previousVolumes = periodVolumes(tenant, previousFrom, from, source, outcome);
+
+        Query durationQuery = entityManager.createNativeQuery("""
+                select extract(epoch from (min(e.exported_at)-p.created_at))/3600.0
+                  from document_packages p
+                  join package_export_records e on e.package_id=p.id and e.tenant_id=p.tenant_id
+                 where p.tenant_id=:tenant and p.created_at>=:from and p.created_at<:to%s%s
+                 group by p.id,p.created_at
+                """.formatted(sourceClause, outcomeClause));
+        bindReport(durationQuery, tenant, from, to, source);
+        List<?> durationRows = durationQuery.getResultList();
+        List<Double> durations = durationRows.stream().map(r -> ((Number) row(r)[0]).doubleValue()).sorted().toList();
+
+        Query automationQuery = entityManager.createNativeQuery("""
+                select count(distinct e.package_id),
+                       count(distinct case when exists (
+                         select 1 from review_tasks rt where rt.tenant_id=p.tenant_id
+                          and rt.package_id=p.id
+                       ) then e.package_id end)
+                  from package_export_records e
+                  join document_packages p on p.id=e.package_id and p.tenant_id=e.tenant_id
+                 where e.tenant_id=:tenant and e.exported_at>=:from and e.exported_at<:to%s%s
+                """.formatted(sourceClause, outcomeClause));
+        bindReport(automationQuery, tenant, from, to, source);
+        Object[] automation = row(automationQuery.getSingleResult());
+
+        Query backlogQuery = entityManager.createNativeQuery("""
+                select count(*),
+                       coalesce(sum(case when status in ('PENDING_REVIEW','IN_REVIEW','PENDING_FINAL_APPROVAL','FAILED') then 1 else 0 end),0),
+                       coalesce(extract(epoch from (:now-min(created_at)))/3600.0,0)
+                  from document_packages p
+                 where p.tenant_id=:tenant and p.status not in ('COMPLETED','REJECTED','CANCELLED')%s%s
+                """.formatted(sourceClause, outcomeClause));
+        bindCurrent(backlogQuery, tenant, now, source);
+        Object[] backlog = row(backlogQuery.getSingleResult());
+
+        Query channelsQuery = entityManager.createNativeQuery("""
                 select count(*),
                        coalesce(sum(case when package_type='MANUAL_UPLOAD' then 1 else 0 end),0),
                        coalesce(sum(case when package_type='API_SUBMISSION' then 1 else 0 end),0),
                        coalesce(sum(case when package_type='FOLDER_INTAKE' then 1 else 0 end),0)
-                  from document_packages where tenant_id=:tenant
-                """).setParameter("tenant", tenant).getSingleResult());
+                  from document_packages p where tenant_id=:tenant and p.created_at>=:from and p.created_at<:to%s%s
+                """.formatted(sourceClause, outcomeClause));
+        bindReport(channelsQuery, tenant, from, to, source);
+        Object[] channels = row(channelsQuery.getSingleResult());
 
         Object[] observations = row(entityManager.createNativeQuery("""
                 select
@@ -116,34 +160,142 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                   (select count(*) from intake_observations where tenant_id=:tenant and status='REJECTED')
                 """).setParameter("tenant", tenant).setParameter("now", now).getSingleResult());
 
-        Object[] export = row(entityManager.createNativeQuery("""
-                select count(distinct package_id), count(*)
-                  from package_export_records
-                 where tenant_id=:tenant
-                """).setParameter("tenant", tenant).getSingleResult());
+        Query exportQuery = entityManager.createNativeQuery("""
+                select count(distinct e.package_id), count(*)
+                  from package_export_records e
+                  join document_packages p on p.id=e.package_id and p.tenant_id=e.tenant_id
+                 where e.tenant_id=:tenant%s%s
+                """.formatted(sourceClause, outcomeClause));
+        bindTenantAndSource(exportQuery, tenant, source);
+        Object[] export = row(exportQuery.getSingleResult());
 
         Instant due = now.plusSeconds(24L * 60L * 60L);
-        Object[] retention = row(entityManager.createNativeQuery("""
+        Query retentionQuery = entityManager.createNativeQuery("""
                 select
-                  coalesce(sum(case when purged_at is null and original_delete_at is not null and original_delete_at <= :due then 1 else 0 end),0),
-                  coalesce(sum(case when redacted_purged_at is null and redacted_delete_at is not null and redacted_delete_at <= :due then 1 else 0 end),0),
-                  coalesce(sum(case when purged_at is null and successful_export_cycles=0 and technical_hold_until is not null and technical_hold_until <= :due then 1 else 0 end),0),
-                  coalesce(sum(case when purged_at is not null then 1 else 0 end),0)
-                from package_lifecycles where tenant_id=:tenant
-                """).setParameter("tenant", tenant).setParameter("due", due).getSingleResult());
+                  coalesce(sum(case when pl.original_purged_at is null and pl.original_delete_at > :now and pl.original_delete_at <= :due then 1 else 0 end),0),
+                  coalesce(sum(case when pl.redacted_purged_at is null and pl.redacted_delete_at > :now and pl.redacted_delete_at <= :due then 1 else 0 end),0),
+                  coalesce(sum(case when pl.purged_at is null and pl.successful_export_cycles=0 and pl.technical_hold_until > :now and pl.technical_hold_until <= :due then 1 else 0 end),0),
+                  coalesce(sum(case when pl.purged_at is not null then 1 else 0 end),0),
+                  coalesce(sum(case when pl.original_purged_at is null and pl.original_delete_at is not null and pl.original_delete_at < :now then 1 else 0 end),0),
+                  coalesce(sum(case when pl.redacted_purged_at is null and pl.redacted_delete_at is not null and pl.redacted_delete_at < :now then 1 else 0 end),0)
+                  from package_lifecycles pl
+                  join document_packages p on p.id=pl.package_id and p.tenant_id=pl.tenant_id
+                 where pl.tenant_id=:tenant%s%s
+                """.formatted(sourceClause, outcomeClause));
+        bindTenantAndSource(retentionQuery, tenant, source);
+        retentionQuery.setParameter("due", due).setParameter("now", now);
+        Object[] retention = row(retentionQuery.getSingleResult());
+
+        Query trendQuery = entityManager.createNativeQuery("""
+                select day,
+                       (select count(*) from document_packages p where p.tenant_id=:tenant
+                         and p.created_at>=day and p.created_at<day+interval '1 day'%s%s),
+                       (select count(distinct e.package_id) from package_export_records e
+                         join document_packages p on p.id=e.package_id and p.tenant_id=e.tenant_id
+                        where e.tenant_id=:tenant and e.exported_at>=day and e.exported_at<day+interval '1 day'%s%s)
+                  from generate_series(date_trunc('day',cast(:from as timestamptz)),
+                       date_trunc('day',cast(:to as timestamptz)-interval '1 second'), interval '1 day') day
+                 order by day
+                """.formatted(sourceClause, outcomeClause, sourceClause, outcomeClause));
+        bindReport(trendQuery, tenant, from, to, source);
+        @SuppressWarnings("unchecked")
+        List<Object[]> trendRows = trendQuery.getResultList();
+        List<OperationalReportSnapshot.TrendPoint> trend = trendRows.stream().map(r ->
+                new OperationalReportSnapshot.TrendPoint(instant(r[0]), number(r[1]), number(r[2]))).toList();
+
+        long batches = number(periodVolumes[0]);
+        long completed = number(periodVolumes[3]);
+        long delivered = number(periodVolumes[4]);
+        long reviewed = number(automation[1]);
 
         return new OperationalReportSnapshot(
                 now,
+                new OperationalReportSnapshot.Period(from, to, previousFrom, from, source, outcome),
+                new OperationalReportSnapshot.Executive(
+                        batches, number(previousVolumes[0]), number(periodVolumes[1]), number(periodVolumes[2]),
+                        completed, number(previousVolumes[3]), delivered, number(previousVolumes[4]),
+                        percent(completed, batches), percent(delivered, batches), percentile(durations, .50),
+                        percentile(durations, .95), percent(number(automation[0]) - reviewed, number(automation[0])),
+                        percent(reviewed, number(automation[0])), number(backlog[0]), number(backlog[1]),
+                        ((Number) backlog[2]).doubleValue(), trend),
                 new OperationalReportSnapshot.Intake(
                         number(channels[0]), number(channels[1]), number(channels[2]), number(channels[3]),
-                        number(observations[0]), number(observations[1]), number(observations[2])),
+                        includeObservations(source, outcome) ? number(observations[0]) : 0,
+                        includeObservations(source, outcome) ? number(observations[1]) : 0,
+                        includeObservations(source, outcome) ? number(observations[2]) : 0),
                 new OperationalReportSnapshot.Processing(
                         overview.processing(), overview.needsReview(), overview.needsApproval(), overview.exported(),
                         overview.technicalAttention(), overview.rejected()),
                 new OperationalReportSnapshot.Export(number(export[0]), number(export[1]), overview.needsApproval()),
                 new OperationalReportSnapshot.Retention(
-                        number(retention[0]), number(retention[1]), number(retention[2]), number(retention[3]))
+                        number(retention[0]), number(retention[1]), number(retention[2]), number(retention[3]),
+                        number(retention[4]), number(retention[5]))
         );
+    }
+
+    private Object[] periodVolumes(UUID tenant, Instant from, Instant to, String source, String outcome) {
+        String documentFilter = sourceClause("dp", source) + outcomeClause("dp", outcome);
+        String exportFilter = sourceClause("ep", source) + outcomeClause("ep", outcome);
+        String packageFilter = sourceClause("p", source) + outcomeClause("p", outcome);
+        Query query = entityManager.createNativeQuery("""
+                select count(*),
+                       (select count(*) from documents d join document_packages dp on dp.id=d.package_id and dp.tenant_id=d.tenant_id
+                         where d.tenant_id=:tenant and dp.created_at>=:from and dp.created_at<:to%s),
+                       (select coalesce(sum(d.page_count),0) from documents d join document_packages dp on dp.id=d.package_id and dp.tenant_id=d.tenant_id
+                         where d.tenant_id=:tenant and dp.created_at>=:from and dp.created_at<:to%s),
+                       coalesce(sum(case when p.status='COMPLETED' then 1 else 0 end),0),
+                       (select count(distinct e.package_id) from package_export_records e join document_packages ep on ep.id=e.package_id and ep.tenant_id=e.tenant_id
+                         where e.tenant_id=:tenant and e.exported_at>=:from and e.exported_at<:to%s)
+                  from document_packages p where p.tenant_id=:tenant and p.created_at>=:from and p.created_at<:to%s
+                """.formatted(documentFilter, documentFilter, exportFilter, packageFilter));
+        query.setParameter("tenant", tenant).setParameter("from", from).setParameter("to", to);
+        if (!"ALL".equals(source)) query.setParameter("source", source);
+        return row(query.getSingleResult());
+    }
+
+    private static void bindReport(Query query, UUID tenant, Instant from, Instant to, String source) {
+        query.setParameter("tenant", tenant).setParameter("from", from).setParameter("to", to);
+        if (!"ALL".equals(source)) query.setParameter("source", source);
+    }
+
+    private static void bindCurrent(Query query, UUID tenant, Instant now, String source) {
+        bindTenantAndSource(query, tenant, source);
+        query.setParameter("now", now);
+    }
+
+    private static void bindTenantAndSource(Query query, UUID tenant, String source) {
+        query.setParameter("tenant", tenant);
+        if (!"ALL".equals(source)) query.setParameter("source", source);
+    }
+
+    private static String sourceClause(String alias, String source) {
+        return "ALL".equals(source) ? "" : " and " + alias + ".package_type=:source";
+    }
+
+    private static String outcomeClause(String alias, String outcome) {
+        return switch (outcome) {
+            case "PROCESSING" -> " and " + alias + ".status in ('CREATED','SUBMITTED','PROCESSING','APPROVED','VAULTED')";
+            case "NEEDS_REVIEW" -> " and " + alias + ".status in ('PENDING_REVIEW','IN_REVIEW')";
+            case "NEEDS_APPROVAL" -> " and " + alias + ".status='PENDING_FINAL_APPROVAL'";
+            case "COMPLETED" -> " and " + alias + ".status='COMPLETED'";
+            case "TECHNICAL_ATTENTION" -> " and " + alias + ".status='FAILED'";
+            case "REJECTED" -> " and " + alias + ".status in ('REJECTED','CANCELLED')";
+            default -> "";
+        };
+    }
+
+    private static boolean includeObservations(String source, String outcome) {
+        return "ALL".equals(outcome) && ("ALL".equals(source) || "FOLDER_INTAKE".equals(source));
+    }
+
+    private static double percent(long numerator, long denominator) {
+        return denominator <= 0 ? 0 : Math.round((numerator * 1000.0 / denominator)) / 10.0;
+    }
+
+    private static double percentile(List<Double> values, double percentile) {
+        if (values.isEmpty()) return 0;
+        int index = (int) Math.ceil(percentile * values.size()) - 1;
+        return Math.round(values.get(Math.max(0, Math.min(index, values.size() - 1))) * 10.0) / 10.0;
     }
 
     private DashboardOverview loadOverview(UUID tenant, boolean dashboardVisibleOnly) {
@@ -158,6 +310,25 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                        coalesce(sum(case when status in ('REJECTED','CANCELLED') then 1 else 0 end),0)
                   from document_packages where tenant_id=:tenant%s
                 """.formatted(visibilityClause)).setParameter("tenant", tenant).getSingleResult());
+        return new DashboardOverview(number(counts[0]), number(counts[1]), number(counts[2]), number(counts[3]),
+                number(counts[4]), number(counts[5]), number(counts[6]));
+    }
+
+    private DashboardOverview loadReportOverview(UUID tenant, String source, String outcome) {
+        String filter = sourceClause("p", source) + outcomeClause("p", outcome);
+        Query query = entityManager.createNativeQuery("""
+                select count(*),
+                       coalesce(sum(case when p.status in ('CREATED','SUBMITTED','PROCESSING','APPROVED','VAULTED') then 1 else 0 end),0),
+                       coalesce(sum(case when p.status in ('PENDING_REVIEW','IN_REVIEW') then 1 else 0 end),0),
+                       coalesce(sum(case when p.status='PENDING_FINAL_APPROVAL' then 1 else 0 end),0),
+                       coalesce(sum(case when p.status='COMPLETED' then 1 else 0 end),0),
+                       coalesce(sum(case when p.status='FAILED' then 1 else 0 end),0),
+                       coalesce(sum(case when p.status in ('REJECTED','CANCELLED') then 1 else 0 end),0)
+                  from document_packages p
+                 where p.tenant_id=:tenant%s
+                """.formatted(filter));
+        bindTenantAndSource(query, tenant, source);
+        Object[] counts = row(query.getSingleResult());
         return new DashboardOverview(number(counts[0]), number(counts[1]), number(counts[2]), number(counts[3]),
                 number(counts[4]), number(counts[5]), number(counts[6]));
     }

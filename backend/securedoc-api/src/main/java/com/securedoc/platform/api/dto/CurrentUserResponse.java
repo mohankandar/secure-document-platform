@@ -7,5 +7,6 @@ public record CurrentUserResponse(
         Set<String> roles,
         String tenantName,
         String tenantSlug,
-        String authenticationMode
+        String authenticationMode,
+        Set<String> capabilities
 ) {}

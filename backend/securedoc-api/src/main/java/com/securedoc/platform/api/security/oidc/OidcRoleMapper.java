@@ -13,7 +13,8 @@ import java.util.Set;
 @Component
 public class OidcRoleMapper {
     public static final Set<String> PRODUCT_ROLES = Set.of(
-            "USER", "REVIEWER", "APPROVER", "BUSINESS_ADMIN", "PLATFORM_ADMIN", "ADMIN");
+            "USER", "REVIEWER", "APPROVER", "BUSINESS_ADMIN", "TENANT_IT_ADMIN",
+            "PLATFORM_OPERATIONS_ADMIN", "REPORT_VIEWER", "ADMIN");
 
     private final SecurityProperties properties;
 

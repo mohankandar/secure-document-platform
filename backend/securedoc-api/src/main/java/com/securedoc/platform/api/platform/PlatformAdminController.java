@@ -2,7 +2,8 @@ package com.securedoc.platform.api.platform;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.WatchedFolderScanResponse;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,14 +29,14 @@ public class PlatformAdminController {
     }
 
     @GetMapping("/overview")
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.TECHNICAL_ADMIN_VIEW)
     public ResponseEntity<PlatformAdminOverviewResponse> overview(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         return ResponseEntity.ok(healthService.overview(principal.tenantId(), false));
     }
 
     @PostMapping("/health-check")
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.TECHNICAL_ADMIN_VIEW)
     public ResponseEntity<PlatformAdminOverviewResponse> healthCheck(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         var correlationId = contextResolver.resolveCorrelationId(request);
@@ -46,7 +47,7 @@ public class PlatformAdminController {
     }
 
     @PostMapping("/watched-folder/scan")
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<WatchedFolderScanResponse> scanWatchedFolder(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         return ResponseEntity.ok(watchedFolderScheduler.scanManual(principal, contextResolver.resolveCorrelationId(request)));

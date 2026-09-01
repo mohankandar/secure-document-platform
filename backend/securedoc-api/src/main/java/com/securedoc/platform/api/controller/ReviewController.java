@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.AssignReviewTaskUseCase;
 import com.securedoc.platform.application.port.in.CompleteReviewTaskUseCase;
@@ -52,7 +53,7 @@ public class ReviewController {
 
     @PostMapping
     @Transactional
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<Map<String, Object>> createReviewTask(
             @RequestBody Map<String, String> body,
             HttpServletRequest httpRequest) {
@@ -70,7 +71,7 @@ public class ReviewController {
 
     @PostMapping("/{taskId}/assign")
     @Transactional
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<Map<String, Object>> assignTask(
             @PathVariable String taskId,
             HttpServletRequest httpRequest) {
@@ -88,7 +89,7 @@ public class ReviewController {
 
     @PostMapping("/{taskId}/start")
     @Transactional
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<Map<String, Object>> startTask(
             @PathVariable String taskId,
             HttpServletRequest httpRequest) {
@@ -106,7 +107,7 @@ public class ReviewController {
 
     @PostMapping("/{taskId}/complete")
     @Transactional
-    @RequireRole({"REVIEWER"})
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<Map<String, Object>> completeTask(
             @PathVariable String taskId,
             @RequestBody(required = false) Map<String, String> body,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '../api/client';
+import Breadcrumbs from '../components/Breadcrumbs';
 import type {
   ApiError,
   BusinessAdminConfiguration,
@@ -233,10 +234,18 @@ export default function BusinessAdminPage() {
     if (policy) setPolicy({ ...policy, reviewMode });
   };
 
-  if (loading) return <div className="card">Loading Business Admin configuration...</div>;
+  if (loading) {
+    return (
+      <div className="business-admin-page">
+        <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Business Admin' }]} />
+        <div className="card">Loading Business Admin configuration...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="business-admin-page">
+      <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Business Admin' }]} />
       <div className="business-admin-header">
         <div>
           <h1>Business Admin</h1>

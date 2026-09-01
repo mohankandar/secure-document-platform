@@ -280,6 +280,34 @@ export interface OperationsDashboard {
 
 export interface OperationalReports {
   generatedAt: string;
+  period: {
+    from: string;
+    to: string;
+    previousFrom: string;
+    previousTo: string;
+    source: string;
+    outcome: string;
+  };
+  executive: {
+    batches: number;
+    previousBatches: number;
+    documents: number;
+    pages: number;
+    completed: number;
+    previousCompleted: number;
+    delivered: number;
+    previousDelivered: number;
+    completionRate: number;
+    deliveryRate: number;
+    medianDeliveryHours: number;
+    p95DeliveryHours: number;
+    straightThroughRate: number;
+    reviewRate: number;
+    currentBacklog: number;
+    currentAttention: number;
+    oldestBacklogHours: number;
+    trend: Array<{ bucket: string; received: number; delivered: number }>;
+  };
   intake: {
     totalBatches: number;
     manual: number;
@@ -307,6 +335,8 @@ export interface OperationalReports {
     redactedCopiesDueWithin24Hours: number;
     technicalHoldsDueWithin24Hours: number;
     purgedPackages: number;
+    originalsOverdue: number;
+    redactedCopiesOverdue: number;
   };
 }
 
@@ -376,4 +406,24 @@ export interface CurrentUser {
   tenantName: string;
   tenantSlug: string;
   authenticationMode: 'LOCAL' | 'OIDC' | string;
+  capabilities: string[];
+}
+
+export interface TechnicalExceptionDetail {
+  packageId: string;
+  documentId?: string | null;
+  status: string;
+  failureCategory: string;
+  failedStage: string;
+  retryable: boolean;
+  failedAt: string;
+  correlationId?: string | null;
+  originalRetainedUntil?: string | null;
+  explanation: string;
+  operatorDiagnostics?: {
+    dependency: string;
+    internalErrorCode: string;
+    attempts: number;
+    environment: string;
+  } | null;
 }

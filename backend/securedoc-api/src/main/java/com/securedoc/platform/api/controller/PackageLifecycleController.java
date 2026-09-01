@@ -2,7 +2,8 @@ package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.PackageLifecycleResponse;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.lifecycle.command.ApproveFinalDeliveryCommand;
 import com.securedoc.platform.application.lifecycle.command.ExtendTechnicalHoldCommand;
 import com.securedoc.platform.application.lifecycle.command.PurgeDueRetentionCommand;
@@ -60,7 +61,7 @@ public class PackageLifecycleController {
     }
 
     @PostMapping("/packages/{packageId}/reprocess")
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_REPROCESS)
     public ResponseEntity<Map<String, Object>> reprocess(@PathVariable String packageId,
                                                           HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
@@ -74,7 +75,7 @@ public class PackageLifecycleController {
     }
 
     @PostMapping("/packages/{packageId}/approve-delivery")
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public ResponseEntity<Map<String, String>> approveDelivery(@PathVariable String packageId,
                                                                 HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
@@ -85,7 +86,7 @@ public class PackageLifecycleController {
     }
 
     @PostMapping("/packages/{packageId}/technical-hold")
-    @RequireRole({"BUSINESS_ADMIN"})
+    @RequireCapability(UserCapability.TECHNICAL_HOLD_MANAGE)
     public ResponseEntity<PackageLifecycleResponse> extendTechnicalHold(
             @PathVariable String packageId,
             @RequestBody Map<String, Integer> body,
@@ -99,7 +100,7 @@ public class PackageLifecycleController {
     }
 
     @PostMapping("/lifecycle/purge-due")
-    @RequireRole({"PLATFORM_ADMIN"})
+    @RequireCapability(UserCapability.PLATFORM_OPERATIONS)
     public ResponseEntity<Map<String, Integer>> purgeDue(@RequestParam(defaultValue = "100") int limit,
                                                           HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);

@@ -12,5 +12,6 @@ public interface OperationsReadPort {
     DashboardPage loadDashboard(TenantId tenantId, DashboardStage stage, String search,
                                 int offset, int limit, String sortField, boolean descending);
 
-    OperationalReportSnapshot loadReports(TenantId tenantId, Instant now);
+    OperationalReportSnapshot loadReports(TenantId tenantId, Instant now, Instant from, Instant to,
+                                          String source, String outcome);
 }

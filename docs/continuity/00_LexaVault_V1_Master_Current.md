@@ -2462,3 +2462,31 @@ Runtime testing has now validated package-scoped Manual Review, exact source-pag
 The correction keeps the human decision and slow document work separate. After the final actionable finding is saved, the package transitions to `PROCESSING`, the transition is audited, and a new provider-neutral `PackageProcessingDispatcher` dispatches the existing `TriggerPackageProcessingUseCase` through a bounded in-process executor. The review API can therefore return promptly while the existing processing orchestrator performs redaction, verification, and delivery in the background. Dashboard polling communicates Processing -> Exported/Completed. No duplicate redaction/export implementation, new retention path, AI/detection change, or distributed broker was introduced.
 
 Acceptance must verify that the last decision visibly leaves `Saving…` promptly, the review queue becomes empty, `REVIEW_PROCESSING_RESUME_SCHEDULED/STARTED/COMPLETED` are emitted without sensitive content, and exactly one export cycle results. The in-process dispatcher remains an explicit V1 limitation that may later be replaced by durable queue/outbox consumption.
+
+---
+
+## 2026-09-01 — V1 role/capability + Technical Attention delta
+
+The current runtime-validated baseline (Dashboard polling, package-scoped exact-page Manual Review, Approver Dashboard removal, and non-blocking final-review resume/export) is frozen. The next focused implementation delta introduces the approved V1 product-defined authorization model and Technical Attention workflow.
+
+Admin personas are now named `BUSINESS_ADMIN`, `TENANT_IT_ADMIN`, and `PLATFORM_OPERATIONS_ADMIN`; `REVIEWER` and `APPROVER` remain workflow roles. The old ambiguous `PLATFORM_ADMIN` product role is retired. Business Admin does not configure role permissions. Tenant IT assigns users to the product-defined roles in production identity management.
+
+Backend authorization now supports fixed `UserCapability` mappings and `@RequireCapability`; `/api/v1/me` returns the trusted capability set so frontend action visibility uses the same product policy. Key corrections: USER cannot open Manual Review, BUSINESS_ADMIN cannot reprocess, and Approver-only Dashboard removal remains Approver-only.
+
+A dedicated Technical Issue Details flow was added for FAILED packages. It derives safe failure classification from persisted sanitized audit metadata and lifecycle state, exposes failure category/stage/retryability/correlation/retention information, and gives `PLATFORM_OPERATIONS_ADMIN` only safe deeper operator metadata. Selective `Retry Processing` is permitted only for classified retryable failures while retained originals remain available; only failed work is reset and the existing processing dispatcher resumes asynchronously. No new distributed queue or duplicate processing pipeline was introduced.
+
+See `16_Role_Capability_and_Technical_Attention_Workflow.md`. This delta awaits local build/runtime verification.
+
+---
+
+## 2026-09-01 — Batch 4 Executive and Operational Reports
+
+Batches 1, 2, and 3 are user-tested and frozen. Batch 4 adds one Reports area with two capability-controlled views while preserving the accepted Dashboard and global visual system byte-for-byte.
+
+`REPORT_VIEWER` is an additive, read-only product role. It receives `REPORT_EXECUTIVE_VIEW` and aggregate `REPORT_EXPORT` only. `BUSINESS_ADMIN` receives Executive Overview without export; `TENANT_IT_ADMIN` and `PLATFORM_OPERATIONS_ADMIN` receive Executive Overview, Operational Details, and aggregate export. `USER`, `REVIEWER`, and `APPROVER` receive no tenant-wide reporting capability by default. LOCAL and OIDC role trust boundaries both recognize the new role, and backend capability annotations remain authoritative.
+
+Executive reporting distinguishes selected-period intake, current workflow completion, and unique delivery/export facts. It includes package/document/page volume, prior-period comparison, median/P95 time to first delivery, straight-through versus reviewed delivery, current backlog/attention, oldest open age, and a daily received-versus-delivered trend. Shared 7/30/90-day, intake-source, and current-outcome filters are allowlisted; ranges are capped at 366 days. Operational Details adds current stages, watched-folder observations, export cycles, and non-overlapping retention overdue/due-soon risks.
+
+CSV export contains aggregate metrics and filter context only and records `REPORT_CSV_EXPORTED`. The report implementation reads tenant-scoped structured tables and does not parse logs or audit-message text. No PII snippets, filenames, document values, credentials, raw stack traces, or internal record identifiers are exposed. Custom report builders, scheduled distribution, forecasting, custom templates, and invented SLA health labels remain outside V1.
+
+See `22_Batch4_Executive_Operational_Reports.md` and `23_Batch4_Reports_Self_Review.md`. Batch 4 awaits the normal Java 21 build and focused user acceptance testing; Kiro remains reserved for later independent verification.

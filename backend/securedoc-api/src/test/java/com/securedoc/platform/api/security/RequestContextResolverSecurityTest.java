@@ -74,6 +74,21 @@ class RequestContextResolverSecurityTest {
         assertEquals(java.util.Set.of("USER"), principal.roles());
     }
 
+    @Test
+    void reportViewerIsRecognizedAtLocalAndOidcTrustBoundaries() {
+        SecurityProperties local = new SecurityProperties();
+        local.setMode(SecurityMode.LOCAL);
+        HttpServletRequest localRequest = mock(HttpServletRequest.class);
+        when(localRequest.getHeader("X-Actor-Roles")).thenReturn("REPORT_VIEWER");
+        assertEquals(java.util.Set.of("REPORT_VIEWER"), resolver(local).resolvePrincipal(localRequest).roles());
+
+        SecurityProperties oidc = oidcProperties();
+        SecurityContextHolder.getContext().setAuthentication(authenticated(
+                jwt("00000000-0000-0000-0000-000000000001", List.of("securedoc-report-viewer"))));
+        assertEquals(java.util.Set.of("REPORT_VIEWER"),
+                resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
+    }
+
     private JwtAuthenticationToken authenticated(Jwt jwt) {
         return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_AUTHENTICATED")));
     }
@@ -92,7 +107,9 @@ class RequestContextResolverSecurityTest {
         properties.setMode(SecurityMode.OIDC);
         properties.getOidc().getRoleMappings().put("USER", "securedoc-user");
         properties.getOidc().getRoleMappings().put("BUSINESS_ADMIN", "securedoc-business-admin");
-        properties.getOidc().getRoleMappings().put("PLATFORM_ADMIN", "securedoc-platform-admin");
+        properties.getOidc().getRoleMappings().put("TENANT_IT_ADMIN", "securedoc-tenant-it-admin");
+        properties.getOidc().getRoleMappings().put("PLATFORM_OPERATIONS_ADMIN", "securedoc-platform-operations-admin");
+        properties.getOidc().getRoleMappings().put("REPORT_VIEWER", "securedoc-report-viewer");
         properties.getOidc().getRoleMappings().put("ADMIN", "securedoc-admin");
         return properties;
     }
