@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { getCurrentRoles, setCurrentRoles } from './api/config';
+import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
 import { beginOidcLogin, clearOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode } from './api/auth';
 import type { CurrentUser } from './types';
@@ -12,11 +12,25 @@ import AuditPage from './pages/AuditPage';
 import BusinessAdminPage from './pages/BusinessAdminPage';
 import ReportsPage from './pages/ReportsPage';
 import PlatformAdminPage from './pages/PlatformAdminPage';
+import TechnicalIssueDetailPage from './pages/TechnicalIssueDetailPage';
+import Breadcrumbs from './components/Breadcrumbs';
 
 const ROLE_OPTIONS = [
-  'ADMIN', 'USER', 'REVIEWER', 'APPROVER', 'BUSINESS_ADMIN', 'PLATFORM_ADMIN',
-  'USER,REVIEWER', 'USER,APPROVER', 'USER,BUSINESS_ADMIN', 'USER,PLATFORM_ADMIN',
+  'ADMIN', 'USER', 'REVIEWER', 'APPROVER', 'BUSINESS_ADMIN', 'TENANT_IT_ADMIN', 'PLATFORM_OPERATIONS_ADMIN', 'REPORT_VIEWER',
+  'USER,REVIEWER', 'USER,APPROVER', 'USER,BUSINESS_ADMIN', 'USER,TENANT_IT_ADMIN', 'USER,PLATFORM_OPERATIONS_ADMIN',
 ];
+
+function PermissionDenied() {
+  return (
+    <div>
+      <Breadcrumbs items={[{ label: 'Permission required' }]} />
+      <div className="card">
+        <h1>Permission required</h1>
+        <p>Your current role does not allow this operation.</p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const localMode = isLocalSecurityMode();
@@ -38,9 +52,9 @@ export default function App() {
         const user = await apiClient.getCurrentUser();
         if (active) {
           setCurrentUser(user);
-          // Reuse the existing UI role hints from trusted /me data. In OIDC mode these
-          // values are never sent as identity headers; the backend remains authoritative.
+          // Reuse trusted /me role/capability data for UI visibility. Backend authorization remains authoritative.
           setCurrentRoles(user.roles.join(','));
+          setCurrentCapabilities(user.capabilities || []);
         }
       } catch {
         clearOidcSession();
@@ -53,16 +67,39 @@ export default function App() {
     return () => { active = false; };
   }, [localMode]);
 
+  useEffect(() => {
+    if (!localMode) return;
+    let active = true;
+    setCurrentCapabilities([]);
+    const loadLocalPrincipal = async () => {
+      try {
+        const user = await apiClient.getCurrentUser();
+        if (active) {
+          setCurrentUser(user);
+          setCurrentCapabilities(user.capabilities || []);
+        }
+      } catch {
+        if (active) setCurrentUser(null);
+      }
+    };
+    void loadLocalPrincipal();
+    return () => { active = false; };
+  }, [localMode, selectedRole]);
+
   const roles = useMemo(() => {
     if (localMode) return selectedRole.split(',').map((role) => role.trim()).filter(Boolean);
     return currentUser?.roles ?? [];
   }, [localMode, selectedRole, currentUser]);
 
   const hasRole = (role: string) => roles.includes('ADMIN') || roles.includes(role);
+  const capabilities = currentUser?.capabilities ?? [];
+  const hasCapability = (capability: string) => capabilities.includes(capability);
 
   const handleRoleChange = (value: string) => {
-    setSelectedRole(value);
+    setCurrentCapabilities([]);
+    setCurrentUser(null);
     setCurrentRoles(value);
+    setSelectedRole(value);
   };
 
   if (!localMode && authLoading) {
@@ -96,14 +133,16 @@ export default function App() {
         <nav>
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/packages/new">Upload Documents</NavLink>
-          {hasRole('REVIEWER') && <NavLink to="/review">Manual Review</NavLink>}
-          <NavLink to="/reports">Reports</NavLink>
-          {(hasRole('BUSINESS_ADMIN') || hasRole('PLATFORM_ADMIN')) && (
+          {hasCapability('MANUAL_REVIEW') && <NavLink to="/review">Manual Review</NavLink>}
+          {hasCapability('REPORT_EXECUTIVE_VIEW') && <NavLink to="/reports">Reports</NavLink>}
+          {(hasCapability('TENANT_POLICY_MANAGE') || hasCapability('TECHNICAL_ADMIN_VIEW') || hasCapability('AUDIT_VIEW')) && (
             <div className="sidebar-section-label">Administration</div>
           )}
-          {hasRole('BUSINESS_ADMIN') && <NavLink to="/business-admin">Business Admin</NavLink>}
-          {hasRole('PLATFORM_ADMIN') && <NavLink to="/platform-admin">IT / Platform Admin</NavLink>}
-          {hasRole('PLATFORM_ADMIN') && <NavLink to="/audit">Audit</NavLink>}
+          {hasCapability('TENANT_POLICY_MANAGE') && <NavLink to="/business-admin">Business Admin</NavLink>}
+          {hasCapability('TECHNICAL_ADMIN_VIEW') && (
+            <NavLink to="/platform-admin">{hasRole('PLATFORM_OPERATIONS_ADMIN') ? 'Platform Operations' : 'Tenant IT Admin'}</NavLink>
+          )}
+          {hasCapability('AUDIT_VIEW') && <NavLink to="/audit">Audit</NavLink>}
         </nav>
         {localMode ? (
           <div style={{ padding: '1rem', borderTop: '1px solid #636e72', marginTop: '1rem' }}>
@@ -114,7 +153,7 @@ export default function App() {
             </select>
           </div>
         ) : (
-          <button className="sidebar-signout" onClick={() => { clearOidcSession(); setCurrentRoles('USER'); setCurrentUser(null); }}>Sign out</button>
+          <button className="sidebar-signout" onClick={() => { clearOidcSession(); setCurrentCapabilities([]); setCurrentRoles('USER'); setCurrentUser(null); }}>Sign out</button>
         )}
       </aside>
       <main className="main-content">
@@ -122,11 +161,14 @@ export default function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/packages/new" element={<CreatePackagePage />} />
           <Route path="/packages/:packageId" element={<PackageDetailPage />} />
-          <Route path="/review" element={<ReviewPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/audit" element={<AuditPage />} />
-          <Route path="/business-admin" element={<BusinessAdminPage />} />
-          <Route path="/platform-admin" element={<PlatformAdminPage />} />
+          <Route path="/review" element={hasCapability('MANUAL_REVIEW') ? <ReviewPage /> : <PermissionDenied />} />
+          <Route path="/reports" element={hasCapability('REPORT_EXECUTIVE_VIEW')
+            ? <ReportsPage canViewOperations={hasCapability('REPORT_OPERATIONAL_VIEW')} canExport={hasCapability('REPORT_EXPORT')} />
+            : <PermissionDenied />} />
+          <Route path="/audit" element={hasCapability('AUDIT_VIEW') ? <AuditPage /> : <PermissionDenied />} />
+          <Route path="/business-admin" element={hasCapability('TENANT_POLICY_MANAGE') ? <BusinessAdminPage /> : <PermissionDenied />} />
+          <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage /> : <PermissionDenied />} />
+          <Route path="/technical-exceptions/:packageId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <TechnicalIssueDetailPage /> : <PermissionDenied />} />
         </Routes>
       </main>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiClient } from '../api/client';
 import type { AuditRecordResult, ApiError } from '../types';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 export default function AuditPage() {
   const [records, setRecords] = useState<AuditRecordResult[]>([]);
@@ -39,6 +40,7 @@ export default function AuditPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Audit' }]} />
       <h1>Audit Timeline</h1>
 
       {error && <div className="error-msg">{error}</div>}

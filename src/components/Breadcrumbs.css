@@ -1,0 +1,79 @@
+.breadcrumbs {
+  margin: 0 0 1rem;
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumbs li {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.breadcrumbs a,
+.breadcrumb-current {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  line-height: 1.25;
+}
+
+.breadcrumbs a {
+  color: #175cd3;
+  font-weight: 650;
+  text-decoration: none;
+  text-underline-offset: 0.18em;
+}
+
+.breadcrumbs a:hover {
+  background: #eff6ff;
+  text-decoration: underline;
+}
+
+.breadcrumbs a:focus-visible {
+  outline: 3px solid rgba(23, 92, 211, 0.25);
+  outline-offset: 1px;
+}
+
+.breadcrumb-current {
+  max-width: min(34rem, 60vw);
+  overflow: hidden;
+  color: #344054;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumb-separator {
+  padding: 0 0.05rem;
+  color: #98a2b3;
+  font-size: 1rem;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+  .breadcrumbs {
+    margin-bottom: 0.75rem;
+  }
+
+  .breadcrumbs a,
+  .breadcrumb-current {
+    min-height: 44px;
+    padding: 0.5rem 0.45rem;
+  }
+
+  .breadcrumb-current {
+    max-width: 70vw;
+  }
+}

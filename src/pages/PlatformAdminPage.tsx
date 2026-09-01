@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { PlatformAdminOverview, PlatformHealthItem } from '../types';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 function statusClass(status: string) {
   const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -71,14 +72,22 @@ export default function PlatformAdminPage() {
     }
   };
 
-  if (loading) return <div className="platform-admin-page"><p>Loading IT / Platform Admin…</p></div>;
+  if (loading) {
+    return (
+      <div className="platform-admin-page">
+        <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Technical Administration' }]} />
+        <p>Loading IT / Platform Admin…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="platform-admin-page">
+      <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Technical Administration' }]} />
       <div className="platform-admin-header">
         <div>
           <div className="platform-eyebrow">Administration</div>
-          <h1>IT / Platform Admin</h1>
+          <h1>Technical Administration</h1>
           <p>Technical providers, intake connections, resilience, integrations and operational health.</p>
         </div>
         <div className="platform-header-actions">
@@ -165,6 +174,7 @@ export default function PlatformAdminPage() {
                     </div>
                     <div className="platform-exception-actions">
                       <span className="platform-status platform-status-unhealthy">Attention</span>
+                      <Link to={`/technical-exceptions/${item.packageId}`}>View issue details</Link>
                       <Link to={`/packages/${item.packageId}`}>Open intake</Link>
                     </div>
                   </div>

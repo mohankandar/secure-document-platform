@@ -24,6 +24,7 @@ import type {
   DashboardStage,
   PlatformAdminOverview,
   CurrentUser,
+  TechnicalExceptionDetail,
 } from '../types';
 
 class ApiClient {
@@ -120,8 +121,15 @@ class ApiClient {
     return this.request(`/operations/dashboard?${query.toString()}`);
   }
 
-  async getOperationalReports(): Promise<OperationalReports> {
-    return this.request('/operations/reports');
+  async getOperationalReports(params: { from: string; to: string; source: string; outcome: string }): Promise<OperationalReports> {
+    const query = new URLSearchParams(params);
+    return this.request(`/operations/reports?${query.toString()}`);
+  }
+
+  async exportOperationalReports(params: { from: string; to: string; source: string; outcome: string }): Promise<Blob> {
+    const query = new URLSearchParams(params);
+    const response = await this.request<Response>(`/operations/reports/export?${query.toString()}`);
+    return response.blob();
   }
 
   // --- IT / Platform Admin (Unit 24) ---
@@ -136,6 +144,14 @@ class ApiClient {
 
   async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number }> {
     return this.request('/platform-admin/watched-folder/scan', { method: 'POST' });
+  }
+
+  async getTechnicalException(packageId: string): Promise<TechnicalExceptionDetail> {
+    return this.request(`/technical-exceptions/${packageId}`);
+  }
+
+  async retryTechnicalException(packageId: string): Promise<{ packageId: string; status: string }> {
+    return this.request(`/technical-exceptions/${packageId}/retry`, { method: 'POST' });
   }
 
   async listPackages(): Promise<PackageSummary[]> {
