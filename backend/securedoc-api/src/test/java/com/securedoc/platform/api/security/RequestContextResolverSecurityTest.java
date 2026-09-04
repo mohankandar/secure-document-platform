@@ -71,7 +71,7 @@ class RequestContextResolverSecurityTest {
         HttpServletRequest request = mock(HttpServletRequest.class);
         when(request.getHeader(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
         var principal = resolver.resolvePrincipal(request);
-        assertEquals(java.util.Set.of("USER"), principal.roles());
+        assertEquals(java.util.Set.of("DOCUMENT_PROCESSOR"), principal.roles());
     }
 
     @Test
@@ -86,6 +86,32 @@ class RequestContextResolverSecurityTest {
         SecurityContextHolder.getContext().setAuthentication(authenticated(
                 jwt("00000000-0000-0000-0000-000000000001", List.of("securedoc-report-viewer"))));
         assertEquals(java.util.Set.of("REPORT_VIEWER"),
+                resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
+    }
+
+
+    @Test
+    void legacyIdentityAliasesNormalizeImmediatelyToCanonicalRoles() {
+        SecurityProperties local = new SecurityProperties();
+        local.setMode(SecurityMode.LOCAL);
+        HttpServletRequest localRequest = mock(HttpServletRequest.class);
+        when(localRequest.getHeader("X-Actor-Roles")).thenReturn("USER,REVIEWER,APPROVER");
+        assertEquals(java.util.Set.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR"),
+                resolver(local).resolvePrincipal(localRequest).roles());
+
+        SecurityProperties oidc = oidcProperties();
+        SecurityContextHolder.getContext().setAuthentication(authenticated(
+                jwt("00000000-0000-0000-0000-000000000001", List.of("securedoc-reviewer", "securedoc-approver"))));
+        assertEquals(java.util.Set.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR"),
+                resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
+    }
+
+    @Test
+    void canonicalIdentityGroupsMapWithoutLegacyNamesLeaking() {
+        SecurityProperties oidc = oidcProperties();
+        SecurityContextHolder.getContext().setAuthentication(authenticated(
+                jwt("00000000-0000-0000-0000-000000000001", List.of("securedoc-document-processor"))));
+        assertEquals(java.util.Set.of("DOCUMENT_PROCESSOR"),
                 resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
     }
 
@@ -105,7 +131,11 @@ class RequestContextResolverSecurityTest {
     private SecurityProperties oidcProperties() {
         SecurityProperties properties = new SecurityProperties();
         properties.setMode(SecurityMode.OIDC);
+        properties.getOidc().getRoleMappings().put("DOCUMENT_PROCESSOR", "securedoc-document-processor");
+        properties.getOidc().getRoleMappings().put("DOCUMENT_SUPERVISOR", "securedoc-document-supervisor");
         properties.getOidc().getRoleMappings().put("USER", "securedoc-user");
+        properties.getOidc().getRoleMappings().put("REVIEWER", "securedoc-reviewer");
+        properties.getOidc().getRoleMappings().put("APPROVER", "securedoc-approver");
         properties.getOidc().getRoleMappings().put("BUSINESS_ADMIN", "securedoc-business-admin");
         properties.getOidc().getRoleMappings().put("TENANT_IT_ADMIN", "securedoc-tenant-it-admin");
         properties.getOidc().getRoleMappings().put("PLATFORM_OPERATIONS_ADMIN", "securedoc-platform-operations-admin");

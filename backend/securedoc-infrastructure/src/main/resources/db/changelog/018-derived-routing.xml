@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="018-01-routing-rules" author="openai">
+        <createTable tableName="routing_rules">
+            <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="destination_label" type="varchar(120)"><constraints nullable="false"/></column>
+            <column name="marker_type" type="varchar(30)"><constraints nullable="false"/></column>
+            <column name="marker_value" type="varchar(200)"><constraints nullable="false"/></column>
+            <column name="scan_region" type="varchar(30)"><constraints nullable="false"/></column>
+            <column name="destination_connection_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="enabled" type="boolean" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="created_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+            <column name="updated_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="routing_rules" baseColumnNames="destination_connection_id"
+                                 referencedTableName="integration_connections" referencedColumnNames="id"
+                                 constraintName="fk_routing_rule_destination" onDelete="RESTRICT"/>
+        <addUniqueConstraint tableName="routing_rules" columnNames="tenant_id,marker_type,marker_value,scan_region" constraintName="uk_routing_rule_marker_region"/>
+        <createIndex tableName="routing_rules" indexName="idx_routing_rules_tenant_enabled"><column name="tenant_id"/><column name="enabled"/></createIndex>
+    </changeSet>
+
+    <changeSet id="018-02-derived-deliveries" author="openai">
+        <createTable tableName="derived_deliveries">
+            <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="package_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="source_document_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="export_cycle" type="int"><constraints nullable="false"/></column>
+            <column name="routing_rule_id" type="uuid"/>
+            <column name="destination_connection_id" type="uuid"/>
+            <column name="connection_config_version" type="int"/>
+            <column name="destination_label" type="varchar(120)"/>
+            <column name="marker_type" type="varchar(30)"/>
+            <column name="marker_value" type="varchar(200)"/>
+            <column name="page_numbers" type="varchar(2000)"><constraints nullable="false"/></column>
+            <column name="artifact_id" type="uuid"/>
+            <column name="source_derived_document_id" type="varchar(120)"><constraints nullable="false"/></column>
+            <column name="file_name" type="varchar(255)"/>
+            <column name="status" type="varchar(40)"><constraints nullable="false"/></column>
+            <column name="attempt_count" type="int" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="last_failure_category" type="varchar(120)"/>
+            <column name="retryable" type="boolean" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="destination_reference" type="varchar(512)"/>
+            <column name="created_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+            <column name="updated_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+            <column name="delivered_at" type="timestamp with time zone"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="derived_deliveries" baseColumnNames="package_id" referencedTableName="document_packages" referencedColumnNames="id" constraintName="fk_derived_delivery_package" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="derived_deliveries" baseColumnNames="source_document_id" referencedTableName="documents" referencedColumnNames="id" constraintName="fk_derived_delivery_document" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="derived_deliveries" baseColumnNames="routing_rule_id" referencedTableName="routing_rules" referencedColumnNames="id" constraintName="fk_derived_delivery_rule" onDelete="SET NULL"/>
+        <addForeignKeyConstraint baseTableName="derived_deliveries" baseColumnNames="destination_connection_id" referencedTableName="integration_connections" referencedColumnNames="id" constraintName="fk_derived_delivery_connection" onDelete="RESTRICT"/>
+        <addForeignKeyConstraint baseTableName="derived_deliveries" baseColumnNames="artifact_id" referencedTableName="artifacts" referencedColumnNames="id" constraintName="fk_derived_delivery_artifact" onDelete="RESTRICT"/>
+        <addUniqueConstraint tableName="derived_deliveries" columnNames="tenant_id,package_id,export_cycle,source_document_id,routing_rule_id" constraintName="uk_derived_delivery_rule_document"/>
+        <addUniqueConstraint tableName="derived_deliveries" columnNames="tenant_id,source_derived_document_id" constraintName="uk_derived_source_id"/>
+        <createIndex tableName="derived_deliveries" indexName="idx_derived_delivery_package"><column name="tenant_id"/><column name="package_id"/><column name="status"/></createIndex>
+        <createIndex tableName="derived_deliveries" indexName="idx_derived_delivery_attention"><column name="tenant_id"/><column name="status"/><column name="updated_at"/></createIndex>
+    </changeSet>
+
+    <changeSet id="018-03-derived-attempts" author="openai">
+        <createTable tableName="derived_delivery_attempts">
+            <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="derived_delivery_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="attempt_number" type="int"><constraints nullable="false"/></column>
+            <column name="connection_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="connection_config_version" type="int"><constraints nullable="false"/></column>
+            <column name="status" type="varchar(30)"><constraints nullable="false"/></column>
+            <column name="failure_category" type="varchar(120)"/>
+            <column name="started_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+            <column name="completed_at" type="timestamp with time zone"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="derived_delivery_attempts" baseColumnNames="derived_delivery_id" referencedTableName="derived_deliveries" referencedColumnNames="id" constraintName="fk_derived_attempt_delivery" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="derived_delivery_attempts" baseColumnNames="connection_id" referencedTableName="integration_connections" referencedColumnNames="id" constraintName="fk_derived_attempt_connection" onDelete="RESTRICT"/>
+        <addUniqueConstraint tableName="derived_delivery_attempts" columnNames="derived_delivery_id,attempt_number" constraintName="uk_derived_delivery_attempt"/>
+        <createIndex tableName="derived_delivery_attempts" indexName="idx_derived_attempt_delivery"><column name="derived_delivery_id"/><column name="attempt_number"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

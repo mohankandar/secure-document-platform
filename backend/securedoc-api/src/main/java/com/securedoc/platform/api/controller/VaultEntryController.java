@@ -2,7 +2,8 @@ package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.RegisterVaultEntryUseCase;
 import com.securedoc.platform.application.vault.command.RegisterVaultEntryCommand;
@@ -38,7 +39,7 @@ public class VaultEntryController {
 
     @PostMapping
     @Transactional
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public ResponseEntity<Map<String, Object>> registerVaultEntry(
             @RequestBody Map<String, String> body,
             HttpServletRequest httpRequest) {

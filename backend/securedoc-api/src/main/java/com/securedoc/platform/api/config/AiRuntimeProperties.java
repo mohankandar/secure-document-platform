@@ -20,6 +20,18 @@ public class AiRuntimeProperties {
     private int parallelism = 2;
     private int pageMaxAttempts = 2;
     private long pageRetryBackoffMs = 500;
+    // Requirement 5 local-inference tuning. Zero token limits mean "provider/model default".
+    private String ollamaKeepAlive = "5m";
+    private boolean ollamaStructuredOutput = true;
+    private boolean ollamaThinkingEnabled = false;
+    private int ollamaContextWindowTokens = 0;
+    private int ollamaMaxOutputTokens = 0;
+    private int ollamaPageBatchSize = 1;
+    private int ollamaPageBatchMaxCharacters = 14000;
+    // Optional startup preload for the deployment default Ollama model. Tenant-specific models remain lazy.
+    private boolean ollamaPreloadEnabled = false;
+    private boolean ollamaPreloadFailOnError = false;
+    private int ollamaPreloadTimeoutSeconds = 300;
     private boolean requireTenantProfile = false;
 
     private boolean secondaryEnabled = false;
@@ -47,6 +59,26 @@ public class AiRuntimeProperties {
     public void setPageMaxAttempts(int pageMaxAttempts) { this.pageMaxAttempts = pageMaxAttempts; }
     public long getPageRetryBackoffMs() { return pageRetryBackoffMs; }
     public void setPageRetryBackoffMs(long pageRetryBackoffMs) { this.pageRetryBackoffMs = pageRetryBackoffMs; }
+    public String getOllamaKeepAlive() { return ollamaKeepAlive; }
+    public void setOllamaKeepAlive(String ollamaKeepAlive) { this.ollamaKeepAlive = ollamaKeepAlive; }
+    public boolean isOllamaStructuredOutput() { return ollamaStructuredOutput; }
+    public void setOllamaStructuredOutput(boolean ollamaStructuredOutput) { this.ollamaStructuredOutput = ollamaStructuredOutput; }
+    public boolean isOllamaThinkingEnabled() { return ollamaThinkingEnabled; }
+    public void setOllamaThinkingEnabled(boolean ollamaThinkingEnabled) { this.ollamaThinkingEnabled = ollamaThinkingEnabled; }
+    public int getOllamaContextWindowTokens() { return ollamaContextWindowTokens; }
+    public void setOllamaContextWindowTokens(int ollamaContextWindowTokens) { this.ollamaContextWindowTokens = ollamaContextWindowTokens; }
+    public int getOllamaMaxOutputTokens() { return ollamaMaxOutputTokens; }
+    public void setOllamaMaxOutputTokens(int ollamaMaxOutputTokens) { this.ollamaMaxOutputTokens = ollamaMaxOutputTokens; }
+    public int getOllamaPageBatchSize() { return ollamaPageBatchSize; }
+    public void setOllamaPageBatchSize(int ollamaPageBatchSize) { this.ollamaPageBatchSize = ollamaPageBatchSize; }
+    public int getOllamaPageBatchMaxCharacters() { return ollamaPageBatchMaxCharacters; }
+    public void setOllamaPageBatchMaxCharacters(int ollamaPageBatchMaxCharacters) { this.ollamaPageBatchMaxCharacters = ollamaPageBatchMaxCharacters; }
+    public boolean isOllamaPreloadEnabled() { return ollamaPreloadEnabled; }
+    public void setOllamaPreloadEnabled(boolean ollamaPreloadEnabled) { this.ollamaPreloadEnabled = ollamaPreloadEnabled; }
+    public boolean isOllamaPreloadFailOnError() { return ollamaPreloadFailOnError; }
+    public void setOllamaPreloadFailOnError(boolean ollamaPreloadFailOnError) { this.ollamaPreloadFailOnError = ollamaPreloadFailOnError; }
+    public int getOllamaPreloadTimeoutSeconds() { return ollamaPreloadTimeoutSeconds; }
+    public void setOllamaPreloadTimeoutSeconds(int ollamaPreloadTimeoutSeconds) { this.ollamaPreloadTimeoutSeconds = ollamaPreloadTimeoutSeconds; }
     public boolean isRequireTenantProfile() { return requireTenantProfile; }
     public void setRequireTenantProfile(boolean requireTenantProfile) { this.requireTenantProfile = requireTenantProfile; }
 
@@ -78,6 +110,13 @@ public class AiRuntimeProperties {
         private int parallelism;
         private int pageMaxAttempts;
         private long pageRetryBackoffMs = -1L;
+        private String ollamaKeepAlive;
+        private Boolean ollamaStructuredOutput;
+        private Boolean ollamaThinkingEnabled;
+        private int ollamaContextWindowTokens = -1;
+        private int ollamaMaxOutputTokens = -1;
+        private int ollamaPageBatchSize;
+        private int ollamaPageBatchMaxCharacters;
 
         private boolean secondaryEnabled;
         private String secondaryProvider;
@@ -102,6 +141,20 @@ public class AiRuntimeProperties {
         public void setPageMaxAttempts(int pageMaxAttempts) { this.pageMaxAttempts = pageMaxAttempts; }
         public long getPageRetryBackoffMs() { return pageRetryBackoffMs; }
         public void setPageRetryBackoffMs(long pageRetryBackoffMs) { this.pageRetryBackoffMs = pageRetryBackoffMs; }
+        public String getOllamaKeepAlive() { return ollamaKeepAlive; }
+        public void setOllamaKeepAlive(String ollamaKeepAlive) { this.ollamaKeepAlive = ollamaKeepAlive; }
+        public Boolean getOllamaStructuredOutput() { return ollamaStructuredOutput; }
+        public void setOllamaStructuredOutput(Boolean ollamaStructuredOutput) { this.ollamaStructuredOutput = ollamaStructuredOutput; }
+        public Boolean getOllamaThinkingEnabled() { return ollamaThinkingEnabled; }
+        public void setOllamaThinkingEnabled(Boolean ollamaThinkingEnabled) { this.ollamaThinkingEnabled = ollamaThinkingEnabled; }
+        public int getOllamaContextWindowTokens() { return ollamaContextWindowTokens; }
+        public void setOllamaContextWindowTokens(int ollamaContextWindowTokens) { this.ollamaContextWindowTokens = ollamaContextWindowTokens; }
+        public int getOllamaMaxOutputTokens() { return ollamaMaxOutputTokens; }
+        public void setOllamaMaxOutputTokens(int ollamaMaxOutputTokens) { this.ollamaMaxOutputTokens = ollamaMaxOutputTokens; }
+        public int getOllamaPageBatchSize() { return ollamaPageBatchSize; }
+        public void setOllamaPageBatchSize(int ollamaPageBatchSize) { this.ollamaPageBatchSize = ollamaPageBatchSize; }
+        public int getOllamaPageBatchMaxCharacters() { return ollamaPageBatchMaxCharacters; }
+        public void setOllamaPageBatchMaxCharacters(int ollamaPageBatchMaxCharacters) { this.ollamaPageBatchMaxCharacters = ollamaPageBatchMaxCharacters; }
         public boolean isSecondaryEnabled() { return secondaryEnabled; }
         public void setSecondaryEnabled(boolean secondaryEnabled) { this.secondaryEnabled = secondaryEnabled; }
         public String getSecondaryProvider() { return secondaryProvider; }

@@ -2,7 +2,8 @@ package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.DecideArtifactAccessRequestUseCase;
 import com.securedoc.platform.application.port.in.GetArtifactAccessRequestQuery;
@@ -95,7 +96,7 @@ public class ArtifactAccessRequestController {
 
     @PostMapping("/{requestId}/approve")
     @Transactional
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public ResponseEntity<Map<String, Object>> approve(
             @PathVariable String requestId,
             @RequestBody(required = false) Map<String, String> body,
@@ -115,7 +116,7 @@ public class ArtifactAccessRequestController {
 
     @PostMapping("/{requestId}/deny")
     @Transactional
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public ResponseEntity<Map<String, Object>> deny(
             @PathVariable String requestId,
             @RequestBody Map<String, String> body,

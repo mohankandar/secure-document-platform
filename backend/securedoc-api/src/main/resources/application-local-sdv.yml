@@ -1,0 +1,8 @@
+spring:
+  config:
+    activate:
+      on-profile: local-sdv
+
+securedoc:
+  delivery:
+    type: sdv

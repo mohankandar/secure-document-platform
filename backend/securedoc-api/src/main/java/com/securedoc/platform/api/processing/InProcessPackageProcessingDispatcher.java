@@ -6,13 +6,18 @@ import com.securedoc.platform.application.processing.command.TriggerPackageProce
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Objects;
 
 /**
- * V1 in-process dispatcher used to resume package processing after the final review decision.
- * The review HTTP request returns once the work has been accepted by the bounded executor;
- * redaction, verification and delivery continue on a background thread.
+ * V1 in-process dispatcher for asynchronous package processing.
+ *
+ * <p>If dispatch is requested while a Spring transaction is active, the background task is
+ * submitted only after that transaction commits. This prevents the worker from observing
+ * pre-commit package state (for example CREATED immediately before SUBMITTED is committed).
+ * A rollback therefore never starts processing for state that was not durably committed.
  */
 public final class InProcessPackageProcessingDispatcher implements PackageProcessingDispatcher {
 
@@ -30,22 +35,48 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
     @Override
     public void dispatch(TriggerPackageProcessingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
+
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    schedule(command);
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                        log.warn("PACKAGE_PROCESSING_DISPATCH_CANCELLED package={} tenant={} correlation={} transactionStatus={}",
+                                command.packageId(), command.tenantId(), command.correlationId(), status);
+                    }
+                }
+            });
+            log.info("PACKAGE_PROCESSING_DISPATCH_DEFERRED_UNTIL_COMMIT package={} tenant={} correlation={}",
+                    command.packageId(), command.tenantId(), command.correlationId());
+            return;
+        }
+
+        schedule(command);
+    }
+
+    private void schedule(TriggerPackageProcessingCommand command) {
         taskExecutor.execute(() -> {
-            log.info("REVIEW_PROCESSING_RESUME_STARTED package={} tenant={} correlation={}",
+            log.info("PACKAGE_PROCESSING_DISPATCH_STARTED package={} tenant={} correlation={}",
                     command.packageId(), command.tenantId(), command.correlationId());
             try {
                 triggerPackageProcessingUseCase.execute(command);
-                log.info("REVIEW_PROCESSING_RESUME_COMPLETED package={} tenant={} correlation={}",
+                log.info("PACKAGE_PROCESSING_DISPATCH_COMPLETED package={} tenant={} correlation={}",
                         command.packageId(), command.tenantId(), command.correlationId());
             } catch (RuntimeException ex) {
-                // Do not expose document content or raw exception messages. The processing service
-                // records authoritative package/document failure state where applicable.
-                log.error("REVIEW_PROCESSING_RESUME_FAILED package={} tenant={} correlation={} errorType={}",
+                // Keep document content and raw exception messages out of logs while making
+                // asynchronous processing failures operationally visible.
+                log.error("PACKAGE_PROCESSING_DISPATCH_FAILED package={} tenant={} correlation={} errorType={}",
                         command.packageId(), command.tenantId(), command.correlationId(),
                         ex.getClass().getSimpleName());
             }
         });
-        log.info("REVIEW_PROCESSING_RESUME_SCHEDULED package={} tenant={} correlation={}",
+        log.info("PACKAGE_PROCESSING_DISPATCH_SCHEDULED package={} tenant={} correlation={}",
                 command.packageId(), command.tenantId(), command.correlationId());
     }
 }

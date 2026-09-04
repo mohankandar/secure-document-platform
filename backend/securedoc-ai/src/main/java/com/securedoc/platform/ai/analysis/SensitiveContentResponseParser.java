@@ -28,14 +28,37 @@ final class SensitiveContentResponseParser {
                                            String model,
                                            String analyzerName,
                                            String analyzerVersion) throws IOException {
+        return parse(content, List.of(page), provider, model, analyzerName, analyzerVersion);
+    }
+
+    List<DiscoveredSensitiveContent> parse(String content,
+                                           List<PageContent> pages,
+                                           String provider,
+                                           String model,
+                                           String analyzerName,
+                                           String analyzerVersion) throws IOException {
         JsonNode root = objectMapper.readTree(content);
         JsonNode findings = root.path("findings");
         if (!findings.isArray()) {
             throw new IOException("Invalid findings payload");
         }
 
+        java.util.Map<Integer, PageContent> pagesByNumber = new java.util.LinkedHashMap<>();
+        for (PageContent page : pages) {
+            pagesByNumber.put(page.pageNumber(), page);
+        }
+
         List<DiscoveredSensitiveContent> result = new ArrayList<>();
         for (JsonNode finding : findings) {
+            int pageNumber = finding.path("pageNumber").asInt(-1);
+            if (pageNumber < 1 && pages.size() == 1) {
+                pageNumber = pages.getFirst().pageNumber();
+            }
+            PageContent page = pagesByNumber.get(pageNumber);
+            if (page == null) {
+                continue;
+            }
+
             String type = normalizeEntityType(finding.path("entityType").asText(""));
             String matchedText = finding.path("matchedText").asText("");
             String contextText = finding.path("contextText").asText("");
@@ -43,7 +66,7 @@ final class SensitiveContentResponseParser {
             if (type.isBlank() || matchedText.isBlank() || confidence < 0.0 || confidence > 1.0) {
                 continue;
             }
-            // Fail closed against model fabrication: only accept exact text present on this page.
+            // Fail closed against model fabrication: only accept exact text present on its declared page.
             if (!page.text().contains(matchedText)) {
                 continue;
             }

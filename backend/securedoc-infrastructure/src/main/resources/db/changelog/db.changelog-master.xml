@@ -19,4 +19,11 @@
     <include file="db/changelog/011-dashboard-reporting-indexes.xml"/>
     <include file="db/changelog/012-ssn-last-four-policy.xml"/>
     <include file="db/changelog/013-dashboard-package-visibility.xml"/>
+    <include file="db/changelog/014-integration-connection-foundation.xml"/>
+    <include file="db/changelog/015-external-machine-intake.xml"/>
+    <include file="db/changelog/016-polling-ingestion.xml"/>
+    <include file="db/changelog/017-sdv-delivery.xml"/>
+    <include file="db/changelog/018-derived-routing.xml"/>
+    <include file="db/changelog/019-primary-business-identifier-resolution.xml"/>
+    <include file="db/changelog/020-primary-business-identifier-concurrency.xml"/>
 </databaseChangeLog>

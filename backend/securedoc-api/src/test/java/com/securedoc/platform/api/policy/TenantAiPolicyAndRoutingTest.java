@@ -36,6 +36,33 @@ class TenantAiPolicyAndRoutingTest {
     }
 
     @Test
+    void compactOllamaPromptContainsOnlyTenantEnabledCategories() {
+        SensitiveContentPromptBuilder builder = new SensitiveContentPromptBuilder();
+        String prompt = builder.buildCompact(new AnalysisPolicy(Set.of(EntityType.CREDIT_SCORE), true));
+
+        assertTrue(prompt.contains("CREDIT_SCORE"));
+        assertFalse(prompt.contains("DATE_OF_BIRTH"));
+        assertFalse(prompt.contains("CREDIT_CARD_NUMBER"));
+        assertFalse(prompt.contains("SSN:"));
+    }
+
+    @Test
+    void qwenPromptCarriesCompactPrecisionGuardrails() {
+        SensitiveContentPromptBuilder builder = new SensitiveContentPromptBuilder();
+        String prompt = builder.buildCompact(new AnalysisPolicy(Set.of(
+                EntityType.SSN, EntityType.DATE_OF_BIRTH,
+                EntityType.CREDIT_CARD_NUMBER, EntityType.CREDIT_SCORE), true));
+
+        assertTrue(prompt.contains("never a person's name"));
+        assertTrue(prompt.contains("masked/last-four-only"));
+        assertTrue(prompt.contains("300-850"));
+        assertTrue(prompt.contains("policy/privacy language"));
+        assertTrue(prompt.contains("examples are not"));
+        assertTrue(prompt.contains("non-assignable"));
+        assertTrue(prompt.contains("'Your credit score' column header"));
+    }
+
+    @Test
     void promptRespectsTenantSsnLastFourOption() {
         SensitiveContentPromptBuilder builder = new SensitiveContentPromptBuilder();
         String enabled = builder.build(new AnalysisPolicy(Set.of(EntityType.SSN), true));

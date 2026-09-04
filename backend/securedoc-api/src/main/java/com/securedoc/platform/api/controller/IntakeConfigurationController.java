@@ -1,5 +1,8 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
+
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.IdentifierDefinitionResponse;
 import com.securedoc.platform.application.business.service.BusinessIdentityService;
@@ -17,6 +20,7 @@ public class IntakeConfigurationController {
         this.businessIdentityService=businessIdentityService; this.contextResolver=contextResolver;
     }
     @GetMapping("/identifier-definitions")
+    @RequireCapability(UserCapability.DOCUMENT_INTAKE)
     public ResponseEntity<List<IdentifierDefinitionResponse>> definitions(HttpServletRequest request){
         var principal=contextResolver.resolvePrincipal(request);
         var result=businessIdentityService.definitions(principal.tenantId()).stream()

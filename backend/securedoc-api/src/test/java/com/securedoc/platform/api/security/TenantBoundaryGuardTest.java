@@ -24,7 +24,7 @@ class TenantBoundaryGuardTest {
         when(repository.findById(tenantId)).thenReturn(Optional.empty());
         TenantBoundaryGuard guard = new TenantBoundaryGuard(new TenantContextService(repository));
         AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(
-                ActorId.of(UUID.randomUUID()), tenantId, "person@example.test", Set.of("USER"));
+                ActorId.of(UUID.randomUUID()), tenantId, "person@example.test", Set.of("DOCUMENT_PROCESSOR"));
         assertThrows(AccessDeniedException.class, () -> guard.requireProvisionedTenant(principal));
     }
 }

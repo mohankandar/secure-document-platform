@@ -1,21 +1,17 @@
 package com.securedoc.platform.api.security.oidc;
 
 import com.securedoc.platform.api.context.SecurityContextException;
+import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.SecurityProperties;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 @Component
 public class OidcRoleMapper {
-    public static final Set<String> PRODUCT_ROLES = Set.of(
-            "USER", "REVIEWER", "APPROVER", "BUSINESS_ADMIN", "TENANT_IT_ADMIN",
-            "PLATFORM_OPERATIONS_ADMIN", "REPORT_VIEWER", "ADMIN");
-
     private final SecurityProperties properties;
 
     public OidcRoleMapper(SecurityProperties properties) {
@@ -26,13 +22,11 @@ public class OidcRoleMapper {
         Set<String> externalValues = normalizeExternalValues(externalClaim);
         Set<String> mapped = new LinkedHashSet<>();
         for (Map.Entry<String, String> entry : properties.getOidc().getRoleMappings().entrySet()) {
-            String productRole = entry.getKey().trim().toUpperCase(Locale.ROOT);
-            if (!PRODUCT_ROLES.contains(productRole)) {
-                continue;
-            }
+            var canonicalRole = ProductRole.fromIdentityName(entry.getKey());
+            if (canonicalRole.isEmpty()) continue;
             for (String configuredExternal : split(entry.getValue())) {
                 if (externalValues.contains(configuredExternal)) {
-                    mapped.add(productRole);
+                    mapped.add(canonicalRole.get().name());
                     break;
                 }
             }

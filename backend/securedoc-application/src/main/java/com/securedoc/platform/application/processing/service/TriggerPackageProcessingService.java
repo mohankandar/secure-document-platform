@@ -10,6 +10,7 @@ import com.securedoc.platform.application.extraction.command.ExtractDocumentText
 import com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
+import com.securedoc.platform.application.port.in.ProcessDerivedRoutingUseCase;
 import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
 import com.securedoc.platform.application.port.in.StartDocumentProcessingUseCase;
@@ -75,6 +76,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final DetectSensitiveDataUseCase detectSensitiveDataUseCase;
     private final RedactDocumentUseCase redactDocumentUseCase;
     private final ExportPackageDocumentsUseCase exportPackageDocumentsUseCase;
+    private final ProcessDerivedRoutingUseCase processDerivedRoutingUseCase;
     private final SelectiveRetryExecutor selectiveRetryExecutor;
     private final PackageLifecycleService lifecycleService;
     private final AuditService auditService;
@@ -88,6 +90,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            DetectSensitiveDataUseCase detectSensitiveDataUseCase,
                                            RedactDocumentUseCase redactDocumentUseCase,
                                            ExportPackageDocumentsUseCase exportPackageDocumentsUseCase,
+                                           ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
                                            SelectiveRetryExecutor selectiveRetryExecutor,
                                            PackageLifecycleService lifecycleService,
                                            AuditService auditService) {
@@ -100,6 +103,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.detectSensitiveDataUseCase = Objects.requireNonNull(detectSensitiveDataUseCase);
         this.redactDocumentUseCase = Objects.requireNonNull(redactDocumentUseCase);
         this.exportPackageDocumentsUseCase = Objects.requireNonNull(exportPackageDocumentsUseCase);
+        this.processDerivedRoutingUseCase = Objects.requireNonNull(processDerivedRoutingUseCase);
         this.selectiveRetryExecutor = Objects.requireNonNull(selectiveRetryExecutor);
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
         this.auditService = Objects.requireNonNull(auditService);
@@ -305,14 +309,25 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
 
         // Batch gate: the destination receives the complete package atomically. No individual
         // document becomes visible until every staged document has been written successfully.
+        com.securedoc.platform.application.export.result.ExportPackageDocumentsResult exportResult;
         try {
-            selectiveRetryExecutor.execute(() -> exportPackageDocumentsUseCase.execute(
+            exportResult = selectiveRetryExecutor.execute(() -> exportPackageDocumentsUseCase.execute(
                     ExportPackageDocumentsCommand.of(packageId, tenantId, correlationId)));
         } catch (Exception e) {
             failPackage(pkg, tenantId, packageId, correlationId,
                     TechnicalFailureClassifier.safeAuditDetail(
                             e, "Package delivery failed; technical attention required"));
             return;
+        }
+
+        // Option A: master SDV/local export is authoritative for package completion. Derived
+        // routing is an independent post-export track; failures are recorded there and never
+        // undo the successful master export or its retention semantics.
+        try {
+            processDerivedRoutingUseCase.processPackage(packageId, tenantId, exportResult.exportCycle(), correlationId);
+        } catch (Exception e) {
+            log.warn("DERIVED_ROUTING_POST_EXPORT_FAILED package={} tenant={} correlation={} type={}",
+                    packageId, tenantId, correlationId, e.getClass().getSimpleName());
         }
 
         pkg.completeSuccessfully();

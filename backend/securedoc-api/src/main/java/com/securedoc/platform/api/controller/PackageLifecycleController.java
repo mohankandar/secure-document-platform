@@ -54,6 +54,7 @@ public class PackageLifecycleController {
     }
 
     @GetMapping("/packages/{packageId}/lifecycle")
+    @RequireCapability(UserCapability.DASHBOARD_ACCESS)
     public ResponseEntity<PackageLifecycleResponse> getLifecycle(@PathVariable String packageId,
                                                                  HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);

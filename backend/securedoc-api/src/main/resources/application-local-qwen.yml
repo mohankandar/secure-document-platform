@@ -1,0 +1,6 @@
+# Requirement 5 controlled alternative-model benchmark overlay.
+# Activate together with local: --spring.profiles.active=local,local-qwen
+# The accepted Gemma local profile remains unchanged; this overlay changes only the selected model.
+securedoc:
+  ai:
+    model: ${SECUREDOC_AI_MODEL:qwen3.5:4b}

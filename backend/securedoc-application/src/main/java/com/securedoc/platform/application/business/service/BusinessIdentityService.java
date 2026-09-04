@@ -53,22 +53,31 @@ public final class BusinessIdentityService {
                 .sorted(Comparator.comparingInt(BusinessIdentifier::displayOrder))
                 .toList();
 
-        Map<com.securedoc.platform.domain.identity.BusinessRecordId, BusinessRecord> matches = new LinkedHashMap<>();
-        for (BusinessIdentifier identifier : requested) {
-            recordRepository.findByIdentifier(tenantId, identifier.definitionId(), identifier.normalizedValue())
-                    .ifPresent(record -> matches.put(record.id(), record));
-        }
-        if (matches.size() > 1) {
-            throw new IntakeValidationException(IntakeRejectionCode.IDENTIFIER_CONFLICT,
-                    "Provided identifiers resolve to different business records");
-        }
+        BusinessIdentifierDefinition primaryDefinition = definitions.stream()
+                .filter(BusinessIdentifierDefinition::primary)
+                .findFirst()
+                .orElseThrow();
+        BusinessIdentifier requestedPrimary = requested.stream()
+                .filter(i -> i.definitionId().equals(primaryDefinition.id()))
+                .findFirst()
+                .orElseThrow(() -> new IntakeValidationException(IntakeRejectionCode.MISSING_REQUIRED_IDENTIFIER,
+                        "Missing required business identifier: " + primaryDefinition.label()));
+
+        /*
+         * Only the tenant-configured Primary identifier resolves the long-lived BusinessRecord.
+         * Secondary identifiers are descriptive/searchable attributes and may legitimately repeat
+         * across different business records (for example, one Member Number can own multiple
+         * Contract Numbers, and many records can share the same Service Entity).
+         */
+        Optional<BusinessRecord> primaryMatch = recordRepository.findByPrimaryIdentifier(
+                tenantId, requestedPrimary.definitionId(), requestedPrimary.normalizedValue());
 
         BusinessRecord record;
-        boolean createdNew = matches.isEmpty();
+        boolean createdNew = primaryMatch.isEmpty();
         if (createdNew) {
             record = BusinessRecord.create(tenantId, requested);
         } else {
-            record = matches.values().iterator().next();
+            record = primaryMatch.orElseThrow();
             Map<BusinessIdentifierDefinitionId,BusinessIdentifier> existing = record.identifiers().stream()
                     .collect(Collectors.toMap(BusinessIdentifier::definitionId, Function.identity()));
             for (BusinessIdentifier identifier : requested) {

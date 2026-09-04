@@ -195,6 +195,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
             if (!isTerminalForPurge(lifecycle)) continue;
             try {
                 purgeArtifactType(lifecycle, ArtifactType.REDACTED);
+                purgeArtifactType(lifecycle, ArtifactType.DERIVED_REDACTED);
                 lifecycle.markRedactedPurged(command.now());
                 lifecycleRepository.save(lifecycle);
                 redactedPurged++;

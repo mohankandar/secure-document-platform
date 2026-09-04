@@ -2,42 +2,55 @@
 
 Generic codebase for the LexaVault project codename. Market-facing naming is intentionally not hardcoded into reusable code.
 
-## Current V1 Direction
+## Current V1 direction
 
-An AI-first automatic secure document-redaction platform:
+LexaVault V1 is an AI-first secure document-redaction and processing platform:
 
 ```text
 PDF -> native extraction/OCR -> AI semantic discovery + deterministic evidence
-    -> policy/confidence -> permanent redaction -> verification -> delivery
+    -> tenant policy/confidence -> permanent redaction -> verification
+    -> focused review only when required -> delivery
 ```
 
-AI independently analyzes every normalized document. Deterministic recognizers/validators strengthen structured findings but do not gate AI discovery. High-confidence straight-through processing requires no human approval by default; only specific uncertain findings are routed to focused review.
+AI analyzes every normalized document. Deterministic recognizers/validators provide supporting evidence and never gate AI discovery.
 
-## Repository Guidance
+## Read before development
 
-Before development, read:
+1. `docs/continuity/CURRENT_STATE.md`
+2. `docs/continuity/DEVELOPMENT_WORKING_AGREEMENT.md`
+3. `docs/product/V1_SCOPE.md`
+4. `docs/product/AUTHORIZATION.md`
+5. the architecture/product document relevant to the requested change
 
-- `.kiro/steering/requirements-index.md`
-- `.kiro/specs/secure-document-platform-v1/unit-of-work.md`
-- `docs/architecture/06-core-automatic-redaction-pipeline.md`
+Full documentation index: `docs/README.md`.
 
-Current construction status: **Units 16–25 are approved. There is no Unit 26 in the frozen V1 plan.** The project is in **Final V1 Security / Integration + Acceptance** with focused pre-acceptance runtime corrections only when real customer-package testing exposes a concrete defect. The current baseline includes the Ollama page-level retry correction, the 2026-08-31 DOB/SSN precision and Manual Review preview-diagnostic correction, the runtime-validated credit-card precision correction, and the tenant-driven prompt/per-tenant AI provider routing delta documented under `docs/continuity/`, plus the runtime-driven Dashboard/Manual Review/package-visibility corrections and the 2026-09-01 final-review-item asynchronous resume correction documented under `docs/continuity/`.
+Historical unit plans, prompts, self-reviews, and superseded role models are under `docs/archive/` and must not override current documentation/source.
 
-## Current Continuity / Final Acceptance
+## Build and LOCAL run
 
-Before coding or verification, read `docs/continuity/README.md` and `docs/continuity/00_LexaVault_V1_Master_Current.md`.
+Recommended Windows workflow:
 
-LOCAL convenience scripts are available at the repository root:
+```powershell
+.\build-all.cmd
+.\start-local.cmd
+```
 
+See:
+
+- `docs/operations/BUILD.md`
+- `docs/operations/LOCAL_RUN.md`
+- `docs/operations/LOCAL_AI_SETUP.md`
+- `docs/operations/OCR_CONFIGURATION.md`
+- `docs/operations/AI_PROVIDER_CONFIGURATION.md`
+
+LOCAL convenience scripts:
+
+- `Build-LexaVault-All.ps1` / `build-all.cmd`
 - `Start-LexaVault-Local.ps1` / `start-local.cmd`
 - `Stop-LexaVault-Local.ps1` / `stop-local.cmd`
 
-The current customer masking policy is tenant-configured for SSN, DOB, Credit Score and Credit Card Number, with a separate `maskSsnLastFour` option for contextual SSN-last-four exposure.
+## Current authorization
 
-## AI Provider / Model Configuration
+Canonical roles are `DOCUMENT_PROCESSOR`, `DOCUMENT_SUPERVISOR`, `BUSINESS_ADMIN`, `REPORT_VIEWER`, `TENANT_IT_ADMIN`, `PLATFORM_OPERATIONS_ADMIN`, and explicit internal `ADMIN`.
 
-Business redaction policy and AI execution are separate. Business Admin controls enabled sensitive categories/options. Deployment/Platform configuration controls provider, endpoint, model and credentials.
-
-Supported V1 transports are Ollama and OpenAI-compatible/vLLM. Model is configuration, so Ollama can run Gemma or Qwen without code changes. Optional deployment-managed tenant profiles are keyed by trusted tenant UUID. Set `SECUREDOC_AI_REQUIRE_TENANT_PROFILE=true` when every production tenant must have an explicit AI endpoint and fallback to the default provider is forbidden.
-
-See `docs/continuity/10_Tenant_AI_Provider_Configuration_Guide.md`.
+See `docs/product/AUTHORIZATION.md`. Retired `USER`, `REVIEWER`, and `APPROVER` names exist only as narrow identity-transition aliases where compatibility is still required.

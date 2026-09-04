@@ -35,8 +35,11 @@ public class JpaBusinessRecordRepositoryAdapter implements BusinessRecordReposit
     @Override public Optional<BusinessRecord> findByIdAndTenantId(BusinessRecordId id,TenantId tenant){
         return records.findByIdAndTenantId(id.value(),tenant.value()).map(this::toDomain);
     }
-    @Override public Optional<BusinessRecord> findByIdentifier(TenantId tenant, BusinessIdentifierDefinitionId definitionId,String normalizedValue){
-        return identifiers.findByTenantIdAndDefinitionIdAndNormalizedValue(tenant.value(), definitionId.value(), normalizedValue)
+    @Override public Optional<BusinessRecord> findByPrimaryIdentifier(TenantId tenant, BusinessIdentifierDefinitionId definitionId,String normalizedValue){
+        BusinessIdentifierDefinitionEntity definition = definitions.findById(definitionId.value())
+                .filter(d -> d.getTenantId().equals(tenant.value()) && d.isActive() && d.isPrimary())
+                .orElseThrow(() -> new IllegalArgumentException("Business record lookup requires the active Primary identifier"));
+        return identifiers.findByTenantIdAndDefinitionIdAndNormalizedValue(tenant.value(), definition.getId(), normalizedValue)
                 .flatMap(e->records.findByIdAndTenantId(e.getBusinessRecordId(),tenant.value())).map(this::toDomain);
     }
     private BusinessRecord toDomain(BusinessRecordEntity r){

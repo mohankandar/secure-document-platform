@@ -2,6 +2,7 @@ package com.securedoc.platform.api.context;
 
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.SecurityProperties;
+import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
@@ -16,7 +17,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,10 +31,8 @@ public class RequestContextResolver {
     private static final String HEADER_ACTOR_ID = "X-Actor-Id";
     private static final String HEADER_CORRELATION_ID = "X-Correlation-Id";
     private static final String HEADER_ACTOR_ROLES = "X-Actor-Roles";
+    private static final String HEADER_INTEGRATION_CLIENT = "X-Integration-Client";
 
-    private static final Set<String> VALID_LOCAL_ROLES = Set.of(
-            "USER", "REVIEWER", "APPROVER", "BUSINESS_ADMIN", "TENANT_IT_ADMIN",
-            "PLATFORM_OPERATIONS_ADMIN", "REPORT_VIEWER", "ADMIN");
 
     private final UUID demoTenantId;
     private final UUID demoActorId;
@@ -61,6 +59,17 @@ public class RequestContextResolver {
                 : resolveOidcPrincipal();
     }
 
+    /**
+     * Resolves a service/integration identity without requiring a product user-role mapping.
+     * The caller is authorized later by binding this authenticated principal to an enabled
+     * tenant PUSH_API Integration Connection. Production identity still comes only from the verified JWT.
+     */
+    public AuthenticatedPrincipal resolveIntegrationPrincipal(HttpServletRequest request) {
+        return securityProperties.getMode() == SecurityMode.LOCAL
+                ? resolveLocalIntegrationPrincipal(request)
+                : resolveOidcIntegrationPrincipal();
+    }
+
     public SecurityMode securityMode() {
         return securityProperties.getMode();
     }
@@ -85,30 +94,57 @@ public class RequestContextResolver {
                 ActorId.of(actorId), TenantId.of(tenantId), "demo-user", roles);
     }
 
+    private AuthenticatedPrincipal resolveLocalIntegrationPrincipal(HttpServletRequest request) {
+        UUID tenantId = resolveLocalUuid(request, HEADER_TENANT_ID, demoTenantId);
+        UUID actorId = resolveLocalUuid(request, HEADER_ACTOR_ID, demoActorId);
+        String client = request.getHeader(HEADER_INTEGRATION_CLIENT);
+        if (client == null || client.isBlank()) client = "demo-integration-client";
+        return AuthenticatedPrincipal.of(ActorId.of(actorId), TenantId.of(tenantId), client.trim(), Set.of());
+    }
+
+    private AuthenticatedPrincipal resolveOidcIntegrationPrincipal() {
+        JwtAuthenticationToken token = requireOidcToken();
+        var jwt = token.getToken();
+        TenantId tenantId = resolveOidcTenant(jwt);
+        ActorId actorId = trustedActorResolver.resolve(jwt);
+        String username = resolveOidcUsername(jwt);
+        return AuthenticatedPrincipal.of(actorId, tenantId, username, Set.of());
+    }
+
     private AuthenticatedPrincipal resolveOidcPrincipal() {
+        JwtAuthenticationToken token = requireOidcToken();
+        var jwt = token.getToken();
+        TenantId tenantId = resolveOidcTenant(jwt);
+        Set<String> roles = oidcRoleMapper.map(jwt.getClaim(securityProperties.getOidc().getRolesClaim()));
+        ActorId actorId = trustedActorResolver.resolve(jwt);
+        return AuthenticatedPrincipal.of(actorId, tenantId, resolveOidcUsername(jwt), roles);
+    }
+
+
+    private JwtAuthenticationToken requireOidcToken() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (!(authentication instanceof JwtAuthenticationToken token) || !authentication.isAuthenticated()) {
             throw new SecurityContextException("Authenticated OIDC identity is required");
         }
-        var jwt = token.getToken();
-        String tenantClaim = securityProperties.getOidc().getTenantClaim();
-        String rawTenant = jwt.getClaimAsString(tenantClaim);
-        UUID tenantId;
+        return token;
+    }
+
+    private TenantId resolveOidcTenant(org.springframework.security.oauth2.jwt.Jwt jwt) {
+        String rawTenant = jwt.getClaimAsString(securityProperties.getOidc().getTenantClaim());
         try {
-            tenantId = UUID.fromString(rawTenant == null ? "" : rawTenant.trim());
+            return TenantId.of(UUID.fromString(rawTenant == null ? "" : rawTenant.trim()));
         } catch (IllegalArgumentException ex) {
             throw new SecurityContextException("Authenticated identity has an invalid tenant claim");
         }
+    }
 
-        Set<String> roles = oidcRoleMapper.map(jwt.getClaim(securityProperties.getOidc().getRolesClaim()));
-        ActorId actorId = trustedActorResolver.resolve(jwt);
+    private String resolveOidcUsername(org.springframework.security.oauth2.jwt.Jwt jwt) {
         String username = jwt.getClaimAsString(securityProperties.getOidc().getUsernameClaim());
         if (username == null || username.isBlank()) username = jwt.getSubject();
         if (username == null || username.isBlank()) {
             throw new SecurityContextException("Authenticated identity has no usable username/subject");
         }
-
-        return AuthenticatedPrincipal.of(actorId, TenantId.of(tenantId), username.trim(), roles);
+        return username.trim();
     }
 
     private UUID resolveLocalUuid(HttpServletRequest request, String headerName, UUID fallback) {
@@ -126,17 +162,17 @@ public class RequestContextResolver {
     private Set<String> resolveLocalRoles(HttpServletRequest request) {
         String header = request.getHeader(HEADER_ACTOR_ROLES);
         if (header == null || header.isBlank()) {
-            return Set.of("USER");
+            return Set.of(ProductRole.DOCUMENT_PROCESSOR.name());
         }
         Set<String> roles = new LinkedHashSet<>();
         for (String raw : header.split(",")) {
-            String role = raw.trim().toUpperCase(Locale.ROOT);
+            String role = raw.trim();
             if (role.isEmpty()) continue;
-            if (!VALID_LOCAL_ROLES.contains(role)) {
-                throw new SecurityContextException("Invalid role in X-Actor-Roles header: " + raw.trim());
-            }
-            roles.add(role);
+            ProductRole canonical = ProductRole.fromIdentityName(role)
+                    .orElseThrow(() -> new SecurityContextException(
+                            "Invalid role in X-Actor-Roles header: " + raw.trim()));
+            roles.add(canonical.name());
         }
-        return roles.isEmpty() ? Set.of("USER") : Set.copyOf(roles);
+        return roles.isEmpty() ? Set.of(ProductRole.DOCUMENT_PROCESSOR.name()) : Set.copyOf(roles);
     }
 }

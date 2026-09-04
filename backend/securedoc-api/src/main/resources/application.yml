@@ -27,14 +27,17 @@ securedoc:
       username-claim: ${SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM:preferred_username}
       roles-claim: ${SECUREDOC_SECURITY_OIDC_ROLES_CLAIM:groups}
       role-mappings:
-        USER: ${SECUREDOC_SECURITY_ROLE_USER:securedoc-user}
-        REVIEWER: ${SECUREDOC_SECURITY_ROLE_REVIEWER:securedoc-reviewer}
-        APPROVER: ${SECUREDOC_SECURITY_ROLE_APPROVER:securedoc-approver}
+        DOCUMENT_PROCESSOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_PROCESSOR:securedoc-document-processor}
+        DOCUMENT_SUPERVISOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_SUPERVISOR:securedoc-document-supervisor}
         BUSINESS_ADMIN: ${SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN:securedoc-business-admin}
+        REPORT_VIEWER: ${SECUREDOC_SECURITY_ROLE_REPORT_VIEWER:securedoc-report-viewer}
         TENANT_IT_ADMIN: ${SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN:securedoc-tenant-it-admin}
         PLATFORM_OPERATIONS_ADMIN: ${SECUREDOC_SECURITY_ROLE_PLATFORM_OPERATIONS_ADMIN:securedoc-platform-operations-admin}
-        REPORT_VIEWER: ${SECUREDOC_SECURITY_ROLE_REPORT_VIEWER:securedoc-report-viewer}
         ADMIN: ${SECUREDOC_SECURITY_ROLE_ADMIN:}
+        # Narrow transition aliases for existing IdP groups. Remove after tenant IdP assignments migrate.
+        USER: ${SECUREDOC_SECURITY_LEGACY_ROLE_USER:securedoc-user}
+        REVIEWER: ${SECUREDOC_SECURITY_LEGACY_ROLE_REVIEWER:securedoc-reviewer}
+        APPROVER: ${SECUREDOC_SECURITY_LEGACY_ROLE_APPROVER:securedoc-approver}
   ai:
     # AI-first discovery is part of the active V1 pipeline. Use "heuristic" only as an
     # explicit development fallback when no local model is available.
@@ -49,6 +52,20 @@ securedoc:
     parallelism: ${SECUREDOC_AI_PARALLELISM:2}
     page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
     page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
+    # Requirement 5 Ollama inference tuning. These are deployment/profile settings; tenant profiles
+    # may override them when a tenant uses an explicitly assigned Ollama profile.
+    ollama-keep-alive: ${SECUREDOC_AI_OLLAMA_KEEP_ALIVE:5m}
+    ollama-structured-output: ${SECUREDOC_AI_OLLAMA_STRUCTURED_OUTPUT:true}
+    ollama-thinking-enabled: ${SECUREDOC_AI_OLLAMA_THINKING_ENABLED:false}
+    # 0 keeps the model/provider default outside explicitly tuned profiles.
+    ollama-context-window-tokens: ${SECUREDOC_AI_OLLAMA_CONTEXT_WINDOW_TOKENS:0}
+    ollama-max-output-tokens: ${SECUREDOC_AI_OLLAMA_MAX_OUTPUT_TOKENS:0}
+    ollama-page-batch-size: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE:1}
+    ollama-page-batch-max-characters: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS:14000}
+    # Optional startup preload for the default Ollama model. Disabled in secure base config; explicit local/demo profiles enable it.
+    ollama-preload-enabled: ${SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED:false}
+    ollama-preload-fail-on-error: ${SECUREDOC_AI_OLLAMA_PRELOAD_FAIL_ON_ERROR:false}
+    ollama-preload-timeout-seconds: ${SECUREDOC_AI_OLLAMA_PRELOAD_TIMEOUT_SECONDS:300}
     # Set true in multi-tenant deployments where each tenant must use an explicitly assigned AI endpoint.
     require-tenant-profile: ${SECUREDOC_AI_REQUIRE_TENANT_PROFILE:false}
     secondary-enabled: ${SECUREDOC_AI_SECONDARY_ENABLED:false}
@@ -69,26 +86,20 @@ securedoc:
       timeout-seconds: ${SECUREDOC_OCR_TESSERACT_TIMEOUT_SECONDS:60}
       render-dpi: ${SECUREDOC_OCR_RENDER_DPI:220}
       min-native-characters: ${SECUREDOC_OCR_MIN_NATIVE_CHARACTERS:32}
+      # Some mixed PDFs contain only a native title/footer around a large scanned image. Inspect
+      # sparse native pages at low DPI and OCR them when the raster content is materially denser
+      # than the embedded text, so image-only identity appendices are not skipped.
+      sparse-native-image-check-max-characters: ${SECUREDOC_OCR_SPARSE_IMAGE_CHECK_MAX_CHARACTERS:400}
+      sparse-native-image-check-dpi: ${SECUREDOC_OCR_SPARSE_IMAGE_CHECK_DPI:72}
+      sparse-native-image-dark-pixel-ratio: ${SECUREDOC_OCR_SPARSE_IMAGE_DARK_PIXEL_RATIO:0.006}
       minimum-page-confidence: ${SECUREDOC_OCR_MIN_PAGE_CONFIDENCE:0.55}
       blank-page-dark-pixel-ratio: ${SECUREDOC_OCR_BLANK_DARK_PIXEL_RATIO:0.0015}
   delivery:
     # Unit 22: one active final-delivery provider per deployment. Business Admin owns
     # retention/approval policy; provider connection details remain IT/Platform configuration.
-    type: ${SECUREDOC_DELIVERY_TYPE:local}
+    type: ${SECUREDOC_DELIVERY_TYPE:sdv}
     local:
       output-path: ${SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH:./securedoc-output}
-    api:
-      endpoint: ${SECUREDOC_DELIVERY_API_ENDPOINT:}
-      bearer-token: ${SECUREDOC_DELIVERY_API_BEARER_TOKEN:}
-      timeout-seconds: ${SECUREDOC_DELIVERY_API_TIMEOUT_SECONDS:60}
-      require-authentication: ${SECUREDOC_DELIVERY_API_REQUIRE_AUTHENTICATION:true}
-      require-https: ${SECUREDOC_DELIVERY_API_REQUIRE_HTTPS:true}
-    s3:
-      bucket: ${SECUREDOC_DELIVERY_S3_BUCKET:}
-      prefix: ${SECUREDOC_DELIVERY_S3_PREFIX:securedoc-output}
-      region: ${SECUREDOC_DELIVERY_S3_REGION:us-east-1}
-      endpoint: ${SECUREDOC_DELIVERY_S3_ENDPOINT:}
-      path-style-access: ${SECUREDOC_DELIVERY_S3_PATH_STYLE_ACCESS:false}
   lifecycle:
     # Unit 22 in-process V1 retention maintenance. Can be replaced with durable scheduling later.
     purge-scheduler-enabled: ${SECUREDOC_LIFECYCLE_PURGE_SCHEDULER_ENABLED:true}

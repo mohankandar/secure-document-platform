@@ -87,6 +87,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private final SensitiveDataValidationPort deterministicValidationPort;
     private final TenantRedactionPolicyRepository tenantRedactionPolicyRepository;
     private final FindingEvidenceConfidencePolicy evidenceConfidencePolicy = new FindingEvidenceConfidencePolicy();
+    private final SensitiveCandidatePlausibilityPolicy candidatePlausibilityPolicy = new SensitiveCandidatePlausibilityPolicy();
+    private final OcrSensitiveFieldSafetyPolicy ocrSensitiveFieldSafetyPolicy = new OcrSensitiveFieldSafetyPolicy();
     private final TextExtractionPort textExtractionPort;
     private final FindingRepository findingRepository;
     private final DomainEventPublisher eventPublisher;
@@ -180,8 +182,17 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
         SemanticResolution semanticResolution = resolveSemanticDiscoveries(semanticOutput.findings(), pagesByNumber, enabledTypes, tenantPolicy.maskSsnLastFour());
         List<DetectedEntity> mergedEntities = mergeEvidence(semanticResolution.located(), deterministicOutput.entities(), enabledTypes);
+
+        // OCR fail-safe: a strong structured field label must not silently disappear between OCR
+        // and policy evaluation. Exact OCR credit-score values become normal located findings;
+        // unresolved non-empty sensitive fields become review-only signals that block export.
+        OcrSensitiveFieldSafetyPolicy.Evaluation ocrSafety = ocrSensitiveFieldSafetyPolicy.evaluate(
+                pagesByNumber, mergedEntities, enabledTypes);
+        mergedEntities = mergeEvidence(mergedEntities, ocrSafety.locatedEntities(), enabledTypes);
+
         List<Finding> findings = createFindings(new DetectionOutput(mergedEntities), document, pagesByNumber, enabledTypes);
         findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document));
+        findings.addAll(createOcrSafetyReviewFindings(ocrSafety.reviewSignals(), document));
 
         // Per-finding policy. Only findings that individually meet confidence AND have a trusted
         // location are auto-confirmed. Low-confidence/unlocated findings remain DETECTED for review.
@@ -213,9 +224,10 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         Map<String, Integer> findingsByType = buildFindingsByType(findings);
         Map<String, List<Integer>> findingPagesByType = buildFindingPagesByType(findings);
         long autoConfirmedCount = findings.stream().filter(f -> f.status() == FindingStatus.CONFIRMED).count();
-        log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} merged={} semanticByType={} deterministicByType={}",
+        log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} merged={} semanticByType={} deterministicByType={}",
                 command.documentId(), semanticOutput.findings().size(), semanticResolution.located().size(),
-                semanticResolution.unlocated().size(), deterministicOutput.entities().size(), mergedEntities.size(),
+                semanticResolution.unlocated().size(), deterministicOutput.entities().size(),
+                ocrSafety.locatedEntities().size(), ocrSafety.reviewSignals().size(), mergedEntities.size(),
                 buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()));
         log.info("DOCUMENT_DETECTION_COMPLETED document={} package={} findings={} byType={} pagesByType={} autoConfirmed={} reviewRequired={} decision={} enabledTypes={} maskSsnLastFour={} durationMs={}",
                 command.documentId(), command.packageId(), findings.size(), findingsByType, findingPagesByType,
@@ -280,18 +292,29 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 continue;
             }
 
+            int[] offsets = resolveOffsets(page.text(), matchedText, discovery.contextText());
+            String trustedContext = trustedContext(page.text(), offsets, discovery.contextText());
             ValidationEvidence validation = deterministicValidationPort.validate(new Candidate(
-                    discovery.entityType(), matchedText, discovery.contextText()));
+                    discovery.entityType(), matchedText, trustedContext));
+            SensitiveCandidatePlausibilityPolicy.Evaluation plausibility = candidatePlausibilityPolicy.evaluate(
+                    type, matchedText, trustedContext, maskSsnLastFour, validation.outcome());
+            if (!plausibility.plausible()) {
+                // Do not persist impossible/contradictory classifications as low-confidence review
+                // clutter. Log only type/page/reason; never the candidate value or surrounding text.
+                log.info("AI_FINDING_REJECTED type={} page={} reason={} validation={}",
+                        type, discovery.pageNumber(), plausibility.reasonCode(), validation.outcome());
+                continue;
+            }
+
             double effectiveConfidence = evidenceConfidencePolicy.effectiveSemanticConfidence(
                     discovery.confidence(), validation.outcome());
-            String analyzerVersion = discovery.analyzerVersion() + ";validation=" + validation.outcome();
+            String analyzerVersion = discovery.analyzerVersion()
+                    + ";validation=" + validation.outcome() + ";plausibility=PASS";
 
-            int[] offsets = resolveOffsets(page.text(), matchedText, discovery.contextText());
             if (offsets == null) {
-                // Never silently discard a semantic finding. If the AI identifies sensitive content
-                // but trusted extraction cannot select one exact occurrence, preserve it as an
-                // unlocated page-level finding. No bounding box means it cannot auto-redact and
-                // therefore routes to focused review.
+                // A structurally/contextually plausible candidate may still be ambiguous to locate
+                // when the exact value occurs more than once. Preserve that uncertainty for review,
+                // but only after the plausibility gate above has rejected obvious garbage.
                 unlocated.add(new UnlocatedSemanticFinding(
                         type, discovery.pageNumber(), effectiveConfidence,
                         discovery.analyzerName(), analyzerVersion));
@@ -339,6 +362,21 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         return findings;
     }
 
+    private List<Finding> createOcrSafetyReviewFindings(
+            List<OcrSensitiveFieldSafetyPolicy.ReviewSignal> reviewSignals,
+            Document document) {
+        List<Finding> findings = new ArrayList<>(reviewSignals.size());
+        for (OcrSensitiveFieldSafetyPolicy.ReviewSignal signal : reviewSignals) {
+            findings.add(Finding.create(
+                    document.tenantId(), document.id(), signal.entityType(),
+                    FindingLocation.unlocated(signal.pageNumber()),
+                    Confidence.of(signal.confidence()),
+                    new DetectorSource("ocr-sensitive-field-guard", "1.0.0;unresolved-field"),
+                    "***"));
+        }
+        return findings;
+    }
+
     private record SemanticResolution(List<DetectedEntity> located,
                                       List<UnlocatedSemanticFinding> unlocated) {
         private SemanticResolution {
@@ -349,6 +387,24 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
     private record UnlocatedSemanticFinding(EntityType entityType, int pageNumber, double confidence,
                                              String detectorName, String detectorVersion) {
+    }
+
+    private String trustedContext(String pageText, int[] offsets, String groundedModelContext) {
+        if (offsets != null) {
+            int radius = 220;
+            int start = Math.max(0, offsets[0] - radius);
+            int end = Math.min(pageText.length(), offsets[1] + radius);
+            String window = pageText.substring(start, end);
+            if (groundedModelContext != null && !groundedModelContext.isBlank()
+                    && !window.contains(groundedModelContext)) {
+                return window + "\n" + groundedModelContext;
+            }
+            return window;
+        }
+        // SensitiveContentResponseParser keeps contextText only when it is an exact quote from the
+        // declared page and contains matchedText, so it is safe as trusted context for an unlocated
+        // repeated value. An empty string intentionally makes context-dependent types fail closed.
+        return groundedModelContext == null ? "" : groundedModelContext;
     }
 
     /** Resolves an AI text discovery against trusted page text; never trusts model X/Y coordinates. */

@@ -1,213 +1,201 @@
-# Local Demo: Unit 17 AI-First Digital + Scanned PDF Flow
+# Local Demo: End-to-End Flow
 
-This guide describes the Unit 17 flow built on the approved Unit 16 pipeline. Digital pages use native PDF text when usable; scanned/sparse pages use local Tesseract OCR and then enter the exact same AI-first finding/policy/redaction path.
+This guide walks through the complete SecureDoc document processing lifecycle using the local/demo environment.
 
 ## Prerequisites
 
 - Java 21+
 - Maven 3.9+
 - Node.js 18+
-- PostgreSQL 15+
-- Local Ollama runtime with the configured model available (default `qwen2.5:7b`)
-- Tesseract 5.x available on PATH (or configure `SECUREDOC_OCR_TESSERACT_EXECUTABLE`)
-
-See `docs/local-ai-setup.md` for AI provider configuration and `docs/local-ocr-setup.md` for OCR configuration.
+- PostgreSQL 15+ running on `localhost:5432`
+- Database `securedoc` created with user `securedoc` / password `securedoc`
 
 ## 1. Start PostgreSQL
 
 ```bash
+# If using Docker:
 docker run -d --name securedoc-pg \
   -e POSTGRES_DB=securedoc \
   -e POSTGRES_USER=securedoc \
-  -e POSTGRES_PASSWORD=securedoc_dev_password \
+  -e POSTGRES_PASSWORD=securedoc \
   -p 5432:5432 \
   postgres:15
 ```
 
-## 2. Start the local AI provider
-
-Ensure Ollama is reachable at the configured base URL and the configured model is already available.
-
-```bash
-export SECUREDOC_AI_PROVIDER=ollama
-export SECUREDOC_AI_OLLAMA_BASE_URL=http://localhost:11434
-export SECUREDOC_AI_OLLAMA_MODEL=qwen2.5:7b
-```
-
-Do not use `SECUREDOC_AI_PROVIDER=heuristic` as proof of the final AI-first acceptance; it is a bounded development fallback only.
-
-## 3. Confirm local OCR
-
-```bash
-tesseract --version
-```
-
-Windows PowerShell example when Tesseract is not on PATH:
-
-```powershell
-$env:SECUREDOC_OCR_TESSERACT_EXECUTABLE = "C:\Program Files\Tesseract-OCR\tesseract.exe"
-```
-
-## 4. Build and start backend
+## 2. Start Backend
 
 ```bash
 cd backend
-mvn clean verify
-mvn spring-boot:run -pl securedoc-api -am -Dspring-boot.run.profiles=local
+mvn spring-boot:run -pl securedoc-api -Dspring-boot.run.profiles=local
 ```
 
-Backend: `http://localhost:8080`
+The backend starts on `http://localhost:8080`. Liquibase applies all migrations automatically.
 
-## 5. Build/start frontend
+## 3. Start Frontend
 
 ```bash
 cd frontend/securedoc-ui
-npm ci
-npm run build
+npm install
 npm run dev
 ```
 
-Frontend: `http://localhost:5173`
+The frontend starts on `http://localhost:5173` and proxies API calls to the backend.
 
-## 6. Normal happy path
+## 4. Demo Steps
 
-1. Create a `MANUAL_UPLOAD` package.
-2. Upload one or more PDFs. Digital, scanned/image-only, and mixed native/scanned PDFs are supported by the Unit 17 normalization path.
-3. Submit once.
-4. Submission automatically starts page-aware normalization: meaningful native pages use PDFBox text/coordinates; sparse/image pages are rendered and OCR'd with Tesseract. Normalized pages then enter AI semantic discovery, deterministic evidence, trusted-location mapping, policy, permanent redaction, verification, and delivery.
-5. No normal user enters X/Y/bounding-box coordinates and no manual processing trigger is required.
+### Step 1: Create Package
 
-For a package where every finding is auto-confirmed by policy, the expected terminal package status is `COMPLETED`. Each document is `PROCESSED`, and each delivered file keeps its original customer filename.
+- Navigate to **Create Package** page
+- Select package type (e.g., STANDARD)
+- Click **Create Package**
+- Note the package ID, click **View** to go to detail
 
-Local delivery is isolated internally to avoid filename collisions:
+**Expected status:** Package `CREATED`
 
-```text
-securedoc-output/
-  {tenantId}/
-    {packageId}/
-      {documentId}/
-        application.pdf
+### Step 2: Upload PDF
+
+- On the Package Detail page, choose a PDF file
+- Click **Upload**
+- Document appears in the Documents table
+
+**Expected status:** Package `CREATED`, Document `UPLOADED`
+
+### Step 3: Submit Package
+
+- Click **Submit Package**
+
+**Expected status:** Package `SUBMITTED`
+
+### Step 4: Trigger Processing
+
+- Click **Trigger Processing**
+- This runs: extract text → detect sensitive data
+- If findings are detected but lack bounding boxes, redaction is **skipped** (document stays in REDACTING)
+- Package moves to PENDING_REVIEW regardless
+
+**Expected statuses after processing:**
+- No sensitive data found: Package `PENDING_REVIEW`, Document `PROCESSED`
+- Sensitive data found, all findings have bounding boxes: Package `PENDING_REVIEW`, Document `PROCESSED`, Findings `REDACTED`
+- Sensitive data found, findings lack bounding boxes: Package `PENDING_REVIEW`, Document `REDACTING` (waiting for review)
+
+### Step 5: Review (when documents are in REDACTING)
+
+If documents are in REDACTING status (findings need bounding boxes):
+
+1. Go to **Review** page
+2. Enter the Package ID, click **Create** to create a review task
+3. Copy the task ID, click **Assign to current actor**
+4. Click **Start**
+5. For each finding:
+   - Enter the Finding ID and Review Task ID
+   - Click **Confirm** (changes DETECTED → CONFIRMED)
+   - Set bounding box coordinates (normalized 0.0-1.0, e.g., left=0.1, top=0.2, width=0.3, height=0.05)
+   - Click **Update Bounding Box**
+6. Click **Complete** when all findings have been confirmed with bounding boxes
+
+### Step 6: Continue Processing (Redact)
+
+- Go back to Package Detail page, click **Refresh**
+- Click **Continue Processing (Redact)**
+- This validates all confirmed findings have bounding boxes, then runs redaction
+- After successful redaction: findings are marked REDACTED, document becomes PROCESSED
+
+**Expected status:** Package `PENDING_REVIEW`, Document `PROCESSED`, Findings `REDACTED`
+
+### Step 7: Finalize Package
+
+- Click **Finalize & Approve**
+- This validates:
+  - All documents are PROCESSED
+  - No DETECTED findings remain
+  - No CONFIRMED findings remain (all must be REDACTED)
+  - REDACTED, DISMISSED, and OVERRIDDEN findings are considered safe
+
+**Expected status:** Package `APPROVED`
+
+### Step 8: Register Vault Entry
+
+- Go to **Vault / Access** page
+- Enter Package ID, Document ID, and the REDACTED Artifact ID
+- Click **Register Vault Entry**
+
+**Expected:** Vault entry created
+
+### Step 9: Download Redacted Artifact
+
+- On the Vault page, enter the Document ID
+- Click **Download Redacted**
+
+The browser downloads the redacted PDF with a safe filename (`document-{id}-redacted.pdf`).
+
+## 5. Status Flow Summary
+
+```
+Package:  CREATED → SUBMITTED → PROCESSING → PENDING_REVIEW → [IN_REVIEW] → APPROVED → VAULTED
+Document: UPLOADED → EXTRACTING → DETECTING → [REDACTING] → PROCESSED
+Finding:  DETECTED → CONFIRMED → REDACTED (or DISMISSED/OVERRIDDEN)
 ```
 
-The internal directories are implementation details; the customer filename remains exactly `application.pdf`.
+Key: Documents in REDACTING wait for human review to provide bounding boxes before redaction can proceed.
 
-## 7. Review path
+## 6. Known Limitations
 
-If one or more findings do not individually meet the V1 auto-redact threshold or do not have a trusted location:
+- The rule-based detector creates text-only findings (character offsets, no bounding boxes)
+- Redaction is skipped during initial processing when findings lack bounding boxes
+- A reviewer must confirm findings and provide bounding boxes via the Review page
+- If the reviewer dismisses all findings, Continue Processing marks the document PROCESSED without creating a redacted artifact (no redaction needed)
+- After adding bounding boxes for confirmed findings, use "Continue Processing (Redact)" to run redaction
+- The worker is disabled by default; processing must be triggered manually
+- The current detector is deterministic (regex patterns) — no AI/ML detection yet
+- Finalization requires every document to be PROCESSED (FAILED documents block approval)
+- For V1 demo, the redacted artifact path is the main flow when findings are confirmed
+- If all findings are dismissed, no redacted artifact is created; vault registration would use ORIGINAL (future policy decision)
 
-- only those findings remain `DETECTED`;
-- high-confidence, trusted-location findings are auto-confirmed and do not require re-review;
-- the affected document remains `REDACTING` while review is required;
-- the package becomes `PENDING_REVIEW`;
-- **no package delivery occurs yet**.
+## 7. Troubleshooting
 
-The `/review` screen is now the focused Manual Review workbench. It shows only unresolved findings, renders the relevant source page, and lets the reviewer visually draw/move/resize the proposed redaction area. After the last `DETECTED` finding is confirmed/dismissed, processing resumes automatically; no separate Continue Processing action is required.
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Package stuck in SUBMITTED | Processing not triggered | Click "Trigger Processing" |
+| Document in REDACTING after processing | Findings detected without bounding boxes | Normal — use Review page to add bounding boxes |
+| "Cannot continue redaction: DETECTED findings" | Findings not confirmed yet | Confirm findings on Review page first |
+| "confirmed findings without bounding boxes" | Bounding boxes not provided | Update bounding boxes on Review page |
+| Finalize fails: "document not PROCESSED" | Document still REDACTING or FAILED | Continue processing after review, or fix failed docs |
+| Finalize fails: "finding not reviewed" | DETECTED findings remain | Confirm or dismiss all findings |
+| Finalize fails: "confirmed but not redacted" | Confirmed findings not yet processed | Run Continue Processing to trigger redaction |
+| Upload fails | Package not in CREATED status | Cannot upload after submit |
+| CORS errors | Frontend not proxied | Ensure Vite dev server is running |
 
-## 8. No-sensitive-data path
-
-A PDF with no supported sensitive findings still produces a verified safe burn-flat output with zero redaction targets. It is delivered with the original filename and the package can become `COMPLETED`.
-
-## 9. Failure behavior
-
-- AI provider unavailable/invalid response → document/package technical failure; no deterministic-only silent fallback.
-- Scanned/image-only PDF → page render + Tesseract OCR + same AI-first pipeline.
-- Non-blank page with empty OCR or page OCR confidence below the configured minimum → fail closed as a technical processing failure; no silent clean-output success.
-- Redaction verification failure → no delivery; technical failure.
-- Delivery failure → package does not become `COMPLETED`; technical failure.
-- One failed document prevents successful batch completion/delivery status.
-
-## 10. Unit 17 acceptance matrix
-
-Before approving Unit 17, verify at least:
-
-| Scenario | Expected result |
-| --- | --- |
-| All four V1 categories, high confidence | AI participates; automatic permanent redaction; verified output; package `COMPLETED` |
-| AI-only discovery that deterministic SSN rule misses (e.g. contextually labeled 9-digit SSN without separators) | Finding can still originate from semantic/AI path |
-| AI finding text appears multiple times and cannot be mapped to one trusted occurrence | Finding is preserved as unlocated `DETECTED`; package requires review; nothing is silently dropped |
-| AI structured candidate conflicts with deterministic validation (e.g. invalid Luhn PAN) | Confidence is bounded down; candidate is not auto-redacted |
-| One deliberately below-threshold finding among high-confidence findings | Low item is not swept into redaction; package `PENDING_REVIEW`; no customer delivery yet |
-| No sensitive findings | Verified safe output delivered; package `COMPLETED` |
-| AI provider unavailable | Technical failure; no deterministic-only success |
-| Delivery destination fails | Technical failure; package not `COMPLETED` |
-| Same filename in different packages | Both outputs retained under different internal package/document paths; filename unchanged |
-| Two documents, one needs review | No package delivery until the review condition is resolved |
-| Two-document delivery, second staging write fails | No final package directory is exposed; package becomes technical failure |
-| Scanned/image-only PDF with all four V1 categories | Real Tesseract OCR → real Ollama analysis → trusted location → permanent redaction → verified delivery → `COMPLETED` |
-| Mixed native + scanned PDF | Native pages avoid OCR; scanned/sparse pages use OCR; both enter the same finding/policy/redaction pipeline |
-| Low OCR-confidence sensitive text | Finding confidence is bounded by OCR span confidence and cannot auto-redact above policy merely because AI is confident |
-| Non-blank unreadable/very-low-confidence scan | Fail closed as technical failure; no successful delivery |
-| Genuinely blank scanned page | Safe zero-finding output can still complete |
-
-## 11. Status summary
-
-```text
-Straight-through package:
-CREATED → SUBMITTED → PROCESSING → COMPLETED
-
-Review-required package:
-CREATED → SUBMITTED → PROCESSING → PENDING_REVIEW → [IN_REVIEW] → COMPLETED
-
-Technical failure:
-... → FAILED
-
-Document:
-UPLOADED → EXTRACTING → DETECTING → REDACTING → PROCESSED
-                                  └────────────→ FAILED
-```
-
-`PENDING_REVIEW` is reserved for a real human content decision. It is not the successful terminal status and is not used to represent a technical failure.
-
-## 12. Current boundaries
-
-- Unit 17 supports digital/text, scanned/image-only, and page-mixed PDFs through one normalized text/location model.
-- Native extraction is preferred for meaningful digital pages; OCR is used only for sparse/image pages.
-- Positional spans are not yet persisted. Detection re-normalizes the original artifact to recover trusted geometry, so OCR pages may be OCR'd twice in the current local path. This is a known performance optimization opportunity, not a separate detection architecture.
-- The current submit path is synchronous for the local/demo happy path. Production-grade asynchronous orchestration remains a later hardening concern.
-- Batch delivery is gated until all documents are review-free and processed. The local adapter stages the entire package and publishes it as one directory move, so a staging failure exposes no partial final package. Non-local provider transaction semantics remain later delivery-lifecycle work.
-- The legacy finalize/vault/access backend remains from earlier units but is not part of the straight-through V1 happy path and will be retired/simplified in later scoped work.
-- The focused Manual Review workbench is approved. The full shared Dashboard remains a later Unit 23 deliverable; Unit 20 only adds the transitional business-identifier views needed to exercise intake.
-
-## 13. Cleanup
+## 8. Cleanup
 
 ```bash
+# Stop services (Ctrl+C in each terminal)
+
+# Clean build artifacts:
 cd backend
 mvn clean
 
 cd ../frontend/securedoc-ui
 rm -rf node_modules dist
 
+# Remove local storage data:
 rm -rf backend/securedoc-api/securedoc-storage
-rm -rf backend/securedoc-api/securedoc-output
+
+# Drop and recreate database:
+docker exec securedoc-pg psql -U securedoc -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 ```
 
-## 14. Unit 18 / Unit 19 status
+## 9. API Reference (Demo Endpoints)
 
-Unit 18 is approved. Unit 19 implements the focused Manual Review workbench on top of the approved focused-review APIs.
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/v1/packages` | Create package |
+| `POST /api/v1/packages/{id}/documents` | Upload PDF (multipart) |
+| `POST /api/v1/packages/{id}/submit` | Submit for processing |
+| `POST /api/v1/packages/{id}/process` | Trigger processing / continue redaction |
+| `POST /api/v1/packages/{id}/finalize` | Approve package for vault |
+| `POST /api/v1/vault/entries` | Register vault entry |
+| `GET /api/v1/documents/{id}/artifacts/redacted/content` | Download redacted |
 
-Focused review API:
-
-```text
-GET  /api/v1/review-items
-GET  /api/v1/review-items/{findingId}/page-preview
-POST /api/v1/review-items/{findingId}/confirm
-POST /api/v1/review-items/{findingId}/dismiss
-```
-
-Expected focused behavior:
-
-- queue contains only unresolved `DETECTED` findings
-- high-confidence auto-confirmed findings are not re-presented
-- confirm requires trusted location; the Unit 19 visual workbench submits corrected bounds directly from the page preview
-- dismiss removes the finding from redaction consideration
-- resolving the final pending item automatically resumes redaction, verification, and package delivery
-- no ReviewTask create/assign/start sequence is required for this V1 path
-
-Technical resilience defaults:
-
-```text
-SECUREDOC_RETRY_MAX_ATTEMPTS=2
-SECUREDOC_RETRY_INITIAL_BACKOFF_MS=250
-```
-
-Only explicitly typed transient failures retry. Low confidence/content uncertainty never retries. Real AI verification must use Ollama; do not silently fall back to the heuristic adapter. Optional AI secondary-provider settings use the `SECUREDOC_AI_SECONDARY_*` environment variables documented in the Unit 18 implementation record.
+All requests should include headers:
+- `X-Tenant-Id: 00000000-0000-0000-0000-000000000001`
+- `X-Actor-Id: 00000000-0000-0000-0000-000000000099`

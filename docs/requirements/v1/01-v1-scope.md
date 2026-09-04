@@ -1,31 +1,44 @@
-# V1 Scope — Current Freeze
+# V1 Scope
 
-## In Scope
+## Target: Local/Demo First
 
-- PDF intake: digital/text and scanned/image (OCR arrives in Unit 17).
-- AI contextual sensitive-content discovery on every normalized document.
-- Parallel deterministic validators/recognizers for structured evidence.
-- SSN, Date of Birth, Credit Card Number, Credit Score.
-- Automatic text/OCR location mapping; no customer-entered X/Y coordinates.
-- Permanent irreversible redaction and verification.
-- Straight-through automatic processing/export for policy-approved findings.
-- Focused low-confidence review only when needed.
-- Manual/API/watched-folder intake in the planned unified-intake unit.
-- Multiple configurable business identifiers with one Primary identifier.
-- Pluggable storage/delivery; local/on-prem first, S3/object/API adapters planned.
-- Audit and reporting-ready structured operational metadata.
-- Minimal shared Dashboard, Business Admin, IT Admin, and focused Manual Review workbench in planned units.
-- Temporary original retention/reprocessing lifecycle; durable redacted output at customer destination.
+The first version targets a fully functional local/demo environment before cloud deployment.
 
-## Not a V1 Product Direction
+## V1 Feature Scope
 
-- Long-term original-document vault/download as the primary product workflow.
-- Blanket human review of every page/document.
-- Visual-overlay-only masking.
-- OCRing every digital PDF page when usable native text/layout already exists.
-- Deterministic-only discovery with AI as an optional fallback.
-- Kafka/agent complexity without demonstrated V1 need.
+### In Scope for V1
 
-## Authoritative Details
+- Manual document/package upload via API
+- Document processing pipeline (OCR, text extraction)
+- Sensitive-data detection with configurable rules
+- Policy-driven automated redaction
+- Human review workflow (assign, review, approve/reject)
+- Secure vault registration
+- Controlled document download
+- Audit timeline for all operations
+- Single-tenant configuration (multi-tenant structure, single tenant active)
+- Local PostgreSQL persistence
+- REST API
 
-See `.kiro/steering/requirements/v1-decision-freeze-2026-08-29.md` and the current implementation tracker.
+### Out of Scope for V1
+
+- Shared-folder/watched-folder intake
+- Kafka/event-driven architecture
+- Cloud deployment (AWS/Azure/GCP)
+- Full multi-tenant onboarding
+- Frontend UI (separate delivery unit)
+- SSO/OIDC integration (basic auth for demo)
+- High-availability configuration
+
+## Implementation Units
+
+See `docs/timeline/00-implementation-units.md` for the unit breakdown.
+
+## IDP Framework Usage
+
+The IDP framework provides reusable enterprise plumbing at edge modules only:
+- `securedoc-api` — web framework, security filters, logging
+- `securedoc-infrastructure` — data access patterns, storage adapters
+- `securedoc-worker` — observability, scheduling
+
+Product-specific logic (OCR, redaction, AI, agents, vault, review) stays in SecureDoc modules.

@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
-import com.securedoc.platform.api.security.RequireRole;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.FinalizePackageUseCase;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
@@ -49,7 +50,7 @@ public class PackageWorkflowController {
      * Supports: SUBMITTED, PROCESSING, PENDING_REVIEW, and IN_REVIEW where domain rules allow it.
      */
     @PostMapping("/{packageId}/process")
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.REVIEW_SUBMIT)
     public ResponseEntity<Map<String, String>> triggerProcessing(
             @PathVariable String packageId,
             HttpServletRequest httpRequest) {
@@ -73,7 +74,7 @@ public class PackageWorkflowController {
      */
     @PostMapping("/{packageId}/finalize")
     @Transactional
-    @RequireRole({"APPROVER"})
+    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public ResponseEntity<Map<String, String>> finalizePackage(
             @PathVariable String packageId,
             HttpServletRequest httpRequest) {

@@ -25,6 +25,15 @@ import type {
   PlatformAdminOverview,
   CurrentUser,
   TechnicalExceptionDetail,
+  IntegrationConnection,
+  IntegrationConnectionRequest,
+  PollingConnectionStatus,
+  PollingRun,
+  SdvConnectionTestResult,
+  RoutingRule,
+  RoutingRuleRequest,
+  RoutingDestinationOption,
+  DerivedDelivery,
 } from '../types';
 
 class ApiClient {
@@ -130,6 +139,76 @@ class ApiClient {
     const query = new URLSearchParams(params);
     const response = await this.request<Response>(`/operations/reports/export?${query.toString()}`);
     return response.blob();
+  }
+
+  // --- Tenant integration connections ---
+
+  async listIntegrationConnections(): Promise<IntegrationConnection[]> {
+    return this.request('/integrations');
+  }
+
+  async createIntegrationConnection(body: IntegrationConnectionRequest): Promise<IntegrationConnection> {
+    return this.request('/integrations', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async updateIntegrationConnection(connectionId: string, body: IntegrationConnectionRequest): Promise<IntegrationConnection> {
+    return this.request(`/integrations/${connectionId}`, { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async setIntegrationConnectionEnabled(connectionId: string, enabled: boolean): Promise<IntegrationConnection> {
+    return this.request(`/integrations/${connectionId}/${enabled ? 'enable' : 'disable'}`, { method: 'POST' });
+  }
+
+  async getPollingConnectionStatus(connectionId: string): Promise<PollingConnectionStatus> {
+    return this.request(`/integrations/${connectionId}/polling`);
+  }
+
+  async runPollingNow(connectionId: string): Promise<PollingRun> {
+    return this.request(`/integrations/${connectionId}/polling/run-now`, { method: 'POST' });
+  }
+
+  async testSdvConnection(connectionId: string): Promise<SdvConnectionTestResult> {
+    return this.request(`/integrations/${connectionId}/sdv/test-connection`, { method: 'POST' });
+  }
+
+  async testDerivedConnection(connectionId: string): Promise<{ connectionId: string; healthStatus: string; configurationVersion: number }> {
+    return this.request(`/integrations/${connectionId}/derived/test-connection`, { method: 'POST' });
+  }
+
+  async listRoutingRules(): Promise<RoutingRule[]> {
+    return this.request('/business-admin/routing-rules');
+  }
+
+  async listRoutingDestinations(): Promise<RoutingDestinationOption[]> {
+    return this.request('/business-admin/routing-rules/destinations');
+  }
+
+  async createRoutingRule(body: RoutingRuleRequest): Promise<RoutingRule> {
+    return this.request('/business-admin/routing-rules', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async updateRoutingRule(ruleId: string, body: RoutingRuleRequest): Promise<RoutingRule> {
+    return this.request(`/business-admin/routing-rules/${ruleId}`, { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async deleteRoutingRule(ruleId: string): Promise<void> {
+    await this.request(`/business-admin/routing-rules/${ruleId}`, { method: 'DELETE' });
+  }
+
+  async listDerivedDeliveries(packageId: string): Promise<DerivedDelivery[]> {
+    return this.request(`/packages/${packageId}/derived-deliveries`);
+  }
+
+  async sendDerivedDelivery(packageId: string, deliveryId: string): Promise<DerivedDelivery> {
+    return this.request(`/packages/${packageId}/derived-deliveries/${deliveryId}/send`, { method: 'POST' });
+  }
+
+  async listDerivedDeliveryAttention(): Promise<DerivedDelivery[]> {
+    return this.request('/derived-deliveries/attention');
+  }
+
+  async retryDerivedDelivery(deliveryId: string): Promise<DerivedDelivery> {
+    return this.request(`/derived-deliveries/${deliveryId}/technical-retry`, { method: 'POST' });
   }
 
   // --- IT / Platform Admin (Unit 24) ---

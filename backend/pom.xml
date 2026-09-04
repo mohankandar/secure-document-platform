@@ -43,6 +43,8 @@
                     <target>${java.version}</target>
                     <release>${java.version}</release>
                     <parameters>true</parameters>
+                    <!-- This project is not JPMS-modular. Keep reactor/test compilation on the classpath. -->
+                    <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
         </plugins>

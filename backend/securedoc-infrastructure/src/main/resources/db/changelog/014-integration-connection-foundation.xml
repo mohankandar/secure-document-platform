@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="014-01-integration-connection-foundation" author="securedoc">
+        <createTable tableName="integration_connections">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="name" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="description" type="VARCHAR(500)"/>
+            <column name="purpose" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="direction" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="provider_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="authentication_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="client_principal" type="VARCHAR(255)"/>
+            <column name="endpoint" type="VARCHAR(1000)"/>
+            <column name="file_share_root" type="VARCHAR(1000)"/>
+            <column name="secret_reference" type="VARCHAR(500)"/>
+            <column name="timeout_seconds" type="INT"><constraints nullable="false"/></column>
+            <column name="retry_max_attempts" type="INT"><constraints nullable="false"/></column>
+            <column name="incomplete_window_hours" type="INT" defaultValueNumeric="24"><constraints nullable="false"/></column>
+            <column name="max_documents_per_intake" type="INT" defaultValueNumeric="100"><constraints nullable="false"/></column>
+            <column name="max_pdf_size_bytes" type="BIGINT" defaultValueNumeric="262144000"><constraints nullable="false"/></column>
+            <column name="max_pdf_pages" type="INT" defaultValueNumeric="2000"><constraints nullable="false"/></column>
+            <column name="acknowledgement_mode" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="enabled" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="configuration_version" type="INT"><constraints nullable="false"/></column>
+            <column name="health_status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="last_success_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_failure_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_failure_category" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="integration_connections"
+                             columnNames="tenant_id,name"
+                             constraintName="uk_integration_connection_tenant_name"/>
+        <addUniqueConstraint tableName="integration_connections"
+                             columnNames="tenant_id,client_principal"
+                             constraintName="uk_integration_connection_tenant_client_principal"/>
+        <createIndex tableName="integration_connections" indexName="idx_integration_connections_tenant_purpose">
+            <column name="tenant_id"/>
+            <column name="purpose"/>
+        </createIndex>
+        <createIndex tableName="integration_connections" indexName="idx_integration_connections_tenant_health">
+            <column name="tenant_id"/>
+            <column name="health_status"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

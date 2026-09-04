@@ -4,6 +4,7 @@ import com.securedoc.platform.application.port.out.SensitiveDataDetectionPort;
 import com.securedoc.platform.application.port.out.SensitiveDataValidationPort;
 import com.securedoc.platform.application.port.out.SensitiveDataValidationPort.Candidate;
 import com.securedoc.platform.application.port.out.SensitiveDataValidationPort.ValidationEvidence;
+import com.securedoc.platform.application.port.out.SensitiveDataValidationPort.ValidationOutcome;
 import org.springframework.stereotype.Component;
 
 import java.time.DateTimeException;
@@ -29,7 +30,7 @@ import java.util.regex.Pattern;
 public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPort, SensitiveDataValidationPort {
 
     private static final String DETECTOR_NAME = "local-rule-based";
-    private static final String DETECTOR_VERSION = "1.2.0";
+    private static final String DETECTOR_VERSION = "1.4.0";
 
     // SSN pattern: 3 digits, separator, 2 digits, separator, 4 digits
     private static final Pattern SSN_PATTERN = Pattern.compile("\\b(\\d{3})[- ](\\d{2})[- ](\\d{4})\\b");
@@ -60,6 +61,31 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
 
     private static final Pattern SCORE_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\b(?:credit\\s*score|fico(?:\\s*score)?|vantage(?:score)?(?:\\s*score)?|beacon\\s*score)\\b");
+
+    private static final Pattern SCORE_RANGE_CONTEXT_PATTERN = Pattern.compile(
+            "(?i)(?:range\\s+of\\s+scores|scores?\\s+range|range\\s+from|low\\s+of\\s+300|"
+                    + "high\\s+of\\s+850|300\\s*(?:to|-)\\s*850|example|illustrative)");
+
+    private static final Pattern SSN_CONTEXT_PATTERN = Pattern.compile(
+            "(?i)\\b(?:ssn|social\\s+security(?:\\s+number)?)\\b");
+
+    private static final Pattern BUSINESS_IDENTIFIER_CONTEXT_PATTERN = Pattern.compile(
+            "(?i)\\b(?:contract|member|account|loan|reference|ref\\.?|form|document|invoice|order|"
+                    + "routing|phone|telephone|servicing|confirmation|reservation)\\s*"
+                    + "(?:number|no\\.?|#|id)?\\b");
+
+    private static final Pattern SCORE_TABLE_HEADER_PATTERN = Pattern.compile(
+            "(?is)\\bapplicant\\b.{0,160}\\byour\\s+credit\\s+score\\b");
+
+    private static final Pattern SCORE_TABLE_END_PATTERN = Pattern.compile(
+            "(?i)\\b(?:what\\s+you\\s+should\\s+know|the\\s+range\\s+of\\s+scores|key\\s+factors|"
+                    + "how\\s+can\\s+you\\s+get\\s+more\\s+information)\\b");
+
+    private static final Pattern THREE_DIGIT_NUMBER_PATTERN = Pattern.compile("(?<!\\d)(\\d{3})(?!\\d)");
+
+    private static final Pattern CARD_CONTEXT_PATTERN = Pattern.compile(
+            "(?i)\\b(?:credit\\s+card|debit\\s+card|card\\s*(?:number|no\\.?|#)|payment\\s+card|"
+                    + "pan|visa|master\\s*card|mastercard|amex|american\\s+express|discover)\\b");
 
     @Override
     public DetectionOutput detect(List<PageInput> pages) {
@@ -99,13 +125,14 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         if (digits.length() != 9) {
             return ValidationEvidence.contradicts(DETECTOR_NAME, DETECTOR_VERSION);
         }
-        int area = Integer.parseInt(digits.substring(0, 3));
-        int group = Integer.parseInt(digits.substring(3, 5));
-        int serial = Integer.parseInt(digits.substring(5));
-        boolean structurallyValid = area != 0 && area != 666 && area < 900 && group != 0 && serial != 0;
-        return structurallyValid
+
+        // For redaction, the relevant question is whether this exposed value is presented as an
+        // SSN in the document, not whether SSA could historically have issued it. Synthetic/test
+        // values intentionally use non-assignable ranges (for example 987-xx-xxxx) and still need
+        // protection when explicitly labeled as Social Security Numbers.
+        return hasExplicitSsnContext(contextText)
                 ? ValidationEvidence.supports(DETECTOR_NAME, DETECTOR_VERSION)
-                : ValidationEvidence.contradicts(DETECTOR_NAME, DETECTOR_VERSION);
+                : ValidationEvidence.notApplicable(DETECTOR_NAME, DETECTOR_VERSION);
     }
 
     private boolean hasExplicitSsnContext(String contextText) {
@@ -185,7 +212,7 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
     private void detectInPage(PageInput page, List<DetectedEntity> results) {
         String text = page.text();
 
-        detectPattern(text, SSN_PATTERN, "SSN", 0.95, page.pageNumber(), results, this::maskSsn);
+        detectSsns(text, page.pageNumber(), results);
         detectPattern(text, EMAIL_PATTERN, "EMAIL_ADDRESS", 0.90, page.pageNumber(), results, this::maskEmail);
         detectPattern(text, PHONE_PATTERN, "PHONE_NUMBER", 0.85, page.pageNumber(), results, this::maskPhone);
         detectDatesOfBirth(text, page.pageNumber(), results);
@@ -203,12 +230,48 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         }
     }
 
+    private void detectSsns(String text, int pageNumber, List<DetectedEntity> results) {
+        Matcher matcher = SSN_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String context = contextWindow(text, matcher.start(), matcher.end(), 180);
+            String rawMatch = matcher.group();
+            int ssnGap = nearestContextGap(
+                    SSN_CONTEXT_PATTERN, text, matcher.start(), matcher.end(), 180);
+            int businessGap = nearestContextGap(
+                    BUSINESS_IDENTIFIER_CONTEXT_PATTERN, text, matcher.start(), matcher.end(), 180);
+            boolean explicitSsnContext = ssnGap >= 0 && ssnGap <= 90;
+            boolean closerBusinessIdentifier = businessGap >= 0 && businessGap <= 90
+                    && (!explicitSsnContext || businessGap <= ssnGap);
+
+            if (!explicitSsnContext || closerBusinessIdentifier) {
+                // Bind a 3-2-4 value to its nearest semantic label. This prevents a nearby phrase
+                // such as "not a Social Security Number" from turning a Form/Reference Number into
+                // an SSN finding while still protecting explicitly labeled synthetic SSNs.
+                continue;
+            }
+            ValidationEvidence evidence = validateSsn(rawMatch, context);
+            if (evidence.outcome() != ValidationOutcome.SUPPORTS) {
+                continue;
+            }
+            results.add(new DetectedEntity(
+                    "SSN", pageNumber, matcher.start(), matcher.end(), 0.95,
+                    maskSsn(rawMatch), DETECTOR_NAME, DETECTOR_VERSION));
+        }
+    }
+
     private void detectCreditCards(String text, int pageNumber, List<DetectedEntity> results) {
         Matcher matcher = CREDIT_CARD_PATTERN.matcher(text);
         while (matcher.find()) {
             String rawMatch = matcher.group();
             String digits = rawMatch.replaceAll("[^0-9]", "");
             if (digits.length() < 13 || digits.length() > 19 || !isLuhnValid(digits)) {
+                continue;
+            }
+            String context = contextWindow(text, matcher.start(), matcher.end(), 160);
+            boolean cardContext = CARD_CONTEXT_PATTERN.matcher(context).find();
+            if (!cardContext) {
+                // Luhn alone is supporting evidence, not sufficient semantic meaning. This keeps a
+                // Luhn-valid contract/member/reference number from becoming a deterministic finding.
                 continue;
             }
             results.add(new DetectedEntity(
@@ -220,20 +283,119 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
     private void detectCreditScores(String text, int pageNumber, List<DetectedEntity> results) {
         Matcher matcher = CREDIT_SCORE_PATTERN.matcher(text);
         while (matcher.find()) {
-            String scoreStr = matcher.group(1);
-            int score;
-            try {
-                score = Integer.parseInt(scoreStr);
-            } catch (NumberFormatException e) {
-                continue;
-            }
-            if (score < 300 || score > 850) {
-                continue;
-            }
+            addCreditScoreIfPlausible(
+                    text, pageNumber, matcher.start(1), matcher.end(1), 0.85, results);
+        }
+
+        // In a table the semantic label is often a column header and is not repeated beside each
+        // row value. Detect valid three-digit values only inside the bounded score-table region;
+        // stop before explanatory score-range prose so 300/850 remain non-findings.
+        String flattened = text.replace('\n', ' ');
+        Matcher header = SCORE_TABLE_HEADER_PATTERN.matcher(flattened);
+        if (!header.find()) {
+            return;
+        }
+
+        // The flattened header offsets correspond 1:1 to the original string because only newline
+        // characters were replaced, so the end offset is safe to use against the original text.
+        int tableStart = Math.min(text.length(), header.end());
+        Matcher endMatcher = SCORE_TABLE_END_PATTERN.matcher(text);
+        int tableEnd = text.length();
+        if (endMatcher.find(tableStart)) {
+            tableEnd = endMatcher.start();
+        } else {
+            tableEnd = Math.min(text.length(), tableStart + 800);
+        }
+
+        Matcher tableScores = THREE_DIGIT_NUMBER_PATTERN.matcher(text);
+        tableScores.region(tableStart, tableEnd);
+        while (tableScores.find()) {
+            addCreditScoreIfPlausible(
+                    text, pageNumber, tableScores.start(1), tableScores.end(1), 0.90, results);
+        }
+    }
+
+    private void addCreditScoreIfPlausible(String text,
+                                            int pageNumber,
+                                            int start,
+                                            int end,
+                                            double confidence,
+                                            List<DetectedEntity> results) {
+        String scoreStr = text.substring(start, end);
+        int score;
+        try {
+            score = Integer.parseInt(scoreStr);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        if (score < 300 || score > 850) {
+            return;
+        }
+        String context = contextWindow(text, start, end, 120);
+        if (isExplanatoryScoreValue(score, scoreStr, context)) {
+            return;
+        }
+
+        boolean duplicate = results.stream().anyMatch(existing ->
+                "CREDIT_SCORE".equals(existing.entityType())
+                        && existing.pageNumber() == pageNumber
+                        && existing.startOffset() == start
+                        && existing.endOffset() == end);
+        if (!duplicate) {
             results.add(new DetectedEntity(
-                    "CREDIT_SCORE", pageNumber, matcher.start(1), matcher.end(1), 0.85,
+                    "CREDIT_SCORE", pageNumber, start, end, confidence,
                     "***", DETECTOR_NAME, DETECTOR_VERSION));
         }
+    }
+
+    private boolean isExplanatoryScoreValue(int score, String value, String context) {
+        if (!SCORE_RANGE_CONTEXT_PATTERN.matcher(context).find()) {
+            return false;
+        }
+        if (score == 300 || score == 850) {
+            return true;
+        }
+        String quoted = Pattern.quote(value);
+        Pattern candidateInRange = Pattern.compile(
+                "(?i)(?:\\b" + quoted + "\\b\\s*(?:to|through|-)\\s*\\d{3}\\b"
+                        + "|\\b\\d{3}\\b\\s*(?:to|through|-)\\s*\\b" + quoted + "\\b"
+                        + "|(?:low|high)\\s+of\\s+\\b" + quoted + "\\b)");
+        return candidateInRange.matcher(context).find();
+    }
+
+    private int nearestContextGap(Pattern labelPattern,
+                                  String text,
+                                  int candidateStart,
+                                  int candidateEnd,
+                                  int radius) {
+        if (text == null || text.isBlank()) {
+            return -1;
+        }
+        int windowStart = Math.max(0, candidateStart - radius);
+        int windowEnd = Math.min(text.length(), candidateEnd + radius);
+        String context = text.substring(windowStart, windowEnd);
+        int relativeStart = candidateStart - windowStart;
+        int relativeEnd = candidateEnd - windowStart;
+        int best = Integer.MAX_VALUE;
+        Matcher label = labelPattern.matcher(context);
+        while (label.find()) {
+            int gap;
+            if (label.end() <= relativeStart) {
+                gap = relativeStart - label.end();
+            } else if (label.start() >= relativeEnd) {
+                gap = label.start() - relativeEnd;
+            } else {
+                gap = 0;
+            }
+            best = Math.min(best, gap);
+        }
+        return best == Integer.MAX_VALUE ? -1 : best;
+    }
+
+    private String contextWindow(String text, int startOffset, int endOffset, int radius) {
+        int start = Math.max(0, startOffset - radius);
+        int end = Math.min(text.length(), endOffset + radius);
+        return text.substring(start, end);
     }
 
     private boolean isLuhnValid(String digits) {

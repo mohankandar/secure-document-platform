@@ -92,7 +92,7 @@ public class FocusedReviewController {
     }
 
     @PostMapping("/{findingId}/confirm")
-    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    @RequireCapability(UserCapability.FINDING_DECISION)
     public ResponseEntity<Map<String, Object>> confirm(
             @PathVariable String findingId,
             @RequestBody(required = false) ConfirmRequest body,
@@ -102,7 +102,7 @@ public class FocusedReviewController {
     }
 
     @PostMapping("/{findingId}/dismiss")
-    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    @RequireCapability(UserCapability.FINDING_DECISION)
     public ResponseEntity<Map<String, Object>> dismiss(
             @PathVariable String findingId,
             @RequestBody(required = false) DismissRequest body,

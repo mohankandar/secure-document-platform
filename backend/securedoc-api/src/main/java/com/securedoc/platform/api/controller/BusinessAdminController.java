@@ -46,14 +46,14 @@ public class BusinessAdminController {
     }
 
     @GetMapping("/configuration")
-    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @RequireCapability({UserCapability.TENANT_POLICY_MANAGE, UserCapability.TENANT_IDENTIFIER_MANAGE})
     public ResponseEntity<BusinessAdminConfigurationResponse> getConfiguration(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
     @PutMapping("/identifiers")
-    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @RequireCapability(UserCapability.TENANT_IDENTIFIER_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateIdentifiers(
             @RequestBody UpdateBusinessIdentifiersRequest body,
             HttpServletRequest request) {
@@ -69,7 +69,7 @@ public class BusinessAdminController {
     }
 
     @PutMapping("/dashboard-columns")
-    @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @RequireCapability(UserCapability.TENANT_IDENTIFIER_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateDashboardColumns(
             @RequestBody UpdateDashboardColumnsRequest body,
             HttpServletRequest request) {

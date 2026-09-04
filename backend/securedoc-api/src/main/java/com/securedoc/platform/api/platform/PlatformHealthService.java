@@ -2,12 +2,11 @@ package com.securedoc.platform.api.platform;
 
 import com.securedoc.platform.api.config.AiRuntimeProperties;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
+import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.identity.TenantId;
-import com.securedoc.platform.infrastructure.delivery.ApiDeliveryProperties;
 import com.securedoc.platform.infrastructure.delivery.LocalDeliveryProperties;
-import com.securedoc.platform.infrastructure.delivery.S3DeliveryProperties;
 import com.securedoc.platform.infrastructure.intake.WatchedFolderProperties;
 import com.securedoc.platform.infrastructure.ocr.TesseractOcrProperties;
 import com.securedoc.platform.infrastructure.resilience.TechnicalResilienceProperties;
@@ -38,8 +37,7 @@ public class PlatformHealthService {
     private final TesseractOcrProperties ocr;
     private final LocalStorageProperties storage;
     private final LocalDeliveryProperties localDelivery;
-    private final ApiDeliveryProperties apiDelivery;
-    private final S3DeliveryProperties s3Delivery;
+    private final IntegrationConnectionRepository integrationConnections;
     private final WatchedFolderProperties watchedFolder;
     private final TechnicalResilienceProperties resilience;
     private final Environment environment;
@@ -52,8 +50,7 @@ public class PlatformHealthService {
                                  TesseractOcrProperties ocr,
                                  LocalStorageProperties storage,
                                  LocalDeliveryProperties localDelivery,
-                                 ApiDeliveryProperties apiDelivery,
-                                 S3DeliveryProperties s3Delivery,
+                                 IntegrationConnectionRepository integrationConnections,
                                  WatchedFolderProperties watchedFolder,
                                  TechnicalResilienceProperties resilience,
                                  Environment environment,
@@ -65,8 +62,7 @@ public class PlatformHealthService {
         this.ocr = ocr;
         this.storage = storage;
         this.localDelivery = localDelivery;
-        this.apiDelivery = apiDelivery;
-        this.s3Delivery = s3Delivery;
+        this.integrationConnections = integrationConnections;
         this.watchedFolder = watchedFolder;
         this.resilience = resilience;
         this.environment = environment;
@@ -81,19 +77,16 @@ public class PlatformHealthService {
         providers.add(aiHealth(probe));
         providers.add(ocrHealth(probe));
         providers.add(storageHealth(probe));
-        providers.add(deliveryHealth(probe));
+        providers.add(deliveryHealth(tenantId, probe));
 
         var resilienceSummary = new PlatformAdminOverviewResponse.ResilienceSummary(
                 resilience.getMaxAttempts(), resilience.getInitialBackoffMs(),
                 ai.isSecondaryEnabled(), ai.getSecondaryProvider(), safe(ai.getSecondaryModel()));
         String deliveryType = environment.getProperty("securedoc.delivery.type", "local");
         String identityMode = environment.getProperty("securedoc.security.mode", "OIDC").trim().toUpperCase();
+        boolean sdvConfigured = integrationConnections.findEnabledSdvDeliveryByTenantId(tenantId).isPresent();
         var integrationSummary = new PlatformAdminOverviewResponse.IntegrationSummary(
-                deliveryType,
-                notBlank(apiDelivery.getEndpoint()),
-                notBlank(s3Delivery.getBucket()),
-                identityMode,
-                "OIDC".equals(identityMode));
+                deliveryType, sdvConfigured, identityMode, "OIDC".equals(identityMode));
 
         var exceptions = packageRepository.findByTenantId(tenantId, 0, 250).stream()
                 .filter(pkg -> pkg.status() == PackageStatus.FAILED)
@@ -206,34 +199,31 @@ public class PlatformHealthService {
         }
     }
 
-    private PlatformHealthItem deliveryHealth(boolean probe) {
-        String type = environment.getProperty("securedoc.delivery.type", "local").trim().toLowerCase();
-        return switch (type) {
-            case "api" -> {
-                boolean configured = notBlank(apiDelivery.getEndpoint()) && (!apiDelivery.isRequireAuthentication() || notBlank(apiDelivery.getBearerToken()));
-                yield item("delivery", "Final delivery", "Delivery", "api", configured ? "CONFIGURED" : "NOT_CONFIGURED",
-                        configured, "API callback " + (configured ? "configured" : "missing required connection settings"));
+    private PlatformHealthItem deliveryHealth(TenantId tenantId, boolean probe) {
+        String type = environment.getProperty("securedoc.delivery.type", "sdv").trim().toLowerCase();
+        if ("sdv".equals(type)) {
+            var configured = integrationConnections.findEnabledSdvDeliveryByTenantId(tenantId);
+            if (configured.isEmpty()) {
+                return item("delivery", "Final delivery", "Delivery", "sdv", "NOT_CONFIGURED", false,
+                        "No enabled tenant SDV delivery connection");
             }
-            case "s3" -> {
-                boolean configured = notBlank(s3Delivery.getBucket());
-                yield item("delivery", "Final delivery", "Delivery", "s3", configured ? "CONFIGURED" : "NOT_CONFIGURED",
-                        configured, "S3-compatible destination " + (configured ? "configured" : "missing bucket"));
-            }
-            default -> {
-                Path output = Path.of(localDelivery.getOutputPath()).toAbsolutePath().normalize();
-                if (!probe) yield item("delivery", "Final delivery", "Delivery", "local", "CONFIGURED", true,
-                        "Local filesystem destination");
-                try {
-                    Files.createDirectories(output);
-                    boolean ok = Files.isDirectory(output) && Files.isWritable(output);
-                    yield item("delivery", "Final delivery", "Delivery", "local", ok ? "HEALTHY" : "UNHEALTHY", true,
-                            "Local filesystem destination");
-                } catch (Exception e) {
-                    yield item("delivery", "Final delivery", "Delivery", "local", "UNHEALTHY", true,
-                            "Local destination unavailable");
-                }
-            }
-        };
+            var c = configured.get();
+            String status = c.healthStatus().name();
+            return item("delivery", "Final delivery", "Delivery", "sdv", status, true,
+                    "Tenant SDV connection configured; secrets are protected");
+        }
+        Path output = Path.of(localDelivery.getOutputPath()).toAbsolutePath().normalize();
+        if (!probe) return item("delivery", "Final delivery", "Delivery", "local", "CONFIGURED", true,
+                "Local filesystem destination");
+        try {
+            Files.createDirectories(output);
+            boolean ok = Files.isDirectory(output) && Files.isWritable(output);
+            return item("delivery", "Final delivery", "Delivery", "local", ok ? "HEALTHY" : "UNHEALTHY", true,
+                    "Local filesystem destination");
+        } catch (Exception e) {
+            return item("delivery", "Final delivery", "Delivery", "local", "UNHEALTHY", true,
+                    "Local destination unavailable");
+        }
     }
 
     private static PlatformHealthItem item(String key, String label, String category, String provider,

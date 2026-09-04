@@ -50,6 +50,7 @@ public class OperationsController {
     }
 
     @GetMapping("/dashboard")
+    @RequireCapability(UserCapability.DASHBOARD_ACCESS)
     @Transactional(readOnly = true)
     public ResponseEntity<OperationsDashboardResponse> dashboard(
             @RequestParam(defaultValue = "ALL") String stage,

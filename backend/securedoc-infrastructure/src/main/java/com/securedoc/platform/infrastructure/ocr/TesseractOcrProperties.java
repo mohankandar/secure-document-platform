@@ -12,6 +12,9 @@ public class TesseractOcrProperties {
     private int timeoutSeconds = 60;
     private int renderDpi = 220;
     private int minNativeCharacters = 32;
+    private int sparseNativeImageCheckMaxCharacters = 400;
+    private int sparseNativeImageCheckDpi = 72;
+    private double sparseNativeImageDarkPixelRatio = 0.006;
     private double minimumPageConfidence = 0.55;
     private double blankPageDarkPixelRatio = 0.0015;
 
@@ -61,6 +64,30 @@ public class TesseractOcrProperties {
 
     public void setMinNativeCharacters(int minNativeCharacters) {
         this.minNativeCharacters = minNativeCharacters;
+    }
+
+    public int getSparseNativeImageCheckMaxCharacters() {
+        return sparseNativeImageCheckMaxCharacters;
+    }
+
+    public void setSparseNativeImageCheckMaxCharacters(int sparseNativeImageCheckMaxCharacters) {
+        this.sparseNativeImageCheckMaxCharacters = sparseNativeImageCheckMaxCharacters;
+    }
+
+    public int getSparseNativeImageCheckDpi() {
+        return sparseNativeImageCheckDpi;
+    }
+
+    public void setSparseNativeImageCheckDpi(int sparseNativeImageCheckDpi) {
+        this.sparseNativeImageCheckDpi = sparseNativeImageCheckDpi;
+    }
+
+    public double getSparseNativeImageDarkPixelRatio() {
+        return sparseNativeImageDarkPixelRatio;
+    }
+
+    public void setSparseNativeImageDarkPixelRatio(double sparseNativeImageDarkPixelRatio) {
+        this.sparseNativeImageDarkPixelRatio = sparseNativeImageDarkPixelRatio;
     }
 
     public double getMinimumPageConfidence() {

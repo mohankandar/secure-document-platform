@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+  <changeSet id="017-01-delivery-submissions" author="openai">
+    <createTable tableName="delivery_submissions">
+      <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+      <column name="tenant_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="package_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="export_cycle" type="int"><constraints nullable="false"/></column>
+      <column name="source_submission_id" type="varchar(120)"><constraints nullable="false"/></column>
+      <column name="destination_type" type="varchar(40)"><constraints nullable="false"/></column>
+      <column name="status" type="varchar(40)"><constraints nullable="false"/></column>
+      <column name="attempt_count" type="int" defaultValueNumeric="0"><constraints nullable="false"/></column>
+      <column name="destination_submission_reference" type="varchar(255)"/>
+      <column name="last_failure_category" type="varchar(120)"/>
+      <column name="created_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+      <column name="updated_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+      <column name="completed_at" type="timestamp with time zone"/>
+    </createTable>
+    <addUniqueConstraint tableName="delivery_submissions" columnNames="tenant_id,package_id,export_cycle" constraintName="uk_delivery_submission_package_cycle"/>
+    <addUniqueConstraint tableName="delivery_submissions" columnNames="tenant_id,source_submission_id" constraintName="uk_delivery_submission_source_id"/>
+    <addForeignKeyConstraint baseTableName="delivery_submissions" baseColumnNames="package_id" referencedTableName="document_packages" referencedColumnNames="id" constraintName="fk_delivery_submission_package" onDelete="CASCADE"/>
+    <createIndex tableName="delivery_submissions" indexName="idx_delivery_submissions_tenant_status"><column name="tenant_id"/><column name="status"/><column name="updated_at"/></createIndex>
+  </changeSet>
+  <changeSet id="017-02-delivery-documents" author="openai">
+    <createTable tableName="delivery_submission_documents">
+      <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+      <column name="submission_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="tenant_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="package_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="document_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="source_document_id" type="varchar(120)"><constraints nullable="false"/></column>
+      <column name="file_name" type="varchar(512)"><constraints nullable="false"/></column>
+      <column name="size_bytes" type="bigint"><constraints nullable="false"/></column>
+      <column name="checksum_algorithm" type="varchar(32)"><constraints nullable="false"/></column>
+      <column name="checksum_value" type="varchar(256)"><constraints nullable="false"/></column>
+      <column name="acknowledged" type="boolean" defaultValueBoolean="false"><constraints nullable="false"/></column>
+      <column name="destination_document_reference" type="varchar(255)"/>
+      <column name="destination_location" type="varchar(1024)"/>
+      <column name="acknowledged_at" type="timestamp with time zone"/>
+    </createTable>
+    <addForeignKeyConstraint baseTableName="delivery_submission_documents" baseColumnNames="submission_id" referencedTableName="delivery_submissions" referencedColumnNames="id" constraintName="fk_delivery_document_submission" onDelete="CASCADE"/>
+    <addForeignKeyConstraint baseTableName="delivery_submission_documents" baseColumnNames="document_id" referencedTableName="documents" referencedColumnNames="id" constraintName="fk_delivery_document_document" onDelete="CASCADE"/>
+    <addUniqueConstraint tableName="delivery_submission_documents" columnNames="submission_id,document_id" constraintName="uk_delivery_document_internal"/>
+    <addUniqueConstraint tableName="delivery_submission_documents" columnNames="submission_id,source_document_id" constraintName="uk_delivery_document_source"/>
+  </changeSet>
+  <changeSet id="017-03-delivery-attempts" author="openai">
+    <createTable tableName="delivery_attempts">
+      <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+      <column name="submission_id" type="uuid"><constraints nullable="false"/></column>
+      <column name="attempt_number" type="int"><constraints nullable="false"/></column>
+      <column name="connection_id" type="uuid"/>
+      <column name="connection_configuration_version" type="int"/>
+      <column name="status" type="varchar(40)"><constraints nullable="false"/></column>
+      <column name="failure_category" type="varchar(120)"/>
+      <column name="started_at" type="timestamp with time zone"><constraints nullable="false"/></column>
+      <column name="completed_at" type="timestamp with time zone"/>
+    </createTable>
+    <addForeignKeyConstraint baseTableName="delivery_attempts" baseColumnNames="submission_id" referencedTableName="delivery_submissions" referencedColumnNames="id" constraintName="fk_delivery_attempt_submission" onDelete="CASCADE"/>
+    <addForeignKeyConstraint baseTableName="delivery_attempts" baseColumnNames="connection_id" referencedTableName="integration_connections" referencedColumnNames="id" constraintName="fk_delivery_attempt_connection"/>
+    <addUniqueConstraint tableName="delivery_attempts" columnNames="submission_id,attempt_number" constraintName="uk_delivery_attempt_number"/>
+    <createIndex tableName="delivery_attempts" indexName="idx_delivery_attempts_submission_started"><column name="submission_id"/><column name="started_at"/></createIndex>
+  </changeSet>
+  <changeSet id="017-04-one-enabled-sdv-per-tenant" author="openai">
+    <sql>
+      CREATE UNIQUE INDEX uk_integration_connection_enabled_sdv
+      ON integration_connections (tenant_id)
+      WHERE purpose = 'SDV_DELIVERY' AND enabled = true;
+    </sql>
+    <rollback>
+      <sql>DROP INDEX IF EXISTS uk_integration_connection_enabled_sdv;</sql>
+    </rollback>
+  </changeSet>
+
+</databaseChangeLog>

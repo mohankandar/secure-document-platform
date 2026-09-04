@@ -86,7 +86,7 @@ public class SecurityConfig {
         }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(properties.getMode() == SecurityMode.LOCAL
-                ? List.of("Authorization", "Content-Type", "X-Correlation-Id", "X-Tenant-Id", "X-Actor-Id", "X-Actor-Roles")
+                ? List.of("Authorization", "Content-Type", "X-Correlation-Id", "X-Tenant-Id", "X-Actor-Id", "X-Actor-Roles", "X-Integration-Client", "Idempotency-Key", "X-Content-SHA256")
                 : List.of("Authorization", "Content-Type", "X-Correlation-Id"));
         configuration.setExposedHeaders(List.of(
                 "X-Correlation-Id",

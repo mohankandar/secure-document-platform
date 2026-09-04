@@ -1,5 +1,8 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
+
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.DownloadArtifactUseCase;
@@ -34,6 +37,7 @@ public class ArtifactDownloadController {
     }
 
     @GetMapping("/{documentId}/artifacts/redacted/content")
+    @RequireCapability(UserCapability.DASHBOARD_ACCESS)
     public ResponseEntity<InputStreamResource> downloadRedacted(
             @PathVariable String documentId,
             HttpServletRequest httpRequest) {

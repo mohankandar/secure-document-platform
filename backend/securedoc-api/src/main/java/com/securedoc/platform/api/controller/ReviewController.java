@@ -107,7 +107,7 @@ public class ReviewController {
 
     @PostMapping("/{taskId}/complete")
     @Transactional
-    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    @RequireCapability(UserCapability.REVIEW_SUBMIT)
     public ResponseEntity<Map<String, Object>> completeTask(
             @PathVariable String taskId,
             @RequestBody(required = false) Map<String, String> body,

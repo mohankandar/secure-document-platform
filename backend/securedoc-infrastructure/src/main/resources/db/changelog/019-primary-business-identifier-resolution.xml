@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      Business-record identity is anchored by the tenant-configured Primary identifier.
+      Secondary identifiers are attributes and may repeat across records (for example,
+      Member Number across multiple contracts or Service Entity across many contracts).
+    -->
+    <changeSet id="019-01-secondary-business-identifiers-may-repeat" author="securedoc" dbms="postgresql">
+        <dropUniqueConstraint tableName="business_record_identifiers"
+                              constraintName="uq_business_identifier_value"/>
+
+        <createIndex tableName="business_record_identifiers"
+                     indexName="idx_business_identifier_lookup">
+            <column name="tenant_id"/>
+            <column name="definition_id"/>
+            <column name="normalized_value"/>
+        </createIndex>
+
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION enforce_primary_business_identifier_unique()
+            RETURNS trigger AS $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                      FROM business_identifier_definitions d
+                     WHERE d.id = NEW.definition_id
+                       AND d.tenant_id = NEW.tenant_id
+                       AND d.primary_flag = TRUE
+                       AND d.active_flag = TRUE
+                ) AND EXISTS (
+                    SELECT 1
+                      FROM business_record_identifiers bri
+                     WHERE bri.tenant_id = NEW.tenant_id
+                       AND bri.definition_id = NEW.definition_id
+                       AND bri.normalized_value = NEW.normalized_value
+                       AND bri.id <> NEW.id
+                ) THEN
+                    RAISE EXCEPTION 'Duplicate primary business identifier value for tenant'
+                        USING ERRCODE = '23505',
+                              CONSTRAINT = 'uq_business_primary_identifier_value';
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            DROP TRIGGER IF EXISTS trg_business_identifier_primary_unique
+                ON business_record_identifiers;
+            CREATE TRIGGER trg_business_identifier_primary_unique
+                BEFORE INSERT OR UPDATE OF tenant_id, definition_id, normalized_value
+                ON business_record_identifiers
+                FOR EACH ROW
+                EXECUTE FUNCTION enforce_primary_business_identifier_unique();
+        ]]></sql>
+
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                DROP TRIGGER IF EXISTS trg_business_identifier_primary_unique
+                    ON business_record_identifiers;
+                DROP FUNCTION IF EXISTS enforce_primary_business_identifier_unique();
+                DROP INDEX IF EXISTS idx_business_identifier_lookup;
+            ]]></sql>
+            <addUniqueConstraint tableName="business_record_identifiers"
+                                 columnNames="tenant_id, definition_id, normalized_value"
+                                 constraintName="uq_business_identifier_value"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Prevent a duplicated secondary identifier definition from being promoted to Primary. -->
+    <changeSet id="019-02-primary-definition-must-be-unique" author="securedoc" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION validate_primary_business_identifier_definition()
+            RETURNS trigger AS $$
+            DECLARE
+                duplicate_value VARCHAR(512);
+            BEGIN
+                IF NEW.primary_flag = TRUE AND NEW.active_flag = TRUE THEN
+                    SELECT bri.normalized_value
+                      INTO duplicate_value
+                      FROM business_record_identifiers bri
+                     WHERE bri.tenant_id = NEW.tenant_id
+                       AND bri.definition_id = NEW.id
+                     GROUP BY bri.normalized_value
+                    HAVING COUNT(*) > 1
+                     LIMIT 1;
+
+                    IF duplicate_value IS NOT NULL THEN
+                        RAISE EXCEPTION 'Identifier definition cannot become Primary because existing values are not unique'
+                            USING ERRCODE = '23505',
+                                  CONSTRAINT = 'uq_business_primary_identifier_value';
+                    END IF;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            DROP TRIGGER IF EXISTS trg_business_identifier_definition_primary_unique
+                ON business_identifier_definitions;
+            CREATE TRIGGER trg_business_identifier_definition_primary_unique
+                BEFORE INSERT OR UPDATE OF primary_flag, active_flag
+                ON business_identifier_definitions
+                FOR EACH ROW
+                EXECUTE FUNCTION validate_primary_business_identifier_definition();
+        ]]></sql>
+
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                DROP TRIGGER IF EXISTS trg_business_identifier_definition_primary_unique
+                    ON business_identifier_definitions;
+                DROP FUNCTION IF EXISTS validate_primary_business_identifier_definition();
+            ]]></sql>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

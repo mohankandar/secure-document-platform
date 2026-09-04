@@ -15,7 +15,7 @@ public record PlatformAdminOverviewResponse(
                                     boolean aiSecondaryEnabled, String aiSecondaryProvider,
                                     String aiSecondaryModel) {}
 
-    public record IntegrationSummary(String deliveryType, boolean apiCallbackConfigured,
-                                     boolean s3Configured, String identityMode,
+    public record IntegrationSummary(String deliveryType, boolean sdvConfigured,
+                                     String identityMode,
                                      boolean productionIdentityConfigured) {}
 }

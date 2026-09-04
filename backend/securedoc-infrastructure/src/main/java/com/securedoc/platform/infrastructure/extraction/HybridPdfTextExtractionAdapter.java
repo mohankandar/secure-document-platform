@@ -73,10 +73,14 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     int pageNumber = index + 1;
                     PageText nativePage = nativePage(nativeOutput.pages(), pageNumber);
 
-                    if (hasMeaningfulNativeText(nativePage)) {
+                    if (nativePage != null && !nativePage.text().isBlank()) {
+                        hasEmbeddedText = true;
+                    }
+
+                    if (hasMeaningfulNativeText(nativePage)
+                            && !shouldOcrSparseNativePage(renderer, index, nativePage)) {
                         normalizedPages.add(nativePage);
                         totalChars += nativePage.text().length();
-                        hasEmbeddedText = true;
                         continue;
                     }
 
@@ -141,10 +145,39 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
     }
 
     /**
+     * Detects the mixed-page case where a PDF has enough embedded text to pass the normal native
+     * threshold (for example a title/footer) but the meaningful customer data is actually inside
+     * a large raster image. We inspect only sparse native pages and only at low DPI, keeping the
+     * common fully-digital path fast while preventing scanned appendices from bypassing OCR.
+     */
+    private boolean shouldOcrSparseNativePage(PDFRenderer renderer,
+                                              int pageIndex,
+                                              PageText nativePage) throws IOException {
+        long nonWhitespace = nativePage.text().codePoints()
+                .filter(cp -> !Character.isWhitespace(cp))
+                .count();
+        int maxCharacters = Math.max(
+                properties.getMinNativeCharacters(),
+                properties.getSparseNativeImageCheckMaxCharacters());
+        if (nonWhitespace > maxCharacters) {
+            return false;
+        }
+
+        int inspectionDpi = Math.max(36, properties.getSparseNativeImageCheckDpi());
+        BufferedImage preview = renderer.renderImageWithDPI(pageIndex, inspectionDpi, ImageType.GRAY);
+        double darkRatio = darkPixelRatio(preview);
+        return darkRatio >= clamp01(properties.getSparseNativeImageDarkPixelRatio());
+    }
+
+    /**
      * Fail closed for non-blank image pages that OCR cannot read, while allowing
      * genuinely blank pages to continue through the no-finding safe-output path.
      */
     private boolean isVisuallyBlank(BufferedImage image) {
+        return darkPixelRatio(image) <= Math.max(0.0, properties.getBlankPageDarkPixelRatio());
+    }
+
+    private double darkPixelRatio(BufferedImage image) {
         long sampled = 0;
         long dark = 0;
         int step = Math.max(1, Math.min(image.getWidth(), image.getHeight()) / 500);
@@ -162,10 +195,9 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
             }
         }
         if (sampled == 0) {
-            return true;
+            return 0.0;
         }
-        double ratio = (double) dark / sampled;
-        return ratio <= Math.max(0.0, properties.getBlankPageDarkPixelRatio());
+        return (double) dark / sampled;
     }
 
     private static double clamp01(double value) {

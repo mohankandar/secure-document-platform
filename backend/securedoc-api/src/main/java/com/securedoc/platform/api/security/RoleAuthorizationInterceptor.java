@@ -17,12 +17,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class RoleAuthorizationInterceptor implements HandlerInterceptor {
 
     private final RequestContextResolver contextResolver;
-    private final ProductAuthorizationPolicy authorizationPolicy;
 
-    public RoleAuthorizationInterceptor(RequestContextResolver contextResolver,
-                                        ProductAuthorizationPolicy authorizationPolicy) {
+    public RoleAuthorizationInterceptor(RequestContextResolver contextResolver) {
         this.contextResolver = contextResolver;
-        this.authorizationPolicy = authorizationPolicy;
     }
 
     @Override
@@ -32,25 +29,25 @@ public class RoleAuthorizationInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        RequireCapability capabilityAnnotation = handlerMethod.getMethodAnnotation(RequireCapability.class);
-        RequireRole roleAnnotation = handlerMethod.getMethodAnnotation(RequireRole.class);
-        if (capabilityAnnotation == null && roleAnnotation == null) {
-            return true;
+        RequireRole annotation = handlerMethod.getMethodAnnotation(RequireRole.class);
+        if (annotation == null) {
+            return true; // No role restriction
         }
 
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
-        if (principal.hasRole("ADMIN")) return true;
 
-        if (capabilityAnnotation != null) {
-            for (UserCapability capability : capabilityAnnotation.value()) {
-                if (authorizationPolicy.has(principal, capability)) return true;
+        // ADMIN always has access
+        if (principal.hasRole("ADMIN")) {
+            return true;
+        }
+
+        // Check if actor has at least one of the required roles
+        for (String requiredRole : annotation.value()) {
+            if (principal.hasRole(requiredRole.toUpperCase())) {
+                return true;
             }
-            throw new AccessDeniedException("Insufficient permissions for this operation");
         }
 
-        for (String requiredRole : roleAnnotation.value()) {
-            if (principal.hasRole(requiredRole.toUpperCase())) return true;
-        }
         throw new AccessDeniedException("Insufficient permissions for this operation");
     }
 }

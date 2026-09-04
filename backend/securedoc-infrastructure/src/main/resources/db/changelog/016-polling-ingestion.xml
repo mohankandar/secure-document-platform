@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="016-01-polling-connection-schedule" author="securedoc">
+        <addColumn tableName="integration_connections">
+            <column name="polling_schedule_type" type="VARCHAR(32)"/>
+            <column name="polling_interval_minutes" type="INT"/>
+            <column name="polling_local_time" type="TIME"/>
+            <column name="polling_time_zone" type="VARCHAR(80)"/>
+            <column name="polling_batch_limit" type="INT"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="016-02-polling-runs" author="securedoc">
+        <createTable tableName="polling_runs">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="integration_connection_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="trigger_type" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="active_lock_key" type="VARCHAR(80)"/>
+            <column name="started_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="packages_discovered" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="documents_expected" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="documents_retrieved" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="packages_acknowledged" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="failure_category" type="VARCHAR(120)"/>
+            <column name="failure_detail" type="VARCHAR(500)"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="polling_runs" baseColumnNames="integration_connection_id"
+                                 referencedTableName="integration_connections" referencedColumnNames="id"
+                                 constraintName="fk_polling_run_connection" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="polling_runs" columnNames="active_lock_key"
+                             constraintName="uk_polling_run_active_lock"/>
+        <createIndex tableName="polling_runs" indexName="idx_polling_runs_connection_started">
+            <column name="integration_connection_id"/><column name="started_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="polling_runs" indexName="idx_polling_runs_tenant_status">
+            <column name="tenant_id"/><column name="status"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

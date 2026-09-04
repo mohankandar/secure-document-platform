@@ -51,7 +51,7 @@ public class TechnicalExceptionController {
         var principal = contextResolver.resolvePrincipal(request);
         TechnicalExceptionDetail detail = technicalExceptionQuery.execute(
                 PackageId.of(UUID.fromString(packageId)), principal.tenantId());
-        OperatorDiagnostics operatorDiagnostics = authorizationPolicy.has(principal, UserCapability.PLATFORM_OPERATIONS)
+        OperatorDiagnostics operatorDiagnostics = authorizationPolicy.has(principal, UserCapability.PLATFORM_DIAGNOSTICS)
                 ? new OperatorDiagnostics(
                         detail.dependency(),
                         detail.failureCode(),

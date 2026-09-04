@@ -9,8 +9,29 @@ import com.securedoc.platform.application.port.out.TenantLifecyclePolicyReposito
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.PackageExportRecordRepository;
 import com.securedoc.platform.application.intake.watched.WatchedFolderIntakeService;
+import com.securedoc.platform.application.intake.external.ExternalIntakeService;
+import com.securedoc.platform.application.intake.polling.PollingIntakeService;
+import com.securedoc.platform.application.intake.external.ExternalIntakeMaintenanceService;
 import com.securedoc.platform.application.port.out.WatchedFolderSourcePort;
 import com.securedoc.platform.application.port.out.IntakeObservationRepository;
+import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
+import com.securedoc.platform.application.port.out.ExternalIntakeRepository;
+import com.securedoc.platform.application.port.out.PdfIntakeValidationPort;
+import com.securedoc.platform.application.port.out.PollingRunRepository;
+import com.securedoc.platform.application.port.out.PollingSourcePort;
+import com.securedoc.platform.application.integration.IntegrationConnectionService;
+import com.securedoc.platform.application.integration.SdvConnectionTestService;
+import com.securedoc.platform.application.routing.service.RoutingRuleService;
+import com.securedoc.platform.application.routing.service.DerivedRoutingService;
+import com.securedoc.platform.application.routing.service.DerivedDeliveryService;
+import com.securedoc.platform.application.routing.service.DerivedConnectionTestService;
+import com.securedoc.platform.application.port.in.ProcessDerivedRoutingUseCase;
+import com.securedoc.platform.application.port.out.RoutingRuleRepository;
+import com.securedoc.platform.application.port.out.DerivedDeliveryRepository;
+import com.securedoc.platform.application.port.out.RoutingMarkerDetectionPort;
+import com.securedoc.platform.application.port.out.DerivedPdfBuilderPort;
+import com.securedoc.platform.application.port.out.DerivedDestinationDeliveryPort;
+import com.securedoc.platform.application.port.out.SdvConnectionTestPort;
 import com.securedoc.platform.infrastructure.intake.WatchedFolderProperties;
 import com.securedoc.platform.application.port.in.CreatePackageUseCase;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
@@ -81,6 +102,7 @@ import com.securedoc.platform.application.technical.service.TechnicalExceptionQu
 import com.securedoc.platform.application.technical.service.RetryTechnicalFailureService;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
 import com.securedoc.platform.application.port.out.DeliveryPort;
+import com.securedoc.platform.application.port.out.DeliverySubmissionRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.application.vault.service.ArtifactAccessService;
 import com.securedoc.platform.application.vault.service.VaultService;
@@ -123,6 +145,63 @@ public class ApplicationServiceConfig {
     @Bean
     public TenantContextService tenantContextService(TenantRepository tenantRepository) {
         return new TenantContextService(tenantRepository);
+    }
+
+
+    @Bean
+    public IntegrationConnectionService integrationConnectionService(
+            IntegrationConnectionRepository integrationConnectionRepository,
+            AuditService auditService) {
+        return new IntegrationConnectionService(integrationConnectionRepository, auditService);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "sdv")
+    public SdvConnectionTestService sdvConnectionTestService(
+            IntegrationConnectionService integrationConnectionService,
+            SdvConnectionTestPort sdvConnectionTestPort,
+            AuditService auditService) {
+        return new SdvConnectionTestService(integrationConnectionService, sdvConnectionTestPort, auditService);
+    }
+
+    @Bean
+    public ExternalIntakeMaintenanceService externalIntakeMaintenanceService(
+            ExternalIntakeRepository externalIntakeRepository,
+            PackageRepository packageRepository,
+            ArtifactRepository artifactRepository,
+            StoragePort storagePort,
+            AuditService auditService) {
+        return new ExternalIntakeMaintenanceService(externalIntakeRepository, packageRepository,
+                artifactRepository, storagePort, auditService);
+    }
+
+    @Bean
+    public ExternalIntakeService externalIntakeService(
+            IntegrationConnectionService integrationConnectionService,
+            ExternalIntakeRepository externalIntakeRepository,
+            PackageRepository packageRepository,
+            CreatePackageUseCase createPackageUseCase,
+            UploadDocumentUseCase uploadDocumentUseCase,
+            SubmitPackageUseCase submitPackageUseCase,
+            PackageProcessingDispatcher packageProcessingDispatcher,
+            ChecksumPort checksumPort,
+            PdfIntakeValidationPort pdfIntakeValidationPort,
+            AuditService auditService,
+            ExternalIntakeMaintenanceService maintenanceService) {
+        return new ExternalIntakeService(integrationConnectionService, externalIntakeRepository, packageRepository,
+                createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
+                checksumPort, pdfIntakeValidationPort, auditService, maintenanceService);
+    }
+
+    @Bean
+    public PollingIntakeService pollingIntakeService(
+            IntegrationConnectionService integrationConnectionService,
+            PollingRunRepository pollingRunRepository,
+            PollingSourcePort pollingSourcePort,
+            ExternalIntakeService externalIntakeService,
+            AuditService auditService) {
+        return new PollingIntakeService(integrationConnectionService, pollingRunRepository, pollingSourcePort,
+                externalIntakeService, auditService);
     }
 
     @Bean
@@ -316,6 +395,9 @@ public class ApplicationServiceConfig {
                 properties.getProvider(), properties.getBaseUrl(), properties.getModel(), properties.getApiKey(),
                 properties.getTimeoutSeconds(), properties.getParallelism(), properties.getPageMaxAttempts(),
                 properties.getPageRetryBackoffMs(),
+                properties.getOllamaKeepAlive(), properties.isOllamaStructuredOutput(), properties.isOllamaThinkingEnabled(),
+                properties.getOllamaContextWindowTokens(), properties.getOllamaMaxOutputTokens(),
+                properties.getOllamaPageBatchSize(), properties.getOllamaPageBatchMaxCharacters(),
                 properties.isSecondaryEnabled(), properties.getSecondaryProvider(),
                 properties.getSecondaryBaseUrl(), properties.getSecondaryModel(), properties.getSecondaryApiKey(),
                 properties.getSecondaryTimeoutSeconds(),
@@ -341,10 +423,19 @@ public class ApplicationServiceConfig {
                     ? profile.getPageRetryBackoffMs()
                     : properties.getPageRetryBackoffMs();
             int secondaryTimeout = positiveOrDefault(profile.getSecondaryTimeoutSeconds(), timeoutSeconds);
+            String keepAlive = stringOrDefault(profile.getOllamaKeepAlive(), properties.getOllamaKeepAlive());
+            boolean structuredOutput = booleanOrDefault(profile.getOllamaStructuredOutput(), properties.isOllamaStructuredOutput());
+            boolean thinkingEnabled = booleanOrDefault(profile.getOllamaThinkingEnabled(), properties.isOllamaThinkingEnabled());
+            int contextWindowTokens = nonNegativeOrDefault(profile.getOllamaContextWindowTokens(), properties.getOllamaContextWindowTokens());
+            int maxOutputTokens = nonNegativeOrDefault(profile.getOllamaMaxOutputTokens(), properties.getOllamaMaxOutputTokens());
+            int pageBatchSize = positiveOrDefault(profile.getOllamaPageBatchSize(), properties.getOllamaPageBatchSize());
+            int pageBatchMaxCharacters = positiveOrDefault(profile.getOllamaPageBatchMaxCharacters(), properties.getOllamaPageBatchMaxCharacters());
 
             SensitiveContentAnalysisPort tenantProfile = buildResilientAnalysisProfile(
                     profile.getProvider(), profile.getBaseUrl(), profile.getModel(), profile.getApiKey(),
                     timeoutSeconds, parallelism, pageMaxAttempts, pageBackoffMs,
+                    keepAlive, structuredOutput, thinkingEnabled, contextWindowTokens, maxOutputTokens,
+                    pageBatchSize, pageBatchMaxCharacters,
                     profile.isSecondaryEnabled(), profile.getSecondaryProvider(), profile.getSecondaryBaseUrl(),
                     profile.getSecondaryModel(), profile.getSecondaryApiKey(), secondaryTimeout,
                     selectiveRetryExecutor, false);
@@ -364,6 +455,13 @@ public class ApplicationServiceConfig {
             int parallelism,
             int pageMaxAttempts,
             long pageRetryBackoffMs,
+            String ollamaKeepAlive,
+            boolean ollamaStructuredOutput,
+            boolean ollamaThinkingEnabled,
+            int ollamaContextWindowTokens,
+            int ollamaMaxOutputTokens,
+            int ollamaPageBatchSize,
+            int ollamaPageBatchMaxCharacters,
             boolean secondaryEnabled,
             String secondaryProvider,
             String secondaryBaseUrl,
@@ -374,12 +472,17 @@ public class ApplicationServiceConfig {
             boolean allowHeuristic) {
         SensitiveContentAnalysisPort primary = buildAnalysisProvider(
                 provider, baseUrl, model, apiKey, timeoutSeconds, parallelism,
-                pageMaxAttempts, pageRetryBackoffMs, allowHeuristic);
+                pageMaxAttempts, pageRetryBackoffMs, ollamaKeepAlive, ollamaStructuredOutput,
+                ollamaThinkingEnabled, ollamaContextWindowTokens, ollamaMaxOutputTokens,
+                ollamaPageBatchSize, ollamaPageBatchMaxCharacters, allowHeuristic);
         SensitiveContentAnalysisPort secondary = null;
         if (secondaryEnabled) {
             secondary = buildAnalysisProvider(
                     secondaryProvider, secondaryBaseUrl, secondaryModel, secondaryApiKey,
-                    secondaryTimeoutSeconds, parallelism, pageMaxAttempts, pageRetryBackoffMs, false);
+                    secondaryTimeoutSeconds, parallelism, pageMaxAttempts, pageRetryBackoffMs,
+                    ollamaKeepAlive, ollamaStructuredOutput, ollamaThinkingEnabled,
+                    ollamaContextWindowTokens, ollamaMaxOutputTokens, ollamaPageBatchSize,
+                    ollamaPageBatchMaxCharacters, false);
         }
         return new ResilientSensitiveContentAnalysisPort(primary, secondary, selectiveRetryExecutor);
     }
@@ -392,6 +495,13 @@ public class ApplicationServiceConfig {
                                                                int parallelism,
                                                                int pageMaxAttempts,
                                                                long pageRetryBackoffMs,
+                                                               String ollamaKeepAlive,
+                                                               boolean ollamaStructuredOutput,
+                                                               boolean ollamaThinkingEnabled,
+                                                               int ollamaContextWindowTokens,
+                                                               int ollamaMaxOutputTokens,
+                                                               int ollamaPageBatchSize,
+                                                               int ollamaPageBatchMaxCharacters,
                                                                boolean allowHeuristic) {
         String provider = providerValue == null ? "" : providerValue.trim().toLowerCase();
         Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds));
@@ -401,7 +511,11 @@ public class ApplicationServiceConfig {
 
         return switch (provider) {
             case "ollama" -> new OllamaSensitiveContentAnalysisAdapter(
-                    baseUrl, model, timeout, boundedParallelism, boundedPageAttempts, pageBackoff);
+                    baseUrl, model, timeout, boundedParallelism, boundedPageAttempts, pageBackoff,
+                    ollamaKeepAlive, ollamaStructuredOutput, ollamaThinkingEnabled,
+                    Math.max(0, ollamaContextWindowTokens), Math.max(0, ollamaMaxOutputTokens),
+                    Math.max(1, Math.min(8, ollamaPageBatchSize)),
+                    Math.max(1_000, Math.min(200_000, ollamaPageBatchMaxCharacters)));
             case "openai-compatible", "openai_compatible", "vllm" ->
                     new OpenAiCompatibleSensitiveContentAnalysisAdapter(
                             baseUrl, model, apiKey, timeout, boundedParallelism, boundedPageAttempts, pageBackoff);
@@ -417,6 +531,18 @@ public class ApplicationServiceConfig {
 
     private int positiveOrDefault(int value, int fallback) {
         return value > 0 ? value : fallback;
+    }
+
+    private int nonNegativeOrDefault(int value, int fallback) {
+        return value >= 0 ? value : fallback;
+    }
+
+    private String stringOrDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
+    }
+
+    private boolean booleanOrDefault(Boolean value, boolean fallback) {
+        return value == null ? fallback : value;
     }
 
     // --- Detection service ---
@@ -589,13 +715,14 @@ public class ApplicationServiceConfig {
             DetectSensitiveDataUseCase detectSensitiveDataUseCase,
             RedactDocumentUseCase redactDocumentUseCase,
             ExportPackageDocumentsUseCase exportPackageDocumentsUseCase,
+            ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
             SelectiveRetryExecutor selectiveRetryExecutor,
             PackageLifecycleService packageLifecycleService,
             AuditService auditService) {
         return new TriggerPackageProcessingService(packageRepository, documentRepository,
                 findingRepository, startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase,
-                exportPackageDocumentsUseCase, selectiveRetryExecutor, packageLifecycleService, auditService);
+                exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService, auditService);
     }
 
 
@@ -603,6 +730,18 @@ public class ApplicationServiceConfig {
      * Bounded V1 executor for post-review continuation. Keeping this separate from request threads
      * prevents the final reviewer action from waiting on redaction, verification and export.
      */
+    @Bean(name = "pollingTaskExecutor")
+    public ThreadPoolTaskExecutor pollingTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("polling-intake-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
+
     @Bean(name = "reviewResumeTaskExecutor")
     public ThreadPoolTaskExecutor reviewResumeTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -627,15 +766,59 @@ public class ApplicationServiceConfig {
     @Bean
     public ExportPackageDocumentsUseCase exportPackageDocumentsUseCase(
             DocumentRepository documentRepository,
+            PackageRepository packageRepository,
+            BusinessRecordRepository businessRecordRepository,
             ArtifactRepository artifactRepository,
             StoragePort storagePort,
             DeliveryPort deliveryPort,
+            DeliverySubmissionRepository deliverySubmissionRepository,
             PackageLifecycleService packageLifecycleService,
             AuditService auditService) {
-        return new PackageDocumentExportService(documentRepository, artifactRepository,
-                storagePort, deliveryPort, packageLifecycleService, auditService);
+        return new PackageDocumentExportService(documentRepository, packageRepository, businessRecordRepository,
+                artifactRepository, storagePort, deliveryPort, deliverySubmissionRepository, packageLifecycleService, auditService);
     }
 
+
+    @Bean
+    public RoutingRuleService routingRuleService(RoutingRuleRepository routingRuleRepository,
+                                                 IntegrationConnectionRepository integrationConnectionRepository,
+                                                 AuditService auditService) {
+        return new RoutingRuleService(routingRuleRepository, integrationConnectionRepository, auditService);
+    }
+
+    @Bean
+    public DerivedDeliveryService derivedDeliveryService(DerivedDeliveryRepository derivedDeliveryRepository,
+                                                         IntegrationConnectionRepository integrationConnectionRepository,
+                                                         ArtifactRepository artifactRepository,
+                                                         StoragePort storagePort,
+                                                         DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
+                                                         AuditService auditService) {
+        return new DerivedDeliveryService(derivedDeliveryRepository, integrationConnectionRepository,
+                artifactRepository, storagePort, derivedDestinationDeliveryPort, auditService);
+    }
+
+    @Bean
+    public ProcessDerivedRoutingUseCase processDerivedRoutingUseCase(RoutingRuleRepository routingRuleRepository,
+                                                                     DerivedDeliveryRepository derivedDeliveryRepository,
+                                                                     IntegrationConnectionRepository integrationConnectionRepository,
+                                                                     DocumentRepository documentRepository,
+                                                                     ArtifactRepository artifactRepository,
+                                                                     StoragePort storagePort,
+                                                                     RoutingMarkerDetectionPort routingMarkerDetectionPort,
+                                                                     DerivedPdfBuilderPort derivedPdfBuilderPort,
+                                                                     DerivedDeliveryService derivedDeliveryService,
+                                                                     AuditService auditService) {
+        return new DerivedRoutingService(routingRuleRepository, derivedDeliveryRepository,
+                integrationConnectionRepository, documentRepository, artifactRepository, storagePort,
+                routingMarkerDetectionPort, derivedPdfBuilderPort, derivedDeliveryService, auditService);
+    }
+
+    @Bean
+    public DerivedConnectionTestService derivedConnectionTestService(IntegrationConnectionRepository integrationConnectionRepository,
+                                                                     DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
+                                                                     AuditService auditService) {
+        return new DerivedConnectionTestService(integrationConnectionRepository, derivedDestinationDeliveryPort, auditService);
+    }
 
     @Bean
     public GetTechnicalExceptionQuery getTechnicalExceptionQuery(

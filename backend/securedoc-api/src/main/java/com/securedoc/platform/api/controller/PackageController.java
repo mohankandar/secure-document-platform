@@ -1,6 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.security.RequireCapability;
+import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.api.dto.CreatePackageRequest;
 import com.securedoc.platform.api.dto.BusinessIdentifierResponse;
 import com.securedoc.platform.api.dto.CreatePackageResponse;
@@ -22,7 +24,7 @@ import com.securedoc.platform.application.port.in.CreatePackageUseCase;
 import com.securedoc.platform.application.port.in.GetPackageQuery;
 import com.securedoc.platform.application.port.in.ListPackagesQuery;
 import com.securedoc.platform.application.port.in.SubmitPackageUseCase;
-import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
+import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.port.in.UploadDocumentUseCase;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.domain.document.PackageType;
@@ -53,7 +55,7 @@ public class PackageController {
     private final CreatePackageUseCase createPackageUseCase;
     private final UploadDocumentUseCase uploadDocumentUseCase;
     private final SubmitPackageUseCase submitPackageUseCase;
-    private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
+    private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final GetPackageQuery getPackageQuery;
     private final ListPackagesQuery listPackagesQuery;
     private final RequestContextResolver contextResolver;
@@ -61,14 +63,14 @@ public class PackageController {
     public PackageController(CreatePackageUseCase createPackageUseCase,
                               UploadDocumentUseCase uploadDocumentUseCase,
                               SubmitPackageUseCase submitPackageUseCase,
-                              TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+                              PackageProcessingDispatcher packageProcessingDispatcher,
                               GetPackageQuery getPackageQuery,
                               ListPackagesQuery listPackagesQuery,
                               RequestContextResolver contextResolver) {
         this.createPackageUseCase = createPackageUseCase;
         this.uploadDocumentUseCase = uploadDocumentUseCase;
         this.submitPackageUseCase = submitPackageUseCase;
-        this.triggerPackageProcessingUseCase = triggerPackageProcessingUseCase;
+        this.packageProcessingDispatcher = packageProcessingDispatcher;
         this.getPackageQuery = getPackageQuery;
         this.listPackagesQuery = listPackagesQuery;
         this.contextResolver = contextResolver;
@@ -76,6 +78,7 @@ public class PackageController {
 
     @PostMapping
     @Transactional
+    @RequireCapability(UserCapability.DOCUMENT_INTAKE)
     public ResponseEntity<CreatePackageResponse> createPackage(
             @Valid @RequestBody CreatePackageRequest request,
             HttpServletRequest httpRequest) {
@@ -100,6 +103,7 @@ public class PackageController {
 
     @PostMapping(value = "/{packageId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Transactional
+    @RequireCapability(UserCapability.DOCUMENT_INTAKE)
     public ResponseEntity<UploadDocumentResponse> uploadDocument(
             @PathVariable String packageId,
             @RequestParam("file") MultipartFile file,
@@ -128,6 +132,8 @@ public class PackageController {
     }
 
     @PostMapping("/{packageId}/submit")
+    @Transactional
+    @RequireCapability(UserCapability.DOCUMENT_INTAKE)
     public ResponseEntity<SubmitPackageResponse> submitPackage(
             @PathVariable String packageId,
             HttpServletRequest httpRequest) {
@@ -139,9 +145,11 @@ public class PackageController {
         SubmitPackageCommand command = SubmitPackageCommand.of(pkgId, correlationId);
         submitPackageUseCase.execute(command, principal);
 
-        // Straight-through processing: automatically run the pipeline on submit
-        // (extract → detect → locate → policy → redact → export). No manual trigger needed.
-        triggerPackageProcessingUseCase.execute(
+        // Manual intake has the same post-commit processing contract as machine ingestion:
+        // return the submit request promptly, then start the expensive AI/redaction pipeline only
+        // after the SUBMITTED state is durably committed. This prevents the UI from remaining in
+        // "Submitting..." for the entire document-processing duration and preserves the R3 race fix.
+        packageProcessingDispatcher.dispatch(
                 TriggerPackageProcessingCommand.of(pkgId, principal.tenantId(),
                         principal.actorId(), correlationId));
 
@@ -153,6 +161,7 @@ public class PackageController {
     }
 
     @GetMapping("/{packageId}")
+    @RequireCapability(UserCapability.DASHBOARD_ACCESS)
     @Transactional(readOnly = true)
     public ResponseEntity<PackageDetailResponse> getPackageDetail(
             @PathVariable String packageId,
@@ -188,6 +197,7 @@ public class PackageController {
     }
 
     @GetMapping
+    @RequireCapability(UserCapability.DASHBOARD_ACCESS)
     @Transactional(readOnly = true)
     public ResponseEntity<List<PackageSummaryResponse>> listPackages(
             @RequestParam(defaultValue = "0") int offset,

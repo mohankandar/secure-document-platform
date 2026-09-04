@@ -9,6 +9,11 @@ import type {
   SensitiveDataPolicyConfiguration,
   LifecyclePolicyConfiguration,
   DashboardAdminColumnConfiguration,
+  RoutingRule,
+  RoutingRuleRequest,
+  RoutingDestinationOption,
+  RoutingMarkerType,
+  RoutingScanRegion,
 } from '../types';
 
 const SENSITIVE_TYPES = [
@@ -24,11 +29,17 @@ export default function BusinessAdminPage() {
   const [policy, setPolicy] = useState<SensitiveDataPolicyConfiguration | null>(null);
   const [lifecyclePolicy, setLifecyclePolicy] = useState<LifecyclePolicyConfiguration | null>(null);
   const [dashboardColumns, setDashboardColumns] = useState<DashboardAdminColumnConfiguration[]>([]);
+  const [routingRules, setRoutingRules] = useState<RoutingRule[]>([]);
+  const [routingDestinations, setRoutingDestinations] = useState<RoutingDestinationOption[]>([]);
+  const [routingDraft, setRoutingDraft] = useState<(RoutingRuleRequest & { ruleId?: string })>({
+    destinationLabel: '', markerType: 'TEXT_PATTERN', markerValue: '', scanRegion: 'TOP_RIGHT', destinationConnectionId: '', enabled: true,
+  });
   const [loading, setLoading] = useState(true);
   const [savingIdentifiers, setSavingIdentifiers] = useState(false);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
   const [savingDashboardColumns, setSavingDashboardColumns] = useState(false);
+  const [savingRouting, setSavingRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -36,8 +47,14 @@ export default function BusinessAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiClient.getBusinessAdminConfiguration();
+      const [result, rules, destinations] = await Promise.all([
+        apiClient.getBusinessAdminConfiguration(),
+        apiClient.listRoutingRules(),
+        apiClient.listRoutingDestinations(),
+      ]);
       applyConfiguration(result);
+      setRoutingRules(rules);
+      setRoutingDestinations(destinations);
     } catch (err) {
       const apiError = err as ApiError;
       setError(apiError.message || 'Unable to load Business Admin configuration');
@@ -232,6 +249,39 @@ export default function BusinessAdminPage() {
 
   const setReviewMode = (reviewMode: BusinessReviewMode) => {
     if (policy) setPolicy({ ...policy, reviewMode });
+  };
+
+  const resetRoutingDraft = () => setRoutingDraft({
+    destinationLabel: '', markerType: 'TEXT_PATTERN', markerValue: '', scanRegion: 'TOP_RIGHT', destinationConnectionId: '', enabled: true,
+  });
+
+  const saveRoutingRule = async () => {
+    if (!routingDraft.destinationLabel.trim() || !routingDraft.markerValue.trim() || !routingDraft.destinationConnectionId) {
+      setError('Routing destination label, marker value, and destination connection are required.');
+      return;
+    }
+    setSavingRouting(true); setError(null); setSuccess(null);
+    try {
+      const body: RoutingRuleRequest = { ...routingDraft, destinationLabel: routingDraft.destinationLabel.trim(), markerValue: routingDraft.markerValue.trim() };
+      if (routingDraft.ruleId) await apiClient.updateRoutingRule(routingDraft.ruleId, body);
+      else await apiClient.createRoutingRule(body);
+      const [rules, destinations] = await Promise.all([apiClient.listRoutingRules(), apiClient.listRoutingDestinations()]);
+      setRoutingRules(rules); setRoutingDestinations(destinations); resetRoutingDraft();
+      setSuccess('Routing rule saved. Derived routing will use the approved redacted-document destination.');
+    } catch (err) {
+      const apiError = err as ApiError; setError(apiError.message || 'Unable to save routing rule');
+    } finally { setSavingRouting(false); }
+  };
+
+  const editRoutingRule = (rule: RoutingRule) => setRoutingDraft({
+    ruleId: rule.ruleId, destinationLabel: rule.destinationLabel, markerType: rule.markerType,
+    markerValue: rule.markerValue, scanRegion: rule.scanRegion, destinationConnectionId: rule.destinationConnectionId, enabled: rule.enabled,
+  });
+
+  const deleteRoutingRule = async (ruleId: string) => {
+    setError(null); setSuccess(null);
+    try { await apiClient.deleteRoutingRule(ruleId); setRoutingRules(await apiClient.listRoutingRules()); if (routingDraft.ruleId === ruleId) resetRoutingDraft(); setSuccess('Routing rule removed.'); }
+    catch (err) { const apiError = err as ApiError; setError(apiError.message || 'Unable to remove routing rule'); }
   };
 
   if (loading) {
@@ -473,6 +523,67 @@ export default function BusinessAdminPage() {
             </div>
           </>
         )}
+      </section>
+
+      <section className="card admin-section-card">
+        <div className="admin-section-heading">
+          <div>
+            <h2>Derived Document Routing</h2>
+            <p>Map deterministic markers to destinations configured by Tenant IT. The full redacted master remains intact and exports independently.</p>
+          </div>
+        </div>
+
+        <div className="policy-controls-grid">
+          <div className="policy-control-card">
+            <label>Destination label</label>
+            <input value={routingDraft.destinationLabel} onChange={(e) => setRoutingDraft({ ...routingDraft, destinationLabel: e.target.value })} placeholder="South Carolina" />
+          </div>
+          <div className="policy-control-card">
+            <label>Marker type</label>
+            <select value={routingDraft.markerType} onChange={(e) => setRoutingDraft({ ...routingDraft, markerType: e.target.value as RoutingMarkerType })}>
+              <option value="TEXT_PATTERN">Text pattern</option><option value="BARCODE">Barcode</option><option value="QR_CODE">QR code</option>
+            </select>
+          </div>
+          <div className="policy-control-card">
+            <label>Marker value</label>
+            <input value={routingDraft.markerValue} onChange={(e) => setRoutingDraft({ ...routingDraft, markerValue: e.target.value })} placeholder="77777777" />
+            <p>Text markers are normalized, so decorative bars/spaces do not need to match exactly.</p>
+          </div>
+          <div className="policy-control-card">
+            <label>Fixed scan region</label>
+            <select value={routingDraft.scanRegion} onChange={(e) => setRoutingDraft({ ...routingDraft, scanRegion: e.target.value as RoutingScanRegion })}>
+              <option value="TOP_RIGHT">Top right</option><option value="BOTTOM_LEFT">Bottom left</option><option value="BOTH">Both</option>
+            </select>
+          </div>
+          <div className="policy-control-card">
+            <label>Approved destination</label>
+            <select value={routingDraft.destinationConnectionId} onChange={(e) => setRoutingDraft({ ...routingDraft, destinationConnectionId: e.target.value })}>
+              <option value="">Select destination…</option>
+              {routingDestinations.filter((d) => d.enabled).map((d) => <option key={d.connectionId} value={d.connectionId}>{d.name} · {d.providerType}</option>)}
+            </select>
+            <p>Technical endpoint/authentication settings stay under IT Admin → Integrations.</p>
+          </div>
+          <div className="policy-control-card">
+            <span className="policy-control-label">Rule status</span>
+            <label className={`review-mode-option ${routingDraft.enabled ? 'selected' : ''}`}>
+              <input type="checkbox" checked={routingDraft.enabled} onChange={(e) => setRoutingDraft({ ...routingDraft, enabled: e.target.checked })} />
+              <span><strong>Enabled</strong><small>Only enabled rules are scanned during derived routing.</small></span>
+            </label>
+          </div>
+        </div>
+        <div className="admin-save-row">
+          <button className="primary" disabled={savingRouting} onClick={() => void saveRoutingRule()}>{savingRouting ? 'Saving…' : routingDraft.ruleId ? 'Update Routing Rule' : 'Add Routing Rule'}</button>
+          {routingDraft.ruleId && <button className="secondary" onClick={resetRoutingDraft}>Cancel edit</button>}
+        </div>
+
+        {routingRules.length > 0 && <table>
+          <thead><tr><th>Marker</th><th>Region</th><th>Destination</th><th>Status</th><th></th></tr></thead>
+          <tbody>{routingRules.map((rule) => <tr key={rule.ruleId}>
+            <td><strong>{rule.markerValue}</strong><br/><small>{rule.markerType}</small></td>
+            <td>{rule.scanRegion.replace(/_/g, ' ')}</td><td>{rule.destinationLabel}</td><td>{rule.enabled ? 'Enabled' : 'Disabled'}</td>
+            <td><div className="inline-actions"><button className="secondary" onClick={() => editRoutingRule(rule)}>Edit</button><button className="secondary" onClick={() => void deleteRoutingRule(rule.ruleId)}>Remove</button></div></td>
+          </tr>)}</tbody>
+        </table>}
       </section>
 
       {lifecyclePolicy && (

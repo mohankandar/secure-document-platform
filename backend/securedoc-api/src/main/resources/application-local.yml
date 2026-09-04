@@ -31,17 +31,29 @@ securedoc:
     actor-id: "00000000-0000-0000-0000-000000000099"
 
   ai:
-    # Local gemma3:12b tuning validated from the 61-page acceptance-package failure:
-    # use lower client concurrency, allow slow pages more time, and retry only failed pages.
+    # Requirement 5 accepted LOCAL/demo reference model. Gemma3:12b remains explicitly selectable
+    # through SECUREDOC_AI_MODEL on larger hardware; there is no silent fallback.
+    model: ${SECUREDOC_AI_MODEL:${SECUREDOC_AI_OLLAMA_MODEL:qwen3.5:4b}}
     timeout-seconds: ${SECUREDOC_AI_TIMEOUT_SECONDS:180}
     parallelism: ${SECUREDOC_AI_PARALLELISM:2}
     page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
     page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
+    # Keep the model resident, constrain output, disable unnecessary reasoning, and batch two
+    # moderate pages per Ollama call. Oversized pages are automatically isolated by max characters.
+    ollama-keep-alive: ${SECUREDOC_AI_OLLAMA_KEEP_ALIVE:30m}
+    ollama-structured-output: ${SECUREDOC_AI_OLLAMA_STRUCTURED_OUTPUT:true}
+    ollama-thinking-enabled: ${SECUREDOC_AI_OLLAMA_THINKING_ENABLED:false}
+    ollama-context-window-tokens: ${SECUREDOC_AI_OLLAMA_CONTEXT_WINDOW_TOKENS:8192}
+    ollama-max-output-tokens: ${SECUREDOC_AI_OLLAMA_MAX_OUTPUT_TOKENS:2048}
+    ollama-page-batch-size: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE:2}
+    ollama-page-batch-max-characters: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS:14000}
+    # Direct Spring startup also preloads the selected local model; fail closed if the configured model cannot be loaded.
+    ollama-preload-enabled: ${SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED:true}
+    ollama-preload-fail-on-error: ${SECUREDOC_AI_OLLAMA_PRELOAD_FAIL_ON_ERROR:true}
+    ollama-preload-timeout-seconds: ${SECUREDOC_AI_OLLAMA_PRELOAD_TIMEOUT_SECONDS:300}
 
   delivery:
-    api:
-      require-authentication: false
-      require-https: false
+    type: local
   intake:
     watched-folder:
       enabled: false

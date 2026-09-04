@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.UUID;
 
-/** Approver-only operational removal from normal Dashboard views; no package or artifact deletion occurs here. */
+/** Supervisor-capable operational removal from normal Dashboard views; no package or artifact deletion occurs here. */
 @RestController
 @RequestMapping("/api/v1/packages")
 public class PackageDashboardController {

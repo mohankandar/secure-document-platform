@@ -7,10 +7,14 @@ import com.securedoc.platform.application.exception.ApplicationException;
 import com.securedoc.platform.application.exception.CapabilityNotEnabledException;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.exception.IntakeExpiredException;
+import com.securedoc.platform.application.exception.IntakeConflictException;
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -39,12 +43,47 @@ public class GlobalExceptionHandler {
                 .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
     }
 
+    @ExceptionHandler(IntakeExpiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleIntakeExpired(IntakeExpiredException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.GONE)
+                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
+    }
+
+    @ExceptionHandler(IntakeConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleIntakeConflict(IntakeConflictException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
+    }
+
     @ExceptionHandler(SecurityContextException.class)
     public ResponseEntity<ApiErrorResponse> handleSecurityContext(SecurityContextException ex,
                                                                    HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiErrorResponse.of("SECURITY_CONTEXT_INVALID", "Authenticated identity is not authorized for this tenant/application",
                         correlationIdForError(request)));
+    }
+
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleMalformedJson(HttpMessageNotReadableException ex,
+                                                                 HttpServletRequest request) {
+        String correlationId = correlationIdForError(request);
+        log.warn("REQUEST_BODY_INVALID path={} correlation={}",
+                request == null ? "unknown" : request.getRequestURI(), correlationId);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiErrorResponse.of("INVALID_REQUEST_BODY", "Request body is malformed or contains an invalid value type", correlationId));
+    }
+
+    @ExceptionHandler(TechnicalDependencyException.class)
+    public ResponseEntity<ApiErrorResponse> handleTechnicalDependency(TechnicalDependencyException ex,
+                                                                       HttpServletRequest request) {
+        String correlationId = correlationIdForError(request);
+        HttpStatus status = ex.retryable() ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_GATEWAY;
+        log.warn("TECHNICAL_DEPENDENCY_FAILED path={} dependency={} code={} retryable={} attempts={} correlation={}",
+                request == null ? "unknown" : request.getRequestURI(), ex.dependency(), ex.failureCode(),
+                ex.retryable(), ex.attempts(), correlationId);
+        return ResponseEntity.status(status)
+                .body(ApiErrorResponse.of(ex.failureCode().name(), ex.getMessage(), correlationId));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

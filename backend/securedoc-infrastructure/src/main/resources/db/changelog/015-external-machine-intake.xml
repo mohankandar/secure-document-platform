@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+    <changeSet id="015-01-external-machine-intake" author="securedoc">
+        <createTable tableName="external_intakes">
+            <column name="package_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="integration_connection_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="channel" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="external_source_package_id" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="source_revision" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="attempt_number" type="INT" defaultValueNumeric="1"><constraints nullable="false"/></column>
+            <column name="request_fingerprint" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="accepted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="expired_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="cleanup_completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="external_intakes" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_external_intake_package" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="external_intakes" baseColumnNames="integration_connection_id"
+                                 referencedTableName="integration_connections" referencedColumnNames="id"
+                                 constraintName="fk_external_intake_connection"/>
+        <addUniqueConstraint tableName="external_intakes"
+                             columnNames="tenant_id,integration_connection_id,external_source_package_id,source_revision,attempt_number"
+                             constraintName="uk_external_intake_source_revision_attempt"/>
+        <createIndex tableName="external_intakes" indexName="idx_external_intake_expiry">
+            <column name="status"/><column name="expires_at"/>
+        </createIndex>
+
+        <createTable tableName="external_intake_documents">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="external_source_document_id" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="original_file_name" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="declared_sha256" type="VARCHAR(64)"/>
+            <column name="received_document_id" type="UUID"/>
+            <column name="received_sha256" type="VARCHAR(64)"/>
+            <column name="idempotency_key" type="VARCHAR(255)"/>
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="external_intake_documents" baseColumnNames="package_id"
+                                 referencedTableName="external_intakes" referencedColumnNames="package_id"
+                                 constraintName="fk_external_intake_document_intake" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="external_intake_documents" baseColumnNames="received_document_id"
+                                 referencedTableName="documents" referencedColumnNames="id"
+                                 constraintName="fk_external_intake_document_received"/>
+        <addUniqueConstraint tableName="external_intake_documents"
+                             columnNames="package_id,external_source_document_id"
+                             constraintName="uk_external_intake_document_source_id"/>
+        <addUniqueConstraint tableName="external_intake_documents"
+                             columnNames="package_id,idempotency_key"
+                             constraintName="uk_external_intake_document_idempotency"/>
+    </changeSet>
+</databaseChangeLog>

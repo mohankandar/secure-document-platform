@@ -1,0 +1,23 @@
+dataset,source_document,page,entity_type,candidate_reference,expected_find,expected_redact,reason_context,baseline_observation
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,SSN,actual labeled synthetic SSN,FIND,REDACT,"Actual exposed SSN value with explicit SSN label",must remain positive
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,DATE_OF_BIRTH,actual labeled synthetic DOB,FIND,REDACT,"Parseable birth date explicitly tied to Date of Birth",must remain positive
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,CREDIT_CARD_NUMBER,actual full synthetic PAN,FIND,REDACT,"Full PAN in payment-card context",must remain positive
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,CREDIT_SCORE,actual synthetic consumer score,FIND,REDACT,"300-850 value explicitly shown as customer's credit score",must remain positive
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,SSN,generic phrase Social Security number,DO_NOT_FIND,DO_NOT_REDACT,"Category/policy language without an exposed value",false-positive trap
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,CREDIT_SCORE,explanatory 300-850 range,DO_NOT_FIND,DO_NOT_REDACT,"Generic score range is not the customer's score",false-positive trap
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,SSN,SSN-shaped business reference,DO_NOT_FIND,DO_NOT_REDACT,"Reference/business identifier context contradicts SSN semantics",false-positive trap
+SYNTHETIC,LexaVault synthetic precision contract,synthetic,CREDIT_CARD_NUMBER,masked card last four only,DO_NOT_FIND,DO_NOT_REDACT,"V1 default does not independently redact masked/last-four-only PAN display",policy trap
+REAL_1,002242500668_ori.pdf,1,CREDIT_CARD_NUMBER,Contract Number ending 0668,DO_NOT_FIND,DO_NOT_REDACT,"Contract identifier is not a payment-card PAN",baseline incorrectly redacted contract value
+REAL_1,002242500668_ori.pdf,1,CREDIT_SCORE,address/phone numeric fragments,DO_NOT_FIND,DO_NOT_REDACT,"Ordinary address/phone numbers have no credit-score context",baseline incorrectly redacted address and phone values
+REAL_1,002242500668_ori.pdf,2,DATE_OF_BIRTH,Date of Sale 12-20-2025,DO_NOT_FIND,DO_NOT_REDACT,"Sale date is a transaction date, not DOB",baseline incorrectly redacted date
+REAL_1,002242500668_ori.pdf,2,CREDIT_SCORE,phone numeric fragments,DO_NOT_FIND,DO_NOT_REDACT,"Phone values have no credit-score context",baseline incorrectly redacted phone values
+REAL_1,002242500668_ori.pdf,4,CREDIT_CARD_NUMBER,masked card ending 6304,DO_NOT_FIND,DO_NOT_REDACT,"Only masked/last-four card display is exposed",baseline correctly left visible
+REAL_1,002242500668_ori.pdf,7,CREDIT_SCORE,780,FIND,REDACT,"Actual consumer credit score; Source Equifax",baseline correctly redacted 780
+REAL_1,002242500668_ori.pdf,7,CREDIT_SCORE,300 and 850 explanatory range,DO_NOT_FIND,DO_NOT_REDACT,"The range-of-scores explanation is not the customer's score",baseline correctly left range visible
+REAL_1,002242500668_ori.pdf,8,SSN,generic phrase Social Security number and income,DO_NOT_FIND,DO_NOT_REDACT,"Privacy notice discusses a category without an exposed SSN value",baseline correctly left generic phrase visible
+REAL_1,002242500668_ori.pdf,10,DATE_OF_BIRTH,Enrollment Agreement Date 12-20-2025,DO_NOT_FIND,DO_NOT_REDACT,"Agreement/document date is not DOB",baseline incorrectly redacted date
+REAL_1,002242500668_ori.pdf,19,DATE_OF_BIRTH,First Payment Date 01-12-2026,DO_NOT_FIND,DO_NOT_REDACT,"Payment date is not DOB",baseline incorrectly redacted date
+REAL_2,003712500558_ori.pdf,3,DATE_OF_BIRTH,Date of Sale 04-21-2025,DO_NOT_FIND,DO_NOT_REDACT,"Sale date is not DOB",source-only negative case
+REAL_2,003712500558_ori.pdf,23,SSN,generic phrase Social Security number and income,DO_NOT_FIND,DO_NOT_REDACT,"Privacy notice contains no exposed SSN value",source-only negative case
+REAL_2,003712500558_ori.pdf,45,DATE_OF_BIRTH,First Payment Date 06-05-2025,DO_NOT_FIND,DO_NOT_REDACT,"Payment date is not DOB",source-only negative case
+REAL_2_PROCESSED,003712600805.pdf,14,CREDIT_SCORE,actual score value already blacked in processed output,FIND,REDACT,"Processed page shows a redaction in the actual-credit-score field",positive behavior to preserve; direct source pair not provided

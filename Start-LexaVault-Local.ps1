@@ -1,5 +1,7 @@
 param(
-    [switch]$PullModelIfMissing
+    [switch]$PullModelIfMissing,
+    [switch]$SkipAiWarmup,
+    [string]$AiModel = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +12,8 @@ $ApiTargetDir = Join-Path $BackendDir "securedoc-api\target"
 $FrontendDir = Join-Path $ProjectRoot "frontend\securedoc-ui"
 $ComposeFile = Join-Path $ProjectRoot "docker\compose\postgres.yml"
 $RunDir = Join-Path $ProjectRoot ".run"
-$Model = "gemma3:12b"
+$Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:4b" }
+$AiKeepAlive = if ($env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE) { $env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE } else { "30m" }
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
@@ -158,6 +161,22 @@ if ($modelNames -notcontains $Model) {
 }
 Write-Host "Ollama model $Model is installed." -ForegroundColor Green
 
+if (-not $SkipAiWarmup) {
+    Write-Host "Preloading Ollama model $Model (keep_alive=$AiKeepAlive)..."
+    $warmupBody = @{ model = $Model; prompt = ""; stream = $false; keep_alive = $AiKeepAlive } | ConvertTo-Json -Compress
+    try {
+        Invoke-RestMethod -Uri "http://localhost:11434/api/generate" -Method Post `
+            -ContentType "application/json" -Body $warmupBody -TimeoutSec 300 | Out-Null
+        Write-Host "Ollama model $Model is warm and resident." -ForegroundColor Green
+    }
+    catch {
+        throw "Ollama model warmup failed for '$Model': $($_.Exception.Message)"
+    }
+}
+else {
+    Write-Host "Skipping Ollama model warmup by request." -ForegroundColor Yellow
+}
+
 # Backend - run the already-built executable Spring Boot JAR.
 $backendPidFile = Join-Path $RunDir "backend-shell.pid"
 
@@ -193,6 +212,9 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_AI_PROVIDER = 'ollama'
 `$env:SECUREDOC_AI_OLLAMA_BASE_URL = 'http://localhost:11434'
 `$env:SECUREDOC_AI_OLLAMA_MODEL = '$Model'
+`$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
+# This launcher already performs (or explicitly skips) warmup above; prevent a duplicate in-app preload.
+`$env:SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED = 'false'
 java -jar '$jarPathEscaped' --spring.profiles.active=local
 "@
 

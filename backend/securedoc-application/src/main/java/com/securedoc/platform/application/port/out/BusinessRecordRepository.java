@@ -9,5 +9,5 @@ import java.util.Optional;
 public interface BusinessRecordRepository {
     void save(BusinessRecord record);
     Optional<BusinessRecord> findByIdAndTenantId(BusinessRecordId id, TenantId tenantId);
-    Optional<BusinessRecord> findByIdentifier(TenantId tenantId, BusinessIdentifierDefinitionId definitionId, String normalizedValue);
+    Optional<BusinessRecord> findByPrimaryIdentifier(TenantId tenantId, BusinessIdentifierDefinitionId definitionId, String normalizedValue);
 }

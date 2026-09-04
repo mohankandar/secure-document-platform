@@ -17,6 +17,9 @@ public enum ArtifactType {
     /** Redacted version of the document. */
     REDACTED,
 
+    /** Redacted page subset created for an approved routing destination. */
+    DERIVED_REDACTED,
+
     /** Thumbnail or preview image. */
     THUMBNAIL,
 

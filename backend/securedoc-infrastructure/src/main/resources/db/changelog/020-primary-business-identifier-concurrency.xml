@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+      019 removed the incorrect tenant-wide uniqueness rule for secondary identifiers and
+      retained Primary-only enforcement. This follow-up makes that trigger safe under
+      concurrent manual/API intake: two transactions resolving the same new Primary value
+      must not both pass the pre-insert existence check.
+    -->
+    <changeSet id="020-01-primary-business-identifier-concurrency" author="securedoc" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION enforce_primary_business_identifier_unique()
+            RETURNS trigger AS $$
+            DECLARE
+                is_active_primary BOOLEAN;
+            BEGIN
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM business_identifier_definitions d
+                     WHERE d.id = NEW.definition_id
+                       AND d.tenant_id = NEW.tenant_id
+                       AND d.primary_flag = TRUE
+                       AND d.active_flag = TRUE
+                ) INTO is_active_primary;
+
+                IF is_active_primary THEN
+                    -- Serialize competing inserts/updates for the same tenant + definition +
+                    -- normalized Primary value. A hash collision only over-serializes; it cannot
+                    -- permit a duplicate. The lock is held until the surrounding transaction ends.
+                    PERFORM pg_advisory_xact_lock(
+                        hashtext(NEW.tenant_id::text || ':' || NEW.definition_id::text),
+                        hashtext(NEW.normalized_value)
+                    );
+
+                    IF EXISTS (
+                        SELECT 1
+                          FROM business_record_identifiers bri
+                         WHERE bri.tenant_id = NEW.tenant_id
+                           AND bri.definition_id = NEW.definition_id
+                           AND bri.normalized_value = NEW.normalized_value
+                           AND bri.id <> NEW.id
+                    ) THEN
+                        RAISE EXCEPTION 'Duplicate primary business identifier value for tenant'
+                            USING ERRCODE = '23505',
+                                  CONSTRAINT = 'uq_business_primary_identifier_value';
+                    END IF;
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        ]]></sql>
+
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                CREATE OR REPLACE FUNCTION enforce_primary_business_identifier_unique()
+                RETURNS trigger AS $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                          FROM business_identifier_definitions d
+                         WHERE d.id = NEW.definition_id
+                           AND d.tenant_id = NEW.tenant_id
+                           AND d.primary_flag = TRUE
+                           AND d.active_flag = TRUE
+                    ) AND EXISTS (
+                        SELECT 1
+                          FROM business_record_identifiers bri
+                         WHERE bri.tenant_id = NEW.tenant_id
+                           AND bri.definition_id = NEW.definition_id
+                           AND bri.normalized_value = NEW.normalized_value
+                           AND bri.id <> NEW.id
+                    ) THEN
+                        RAISE EXCEPTION 'Duplicate primary business identifier value for tenant'
+                            USING ERRCODE = '23505',
+                                  CONSTRAINT = 'uq_business_primary_identifier_value';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+            ]]></sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

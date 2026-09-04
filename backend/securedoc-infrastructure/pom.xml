@@ -18,7 +18,6 @@
         <spring-boot.version>3.3.2</spring-boot.version>
         <liquibase.version>4.28.0</liquibase.version>
         <jackson.version>2.17.2</jackson.version>
-        <aws.sdk.version>2.27.24</aws.sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -79,18 +78,23 @@
         </dependency>
 
 
-        <!-- S3-compatible final delivery -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <version>${aws.sdk.version}</version>
-        </dependency>
-
         <!-- PDFBox for local/demo PDF text extraction -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>3.0.2</version>
+        </dependency>
+
+        <!-- ZXing for deterministic fixed-region barcode / QR routing markers -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.5.3</version>
         </dependency>
     </dependencies>
 </project>

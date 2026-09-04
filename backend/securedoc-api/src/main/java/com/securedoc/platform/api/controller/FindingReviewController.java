@@ -46,7 +46,7 @@ public class FindingReviewController {
 
     @PostMapping("/{findingId}/confirm")
     @Transactional
-    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    @RequireCapability(UserCapability.FINDING_DECISION)
     public ResponseEntity<Map<String, String>> confirmFinding(
             @PathVariable String findingId,
             @RequestBody Map<String, String> body,
@@ -67,7 +67,7 @@ public class FindingReviewController {
 
     @PostMapping("/{findingId}/dismiss")
     @Transactional
-    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    @RequireCapability(UserCapability.FINDING_DECISION)
     public ResponseEntity<Map<String, String>> dismissFinding(
             @PathVariable String findingId,
             @RequestBody Map<String, String> body,
@@ -88,7 +88,7 @@ public class FindingReviewController {
 
     @PostMapping("/{findingId}/bounding-box")
     @Transactional
-    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    @RequireCapability(UserCapability.REDACTION_ADJUST)
     public ResponseEntity<Map<String, String>> updateBoundingBox(
             @PathVariable String findingId,
             @RequestBody Map<String, Object> body,

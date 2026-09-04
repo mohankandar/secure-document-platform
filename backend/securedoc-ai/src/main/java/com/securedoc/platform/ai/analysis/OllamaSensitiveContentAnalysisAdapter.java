@@ -13,34 +13,37 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
-import java.net.http.HttpTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Local/on-prem AI adapter backed by Ollama. The model independently analyzes every
- * non-blank page; it is not given deterministic detector candidates.
+ * Local/on-prem AI adapter backed by Ollama.
  *
- * <p>The model returns the exact sensitive text transiently so the application can map
- * it back to trusted PDF/OCR text offsets and coordinates. The AI never supplies page
- * X/Y coordinates and never modifies the PDF itself.
+ * <p>Requirement 5 keeps semantic discovery AI-first while reducing local inference overhead:
+ * bounded page batching reduces repeated prompt/model calls, JSON-schema structured output constrains
+ * completion shape, optional token/context budgets avoid waste, thinking is disabled for extraction,
+ * and keep-alive keeps the configured model resident between requests. All knobs remain deployment
+ * configuration; provider/model selection is not hard-coded into application/domain logic.
  */
 public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveContentAnalysisPort {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaSensitiveContentAnalysisAdapter.class);
-    private static final String VERSION = "1.0.0";
+    private static final String VERSION = "1.1.0";
+    private static final int MAX_BATCH_SIZE = 8;
 
     private final URI chatEndpoint;
     private final String model;
@@ -48,6 +51,13 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     private final int configuredParallelism;
     private final int pageMaxAttempts;
     private final Duration pageRetryBackoff;
+    private final String keepAlive;
+    private final boolean structuredOutput;
+    private final boolean thinkingEnabled;
+    private final int contextWindowTokens;
+    private final int maxOutputTokens;
+    private final int pageBatchSize;
+    private final int pageBatchMaxCharacters;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final SensitiveContentPromptBuilder promptBuilder;
@@ -57,12 +67,30 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         this(baseUrl, model, timeout, 2, 2, Duration.ofMillis(500));
     }
 
+    /** Backward-compatible constructor used by existing tests and non-tuned callers. */
     public OllamaSensitiveContentAnalysisAdapter(String baseUrl,
                                                   String model,
                                                   Duration timeout,
                                                   int parallelism,
                                                   int pageMaxAttempts,
                                                   Duration pageRetryBackoff) {
+        this(baseUrl, model, timeout, parallelism, pageMaxAttempts, pageRetryBackoff,
+                "5m", true, false, 0, 0, 1, 14_000);
+    }
+
+    public OllamaSensitiveContentAnalysisAdapter(String baseUrl,
+                                                  String model,
+                                                  Duration timeout,
+                                                  int parallelism,
+                                                  int pageMaxAttempts,
+                                                  Duration pageRetryBackoff,
+                                                  String keepAlive,
+                                                  boolean structuredOutput,
+                                                  boolean thinkingEnabled,
+                                                  int contextWindowTokens,
+                                                  int maxOutputTokens,
+                                                  int pageBatchSize,
+                                                  int pageBatchMaxCharacters) {
         Objects.requireNonNull(baseUrl, "baseUrl must not be null");
         if (model == null || model.isBlank()) {
             throw new IllegalArgumentException("Ollama model must not be blank");
@@ -73,6 +101,15 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         if (pageMaxAttempts < 1 || pageMaxAttempts > 5) {
             throw new IllegalArgumentException("Ollama pageMaxAttempts must be between 1 and 5");
         }
+        if (pageBatchSize < 1 || pageBatchSize > MAX_BATCH_SIZE) {
+            throw new IllegalArgumentException("Ollama pageBatchSize must be between 1 and " + MAX_BATCH_SIZE);
+        }
+        if (pageBatchMaxCharacters < 1_000 || pageBatchMaxCharacters > 200_000) {
+            throw new IllegalArgumentException("Ollama pageBatchMaxCharacters must be between 1000 and 200000");
+        }
+        if (contextWindowTokens < 0 || maxOutputTokens < 0) {
+            throw new IllegalArgumentException("Ollama token limits must be zero (provider default) or positive");
+        }
         String normalized = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.chatEndpoint = URI.create(normalized + "/api/chat");
         this.model = model.trim();
@@ -80,6 +117,13 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         this.configuredParallelism = parallelism;
         this.pageMaxAttempts = pageMaxAttempts;
         this.pageRetryBackoff = pageRetryBackoff == null ? Duration.ZERO : pageRetryBackoff;
+        this.keepAlive = keepAlive == null || keepAlive.isBlank() ? "5m" : keepAlive.trim();
+        this.structuredOutput = structuredOutput;
+        this.thinkingEnabled = thinkingEnabled;
+        this.contextWindowTokens = contextWindowTokens;
+        this.maxOutputTokens = maxOutputTokens;
+        this.pageBatchSize = pageBatchSize;
+        this.pageBatchMaxCharacters = pageBatchMaxCharacters;
         this.httpClient = HttpClient.newBuilder().connectTimeout(this.timeout).build();
         this.objectMapper = new ObjectMapper();
         this.promptBuilder = new SensitiveContentPromptBuilder();
@@ -96,26 +140,34 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             return new AnalysisOutput(List.of());
         }
 
-        // Bound page concurrency to the deployment-configured value. Ollama may have its own
-        // concurrency/queue limits, so keeping this configurable avoids client-side request
-        // timeouts caused only by requests waiting behind other page requests.
-        int parallelism = Math.min(configuredParallelism, nonBlankPages.size());
+        List<List<PageContent>> batches = buildBatches(nonBlankPages);
+        int parallelism = Math.min(configuredParallelism, batches.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
-        String systemPrompt = promptBuilder.build(request.policy());
+        AtomicInteger providerCallCount = new AtomicInteger();
+        String systemPrompt = promptBuilder.buildCompact(request.policy());
+        JsonNode responseSchema = structuredOutput ? buildResponseSchema() : null;
         long startedNanos = System.nanoTime();
-        log.info("AI_ANALYSIS_STARTED provider=ollama model={} pages={} parallelism={} timeoutSeconds={} pageMaxAttempts={}",
-                model, nonBlankPages.size(), parallelism, timeout.toSeconds(), pageMaxAttempts);
+
+        log.info("AI_ANALYSIS_STARTED provider=ollama model={} pages={} batches={} batchSize={} batchMaxChars={} parallelism={} timeoutSeconds={} pageMaxAttempts={} keepAlive={} structuredOutput={} thinking={} numCtx={} numPredict={}",
+                model, nonBlankPages.size(), batches.size(), pageBatchSize, pageBatchMaxCharacters, parallelism,
+                timeout.toSeconds(), pageMaxAttempts, keepAlive, structuredOutput, thinkingEnabled,
+                contextWindowTokens, maxOutputTokens);
+
         ExecutorService executor = Executors.newFixedThreadPool(parallelism);
         try {
-            List<Future<List<DiscoveredSensitiveContent>>> futures = new ArrayList<>(nonBlankPages.size());
-            for (PageContent page : nonBlankPages) {
-                futures.add(executor.submit(() -> analyzePageWithRetry(page, pageRetryCount, systemPrompt)));
+            List<Future<BatchAnalysisResult>> futures = new ArrayList<>(batches.size());
+            for (List<PageContent> batch : batches) {
+                futures.add(executor.submit(() -> analyzeBatchWithRetry(
+                        batch, pageRetryCount, providerCallCount, systemPrompt, responseSchema)));
             }
 
             List<DiscoveredSensitiveContent> discoveries = new ArrayList<>();
-            for (Future<List<DiscoveredSensitiveContent>> future : futures) {
+            ProviderMetrics aggregate = new ProviderMetrics();
+            for (Future<BatchAnalysisResult> future : futures) {
                 try {
-                    discoveries.addAll(future.get());
+                    BatchAnalysisResult result = future.get();
+                    discoveries.addAll(result.findings());
+                    aggregate.add(result.metrics());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException("Local AI provider analysis was interrupted", e);
@@ -124,11 +176,16 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                     if (cause instanceof RuntimeException runtimeException) {
                         throw runtimeException;
                     }
-                    throw new IllegalStateException("Local AI provider page analysis failed", cause);
+                    throw new IllegalStateException("Local AI provider batch analysis failed", cause);
                 }
             }
-            log.info("AI_ANALYSIS_COMPLETED provider=ollama model={} pages={} findings={} pageRetries={} durationMs={}",
-                    model, nonBlankPages.size(), discoveries.size(), pageRetryCount.get(), elapsedMillis(startedNanos));
+
+            log.info("AI_ANALYSIS_COMPLETED provider=ollama model={} pages={} batches={} providerCalls={} findings={} pageRetries={} durationMs={} loadMs={} promptTokens={} promptEvalMs={} outputTokens={} outputEvalMs={} outputTokensPerSecond={}",
+                    model, nonBlankPages.size(), batches.size(), providerCallCount.get(), discoveries.size(),
+                    pageRetryCount.get(), elapsedMillis(startedNanos), nanosToMillis(aggregate.loadDurationNanos.get()),
+                    aggregate.promptEvalCount.get(), nanosToMillis(aggregate.promptEvalDurationNanos.get()),
+                    aggregate.evalCount.get(), nanosToMillis(aggregate.evalDurationNanos.get()),
+                    formatRate(aggregate.evalCount.get(), aggregate.evalDurationNanos.get()));
             return new AnalysisOutput(discoveries);
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
@@ -137,92 +194,93 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             int attempts = e instanceof TechnicalDependencyException technical
                     ? technical.attempts()
                     : 1;
-            log.warn("AI_ANALYSIS_FAILED provider=ollama model={} pages={} reason={} attempts={} pageRetries={} durationMs={}",
-                    model, nonBlankPages.size(), reason, attempts, pageRetryCount.get(), elapsedMillis(startedNanos));
+            log.warn("AI_ANALYSIS_FAILED provider=ollama model={} pages={} batches={} providerCalls={} reason={} attempts={} pageRetries={} durationMs={}",
+                    model, nonBlankPages.size(), batches.size(), providerCallCount.get(), reason, attempts,
+                    pageRetryCount.get(), elapsedMillis(startedNanos));
             throw e;
         } finally {
             executor.shutdownNow();
         }
     }
 
-    /**
-     * Retries a transient failure for only the affected page. Successful page work is not
-     * replayed. If page-level retries are exhausted, the failure is marked non-retryable so
-     * the outer provider resilience decorator does not restart the entire document. Optional
-     * secondary-provider failover still remains available.
-     */
-    private List<DiscoveredSensitiveContent> analyzePageWithRetry(PageContent page, AtomicInteger pageRetryCount, String systemPrompt) {
+    private List<List<PageContent>> buildBatches(List<PageContent> pages) {
+        List<List<PageContent>> batches = new ArrayList<>();
+        List<PageContent> current = new ArrayList<>();
+        int chars = 0;
+        for (PageContent page : pages) {
+            int nextChars = page.text().length();
+            if (!current.isEmpty() && (current.size() >= pageBatchSize || chars + nextChars > pageBatchMaxCharacters)) {
+                batches.add(List.copyOf(current));
+                current.clear();
+                chars = 0;
+            }
+            current.add(page);
+            chars += nextChars;
+        }
+        if (!current.isEmpty()) {
+            batches.add(List.copyOf(current));
+        }
+        return batches;
+    }
+
+    /** Retries only the affected page batch; successful batches are not replayed. */
+    private BatchAnalysisResult analyzeBatchWithRetry(List<PageContent> pages,
+                                                       AtomicInteger pageRetryCount,
+                                                       AtomicInteger providerCallCount,
+                                                       String systemPrompt,
+                                                       JsonNode responseSchema) {
         int attempt = 0;
-        long pageStartedNanos = System.nanoTime();
+        long batchStartedNanos = System.nanoTime();
         while (true) {
             attempt++;
             long attemptStartedNanos = System.nanoTime();
             try {
-                List<DiscoveredSensitiveContent> result = analyzePage(page, systemPrompt);
+                BatchAnalysisResult result = analyzeBatch(pages, systemPrompt, responseSchema, providerCallCount);
                 if (attempt > 1) {
-                    log.info("AI_PAGE_RECOVERED provider=ollama model={} page={} attempts={} durationMs={}",
-                            model, page.pageNumber(), attempt, elapsedMillis(pageStartedNanos));
+                    log.info("AI_BATCH_RECOVERED provider=ollama model={} pages={} attempts={} durationMs={}",
+                            model, pageNumbers(pages), attempt, elapsedMillis(batchStartedNanos));
                 }
                 return result;
             } catch (TechnicalDependencyException e) {
                 boolean retrying = e.retryable() && attempt < pageMaxAttempts;
-                log.warn("AI_PAGE_ATTEMPT_FAILED provider=ollama model={} page={} attempt={} maxAttempts={} reason={} retrying={} durationMs={}",
-                        model, page.pageNumber(), attempt, pageMaxAttempts, e.failureCode(), retrying,
+                log.warn("AI_BATCH_ATTEMPT_FAILED provider=ollama model={} pages={} attempt={} maxAttempts={} reason={} retrying={} durationMs={}",
+                        model, pageNumbers(pages), attempt, pageMaxAttempts, e.failureCode(), retrying,
                         elapsedMillis(attemptStartedNanos));
-
                 if (!retrying) {
                     if (e.retryable()) {
-                        throw exhaustedPageFailure(e, attempt);
+                        throw exhaustedBatchFailure(e, attempt);
                     }
                     throw e.withAttempts(attempt);
                 }
-
                 pageRetryCount.incrementAndGet();
                 sleepPageBackoff(attempt);
             }
         }
     }
 
-    private TechnicalDependencyException exhaustedPageFailure(TechnicalDependencyException failure, int attempts) {
-        // Page retries have already consumed the transient retry budget. Mark the propagated
-        // failure non-retryable to prevent the generic outer retry decorator from replaying
-        // every successful page in the document.
-        return new TechnicalDependencyException(
-                failure.dependency(),
-                failure.failureCode(),
-                false,
-                failure.getMessage(),
-                failure).withAttempts(attempts);
-    }
-
-    private void sleepPageBackoff(int completedAttempt) {
-        long baseMillis = Math.max(0L, pageRetryBackoff.toMillis());
-        long sleepMillis = Math.min(5_000L, baseMillis * Math.max(1, completedAttempt));
-        if (sleepMillis <= 0L) {
-            return;
-        }
-        try {
-            Thread.sleep(sleepMillis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw technical(TechnicalFailureCode.AI_UNAVAILABLE, false,
-                    "Local AI provider retry was interrupted", e);
-        }
-    }
-
-    private long elapsedMillis(long startedNanos) {
-        return (System.nanoTime() - startedNanos) / 1_000_000L;
-    }
-
-    private List<DiscoveredSensitiveContent> analyzePage(PageContent page, String systemPrompt) {
+    private BatchAnalysisResult analyzeBatch(List<PageContent> pages,
+                                              String systemPrompt,
+                                              JsonNode responseSchema,
+                                              AtomicInteger providerCallCount) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", model);
         requestBody.put("stream", false);
-        requestBody.put("format", "json");
-        requestBody.put("options", Map.of("temperature", 0));
+        requestBody.put("keep_alive", keepAlive);
+        requestBody.put("think", thinkingEnabled);
+        requestBody.put("format", structuredOutput ? responseSchema : "json");
+
+        Map<String, Object> options = new LinkedHashMap<>();
+        options.put("temperature", 0);
+        if (contextWindowTokens > 0) {
+            options.put("num_ctx", contextWindowTokens);
+        }
+        if (maxOutputTokens > 0) {
+            options.put("num_predict", maxOutputTokens);
+        }
+        requestBody.put("options", options);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", "Page " + page.pageNumber() + " text:\n" + page.text())
+                Map.of("role", "user", "content", buildBatchUserPrompt(pages))
         ));
 
         final String body;
@@ -240,6 +298,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 .build();
 
         final HttpResponse<String> response;
+        providerCallCount.incrementAndGet();
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (HttpTimeoutException e) {
@@ -278,8 +337,14 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
                         "Local AI provider returned no analysis content", null);
             }
-
-            return responseParser.parse(content, page, "ollama", model, "ollama:" + model, VERSION);
+            String doneReason = envelope.path("done_reason").asText("");
+            if ("length".equalsIgnoreCase(doneReason)) {
+                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
+                        "Local AI provider reached the configured output limit", null);
+            }
+            List<DiscoveredSensitiveContent> findings = responseParser.parse(
+                    content, pages, "ollama", model, "ollama:" + model, VERSION);
+            return new BatchAnalysisResult(findings, ProviderMetrics.from(envelope));
         } catch (TechnicalDependencyException e) {
             throw e;
         } catch (IOException e) {
@@ -288,11 +353,104 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         }
     }
 
+    private String buildBatchUserPrompt(List<PageContent> pages) {
+        StringBuilder builder = new StringBuilder("Analyze each page independently. Every finding must include its pageNumber.\n");
+        for (PageContent page : pages) {
+            builder.append("<PAGE number=\"").append(page.pageNumber()).append("\">\n")
+                    .append(page.text())
+                    .append("\n</PAGE>\n");
+        }
+        return builder.toString();
+    }
+
+    private JsonNode buildResponseSchema() {
+        Map<String, Object> finding = new LinkedHashMap<>();
+        finding.put("type", "object");
+        finding.put("additionalProperties", false);
+        finding.put("properties", Map.of(
+                "pageNumber", Map.of("type", "integer", "minimum", 1),
+                "entityType", Map.of("type", "string", "enum", List.of("SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE")),
+                "matchedText", Map.of("type", "string"),
+                "contextText", Map.of("type", "string"),
+                "confidence", Map.of("type", "number", "minimum", 0, "maximum", 1)
+        ));
+        finding.put("required", List.of("pageNumber", "entityType", "matchedText", "contextText", "confidence"));
+
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("type", "object");
+        root.put("additionalProperties", false);
+        root.put("properties", Map.of("findings", Map.of("type", "array", "items", finding)));
+        root.put("required", List.of("findings"));
+        return objectMapper.valueToTree(root);
+    }
+
+    private String pageNumbers(List<PageContent> pages) {
+        return pages.stream().map(page -> Integer.toString(page.pageNumber())).reduce((a, b) -> a + "," + b).orElse("");
+    }
+
+    private TechnicalDependencyException exhaustedBatchFailure(TechnicalDependencyException failure, int attempts) {
+        return new TechnicalDependencyException(
+                failure.dependency(), failure.failureCode(), false, failure.getMessage(), failure).withAttempts(attempts);
+    }
+
+    private void sleepPageBackoff(int completedAttempt) {
+        long baseMillis = Math.max(0L, pageRetryBackoff.toMillis());
+        long sleepMillis = Math.min(5_000L, baseMillis * Math.max(1, completedAttempt));
+        if (sleepMillis <= 0L) return;
+        try {
+            Thread.sleep(sleepMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw technical(TechnicalFailureCode.AI_UNAVAILABLE, false,
+                    "Local AI provider retry was interrupted", e);
+        }
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000L;
+    }
+
+    private long nanosToMillis(long nanos) {
+        return nanos / 1_000_000L;
+    }
+
+    private String formatRate(long tokens, long durationNanos) {
+        if (tokens <= 0 || durationNanos <= 0) return "0.0";
+        double rate = tokens / (durationNanos / 1_000_000_000.0d);
+        return String.format(java.util.Locale.ROOT, "%.1f", rate);
+    }
 
     private TechnicalDependencyException technical(TechnicalFailureCode code, boolean retryable,
                                                     String safeMessage, Throwable cause) {
-        return new TechnicalDependencyException(
-                TechnicalDependency.AI, code, retryable, safeMessage, cause);
+        return new TechnicalDependencyException(TechnicalDependency.AI, code, retryable, safeMessage, cause);
     }
 
+    private record BatchAnalysisResult(List<DiscoveredSensitiveContent> findings, ProviderMetrics metrics) { }
+
+    private static final class ProviderMetrics {
+        private final AtomicLong loadDurationNanos = new AtomicLong();
+        private final AtomicLong promptEvalCount = new AtomicLong();
+        private final AtomicLong promptEvalDurationNanos = new AtomicLong();
+        private final AtomicLong evalCount = new AtomicLong();
+        private final AtomicLong evalDurationNanos = new AtomicLong();
+
+        static ProviderMetrics from(JsonNode envelope) {
+            ProviderMetrics result = new ProviderMetrics();
+            result.loadDurationNanos.set(envelope.path("load_duration").asLong(0));
+            result.promptEvalCount.set(envelope.path("prompt_eval_count").asLong(0));
+            result.promptEvalDurationNanos.set(envelope.path("prompt_eval_duration").asLong(0));
+            result.evalCount.set(envelope.path("eval_count").asLong(0));
+            result.evalDurationNanos.set(envelope.path("eval_duration").asLong(0));
+            return result;
+        }
+
+        void add(ProviderMetrics other) {
+            if (other == null) return;
+            loadDurationNanos.addAndGet(other.loadDurationNanos.get());
+            promptEvalCount.addAndGet(other.promptEvalCount.get());
+            promptEvalDurationNanos.addAndGet(other.promptEvalDurationNanos.get());
+            evalCount.addAndGet(other.evalCount.get());
+            evalDurationNanos.addAndGet(other.evalDurationNanos.get());
+        }
+    }
 }

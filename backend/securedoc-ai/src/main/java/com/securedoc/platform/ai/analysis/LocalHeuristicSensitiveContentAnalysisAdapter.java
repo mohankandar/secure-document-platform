@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
 public final class LocalHeuristicSensitiveContentAnalysisAdapter implements SensitiveContentAnalysisPort {
 
     private static final String NAME = "local-semantic-heuristic";
-    private static final String VERSION = "1.0.0";
+    private static final String VERSION = "1.1.0";
 
     private static final Pattern LABELED_SSN = Pattern.compile(
             "(?i)(?:social\\s+security(?:\\s+number)?|ssn)\\s*[:#-]?\\s*(\\d{3}[- ]?\\d{2}[- ]?\\d{4})");
@@ -29,6 +29,12 @@ public final class LocalHeuristicSensitiveContentAnalysisAdapter implements Sens
             "(?i)(?:credit\\s+card(?:\\s+number)?|card\\s+number)\\s*[:#-]?\\s*((?:\\d[ -]?){13,19})");
     private static final Pattern LABELED_SCORE = Pattern.compile(
             "(?i)(?:credit\\s+score|fico(?:\\s+score)?|vantage(?:score)?(?:\\s+score)?)\\s*[:#-]?\\s*(\\d{3})");
+    private static final Pattern SCORE_TABLE_HEADER = Pattern.compile(
+            "(?is)\\bapplicant\\b.{0,160}\\byour\\s+credit\\s+score\\b");
+    private static final Pattern SCORE_TABLE_END = Pattern.compile(
+            "(?i)\\b(?:what\\s+you\\s+should\\s+know|the\\s+range\\s+of\\s+scores|key\\s+factors|"
+                    + "how\\s+can\\s+you\\s+get\\s+more\\s+information)\\b");
+    private static final Pattern THREE_DIGIT_NUMBER = Pattern.compile("(?<!\\d)(\\d{3})(?!\\d)");
 
     @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
@@ -83,6 +89,41 @@ public final class LocalHeuristicSensitiveContentAnalysisAdapter implements Sens
             if (score >= 300 && score <= 850) {
                 findings.add(new DiscoveredSensitiveContent(
                         "CREDIT_SCORE", pageNumber, matcher.group(1), matcher.group(), 0.96, NAME, VERSION));
+            }
+        }
+
+        String flattened = text.replace('\n', ' ');
+        Matcher header = SCORE_TABLE_HEADER.matcher(flattened);
+        if (!header.find()) {
+            return;
+        }
+        int start = header.end();
+        Matcher end = SCORE_TABLE_END.matcher(text);
+        int stop = end.find(start) ? end.start() : Math.min(text.length(), start + 800);
+
+        Matcher score = THREE_DIGIT_NUMBER.matcher(text);
+        score.region(start, stop);
+        while (score.find()) {
+            int numeric;
+            try {
+                numeric = Integer.parseInt(score.group(1));
+            } catch (NumberFormatException e) {
+                continue;
+            }
+            if (numeric < 300 || numeric > 850) {
+                continue;
+            }
+            String value = score.group(1);
+            boolean duplicate = findings.stream().anyMatch(existing ->
+                    existing.pageNumber() == pageNumber
+                            && "CREDIT_SCORE".equals(existing.entityType())
+                            && value.equals(existing.matchedText()));
+            if (!duplicate) {
+                int contextStart = Math.max(0, score.start(1) - 80);
+                int contextEnd = Math.min(text.length(), score.end(1) + 80);
+                findings.add(new DiscoveredSensitiveContent(
+                        "CREDIT_SCORE", pageNumber, value,
+                        text.substring(contextStart, contextEnd), 0.94, NAME, VERSION));
             }
         }
     }

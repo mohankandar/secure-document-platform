@@ -2,13 +2,14 @@ import { useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
-import type { PackageDetail, PackageLifecycleSummary, ApiError } from '../types';
+import type { PackageDetail, PackageLifecycleSummary, ApiError, DerivedDelivery } from '../types';
 import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
 
 export default function PackageDetailPage() {
   const { packageId } = useParams<{ packageId: string }>();
   const [pkg, setPkg] = useState<PackageDetail | null>(null);
   const [lifecycle, setLifecycle] = useState<PackageLifecycleSummary | null>(null);
+  const [derivedDeliveries, setDerivedDeliveries] = useState<DerivedDelivery[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -19,12 +20,14 @@ export default function PackageDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [data, lifecycleData] = await Promise.all([
+      const [data, lifecycleData, derivedData] = await Promise.all([
         apiClient.getPackage(packageId),
         apiClient.getPackageLifecycle(packageId),
+        hasCurrentCapability('PACKAGE_APPROVE_DELIVERY') ? apiClient.listDerivedDeliveries(packageId) : Promise.resolve([]),
       ]);
       setPkg(data);
       setLifecycle(lifecycleData);
+      setDerivedDeliveries(derivedData);
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Failed to load package');
@@ -90,6 +93,13 @@ export default function PackageDetailPage() {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Unable to reprocess this intake');
     }
+  };
+
+  const handleDerivedSend = async (deliveryId: string) => {
+    if (!packageId) return;
+    setError(null); setSuccessMsg(null);
+    try { await apiClient.sendDerivedDelivery(packageId, deliveryId); setSuccessMsg('Derived document delivery completed.'); await loadPackage(); }
+    catch (err) { const apiErr = err as ApiError; setError(apiErr.message || 'Unable to send derived document'); }
   };
 
   const formatTime = (value?: string | null) => value ? new Date(value).toLocaleString() : '—';
@@ -220,6 +230,23 @@ export default function PackageDetailPage() {
                     <tr><td><strong>Internal artifacts purged</strong></td><td>{formatTime(lifecycle.purgedAt)}</td></tr>
                   )}
                 </tbody>
+              </table>
+            </div>
+          )}
+
+          {derivedDeliveries.length > 0 && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Derived Document Routing</h2>
+              <p style={{ fontSize: '0.85rem', color: '#636e72' }}>These page-subset PDFs are separate from the full master export. A routing failure does not undo the master delivery.</p>
+              <table>
+                <thead><tr><th>Destination</th><th>Marker</th><th>Pages</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>{derivedDeliveries.map((d) => <tr key={d.derivedDeliveryId}>
+                  <td>{d.destinationLabel || 'Routing attention'}</td>
+                  <td>{d.markerValue || d.failureCategory || '—'}</td>
+                  <td>{d.pageNumbers.length ? d.pageNumbers.join(', ') : '—'}</td>
+                  <td><span className={`badge badge-${d.status.toLowerCase()}`}>{d.status}</span></td>
+                  <td>{d.status !== 'ATTENTION_REQUIRED' && <button className="secondary" onClick={() => void handleDerivedSend(d.derivedDeliveryId)}>{d.status === 'DELIVERED' ? 'Resend' : 'Send'}</button>}</td>
+                </tr>)}</tbody>
               </table>
             </div>
           )}

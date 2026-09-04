@@ -78,7 +78,7 @@ public class TesseractOcrAdapter implements OcrPort {
         }
     }
 
-    private OcrPageOutput parseTsv(List<String> lines, int pixelWidth, int pixelHeight) {
+    OcrPageOutput parseTsv(List<String> lines, int pixelWidth, int pixelHeight) {
         List<WordRow> words = new ArrayList<>();
         for (int i = 1; i < lines.size(); i++) {
             String line = lines.get(i);
@@ -112,55 +112,117 @@ public class TesseractOcrAdapter implements OcrPort {
                     left, top, width, height, confidence, text));
         }
 
-        words.sort(Comparator
-                .comparingInt(WordRow::block)
-                .thenComparingInt(WordRow::paragraph)
-                .thenComparingInt(WordRow::line)
-                .thenComparingInt(WordRow::word));
+        // Tesseract's logical block order is not reliable for forms. On a scanned two-column
+        // form it can emit every label first and every value afterwards, even though each label
+        // and value are on the same visual row. That destroys semantic context for fields such as
+        // SSN, DOB and credit score. Rebuild reading order from page geometry instead: cluster
+        // words that occupy the same visual row, then read each row left-to-right.
+        List<VisualLine> visualLines = buildVisualLines(words);
 
         StringBuilder text = new StringBuilder();
         List<OcrTextSpan> spans = new ArrayList<>();
-        int previousBlock = -1;
-        int previousParagraph = -1;
-        int previousLine = -1;
         double confidenceSum = 0.0;
         int confidenceCount = 0;
 
-        for (WordRow word : words) {
-            boolean newLine = previousLine >= 0
-                    && (word.block() != previousBlock
-                    || word.paragraph() != previousParagraph
-                    || word.line() != previousLine);
-
-            if (!text.isEmpty()) {
-                text.append(newLine ? '\n' : ' ');
+        boolean firstLine = true;
+        for (VisualLine visualLine : visualLines) {
+            if (!firstLine) {
+                text.append('\n');
             }
-            int start = text.length();
-            text.append(word.text());
-            int end = text.length();
+            firstLine = false;
 
-            double left = clamp((double) word.left() / pixelWidth);
-            double top = clamp((double) word.top() / pixelHeight);
-            double width = clamp((double) word.width() / pixelWidth);
-            double height = clamp((double) word.height() / pixelHeight);
-            if (left + width > 1.0) width = Math.max(0.0, 1.0 - left);
-            if (top + height > 1.0) height = Math.max(0.0, 1.0 - top);
+            boolean firstWord = true;
+            for (WordRow word : visualLine.words()) {
+                if (!firstWord) {
+                    text.append(' ');
+                }
+                firstWord = false;
 
-            if (width > 0.0 && height > 0.0) {
-                spans.add(new OcrTextSpan(start, end, left, top, width, height, word.confidence()));
+                int start = text.length();
+                text.append(word.text());
+                int end = text.length();
+
+                double left = clamp((double) word.left() / pixelWidth);
+                double top = clamp((double) word.top() / pixelHeight);
+                double width = clamp((double) word.width() / pixelWidth);
+                double height = clamp((double) word.height() / pixelHeight);
+                if (left + width > 1.0) width = Math.max(0.0, 1.0 - left);
+                if (top + height > 1.0) height = Math.max(0.0, 1.0 - top);
+
+                if (width > 0.0 && height > 0.0) {
+                    spans.add(new OcrTextSpan(start, end, left, top, width, height, word.confidence()));
+                }
+
+                if (word.confidence() > 0.0) {
+                    confidenceSum += word.confidence();
+                    confidenceCount++;
+                }
             }
-
-            if (word.confidence() > 0.0) {
-                confidenceSum += word.confidence();
-                confidenceCount++;
-            }
-            previousBlock = word.block();
-            previousParagraph = word.paragraph();
-            previousLine = word.line();
         }
 
         double confidence = confidenceCount == 0 ? 0.0 : confidenceSum / confidenceCount;
         return new OcrPageOutput(text.toString(), spans, clamp(confidence));
+    }
+
+
+    /**
+     * Reconstructs OCR reading order from visual geometry rather than Tesseract block order.
+     * This is deliberately page-layout neutral: it does not know anything about SSNs, DOBs,
+     * cards or scores. It only preserves label/value adjacency for ordinary forms and tables.
+     */
+    private List<VisualLine> buildVisualLines(List<WordRow> words) {
+        if (words.isEmpty()) {
+            return List.of();
+        }
+
+        List<WordRow> ordered = new ArrayList<>(words);
+        ordered.sort(Comparator
+                .comparingDouble(WordRow::verticalCenter)
+                .thenComparingInt(WordRow::left));
+
+        List<VisualLine> lines = new ArrayList<>();
+        for (WordRow word : ordered) {
+            VisualLine best = null;
+            double bestCenterGap = Double.MAX_VALUE;
+
+            // Since words are sorted by vertical center, only recent lines can reasonably match.
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                VisualLine line = lines.get(i);
+                double centerGap = Math.abs(word.verticalCenter() - line.verticalCenter());
+                if (centerGap > Math.max(12.0, word.height() * 2.0)
+                        && word.top() > line.bottom()) {
+                    break;
+                }
+                if (sameVisualRow(line, word) && centerGap < bestCenterGap) {
+                    best = line;
+                    bestCenterGap = centerGap;
+                }
+            }
+
+            if (best == null) {
+                lines.add(new VisualLine(word));
+            } else {
+                best.add(word);
+            }
+        }
+
+        lines.sort(Comparator
+                .comparingInt(VisualLine::top)
+                .thenComparingDouble(VisualLine::verticalCenter));
+        for (VisualLine line : lines) {
+            line.sortLeftToRight();
+        }
+        return lines;
+    }
+
+    private boolean sameVisualRow(VisualLine line, WordRow word) {
+        int overlap = Math.max(0,
+                Math.min(line.bottom(), word.bottom()) - Math.max(line.top(), word.top()));
+        int minHeight = Math.max(1, Math.min(line.height(), word.height()));
+        double overlapRatio = (double) overlap / minHeight;
+        double centerGap = Math.abs(word.verticalCenter() - line.verticalCenter());
+        double centerTolerance = Math.max(4.0, 0.65 * Math.max(line.height(), word.height()));
+        return overlapRatio >= 0.35 || centerGap <= centerTolerance;
     }
 
     private static int parseInt(String value) {
@@ -209,5 +271,54 @@ public class TesseractOcrAdapter implements OcrPort {
     private record WordRow(int block, int paragraph, int line, int word,
                            int left, int top, int width, int height,
                            double confidence, String text) {
+        int bottom() {
+            return top + height;
+        }
+
+        double verticalCenter() {
+            return top + (height / 2.0);
+        }
+    }
+
+    private static final class VisualLine {
+        private final List<WordRow> words = new ArrayList<>();
+        private int top;
+        private int bottom;
+
+        private VisualLine(WordRow first) {
+            words.add(first);
+            top = first.top();
+            bottom = first.bottom();
+        }
+
+        void add(WordRow word) {
+            words.add(word);
+            top = Math.min(top, word.top());
+            bottom = Math.max(bottom, word.bottom());
+        }
+
+        List<WordRow> words() {
+            return words;
+        }
+
+        int top() {
+            return top;
+        }
+
+        int bottom() {
+            return bottom;
+        }
+
+        int height() {
+            return Math.max(1, bottom - top);
+        }
+
+        double verticalCenter() {
+            return top + (height() / 2.0);
+        }
+
+        void sortLeftToRight() {
+            words.sort(Comparator.comparingInt(WordRow::left));
+        }
     }
 }

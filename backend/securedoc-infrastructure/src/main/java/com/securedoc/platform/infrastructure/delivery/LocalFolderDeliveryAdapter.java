@@ -32,7 +32,7 @@ import java.util.UUID;
  * {@code securedoc-output/{tenant}/{packageId}/cycle-{n}/{documentId}/application.pdf}.
  */
 @Component
-@ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "local", matchIfMissing = true)
+@ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "local")
 public class LocalFolderDeliveryAdapter implements DeliveryPort {
 
     private static final String DESTINATION_TYPE = "local-folder";
@@ -45,7 +45,16 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
     }
 
     @Override
-    public BatchDeliveryReference deliverBatch(TenantId tenantId, PackageId packageId, int exportCycle, List<DeliveryItem> items) {
+    public DeliveryDescriptor describe(TenantId tenantId) {
+        return new DeliveryDescriptor(DESTINATION_TYPE, null, null);
+    }
+
+    @Override
+    public BatchDeliveryReference deliverBatch(DeliveryBatch batch) {
+        TenantId tenantId = batch.tenantId();
+        PackageId packageId = batch.packageId();
+        int exportCycle = batch.exportCycle();
+        List<DeliveryItem> items = batch.items();
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("Delivery batch must contain at least one document");
         }
@@ -88,12 +97,15 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
                     throw new IllegalArgumentException("Resolved final delivery file escapes package directory");
                 }
                 finalReferences.add(new DeliveryReference(
-                        item.documentId(), DESTINATION_TYPE, finalFile.toString()));
+                        item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE, null, finalFile.toString()));
             }
 
             Files.createDirectories(packageDir);
             publishAtomically(stagingPackageDir, finalPackageDir);
-            return new BatchDeliveryReference(DESTINATION_TYPE, finalReferences);
+            for (DeliveryReference reference : finalReferences) {
+                batch.progressListener().documentAcknowledged(reference);
+            }
+            return new BatchDeliveryReference(DESTINATION_TYPE, null, finalReferences);
         } catch (IOException e) {
             deleteRecursivelyQuietly(stagingPackageDir);
             throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Failed to deliver package to local folder", e);
