@@ -18,6 +18,7 @@ import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.finding.Finding;
+import com.securedoc.platform.domain.finding.FindingLocation;
 import com.securedoc.platform.domain.finding.FindingStatus;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -27,6 +28,7 @@ import com.securedoc.platform.domain.identity.TenantId;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Objects;
 
 import org.slf4j.Logger;
@@ -100,23 +102,56 @@ public final class ReviewPagePreviewService implements GetReviewPagePreviewQuery
                     return new IllegalStateException("Original document is unavailable for review preview");
                 });
 
+        int reviewPageNumber = finding.location().pageNumber();
+        List<Finding> pageFindings = findingRepository
+                .findByDocumentIdAndTenantId(finding.documentId(), tenantId).stream()
+                .filter(candidate -> candidate.location().pageNumber() == reviewPageNumber)
+                .toList();
+        List<Finding> knownSensitiveOnPage = pageFindings.stream()
+                .filter(candidate -> candidate.status() == FindingStatus.CONFIRMED
+                        || candidate.status() == FindingStatus.REDACTED)
+                .toList();
+        List<Finding> unmaskableKnownSensitive = knownSensitiveOnPage.stream()
+                .filter(candidate -> !candidate.location().hasBoundingBox())
+                .toList();
+        if (!unmaskableKnownSensitive.isEmpty()) {
+            log.error("REVIEW_PREVIEW_REJECTED finding={} package={} document={} page={} "
+                            + "reason=KNOWN_SENSITIVE_MASK_UNAVAILABLE knownSensitive={} missingBounds={}",
+                    findingId, pkg.id(), finding.documentId(), reviewPageNumber,
+                    knownSensitiveOnPage.size(), unmaskableKnownSensitive.size());
+            throw new IllegalStateException(
+                    "Review preview is unavailable because previously confirmed sensitive content cannot be safely masked; refresh or reprocess the package");
+        }
+        List<FindingLocation.BoundingBox> previewMasks =
+                knownSensitiveOnPage.stream()
+                        .map(candidate -> candidate.location().boundingBox())
+                        .toList();
+        long pendingOnPage = pageFindings.stream()
+                .filter(candidate -> candidate.status() == FindingStatus.DETECTED)
+                .count();
+        log.info("REVIEW_PREVIEW_MASK_PLAN finding={} package={} document={} page={} "
+                        + "knownSensitive={} previewMasks={} pendingOnPage={}",
+                findingId, pkg.id(), finding.documentId(), reviewPageNumber,
+                knownSensitiveOnPage.size(), previewMasks.size(), pendingOnPage);
+
         try (InputStream content = storagePort.retrieve(original.storageReference())) {
             ReviewPageRenderPort.RenderedPage rendered;
             try {
-                rendered = reviewPageRenderPort.render(content, finding.location().pageNumber());
+                rendered = reviewPageRenderPort.render(content, reviewPageNumber, previewMasks);
             } catch (ValidationException ex) {
                 log.warn("REVIEW_PREVIEW_REJECTED finding={} package={} document={} page={} reason=PAGE_LOCATION_INVALID",
-                        findingId, pkg.id(), finding.documentId(), finding.location().pageNumber());
+                        findingId, pkg.id(), finding.documentId(), reviewPageNumber);
                 throw new IllegalStateException("The stored finding page is unavailable in the source document; refresh or reprocess the package", ex);
             }
-            log.info("REVIEW_PREVIEW_RENDERED finding={} package={} document={} page={} width={} height={}",
-                    findingId, pkg.id(), finding.documentId(), finding.location().pageNumber(),
-                    rendered.pixelWidth(), rendered.pixelHeight());
+            log.info("REVIEW_PREVIEW_RENDERED finding={} package={} document={} page={} width={} height={} previewMasks={}",
+                    findingId, pkg.id(), finding.documentId(), reviewPageNumber,
+                    rendered.pixelWidth(), rendered.pixelHeight(), previewMasks.size());
             auditService.recordSuccess(tenantId, actorId,
                     AuditAction.REVIEW_PAGE_PREVIEWED, "Finding", finding.id().toString(),
-                    correlationId, "Focused review page preview rendered: page=" + finding.location().pageNumber());
+                    correlationId, "Focused review page preview rendered: page=" + reviewPageNumber
+                            + ", previewMasks=" + previewMasks.size());
             return new ReviewPagePreviewResult(
-                    rendered.content(), rendered.mimeType(), finding.location().pageNumber(),
+                    rendered.content(), rendered.mimeType(), reviewPageNumber,
                     rendered.pixelWidth(), rendered.pixelHeight());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to close review preview content", e);

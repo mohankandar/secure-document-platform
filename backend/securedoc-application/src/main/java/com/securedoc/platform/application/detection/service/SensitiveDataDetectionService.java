@@ -223,16 +223,25 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
         Map<String, Integer> findingsByType = buildFindingsByType(findings);
         Map<String, List<Integer>> findingPagesByType = buildFindingPagesByType(findings);
+        Map<String, Integer> finalPageTypeCounts = buildFindingPageTypeCounts(findings);
+        Map<String, Integer> multiFindingPageTypes = finalPageTypeCounts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 1)
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey, Map.Entry::getValue,
+                        (left, right) -> left, java.util.TreeMap::new));
         long autoConfirmedCount = findings.stream().filter(f -> f.status() == FindingStatus.CONFIRMED).count();
-        log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} merged={} semanticByType={} deterministicByType={}",
+        log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} ocrGuardStrongLabels={} ocrGuardSpatialScoreCandidates={} merged={} semanticByType={} deterministicByType={} semanticLocatedByPageType={} deterministicByPageType={}",
                 command.documentId(), semanticOutput.findings().size(), semanticResolution.located().size(),
                 semanticResolution.unlocated().size(), deterministicOutput.entities().size(),
-                ocrSafety.locatedEntities().size(), ocrSafety.reviewSignals().size(), mergedEntities.size(),
-                buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()));
-        log.info("DOCUMENT_DETECTION_COMPLETED document={} package={} findings={} byType={} pagesByType={} autoConfirmed={} reviewRequired={} decision={} enabledTypes={} maskSsnLastFour={} durationMs={}",
+                ocrSafety.locatedEntities().size(), ocrSafety.reviewSignals().size(),
+                ocrSafety.strongLabelCount(), ocrSafety.spatialScoreCandidateCount(), mergedEntities.size(),
+                buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()),
+                buildDetectedEntityPageTypeCounts(semanticResolution.located(), enabledTypes),
+                buildDetectedEntityPageTypeCounts(deterministicOutput.entities(), enabledTypes));
+        log.info("DOCUMENT_DETECTION_COMPLETED document={} package={} findings={} byType={} pagesByType={} pageTypeCounts={} multiFindingPageTypes={} autoConfirmed={} reviewRequired={} decision={} enabledTypes={} maskSsnLastFour={} durationMs={}",
                 command.documentId(), command.packageId(), findings.size(), findingsByType, findingPagesByType,
-                autoConfirmedCount, requiresReview, overallDecision, enabledTypes, tenantPolicy.maskSsnLastFour(),
-                elapsedMillis(startedNanos));
+                finalPageTypeCounts, multiFindingPageTypes, autoConfirmedCount, requiresReview, overallDecision,
+                enabledTypes, tenantPolicy.maskSsnLastFour(), elapsedMillis(startedNanos));
 
         eventPublisher.publish(DocumentDetectionCompletedEvent.of(
                 command.documentId(), command.packageId(), command.tenantId(),
@@ -635,6 +644,28 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         Map<String, Integer> map = new java.util.TreeMap<>();
         for (DetectedEntity entity : entities) {
             map.merge(parseEntityType(entity.entityType()).name(), 1, Integer::sum);
+        }
+        return map;
+    }
+
+    private Map<String, Integer> buildDetectedEntityPageTypeCounts(List<DetectedEntity> entities,
+                                                                    Set<EntityType> enabledTypes) {
+        Map<String, Integer> map = new java.util.TreeMap<>();
+        for (DetectedEntity entity : entities) {
+            EntityType type = parseEntityType(entity.entityType());
+            if (!enabledTypes.contains(type)) {
+                continue;
+            }
+            map.merge("p" + entity.pageNumber() + ":" + type.name(), 1, Integer::sum);
+        }
+        return map;
+    }
+
+    private Map<String, Integer> buildFindingPageTypeCounts(List<Finding> findings) {
+        Map<String, Integer> map = new java.util.TreeMap<>();
+        for (Finding finding : findings) {
+            map.merge("p" + finding.location().pageNumber() + ":" + finding.entityType().name(),
+                    1, Integer::sum);
         }
         return map;
     }

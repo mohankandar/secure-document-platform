@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPort, SensitiveDataValidationPort {
 
     private static final String DETECTOR_NAME = "local-rule-based";
-    private static final String DETECTOR_VERSION = "1.4.0";
+    private static final String DETECTOR_VERSION = "1.5.0";
 
     // SSN pattern: 3 digits, separator, 2 digits, separator, 4 digits
     private static final Pattern SSN_PATTERN = Pattern.compile("\\b(\\d{3})[- ](\\d{2})[- ](\\d{4})\\b");
@@ -43,11 +43,19 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
     private static final Pattern PHONE_PATTERN = Pattern.compile(
             "\\b(?:\\+1[- ]?)?\\(?\\d{3}\\)?[- ]?\\d{3}[- ]?\\d{4}\\b");
 
-    // DOB discovery requires explicit birth context. A syntactically valid date alone is not
-    // evidence that the date is a person's date of birth. Group 1 is the value to redact.
-    private static final Pattern DOB_CONTEXT_PATTERN = Pattern.compile(
-            "(?i)\\b(?:date\\s+of\\s+birth|birth\\s*date|dob|born(?:\\s+on)?)\\b\\s*[:#-]?\\s*"
-                    + "((?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\\d|3[01])[/-](?:19|20)\\d{2})\\b");
+    // DOB discovery is context-bound rather than assuming every date is a birth date. A single
+    // table row label can apply to multiple owner columns, so candidate dates are bound to the
+    // nearest birth label instead of requiring the label to be repeated before every value.
+    private static final Pattern DOB_LABEL_PATTERN = Pattern.compile(
+            "(?i)\\b(?:date\\s+of\\s+birth|birth\\s*date|dob|born(?:\\s+on)?)\\b");
+    private static final Pattern DATE_VALUE_PATTERN = Pattern.compile(
+            "\\b((?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\\d|3[01])[/-](?:19|20)\\d{2})\\b");
+    private static final Pattern NON_BIRTH_DATE_LABEL_PATTERN = Pattern.compile(
+            "(?i)\\b(?:date\\s+of\\s+sale|sale\\s+date|issue\\s+date|first\\s+payment\\s+date|"
+                    + "payment\\s+date|closing\\s+date|effective\\s+date|authorization\\s+date|"
+                    + "expiration\\s+date|report\\s+date|signature\\s+date|contract\\s+date|"
+                    + "servicing\\s+date|processing\\s+date|statement\\s+date)\\b");
+    private static final int DOB_CONTEXT_MAX_GAP = 100;
 
     // PAN candidates may be 13-19 digits, optionally grouped by spaces or dashes.
     // Structural match only — confirmed via Luhn before being reported.
@@ -221,8 +229,34 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
     }
 
     private void detectDatesOfBirth(String text, int pageNumber, List<DetectedEntity> results) {
-        Matcher matcher = DOB_CONTEXT_PATTERN.matcher(text);
+        Matcher matcher = DATE_VALUE_PATTERN.matcher(text);
         while (matcher.find()) {
+            int dobGap = nearestContextGap(
+                    DOB_LABEL_PATTERN, text, matcher.start(1), matcher.end(1), 180);
+            if (dobGap < 0 || dobGap > DOB_CONTEXT_MAX_GAP) {
+                continue;
+            }
+
+            int competingDateLabelGap = nearestContextGap(
+                    NON_BIRTH_DATE_LABEL_PATTERN, text, matcher.start(1), matcher.end(1), 180);
+            if (competingDateLabelGap >= 0
+                    && competingDateLabelGap <= DOB_CONTEXT_MAX_GAP
+                    && competingDateLabelGap <= dobGap) {
+                // Bind dates to their nearest semantic field label. This keeps an Issue Date or
+                // Payment Date near a DOB row from being promoted while allowing one DOB label to
+                // safely cover multiple owner values in the same table row.
+                continue;
+            }
+
+            boolean duplicate = results.stream().anyMatch(existing ->
+                    "DATE_OF_BIRTH".equals(existing.entityType())
+                            && existing.pageNumber() == pageNumber
+                            && existing.startOffset() == matcher.start(1)
+                            && existing.endOffset() == matcher.end(1));
+            if (duplicate) {
+                continue;
+            }
+
             String rawMatch = matcher.group(1);
             results.add(new DetectedEntity(
                     "DATE_OF_BIRTH", pageNumber, matcher.start(1), matcher.end(1), 0.90,

@@ -90,6 +90,34 @@ class DeterministicContextPrecisionTest {
         assertThat(output.entities()).anyMatch(entity -> entity.entityType().equals("CREDIT_SCORE"));
     }
 
+
+    @Test
+    void oneDobLabelCanApplyToMultipleOwnerValuesInSameTableRow() {
+        String page = "Field | Primary Owner | Secondary Owner\n"
+                + "Name | Jordan Avery | Morgan Avery\n"
+                + "Date of Birth | 01/15/1980 | 11/03/1981\n"
+                + "Government ID | OH TEST-DL A1234567 | OH TEST-DL B7654321";
+
+        var output = detector.detect(List.of(new PageInput(1, page)));
+
+        assertThat(output.entities())
+                .filteredOn(entity -> entity.entityType().equals("DATE_OF_BIRTH"))
+                .extracting(entity -> page.substring(entity.startOffset(), entity.endOffset()))
+                .containsExactlyInAnyOrder("01/15/1980", "11/03/1981");
+    }
+
+    @Test
+    void nearbyIssueDateDoesNotBecomeSecondDob() {
+        String page = "Date of Birth: 01/15/1980   Issue Date: 04/19/2026";
+
+        var output = detector.detect(List.of(new PageInput(1, page)));
+
+        assertThat(output.entities())
+                .filteredOn(entity -> entity.entityType().equals("DATE_OF_BIRTH"))
+                .extracting(entity -> page.substring(entity.startOffset(), entity.endOffset()))
+                .containsExactly("01/15/1980");
+    }
+
     @Test
     void creditScoreTableHeaderAppliesToMultipleApplicantRows() {
         String page = "Your Credit Score and Understanding Your Credit Score\n"
