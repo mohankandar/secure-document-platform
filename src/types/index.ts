@@ -69,6 +69,55 @@ export interface BusinessAdminIdentifierDraft {
   displayable: boolean;
 }
 
+
+export type RoutingMarkerType = 'BARCODE' | 'QR_CODE' | 'TEXT_PATTERN';
+export type RoutingScanRegion = 'TOP_RIGHT' | 'BOTTOM_LEFT' | 'BOTH';
+
+export interface RoutingDestinationOption {
+  connectionId: string;
+  name: string;
+  providerType: 'HTTP_API' | 'FILE_SHARE' | string;
+  enabled: boolean;
+  healthStatus: string;
+}
+
+export interface RoutingRule {
+  ruleId: string;
+  destinationLabel: string;
+  markerType: RoutingMarkerType;
+  markerValue: string;
+  scanRegion: RoutingScanRegion;
+  destinationConnectionId: string;
+  enabled: boolean;
+}
+
+export interface RoutingRuleRequest {
+  destinationLabel: string;
+  markerType: RoutingMarkerType;
+  markerValue: string;
+  scanRegion: RoutingScanRegion;
+  destinationConnectionId: string;
+  enabled: boolean;
+}
+
+export interface DerivedDelivery {
+  derivedDeliveryId: string;
+  packageId: string;
+  sourceDocumentId: string;
+  exportCycle: number;
+  destinationLabel?: string;
+  markerType?: RoutingMarkerType;
+  markerValue?: string;
+  pageNumbers: number[];
+  fileName?: string;
+  status: 'PENDING' | 'DELIVERING' | 'RETRY_PENDING' | 'DELIVERED' | 'ATTENTION_REQUIRED' | string;
+  attemptCount: number;
+  failureCategory?: string;
+  retryable: boolean;
+  destinationReference?: string;
+  deliveredAt?: string;
+}
+
 export interface PackageSummary {
   packageId: string;
   tenantId?: string;
@@ -340,6 +389,93 @@ export interface OperationalReports {
   };
 }
 
+
+export type IntegrationPurpose = 'INGESTION_SOURCE' | 'SDV_DELIVERY' | 'DERIVED_DOCUMENT_DELIVERY';
+export type IntegrationDirection = 'INBOUND' | 'OUTBOUND';
+export type IntegrationProviderType = 'PUSH_API' | 'HTTP_API' | 'FILE_SHARE' | 'WATCHED_FOLDER' | 'SCANNER';
+export type IntegrationAuthenticationType = 'NONE' | 'BASIC' | 'API_KEY' | 'JWT' | 'OAUTH2_CLIENT_CREDENTIALS' | 'MTLS';
+export type IntegrationAcknowledgementMode = 'NONE' | 'HTTP_SUCCESS' | 'DESTINATION_RECEIPT' | 'DURABLE_FILE_WRITE' | 'SOURCE_PICKUP_ACK' | 'SDV_SUBMISSION_ACK';
+export type IntegrationPollingScheduleType = 'INTERVAL' | 'DAILY';
+
+export interface IntegrationConnection {
+  connectionId: string;
+  name: string;
+  description?: string | null;
+  purpose: IntegrationPurpose;
+  direction: IntegrationDirection;
+  providerType: IntegrationProviderType;
+  authenticationType: IntegrationAuthenticationType;
+  clientPrincipal?: string | null;
+  endpoint?: string | null;
+  fileShareRoot?: string | null;
+  secretConfigured: boolean;
+  timeoutSeconds: number;
+  retryMaxAttempts: number;
+  incompleteWindowHours: number;
+  maxDocumentsPerIntake: number;
+  maxPdfSizeBytes: number;
+  maxPdfPages: number;
+  pollingScheduleType?: IntegrationPollingScheduleType | null;
+  pollingIntervalMinutes?: number | null;
+  pollingLocalTime?: string | null;
+  pollingTimeZone?: string | null;
+  pollingBatchLimit?: number | null;
+  acknowledgementMode: IntegrationAcknowledgementMode;
+  enabled: boolean;
+  configurationVersion: number;
+  healthStatus: string;
+  lastSuccessAt?: string | null;
+  lastFailureAt?: string | null;
+  lastFailureCategory?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntegrationConnectionRequest {
+  name: string;
+  description?: string;
+  purpose: IntegrationPurpose;
+  direction: IntegrationDirection;
+  providerType: IntegrationProviderType;
+  authenticationType: IntegrationAuthenticationType;
+  clientPrincipal?: string;
+  endpoint?: string;
+  fileShareRoot?: string;
+  secretReference?: string;
+  clearSecretReference?: boolean;
+  timeoutSeconds?: number;
+  retryMaxAttempts?: number;
+  incompleteWindowHours?: number;
+  maxDocumentsPerIntake?: number;
+  maxPdfSizeBytes?: number;
+  maxPdfPages?: number;
+  pollingScheduleType?: IntegrationPollingScheduleType;
+  pollingIntervalMinutes?: number;
+  pollingLocalTime?: string;
+  pollingTimeZone?: string;
+  pollingBatchLimit?: number;
+  acknowledgementMode: IntegrationAcknowledgementMode;
+  enabled?: boolean;
+}
+
+
+export interface SdvConnectionTestResult {
+  connectionId: string;
+  healthStatus: string;
+  secretConfigured: boolean;
+  configurationVersion: number;
+}
+
+export interface PollingRun {
+  runId: string; connectionId: string; trigger: 'SCHEDULED' | 'MANUAL'; status: 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED';
+  startedAt: string; completedAt?: string | null; packagesDiscovered: number; documentsExpected: number;
+  documentsRetrieved: number; packagesAcknowledged: number; failureCategory?: string | null; failureDetail?: string | null;
+}
+
+export interface PollingConnectionStatus {
+  connectionId: string; name: string; enabled: boolean; healthStatus: string; nextScheduledAt?: string | null; recentRuns: PollingRun[];
+}
+
 export interface PlatformHealthItem {
   key: string;
   label: string;
@@ -392,8 +528,7 @@ export interface PlatformAdminOverview {
   };
   integrations: {
     deliveryType: string;
-    apiCallbackConfigured: boolean;
-    s3Configured: boolean;
+    sdvConfigured: boolean;
     identityMode: string;
     productionIdentityConfigured: boolean;
   };

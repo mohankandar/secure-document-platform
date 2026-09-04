@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "node node_modules/typescript/lib/tsc.js --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:auth": "node --experimental-strip-types --test src/security/uiAuthorization.test.ts"
   },
   "dependencies": {
     "react": "18.3.1",

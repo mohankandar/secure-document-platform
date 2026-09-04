@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Routes, Route, NavLink } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
 import { beginOidcLogin, clearOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode } from './api/auth';
@@ -13,12 +13,9 @@ import BusinessAdminPage from './pages/BusinessAdminPage';
 import ReportsPage from './pages/ReportsPage';
 import PlatformAdminPage from './pages/PlatformAdminPage';
 import TechnicalIssueDetailPage from './pages/TechnicalIssueDetailPage';
+import IntegrationsPage from './pages/IntegrationsPage';
 import Breadcrumbs from './components/Breadcrumbs';
-
-const ROLE_OPTIONS = [
-  'ADMIN', 'USER', 'REVIEWER', 'APPROVER', 'BUSINESS_ADMIN', 'TENANT_IT_ADMIN', 'PLATFORM_OPERATIONS_ADMIN', 'REPORT_VIEWER',
-  'USER,REVIEWER', 'USER,APPROVER', 'USER,BUSINESS_ADMIN', 'USER,TENANT_IT_ADMIN', 'USER,PLATFORM_OPERATIONS_ADMIN',
-];
+import { ROLE_OPTIONS } from './security/uiAuthorization';
 
 function PermissionDenied() {
   return (
@@ -131,14 +128,15 @@ export default function App() {
           </div>
         )}
         <nav>
-          <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/packages/new">Upload Documents</NavLink>
+          {hasCapability('DASHBOARD_ACCESS') && <NavLink to="/" end>Dashboard</NavLink>}
+          {hasCapability('DOCUMENT_INTAKE') && <NavLink to="/packages/new">Upload Documents</NavLink>}
           {hasCapability('MANUAL_REVIEW') && <NavLink to="/review">Manual Review</NavLink>}
           {hasCapability('REPORT_EXECUTIVE_VIEW') && <NavLink to="/reports">Reports</NavLink>}
           {(hasCapability('TENANT_POLICY_MANAGE') || hasCapability('TECHNICAL_ADMIN_VIEW') || hasCapability('AUDIT_VIEW')) && (
             <div className="sidebar-section-label">Administration</div>
           )}
           {hasCapability('TENANT_POLICY_MANAGE') && <NavLink to="/business-admin">Business Admin</NavLink>}
+          {hasCapability('TENANT_INTEGRATION_MANAGE') && <NavLink to="/integrations">Integrations</NavLink>}
           {hasCapability('TECHNICAL_ADMIN_VIEW') && (
             <NavLink to="/platform-admin">{hasRole('PLATFORM_OPERATIONS_ADMIN') ? 'Platform Operations' : 'Tenant IT Admin'}</NavLink>
           )}
@@ -149,18 +147,18 @@ export default function App() {
             <label style={{ fontSize: '0.7rem', color: '#fdcb6e', textTransform: 'uppercase' }}>Demo Role</label>
             <select value={selectedRole} onChange={(e) => handleRoleChange(e.target.value)}
               style={{ width: '100%', marginTop: '0.25rem', fontSize: '0.8rem', padding: '0.3rem' }}>
-              {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
+              {ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
             </select>
           </div>
         ) : (
-          <button className="sidebar-signout" onClick={() => { clearOidcSession(); setCurrentCapabilities([]); setCurrentRoles('USER'); setCurrentUser(null); }}>Sign out</button>
+          <button className="sidebar-signout" onClick={() => { clearOidcSession(); setCurrentCapabilities([]); setCurrentRoles('DOCUMENT_PROCESSOR'); setCurrentUser(null); }}>Sign out</button>
         )}
       </aside>
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/packages/new" element={<CreatePackagePage />} />
-          <Route path="/packages/:packageId" element={<PackageDetailPage />} />
+          <Route path="/" element={hasCapability('DASHBOARD_ACCESS') ? <DashboardPage /> : hasCapability('REPORT_EXECUTIVE_VIEW') ? <Navigate to="/reports" replace /> : <PermissionDenied />} />
+          <Route path="/packages/new" element={hasCapability('DOCUMENT_INTAKE') ? <CreatePackagePage /> : <PermissionDenied />} />
+          <Route path="/packages/:packageId" element={hasCapability('DASHBOARD_ACCESS') ? <PackageDetailPage /> : <PermissionDenied />} />
           <Route path="/review" element={hasCapability('MANUAL_REVIEW') ? <ReviewPage /> : <PermissionDenied />} />
           <Route path="/reports" element={hasCapability('REPORT_EXECUTIVE_VIEW')
             ? <ReportsPage canViewOperations={hasCapability('REPORT_OPERATIONAL_VIEW')} canExport={hasCapability('REPORT_EXPORT')} />
@@ -168,6 +166,7 @@ export default function App() {
           <Route path="/audit" element={hasCapability('AUDIT_VIEW') ? <AuditPage /> : <PermissionDenied />} />
           <Route path="/business-admin" element={hasCapability('TENANT_POLICY_MANAGE') ? <BusinessAdminPage /> : <PermissionDenied />} />
           <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage /> : <PermissionDenied />} />
+          <Route path="/integrations" element={hasCapability('TENANT_INTEGRATION_MANAGE') ? <IntegrationsPage /> : <PermissionDenied />} />
           <Route path="/technical-exceptions/:packageId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <TechnicalIssueDetailPage /> : <PermissionDenied />} />
         </Routes>
       </main>

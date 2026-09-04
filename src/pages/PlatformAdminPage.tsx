@@ -146,8 +146,7 @@ export default function PlatformAdminPage() {
                 <div><dt>Initial backoff</dt><dd>{data.resilience.initialBackoffMs} ms</dd></div>
                 <div><dt>AI failover</dt><dd>{data.resilience.aiSecondaryEnabled ? `${data.resilience.aiSecondaryProvider}${data.resilience.aiSecondaryModel ? ` · ${data.resilience.aiSecondaryModel}` : ''}` : 'Disabled'}</dd></div>
                 <div><dt>Delivery</dt><dd>{data.integrations.deliveryType}</dd></div>
-                <div><dt>API callback configured</dt><dd>{data.integrations.apiCallbackConfigured ? 'Yes' : 'No'}</dd></div>
-                <div><dt>S3 configured</dt><dd>{data.integrations.s3Configured ? 'Yes' : 'No'}</dd></div>
+                <div><dt>SDV configured</dt><dd>{data.integrations.sdvConfigured ? 'Yes' : 'No'}</dd></div>
                 <div><dt>Identity mode</dt><dd>{data.integrations.identityMode.replace(/_/g, ' ')}</dd></div>
               </dl>
               {!data.integrations.productionIdentityConfigured && (

@@ -3,7 +3,7 @@ import { getAccessToken, isLocalSecurityMode } from './auth';
 export const API_BASE_URL = '/api/v1';
 export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 export const DEFAULT_ACTOR_ID = '00000000-0000-0000-0000-000000000099';
-export const DEFAULT_ACTOR_ROLES = 'USER';
+export const DEFAULT_ACTOR_ROLES = 'DOCUMENT_PROCESSOR';
 
 let currentRoles = DEFAULT_ACTOR_ROLES;
 let currentCapabilities: string[] = [];
