@@ -196,6 +196,18 @@ public final class DocumentPackage {
         updatedAt = Instant.now();
     }
 
+    /**
+     * Moves a technically failed package into business-controlled manual processing.
+     * The technical incident remains recorded separately in audit/technical visibility.
+     */
+    public void prepareForManualFallback() {
+        if (status != PackageStatus.FAILED) {
+            throw new IllegalStateException("Only a failed package can enter manual fallback");
+        }
+        status = PackageStatus.IN_REVIEW;
+        updatedAt = Instant.now();
+    }
+
     public void startReview() {
         if (status != PackageStatus.PENDING_REVIEW) {
             throw new IllegalStateException("Cannot start review for package in status: " + status);

@@ -12,6 +12,9 @@ import type {
   ReviewPagePreview,
   ReviewBoundingBox,
   ReviewResolutionResult,
+  ManualFallbackDetail,
+  ManualFallbackPagePreview,
+  ManualFallbackRegion,
   IdentifierDefinition,
   BusinessAdminConfiguration,
   BusinessAdminIdentifierDraft,
@@ -358,6 +361,66 @@ class ApiClient {
     return this.request(`/review-items/${findingId}/dismiss`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
+    });
+  }
+
+  // --- Business continuity manual fallback ---
+
+  async startManualFallback(packageId: string): Promise<ManualFallbackDetail> {
+    return this.request(`/packages/${packageId}/manual-fallback/start`, { method: 'POST' });
+  }
+
+  async getManualFallback(packageId: string): Promise<ManualFallbackDetail> {
+    return this.request(`/packages/${packageId}/manual-fallback`);
+  }
+
+  async getManualFallbackPagePreview(
+    packageId: string,
+    documentId: string,
+    pageNumber: number
+  ): Promise<ManualFallbackPagePreview> {
+    const url = `${this.baseUrl}/packages/${packageId}/manual-fallback/documents/${documentId}/pages/${pageNumber}/preview`;
+    const response = await fetch(url, {
+      headers: { ...baseHeaders(), Accept: 'image/png, application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const raw = await response.text();
+      let parsed: ApiError | null = null;
+      if (raw) {
+        try { parsed = JSON.parse(raw) as ApiError; } catch { /* non-JSON security/container response */ }
+      }
+      if (parsed?.message) throw parsed;
+      throw { message: `HTTP ${response.status}: ${response.statusText}` } as ApiError;
+    }
+    const resolvedPage = Number(response.headers.get('X-Manual-Page-Number'));
+    return {
+      blob: await response.blob(),
+      pageNumber: Number.isFinite(resolvedPage) && resolvedPage > 0 ? resolvedPage : pageNumber,
+    };
+  }
+
+  async addManualFallbackRegion(
+    packageId: string,
+    documentId: string,
+    pageNumber: number,
+    entityType: string,
+    boundingBox: ReviewBoundingBox
+  ): Promise<ManualFallbackRegion> {
+    return this.request(`/packages/${packageId}/manual-fallback/regions`, {
+      method: 'POST',
+      body: JSON.stringify({ documentId, pageNumber, entityType, boundingBox }),
+    });
+  }
+
+  async removeManualFallbackRegion(packageId: string, findingId: string): Promise<void> {
+    await this.request(`/packages/${packageId}/manual-fallback/regions/${findingId}`, { method: 'DELETE' });
+  }
+
+  async submitManualFallback(packageId: string, fullDocumentReviewed: boolean): Promise<PackageStatusResult> {
+    return this.request(`/packages/${packageId}/manual-fallback/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ fullDocumentReviewed }),
     });
   }
 

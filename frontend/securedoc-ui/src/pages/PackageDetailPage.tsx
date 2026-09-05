@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
 import type { PackageDetail, PackageLifecycleSummary, ApiError, DerivedDelivery } from '../types';
@@ -7,12 +7,14 @@ import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
 
 export default function PackageDetailPage() {
   const { packageId } = useParams<{ packageId: string }>();
+  const navigate = useNavigate();
   const [pkg, setPkg] = useState<PackageDetail | null>(null);
   const [lifecycle, setLifecycle] = useState<PackageLifecycleSummary | null>(null);
   const [derivedDeliveries, setDerivedDeliveries] = useState<DerivedDelivery[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [manualFallbackActive, setManualFallbackActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPackage = async () => {
@@ -28,6 +30,15 @@ export default function PackageDetailPage() {
       setPkg(data);
       setLifecycle(lifecycleData);
       setDerivedDeliveries(derivedData);
+      setManualFallbackActive(false);
+      if (data.status === 'IN_REVIEW' && hasCurrentCapability('MANUAL_REVIEW')) {
+        try {
+          await apiClient.getManualFallback(packageId);
+          setManualFallbackActive(true);
+        } catch {
+          // Normal finding-focused Manual Review also uses IN_REVIEW; this package is not in manual fallback.
+        }
+      }
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Failed to load package');
@@ -92,6 +103,19 @@ export default function PackageDetailPage() {
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Unable to reprocess this intake');
+    }
+  };
+
+  const handleManualFallback = async () => {
+    if (!packageId) return;
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await apiClient.startManualFallback(packageId);
+      navigate(`/packages/${packageId}/manual-processing`);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || 'Unable to continue with manual processing');
     }
   };
 
@@ -163,12 +187,20 @@ export default function PackageDetailPage() {
 
           {(pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') && (
             <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Manual Review Required</h2>
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>
+                {manualFallbackActive ? 'Manual Processing in Progress' : 'Manual Review Required'}
+              </h2>
               <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
-                One or more findings need a human decision. High-confidence findings do not need to be re-reviewed.
+                {manualFallbackActive
+                  ? 'Automatic analysis could not complete. Review every page and mark all sensitive areas before delivery.'
+                  : 'One or more findings need a human decision. High-confidence findings do not need to be re-reviewed.'}
               </p>
               {hasCurrentCapability('MANUAL_REVIEW') ? (
-                <Link className="button-link primary" to={`/review?packageId=${packageId}`}>Open Manual Review</Link>
+                <Link className="button-link primary" to={manualFallbackActive
+                  ? `/packages/${packageId}/manual-processing`
+                  : `/review?packageId=${packageId}`}>
+                  {manualFallbackActive ? 'Continue Manual Processing' : 'Open Manual Review'}
+                </Link>
               ) : (
                 <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>Waiting for an authorized reviewer.</p>
               )}
@@ -204,12 +236,17 @@ export default function PackageDetailPage() {
           {pkg.status === 'FAILED' && (
             <div className="card">
               <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Technical Attention</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') ? '0.75rem' : 0 }}>
-                Processing stopped because of a technical issue. This is separate from business Manual Review.
+              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
+                Automatic processing stopped because of a technical issue. Business can continue manually when the PDF is still safe to render and redact.
               </p>
-              {hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') && (
-                <Link className="button-link primary" to={`/technical-exceptions/${packageId}`}>View Technical Issue</Link>
-              )}
+              <div className="inline-actions">
+                {hasCurrentCapability('MANUAL_REVIEW') && (
+                  <button className="primary" onClick={() => void handleManualFallback()}>Continue Manually</button>
+                )}
+                {hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') && (
+                  <Link className="button-link secondary" to={`/technical-exceptions/${packageId}`}>View Technical Issue</Link>
+                )}
+              </div>
             </div>
           )}
 

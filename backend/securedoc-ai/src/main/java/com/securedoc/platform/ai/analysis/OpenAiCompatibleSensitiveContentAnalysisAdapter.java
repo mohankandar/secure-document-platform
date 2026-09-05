@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements SensitiveContentAnalysisPort {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleSensitiveContentAnalysisAdapter.class);
-    private static final String VERSION = "1.0.0";
+    private static final String VERSION = "1.1.0";
     private static final String PROVIDER = "openai-compatible";
 
     private final URI chatEndpoint;
@@ -230,7 +230,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                     ? choices.get(0).path("message").path("content").asText(null)
                     : null;
             if (content == null || content.isBlank()) {
-                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
+                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "AI provider returned no analysis content", null);
             }
             return responseParser.parse(content, page, PROVIDER, model,
@@ -238,7 +238,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         } catch (TechnicalDependencyException e) {
             throw e;
         } catch (IOException e) {
-            throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
+            throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                     "AI provider response could not be processed", e);
         }
     }

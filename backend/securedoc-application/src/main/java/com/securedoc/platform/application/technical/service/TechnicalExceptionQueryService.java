@@ -49,26 +49,32 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
     public TechnicalExceptionDetail execute(PackageId packageId, TenantId tenantId) {
         var pkg = packageRepository.findByIdAndTenantId(packageId, tenantId)
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", packageId.toString()));
-        if (pkg.status() != PackageStatus.FAILED) {
-            throw new IllegalStateException("Technical issue details are available only for failed packages");
+
+        List<AuditRecordSummary> packageFailures = queryFailures(tenantId, "DocumentPackage", packageId.toString(), 20);
+        if (pkg.status() != PackageStatus.FAILED && packageFailures.isEmpty()) {
+            throw new IllegalStateException("No recorded technical issue is available for this package");
         }
 
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
         List<Document> failedDocuments = documents.stream()
                 .filter(document -> document.status() == DocumentStatus.FAILED)
                 .toList();
-        List<AuditRecordSummary> packageFailures = queryFailures(tenantId, "DocumentPackage", packageId.toString(), 20);
+        // Keep the original technical cause available even after business manual fallback moves
+        // a document out of FAILED. Current status determines whether retry is offered; immutable
+        // failure audit remains the source of truth for incident diagnosis.
         List<AuditRecordSummary> candidates = new ArrayList<>(packageFailures);
         boolean allFailedDocumentsRetryable = !failedDocuments.isEmpty();
-        for (Document document : failedDocuments) {
+        for (Document document : documents) {
             List<AuditRecordSummary> documentFailures = queryFailures(tenantId, "Document", document.id().toString(), 20);
             candidates.addAll(documentFailures);
-            AuditRecordSummary latestClassified = documentFailures.stream()
-                    .filter(this::containsStructuredClassification)
-                    .max(Comparator.comparing(AuditRecordSummary::occurredAt))
-                    .orElse(null);
-            if (latestClassified == null || !TechnicalFailureAuditParser.parse(latestClassified.detail()).retryable()) {
-                allFailedDocumentsRetryable = false;
+            if (document.status() == DocumentStatus.FAILED) {
+                AuditRecordSummary latestClassified = documentFailures.stream()
+                        .filter(this::containsStructuredClassification)
+                        .max(Comparator.comparing(AuditRecordSummary::occurredAt))
+                        .orElse(null);
+                if (latestClassified == null || !TechnicalFailureAuditParser.parse(latestClassified.detail()).retryable()) {
+                    allFailedDocumentsRetryable = false;
+                }
             }
         }
 
@@ -105,14 +111,15 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
 
         String resourceId = selected == null ? null : selected.resourceId();
         var failedDocumentId = documents.stream()
-                .filter(document -> document.status() == DocumentStatus.FAILED)
                 .filter(document -> document.id().toString().equals(resourceId))
                 .map(Document::id)
                 .findFirst()
-                .orElseGet(() -> documents.stream()
-                        .filter(document -> document.status() == DocumentStatus.FAILED)
-                        .map(Document::id)
-                        .findFirst().orElse(null));
+                .orElseGet(() -> failedDocuments.stream().map(Document::id).findFirst().orElse(null));
+        if (failedDocumentId == null) {
+            failedDocumentId = documents.stream()
+                    .filter(document -> !queryFailures(tenantId, "Document", document.id().toString(), 1).isEmpty())
+                    .map(Document::id).findFirst().orElse(null);
+        }
 
         boolean classifiedRetryable = failedDocuments.isEmpty()
                 ? parsed.retryable()
@@ -120,6 +127,7 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
 
         String code = parsed.code();
         String dependency = parsed.dependency();
+        boolean retryAvailable = pkg.status() == PackageStatus.FAILED && classifiedRetryable && originalAvailable;
         return new TechnicalExceptionDetail(
                 packageId,
                 failedDocumentId,
@@ -128,12 +136,12 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
                 failedStage(code, parsed.prefix()),
                 dependency,
                 code,
-                classifiedRetryable && originalAvailable,
+                retryAvailable,
                 parsed.attempts(),
                 selected == null ? pkg.updatedAt() : selected.occurredAt(),
                 selected == null ? null : selected.correlationId(),
                 retainedUntil,
-                explanation(code, dependency, classifiedRetryable, originalAvailable));
+                explanation(code, dependency, classifiedRetryable, originalAvailable, pkg.status()));
     }
 
     private List<AuditRecordSummary> queryFailures(TenantId tenantId, String resourceType, String resourceId, int limit) {
@@ -176,7 +184,7 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
         return "TECHNICAL_PROCESSING_FAILURE";
     }
 
-    private String explanation(String code, String dependency, boolean classifiedRetryable, boolean originalAvailable) {
+    private String explanation(String code, String dependency, boolean classifiedRetryable, boolean originalAvailable, PackageStatus packageStatus) {
         String base = switch (code) {
             case "AI_TIMEOUT" -> "The configured AI provider did not respond within the allowed time.";
             case "AI_RATE_LIMITED" -> "The configured AI provider temporarily limited requests.";
@@ -190,6 +198,9 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
             case "STORAGE_IO" -> "Internal document storage was temporarily unavailable.";
             default -> "Processing stopped because of a technical failure. Use the correlation ID for support diagnostics.";
         };
+        if (packageStatus != PackageStatus.FAILED) {
+            return base + " Business processing may continue independently; this technical incident remains recorded for investigation.";
+        }
         if (classifiedRetryable && !originalAvailable) {
             return base + " Retry is unavailable because the retained original is no longer available.";
         }

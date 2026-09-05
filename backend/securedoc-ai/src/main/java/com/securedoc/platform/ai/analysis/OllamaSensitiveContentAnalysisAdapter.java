@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveContentAnalysisPort {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaSensitiveContentAnalysisAdapter.class);
-    private static final String VERSION = "1.1.0";
+    private static final String VERSION = "1.2.0";
     private static final int MAX_BATCH_SIZE = 8;
 
     private final URI chatEndpoint;
@@ -223,7 +223,14 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         return batches;
     }
 
-    /** Retries only the affected page batch; successful batches are not replayed. */
+    /**
+     * Retries only the affected page batch; successful batches are not replayed.
+     *
+     * <p>If a multi-page batch repeatedly returns unusable structured output, the batch is
+     * split into individual page requests as a final bounded recovery step. This keeps the
+     * recovery local to the failed batch and prevents the outer document-level resilience
+     * decorator from replaying already-successful AI work.
+     */
     private BatchAnalysisResult analyzeBatchWithRetry(List<PageContent> pages,
                                                        AtomicInteger pageRetryCount,
                                                        AtomicInteger providerCallCount,
@@ -243,19 +250,61 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 return result;
             } catch (TechnicalDependencyException e) {
                 boolean retrying = e.retryable() && attempt < pageMaxAttempts;
-                log.warn("AI_BATCH_ATTEMPT_FAILED provider=ollama model={} pages={} attempt={} maxAttempts={} reason={} retrying={} durationMs={}",
-                        model, pageNumbers(pages), attempt, pageMaxAttempts, e.failureCode(), retrying,
+                boolean splitFallback = !retrying
+                        && e.retryable()
+                        && e.failureCode() == TechnicalFailureCode.AI_INVALID_RESPONSE
+                        && pages.size() > 1;
+                log.warn("AI_BATCH_ATTEMPT_FAILED provider=ollama model={} pages={} attempt={} maxAttempts={} reason={} retrying={} splitFallback={} durationMs={}",
+                        model, pageNumbers(pages), attempt, pageMaxAttempts, e.failureCode(), retrying, splitFallback,
                         elapsedMillis(attemptStartedNanos));
-                if (!retrying) {
-                    if (e.retryable()) {
-                        throw exhaustedBatchFailure(e, attempt);
-                    }
-                    throw e.withAttempts(attempt);
+                if (retrying) {
+                    pageRetryCount.incrementAndGet();
+                    sleepPageBackoff(attempt);
+                    continue;
                 }
-                pageRetryCount.incrementAndGet();
-                sleepPageBackoff(attempt);
+                if (splitFallback) {
+                    return analyzeSplitBatchAfterInvalidResponse(
+                            pages, pageRetryCount, providerCallCount, systemPrompt, responseSchema, attempt);
+                }
+                if (e.retryable()) {
+                    throw exhaustedBatchFailure(e, attempt);
+                }
+                throw e.withAttempts(attempt);
             }
         }
+    }
+
+    private BatchAnalysisResult analyzeSplitBatchAfterInvalidResponse(List<PageContent> pages,
+                                                                       AtomicInteger pageRetryCount,
+                                                                       AtomicInteger providerCallCount,
+                                                                       String systemPrompt,
+                                                                       JsonNode responseSchema,
+                                                                       int failedBatchAttempts) {
+        long startedNanos = System.nanoTime();
+        int callsBefore = providerCallCount.get();
+        log.warn("AI_BATCH_SPLIT_FALLBACK_STARTED provider=ollama model={} pages={} failedBatchAttempts={} splitPages={}",
+                model, pageNumbers(pages), failedBatchAttempts, pages.size());
+
+        List<DiscoveredSensitiveContent> findings = new ArrayList<>();
+        ProviderMetrics aggregate = new ProviderMetrics();
+        for (PageContent page : pages) {
+            try {
+                BatchAnalysisResult pageResult = analyzeBatchWithRetry(
+                        List.of(page), pageRetryCount, providerCallCount, systemPrompt, responseSchema);
+                findings.addAll(pageResult.findings());
+                aggregate.add(pageResult.metrics());
+            } catch (TechnicalDependencyException e) {
+                log.warn("AI_BATCH_SPLIT_FALLBACK_FAILED provider=ollama model={} originalPages={} failedPage={} reason={} attempts={} durationMs={}",
+                        model, pageNumbers(pages), page.pageNumber(), e.failureCode(), e.attempts(),
+                        elapsedMillis(startedNanos));
+                throw e;
+            }
+        }
+
+        log.info("AI_BATCH_SPLIT_FALLBACK_RECOVERED provider=ollama model={} pages={} splitPages={} providerCalls={} durationMs={}",
+                model, pageNumbers(pages), pages.size(), providerCallCount.get() - callsBefore,
+                elapsedMillis(startedNanos));
+        return new BatchAnalysisResult(findings, aggregate);
     }
 
     private BatchAnalysisResult analyzeBatch(List<PageContent> pages,
@@ -334,12 +383,12 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             JsonNode envelope = objectMapper.readTree(response.body());
             String content = envelope.path("message").path("content").asText(null);
             if (content == null || content.isBlank()) {
-                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
+                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "Local AI provider returned no analysis content", null);
             }
             String doneReason = envelope.path("done_reason").asText("");
             if ("length".equalsIgnoreCase(doneReason)) {
-                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
+                throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "Local AI provider reached the configured output limit", null);
             }
             List<DiscoveredSensitiveContent> findings = responseParser.parse(
@@ -348,7 +397,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         } catch (TechnicalDependencyException e) {
             throw e;
         } catch (IOException e) {
-            throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
+            throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                     "Local AI provider response could not be processed", e);
         }
     }

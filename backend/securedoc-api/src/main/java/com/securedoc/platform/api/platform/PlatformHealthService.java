@@ -4,6 +4,10 @@ import com.securedoc.platform.api.config.AiRuntimeProperties;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.AuditQueryPort;
+import com.securedoc.platform.application.audit.query.AuditRecordFilter;
+import com.securedoc.platform.domain.audit.AuditAction;
+import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.delivery.LocalDeliveryProperties;
@@ -26,6 +30,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Unit 24 safe technical visibility. Secrets/tokens are never serialized; only configuration state is returned.
@@ -43,6 +50,7 @@ public class PlatformHealthService {
     private final Environment environment;
     private final PackageRepository packageRepository;
     private final PackageLifecycleRepository lifecycleRepository;
+    private final AuditQueryPort auditQueryPort;
     private final WatchedFolderScheduler watchedFolderScheduler;
 
     public PlatformHealthService(DataSource dataSource,
@@ -56,6 +64,7 @@ public class PlatformHealthService {
                                  Environment environment,
                                  PackageRepository packageRepository,
                                  PackageLifecycleRepository lifecycleRepository,
+                                 AuditQueryPort auditQueryPort,
                                  WatchedFolderScheduler watchedFolderScheduler) {
         this.dataSource = dataSource;
         this.ai = ai;
@@ -68,6 +77,7 @@ public class PlatformHealthService {
         this.environment = environment;
         this.packageRepository = packageRepository;
         this.lifecycleRepository = lifecycleRepository;
+        this.auditQueryPort = auditQueryPort;
         this.watchedFolderScheduler = watchedFolderScheduler;
     }
 
@@ -88,18 +98,43 @@ public class PlatformHealthService {
         var integrationSummary = new PlatformAdminOverviewResponse.IntegrationSummary(
                 deliveryType, sdvConfigured, identityMode, "OIDC".equals(identityMode));
 
-        var exceptions = packageRepository.findByTenantId(tenantId, 0, 250).stream()
+        Map<String, TechnicalExceptionItem> exceptionByPackage = new LinkedHashMap<>();
+        packageRepository.findByTenantId(tenantId, 0, 250).stream()
                 .filter(pkg -> pkg.status() == PackageStatus.FAILED)
-                .map(pkg -> {
-                    Instant holdUntil = lifecycleRepository.findByPackageIdAndTenantId(pkg.id(), tenantId)
-                            .flatMap(lifecycle -> lifecycle.technicalHoldUntil()).orElse(null);
-                    return new TechnicalExceptionItem(pkg.id().toString(), "TECHNICAL_FAILURE",
-                            pkg.status().name(), pkg.documents().size(), pkg.updatedAt(), holdUntil);
-                })
-                .toList();
+                .forEach(pkg -> exceptionByPackage.put(pkg.id().toString(), technicalExceptionItem(pkg, tenantId)));
+
+        auditQueryPort.findByFilter(new AuditRecordFilter(tenantId,
+                        AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED.name(), null, "DocumentPackage", null,
+                        null, null, null, null, 100)).stream()
+                .map(record -> record.resourceId())
+                .filter(resourceId -> resourceId != null && !resourceId.isBlank())
+                .distinct()
+                .forEach(resourceId -> {
+                    try {
+                        packageRepository.findByIdAndTenantId(PackageId.of(UUID.fromString(resourceId)), tenantId)
+                                .ifPresent(pkg -> exceptionByPackage.put(resourceId, technicalExceptionItem(pkg, tenantId)));
+                    } catch (IllegalArgumentException ignored) {
+                        // Audit data is immutable; ignore a malformed legacy resource identifier rather than breaking admin overview.
+                    }
+                });
+        var exceptions = List.copyOf(exceptionByPackage.values());
 
         return new PlatformAdminOverviewResponse(Instant.now(), providers,
                 watchedFolderScheduler.status(), resilienceSummary, integrationSummary, exceptions);
+    }
+
+    private TechnicalExceptionItem technicalExceptionItem(com.securedoc.platform.domain.document.DocumentPackage pkg,
+                                                         TenantId tenantId) {
+        Instant holdUntil = lifecycleRepository.findByPackageIdAndTenantId(pkg.id(), tenantId)
+                .flatMap(lifecycle -> lifecycle.technicalHoldUntil()).orElse(null);
+        Instant failedAt = auditQueryPort.findByFilter(new AuditRecordFilter(tenantId,
+                        AuditAction.DOCUMENT_PROCESSING_FAILED.name(), null, "DocumentPackage", pkg.id().toString(),
+                        null, null, null, null, 20)).stream()
+                .map(record -> record.occurredAt())
+                .max(Instant::compareTo)
+                .orElse(pkg.updatedAt());
+        return new TechnicalExceptionItem(pkg.id().toString(), "TECHNICAL_FAILURE",
+                pkg.status().name(), pkg.documents().size(), failedAt, holdUntil);
     }
 
     private PlatformHealthItem databaseHealth(boolean probe) {

@@ -135,6 +135,21 @@ public final class Document {
         updatedAt = Instant.now();
     }
 
+    /**
+     * Prepares a failed document for full-document manual redaction without discarding
+     * the extraction/OCR page metadata needed for page-safe rendering and verification.
+     */
+    public void prepareForManualFallback() {
+        if (status != DocumentStatus.FAILED) {
+            throw new IllegalStateException("Only a failed document can enter manual fallback");
+        }
+        if (pages.isEmpty()) {
+            throw new IllegalStateException("Manual fallback requires known source pages");
+        }
+        status = DocumentStatus.REDACTING;
+        updatedAt = Instant.now();
+    }
+
     public void fail() {
         status = DocumentStatus.FAILED;
         updatedAt = Instant.now();

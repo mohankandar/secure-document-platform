@@ -157,11 +157,11 @@ export default function PlatformAdminPage() {
 
           <section className="platform-section">
             <div className="platform-section-heading">
-              <div><h2>Technical Exceptions</h2><p>Unresolved deterministic/transient failures stay separate from business Manual Review.</p></div>
+              <div><h2>Technical Incidents</h2><p>Recorded technical failures remain available for investigation even when business continues manually.</p></div>
               <span className="platform-count">{data.technicalExceptions.length}</span>
             </div>
             {data.technicalExceptions.length === 0 ? (
-              <div className="platform-empty">No unresolved technical exceptions for this tenant.</div>
+              <div className="platform-empty">No recorded technical incidents for this tenant.</div>
             ) : (
               <div className="platform-exception-list">
                 {data.technicalExceptions.map((item) => (

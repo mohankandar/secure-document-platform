@@ -1780,3 +1780,50 @@ input, select, textarea {
 .platform-status-unavailable { background: #fff0f0; color: #c92a2a; }
 @media (max-width: 1100px) { .integration-layout { grid-template-columns: 1fr; } .integration-editor { position: static; } }
 @media (max-width: 720px) { .integration-list, .integration-form-grid { grid-template-columns: 1fr; } .integration-wide { grid-column: auto; } }
+
+/* P0 business continuity — full-document manual processing fallback */
+.manual-fallback-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0 0 1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid #f0c36d;
+  border-radius: 8px;
+  background: #fff8e5;
+  color: #5f4b16;
+}
+
+.manual-fallback-warning span { font-size: 0.82rem; }
+
+.manual-fallback-grid {
+  display: grid;
+  grid-template-columns: 250px minmax(420px, 1fr) 280px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.manual-fallback-grid > .card { margin-bottom: 0; }
+.manual-fallback-sidebar { padding: 0.9rem; }
+.manual-fallback-sidebar label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.78rem; font-weight: 650; }
+.manual-fallback-sidebar select { width: 100%; }
+.manual-page-nav { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.85rem; text-align: center; }
+.manual-page-nav strong { font-size: 0.82rem; }
+.manual-section-gap { margin-top: 1.15rem; }
+.manual-help { color: #636e72; font-size: 0.76rem; line-height: 1.45; }
+.manual-fallback-sidebar button { width: 100%; margin-top: 0.55rem; }
+.manual-region-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.manual-region-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.55rem; border: 1px solid #e7eaee; border-radius: 7px; font-size: 0.78rem; }
+.manual-region-row button { width: auto; margin-top: 0; }
+.manual-review-confirmation { flex-direction: row !important; align-items: flex-start; font-weight: 500 !important; line-height: 1.4; }
+.manual-review-confirmation input { margin-top: 0.18rem; }
+
+@media (max-width: 1050px) {
+  .manual-fallback-grid { grid-template-columns: 220px minmax(360px, 1fr); }
+  .manual-fallback-grid > aside:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .manual-fallback-grid { grid-template-columns: 1fr; }
+  .manual-fallback-grid > aside:last-child { grid-column: auto; }
+}

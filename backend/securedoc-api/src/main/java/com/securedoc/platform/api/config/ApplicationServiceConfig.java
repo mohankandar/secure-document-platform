@@ -42,6 +42,12 @@ import com.securedoc.platform.application.port.in.FailDocumentProcessingUseCase;
 import com.securedoc.platform.application.port.in.GetPackageQuery;
 import com.securedoc.platform.application.port.in.HidePackageFromDashboardUseCase;
 import com.securedoc.platform.application.port.in.GetReviewPagePreviewQuery;
+import com.securedoc.platform.application.port.in.StartManualFallbackUseCase;
+import com.securedoc.platform.application.port.in.GetManualFallbackQuery;
+import com.securedoc.platform.application.port.in.AddManualRedactionRegionUseCase;
+import com.securedoc.platform.application.port.in.RemoveManualRedactionRegionUseCase;
+import com.securedoc.platform.application.port.in.GetManualFallbackPagePreviewQuery;
+import com.securedoc.platform.application.port.in.SubmitManualFallbackUseCase;
 import com.securedoc.platform.application.port.in.ListPackagesQuery;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
 import com.securedoc.platform.application.port.in.StartDocumentProcessingUseCase;
@@ -87,6 +93,8 @@ import com.securedoc.platform.application.review.service.FindingReviewService;
 import com.securedoc.platform.application.review.service.FocusedReviewService;
 import com.securedoc.platform.application.review.service.ReviewWorkflowService;
 import com.securedoc.platform.application.review.service.ReviewPagePreviewService;
+import com.securedoc.platform.application.manual.service.ManualFallbackService;
+import com.securedoc.platform.application.manual.service.ManualFallbackPagePreviewService;
 import com.securedoc.platform.application.processing.service.DocumentProcessingService;
 import com.securedoc.platform.application.processing.service.PackageFinalizationService;
 import com.securedoc.platform.application.processing.service.PackageProcessingService;
@@ -644,6 +652,36 @@ public class ApplicationServiceConfig {
         return new ReviewPagePreviewService(
                 findingRepository, documentRepository, packageRepository, artifactRepository,
                 storagePort, reviewPageRenderPort, auditService);
+    }
+
+    @Bean
+    public ManualFallbackService manualFallbackService(
+            PackageRepository packageRepository,
+            DocumentRepository documentRepository,
+            FindingRepository findingRepository,
+            ArtifactRepository artifactRepository,
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+            AuditQueryPort auditQueryPort,
+            GetTechnicalExceptionQuery technicalExceptionQuery,
+            PackageProcessingDispatcher packageProcessingDispatcher,
+            AuditService auditService) {
+        return new ManualFallbackService(packageRepository, documentRepository, findingRepository,
+                artifactRepository, tenantRedactionPolicyRepository, auditQueryPort, technicalExceptionQuery,
+                packageProcessingDispatcher, auditService);
+    }
+
+    @Bean
+    public GetManualFallbackPagePreviewQuery manualFallbackPagePreviewQuery(
+            PackageRepository packageRepository,
+            DocumentRepository documentRepository,
+            FindingRepository findingRepository,
+            ArtifactRepository artifactRepository,
+            AuditQueryPort auditQueryPort,
+            StoragePort storagePort,
+            ReviewPageRenderPort reviewPageRenderPort,
+            AuditService auditService) {
+        return new ManualFallbackPagePreviewService(packageRepository, documentRepository, findingRepository,
+                artifactRepository, auditQueryPort, storagePort, reviewPageRenderPort, auditService);
     }
 
 

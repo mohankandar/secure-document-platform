@@ -4,7 +4,11 @@ import com.securedoc.platform.ai.analysis.OpenAiCompatibleSensitiveContentAnalys
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisPolicy;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisRequest;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisOutput;
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.PageContent;
+import com.securedoc.platform.application.resilience.ResilientSensitiveContentAnalysisPort;
+import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.sun.net.httpserver.HttpExchange;
@@ -21,9 +25,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -67,6 +73,60 @@ class OpenAiCompatibleAnalysisAdapterTest {
         assertTrue(requestBody.get().contains("CREDIT_SCORE"));
         assertFalse(requestBody.get().contains("DATE_OF_BIRTH"));
         assertFalse(requestBody.get().contains("CREDIT_CARD_NUMBER"));
+    }
+
+
+    @Test
+    void retriesMalformedProviderContentAtPageScope() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        startServer(exchange -> {
+            int requestNumber = requests.incrementAndGet();
+            String content = requestNumber == 1 ? "not-json" : "{\"findings\":[]}";
+            send(exchange, 200, openAiEnvelope(content));
+        });
+
+        OpenAiCompatibleSensitiveContentAnalysisAdapter adapter =
+                new OpenAiCompatibleSensitiveContentAnalysisAdapter(
+                        "http://localhost:" + server.getAddress().getPort(),
+                        "Qwen/Qwen3-14B",
+                        "",
+                        Duration.ofSeconds(5), 1, 2, Duration.ZERO);
+
+        adapter.analyze(List.of(new PageContent(1, "PAGE_ONE")));
+
+        assertEquals(2, requests.get(), "invalid structured content should be retried at page scope");
+    }
+
+    @Test
+    void exhaustedMalformedProviderContentDoesNotReplayWholeDocument() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        startServer(exchange -> {
+            requests.incrementAndGet();
+            send(exchange, 200, openAiEnvelope("not-json"));
+        });
+
+        OpenAiCompatibleSensitiveContentAnalysisAdapter adapter =
+                new OpenAiCompatibleSensitiveContentAnalysisAdapter(
+                        "http://localhost:" + server.getAddress().getPort(),
+                        "Qwen/Qwen3-14B",
+                        "",
+                        Duration.ofSeconds(5), 1, 2, Duration.ZERO);
+        ResilientSensitiveContentAnalysisPort resilient = new ResilientSensitiveContentAnalysisPort(
+                adapter, null, new SelectiveRetryExecutor(2, Duration.ZERO));
+
+        TechnicalDependencyException failure = assertThrows(
+                TechnicalDependencyException.class,
+                () -> resilient.analyze(List.of(new PageContent(1, "PAGE_ONE"))));
+
+        assertEquals(2, requests.get());
+        assertEquals(TechnicalFailureCode.AI_INVALID_RESPONSE, failure.failureCode());
+        assertEquals(2, failure.attempts());
+        assertFalse(failure.retryable());
+    }
+
+    private String openAiEnvelope(String content) {
+        String escaped = content.replace("\\", "\\\\").replace("\"", "\\\"");
+        return "{\"choices\":[{\"message\":{\"content\":\"" + escaped + "\"}}]}";
     }
 
     private void startServer(Handler handler) throws IOException {

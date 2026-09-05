@@ -13,6 +13,7 @@ import BusinessAdminPage from './pages/BusinessAdminPage';
 import ReportsPage from './pages/ReportsPage';
 import PlatformAdminPage from './pages/PlatformAdminPage';
 import TechnicalIssueDetailPage from './pages/TechnicalIssueDetailPage';
+import ManualFallbackPage from './pages/ManualFallbackPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import Breadcrumbs from './components/Breadcrumbs';
 import { ROLE_OPTIONS } from './security/uiAuthorization';
@@ -160,6 +161,7 @@ export default function App() {
           <Route path="/packages/new" element={hasCapability('DOCUMENT_INTAKE') ? <CreatePackagePage /> : <PermissionDenied />} />
           <Route path="/packages/:packageId" element={hasCapability('DASHBOARD_ACCESS') ? <PackageDetailPage /> : <PermissionDenied />} />
           <Route path="/review" element={hasCapability('MANUAL_REVIEW') ? <ReviewPage /> : <PermissionDenied />} />
+          <Route path="/packages/:packageId/manual-processing" element={hasCapability('MANUAL_REVIEW') ? <ManualFallbackPage /> : <PermissionDenied />} />
           <Route path="/reports" element={hasCapability('REPORT_EXECUTIVE_VIEW')
             ? <ReportsPage canViewOperations={hasCapability('REPORT_OPERATIONAL_VIEW')} canExport={hasCapability('REPORT_EXPORT')} />
             : <PermissionDenied />} />
