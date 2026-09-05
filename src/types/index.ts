@@ -248,6 +248,32 @@ export interface ReviewResolutionResult {
 }
 
 
+export interface ManualFallbackDocument {
+  documentId: string;
+  fileName: string;
+  pageCount: number;
+}
+
+export interface ManualFallbackRegion extends ReviewBoundingBox {
+  findingId: string;
+  documentId: string;
+  pageNumber: number;
+  entityType: string;
+}
+
+export interface ManualFallbackDetail {
+  packageId: string;
+  status: string;
+  documents: ManualFallbackDocument[];
+  regions: ManualFallbackRegion[];
+  enabledEntityTypes: string[];
+}
+
+export interface ManualFallbackPagePreview {
+  blob: Blob;
+  pageNumber: number;
+}
+
 export interface PackageLifecycleSummary {
   packageId: string;
   successfulExportCycles: number;
