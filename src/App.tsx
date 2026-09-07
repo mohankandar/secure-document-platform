@@ -13,6 +13,8 @@ import BusinessAdminPage from './pages/BusinessAdminPage';
 import ReportsPage from './pages/ReportsPage';
 import PlatformAdminPage from './pages/PlatformAdminPage';
 import TechnicalIssueDetailPage from './pages/TechnicalIssueDetailPage';
+import SupportIncidentsPage from './pages/SupportIncidentsPage';
+import SupportIncidentDetailPage from './pages/SupportIncidentDetailPage';
 import ManualFallbackPage from './pages/ManualFallbackPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import Breadcrumbs from './components/Breadcrumbs';
@@ -141,6 +143,7 @@ export default function App() {
           {hasCapability('TECHNICAL_ADMIN_VIEW') && (
             <NavLink to="/platform-admin">{hasRole('PLATFORM_OPERATIONS_ADMIN') ? 'Platform Operations' : 'Tenant IT Admin'}</NavLink>
           )}
+          {hasCapability('TECHNICAL_EXCEPTION_VIEW') && <NavLink to="/support/incidents">Support Incidents</NavLink>}
           {hasCapability('AUDIT_VIEW') && <NavLink to="/audit">Audit</NavLink>}
         </nav>
         {localMode ? (
@@ -170,6 +173,8 @@ export default function App() {
           <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage /> : <PermissionDenied />} />
           <Route path="/integrations" element={hasCapability('TENANT_INTEGRATION_MANAGE') ? <IntegrationsPage /> : <PermissionDenied />} />
           <Route path="/technical-exceptions/:packageId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <TechnicalIssueDetailPage /> : <PermissionDenied />} />
+          <Route path="/support/incidents" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentsPage /> : <PermissionDenied />} />
+          <Route path="/support/incidents/:incidentId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentDetailPage /> : <PermissionDenied />} />
         </Routes>
       </main>
     </div>
