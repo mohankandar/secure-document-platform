@@ -10,6 +10,8 @@ import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.exception.IntakeExpiredException;
 import com.securedoc.platform.application.exception.IntakeConflictException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
+import com.securedoc.platform.application.observability.StructuredLogContext;
+import com.securedoc.platform.api.observability.RequestCorrelationFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,14 +34,12 @@ import java.util.UUID;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-    private static final String HEADER_CORRELATION_ID = "X-Correlation-Id";
-    private static final int MAX_CORRELATION_ID_LENGTH = 128;
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(ValidationException ex, HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
-        log.warn("REQUEST_VALIDATION_REJECTED path={} code={} message={} correlation={}",
-                request == null ? "unknown" : request.getRequestURI(), ex.errorCode(), ex.getMessage(), correlationId);
+        StructuredLogContext.warn(log, "REQUEST_VALIDATION_REJECTED",
+                Map.of("reasonCode", ex.errorCode()), "Request validation rejected");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
     }
@@ -155,22 +156,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
-        log.error("Unhandled exception", ex);
+        StructuredLogContext.error(log, "UNHANDLED_EXCEPTION",
+                Map.of("reasonCode", ex.getClass().getSimpleName()), "Unhandled exception");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiErrorResponse.of("INTERNAL_ERROR", "An unexpected error occurred",
                         correlationIdForError(request)));
     }
 
     private String correlationIdForError(HttpServletRequest request) {
-        if (request == null) {
-            return UUID.randomUUID().toString();
-        }
-        String incoming = request.getHeader(HEADER_CORRELATION_ID);
-        if (incoming != null && !incoming.isBlank()) {
-            String trimmed = incoming.trim();
-            return trimmed.length() <= MAX_CORRELATION_ID_LENGTH
-                    ? trimmed
-                    : trimmed.substring(0, MAX_CORRELATION_ID_LENGTH);
+        if (request != null) {
+            Object established = request.getAttribute(RequestCorrelationFilter.REQUEST_ATTRIBUTE_CORRELATION_ID);
+            if (established instanceof UUID uuid) return uuid.toString();
         }
         return UUID.randomUUID().toString();
     }

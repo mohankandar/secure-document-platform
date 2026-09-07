@@ -26,4 +26,5 @@
     <include file="db/changelog/018-derived-routing.xml"/>
     <include file="db/changelog/019-primary-business-identifier-resolution.xml"/>
     <include file="db/changelog/020-primary-business-identifier-concurrency.xml"/>
+    <include file="db/changelog/021-processing-incidents.xml"/>
 </databaseChangeLog>

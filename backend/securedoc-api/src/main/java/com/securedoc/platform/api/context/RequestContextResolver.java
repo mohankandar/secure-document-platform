@@ -6,9 +6,11 @@ import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
+import com.securedoc.platform.application.observability.StructuredLogContext;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.api.observability.RequestCorrelationFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
@@ -54,9 +56,12 @@ public class RequestContextResolver {
     }
 
     public AuthenticatedPrincipal resolvePrincipal(HttpServletRequest request) {
-        return securityProperties.getMode() == SecurityMode.LOCAL
+        AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
                 ? resolveLocalPrincipal(request)
                 : resolveOidcPrincipal();
+        StructuredLogContext.put("tenantId", principal.tenantId());
+        StructuredLogContext.put("actorId", principal.actorId());
+        return principal;
     }
 
     /**
@@ -65,9 +70,12 @@ public class RequestContextResolver {
      * tenant PUSH_API Integration Connection. Production identity still comes only from the verified JWT.
      */
     public AuthenticatedPrincipal resolveIntegrationPrincipal(HttpServletRequest request) {
-        return securityProperties.getMode() == SecurityMode.LOCAL
+        AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
                 ? resolveLocalIntegrationPrincipal(request)
                 : resolveOidcIntegrationPrincipal();
+        StructuredLogContext.put("tenantId", principal.tenantId());
+        StructuredLogContext.put("actorId", principal.actorId());
+        return principal;
     }
 
     public SecurityMode securityMode() {
@@ -75,15 +83,24 @@ public class RequestContextResolver {
     }
 
     public CorrelationId resolveCorrelationId(HttpServletRequest request) {
+        Object established = request.getAttribute(RequestCorrelationFilter.REQUEST_ATTRIBUTE_CORRELATION_ID);
+        if (established instanceof UUID uuid) {
+            StructuredLogContext.put("correlationId", uuid);
+            return CorrelationId.of(uuid);
+        }
         String header = request.getHeader(HEADER_CORRELATION_ID);
         if (header != null && !header.isBlank()) {
             try {
-                return CorrelationId.of(UUID.fromString(header.trim()));
+                UUID uuid = UUID.fromString(header.trim());
+                StructuredLogContext.put("correlationId", uuid);
+                return CorrelationId.of(uuid);
             } catch (IllegalArgumentException ignored) {
                 // Invalid correlation metadata is replaced, never used as identity truth.
             }
         }
-        return CorrelationId.generate();
+        CorrelationId generated = CorrelationId.generate();
+        StructuredLogContext.put("correlationId", generated);
+        return generated;
     }
 
     private AuthenticatedPrincipal resolveLocalPrincipal(HttpServletRequest request) {

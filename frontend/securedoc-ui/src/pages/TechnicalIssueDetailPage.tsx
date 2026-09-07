@@ -6,7 +6,7 @@ import type { ApiError, PackageDetail, TechnicalExceptionDetail } from '../types
 import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
 
 function friendlyStage(stage: string) {
-  return stage.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  return stage.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function TechnicalIssueDetailPage() {
@@ -113,6 +113,58 @@ export default function TechnicalIssueDetailPage() {
             </table>
           </section>
 
+
+          {detail.incidentId && (
+            <section className="card technical-incident-record">
+              <div className="technical-incident-record-head">
+                <div>
+                  <p className="eyebrow">Structured incident</p>
+                  <h2>Incident record</h2>
+                </div>
+                <span className="platform-status">{friendlyStage(detail.incidentStatus || 'OPEN')}</span>
+              </div>
+              <table>
+                <tbody>
+                  <tr><td><strong>Incident ID</strong></td><td><code>{detail.incidentId}</code></td></tr>
+                  <tr><td><strong>Business continuity</strong></td><td>{detail.businessContinuityUsed ? `Used${detail.businessOutcome ? ` · ${friendlyStage(detail.businessOutcome)}` : ''}` : 'Not used'}</td></tr>
+                </tbody>
+              </table>
+
+              {detail.processingFingerprint && Object.keys(detail.processingFingerprint).length > 0 && (
+                <div className="technical-fingerprint">
+                  <h3>Processing fingerprint</h3>
+                  <p>Safe version/configuration identifiers captured when the incident occurred.</p>
+                  <div className="technical-fingerprint-grid">
+                    {Object.entries(detail.processingFingerprint).map(([key, value]) => (
+                      <div key={key}><span>{friendlyStage(key)}</span><strong>{value}</strong></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {detail.incidentEvents && detail.incidentEvents.length > 0 && (
+                <div className="technical-incident-history">
+                  <h3>Incident history</h3>
+                  <div className="technical-incident-history-list">
+                    {detail.incidentEvents.map((event, index) => (
+                      <div className="technical-incident-history-item" key={`${event.eventType}-${event.occurredAt}-${index}`}>
+                        <div>
+                          <strong>{friendlyStage(event.eventType)}</strong>
+                          <span>{new Date(event.occurredAt).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          {event.attemptNumber ? <span>Attempt {event.attemptNumber}</span> : null}
+                          {event.scope ? <span>{friendlyStage(event.scope)}</span> : null}
+                          {event.reasonCode ? <code>{event.reasonCode}</code> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
           {detail.operatorDiagnostics && (
             <section className="card technical-operator-diagnostics">
               <h2>Platform operations diagnostics</h2>
@@ -140,7 +192,7 @@ export default function TechnicalIssueDetailPage() {
 
           {!detail.retryable && (
             <div className="platform-boundary-note">
-              Retry is not available for this failure. Use the correlation ID when escalating to tenant IT or platform operations.
+              Retry is not available for this failure. Use the incident ID or correlation ID when escalating to tenant IT or platform operations.
             </div>
           )}
         </>

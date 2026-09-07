@@ -25,6 +25,7 @@ import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.service.AuditService;
+import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
 import com.securedoc.platform.domain.artifact.ArtifactStatus;
 import com.securedoc.platform.domain.artifact.ArtifactType;
 import com.securedoc.platform.domain.audit.AuditAction;
@@ -68,6 +69,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
     private final GetTechnicalExceptionQuery technicalExceptionQuery;
     private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final AuditService auditService;
+    private final ProcessingIncidentService processingIncidentService;
 
     public ManualFallbackService(PackageRepository packageRepository,
                                  DocumentRepository documentRepository,
@@ -78,6 +80,21 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
                                  GetTechnicalExceptionQuery technicalExceptionQuery,
                                  PackageProcessingDispatcher packageProcessingDispatcher,
                                  AuditService auditService) {
+        this(packageRepository, documentRepository, findingRepository, artifactRepository,
+                tenantRedactionPolicyRepository, auditQueryPort, technicalExceptionQuery,
+                packageProcessingDispatcher, auditService, ProcessingIncidentService.noop());
+    }
+
+    public ManualFallbackService(PackageRepository packageRepository,
+                                 DocumentRepository documentRepository,
+                                 FindingRepository findingRepository,
+                                 ArtifactRepository artifactRepository,
+                                 TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+                                 AuditQueryPort auditQueryPort,
+                                 GetTechnicalExceptionQuery technicalExceptionQuery,
+                                 PackageProcessingDispatcher packageProcessingDispatcher,
+                                 AuditService auditService,
+                                 ProcessingIncidentService processingIncidentService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -87,6 +104,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         this.technicalExceptionQuery = Objects.requireNonNull(technicalExceptionQuery);
         this.packageProcessingDispatcher = Objects.requireNonNull(packageProcessingDispatcher);
         this.auditService = Objects.requireNonNull(auditService);
+        this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
     }
 
     @Override
@@ -132,6 +150,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         }
         pkg.prepareForManualFallback();
         packageRepository.save(pkg);
+        processingIncidentService.markBusinessContinuityStarted(command.packageId(), command.tenantId(), command.correlationId());
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),
                 AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED, "DocumentPackage", pkg.id().toString(),
@@ -212,8 +231,8 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
     @Override
     public void execute(SubmitManualFallbackCommand command) {
         Objects.requireNonNull(command);
-        if (!command.fullDocumentReviewed()) {
-            throw new ValidationException("Confirm that every page was reviewed before submitting manual processing");
+        if (!command.reviewAttested()) {
+            throw new ValidationException("Confirm that the document was reviewed as necessary and all required sensitive information was marked before submitting manual processing");
         }
         DocumentPackage pkg = loadPackage(command.packageId(), command.tenantId());
         requireActiveManualFallback(pkg, command.tenantId());
@@ -242,10 +261,11 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
 
         pkg.resumeProcessingAfterReview();
         packageRepository.save(pkg);
+        processingIncidentService.markBusinessContinuitySubmitted(command.packageId(), command.tenantId(), command.correlationId());
         auditService.recordSuccess(command.tenantId(), command.actorId(),
                 AuditAction.BUSINESS_MANUAL_FALLBACK_SUBMITTED, "DocumentPackage", pkg.id().toString(),
                 command.correlationId(), "Business manual fallback submitted: documents=" + manualDocuments.size()
-                        + ", manualRegions=" + activeRegions + ", fullDocumentReviewed=true");
+                        + ", manualRegions=" + activeRegions + ", businessReviewAttested=true");
         packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
                 command.packageId(), command.tenantId(), command.actorId(), command.correlationId()));
     }

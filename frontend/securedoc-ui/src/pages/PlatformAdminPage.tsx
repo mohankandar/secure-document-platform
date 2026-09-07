@@ -158,6 +158,7 @@ export default function PlatformAdminPage() {
           <section className="platform-section">
             <div className="platform-section-heading">
               <div><h2>Technical Incidents</h2><p>Recorded technical failures remain available for investigation even when business continues manually.</p></div>
+              <Link className="button-link secondary" to="/support/incidents">Search all incidents</Link>
               <span className="platform-count">{data.technicalExceptions.length}</span>
             </div>
             {data.technicalExceptions.length === 0 ? (

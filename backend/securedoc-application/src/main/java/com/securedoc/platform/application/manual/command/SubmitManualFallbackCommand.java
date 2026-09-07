@@ -8,7 +8,7 @@ import com.securedoc.platform.domain.identity.TenantId;
 import java.util.Objects;
 
 public record SubmitManualFallbackCommand(PackageId packageId, TenantId tenantId, ActorId actorId,
-                                          CorrelationId correlationId, boolean fullDocumentReviewed) {
+                                          CorrelationId correlationId, boolean reviewAttested) {
     public SubmitManualFallbackCommand {
         Objects.requireNonNull(packageId);
         Objects.requireNonNull(tenantId);

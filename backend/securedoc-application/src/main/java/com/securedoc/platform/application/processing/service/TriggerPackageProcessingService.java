@@ -29,6 +29,7 @@ import com.securedoc.platform.application.redaction.command.RedactDocumentComman
 import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
+import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
@@ -42,6 +43,7 @@ import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.policy.PolicyDecision;
+import com.securedoc.platform.domain.processing.ProcessingStage;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,6 +82,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final SelectiveRetryExecutor selectiveRetryExecutor;
     private final PackageLifecycleService lifecycleService;
     private final AuditService auditService;
+    private final ProcessingIncidentService processingIncidentService;
 
     public TriggerPackageProcessingService(PackageRepository packageRepository,
                                            DocumentRepository documentRepository,
@@ -93,7 +96,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
                                            SelectiveRetryExecutor selectiveRetryExecutor,
                                            PackageLifecycleService lifecycleService,
-                                           AuditService auditService) {
+                                           AuditService auditService,
+                                           ProcessingIncidentService processingIncidentService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -107,6 +111,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.selectiveRetryExecutor = Objects.requireNonNull(selectiveRetryExecutor);
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
         this.auditService = Objects.requireNonNull(auditService);
+        this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
     }
 
     @Override
@@ -185,16 +190,19 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     }
 
     private void processDocument(ProcessingWorkItem workItem, CorrelationId correlationId) {
+        ProcessingStage stage = ProcessingStage.DOCUMENT_PROCESSING;
         try {
             StartDocumentProcessingResult start = startDocumentProcessingUseCase.execute(
                     StartDocumentProcessingCommand.of(
                             workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId));
 
+            stage = ProcessingStage.TEXT_EXTRACTION;
             ExtractDocumentTextResult extraction = extractDocumentTextUseCase.execute(
                     ExtractDocumentTextCommand.of(
                             workItem.documentId(), workItem.packageId(), workItem.tenantId(),
                             start.lockKey(), start.lockToken(), correlationId));
 
+            stage = ProcessingStage.SENSITIVE_DETECTION;
             DetectSensitiveDataResult detection = detectSensitiveDataUseCase.execute(
                     DetectSensitiveDataCommand.of(
                             workItem.documentId(), workItem.packageId(), workItem.tenantId(), correlationId));
@@ -205,6 +213,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             }
             // REVIEW intentionally remains REDACTING until only confirmed/dismissed findings remain.
         } catch (Exception e) {
+            processingIncidentService.recordFailure(workItem.tenantId(), workItem.packageId(), workItem.documentId(),
+                    stage, e, correlationId, "Document processing failed", java.util.Map.of());
             markDocumentFailedIfNeeded(workItem.documentId(), workItem.tenantId(), correlationId,
                     TechnicalFailureClassifier.safeAuditDetail(e, "Document processing failed"));
         }
@@ -224,6 +234,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             // A review precondition is not a technical failure; surface it to the caller.
             throw e;
         } catch (Exception e) {
+            processingIncidentService.recordFailure(tenantId, packageId, documentId, ProcessingStage.REDACTION,
+                    e, correlationId, "Document redaction failed", java.util.Map.of());
             markDocumentFailedIfNeeded(documentId, tenantId, correlationId,
                     TechnicalFailureClassifier.safeAuditDetail(e, "Document redaction failed"));
         }
@@ -314,6 +326,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             exportResult = selectiveRetryExecutor.execute(() -> exportPackageDocumentsUseCase.execute(
                     ExportPackageDocumentsCommand.of(packageId, tenantId, correlationId)));
         } catch (Exception e) {
+            processingIncidentService.recordFailure(tenantId, packageId, null, ProcessingStage.DELIVERY,
+                    e, correlationId, "Package delivery failed", java.util.Map.of());
             failPackage(pkg, tenantId, packageId, correlationId,
                     TechnicalFailureClassifier.safeAuditDetail(
                             e, "Package delivery failed; technical attention required"));
@@ -332,6 +346,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
 
         pkg.completeSuccessfully();
         packageRepository.save(pkg);
+        processingIncidentService.markProcessingCompleted(packageId, tenantId, correlationId);
         auditService.recordSuccess(
                 tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_COMPLETED,
                 "DocumentPackage", packageId.toString(), correlationId,

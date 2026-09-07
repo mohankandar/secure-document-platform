@@ -6,6 +6,7 @@ import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
+import com.securedoc.platform.application.observability.StructuredLogContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -148,17 +149,17 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         JsonNode responseSchema = structuredOutput ? buildResponseSchema() : null;
         long startedNanos = System.nanoTime();
 
-        log.info("AI_ANALYSIS_STARTED provider=ollama model={} pages={} batches={} batchSize={} batchMaxChars={} parallelism={} timeoutSeconds={} pageMaxAttempts={} keepAlive={} structuredOutput={} thinking={} numCtx={} numPredict={}",
-                model, nonBlankPages.size(), batches.size(), pageBatchSize, pageBatchMaxCharacters, parallelism,
-                timeout.toSeconds(), pageMaxAttempts, keepAlive, structuredOutput, thinkingEnabled,
-                contextWindowTokens, maxOutputTokens);
+        StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.of(
+                "provider", "ollama", "model", model, "pageCount", nonBlankPages.size(),
+                "batchCount", batches.size(), "maxAttempts", pageMaxAttempts),
+                "AI analysis started");
 
         ExecutorService executor = Executors.newFixedThreadPool(parallelism);
         try {
             List<Future<BatchAnalysisResult>> futures = new ArrayList<>(batches.size());
             for (List<PageContent> batch : batches) {
-                futures.add(executor.submit(() -> analyzeBatchWithRetry(
-                        batch, pageRetryCount, providerCallCount, systemPrompt, responseSchema)));
+                futures.add(executor.submit(StructuredLogContext.wrap(() -> analyzeBatchWithRetry(
+                        batch, pageRetryCount, providerCallCount, systemPrompt, responseSchema))));
             }
 
             List<DiscoveredSensitiveContent> discoveries = new ArrayList<>();
@@ -180,12 +181,11 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 }
             }
 
-            log.info("AI_ANALYSIS_COMPLETED provider=ollama model={} pages={} batches={} providerCalls={} findings={} pageRetries={} durationMs={} loadMs={} promptTokens={} promptEvalMs={} outputTokens={} outputEvalMs={} outputTokensPerSecond={}",
-                    model, nonBlankPages.size(), batches.size(), providerCallCount.get(), discoveries.size(),
-                    pageRetryCount.get(), elapsedMillis(startedNanos), nanosToMillis(aggregate.loadDurationNanos.get()),
-                    aggregate.promptEvalCount.get(), nanosToMillis(aggregate.promptEvalDurationNanos.get()),
-                    aggregate.evalCount.get(), nanosToMillis(aggregate.evalDurationNanos.get()),
-                    formatRate(aggregate.evalCount.get(), aggregate.evalDurationNanos.get()));
+            StructuredLogContext.info(log, "AI_ANALYSIS_COMPLETED", Map.of(
+                    "provider", "ollama", "model", model, "pageCount", nonBlankPages.size(),
+                    "batchCount", batches.size(), "providerCalls", providerCallCount.get(),
+                    "findingCount", discoveries.size(), "pageRetries", pageRetryCount.get(),
+                    "durationMs", elapsedMillis(startedNanos)), "AI analysis completed");
             return new AnalysisOutput(discoveries);
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
@@ -194,9 +194,11 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             int attempts = e instanceof TechnicalDependencyException technical
                     ? technical.attempts()
                     : 1;
-            log.warn("AI_ANALYSIS_FAILED provider=ollama model={} pages={} batches={} providerCalls={} reason={} attempts={} pageRetries={} durationMs={}",
-                    model, nonBlankPages.size(), batches.size(), providerCallCount.get(), reason, attempts,
-                    pageRetryCount.get(), elapsedMillis(startedNanos));
+            StructuredLogContext.warn(log, "AI_ANALYSIS_FAILED", Map.of(
+                    "provider", "ollama", "model", model, "pageCount", nonBlankPages.size(),
+                    "batchCount", batches.size(), "providerCalls", providerCallCount.get(),
+                    "reasonCode", reason, "attempt", attempts, "pageRetries", pageRetryCount.get(),
+                    "durationMs", elapsedMillis(startedNanos)), "AI analysis failed");
             throw e;
         } finally {
             executor.shutdownNow();

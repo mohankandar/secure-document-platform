@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <property name="CONSOLE_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} correlation=%X{correlationId:-} tenant=%X{tenantId:-} incident=%X{incidentId:-} event=%X{eventName:-} - %msg%n"/>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="021-01-processing-incidents" author="openai">
+        <createTable tableName="processing_incidents">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="document_id" type="UUID"/>
+            <column name="stage" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="component" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="failure_category" type="VARCHAR(96)"><constraints nullable="false"/></column>
+            <column name="reason_code" type="VARCHAR(96)"><constraints nullable="false"/></column>
+            <column name="retryable" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="attempt_count" type="INT"><constraints nullable="false"/></column>
+            <column name="correlation_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="business_continuity_used" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="business_outcome" type="VARCHAR(32)"/>
+            <column name="safe_summary" type="VARCHAR(500)"><constraints nullable="false"/></column>
+            <column name="processing_fingerprint" type="JSONB" defaultValueComputed="'{}'::jsonb"><constraints nullable="false"/></column>
+            <column name="safe_metadata" type="JSONB" defaultValueComputed="'{}'::jsonb"><constraints nullable="false"/></column>
+            <column name="first_observed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="last_observed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="resolved_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <createIndex tableName="processing_incidents" indexName="idx_processing_incident_tenant_status_time">
+            <column name="tenant_id"/><column name="status"/><column name="last_observed_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="processing_incidents" indexName="idx_processing_incident_package_time">
+            <column name="tenant_id"/><column name="package_id"/><column name="last_observed_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="processing_incidents" indexName="idx_processing_incident_correlation">
+            <column name="tenant_id"/><column name="correlation_id"/>
+        </createIndex>
+        <createIndex tableName="processing_incidents" indexName="idx_processing_incident_reason_stage">
+            <column name="tenant_id"/><column name="reason_code"/><column name="stage"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="021-02-processing-incident-events" author="openai">
+        <createTable tableName="processing_incident_events">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="incident_id" type="UUID"><constraints nullable="false" foreignKeyName="fk_processing_incident_event_incident" references="processing_incidents(id)" deleteCascade="true"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="event_type" type="VARCHAR(48)"><constraints nullable="false"/></column>
+            <column name="attempt_number" type="INT"/>
+            <column name="scope" type="VARCHAR(64)"/>
+            <column name="reason_code" type="VARCHAR(96)"/>
+            <column name="retryable" type="BOOLEAN"/>
+            <column name="correlation_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="safe_metadata" type="JSONB" defaultValueComputed="'{}'::jsonb"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="processing_incident_events" indexName="idx_processing_incident_event_incident_time">
+            <column name="tenant_id"/><column name="incident_id"/><column name="occurred_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

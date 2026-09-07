@@ -72,6 +72,9 @@ import com.securedoc.platform.application.port.out.OperationsReadPort;
 import com.securedoc.platform.application.port.out.DashboardColumnSettingsRepository;
 import com.securedoc.platform.application.port.out.PdfRedactionPort;
 import com.securedoc.platform.application.port.out.ProcessingLockPort;
+import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
+import com.securedoc.platform.application.port.out.SupportIncidentSearchRepository;
+import com.securedoc.platform.application.port.out.ProcessingFingerprintProvider;
 import com.securedoc.platform.application.port.out.ReviewTaskRepository;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
 import com.securedoc.platform.application.port.out.SensitiveDataDetectionPort;
@@ -108,6 +111,8 @@ import com.securedoc.platform.application.lifecycle.service.ReprocessPackageServ
 import com.securedoc.platform.application.lifecycle.service.FinalDeliveryApprovalService;
 import com.securedoc.platform.application.technical.service.TechnicalExceptionQueryService;
 import com.securedoc.platform.application.technical.service.RetryTechnicalFailureService;
+import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
+import com.securedoc.platform.application.support.service.SupportIncidentQueryService;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.port.out.DeliverySubmissionRepository;
@@ -125,6 +130,7 @@ import com.securedoc.platform.ai.analysis.LocalHeuristicSensitiveContentAnalysis
 import com.securedoc.platform.ai.analysis.OllamaSensitiveContentAnalysisAdapter;
 import com.securedoc.platform.ai.analysis.OpenAiCompatibleSensitiveContentAnalysisAdapter;
 import com.securedoc.platform.api.processing.InProcessPackageProcessingDispatcher;
+import com.securedoc.platform.api.observability.MdcTaskDecorator;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.resilience.TechnicalResilienceProperties;
 import com.securedoc.platform.worker.processing.ProcessingWorkCoordinator;
@@ -136,6 +142,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.env.Environment;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
@@ -155,6 +162,32 @@ public class ApplicationServiceConfig {
         return new TenantContextService(tenantRepository);
     }
 
+    @Bean
+    public ProcessingFingerprintProvider processingFingerprintProvider(Environment environment) {
+        return () -> {
+            Map<String, String> fingerprint = new LinkedHashMap<>();
+            putIfPresent(fingerprint, "applicationVersion", environment.getProperty("securedoc.build.version", "0.1.0-SNAPSHOT"));
+            putIfPresent(fingerprint, "aiProvider", environment.getProperty("securedoc.ai.provider"));
+            putIfPresent(fingerprint, "aiModel", environment.getProperty("securedoc.ai.model"));
+            putIfPresent(fingerprint, "profile", environment.getProperty("spring.profiles.active", "default"));
+            return Map.copyOf(fingerprint);
+        };
+    }
+
+    @Bean
+    public ProcessingIncidentService processingIncidentService(ProcessingIncidentRepository processingIncidentRepository,
+                                                               ProcessingFingerprintProvider processingFingerprintProvider) {
+        return new ProcessingIncidentService(processingIncidentRepository, processingFingerprintProvider);
+    }
+
+
+
+    @Bean
+    public SupportIncidentQueryService supportIncidentQueryService(
+            SupportIncidentSearchRepository supportIncidentSearchRepository,
+            ProcessingIncidentRepository processingIncidentRepository) {
+        return new SupportIncidentQueryService(supportIncidentSearchRepository, processingIncidentRepository);
+    }
 
     @Bean
     public IntegrationConnectionService integrationConnectionService(
@@ -664,10 +697,11 @@ public class ApplicationServiceConfig {
             AuditQueryPort auditQueryPort,
             GetTechnicalExceptionQuery technicalExceptionQuery,
             PackageProcessingDispatcher packageProcessingDispatcher,
-            AuditService auditService) {
+            AuditService auditService,
+            ProcessingIncidentService processingIncidentService) {
         return new ManualFallbackService(packageRepository, documentRepository, findingRepository,
                 artifactRepository, tenantRedactionPolicyRepository, auditQueryPort, technicalExceptionQuery,
-                packageProcessingDispatcher, auditService);
+                packageProcessingDispatcher, auditService, processingIncidentService);
     }
 
     @Bean
@@ -756,11 +790,13 @@ public class ApplicationServiceConfig {
             ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
             SelectiveRetryExecutor selectiveRetryExecutor,
             PackageLifecycleService packageLifecycleService,
-            AuditService auditService) {
+            AuditService auditService,
+            ProcessingIncidentService processingIncidentService) {
         return new TriggerPackageProcessingService(packageRepository, documentRepository,
                 findingRepository, startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase,
-                exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService, auditService);
+                exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService,
+                auditService, processingIncidentService);
     }
 
 
@@ -776,6 +812,7 @@ public class ApplicationServiceConfig {
         executor.setQueueCapacity(50);
         executor.setThreadNamePrefix("polling-intake-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         return executor;
     }
@@ -788,6 +825,7 @@ public class ApplicationServiceConfig {
         executor.setQueueCapacity(100);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setThreadNamePrefix("review-resume-");
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
         return executor;
@@ -864,9 +902,11 @@ public class ApplicationServiceConfig {
             DocumentRepository documentRepository,
             PackageLifecycleRepository packageLifecycleRepository,
             ArtifactRepository artifactRepository,
-            AuditQueryPort auditQueryPort) {
+            AuditQueryPort auditQueryPort,
+            ProcessingIncidentRepository processingIncidentRepository) {
         return new TechnicalExceptionQueryService(
-                packageRepository, documentRepository, packageLifecycleRepository, artifactRepository, auditQueryPort);
+                packageRepository, documentRepository, packageLifecycleRepository, artifactRepository, auditQueryPort,
+                processingIncidentRepository);
     }
 
     @Bean
@@ -878,9 +918,11 @@ public class ApplicationServiceConfig {
             ArtifactRepository artifactRepository,
             PackageLifecycleService packageLifecycleService,
             PackageProcessingDispatcher packageProcessingDispatcher,
-            AuditService auditService) {
+            AuditService auditService,
+            ProcessingIncidentService processingIncidentService) {
         return new RetryTechnicalFailureService(technicalExceptionQuery, packageRepository, documentRepository,
-                findingRepository, artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService);
+                findingRepository, artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService,
+                processingIncidentService);
     }
 
     @Bean
@@ -930,4 +972,10 @@ public class ApplicationServiceConfig {
             ProcessingWorkerConfig config) {
         return new ProcessingWorker(packageRepository, coordinator, config);
     }
+    private static void putIfPresent(Map<String, String> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value.trim());
+        }
+    }
+
 }

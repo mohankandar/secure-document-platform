@@ -200,3 +200,30 @@ A new ChatGPT or Kiro session should start with:
 4. source inspection before modification.
 
 Do not reconstruct current behavior from archived unit notes when a current document or current source answers the question.
+
+---
+
+## 2026-09-06 observability continuation
+
+The latest verified baseline now also includes:
+
+- R11 customer-demo accuracy baseline — VERIFIED / FROZEN;
+- AI Processing Resilience — VERIFIED / FROZEN;
+- Business Continuity Manual Processing Fallback — VERIFIED / FROZEN;
+- Structured Processing Incident Foundation — VERIFIED / FROZEN after independent Kiro PASS;
+- Liquibase baseline — 52 applied changesets.
+
+### Current bounded unit: Structured JSON Logging for SaaS/Production
+
+**Status:** IN VALIDATION.
+
+Scope:
+- production/SaaS JSON console logging;
+- readable local/demo logging by default;
+- one request correlation UUID, preserved from a valid `X-Correlation-Id` when supplied;
+- safe MDC propagation through Spring-managed background work and AI provider worker pools;
+- durable Incident ID integration in structured operational events;
+- explicit MDC allow-list that excludes prompts, provider responses, OCR/document text, matched values, protected values, credentials and tokens;
+- no schema/migration change; Liquibase remains 52.
+
+This unit must not refactor or change the frozen R11 detection/redaction behavior. It must pass local Maven/frontend/runtime JSON/privacy validation before independent Kiro verification and acceptance.

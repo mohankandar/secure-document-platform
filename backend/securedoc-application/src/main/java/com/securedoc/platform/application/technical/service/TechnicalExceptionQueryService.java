@@ -9,6 +9,7 @@ import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.technical.model.TechnicalExceptionDetail;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.artifact.ArtifactStatus;
@@ -18,6 +19,7 @@ import com.securedoc.platform.domain.document.DocumentStatus;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.processing.ProcessingIncident;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,43 +27,95 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
-/** Builds safe technical issue details from persisted lifecycle state plus sanitized audit metadata. */
+/**
+ * Builds safe technical issue details from durable structured incidents when available, while
+ * retaining audit-backed compatibility for incidents created before the structured incident store.
+ */
 public final class TechnicalExceptionQueryService implements GetTechnicalExceptionQuery {
     private final PackageRepository packageRepository;
     private final DocumentRepository documentRepository;
     private final PackageLifecycleRepository lifecycleRepository;
     private final ArtifactRepository artifactRepository;
     private final AuditQueryPort auditQueryPort;
+    private final ProcessingIncidentRepository incidentRepository;
 
     public TechnicalExceptionQueryService(PackageRepository packageRepository,
                                           DocumentRepository documentRepository,
                                           PackageLifecycleRepository lifecycleRepository,
                                           ArtifactRepository artifactRepository,
                                           AuditQueryPort auditQueryPort) {
+        this(packageRepository, documentRepository, lifecycleRepository, artifactRepository,
+                auditQueryPort, ProcessingIncidentRepository.none());
+    }
+
+    public TechnicalExceptionQueryService(PackageRepository packageRepository,
+                                          DocumentRepository documentRepository,
+                                          PackageLifecycleRepository lifecycleRepository,
+                                          ArtifactRepository artifactRepository,
+                                          AuditQueryPort auditQueryPort,
+                                          ProcessingIncidentRepository incidentRepository) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.lifecycleRepository = Objects.requireNonNull(lifecycleRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
         this.auditQueryPort = Objects.requireNonNull(auditQueryPort);
+        this.incidentRepository = Objects.requireNonNull(incidentRepository);
     }
 
     @Override
     public TechnicalExceptionDetail execute(PackageId packageId, TenantId tenantId) {
         var pkg = packageRepository.findByIdAndTenantId(packageId, tenantId)
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", packageId.toString()));
+        List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
+        RetentionState retention = retentionState(packageId, tenantId, documents);
 
-        List<AuditRecordSummary> packageFailures = queryFailures(tenantId, "DocumentPackage", packageId.toString(), 20);
-        if (pkg.status() != PackageStatus.FAILED && packageFailures.isEmpty()) {
-            throw new IllegalStateException("No recorded technical issue is available for this package");
+        var structured = incidentRepository.findLatestByPackageIdAndTenantId(packageId, tenantId);
+        if (structured.isPresent()) {
+            return fromStructuredIncident(structured.get(), pkg.status(), retention);
         }
 
-        List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
+        return fromLegacyAudit(packageId, tenantId, pkg.status(), pkg.updatedAt(), documents, retention);
+    }
+
+    private TechnicalExceptionDetail fromStructuredIncident(ProcessingIncident incident,
+                                                             PackageStatus packageStatus,
+                                                             RetentionState retention) {
+        boolean retryAvailable = packageStatus == PackageStatus.FAILED
+                && incident.retryable() && retention.originalAvailable();
+        var events = incidentRepository.findEvents(incident.id(), incident.tenantId(), 50).stream()
+                .sorted(Comparator.comparing(com.securedoc.platform.domain.processing.ProcessingIncidentEvent::occurredAt))
+                .map(event -> new TechnicalExceptionDetail.IncidentEventSummary(
+                        event.eventType().name(), event.attemptNumber(), event.scope(), event.reasonCode(),
+                        event.retryable(), event.correlationId().toString(), event.occurredAt(), event.safeMetadata()))
+                .toList();
+        return new TechnicalExceptionDetail(
+                incident.packageId(), incident.documentId(), packageStatus.name(), incident.failureCategory(),
+                incident.stage().name(), incident.component(), incident.reasonCode(), retryAvailable,
+                incident.attempts(), incident.firstObservedAt(), incident.correlationId().toString(),
+                retention.retainedUntil(), TechnicalFailureTaxonomy.explanation(
+                        incident.reasonCode(), incident.retryable(), retention.originalAvailable(), packageStatus == PackageStatus.FAILED),
+                incident.id(), incident.status().name(), incident.businessContinuityUsed(),
+                incident.businessOutcome(), incident.processingFingerprint(), events);
+    }
+
+    private TechnicalExceptionDetail fromLegacyAudit(PackageId packageId,
+                                                      TenantId tenantId,
+                                                      PackageStatus packageStatus,
+                                                      Instant packageUpdatedAt,
+                                                      List<Document> documents,
+                                                      RetentionState retention) {
+        List<AuditRecordSummary> packageFailures = queryFailures(tenantId, "DocumentPackage", packageId.toString(), 20);
+        if (packageStatus != PackageStatus.FAILED && packageFailures.isEmpty()) {
+            boolean anyDocumentFailure = documents.stream().anyMatch(document ->
+                    !queryFailures(tenantId, "Document", document.id().toString(), 1).isEmpty());
+            if (!anyDocumentFailure) {
+                throw new IllegalStateException("No recorded technical issue is available for this package");
+            }
+        }
+
         List<Document> failedDocuments = documents.stream()
                 .filter(document -> document.status() == DocumentStatus.FAILED)
                 .toList();
-        // Keep the original technical cause available even after business manual fallback moves
-        // a document out of FAILED. Current status determines whether retry is offered; immutable
-        // failure audit remains the source of truth for incident diagnosis.
         List<AuditRecordSummary> candidates = new ArrayList<>(packageFailures);
         boolean allFailedDocumentsRetryable = !failedDocuments.isEmpty();
         for (Document document : documents) {
@@ -89,6 +143,41 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
                 ? TechnicalFailureAuditParser.Parsed.unknown()
                 : TechnicalFailureAuditParser.parse(selected.detail());
 
+        String resourceId = selected == null ? null : selected.resourceId();
+        var failedDocumentId = documents.stream()
+                .filter(document -> document.id().toString().equals(resourceId))
+                .map(Document::id)
+                .findFirst()
+                .orElseGet(() -> failedDocuments.stream().map(Document::id).findFirst().orElse(null));
+        if (failedDocumentId == null) {
+            failedDocumentId = documents.stream()
+                    .filter(document -> !queryFailures(tenantId, "Document", document.id().toString(), 1).isEmpty())
+                    .map(Document::id).findFirst().orElse(null);
+        }
+
+        boolean classifiedRetryable = failedDocuments.isEmpty()
+                ? parsed.retryable()
+                : allFailedDocumentsRetryable;
+        String code = parsed.code();
+        String dependency = parsed.dependency();
+        boolean retryAvailable = packageStatus == PackageStatus.FAILED && classifiedRetryable && retention.originalAvailable();
+        return new TechnicalExceptionDetail(
+                packageId,
+                failedDocumentId,
+                packageStatus.name(),
+                TechnicalFailureTaxonomy.category(code, dependency),
+                failedStage(code, parsed.prefix()),
+                dependency,
+                code,
+                retryAvailable,
+                parsed.attempts(),
+                selected == null ? packageUpdatedAt : selected.occurredAt(),
+                selected == null ? null : selected.correlationId(),
+                retention.retainedUntil(),
+                TechnicalFailureTaxonomy.explanation(code, classifiedRetryable, retention.originalAvailable(), packageStatus == PackageStatus.FAILED));
+    }
+
+    private RetentionState retentionState(PackageId packageId, TenantId tenantId, List<Document> documents) {
         var lifecycle = lifecycleRepository.findByPackageIdAndTenantId(packageId, tenantId).orElse(null);
         Instant retainedUntil = null;
         boolean originalAvailable = lifecycle != null
@@ -107,41 +196,7 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
                 artifactRepository.findByDocumentIdAndTenantId(document.id(), tenantId).stream()
                         .anyMatch(artifact -> artifact.artifactType() == ArtifactType.ORIGINAL
                                 && artifact.status() != ArtifactStatus.DELETED));
-        originalAvailable = originalAvailable && originalsPresent;
-
-        String resourceId = selected == null ? null : selected.resourceId();
-        var failedDocumentId = documents.stream()
-                .filter(document -> document.id().toString().equals(resourceId))
-                .map(Document::id)
-                .findFirst()
-                .orElseGet(() -> failedDocuments.stream().map(Document::id).findFirst().orElse(null));
-        if (failedDocumentId == null) {
-            failedDocumentId = documents.stream()
-                    .filter(document -> !queryFailures(tenantId, "Document", document.id().toString(), 1).isEmpty())
-                    .map(Document::id).findFirst().orElse(null);
-        }
-
-        boolean classifiedRetryable = failedDocuments.isEmpty()
-                ? parsed.retryable()
-                : allFailedDocumentsRetryable;
-
-        String code = parsed.code();
-        String dependency = parsed.dependency();
-        boolean retryAvailable = pkg.status() == PackageStatus.FAILED && classifiedRetryable && originalAvailable;
-        return new TechnicalExceptionDetail(
-                packageId,
-                failedDocumentId,
-                pkg.status().name(),
-                failureCategory(code, dependency),
-                failedStage(code, parsed.prefix()),
-                dependency,
-                code,
-                retryAvailable,
-                parsed.attempts(),
-                selected == null ? pkg.updatedAt() : selected.occurredAt(),
-                selected == null ? null : selected.correlationId(),
-                retainedUntil,
-                explanation(code, dependency, classifiedRetryable, originalAvailable, pkg.status()));
+        return new RetentionState(retainedUntil, originalAvailable && originalsPresent);
     }
 
     private List<AuditRecordSummary> queryFailures(TenantId tenantId, String resourceType, String resourceId, int limit) {
@@ -164,7 +219,7 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
 
     private String failedStage(String code, String prefix) {
         if (code.startsWith("AI_")) return "AI_ANALYSIS";
-        if (code.startsWith("OCR_")) return "TEXT_EXTRACTION_OCR";
+        if (code.startsWith("OCR_")) return "OCR";
         if (code.startsWith("DELIVERY_")) return "DELIVERY";
         if (code.startsWith("STORAGE_")) return "STORAGE";
         String normalized = prefix == null ? "" : prefix.toLowerCase();
@@ -174,39 +229,5 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
         return "DOCUMENT_PROCESSING";
     }
 
-    private String failureCategory(String code, String dependency) {
-        if (code.contains("TIMEOUT")) return "DEPENDENCY_TIMEOUT";
-        if (code.contains("UNAVAILABLE")) return "DEPENDENCY_UNAVAILABLE";
-        if (code.contains("RATE_LIMITED")) return "DEPENDENCY_RATE_LIMITED";
-        if (code.contains("INVALID_RESPONSE") || code.contains("REJECTED")) return "DEPENDENCY_RESPONSE_ERROR";
-        if (code.contains("DESTINATION_INVALID")) return "DELIVERY_CONFIGURATION";
-        if (code.contains("IO") || code.contains("PROCESS_FAILED")) return dependency + "_FAILURE";
-        return "TECHNICAL_PROCESSING_FAILURE";
-    }
-
-    private String explanation(String code, String dependency, boolean classifiedRetryable, boolean originalAvailable, PackageStatus packageStatus) {
-        String base = switch (code) {
-            case "AI_TIMEOUT" -> "The configured AI provider did not respond within the allowed time.";
-            case "AI_RATE_LIMITED" -> "The configured AI provider temporarily limited requests.";
-            case "AI_UNAVAILABLE" -> "The configured AI provider was unavailable during processing.";
-            case "AI_REJECTED", "AI_INVALID_RESPONSE" -> "The configured AI provider returned a response that could not be safely used.";
-            case "OCR_TIMEOUT" -> "OCR did not complete within the allowed time.";
-            case "OCR_UNAVAILABLE" -> "The configured OCR service was unavailable.";
-            case "OCR_PROCESS_FAILED" -> "OCR could not process the document successfully.";
-            case "DELIVERY_IO" -> "The configured delivery destination could not be reached successfully.";
-            case "DELIVERY_DESTINATION_INVALID" -> "The configured delivery destination is not valid for this package.";
-            case "STORAGE_IO" -> "Internal document storage was temporarily unavailable.";
-            default -> "Processing stopped because of a technical failure. Use the correlation ID for support diagnostics.";
-        };
-        if (packageStatus != PackageStatus.FAILED) {
-            return base + " Business processing may continue independently; this technical incident remains recorded for investigation.";
-        }
-        if (classifiedRetryable && !originalAvailable) {
-            return base + " Retry is unavailable because the retained original is no longer available.";
-        }
-        if (classifiedRetryable) {
-            return base + " The failure is classified as safe to retry.";
-        }
-        return base;
-    }
+    private record RetentionState(Instant retainedUntil, boolean originalAvailable) { }
 }

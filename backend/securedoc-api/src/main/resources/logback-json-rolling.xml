@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="securedoc-platform"/>
+    <springProperty scope="context" name="environment" source="securedoc.logging.environment" defaultValue="production"/>
+
+    <!--
+      Optional local/on-prem rolling-file profile.
+      SaaS/container deployments should normally use logback-json.xml and let
+      the centralized logging platform own collection/retention.
+    -->
+    <property name="LOG_DIR" value="${SECUREDOC_LOG_DIR:-logs}"/>
+    <property name="LOG_FILE" value="${LOG_DIR}/securedoc-platform.json"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${serviceName}","environment":"${environment}"}</customFields>
+            <includeContext>false</includeContext>
+            <includeCallerData>false</includeCallerData>
+            <includeMdc>true</includeMdc>
+            <includeMdcKeyName>tenantId</includeMdcKeyName>
+            <includeMdcKeyName>actorId</includeMdcKeyName>
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <includeMdcKeyName>packageId</includeMdcKeyName>
+            <includeMdcKeyName>documentId</includeMdcKeyName>
+            <includeMdcKeyName>incidentId</includeMdcKeyName>
+            <includeMdcKeyName>eventName</includeMdcKeyName>
+            <includeMdcKeyName>stage</includeMdcKeyName>
+            <includeMdcKeyName>component</includeMdcKeyName>
+            <includeMdcKeyName>failureCategory</includeMdcKeyName>
+            <includeMdcKeyName>reasonCode</includeMdcKeyName>
+            <includeMdcKeyName>provider</includeMdcKeyName>
+            <includeMdcKeyName>model</includeMdcKeyName>
+            <includeMdcKeyName>attempt</includeMdcKeyName>
+            <includeMdcKeyName>maxAttempts</includeMdcKeyName>
+            <includeMdcKeyName>retryable</includeMdcKeyName>
+            <includeMdcKeyName>durationMs</includeMdcKeyName>
+            <includeMdcKeyName>status</includeMdcKeyName>
+            <includeMdcKeyName>decision</includeMdcKeyName>
+            <includeMdcKeyName>scope</includeMdcKeyName>
+            <includeMdcKeyName>businessOutcome</includeMdcKeyName>
+            <includeMdcKeyName>pageCount</includeMdcKeyName>
+            <includeMdcKeyName>batchCount</includeMdcKeyName>
+            <includeMdcKeyName>providerCalls</includeMdcKeyName>
+            <includeMdcKeyName>pageRetries</includeMdcKeyName>
+            <includeMdcKeyName>findingCount</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${serviceName}","environment":"${environment}"}</customFields>
+            <includeContext>false</includeContext>
+            <includeCallerData>false</includeCallerData>
+            <includeMdc>true</includeMdc>
+            <includeMdcKeyName>tenantId</includeMdcKeyName>
+            <includeMdcKeyName>actorId</includeMdcKeyName>
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <includeMdcKeyName>packageId</includeMdcKeyName>
+            <includeMdcKeyName>documentId</includeMdcKeyName>
+            <includeMdcKeyName>incidentId</includeMdcKeyName>
+            <includeMdcKeyName>eventName</includeMdcKeyName>
+            <includeMdcKeyName>stage</includeMdcKeyName>
+            <includeMdcKeyName>component</includeMdcKeyName>
+            <includeMdcKeyName>failureCategory</includeMdcKeyName>
+            <includeMdcKeyName>reasonCode</includeMdcKeyName>
+            <includeMdcKeyName>provider</includeMdcKeyName>
+            <includeMdcKeyName>model</includeMdcKeyName>
+            <includeMdcKeyName>attempt</includeMdcKeyName>
+            <includeMdcKeyName>maxAttempts</includeMdcKeyName>
+            <includeMdcKeyName>retryable</includeMdcKeyName>
+            <includeMdcKeyName>durationMs</includeMdcKeyName>
+            <includeMdcKeyName>status</includeMdcKeyName>
+            <includeMdcKeyName>decision</includeMdcKeyName>
+            <includeMdcKeyName>scope</includeMdcKeyName>
+            <includeMdcKeyName>businessOutcome</includeMdcKeyName>
+            <includeMdcKeyName>pageCount</includeMdcKeyName>
+            <includeMdcKeyName>batchCount</includeMdcKeyName>
+            <includeMdcKeyName>providerCalls</includeMdcKeyName>
+            <includeMdcKeyName>pageRetries</includeMdcKeyName>
+            <includeMdcKeyName>findingCount</includeMdcKeyName>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/securedoc-platform.%d{yyyy-MM-dd}.%i.json.gz</fileNamePattern>
+            <maxFileSize>${SECUREDOC_LOG_MAX_FILE_SIZE:-100MB}</maxFileSize>
+            <maxHistory>${SECUREDOC_LOG_MAX_HISTORY:-14}</maxHistory>
+            <totalSizeCap>${SECUREDOC_LOG_TOTAL_SIZE_CAP:-2GB}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+        <appender-ref ref="JSON_FILE"/>
+    </root>
+</configuration>

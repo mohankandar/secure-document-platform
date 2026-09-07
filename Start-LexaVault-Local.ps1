@@ -1,7 +1,12 @@
 param(
     [switch]$PullModelIfMissing,
     [switch]$SkipAiWarmup,
-    [string]$AiModel = ""
+    [string]$AiModel = "",
+    [ValidateSet("Readable", "Json")]
+    [string]$LoggingFormat = "Json",
+    [ValidateSet("TRACE", "DEBUG", "INFO", "WARN", "ERROR")]
+    [string]$LogLevel = "DEBUG",
+    [switch]$EnableRollingFileLog
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +19,19 @@ $ComposeFile = Join-Path $ProjectRoot "docker\compose\postgres.yml"
 $RunDir = Join-Path $ProjectRoot ".run"
 $Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:4b" }
 $AiKeepAlive = if ($env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE) { $env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE } else { "30m" }
+if ($EnableRollingFileLog -and $LoggingFormat -ne "Json") {
+    throw "-EnableRollingFileLog requires -LoggingFormat Json."
+}
+$LoggingConfig = if ($LoggingFormat -eq "Readable") {
+    "classpath:logback-local.xml"
+}
+elseif ($EnableRollingFileLog) {
+    "classpath:logback-json-rolling.xml"
+}
+else {
+    "classpath:logback-json.xml"
+}
+$BannerMode = if ($LoggingFormat -eq "Json") { "off" } else { "console" }
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
@@ -95,6 +113,9 @@ function Resolve-ApiJar {
 Write-Host ""
 Write-Host "=== LexaVault LOCAL startup ===" -ForegroundColor Cyan
 Write-Host "Project root: $ProjectRoot"
+Write-Host "Logging:      $LoggingFormat ($LoggingConfig)"
+Write-Host "App log level: $LogLevel"
+Write-Host "Rolling file:  $EnableRollingFileLog"
 
 if (-not (Test-Path $BackendDir)) {
     throw "Backend folder not found: $BackendDir"
@@ -215,7 +236,9 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
 # This launcher already performs (or explicitly skips) warmup above; prevent a duplicate in-app preload.
 `$env:SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED = 'false'
-java -jar '$jarPathEscaped' --spring.profiles.active=local
+`$env:SECUREDOC_LOGGING_CONFIG = '$LoggingConfig'
+`$env:SECUREDOC_LOG_LEVEL_APP = '$LogLevel'
+java -jar '$jarPathEscaped' --spring.profiles.active=local --spring.main.banner-mode=$BannerMode
 "@
 
     Write-Host "Starting backend JAR in a separate PowerShell window..."
@@ -260,4 +283,5 @@ Write-Host "UI:      http://localhost:5173"
 Write-Host "Backend: http://localhost:8080"
 Write-Host "AI:      Ollama / $Model"
 Write-Host "OCR:     $tesseractExe"
+Write-Host "Logging: $LoggingFormat / app=$LogLevel / rollingFile=$EnableRollingFileLog"
 Write-Host ""

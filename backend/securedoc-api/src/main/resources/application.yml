@@ -12,6 +12,8 @@ spring:
       max-request-size: 55MB
 
 securedoc:
+  logging:
+    environment: ${SECUREDOC_ENVIRONMENT:production}
   demo:
     tenant-id: "00000000-0000-0000-0000-000000000001"
     actor-id: "00000000-0000-0000-0000-000000000099"
@@ -123,6 +125,8 @@ securedoc:
     batch-size: 5
 
 logging:
+  config: ${SECUREDOC_LOGGING_CONFIG:classpath:logback-json.xml}
   level:
-    com.securedoc.platform: INFO
-    org.springframework: WARN
+    root: ${SECUREDOC_LOG_LEVEL_ROOT:INFO}
+    com.securedoc.platform: ${SECUREDOC_LOG_LEVEL_APP:INFO}
+    org.springframework: ${SECUREDOC_LOG_LEVEL_SPRING:WARN}

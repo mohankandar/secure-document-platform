@@ -64,7 +64,7 @@ class ManualFallbackServiceTest {
     }
 
     @Test
-    void requiresFullDocumentAttestationAndDispatchesNormalPipelineExactlyOnce() {
+    void requiresBusinessReviewAttestationAndDispatchesNormalPipelineExactlyOnce() {
         Fixture f = new Fixture("AI_ANALYSIS");
         f.service.execute(new ManualFallbackCommand(f.pkg.id(), f.tenantId, f.actorId, f.correlationId));
         var region = f.service.execute(new AddManualRedactionRegionCommand(

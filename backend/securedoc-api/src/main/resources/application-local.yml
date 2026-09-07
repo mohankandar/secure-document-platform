@@ -17,6 +17,8 @@ spring:
     enabled: true
 
 securedoc:
+  logging:
+    environment: local
   storage:
     local:
       root-path: ./securedoc-storage
@@ -74,5 +76,10 @@ securedoc:
     watched-folder-actor-username: watched-folder-service
 
 logging:
+  # Keep local/demo close to production observability: JSON is the default.
+  # Use SECUREDOC_LOGGING_CONFIG=classpath:logback-local.xml for readable developer output.
+  config: ${SECUREDOC_LOGGING_CONFIG:classpath:logback-json.xml}
   level:
-    com.securedoc.platform: DEBUG
+    root: ${SECUREDOC_LOG_LEVEL_ROOT:INFO}
+    com.securedoc.platform: ${SECUREDOC_LOG_LEVEL_APP:DEBUG}
+    org.springframework: ${SECUREDOC_LOG_LEVEL_SPRING:WARN}

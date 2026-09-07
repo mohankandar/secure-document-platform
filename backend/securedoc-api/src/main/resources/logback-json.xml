@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="securedoc-platform"/>
+    <springProperty scope="context" name="environment" source="securedoc.logging.environment" defaultValue="production"/>
+
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${serviceName}","environment":"${environment}"}</customFields>
+            <includeContext>false</includeContext>
+            <includeCallerData>false</includeCallerData>
+            <includeMdc>true</includeMdc>
+            <includeMdcKeyName>tenantId</includeMdcKeyName>
+            <includeMdcKeyName>actorId</includeMdcKeyName>
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <includeMdcKeyName>packageId</includeMdcKeyName>
+            <includeMdcKeyName>documentId</includeMdcKeyName>
+            <includeMdcKeyName>incidentId</includeMdcKeyName>
+            <includeMdcKeyName>eventName</includeMdcKeyName>
+            <includeMdcKeyName>stage</includeMdcKeyName>
+            <includeMdcKeyName>component</includeMdcKeyName>
+            <includeMdcKeyName>failureCategory</includeMdcKeyName>
+            <includeMdcKeyName>reasonCode</includeMdcKeyName>
+            <includeMdcKeyName>provider</includeMdcKeyName>
+            <includeMdcKeyName>model</includeMdcKeyName>
+            <includeMdcKeyName>attempt</includeMdcKeyName>
+            <includeMdcKeyName>maxAttempts</includeMdcKeyName>
+            <includeMdcKeyName>retryable</includeMdcKeyName>
+            <includeMdcKeyName>durationMs</includeMdcKeyName>
+            <includeMdcKeyName>status</includeMdcKeyName>
+            <includeMdcKeyName>decision</includeMdcKeyName>
+            <includeMdcKeyName>scope</includeMdcKeyName>
+            <includeMdcKeyName>businessOutcome</includeMdcKeyName>
+            <includeMdcKeyName>pageCount</includeMdcKeyName>
+            <includeMdcKeyName>batchCount</includeMdcKeyName>
+            <includeMdcKeyName>providerCalls</includeMdcKeyName>
+            <includeMdcKeyName>pageRetries</includeMdcKeyName>
+            <includeMdcKeyName>findingCount</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+</configuration>

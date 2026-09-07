@@ -34,6 +34,7 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
     private final PackageLifecycleService lifecycleService;
     private final PackageProcessingDispatcher processingDispatcher;
     private final AuditService auditService;
+    private final ProcessingIncidentService processingIncidentService;
 
     public RetryTechnicalFailureService(GetTechnicalExceptionQuery technicalExceptionQuery,
                                         PackageRepository packageRepository,
@@ -43,6 +44,19 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
                                         PackageLifecycleService lifecycleService,
                                         PackageProcessingDispatcher processingDispatcher,
                                         AuditService auditService) {
+        this(technicalExceptionQuery, packageRepository, documentRepository, findingRepository, artifactRepository,
+                lifecycleService, processingDispatcher, auditService, ProcessingIncidentService.noop());
+    }
+
+    public RetryTechnicalFailureService(GetTechnicalExceptionQuery technicalExceptionQuery,
+                                        PackageRepository packageRepository,
+                                        DocumentRepository documentRepository,
+                                        FindingRepository findingRepository,
+                                        ArtifactRepository artifactRepository,
+                                        PackageLifecycleService lifecycleService,
+                                        PackageProcessingDispatcher processingDispatcher,
+                                        AuditService auditService,
+                                        ProcessingIncidentService processingIncidentService) {
         this.technicalExceptionQuery = Objects.requireNonNull(technicalExceptionQuery);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
@@ -51,6 +65,7 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
         this.processingDispatcher = Objects.requireNonNull(processingDispatcher);
         this.auditService = Objects.requireNonNull(auditService);
+        this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
     }
 
     @Override
@@ -94,6 +109,7 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
         auditService.recordSuccess(command.tenantId(), command.actorId(), AuditAction.PACKAGE_TECHNICAL_RETRY_REQUESTED,
                 "DocumentPackage", command.packageId().toString(), command.correlationId(),
                 "Retry requested for a classified retryable technical failure");
+        processingIncidentService.markRetryScheduled(command.packageId(), command.tenantId(), command.correlationId());
 
         processingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
                 command.packageId(), command.tenantId(), command.actorId(), command.correlationId()));

@@ -6,6 +6,7 @@ import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
+import com.securedoc.platform.application.observability.StructuredLogContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,14 +99,15 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         AtomicInteger pageRetryCount = new AtomicInteger();
         String systemPrompt = promptBuilder.build(request.policy());
         long startedNanos = System.nanoTime();
-        log.info("AI_ANALYSIS_STARTED provider={} model={} pages={} parallelism={} timeoutSeconds={} pageMaxAttempts={}",
-                PROVIDER, model, nonBlankPages.size(), parallelism, timeout.toSeconds(), pageMaxAttempts);
+        StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.of(
+                "provider", PROVIDER, "model", model, "pageCount", nonBlankPages.size(),
+                "maxAttempts", pageMaxAttempts), "AI analysis started");
 
         ExecutorService executor = Executors.newFixedThreadPool(parallelism);
         try {
             List<Future<List<DiscoveredSensitiveContent>>> futures = new ArrayList<>(nonBlankPages.size());
             for (PageContent page : nonBlankPages) {
-                futures.add(executor.submit(() -> analyzePageWithRetry(page, pageRetryCount, systemPrompt)));
+                futures.add(executor.submit(StructuredLogContext.wrap(() -> analyzePageWithRetry(page, pageRetryCount, systemPrompt))));
             }
 
             List<DiscoveredSensitiveContent> discoveries = new ArrayList<>();
@@ -123,8 +125,10 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                     throw new IllegalStateException("AI provider page analysis failed", cause);
                 }
             }
-            log.info("AI_ANALYSIS_COMPLETED provider={} model={} pages={} findings={} pageRetries={} durationMs={}",
-                    PROVIDER, model, nonBlankPages.size(), discoveries.size(), pageRetryCount.get(), elapsedMillis(startedNanos));
+            StructuredLogContext.info(log, "AI_ANALYSIS_COMPLETED", Map.of(
+                    "provider", PROVIDER, "model", model, "pageCount", nonBlankPages.size(),
+                    "findingCount", discoveries.size(), "pageRetries", pageRetryCount.get(),
+                    "durationMs", elapsedMillis(startedNanos)), "AI analysis completed");
             return new AnalysisOutput(discoveries);
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
@@ -133,8 +137,10 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
             int attempts = e instanceof TechnicalDependencyException technical
                     ? technical.attempts()
                     : 1;
-            log.warn("AI_ANALYSIS_FAILED provider={} model={} pages={} reason={} attempts={} pageRetries={} durationMs={}",
-                    PROVIDER, model, nonBlankPages.size(), reason, attempts, pageRetryCount.get(), elapsedMillis(startedNanos));
+            StructuredLogContext.warn(log, "AI_ANALYSIS_FAILED", Map.of(
+                    "provider", PROVIDER, "model", model, "pageCount", nonBlankPages.size(),
+                    "reasonCode", reason, "attempt", attempts, "pageRetries", pageRetryCount.get(),
+                    "durationMs", elapsedMillis(startedNanos)), "AI analysis failed");
             throw e;
         } finally {
             executor.shutdownNow();

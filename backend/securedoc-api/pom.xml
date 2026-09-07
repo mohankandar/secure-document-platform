@@ -59,6 +59,13 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- Structured JSON console logging for SaaS/production. -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>8.0</version>
+        </dependency>
+
         <!-- Production identity / API security (Unit 25) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

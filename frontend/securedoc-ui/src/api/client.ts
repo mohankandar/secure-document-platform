@@ -28,6 +28,8 @@ import type {
   PlatformAdminOverview,
   CurrentUser,
   TechnicalExceptionDetail,
+  SupportIncidentSearchPage,
+  SupportIncidentDetail,
   IntegrationConnection,
   IntegrationConnectionRequest,
   PollingConnectionStatus,
@@ -236,6 +238,37 @@ class ApiClient {
     return this.request(`/technical-exceptions/${packageId}/retry`, { method: 'POST' });
   }
 
+  async searchSupportIncidents(params: {
+    businessIdentifier?: string;
+    incidentId?: string;
+    correlationId?: string;
+    packageId?: string;
+    documentId?: string;
+    stage?: string;
+    reasonCode?: string;
+    status?: string;
+    businessOutcome?: string;
+    businessContinuityUsed?: boolean;
+    retryable?: boolean;
+    from?: string;
+    to?: string;
+    tenantId?: string;
+    page?: number;
+    size?: number;
+  } = {}): Promise<SupportIncidentSearchPage> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return this.request(`/support/incidents${suffix}`);
+  }
+
+  async getSupportIncident(incidentId: string, tenantId?: string): Promise<SupportIncidentDetail> {
+    const suffix = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+    return this.request(`/support/incidents/${incidentId}${suffix}`);
+  }
+
   async listPackages(): Promise<PackageSummary[]> {
     return this.request('/packages');
   }
@@ -417,10 +450,10 @@ class ApiClient {
     await this.request(`/packages/${packageId}/manual-fallback/regions/${findingId}`, { method: 'DELETE' });
   }
 
-  async submitManualFallback(packageId: string, fullDocumentReviewed: boolean): Promise<PackageStatusResult> {
+  async submitManualFallback(packageId: string, reviewAttested: boolean): Promise<PackageStatusResult> {
     return this.request(`/packages/${packageId}/manual-fallback/submit`, {
       method: 'POST',
-      body: JSON.stringify({ fullDocumentReviewed }),
+      body: JSON.stringify({ reviewAttested }),
     });
   }
 

@@ -137,7 +137,7 @@ public class ManualFallbackController {
         var principal = contextResolver.resolvePrincipal(request);
         submitUseCase.execute(new SubmitManualFallbackCommand(
                 packageId(packageId), principal.tenantId(), principal.actorId(),
-                contextResolver.resolveCorrelationId(request), body.fullDocumentReviewed()));
+                contextResolver.resolveCorrelationId(request), body.reviewAttested()));
         return ResponseEntity.accepted().body(Map.of("packageId", packageId, "status", "PROCESSING"));
     }
 
@@ -151,7 +151,7 @@ public class ManualFallbackController {
 
     public record BoundingBoxRequest(double left, double top, double width, double height) {}
     public record AddRegionRequest(String documentId, int pageNumber, String entityType, BoundingBoxRequest boundingBox) {}
-    public record SubmitRequest(boolean fullDocumentReviewed) {}
+    public record SubmitRequest(boolean reviewAttested) {}
 
     public record ManualFallbackDocumentResponse(String documentId, String fileName, int pageCount) {}
     public record ManualRegionResponse(String findingId, String documentId, int pageNumber, String entityType,

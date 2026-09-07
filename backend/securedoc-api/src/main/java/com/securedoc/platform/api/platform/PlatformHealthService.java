@@ -5,10 +5,13 @@ import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.AuditQueryPort;
+import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.audit.query.AuditRecordFilter;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.document.PackageStatus;
+import com.securedoc.platform.domain.processing.ProcessingIncident;
+import com.securedoc.platform.domain.processing.ProcessingIncidentStatus;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.delivery.LocalDeliveryProperties;
 import com.securedoc.platform.infrastructure.intake.WatchedFolderProperties;
@@ -51,6 +54,7 @@ public class PlatformHealthService {
     private final PackageRepository packageRepository;
     private final PackageLifecycleRepository lifecycleRepository;
     private final AuditQueryPort auditQueryPort;
+    private final ProcessingIncidentRepository processingIncidentRepository;
     private final WatchedFolderScheduler watchedFolderScheduler;
 
     public PlatformHealthService(DataSource dataSource,
@@ -65,6 +69,7 @@ public class PlatformHealthService {
                                  PackageRepository packageRepository,
                                  PackageLifecycleRepository lifecycleRepository,
                                  AuditQueryPort auditQueryPort,
+                                 ProcessingIncidentRepository processingIncidentRepository,
                                  WatchedFolderScheduler watchedFolderScheduler) {
         this.dataSource = dataSource;
         this.ai = ai;
@@ -78,6 +83,7 @@ public class PlatformHealthService {
         this.packageRepository = packageRepository;
         this.lifecycleRepository = lifecycleRepository;
         this.auditQueryPort = auditQueryPort;
+        this.processingIncidentRepository = processingIncidentRepository;
         this.watchedFolderScheduler = watchedFolderScheduler;
     }
 
@@ -99,9 +105,18 @@ public class PlatformHealthService {
                 deliveryType, sdvConfigured, identityMode, "OIDC".equals(identityMode));
 
         Map<String, TechnicalExceptionItem> exceptionByPackage = new LinkedHashMap<>();
+
+        // Structured incidents are authoritative for new failures and remain visible even when
+        // business completes through manual continuity. Legacy audit discovery below preserves
+        // visibility for incidents created before migration 021.
+        processingIncidentRepository.findRecentByTenantId(tenantId, 100).stream()
+                .filter(incident -> incident.status() != ProcessingIncidentStatus.RESOLVED)
+                .forEach(incident -> packageRepository.findByIdAndTenantId(incident.packageId(), tenantId)
+                        .ifPresent(pkg -> exceptionByPackage.putIfAbsent(pkg.id().toString(), technicalExceptionItem(pkg, tenantId, incident))));
+
         packageRepository.findByTenantId(tenantId, 0, 250).stream()
                 .filter(pkg -> pkg.status() == PackageStatus.FAILED)
-                .forEach(pkg -> exceptionByPackage.put(pkg.id().toString(), technicalExceptionItem(pkg, tenantId)));
+                .forEach(pkg -> exceptionByPackage.putIfAbsent(pkg.id().toString(), technicalExceptionItem(pkg, tenantId)));
 
         auditQueryPort.findByFilter(new AuditRecordFilter(tenantId,
                         AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED.name(), null, "DocumentPackage", null,
@@ -112,7 +127,7 @@ public class PlatformHealthService {
                 .forEach(resourceId -> {
                     try {
                         packageRepository.findByIdAndTenantId(PackageId.of(UUID.fromString(resourceId)), tenantId)
-                                .ifPresent(pkg -> exceptionByPackage.put(resourceId, technicalExceptionItem(pkg, tenantId)));
+                                .ifPresent(pkg -> exceptionByPackage.putIfAbsent(resourceId, technicalExceptionItem(pkg, tenantId)));
                     } catch (IllegalArgumentException ignored) {
                         // Audit data is immutable; ignore a malformed legacy resource identifier rather than breaking admin overview.
                     }
@@ -121,6 +136,15 @@ public class PlatformHealthService {
 
         return new PlatformAdminOverviewResponse(Instant.now(), providers,
                 watchedFolderScheduler.status(), resilienceSummary, integrationSummary, exceptions);
+    }
+
+    private TechnicalExceptionItem technicalExceptionItem(com.securedoc.platform.domain.document.DocumentPackage pkg,
+                                                         TenantId tenantId,
+                                                         ProcessingIncident incident) {
+        Instant holdUntil = lifecycleRepository.findByPackageIdAndTenantId(pkg.id(), tenantId)
+                .flatMap(lifecycle -> lifecycle.technicalHoldUntil()).orElse(null);
+        return new TechnicalExceptionItem(pkg.id().toString(), incident.reasonCode(),
+                pkg.status().name(), pkg.documents().size(), incident.firstObservedAt(), holdUntil);
     }
 
     private TechnicalExceptionItem technicalExceptionItem(com.securedoc.platform.domain.document.DocumentPackage pkg,

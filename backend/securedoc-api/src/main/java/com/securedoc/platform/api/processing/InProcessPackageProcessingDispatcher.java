@@ -3,6 +3,7 @@ package com.securedoc.platform.api.processing;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
+import com.securedoc.platform.application.observability.StructuredLogContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
@@ -62,18 +63,23 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
 
     private void schedule(TriggerPackageProcessingCommand command) {
         taskExecutor.execute(() -> {
-            log.info("PACKAGE_PROCESSING_DISPATCH_STARTED package={} tenant={} correlation={}",
-                    command.packageId(), command.tenantId(), command.correlationId());
-            try {
-                triggerPackageProcessingUseCase.execute(command);
-                log.info("PACKAGE_PROCESSING_DISPATCH_COMPLETED package={} tenant={} correlation={}",
-                        command.packageId(), command.tenantId(), command.correlationId());
-            } catch (RuntimeException ex) {
-                // Keep document content and raw exception messages out of logs while making
-                // asynchronous processing failures operationally visible.
-                log.error("PACKAGE_PROCESSING_DISPATCH_FAILED package={} tenant={} correlation={} errorType={}",
-                        command.packageId(), command.tenantId(), command.correlationId(),
-                        ex.getClass().getSimpleName());
+            try (var context = StructuredLogContext.open(java.util.Map.of(
+                    "packageId", command.packageId(),
+                    "tenantId", command.tenantId(),
+                    "correlationId", command.correlationId()))) {
+                StructuredLogContext.info(log, "PACKAGE_PROCESSING_DISPATCH_STARTED", java.util.Map.of(),
+                        "Package processing dispatch started");
+                try {
+                    triggerPackageProcessingUseCase.execute(command);
+                    StructuredLogContext.info(log, "PACKAGE_PROCESSING_DISPATCH_COMPLETED", java.util.Map.of(),
+                            "Package processing dispatch completed");
+                } catch (RuntimeException ex) {
+                    // Keep document content and raw exception messages out of logs while making
+                    // asynchronous processing failures operationally visible.
+                    StructuredLogContext.error(log, "PACKAGE_PROCESSING_DISPATCH_FAILED",
+                            java.util.Map.of("reasonCode", ex.getClass().getSimpleName()),
+                            "Package processing dispatch failed");
+                }
             }
         });
         log.info("PACKAGE_PROCESSING_DISPATCH_SCHEDULED package={} tenant={} correlation={}",

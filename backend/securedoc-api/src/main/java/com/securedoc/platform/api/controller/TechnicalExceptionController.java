@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -87,6 +88,12 @@ public class TechnicalExceptionController {
             String correlationId,
             Instant originalRetainedUntil,
             String explanation,
+            String incidentId,
+            String incidentStatus,
+            boolean businessContinuityUsed,
+            String businessOutcome,
+            Map<String, String> processingFingerprint,
+            List<IncidentEventResponse> incidentEvents,
             OperatorDiagnostics operatorDiagnostics) {
         static TechnicalExceptionResponse from(TechnicalExceptionDetail detail, OperatorDiagnostics diagnostics) {
             return new TechnicalExceptionResponse(
@@ -100,7 +107,28 @@ public class TechnicalExceptionController {
                     detail.correlationId(),
                     detail.originalRetainedUntil(),
                     detail.explanation(),
+                    detail.incidentId() == null ? null : detail.incidentId().toString(),
+                    detail.incidentStatus(),
+                    detail.businessContinuityUsed(),
+                    detail.businessOutcome(),
+                    detail.processingFingerprint(),
+                    detail.incidentEvents().stream().map(IncidentEventResponse::from).toList(),
                     diagnostics);
+        }
+    }
+
+    public record IncidentEventResponse(
+            String eventType,
+            Integer attemptNumber,
+            String scope,
+            String reasonCode,
+            Boolean retryable,
+            String correlationId,
+            Instant occurredAt,
+            Map<String, String> safeMetadata) {
+        static IncidentEventResponse from(TechnicalExceptionDetail.IncidentEventSummary event) {
+            return new IncidentEventResponse(event.eventType(), event.attemptNumber(), event.scope(),
+                    event.reasonCode(), event.retryable(), event.correlationId(), event.occurredAt(), event.safeMetadata());
         }
     }
 }

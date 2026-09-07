@@ -570,6 +570,75 @@ export interface CurrentUser {
   capabilities: string[];
 }
 
+export interface TechnicalIncidentEvent {
+  eventType: string;
+  attemptNumber?: number | null;
+  scope?: string | null;
+  reasonCode?: string | null;
+  retryable?: boolean | null;
+  correlationId: string;
+  occurredAt: string;
+  safeMetadata: Record<string, string>;
+}
+
+
+export interface SupportIncidentSummary {
+  incidentId: string;
+  tenantId: string;
+  packageId: string;
+  documentId?: string | null;
+  primaryIdentifierLabel?: string | null;
+  primaryIdentifierValue?: string | null;
+  stage: string;
+  component: string;
+  reasonCode: string;
+  status: string;
+  businessOutcome?: string | null;
+  businessContinuityUsed: boolean;
+  retryable: boolean;
+  attemptCount: number;
+  correlationId: string;
+  businessImpact: 'BLOCKED' | 'CONTINUED' | 'COMPLETED' | string;
+  firstObservedAt: string;
+  lastObservedAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface SupportIncidentSearchPage {
+  items: SupportIncidentSummary[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface SupportIncidentDetail {
+  incidentId: string;
+  tenantId: string;
+  packageId: string;
+  documentId?: string | null;
+  packageStatus?: string | null;
+  primaryIdentifierLabel?: string | null;
+  primaryIdentifierValue?: string | null;
+  status: string;
+  businessOutcome?: string | null;
+  businessImpact: string;
+  businessContinuityUsed: boolean;
+  stage: string;
+  component: string;
+  failureCategory: string;
+  reasonCode: string;
+  retryable: boolean;
+  attemptCount: number;
+  correlationId: string;
+  safeSummary: string;
+  processingFingerprint: Record<string, string>;
+  safeMetadata: Record<string, string>;
+  firstObservedAt: string;
+  lastObservedAt: string;
+  resolvedAt?: string | null;
+  events: TechnicalIncidentEvent[];
+}
+
 export interface TechnicalExceptionDetail {
   packageId: string;
   documentId?: string | null;
@@ -581,6 +650,12 @@ export interface TechnicalExceptionDetail {
   correlationId?: string | null;
   originalRetainedUntil?: string | null;
   explanation: string;
+  incidentId?: string | null;
+  incidentStatus?: string | null;
+  businessContinuityUsed?: boolean;
+  businessOutcome?: string | null;
+  processingFingerprint?: Record<string, string>;
+  incidentEvents?: TechnicalIncidentEvent[];
   operatorDiagnostics?: {
     dependency: string;
     internalErrorCode: string;
