@@ -39,7 +39,6 @@ import com.securedoc.platform.domain.vo.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,10 +53,10 @@ import java.util.UUID;
  *   <li>Validate invariants (doc REDACTING, package PROCESSING)</li>
  *   <li>Require all DETECTED findings to be resolved by policy/review</li>
  *   <li>Build redaction targets from CONFIRMED findings only</li>
- *   <li>Allow zero targets to create a burn-flat safe output when no redaction is required</li>
+ *   <li>Allow zero targets to create a verified output while preserving untouched static pages</li>
  *   <li>Read original PDF via StoragePort</li>
- *   <li>Call PdfRedactionPort to create burn-flat redacted PDF</li>
- *   <li>Verify the burn-flat output has no extractable text layer</li>
+ *   <li>Call PdfRedactionPort to permanently redact target pages while preserving safe untouched pages</li>
+ *   <li>Verify redacted pages have no extractable text and every target is visually covered</li>
  *   <li>Store verified PDF as REDACTED artifact</li>
  *   <li>Complete document processing lifecycle (REDACTING→PROCESSED)</li>
  *   <li>Publish event and audit</li>
@@ -165,7 +164,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 .toList();
 
         // 6. Every confirmed finding must have a trusted location. Zero confirmed findings is
-        //    valid: the engine still burn-flattens the PDF to create the customer's safe output.
+        //    valid: the engine still creates a verified output artifact.
         boolean allHaveBounds = confirmedFindings.stream()
                 .allMatch(f -> f.location().hasBoundingBox());
         if (!allHaveBounds) {
@@ -189,7 +188,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         // 10. Read original PDF content
         InputStream pdfContent = storagePort.retrieve(originalArtifact.storageReference());
 
-        // 11. Perform burn-flat redaction
+        // 11. Perform selective permanent redaction. Target pages are burn-flattened;
+        //     safe untouched pages may retain native PDF content.
         RedactionOutput redactionOutput;
         try {
             redactionOutput = pdfRedactionPort.redact(pdfContent, targets);
@@ -211,95 +211,104 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
             throw new IllegalStateException("Redaction engine did not apply every expected target");
         }
 
-        byte[] redactedBytes = redactionOutput.redactedPdfContent();
-        RedactionVerificationPort.VerificationResult verification = redactionVerificationPort.verify(
-                redactedBytes, expectedSourcePageCount, targets);
-        if (!verification.safe()) {
-            throw new IllegalStateException("Redacted output failed security verification");
+        try (var redactedContent = redactionOutput.redactedPdfContent()) {
+            long redactedSize = redactedContent.contentLength();
+            RedactionVerificationPort.VerificationResult verification;
+            InputStream verificationStream = redactedContent.openStream();
+            try {
+                verification = redactionVerificationPort.verify(
+                        verificationStream, expectedSourcePageCount, targets);
+            } finally {
+                closeQuietly(verificationStream);
+            }
+            if (!verification.safe()) {
+                throw new IllegalStateException("Redacted output failed security verification");
+            }
+            auditService.recordSuccess(
+                    command.tenantId(), SYSTEM_ACTOR,
+                    AuditAction.DOCUMENT_REDACTION_VERIFIED, "Document", command.documentId().toString(),
+                    correlationId,
+                    "Redaction verified: pages=" + verification.pageCount()
+                            + ", expectedRedactions=" + verification.expectedRedactionCount()
+                            + ", coveredRedactions=" + verification.coveredRedactionCount()
+                            + ", redactedPagesExtractableText=false");
+
+            Checksum redactedChecksum;
+            InputStream checksumStream = redactedContent.openStream();
+            try {
+                redactedChecksum = checksumPort.compute(checksumStream);
+            } finally {
+                closeQuietly(checksumStream);
+            }
+
+            Artifact redactedArtifact = Artifact.create(
+                    command.tenantId(),
+                    document.id(),
+                    ArtifactType.REDACTED,
+                    MimeType.of(REDACTED_MIME_TYPE),
+                    redactedSize,
+                    redactedChecksum
+            );
+
+            String storagePath = buildStoragePath(
+                    command.tenantId().toString(),
+                    command.packageId().toString(),
+                    document.id().toString(),
+                    ArtifactType.REDACTED.name(),
+                    redactedArtifact.id().toString()
+            );
+
+            ArtifactStorageReference storageRef;
+            InputStream storageStream = redactedContent.openStream();
+            try {
+                storageRef = storagePort.storeForPackage(
+                        command.tenantId(), command.packageId(), storagePath, storageStream, redactedSize, REDACTED_MIME_TYPE);
+            } finally {
+                closeQuietly(storageStream);
+            }
+
+            redactedArtifact.markAvailable(storageRef);
+            document.completeProcessing();
+
+            for (Finding finding : confirmedFindings) {
+                finding.markRedacted(SYSTEM_ACTOR);
+            }
+            if (!confirmedFindings.isEmpty()) {
+                findingRepository.saveAll(confirmedFindings);
+            }
+
+            documentRepository.save(document);
+            artifactRepository.save(redactedArtifact);
+
+            RedactionCompletedEvent event = RedactionCompletedEvent.of(
+                    command.documentId(), command.packageId(), command.tenantId(),
+                    redactedArtifact.id(), redactionOutput.redactionsApplied(), correlationId);
+            eventPublisher.publish(event);
+
+            auditService.recordSuccess(
+                    command.tenantId(),
+                    SYSTEM_ACTOR,
+                    AuditAction.DOCUMENT_REDACTION_COMPLETED,
+                    "Document",
+                    command.documentId().toString(),
+                    correlationId,
+                    "Redaction completed: redactions=" + redactionOutput.redactionsApplied()
+                            + ", pages=" + redactionOutput.pagesRendered()
+                            + ", artifactSize=" + redactedSize
+            );
+
+            long rasterizedTargetPages = targets.stream()
+                    .map(RedactionTarget::pageNumber)
+                    .distinct()
+                    .count();
+            log.info("DOCUMENT_REDACTION_COMPLETED document={} package={} targets={} verifiedTargets={} pages={} targetPagesRasterized={} redactedPagesExtractableText=false status={} durationMs={}",
+                    command.documentId(), command.packageId(), targets.size(), verification.coveredRedactionCount(),
+                    verification.pageCount(), rasterizedTargetPages, document.status(), elapsedMillis(startedNanos));
+
+            return RedactDocumentResult.of(
+                    command.documentId(), redactedArtifact.id(),
+                    document.status(), redactionOutput.redactionsApplied());
         }
-        auditService.recordSuccess(
-                command.tenantId(), SYSTEM_ACTOR,
-                AuditAction.DOCUMENT_REDACTION_VERIFIED, "Document", command.documentId().toString(),
-                correlationId,
-                "Redaction verified: pages=" + verification.pageCount()
-                        + ", expectedRedactions=" + verification.expectedRedactionCount()
-                        + ", coveredRedactions=" + verification.coveredRedactionCount()
-                        + ", extractableText=false");
-
-        // 12. Compute checksum for verified redacted content.
-        Checksum redactedChecksum = checksumPort.compute(new ByteArrayInputStream(redactedBytes));
-
-        // 12. Create redacted artifact entity
-        Artifact redactedArtifact = Artifact.create(
-                command.tenantId(),
-                document.id(),
-                ArtifactType.REDACTED,
-                MimeType.of(REDACTED_MIME_TYPE),
-                redactedBytes.length,
-                redactedChecksum
-        );
-
-        // 13. Store redacted PDF (ID-only path)
-        String storagePath = buildStoragePath(
-                command.tenantId().toString(),
-                command.packageId().toString(),
-                document.id().toString(),
-                ArtifactType.REDACTED.name(),
-                redactedArtifact.id().toString()
-        );
-
-        ArtifactStorageReference storageRef = storagePort.store(
-                command.tenantId(),
-                storagePath,
-                new ByteArrayInputStream(redactedBytes),
-                redactedBytes.length,
-                REDACTED_MIME_TYPE
-        );
-
-        // 14. Mark artifact available
-        redactedArtifact.markAvailable(storageRef);
-
-        // 15. Complete document processing (REDACTING → PROCESSED)
-        document.completeProcessing();
-
-        // 16. Mark only policy-confirmed findings as REDACTED.
-        for (Finding finding : confirmedFindings) {
-            finding.markRedacted(SYSTEM_ACTOR);
-        }
-        if (!confirmedFindings.isEmpty()) {
-            findingRepository.saveAll(confirmedFindings);
-        }
-
-        // 17. Persist document and artifact
-        documentRepository.save(document);
-        artifactRepository.save(redactedArtifact);
-
-        // 18. Publish event
-        RedactionCompletedEvent event = RedactionCompletedEvent.of(
-                command.documentId(), command.packageId(), command.tenantId(),
-                redactedArtifact.id(), redactionOutput.redactionsApplied(), correlationId);
-        eventPublisher.publish(event);
-
-        // 19. Audit (safe counts only)
-        auditService.recordSuccess(
-                command.tenantId(),
-                SYSTEM_ACTOR,
-                AuditAction.DOCUMENT_REDACTION_COMPLETED,
-                "Document",
-                command.documentId().toString(),
-                correlationId,
-                "Redaction completed: redactions=" + redactionOutput.redactionsApplied()
-                        + ", pages=" + redactionOutput.pagesRendered()
-                        + ", artifactSize=" + redactedBytes.length
-        );
-
-        log.info("DOCUMENT_REDACTION_COMPLETED document={} package={} targets={} verifiedTargets={} pages={} extractableText=false status={} durationMs={}",
-                command.documentId(), command.packageId(), targets.size(), verification.coveredRedactionCount(),
-                verification.pageCount(), document.status(), elapsedMillis(startedNanos));
-
-        return RedactDocumentResult.of(
-                command.documentId(), redactedArtifact.id(),
-                document.status(), redactionOutput.redactionsApplied());
     }
 
     private List<RedactionTarget> buildRedactionTargets(List<Finding> findings) {

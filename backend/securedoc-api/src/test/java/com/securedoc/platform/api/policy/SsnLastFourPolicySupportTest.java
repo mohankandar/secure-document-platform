@@ -32,6 +32,34 @@ class SsnLastFourPolicySupportTest {
     }
 
     @Test
+    void corporateEinInFederalIdFieldContradictsSsnClassification() {
+        var evidence = validator.validate(new SensitiveDataValidationPort.Candidate(
+                "SSN", "71-0390438",
+                "Entity TRANSFEROR Name WYNDHAM VACATION RESORTS, INC. "
+                        + "Federal ID Number 71-0390438 OR Social Security Number"));
+
+        assertEquals(SensitiveDataValidationPort.ValidationOutcome.CONTRADICTS, evidence.outcome());
+    }
+
+    @Test
+    void einShapeContradictsSsnEvenWhenOcrOnlyKeepsSsnWording() {
+        var evidence = validator.validate(new SensitiveDataValidationPort.Candidate(
+                "SSN", "71-0390438",
+                "WYNDHAM VACATION RESORTS INC 71-0390438 Social Security Number"));
+
+        assertEquals(SensitiveDataValidationPort.ValidationOutcome.CONTRADICTS, evidence.outcome());
+    }
+
+    @Test
+    void actualSsnInDualPurposeFederalIdOrSsnFieldStillSupportsSsnClassification() {
+        var evidence = validator.validate(new SensitiveDataValidationPort.Candidate(
+                "SSN", "123-45-6789",
+                "Federal ID Number OR Social Security Number 123-45-6789"));
+
+        assertEquals(SensitiveDataValidationPort.ValidationOutcome.SUPPORTS, evidence.outcome());
+    }
+
+    @Test
     void defaultTenantPolicyMasksSsnLastFour() {
         var policy = TenantRedactionPolicy.defaults(TenantId.of(UUID.randomUUID()));
 

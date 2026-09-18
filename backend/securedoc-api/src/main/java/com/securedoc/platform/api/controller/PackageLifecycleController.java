@@ -17,6 +17,7 @@ import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -62,6 +63,7 @@ public class PackageLifecycleController {
     }
 
     @PostMapping("/packages/{packageId}/reprocess")
+    @Transactional
     @RequireCapability(UserCapability.PACKAGE_REPROCESS)
     public ResponseEntity<Map<String, Object>> reprocess(@PathVariable String packageId,
                                                           HttpServletRequest request) {

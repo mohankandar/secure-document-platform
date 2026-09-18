@@ -2,10 +2,11 @@
 <configuration>
     <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="securedoc-platform"/>
     <springProperty scope="context" name="environment" source="securedoc.logging.environment" defaultValue="production"/>
+    <springProperty scope="context" name="nodeId" source="securedoc.logging.node-id" defaultValue="unknown"/>
 
     <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <customFields>{"service":"${serviceName}","environment":"${environment}"}</customFields>
+            <customFields>{"service":"${serviceName}","environment":"${environment}","nodeId":"${nodeId}"}</customFields>
             <includeContext>false</includeContext>
             <includeCallerData>false</includeCallerData>
             <includeMdc>true</includeMdc>
@@ -33,8 +34,23 @@
             <includeMdcKeyName>pageCount</includeMdcKeyName>
             <includeMdcKeyName>batchCount</includeMdcKeyName>
             <includeMdcKeyName>providerCalls</includeMdcKeyName>
+            <includeMdcKeyName>parallelism</includeMdcKeyName>
+            <includeMdcKeyName>pageBatchSize</includeMdcKeyName>
+            <includeMdcKeyName>pageBatchMaxCharacters</includeMdcKeyName>
+            <includeMdcKeyName>providerLoadMs</includeMdcKeyName>
+            <includeMdcKeyName>promptEvalTokens</includeMdcKeyName>
+            <includeMdcKeyName>providerPromptEvalMs</includeMdcKeyName>
+            <includeMdcKeyName>outputEvalTokens</includeMdcKeyName>
+            <includeMdcKeyName>providerEvalMs</includeMdcKeyName>
             <includeMdcKeyName>pageRetries</includeMdcKeyName>
             <includeMdcKeyName>findingCount</includeMdcKeyName>
+            <includeMdcKeyName>queueWaitMs</includeMdcKeyName>
+            <includeMdcKeyName>activeWorkers</includeMdcKeyName>
+            <includeMdcKeyName>workerPoolSize</includeMdcKeyName>
+            <includeMdcKeyName>workerCorePoolSize</includeMdcKeyName>
+            <includeMdcKeyName>workerMaxPoolSize</includeMdcKeyName>
+            <includeMdcKeyName>workerQueueDepth</includeMdcKeyName>
+            <includeMdcKeyName>workerQueueRemaining</includeMdcKeyName>
         </encoder>
     </appender>
 

@@ -92,6 +92,9 @@ public record IntegrationConnection(
         if (maxDocumentsPerIntake < 1 || maxDocumentsPerIntake > MAX_DOCUMENTS_PER_INTAKE) {
             throw new IllegalArgumentException("Maximum documents per intake must be between 1 and " + MAX_DOCUMENTS_PER_INTAKE);
         }
+        if (providerType == IntegrationProviderType.SCANNER && maxDocumentsPerIntake != 1) {
+            throw new IllegalArgumentException("SCANNER intake requires exactly one consolidated PDF per intake");
+        }
         if (maxPdfSizeBytes < 1 || maxPdfSizeBytes > MAX_PDF_SIZE_BYTES) {
             throw new IllegalArgumentException("Maximum PDF size must be between 1 and " + MAX_PDF_SIZE_BYTES + " bytes");
         }
@@ -137,9 +140,15 @@ public record IntegrationConnection(
                 timeoutSeconds == null ? DEFAULT_TIMEOUT_SECONDS : timeoutSeconds,
                 retryMaxAttempts == null ? DEFAULT_RETRY_MAX_ATTEMPTS : retryMaxAttempts,
                 incompleteWindowHours == null ? DEFAULT_INCOMPLETE_WINDOW_HOURS : incompleteWindowHours,
-                maxDocumentsPerIntake == null ? DEFAULT_MAX_DOCUMENTS_PER_INTAKE : maxDocumentsPerIntake,
-                maxPdfSizeBytes == null ? DEFAULT_MAX_PDF_SIZE_BYTES : maxPdfSizeBytes,
-                maxPdfPages == null ? DEFAULT_MAX_PDF_PAGES : maxPdfPages,
+                maxDocumentsPerIntake == null
+                        ? (providerType == IntegrationProviderType.SCANNER ? 1 : DEFAULT_MAX_DOCUMENTS_PER_INTAKE)
+                        : maxDocumentsPerIntake,
+                maxPdfSizeBytes == null
+                        ? (providerType == IntegrationProviderType.SCANNER ? MAX_PDF_SIZE_BYTES : DEFAULT_MAX_PDF_SIZE_BYTES)
+                        : maxPdfSizeBytes,
+                maxPdfPages == null
+                        ? (providerType == IntegrationProviderType.SCANNER ? MAX_PDF_PAGES : DEFAULT_MAX_PDF_PAGES)
+                        : maxPdfPages,
                 pollingScheduleType, pollingIntervalMinutes, pollingLocalTime, pollingTimeZone, pollingBatchLimit,
                 acknowledgementMode == null ? IntegrationAcknowledgementMode.NONE : acknowledgementMode,
                 enabled, 1, enabled ? IntegrationHealthStatus.UNKNOWN : IntegrationHealthStatus.DISABLED,
@@ -205,8 +214,8 @@ public record IntegrationConnection(
             IntegrationPurpose purpose, IntegrationDirection direction, IntegrationProviderType providerType,
             IntegrationAuthenticationType authenticationType, String clientPrincipal, String endpoint, String fileShareRoot,
             String secretReference, IntegrationAcknowledgementMode acknowledgementMode, boolean enabled) {
-        if (providerType != IntegrationProviderType.PUSH_API && clientPrincipal != null) {
-            throw new IllegalArgumentException("Authenticated client principal binding is only valid for PUSH_API sources");
+        if (providerType != IntegrationProviderType.PUSH_API && providerType != IntegrationProviderType.SCANNER && clientPrincipal != null) {
+            throw new IllegalArgumentException("Authenticated client principal binding is only valid for PUSH_API or SCANNER sources");
         }
 
         switch (providerType) {
@@ -221,9 +230,26 @@ public record IntegrationConnection(
                     throw new IllegalArgumentException("Enabled PUSH_API source requires an authenticated client principal binding");
                 }
             }
-            case WATCHED_FOLDER, SCANNER -> {
+            case WATCHED_FOLDER -> {
                 if (direction != IntegrationDirection.INBOUND || purpose != IntegrationPurpose.INGESTION_SOURCE) {
-                    throw new IllegalArgumentException(providerType + " is only valid for inbound ingestion sources");
+                    throw new IllegalArgumentException("WATCHED_FOLDER is only valid for inbound ingestion sources");
+                }
+                if (clientPrincipal != null) {
+                    throw new IllegalArgumentException("WATCHED_FOLDER does not use an authenticated client principal binding");
+                }
+            }
+            case SCANNER -> {
+                if (direction != IntegrationDirection.INBOUND || purpose != IntegrationPurpose.INGESTION_SOURCE) {
+                    throw new IllegalArgumentException("SCANNER is only valid for inbound ingestion sources");
+                }
+                if (endpoint != null || fileShareRoot != null) {
+                    throw new IllegalArgumentException("SCANNER does not accept endpoint or file-share path configuration");
+                }
+                if (acknowledgementMode != IntegrationAcknowledgementMode.NONE) {
+                    throw new IllegalArgumentException("SCANNER source uses LexaVault intake reconciliation and must not configure a separate acknowledgement mode");
+                }
+                if (enabled && clientPrincipal == null) {
+                    throw new IllegalArgumentException("Enabled SCANNER source requires an authenticated client principal binding");
                 }
             }
             case HTTP_API -> {

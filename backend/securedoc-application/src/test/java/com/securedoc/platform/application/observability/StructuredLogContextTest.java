@@ -30,6 +30,22 @@ class StructuredLogContextTest {
     }
 
     @Test
+    void intelligenceVersionFieldsAreSafeButContentStillIsNot() {
+        try (var ignored = StructuredLogContext.open(Map.of(
+                "intelligenceEffectiveMode", "OBSERVE",
+                "intelligenceBundleVersion", "r11-baseline-v1",
+                "intelligenceInfluenceAllowed", "false",
+                "baselineDiscoveryRequired", "true",
+                "rawModelResponse", "must-not-enter-mdc"))) {
+            assertEquals("OBSERVE", MDC.get("intelligenceEffectiveMode"));
+            assertEquals("r11-baseline-v1", MDC.get("intelligenceBundleVersion"));
+            assertEquals("false", MDC.get("intelligenceInfluenceAllowed"));
+            assertEquals("true", MDC.get("baselineDiscoveryRequired"));
+            assertNull(MDC.get("rawModelResponse"));
+        }
+    }
+
+    @Test
     void wrappedTaskReceivesSafeSnapshotAndRestoresWorkerContext() {
         MDC.put("correlationId", "request-correlation");
         Runnable wrapped = StructuredLogContext.wrap(() -> assertEquals(

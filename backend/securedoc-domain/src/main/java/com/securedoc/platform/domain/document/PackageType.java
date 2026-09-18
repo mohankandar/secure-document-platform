@@ -12,5 +12,8 @@ public enum PackageType {
     FOLDER_INTAKE,
 
     /** Submitted via external API integration. */
-    API_SUBMISSION
+    API_SUBMISSION,
+
+    /** Submitted through the enterprise Scanner Bridge. */
+    SCANNER_INTAKE
 }

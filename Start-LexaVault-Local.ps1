@@ -1,4 +1,5 @@
 param(
+    [string]$ScannerMode = "",
     [switch]$PullModelIfMissing,
     [switch]$SkipAiWarmup,
     [string]$AiModel = "",
@@ -17,8 +18,45 @@ $ApiTargetDir = Join-Path $BackendDir "securedoc-api\target"
 $FrontendDir = Join-Path $ProjectRoot "frontend\securedoc-ui"
 $ComposeFile = Join-Path $ProjectRoot "docker\compose\postgres.yml"
 $RunDir = Join-Path $ProjectRoot ".run"
+$WatchedIntakeDir = Join-Path $BackendDir "watched-intake"
+$ScannerBridgeStartScript = Join-Path $ProjectRoot "Start-LexaVault-ScannerBridge.ps1"
+$ScannerBridgeStopScript = Join-Path $ProjectRoot "Stop-LexaVault-ScannerBridge.ps1"
+$ScannerBridgePidFile = Join-Path $RunDir "scanner-bridge-shell.pid"
+$scannerBridgePortText = if ($env:SECUREDOC_SCAN_BRIDGE_PORT) { $env:SECUREDOC_SCAN_BRIDGE_PORT } else { "10090" }
+$ScannerBridgePort = 0
+if (-not [int]::TryParse($scannerBridgePortText, [ref]$ScannerBridgePort) -or $ScannerBridgePort -le 0) {
+    throw "SECUREDOC_SCAN_BRIDGE_PORT must be a positive integer."
+}
+$scannerModeCandidate = if ($ScannerMode) { $ScannerMode } elseif ($env:SECUREDOC_SCAN_BRIDGE_MODE) { $env:SECUREDOC_SCAN_BRIDGE_MODE } else { "SIMULATOR" }
+$scannerModeCandidate = $scannerModeCandidate.ToUpperInvariant()
+if ($scannerModeCandidate -eq "PRINTER") { $scannerModeCandidate = "PHYSICAL" }
+if ($scannerModeCandidate -notin @("SIMULATOR", "PHYSICAL")) {
+    throw "Scanner mode must be SIMULATOR, PHYSICAL, or PRINTER."
+}
+$EffectiveScannerMode = $scannerModeCandidate
 $Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:4b" }
 $AiKeepAlive = if ($env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE) { $env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE } else { "30m" }
+$aiParallelismText = if ($env:SECUREDOC_AI_PARALLELISM) { $env:SECUREDOC_AI_PARALLELISM } else { "2" }
+$AiParallelism = 0
+if (-not [int]::TryParse($aiParallelismText, [ref]$AiParallelism) -or $AiParallelism -lt 1 -or $AiParallelism -gt 16) {
+    throw "SECUREDOC_AI_PARALLELISM must be an integer between 1 and 16."
+}
+$aiPageBatchSizeText = if ($env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE) {
+    $env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE
+} elseif ($Model -eq "qwen3.5:4b") {
+    "4"
+} else {
+    "2"
+}
+$AiPageBatchSize = 0
+if (-not [int]::TryParse($aiPageBatchSizeText, [ref]$AiPageBatchSize) -or $AiPageBatchSize -lt 1 -or $AiPageBatchSize -gt 8) {
+    throw "SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE must be an integer between 1 and 8."
+}
+$aiPageBatchMaxCharactersText = if ($env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS) { $env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS } else { "14000" }
+$AiPageBatchMaxCharacters = 0
+if (-not [int]::TryParse($aiPageBatchMaxCharactersText, [ref]$AiPageBatchMaxCharacters) -or $AiPageBatchMaxCharacters -lt 1000 -or $AiPageBatchMaxCharacters -gt 200000) {
+    throw "SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS must be an integer between 1000 and 200000."
+}
 if ($EnableRollingFileLog -and $LoggingFormat -ne "Json") {
     throw "-EnableRollingFileLog requires -LoggingFormat Json."
 }
@@ -34,6 +72,7 @@ else {
 $BannerMode = if ($LoggingFormat -eq "Json") { "off" } else { "console" }
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
+New-Item -ItemType Directory -Force -Path $WatchedIntakeDir | Out-Null
 
 function Test-TcpPort {
     param([string]$HostName, [int]$Port, [int]$TimeoutMs = 750)
@@ -61,6 +100,17 @@ function Wait-ForPort {
         Start-Sleep -Seconds 1
     }
     throw "$Name did not become ready on $HostName`:$Port."
+}
+
+function Get-ScannerBridgeConfiguration {
+    param([int]$PortNumber)
+
+    try {
+        return Invoke-RestMethod -Uri "http://127.0.0.1:$PortNumber/api/v1/configuration" -Method Get -TimeoutSec 3
+    }
+    catch {
+        return $null
+    }
 }
 
 function Require-Command {
@@ -116,6 +166,7 @@ Write-Host "Project root: $ProjectRoot"
 Write-Host "Logging:      $LoggingFormat ($LoggingConfig)"
 Write-Host "App log level: $LogLevel"
 Write-Host "Rolling file:  $EnableRollingFileLog"
+Write-Host "Scanner mode:  $EffectiveScannerMode"
 
 if (-not (Test-Path $BackendDir)) {
     throw "Backend folder not found: $BackendDir"
@@ -234,6 +285,9 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_AI_OLLAMA_BASE_URL = 'http://localhost:11434'
 `$env:SECUREDOC_AI_OLLAMA_MODEL = '$Model'
 `$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
+`$env:SECUREDOC_AI_PARALLELISM = '$AiParallelism'
+`$env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE = '$AiPageBatchSize'
+`$env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS = '$AiPageBatchMaxCharacters'
 # This launcher already performs (or explicitly skips) warmup above; prevent a duplicate in-app preload.
 `$env:SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED = 'false'
 `$env:SECUREDOC_LOGGING_CONFIG = '$LoggingConfig'
@@ -249,6 +303,32 @@ java -jar '$jarPathEscaped' --spring.profiles.active=local --spring.main.banner-
     Set-Content -Path $backendPidFile -Value $backendShell.Id
     Wait-ForPort -Name "Backend" -HostName "localhost" -Port 8080 -MaxSeconds 120
 }
+
+# Scanner Bridge - one-command local startup for simulator or physical-scanner mode.
+if (-not (Test-Path $ScannerBridgeStartScript)) {
+    throw "Scanner Bridge startup script not found: $ScannerBridgeStartScript"
+}
+
+$runningBridgeConfig = Get-ScannerBridgeConfiguration -PortNumber $ScannerBridgePort
+if ($runningBridgeConfig) {
+    $runningMode = [string]$runningBridgeConfig.captureMode
+    if (-not [string]::IsNullOrWhiteSpace($runningMode) -and $runningMode.ToUpperInvariant() -ne $EffectiveScannerMode) {
+        if (Test-Path $ScannerBridgePidFile) {
+            Write-Host "Scanner Bridge is running in $runningMode mode; restarting it in $EffectiveScannerMode mode..." -ForegroundColor Yellow
+            & $ScannerBridgeStopScript
+            Start-Sleep -Milliseconds 750
+        }
+        else {
+            throw "Scanner Bridge is already running in $runningMode mode on port $ScannerBridgePort and was not started by this project. Stop it before switching to $EffectiveScannerMode mode."
+        }
+    }
+}
+elseif (Test-TcpPort -HostName "127.0.0.1" -Port $ScannerBridgePort) {
+    throw "Port $ScannerBridgePort is in use, but the LexaVault Scanner Bridge configuration endpoint is not available."
+}
+
+Write-Host "Starting Scanner Bridge in $EffectiveScannerMode mode as part of local startup..."
+& $ScannerBridgeStartScript -Mode $EffectiveScannerMode
 
 # Frontend
 $frontendPidFile = Join-Path $RunDir "frontend-shell.pid"
@@ -282,6 +362,15 @@ Write-Host "=== LexaVault LOCAL is ready ===" -ForegroundColor Green
 Write-Host "UI:      http://localhost:5173"
 Write-Host "Backend: http://localhost:8080"
 Write-Host "AI:      Ollama / $Model"
+Write-Host "AI batch: parallelism=$AiParallelism / pages=$AiPageBatchSize / maxChars=$AiPageBatchMaxCharacters"
 Write-Host "OCR:     $tesseractExe"
 Write-Host "Logging: $LoggingFormat / app=$LogLevel / rollingFile=$EnableRollingFileLog"
+Write-Host "Watched intake: $WatchedIntakeDir (LOCAL automatic scan; default every 10 seconds)"
+Write-Host "Scanner Bridge: http://127.0.0.1:$ScannerBridgePort / $EffectiveScannerMode"
+if ($EffectiveScannerMode -eq "SIMULATOR") {
+    Write-Host "Scanner usage: Start Scan -> Select Test PDF." -ForegroundColor Cyan
+}
+else {
+    Write-Host "Scanner usage: PHYSICAL mode selected. The bridge will use Windows WIA to acquire the paper package and consolidate it into one PDF." -ForegroundColor Yellow
+}
 Write-Host ""

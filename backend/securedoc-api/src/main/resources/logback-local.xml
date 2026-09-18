@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <property name="CONSOLE_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} correlation=%X{correlationId:-} tenant=%X{tenantId:-} incident=%X{incidentId:-} event=%X{eventName:-} - %msg%n"/>
+    <springProperty scope="context" name="nodeId" source="securedoc.logging.node-id" defaultValue="unknown"/>
+    <property name="CONSOLE_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [node=${nodeId}] [%thread] %logger{36} correlation=%X{correlationId:-} tenant=%X{tenantId:-} incident=%X{incidentId:-} event=%X{eventName:-} aiNode=%X{inferenceNodeId:-} attempt=%X{attempt:-}/%X{maxAttempts:-} inflight=%X{inflightCount:-} healthy=%X{healthyNodeCount:-} reason=%X{reasonCode:-} qwaitMs=%X{queueWaitMs:-} workers=%X{activeWorkers:-}/%X{workerPoolSize:-} core=%X{workerCorePoolSize:-} max=%X{workerMaxPoolSize:-} queue=%X{workerQueueDepth:-} qremain=%X{workerQueueRemaining:-} aiPar=%X{parallelism:-} aiBatch=%X{pageBatchSize:-}/%X{batchCount:-} aiCalls=%X{providerCalls:-} - %msg%n"/>
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>${CONSOLE_PATTERN}</pattern>

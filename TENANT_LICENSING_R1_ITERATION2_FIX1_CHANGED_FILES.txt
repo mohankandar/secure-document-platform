@@ -1,0 +1,51 @@
+Tenant Licensing R1 Iteration 2 FIX1 candidate changed files
+
+Frontend
+- frontend/securedoc-ui/src/pages/LicensingPanel.tsx
+  - sub-day expiration rendering
+  - 30-day Needs attention logic
+  - 30-second relative-time refresh
+  - Verified at install history evidence
+- frontend/securedoc-ui/src/types/index.ts
+  - history verificationEvidence field
+- frontend/securedoc-ui/src/index.css
+  - SUPERSEDED/history-evidence styles
+
+Backend / application
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/licensing/LicenseTokenVerifier.java
+  - display-only persisted verified-claims recovery contract
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/licensing/TenantLicenseHistoryItem.java
+  - history status/evidence response model
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/licensing/TenantLicensingService.java
+  - active current-key validation retained; inactive history derives SUPERSEDED/EXPIRED state from verified-install claims
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/controller/LicensingController.java
+  - exposes non-sensitive history verificationEvidence
+- backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/licensing/Ed25519LicenseTokenVerifier.java
+  - recovers historical claims only after payload SHA-256 + tenant/license/schema checks
+
+Tests
+- backend/securedoc-application/src/test/java/com/securedoc/platform/application/licensing/TenantLicensingServiceTest.java
+- backend/securedoc-infrastructure/src/test/java/com/securedoc/platform/infrastructure/licensing/Ed25519LicenseTokenVerifierTest.java
+
+Documentation
+- README.md
+- docs/continuity/CURRENT_STATE.md
+- docs/continuity/CHANGELOG.md
+- docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+- TENANT_LICENSING_R1_ITERATION2_FIX1_CANDIDATE_README.md (new)
+- TENANT_LICENSING_R1_ITERATION2_FIX1_CHANGED_FILES.txt (new)
+
+Database
+- No schema change. Liquibase remains 70 changeSets through 029-tenant-licensing.xml.
+
+Freeze / final acceptance documentation
+- TENANT_LICENSING_R1_ITERATION2_FIX1_VERIFIED_README.md (new)
+- README.md
+- docs/continuity/CURRENT_STATE.md
+- docs/continuity/CHANGELOG.md
+- docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+
+Compile correction before final runtime validation
+- backend/securedoc-application/src/test/java/com/securedoc/platform/application/licensing/TenantLicensingServiceTest.java
+  - common service helper accepts LicenseTokenVerifier so both ConfigurableVerifier and HistoricalVerifier tests compile
+  - test-only signature widening; no runtime semantics changed

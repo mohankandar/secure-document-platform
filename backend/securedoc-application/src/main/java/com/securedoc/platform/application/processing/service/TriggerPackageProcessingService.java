@@ -6,6 +6,8 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.export.command.ExportPackageDocumentsCommand;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
+import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
 import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
 import com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
@@ -16,9 +18,11 @@ import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
 import com.securedoc.platform.application.port.in.StartDocumentProcessingUseCase;
 import com.securedoc.platform.application.port.in.StartPackageProcessingUseCase;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
+import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.FindingRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.ProcessingLockPort;
 import com.securedoc.platform.application.processing.command.StartDocumentProcessingCommand;
 import com.securedoc.platform.application.processing.command.StartPackageProcessingCommand;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
@@ -30,6 +34,8 @@ import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
+import com.securedoc.platform.domain.artifact.ArtifactStatus;
+import com.securedoc.platform.domain.artifact.ArtifactType;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
@@ -68,10 +74,13 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
 
     private static final Logger log = LoggerFactory.getLogger(TriggerPackageProcessingService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
+    private static final String DOCUMENT_PROCESSING_LOCK_PREFIX = "doc-processing:";
 
     private final PackageRepository packageRepository;
     private final DocumentRepository documentRepository;
     private final FindingRepository findingRepository;
+    private final ArtifactRepository artifactRepository;
+    private final ProcessingLockPort processingLockPort;
     private final StartPackageProcessingUseCase startPackageProcessingUseCase;
     private final StartDocumentProcessingUseCase startDocumentProcessingUseCase;
     private final ExtractDocumentTextUseCase extractDocumentTextUseCase;
@@ -81,12 +90,16 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final ProcessDerivedRoutingUseCase processDerivedRoutingUseCase;
     private final SelectiveRetryExecutor selectiveRetryExecutor;
     private final PackageLifecycleService lifecycleService;
+    private final DocumentIntelligenceExecutionService documentIntelligenceExecutionService;
     private final AuditService auditService;
     private final ProcessingIncidentService processingIncidentService;
+    private final TenantLicensingService tenantLicensingService;
 
     public TriggerPackageProcessingService(PackageRepository packageRepository,
                                            DocumentRepository documentRepository,
                                            FindingRepository findingRepository,
+                                           ArtifactRepository artifactRepository,
+                                           ProcessingLockPort processingLockPort,
                                            StartPackageProcessingUseCase startPackageProcessingUseCase,
                                            StartDocumentProcessingUseCase startDocumentProcessingUseCase,
                                            ExtractDocumentTextUseCase extractDocumentTextUseCase,
@@ -96,11 +109,15 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
                                            SelectiveRetryExecutor selectiveRetryExecutor,
                                            PackageLifecycleService lifecycleService,
+                                           DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
                                            AuditService auditService,
-                                           ProcessingIncidentService processingIncidentService) {
+                                           ProcessingIncidentService processingIncidentService,
+                                           TenantLicensingService tenantLicensingService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
+        this.artifactRepository = Objects.requireNonNull(artifactRepository);
+        this.processingLockPort = Objects.requireNonNull(processingLockPort);
         this.startPackageProcessingUseCase = Objects.requireNonNull(startPackageProcessingUseCase);
         this.startDocumentProcessingUseCase = Objects.requireNonNull(startDocumentProcessingUseCase);
         this.extractDocumentTextUseCase = Objects.requireNonNull(extractDocumentTextUseCase);
@@ -110,25 +127,40 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.processDerivedRoutingUseCase = Objects.requireNonNull(processDerivedRoutingUseCase);
         this.selectiveRetryExecutor = Objects.requireNonNull(selectiveRetryExecutor);
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
+        this.documentIntelligenceExecutionService = Objects.requireNonNull(documentIntelligenceExecutionService);
         this.auditService = Objects.requireNonNull(auditService);
         this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
+        this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
     }
 
     @Override
     public void execute(TriggerPackageProcessingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
+        tenantLicensingService.requireDocumentProcessing(command.tenantId(), command.actorId(), command.correlationId());
         DocumentPackage pkg = packageRepository
                 .findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
         long startedNanos = System.nanoTime();
-        log.info("PACKAGE_PROCESSING_STARTED package={} tenant={} status={} correlation={}",
-                command.packageId(), command.tenantId(), pkg.status(), command.correlationId());
+        log.info("PACKAGE_PROCESSING_STARTED package={} tenant={} status={} correlation={} recovery={}",
+                command.packageId(), command.tenantId(), pkg.status(), command.correlationId(), command.recovery());
         try {
+            if (command.recovery() && pkg.status() == PackageStatus.PROCESSING) {
+                recoverInterruptedDocuments(command);
+            }
             switch (pkg.status()) {
-                case SUBMITTED -> executeFullProcessing(command);
-                case PROCESSING -> executeContinueProcessing(command);
-                case PENDING_REVIEW, IN_REVIEW -> executeContinueAfterReview(command);
+                case SUBMITTED -> {
+                    ensureDocumentIntelligenceSnapshot(command);
+                    executeFullProcessing(command);
+                }
+                case PROCESSING -> {
+                    ensureDocumentIntelligenceSnapshot(command);
+                    executeContinueProcessing(command);
+                }
+                case PENDING_REVIEW, IN_REVIEW -> {
+                    ensureDocumentIntelligenceSnapshot(command);
+                    executeContinueAfterReview(command);
+                }
                 default -> throw new ValidationException(
                         "Cannot trigger processing for package in status: " + pkg.status());
             }
@@ -142,6 +174,20 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             }
             log.info("PACKAGE_PROCESSING_FINISHED package={} status={} durationMs={}",
                     command.packageId(), finalStatus, elapsedMillis(startedNanos));
+        }
+    }
+
+    private void ensureDocumentIntelligenceSnapshot(TriggerPackageProcessingCommand command) {
+        try {
+            int processingCycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId());
+            documentIntelligenceExecutionService.ensureSnapshot(
+                    command.tenantId(), command.packageId(), processingCycle, command.correlationId());
+        } catch (RuntimeException intelligenceSnapshotFailure) {
+            // Document Intelligence is optional. Snapshot/configuration telemetry must never
+            // take the frozen baseline processing path down.
+            log.warn("DOCUMENT_INTELLIGENCE_CONTEXT_CAPTURE_FAILED package={} tenant={} correlation={} type={}",
+                    command.packageId(), command.tenantId(), command.correlationId(),
+                    intelligenceSnapshotFailure.getClass().getSimpleName());
         }
     }
 
@@ -160,11 +206,76 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         List<Document> documents = documentRepository
                 .findByPackageIdAndTenantId(command.packageId(), command.tenantId());
         for (Document document : documents) {
-            if (document.status() == DocumentStatus.REDACTING && !hasDetectedFindings(document.id(), command.tenantId())) {
+            if (document.status() == DocumentStatus.UPLOADED) {
+                processDocument(ProcessingWorkItem.of(
+                        document.id(), command.packageId(), command.tenantId(), document.status()),
+                        command.correlationId());
+            } else if (document.status() == DocumentStatus.REDACTING
+                    && !hasDetectedFindings(document.id(), command.tenantId())) {
                 attemptRedaction(document, command.packageId(), command.tenantId(), command.correlationId());
             }
         }
         completePackageProcessingIfReady(command.packageId(), command.tenantId(), command.correlationId());
+    }
+
+    /**
+     * Rewinds only interrupted document states after the prior distributed processing lease has
+     * expired. Outputs/findings from the interrupted attempt are removed and the retained ORIGINAL
+     * is replayed. Already PROCESSED documents are preserved.
+     */
+    private void recoverInterruptedDocuments(TriggerPackageProcessingCommand command) {
+        List<Document> documents = documentRepository
+                .findByPackageIdAndTenantId(command.packageId(), command.tenantId());
+        int recovered = 0;
+
+        for (Document document : documents) {
+            var artifacts = artifactRepository.findByDocumentIdAndTenantId(document.id(), command.tenantId());
+            boolean activeStage = document.status() == DocumentStatus.EXTRACTING
+                    || document.status() == DocumentStatus.DETECTING
+                    || document.status() == DocumentStatus.REDACTING;
+            boolean missingProcessedOutput = document.status() == DocumentStatus.PROCESSED
+                    && artifacts.stream().noneMatch(artifact -> artifact.artifactType() == ArtifactType.REDACTED
+                    && artifact.status() == ArtifactStatus.AVAILABLE);
+            if (!activeStage && !missingProcessedOutput) {
+                continue;
+            }
+
+            // The package lease is already stale before a recovery command is dispatched, so any
+            // document lock owned by the dead process is stale as well. Clear it before replay.
+            processingLockPort.forceRelease(DOCUMENT_PROCESSING_LOCK_PREFIX + document.id().value());
+
+            for (var artifact : artifacts) {
+                if (artifact.artifactType() != ArtifactType.ORIGINAL
+                        && artifact.status() != ArtifactStatus.DELETED) {
+                    lifecycleService.deleteArtifact(artifact);
+                }
+            }
+            findingRepository.deleteByDocumentIdAndTenantId(document.id(), command.tenantId());
+
+            try {
+                if (missingProcessedOutput) {
+                    document.recoverMissingProcessedOutput();
+                } else {
+                    document.recoverInterruptedProcessing();
+                }
+            } catch (IllegalStateException e) {
+                throw new ValidationException(e.getMessage());
+            }
+            documentRepository.save(document);
+            recovered++;
+        }
+
+        if (recovered > 0) {
+            auditService.recordSuccess(
+                    command.tenantId(), SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_RECOVERED,
+                    "DocumentPackage", command.packageId().toString(), command.correlationId(),
+                    "Recovered interrupted package processing: documentsReplayed=" + recovered);
+            log.info("PACKAGE_PROCESSING_RECOVERY_PREPARED package={} tenant={} documentsReplayed={}",
+                    command.packageId(), command.tenantId(), recovered);
+        } else {
+            log.info("PACKAGE_PROCESSING_RECOVERY_CONTINUE package={} tenant={} documentsReplayed=0",
+                    command.packageId(), command.tenantId());
+        }
     }
 
     private void executeContinueAfterReview(TriggerPackageProcessingCommand command) {

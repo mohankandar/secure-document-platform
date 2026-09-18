@@ -1,6 +1,6 @@
 package com.securedoc.platform.infrastructure.routing;
 
-import org.apache.pdfbox.Loader;
+import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -19,9 +19,10 @@ class PdfBoxDerivedPdfBuilderAdapterTest {
     @Test
     void buildsDistinctPagesInOriginalSourceOrder() throws Exception {
         byte[] source = pdfWithPages("PAGE-1", "PAGE-2", "PAGE-3");
-        byte[] derived = new PdfBoxDerivedPdfBuilderAdapter().build(new ByteArrayInputStream(source), List.of(3, 1, 3));
-
-        try (PDDocument document = Loader.loadPDF(derived)) {
+        try (var derived = new PdfBoxDerivedPdfBuilderAdapter().build(new ByteArrayInputStream(source), List.of(3, 1, 3));
+             var stream = derived.openStream();
+             var staged = PdfBoxTempFileSupport.stage(stream, "test-derived-")) {
+            PDDocument document = staged.document();
             assertEquals(2, document.getNumberOfPages());
             String text = new PDFTextStripper().getText(document);
             assertTrue(text.indexOf("PAGE-1") >= 0);

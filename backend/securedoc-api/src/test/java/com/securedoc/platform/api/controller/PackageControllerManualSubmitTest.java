@@ -1,6 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.dto.CreatePackageRequest;
+import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.query.PackageDetail;
 import com.securedoc.platform.application.port.in.CreatePackageUseCase;
@@ -30,6 +32,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -37,6 +40,24 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PackageControllerManualSubmitTest {
+
+    @Test
+    void genericHumanPackageEndpointCannotSpoofScannerIntakeSource() {
+        CreatePackageUseCase create = mock(CreatePackageUseCase.class);
+        RequestContextResolver context = mock(RequestContextResolver.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(
+                ActorId.generate(), TenantId.generate(), "manual-intake-test", Set.of("DOCUMENT_PROCESSOR"));
+        when(context.resolvePrincipal(request)).thenReturn(principal);
+        when(context.resolveCorrelationId(request)).thenReturn(CorrelationId.generate());
+        PackageController controller = new PackageController(create, mock(UploadDocumentUseCase.class),
+                mock(SubmitPackageUseCase.class), mock(PackageProcessingDispatcher.class),
+                mock(GetPackageQuery.class), mock(ListPackagesQuery.class), context);
+
+        ValidationException error = assertThrows(ValidationException.class, () -> controller.createPackage(
+                new CreatePackageRequest("SCANNER_INTAKE", Map.of(), Map.of()), request));
+        assertEquals("VALIDATION_ERROR", error.errorCode());
+    }
 
     @Test
     void manualSubmitUsesPostCommitDispatcherInsteadOfRunningProcessingInline() throws Exception {

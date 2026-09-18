@@ -2,6 +2,8 @@ package com.securedoc.platform.infrastructure.persistence.adapter;
 
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
+import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
+import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
 import com.securedoc.platform.domain.identity.BusinessIdentifierDefinitionId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.persistence.entity.BusinessIdentifierDefinitionEntity;
@@ -12,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -82,12 +86,40 @@ public class JpaBusinessIdentifierDefinitionRepositoryAdapter implements Busines
         e.setId(d.id().value()); e.setTenantId(d.tenantId().value()); e.setIdentifierKey(d.key()); e.setLabel(d.label());
         e.setRequired(d.required()); e.setPrimary(d.primary()); e.setSearchable(d.searchable()); e.setExtractable(d.extractable());
         e.setDisplayable(d.displayable()); e.setDisplayOrder(d.displayOrder()); e.setActive(d.active());
+        e.setValidationType(d.validationType().name()); e.setExactLength(d.exactLength()); e.setMinLength(d.minLength()); e.setMaxLength(d.maxLength());
+        e.setCaseNormalization(d.caseNormalization().name()); e.setStripSeparators(d.stripSeparators());
+        e.setAllowedValues(encodeAllowedValues(d.allowedValues())); e.setCustomPattern(d.customPattern());
         e.setCreatedAt(d.createdAt()); e.setUpdatedAt(d.updatedAt());
     }
 
     private BusinessIdentifierDefinition toDomain(BusinessIdentifierDefinitionEntity e){
         return new BusinessIdentifierDefinition(BusinessIdentifierDefinitionId.of(e.getId()), TenantId.of(e.getTenantId()),
                 e.getIdentifierKey(), e.getLabel(), e.isRequired(), e.isPrimary(), e.isSearchable(), e.isExtractable(),
-                e.isDisplayable(), e.getDisplayOrder(), e.isActive(), e.getCreatedAt(), e.getUpdatedAt());
+                e.isDisplayable(), e.getDisplayOrder(), e.isActive(),
+                parseValidationType(e.getValidationType()), e.getExactLength(), e.getMinLength(), e.getMaxLength(),
+                parseCaseNormalization(e.getCaseNormalization()), e.isStripSeparators(), decodeAllowedValues(e.getAllowedValues()),
+                e.getCustomPattern(), e.getCreatedAt(), e.getUpdatedAt());
+    }
+
+    private BusinessIdentifierValidationType parseValidationType(String value) {
+        return value == null || value.isBlank() ? BusinessIdentifierValidationType.TEXT : BusinessIdentifierValidationType.valueOf(value);
+    }
+
+    private BusinessIdentifierCaseNormalization parseCaseNormalization(String value) {
+        return value == null || value.isBlank() ? BusinessIdentifierCaseNormalization.UPPER : BusinessIdentifierCaseNormalization.valueOf(value);
+    }
+
+    private String encodeAllowedValues(Set<String> values) {
+        if (values == null || values.isEmpty()) return null;
+        return String.join("\n", values);
+    }
+
+    private Set<String> decodeAllowedValues(String value) {
+        if (value == null || value.isBlank()) return Set.of();
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (String item : value.split("\n", -1)) {
+            if (!item.isBlank()) values.add(item);
+        }
+        return Set.copyOf(values);
     }
 }

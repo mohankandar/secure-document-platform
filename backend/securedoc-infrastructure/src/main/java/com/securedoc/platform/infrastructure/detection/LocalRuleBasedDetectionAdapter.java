@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPort, SensitiveDataValidationPort {
 
     private static final String DETECTOR_NAME = "local-rule-based";
-    private static final String DETECTOR_VERSION = "1.5.0";
+    private static final String DETECTOR_VERSION = "1.6.0";
 
     // SSN pattern: 3 digits, separator, 2 digits, separator, 4 digits
     private static final Pattern SSN_PATTERN = Pattern.compile("\\b(\\d{3})[- ](\\d{2})[- ](\\d{4})\\b");
@@ -76,6 +76,12 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
 
     private static final Pattern SSN_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\b(?:ssn|social\\s+security(?:\\s+number)?)\\b");
+
+    private static final Pattern NON_SSN_TAX_ID_CONTEXT_PATTERN = Pattern.compile(
+            "(?i)\\b(?:federal\\s+(?:employer\\s+)?id(?:entification)?(?:\\s+number)?|"
+                    + "employer\\s+identification(?:\\s+number)?|e\\.?i\\.?n\\.?|f\\.?e\\.?i\\.?n\\.?|"
+                    + "business\\s+(?:tax\\s+)?id(?:entification)?(?:\\s+number)?|"
+                    + "taxpayer\\s+identification(?:\\s+number)?|tax\\s+id(?:entification)?(?:\\s+number)?)\\b");
 
     private static final Pattern BUSINESS_IDENTIFIER_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\b(?:contract|member|account|loan|reference|ref\\.?|form|document|invoice|order|"
@@ -124,6 +130,12 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
 
     private ValidationEvidence validateSsn(String raw, String contextText) {
         String digits = raw.replaceAll("[^0-9]", "");
+        if (raw.trim().matches("\\d{2}[- ]\\d{7}")) {
+            return ValidationEvidence.contradicts(DETECTOR_NAME, DETECTOR_VERSION);
+        }
+        if (digits.length() == 9 && isCloserNonSsnTaxIdentifier(raw, contextText)) {
+            return ValidationEvidence.contradicts(DETECTOR_NAME, DETECTOR_VERSION);
+        }
         if (digits.length() == 4 && hasExplicitSsnContext(contextText)) {
             // Last-four-only SSN is semantically valid in explicit SSN context. It is not a
             // structurally complete SSN, so this validator supports the contextual classification
@@ -147,8 +159,26 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         if (contextText == null || contextText.isBlank()) {
             return false;
         }
-        return Pattern.compile("(?i)\\b(?:ssn|social\\s+security(?:\\s+number)?)\\b")
-                .matcher(contextText).find();
+        return SSN_CONTEXT_PATTERN.matcher(contextText).find();
+    }
+
+    private boolean isCloserNonSsnTaxIdentifier(String raw, String contextText) {
+        if (contextText == null || contextText.isBlank() || raw == null || raw.isBlank()) {
+            return false;
+        }
+        String value = raw.trim();
+        int candidateStart = contextText.indexOf(value);
+        if (candidateStart < 0) {
+            return value.matches("\\d{2}[- ]\\d{7}")
+                    && NON_SSN_TAX_ID_CONTEXT_PATTERN.matcher(contextText).find();
+        }
+        int candidateEnd = candidateStart + value.length();
+        int taxIdGap = nearestContextGap(
+                NON_SSN_TAX_ID_CONTEXT_PATTERN, contextText, candidateStart, candidateEnd, contextText.length());
+        int ssnGap = nearestContextGap(
+                SSN_CONTEXT_PATTERN, contextText, candidateStart, candidateEnd, contextText.length());
+        boolean einShaped = value.matches("\\d{2}[- ]\\d{7}");
+        return taxIdGap >= 0 && (einShaped || ssnGap < 0 || taxIdGap <= ssnGap);
     }
 
     private ValidationEvidence validateCreditCard(String raw) {

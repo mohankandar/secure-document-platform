@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="025-01-reporting-package-facts" author="securedoc">
+        <createTable tableName="reporting_package_facts">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="business_record_id" type="UUID"/>
+            <column name="package_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="last_observed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="document_count" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="page_count" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="first_delivered_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_delivered_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="successful_export_cycles" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="reviewed_flag" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="first_review_created_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="first_review_started_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="first_review_completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="active_processing_seconds" type="DECIMAL(18,3)" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="reprocess_count" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="last_reprocessed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="package_purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="source_deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="reporting_package_facts" columnNames="tenant_id,package_id"
+                       constraintName="pk_reporting_package_facts"/>
+        <addForeignKeyConstraint baseTableName="reporting_package_facts" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_reporting_package_facts_tenant"/>
+        <createIndex tableName="reporting_package_facts" indexName="idx_reporting_facts_tenant_received">
+            <column name="tenant_id"/><column name="received_at"/>
+        </createIndex>
+        <createIndex tableName="reporting_package_facts" indexName="idx_reporting_facts_tenant_source_received">
+            <column name="tenant_id"/><column name="package_type"/><column name="received_at"/>
+        </createIndex>
+        <createIndex tableName="reporting_package_facts" indexName="idx_reporting_facts_tenant_delivery">
+            <column name="tenant_id"/><column name="first_delivered_at"/>
+        </createIndex>
+        <createIndex tableName="reporting_package_facts" indexName="idx_reporting_facts_tenant_status">
+            <column name="tenant_id"/><column name="status"/><column name="received_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="025-02-reporting-facts-backfill" author="securedoc" dbms="postgresql">
+        <sql><![CDATA[
+            insert into reporting_package_facts (
+                tenant_id, package_id, business_record_id, package_type, status,
+                received_at, last_observed_at, document_count, page_count,
+                first_delivered_at, last_delivered_at, successful_export_cycles,
+                reviewed_flag, first_review_created_at, first_review_started_at,
+                first_review_completed_at, active_processing_seconds,
+                reprocess_count, last_reprocessed_at, package_purged_at,
+                created_at, updated_at
+            )
+            select
+                p.tenant_id,
+                p.id,
+                p.business_record_id,
+                p.package_type,
+                p.status,
+                p.created_at,
+                p.updated_at,
+                (select count(*) from documents d where d.tenant_id=p.tenant_id and d.package_id=p.id),
+                (select coalesce(sum(d.page_count),0) from documents d where d.tenant_id=p.tenant_id and d.package_id=p.id),
+                (select min(e.exported_at) from package_export_records e where e.tenant_id=p.tenant_id and e.package_id=p.id),
+                (select max(e.exported_at) from package_export_records e where e.tenant_id=p.tenant_id and e.package_id=p.id),
+                (select count(*) from package_export_records e where e.tenant_id=p.tenant_id and e.package_id=p.id),
+                exists(select 1 from review_tasks rt where rt.tenant_id=p.tenant_id and rt.package_id=p.id),
+                (select min(rt.created_at) from review_tasks rt where rt.tenant_id=p.tenant_id and rt.package_id=p.id),
+                (select min(a.occurred_at)
+                   from audit_records a
+                   join review_tasks rt on rt.tenant_id=a.tenant_id and cast(rt.id as text)=a.resource_id
+                  where a.tenant_id=p.tenant_id and rt.package_id=p.id
+                    and a.resource_type='ReviewTask' and a.action='REVIEW_STARTED'),
+                (select min(a.occurred_at)
+                   from audit_records a
+                   join review_tasks rt on rt.tenant_id=a.tenant_id and cast(rt.id as text)=a.resource_id
+                  where a.tenant_id=p.tenant_id and rt.package_id=p.id
+                    and a.resource_type='ReviewTask' and a.action in ('REVIEW_APPROVED','REVIEW_REJECTED')),
+                coalesce((
+                    select sum(extract(epoch from (cycles.completed_at-cycles.started_at)))
+                      from (
+                        select a.correlation_id,
+                               min(a.occurred_at) filter (where a.action='PACKAGE_PROCESSING_STARTED') started_at,
+                               max(a.occurred_at) filter (where a.action='PACKAGE_PROCESSING_COMPLETED') completed_at
+                          from audit_records a
+                         where a.tenant_id=p.tenant_id
+                           and a.resource_type='DocumentPackage'
+                           and a.resource_id=cast(p.id as text)
+                           and a.action in ('PACKAGE_PROCESSING_STARTED','PACKAGE_PROCESSING_COMPLETED')
+                         group by a.correlation_id
+                        having count(*) filter (where a.action='PACKAGE_PROCESSING_STARTED') > 0
+                           and count(*) filter (where a.action='PACKAGE_PROCESSING_COMPLETED') > 0
+                      ) cycles
+                     where cycles.completed_at >= cycles.started_at
+                ),0),
+                (select count(*) from audit_records a
+                  where a.tenant_id=p.tenant_id and a.resource_type='DocumentPackage'
+                    and a.resource_id=cast(p.id as text) and a.action='PACKAGE_REPROCESS_REQUESTED'),
+                (select max(a.occurred_at) from audit_records a
+                  where a.tenant_id=p.tenant_id and a.resource_type='DocumentPackage'
+                    and a.resource_id=cast(p.id as text) and a.action='PACKAGE_REPROCESS_REQUESTED'),
+                (select pl.purged_at from package_lifecycles pl where pl.tenant_id=p.tenant_id and pl.package_id=p.id),
+                now(),
+                now()
+              from document_packages p
+            on conflict (tenant_id, package_id) do nothing;
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="025-03-reporting-package-events" author="securedoc">
+        <createTable tableName="reporting_package_events">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="event_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="event_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="reporting_package_events" columnNames="tenant_id,event_id"
+                       constraintName="pk_reporting_package_events"/>
+        <addForeignKeyConstraint baseTableName="reporting_package_events" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_reporting_package_events_tenant"/>
+        <createIndex tableName="reporting_package_events" indexName="idx_reporting_events_tenant_type_time">
+            <column name="tenant_id"/><column name="event_type"/><column name="occurred_at"/>
+        </createIndex>
+        <createIndex tableName="reporting_package_events" indexName="idx_reporting_events_tenant_package">
+            <column name="tenant_id"/><column name="package_id"/><column name="occurred_at"/>
+        </createIndex>
+        <sql><![CDATA[
+            insert into reporting_package_events (tenant_id,event_id,package_id,event_type,occurred_at,created_at)
+            select a.tenant_id,a.id,cast(a.resource_id as uuid),'REPROCESS_REQUESTED',a.occurred_at,now()
+              from audit_records a
+             where a.resource_type='DocumentPackage' and a.action='PACKAGE_REPROCESS_REQUESTED'
+            on conflict (tenant_id,event_id) do nothing;
+
+            insert into reporting_package_events (tenant_id,event_id,package_id,event_type,occurred_at,created_at)
+            select e.tenant_id,e.id,e.package_id,'EXPORT_SUCCEEDED',e.exported_at,now()
+              from package_export_records e
+            on conflict (tenant_id,event_id) do nothing;
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="025-04-reporting-facts-triggers" author="securedoc" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            create or replace function reporting_sync_package_core() returns trigger as $$
+            begin
+                if tg_op = 'DELETE' then
+                    update reporting_package_facts
+                       set source_deleted_at=coalesce(source_deleted_at, now()), updated_at=now()
+                     where tenant_id=old.tenant_id and package_id=old.id;
+                    return old;
+                end if;
+
+                insert into reporting_package_facts (
+                    tenant_id, package_id, business_record_id, package_type, status,
+                    received_at, last_observed_at, created_at, updated_at
+                ) values (
+                    new.tenant_id, new.id, new.business_record_id, new.package_type, new.status,
+                    new.created_at, new.updated_at, now(), now()
+                )
+                on conflict (tenant_id, package_id) do update set
+                    business_record_id=excluded.business_record_id,
+                    package_type=excluded.package_type,
+                    status=excluded.status,
+                    received_at=excluded.received_at,
+                    last_observed_at=excluded.last_observed_at,
+                    source_deleted_at=null,
+                    updated_at=now();
+                return new;
+            end;
+            $$ language plpgsql;
+
+            create or replace function reporting_sync_document_counts() returns trigger as $$
+            declare
+                v_tenant uuid;
+                v_package uuid;
+            begin
+                if tg_op = 'DELETE' then
+                    v_tenant := old.tenant_id;
+                    v_package := old.package_id;
+                else
+                    v_tenant := new.tenant_id;
+                    v_package := new.package_id;
+                end if;
+
+                update reporting_package_facts f
+                   set document_count=(select count(*) from documents d where d.tenant_id=v_tenant and d.package_id=v_package),
+                       page_count=(select coalesce(sum(d.page_count),0) from documents d where d.tenant_id=v_tenant and d.package_id=v_package),
+                       updated_at=now()
+                 where f.tenant_id=v_tenant and f.package_id=v_package;
+
+                if tg_op = 'DELETE' then
+                    return old;
+                end if;
+                return new;
+            end;
+            $$ language plpgsql;
+
+            create or replace function reporting_sync_export_fact() returns trigger as $$
+            begin
+                insert into reporting_package_events (tenant_id,event_id,package_id,event_type,occurred_at,created_at)
+                values (new.tenant_id,new.id,new.package_id,'EXPORT_SUCCEEDED',new.exported_at,now())
+                on conflict (tenant_id,event_id) do nothing;
+
+                update reporting_package_facts f
+                   set first_delivered_at=case when f.first_delivered_at is null then new.exported_at else least(f.first_delivered_at,new.exported_at) end,
+                       last_delivered_at=case when f.last_delivered_at is null then new.exported_at else greatest(f.last_delivered_at,new.exported_at) end,
+                       successful_export_cycles=(select count(*) from package_export_records e where e.tenant_id=new.tenant_id and e.package_id=new.package_id),
+                       updated_at=now()
+                 where f.tenant_id=new.tenant_id and f.package_id=new.package_id;
+                return new;
+            end;
+            $$ language plpgsql;
+
+            create or replace function reporting_sync_review_fact() returns trigger as $$
+            begin
+                update reporting_package_facts f
+                   set reviewed_flag=true,
+                       first_review_created_at=case when f.first_review_created_at is null then new.created_at else least(f.first_review_created_at,new.created_at) end,
+                       updated_at=now()
+                 where f.tenant_id=new.tenant_id and f.package_id=new.package_id;
+                return new;
+            end;
+            $$ language plpgsql;
+
+            create or replace function reporting_sync_audit_fact() returns trigger as $$
+            declare
+                v_package uuid;
+                v_started timestamptz;
+                v_review_created timestamptz;
+                v_review_started timestamptz;
+            begin
+                if new.resource_type='DocumentPackage' and new.action='PACKAGE_PROCESSING_COMPLETED' then
+                    v_package := cast(new.resource_id as uuid);
+                    select min(a.occurred_at) into v_started
+                      from audit_records a
+                     where a.tenant_id=new.tenant_id and a.resource_type='DocumentPackage'
+                       and a.resource_id=new.resource_id and a.correlation_id=new.correlation_id
+                       and a.action='PACKAGE_PROCESSING_STARTED' and a.occurred_at<=new.occurred_at;
+                    if v_started is not null and new.occurred_at>=v_started then
+                        update reporting_package_facts f
+                           set active_processing_seconds=f.active_processing_seconds + extract(epoch from (new.occurred_at-v_started)),
+                               updated_at=now()
+                         where f.tenant_id=new.tenant_id and f.package_id=v_package;
+                    end if;
+                elsif new.resource_type='DocumentPackage' and new.action='PACKAGE_REPROCESS_REQUESTED' then
+                    v_package := cast(new.resource_id as uuid);
+                    insert into reporting_package_events (tenant_id,event_id,package_id,event_type,occurred_at,created_at)
+                    values (new.tenant_id,new.id,v_package,'REPROCESS_REQUESTED',new.occurred_at,now())
+                    on conflict (tenant_id,event_id) do nothing;
+                    update reporting_package_facts f
+                       set reprocess_count=f.reprocess_count+1,
+                           last_reprocessed_at=new.occurred_at,
+                           updated_at=now()
+                     where f.tenant_id=new.tenant_id and f.package_id=v_package;
+                elsif new.resource_type='DocumentPackage' and new.action='PACKAGE_PURGED' then
+                    v_package := cast(new.resource_id as uuid);
+                    update reporting_package_facts f
+                       set package_purged_at=new.occurred_at, updated_at=now()
+                     where f.tenant_id=new.tenant_id and f.package_id=v_package;
+                elsif new.resource_type='ReviewTask' and new.action='REVIEW_STARTED' then
+                    select rt.package_id, rt.created_at into v_package, v_review_created
+                      from review_tasks rt
+                     where rt.tenant_id=new.tenant_id and cast(rt.id as text)=new.resource_id;
+                    if v_package is not null then
+                        update reporting_package_facts f
+                           set reviewed_flag=true,
+                               first_review_created_at=coalesce(f.first_review_created_at,v_review_created),
+                               first_review_started_at=case when f.first_review_started_at is null then new.occurred_at else least(f.first_review_started_at,new.occurred_at) end,
+                               updated_at=now()
+                         where f.tenant_id=new.tenant_id and f.package_id=v_package;
+                    end if;
+                elsif new.resource_type='ReviewTask' and new.action in ('REVIEW_APPROVED','REVIEW_REJECTED') then
+                    select rt.package_id into v_package
+                      from review_tasks rt
+                     where rt.tenant_id=new.tenant_id and cast(rt.id as text)=new.resource_id;
+                    if v_package is not null then
+                        select min(a.occurred_at) into v_review_started
+                          from audit_records a
+                         where a.tenant_id=new.tenant_id and a.resource_type='ReviewTask'
+                           and a.resource_id=new.resource_id and a.action='REVIEW_STARTED'
+                           and a.occurred_at<=new.occurred_at;
+                        update reporting_package_facts f
+                           set reviewed_flag=true,
+                               first_review_completed_at=case when f.first_review_completed_at is null then new.occurred_at else least(f.first_review_completed_at,new.occurred_at) end,
+                               first_review_started_at=coalesce(f.first_review_started_at,v_review_started),
+                               updated_at=now()
+                         where f.tenant_id=new.tenant_id and f.package_id=v_package;
+                    end if;
+                end if;
+                return new;
+            end;
+            $$ language plpgsql;
+
+            create trigger trg_reporting_package_core_upsert
+                after insert or update on document_packages
+                for each row execute function reporting_sync_package_core();
+            create trigger trg_reporting_package_core_delete
+                after delete on document_packages
+                for each row execute function reporting_sync_package_core();
+            create trigger trg_reporting_document_counts
+                after insert or update or delete on documents
+                for each row execute function reporting_sync_document_counts();
+            create trigger trg_reporting_export_fact
+                after insert on package_export_records
+                for each row execute function reporting_sync_export_fact();
+            create trigger trg_reporting_review_fact
+                after insert or update on review_tasks
+                for each row execute function reporting_sync_review_fact();
+            create trigger trg_reporting_audit_fact
+                after insert on audit_records
+                for each row execute function reporting_sync_audit_fact();
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                drop trigger if exists trg_reporting_audit_fact on audit_records;
+                drop trigger if exists trg_reporting_review_fact on review_tasks;
+                drop trigger if exists trg_reporting_export_fact on package_export_records;
+                drop trigger if exists trg_reporting_document_counts on documents;
+                drop trigger if exists trg_reporting_package_core_delete on document_packages;
+                drop trigger if exists trg_reporting_package_core_upsert on document_packages;
+                drop function if exists reporting_sync_audit_fact();
+                drop function if exists reporting_sync_review_fact();
+                drop function if exists reporting_sync_export_fact();
+                drop function if exists reporting_sync_document_counts();
+                drop function if exists reporting_sync_package_core();
+            ]]></sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

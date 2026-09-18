@@ -380,7 +380,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     document.tenantId(), document.id(), signal.entityType(),
                     FindingLocation.unlocated(signal.pageNumber()),
                     Confidence.of(signal.confidence()),
-                    new DetectorSource("ocr-sensitive-field-guard", "1.0.0;unresolved-field"),
+                    new DetectorSource("ocr-sensitive-field-guard", "1.4.0;unresolved-field"),
                     "***"));
         }
         return findings;

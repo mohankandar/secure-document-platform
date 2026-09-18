@@ -90,6 +90,10 @@ class IntegrationConnectionServiceTest {
                     && v.providerType() == IntegrationProviderType.PUSH_API
                     && clientPrincipal.equals(v.clientPrincipal())).findFirst();
         }
+        @Override public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) {
+            return values.values().stream().filter(v -> v.tenantId().equals(tenantId) && v.enabled()
+                    && v.providerType() == IntegrationProviderType.SCANNER && clientPrincipal.equals(v.clientPrincipal())).findFirst();
+        }
         @Override public boolean existsByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal, IntegrationConnectionId excludeId) {
             return values.values().stream().anyMatch(v -> v.tenantId().equals(tenantId)
                     && (excludeId == null || !v.id().equals(excludeId))

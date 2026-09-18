@@ -21,12 +21,14 @@ public record BusinessIdentifier(
         key = BusinessIdentifierDefinition.normalizeKey(key);
         label = requireText(label, "label");
         value = requireText(value, "value");
-        normalizedValue = normalizeValue(normalizedValue == null ? value : normalizedValue);
+        normalizedValue = normalizedValue == null ? normalizeValue(value) : requireText(normalizedValue, "normalizedValue");
     }
 
     public static BusinessIdentifier from(BusinessIdentifierDefinition definition, String value) {
-        return new BusinessIdentifier(definition.id(), definition.key(), definition.label(), value,
-                normalizeValue(value), definition.primary(), definition.searchable(),
+        String displayValue = requireText(value, "value");
+        String canonicalValue = BusinessIdentifierValidator.validateAndNormalize(definition, displayValue);
+        return new BusinessIdentifier(definition.id(), definition.key(), definition.label(), displayValue,
+                canonicalValue, definition.primary(), definition.searchable(),
                 definition.displayable(), definition.displayOrder());
     }
 

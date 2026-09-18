@@ -1,0 +1,137 @@
+# LexaVault V1 Master Work Item Matrix
+
+_Canonical roadmap/status artifact. Updated 2026-09-18 after Tenant Licensing R1 Iteration 2 FIX1 final acceptance; UI/UX Modernization with iPad/tablet support is next._
+
+## Current verified checkpoint
+
+- Production Performance R3 FIX4 — **VERIFIED / FROZEN**
+- Accepted LOCAL performance profile: `qwen3.5:4b`, AI parallelism 2, page batch 4, 14,000-character ceiling
+- R3 scale: **40/40 PASS**; sustained throughput knee ~concurrency 6 on the reference machine
+- R3 30-minute c6 soak: **180/180 PASS**, zero failures/timeouts, 100% node health, no upward latency/resource drift
+- R3 controlled APP-02 loss after FIX4: **49/49 PASS**, explicit cross-node takeover with fencing token increment and document replay
+- Frozen V1 Liquibase baseline: **64 changeSets**, including `027-package-processing-ha.xml`
+- Current post-V1 schema baseline: **70 changeSets**, including `029-tenant-licensing.xml`
+- Production AI Inference Tier — **VERIFIED / FROZEN**
+- Business / Operational Reporting — **VERIFIED / FROZEN**
+- Enterprise Scanner Intake software — **VERIFIED / FROZEN**; physical target-hardware certification remains pending
+- Final V1 Regression / Release-Readiness Verification — **COMPLETE / VERIFIED / FROZEN**
+- Platform-Managed Processing Storage Iteration 1 — **VERIFIED / FROZEN (FOUNDATION)**
+- Platform-Managed Processing Storage Iteration 2 FIX1 — **VERIFIED / FROZEN**
+- Tenant Licensing R1 Iteration 1 Foundation — **VERIFIED / FROZEN**
+- Tenant Licensing R1 Iteration 2 FIX1 Platform Operations UI + History Hardening — **VERIFIED / FROZEN**
+
+## Master matrix
+
+| Order | Priority | Work Item | Status | Details |
+|---|---|---|---|---|
+| POSTV1-03 | P1 | Tenant Licensing — Iteration 1 Foundation | VERIFIED / FROZEN | Globally unique immutable tenantId is the license identity; Ed25519 signed/offline verification; immutable license history/current assignment; fail-closed validity and DOCUMENT_PROCESSING entitlement enforcement; Platform Operations licensing APIs; raw token secrecy. Runtime PASS covered missing, tampered, valid, wrong-tenant, expired and entitlement-missing cases plus restoration/revalidation. LOCAL remains unenforced by default. |
+| POSTV1-04 | P1 | Tenant Licensing — Iteration 2 FIX1 Platform Operations UI + History Hardening | VERIFIED / FROZEN | Focused local validation passed malformed-token rejection, entitlement-block presentation, near-expiry attention, minute-level sub-day countdown, automatic expiry transition without manual refresh, history preservation across signing-key changes (`Verified at install`, SUPERSEDED/EXPIRED), normal-license restoration and raw-token secrecy. Active/current cryptographic authorization remains fail-closed under the current key. No schema change; optional connected validation remains unconfigured pending a remote service contract. |
+| POSTV1-05 | P1 | UI/UX Modernization + Responsive iPad/Tablet Support | PLANNED / NEXT | Modernize the application shell/navigation, information hierarchy, cards/tables/forms/status treatments and key user/admin workflows while preserving frozen backend/business semantics. Establish responsive/touch-first behavior for iPad/tablet landscape and portrait where practical, plus desktop continuity and accessibility. Detailed design system and acceptance matrix to be agreed before implementation. |
+| POSTV1-06 | P1 | On-Prem Installer & First-Run Setup | PLANNED / AFTER UI MODERNIZATION | Customer-friendly installer and commissioning workflow: runtime/services, PostgreSQL bootstrap/migrations, deployment identity, first tenant, processing storage, licensing, AI/scanner/integrations, readiness checks, upgrade/rollback/diagnostics. No Maven/Node/YAML required for normal customer installation. |
+| DONE-01 | P1 | Reprocess UX Cleanup | VERIFIED / FROZEN | Reprocess from retained ORIGINAL requires confirmation; UI shows Reprocessing/Processing; duplicate or active reprocess is blocked; retained ORIGINAL preserved; audit history remains append-only. |
+| DONE-02 | P2 | Common Configurable Business Identifier Validation Framework | VERIFIED / FROZEN | Tenant-configured validators for NUMERIC, ALPHANUMERIC, TEXT, EMAIL, UUID, ALLOW_LIST and CUSTOM_PATTERN; exact/min/max length, normalization, separator handling and leading-zero preservation across intake channels. |
+| DONE-03 | P2 | Versioned & Reversible Document Intelligence Foundation | VERIFIED / FROZEN | Tenant modes DISABLED / OBSERVE / ENABLED; immutable per-cycle intelligence snapshot; active/last-known-good bundle, pinning and rollback; OBSERVE cannot influence decisions; baseline remains available. |
+| DONE-04 | P1 | PDF Artifact Quality + EIN/SSN Precision Fix | VERIFIED / FROZEN | Only pages requiring permanent redaction are burn-flattened; untouched pages remain native/searchable; output size stays near original; true credit score still redacts; corporate EIN/Federal ID is not misclassified as SSN. |
+| DONE-05 | P1 | Manual Review Precision Regression Fix | VERIFIED / FROZEN | Pre-existing blackouts and category/prose-only references no longer create impossible review items; unresolved visible sensitive values remain fail-safe and may still require review. |
+| DONE-06 | P1 | Derived Document Split & External Routing | VERIFIED / FROZEN | Deterministic BARCODE/QR_CODE/TEXT_PATTERN routing markers; derived PDFs use permanently redacted pages only; ambiguous routing requires attention; delivery is export-cycle scoped and idempotent. |
+| DONE-07 | P1 | Local AI Optimization | VERIFIED / FROZEN | qwen3.5:4b is the V1 LOCAL/demo reference model; larger models remain optional for larger hardware; no automatic downgrade/upgrade behavior that changes the frozen baseline. |
+| DONE-08 | P1 | Support Console / Technical Incident Search & Triage | VERIFIED / FROZEN | Tenant-safe incident search/details, Business Impact, correct paging, cross-tenant 403 behavior, Platform Operations tenant context, privacy-safe diagnostics and incident timelines. |
+| DONE-09 | P1 | Structured JSON Logging | VERIFIED / FROZEN | Stable searchable production log fields with correlation IDs and safe counters/status/reason codes; excludes raw documents, OCR text, prompts/model responses and protected values. |
+| DONE-10 | P1 | AI Processing Resilience + Business Continuity Manual Processing | VERIFIED / FROZEN | Bounded retry, batch-to-page fallback, safe retry exhaustion and manual continuation when automatic recovery is exhausted without bypassing redaction/export safety. |
+| DONE-11 | P0 | Watched-Folder Intake + Fresh Golden-Path Workflow Matrix | VERIFIED / FROZEN | Kiro PASS. Backend 230 tests (Domain 27, Application 75, API 128), 0 failures/errors/skips; frontend build PASS; auth 8/8 PASS; Liquibase 54; rule-based 1.6.0; OCR guard 1.4.0; Document Intelligence remained DISABLED. All seven fresh golden-path scenarios passed, including atomic watched-folder staging, archive/problem terminal disposition, OCR Manual Review, approval authz, reprocess cycle integrity, duplicate/idempotency, and selective permanent PDF redaction. No source files modified; no functional/security/regression findings. |
+| PARALLEL | P2 | Support Console Training / Support Documentation | IN VALIDATION | Finalize support/training documentation for the already-frozen Support Console. This should not block the active production architecture work. |
+| 1 — CURRENT / UMBRELLA | P1 | Enterprise On-Prem Deployment, High Availability & Operational Readiness | IN IMPLEMENTATION | Umbrella production-readiness workstream: PostgreSQL HA/backup/restore/DR, shared-storage HA, stateless app nodes, install/upgrade/rollback, secrets/certificates, network/firewall/DNS, service accounts, health/monitoring, environment config, air-gap support, sizing and privacy-safe diagnostics. |
+| DONE-12 | P1 | High Availability / Multi-Node Intake Coordination & Shared Intake Storage | VERIFIED / FROZEN | Kiro R7 PASS plus verification-evidence completion. Backend 246 tests (27/81/138), 0 failures/errors/skips; frontend build PASS; auth 8/8; Liquibase 55; detector 1.6.0; OCR guard 1.4.0; DI DISABLED. Three-node runtime proved single-owner coordination, standby API availability, monotonic fencing `1 -> 2 -> 3 -> 4 -> 5`, same-package CREATED/0-doc recovery, partial 1-of-2 document recovery without duplication, post-submit/pre-observation recovery, DB-authoritative stale/future-claim recovery, missing shared-root fail-closed/resume, duplicate/idempotency, DB outage fail-closed, auth/privacy/architecture/source integrity. Windows could not deliver a true graceful console shutdown signal; graceful release-in-place is covered by `gracefulReleaseExpiresLeaseWithoutDeletingFencingHistory`, `@PreDestroy releaseLease()` -> `leasePort.release()`, and monotonic runtime history. No Kiro source changes. |
+| DONE-13 | P1 | Enterprise Scanner Intake — Full Scanner E2E | VERIFIED / FROZEN (SOFTWARE) — PHYSICAL HARDWARE CERTIFICATION PENDING | Simulator/common Scanner-E2E plus R5 Windows WIA physical software path independently verified. Build and PHYSICAL startup passed; WIA no-device behavior fails closed before session creation; no simulator fallback; multi-page PDF consolidation, durable READY/queue handoff, idempotency/provenance, crash-window recovery and physical-specific security passed focused verification. Real target-scanner paper/ADF/duplex certification remains a deployment gate and does not block roadmap progression. |
+| DONE-14 | P1 | Production AI Inference Tier — HA, Load Balancing & Horizontal Scaling | VERIFIED / FROZEN | Kiro PASS WITH MINOR FINDINGS after R3. All 20 source requirements satisfied; focused 10/10 tests green; module compile PASS; runtime evidence covers independent-node distribution, dead-node failover, all-down fail-closed and bounded `QUEUE_TIMEOUT` saturation. Only logging duplication/attempt formatting remain non-blocking. |
+| DONE-15 | P1/P2 | Business / Operational Reporting Requirements & Reporting UX | VERIFIED / FROZEN | Kiro PASS WITH MINOR FINDINGS after R3 FIX5. Executive, Business Admin, Usage & Adoption and Operational Details UX accepted; durable package-independent reporting facts/events verified retention-independent and tenant-scoped; CSV export reconciles to report filters; role boundaries verified; Service Entity dimension reconciles across approved / Legacy-Unmapped / Not-provided-Unknown buckets; SLA/target math verified. Focused application/API tests 9/9 green; Liquibase 63. No Kiro source changes. |
+| POSTV1-01 | P1 | Platform-Managed Processing Storage — Iteration 1 Backend/Foundation | VERIFIED / FROZEN | PostgreSQL-backed deployment default plus tenant override; LOCAL_FILESYSTEM / SHARED_FILESYSTEM; provider IDs retained in artifact storage references; package processing-cycle pinning; local-only default bootstrap; non-local fail-closed until configured; active-node heartbeat/validation and multi-node LOCAL_FILESYSTEM rejection. LOCAL runtime proved bootstrap/readiness, upload/process/export, provider UUID persistence, pinning, provider switching and historical-provider reads inside retention. |
+| POSTV1-02 | P1 | Platform-Managed Processing Storage — Iteration 2 Platform Operations UI / Hardening | VERIFIED / FROZEN | LOCAL UI and multi-node shared-filesystem validation passed, including provider create/test/activate, tenant override/clear, 4/4 shared validation/activation, shared artifact persistence and cycle pinning, 4→3 node-loss continuity, shared-root outage NOT_READY and no-local-fallback. FIX1 focused retest also passed: one-node LOCAL was READY; after a second node joined, readiness became NOT READY despite 2/2 healthy probes; upload was blocked with no local artifact; activating validated SHARED_FILESYSTEM restored READY and upload succeeded. No change to final export/delivery. |
+| BACKLOG-RPT | P3 | Reporting Minor Follow-ups | BACKLOG / NON-BLOCKING | Add business-dimension rows to CSV export; roll up or remove the 12-row approved-dimension display cap for future >12-value dimensions; decouple dimension visibility from TENANT_POLICY_MANAGE with a dedicated view capability if needed; make API no-data semantics more explicit than bare 0.0 + sample count; add explicit reconciliation and review-wait-no-sample tests. Do not reopen frozen Reporting unless release evidence or customer need justifies it. |
+| DONE-16 | P1/P2 | Production Performance, Throughput & Concurrency Optimization | VERIFIED / FROZEN | R2A native-text derived routing and R2C AI batch efficiency are accepted; R2B 4/4 single-GPU concurrency is explicitly rejected. R3 scale completed 40/40 packages; measured sustained knee is ~concurrency 6 on the reference machine, while c8 adds latency without throughput. The 30-minute c6 soak completed 180/180 with zero failures/timeouts, 100% node health and no upward drift. FIX4 then proved PostgreSQL DB-time package-processing lease/fencing takeover: 49/49 node-loss recovery packages completed and two PROCESSING packages originally owned by PERF-APP-02 were reacquired by PERF-APP-01 with fencing token 2, recovery dispatch and replay. |
+| 5 — COMPLETE | P0 | Final V1 Regression / Release-Readiness Verification | COMPLETE / VERIFIED / FROZEN | Run one consolidated final build and high-value regression preflight against the frozen product baseline, reuse accepted evidence rather than rerunning every frozen unit, verify final migration count/integrity, frontend authorization tests, representative LOCAL runtime trust-boundary checks and final package-processing HA integration. Do not repeat the accepted 30-minute performance soak. Software release-candidate approval remains distinct from customer production-deployment gates such as physical scanner hardware certification and customer-specific infrastructure/DR/secrets/network validation. |
+| 6 | P2 | Document Profile Intelligence / Adaptive Document Understanding | FUTURE | Recognize known forms/document types and apply versioned semantic anchor/location priors while retaining general AI discovery and frozen Manual Review/export-safety paths. |
+| 7 | P2/P3 | Handwriting + Scanned Government ID Support | FUTURE | Pen/pencil sensitive values, driver licenses, passports, state/national IDs, MRZ, PDF417, QR/barcodes and low-confidence Manual Review routing. |
+| 8 | P3 | Smart Intake / Business Identifier Extraction | FUTURE | Extract and prefill configured business identifiers from document content, cross-check them and require confirmation before authoritative identity assignment. |
+| 9 | P3 | Enterprise Historical Document Migration & Revalidation | FUTURE | Trusted bulk import/revalidation of legacy document estates using durable queues, checkpoints, idempotency, provenance, reconciliation and parallel workers. |
+| 10 | P3 | SDV Historical / Revision Presentation | FUTURE | Define revision-versus-history presentation for later completed submissions that share the same business identifier. |
+
+## Current execution rule
+Business / Operational Reporting R3 FIX5 is **VERIFIED / FROZEN**. Production AI Inference Tier R3, Scanner-E2E R5 software, HA R7, Production Performance R3 FIX4, Final V1 Regression, Platform-Managed Processing Storage Iteration 2 FIX1, Tenant Licensing R1 Iteration 1, and Tenant Licensing R1 Iteration 2 FIX1 are frozen. UI/UX Modernization with responsive iPad/tablet support is next; On-Prem Installer / First-Run Setup follows. Optional connected licensing validation remains deferred pending an external service contract. Frozen V1 performance settings remain unchanged. Kiro remains reserved for evidence gaps that cannot be established from source or user-provided local runtime results.
+
+## Status maintenance rule
+
+Update this file after every accepted Kiro verification or implementation checkpoint. Do not reopen VERIFIED / FROZEN units unless there is a reproducible defect or an explicitly scoped later enhancement.
+
+### Scanner Intake current completion note — 2026-09-11
+
+Scanner-E2E software is now **VERIFIED / FROZEN**. The simulator/common framework and R5 Windows WIA physical software path have been independently evidenced, including no-device fail-closed behavior, no simulator fallback, multi-page consolidation, durable queue integration, idempotency/provenance, crash-window recovery and physical-specific security. Hardware certification remains explicit: test representative target WIA hardware (flatbed, ADF and duplex when supported) before production use. Two non-blocking follow-ups remain: deterministic device configuration for unattended multi-scanner deployments, and removal of legacy bridge-local `firstName` / `lastName` metadata fields.
+
+
+### Production Performance R2A derived-routing native-text optimization — VERIFIED / ACCEPTED — 2026-09-13
+
+Runtime validation on the 57-page native-text reference document completed 12/12 packages. `DERIVED_ROUTING_DETECTION_COMPLETED` median fell from ~39.45 s to ~0.272 s at concurrency 1, ~71.35 s to ~0.250 s at concurrency 2, and ~58.15 s to ~0.222 s at concurrency 4. Median total package latency improved from ~61.4 s to ~20.3 s at concurrency 1, ~111.1 s to ~31.7 s at concurrency 2, and ~143.9 s to ~48.3 s at concurrency 4. The native TEXT_PATTERN fast path is accepted. Scanned/raster OCR fallback, QR/barcode decoding, ambiguity and delivery semantics remain unchanged.
+
+### Production Performance R2B single-node AI concurrency experiment — NO-GO — 2026-09-13
+
+R2B tested LOCAL parallelism/provider-call limit 4/4. All 12 packages completed, but median package and AI latency were effectively unchanged or slightly worse at concurrency 1/2, with only a small concurrency-4 improvement. Provider-capacity telemetry showed roughly 49–51 s of accumulated wait at concurrency 2/4, demonstrating that contention moved inside the adapter rather than creating useful single-GPU throughput. Do not promote the R2B concurrency behavior. Keep R2A as the accepted behavior baseline.
+
+### Production Performance R2C AI request / batch efficiency — VERIFIED / ACCEPTED — 2026-09-13
+
+The 57-page native reference rerun completed 12/12 packages with parallelism 2, page batch 4 and the unchanged 14,000-character ceiling. Provider calls fell from 29 to 15. Median AI latency improved to ~8.4 s / 15.9 s / 16.5 s at concurrency 1/2/4, and median package latency improved to ~10.8 s / 19.0 s / 28.6 s. Derived routing remained sub-second and no new failures/timeouts occurred. These settings are accepted for R3.
+
+### Production Performance R3 multi-node scale / overload / soak / sizing candidate — 2026-09-13
+
+R3 makes no processing-algorithm or concurrency-default changes. It adds a three-process local app cluster on ports 10080/10081/10082, privacy-safe static `nodeId` logging, cross-node API load generation, per-node/aggregate resource telemetry, bounded overload measurement, fixed-concurrency soak, controlled node stop/restart tooling, and a measured sizing-guide generator. The local cluster deliberately shares one Ollama/GPU endpoint so the app-tier scaling curve and shared-AI saturation knee can be measured independently. R3 is not accepted until scale, soak and node-removal/recovery evidence is reviewed.
+
+### Business / Operational Reporting R3 business-dimensions/SLA candidate — 2026-09-11
+
+R3 keeps the approved Reporting UX and R2 durable retained-fact foundation, then adds Business Admin-owned reporting configuration. Only low-cardinality identifier definitions with a tenant-controlled allowed-value set of 1–100 values may be enabled as business reporting dimensions, preventing Contract/Member-style high-cardinality identifiers from becoming BI dimensions while allowing typed identifiers such as numeric Service Entity. Approved dimension values are snapshotted into package-independent retained reporting metadata and can be backfilled from long-lived business-record metadata. Business Admin also configures delivery-time/SLA percentage, straight-through and review-wait targets. The report API exposes eligible samples, within-target rates and breach counts; Executive shows delivery-within-target context and Business Admin shows Targets vs actual plus approved dimension breakdowns. Reporting remains ACTIVE / NOT FROZEN pending final export-format/reconciliation decisions and final targeted verification.
+
+### Business / Operational Reporting R2 durable-fact foundation candidate — 2026-09-11
+
+R2 keeps the approved R1 UX and adds tenant-scoped `reporting_package_facts` and `reporting_package_events` projections with no foreign key to source package/document records, backfills current history, and maintains the projection from package/document/export/review/audit lifecycle changes. Selected-period volume, intake conversion, delivery activity, adoption and timing now read from retained reporting facts; point-in-time backlog/attention remains live operational state. The UI also prevents missing cohort fields from rendering as `NaN`. Reporting remains ACTIVE / NOT FROZEN pending tenant-approved business dimensions, SLA/target configuration, final export formats, reconciliation and final verification.
+
+### Business / Operational Reporting R1 UX/data-semantics refinement candidate — 2026-09-11
+
+Reporting is now the active implementation unit. R1 replaces the compact desktop-style report page with role-aware Executive, Business Admin, Usage & Adoption and Operational Details experiences, touch-first period/filter controls suitable for iPad, aggregate charting, drill-down hooks, active-processing/review/end-to-end timing, backlog aging and richer aggregate CSV export. The current refinement separates Period Performance from Current Operational Risk, adds cohort-safe selected-intake delivery conversion, clarifies straight-through vs current-review semantics, and distinguishes no timing sample from sub-hour fast processing. `REPORT_VIEWER` remains executive/aggregate-only. R1 still depends on live package/audit tables for several metrics; a durable package-independent reporting fact projection, tenant-approved business dimensions and tenant-configurable SLA targets are required before reporting can be VERIFIED / FROZEN.
+
+### Production AI Inference Tier R3 saturation-classification hardening candidate — 2026-09-11
+
+R2 local runtime checks passed routing across distinct real+mock endpoints, dead-node exclusion with continued processing on a healthy node, and all-nodes-down fail-closed behavior. The final bounded-saturation run exposed one classification issue: while `ai-slow` held the only permit, a stale `/api/tags` probe could fail behind active inference and change the node from healthy/busy to unhealthy, causing the competing request to report `ALL_NODES_UNHEALTHY`. R3 defers request-path health refresh for an already-healthy node while it has active leased work, adds a regression test for that exact case, and makes the local mock server concurrent. Only the saturation case needs to be rerun before the targeted Kiro checkpoint.
+
+### Production AI Inference Tier R2 hardening candidate — 2026-09-11
+
+R1 build and the one-real-node pool path passed locally. A two-alias test (`127.0.0.1` + `localhost`) was intentionally rejected as valid HA evidence because both aliases resolve to the same Ollama process, and readable logs did not expose the node fields already present in structured MDC. R2 adds readable `aiNode`, attempt, inflight, healthy-count and reason fields; emits explicit `AI_INFERENCE_POOL_UNAVAILABLE` / `AI_INFERENCE_POOL_EXHAUSTED` events with `ALL_NODES_UNHEALTHY`, `POOL_SATURATED`, or `QUEUE_TIMEOUT`; rejects loopback aliases on the same port as duplicate capacity; and adds a lightweight mock Ollama helper for deterministic local failure/health tests.
+
+### Production AI Inference Tier R1 candidate — 2026-09-11
+
+R1 implements the first complete software slice: deployment-managed homogeneous Ollama node pools, exact model readiness checks, bounded node concurrency and queue wait, least-inflight/round-robin selection, targeted failover, circuit cooldown/rejoin, pool-aware startup preload and aggregate platform health. Pool mode is opt-in; existing one-endpoint deployments are unchanged. Tenant profiles can independently enable/dedicate a pool, preserving the future SaaS shared-versus-dedicated inference boundary. Focused tests cover healthy distribution, failover after node-local retries, wrong-model exclusion, bounded saturation, recovery/rejoin, pool config parsing and partial-node startup preload. Local build/runtime validation remains required before R1 can be accepted.
+
+
+
+### Reporting R3 FIX1 candidate — local validation pending
+- Corrects reporting-dimension eligibility to use bounded tenant-controlled allowed values (1–100), regardless of base validation type.
+- Current Service Entity (`NUMERIC`, 3 digits, allowed values 000–005) is now eligible; Contract/Member identifiers remain excluded.
+- Adds explicit target-met / below-target status presentation.
+- No database migration; reporting remains ACTIVE / NOT FROZEN pending local validation and final reporting verification.
+
+
+
+### Reporting R3 FIX5 candidate — local validation pending
+- Keeps current approved values and `Legacy / Unmapped` behavior from FIX4.
+- Adds a distinct **Not provided / Unknown** bucket for selected-period packages that have no retained value for an enabled business dimension.
+- Dimension aggregation now starts from the complete retained package-fact cohort and LEFT JOINs retained dimension values, so business-dimension totals reconcile to the selected-period cohort instead of silently omitting missing values.
+- No database migration; Reporting remains ACTIVE / NOT FROZEN pending focused reconciliation validation, final export/reconciliation decisions, and final targeted verification.
+
+### Reporting R3 FIX3 candidate — local validation pending
+- Keeps R3 SLA/target behavior and approved Service Entity dimension configuration unchanged.
+- Normalizes retained historical dimension values against the tenant's current bounded allowed-value set.
+- Historical values outside the current set are preserved but reported as **Legacy / Unmapped** instead of current business categories.
+- Current approved values may appear with zero activity so unused configured values are distinguishable from historical/unmapped data.
+- No database migration; Reporting remains ACTIVE / NOT FROZEN pending local validation, final export/reconciliation decisions, and final targeted verification.
+
+
+### Production Performance R3 FIX4 final acceptance — VERIFIED / FROZEN — 2026-09-13
+
+The final controlled node-loss run completed 49/49 packages with zero failures/timeouts. Two packages originally leased by `PERF-APP-02` while `PROCESSING` were later reacquired by `PERF-APP-01` with `fencingToken=2`, `recovery=true`, `PACKAGE_PROCESSING_RECOVERY_DISPATCHED`, and `PACKAGE_PROCESSING_RECOVERY_PREPARED documentsReplayed=1`, then completed successfully. This closes the blocking pre-FIX4 orphan-processing defect. The 30-minute c6 soak and 40-package scale matrix remain accepted and are not to be rerun during the final release gate unless later source changes touch those paths.

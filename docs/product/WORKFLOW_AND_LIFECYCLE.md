@@ -4,8 +4,7 @@
 
 Normal manual intake is one page containing tenant-configured business identifiers and a PDF queue.
 
-- Desktop drag/drop and `Browse Files` feed the same queue.
-- `Scan Documents` is a scan-ready source action that also feeds the same PDF queue.
+- Desktop drag/drop and `Browse Files` feed the same manual-upload queue.
 - Multiple PDFs can be queued in one Intake Batch.
 - Every PDF remains a separate document and keeps its original filename.
 - PDFs are never merged as part of intake.
@@ -16,7 +15,9 @@ Normal manual intake is one page containing tenant-configured business identifie
 
 Submission uses one tenant-scoped Intake Batch, uploads queued documents while the package is `CREATED`, and submits only after every required upload succeeds.
 
-API and watched-folder intake use the same downstream document-processing lifecycle while preserving their own trigger/identifier/fingerprint contracts.
+Scanner-assisted intake is a separate **Scan Documents** entry point using the local Scanner Bridge. It reuses the same tenant-configured business-identifier definitions but does not expose a second `Scan Documents` file-picker action inside manual Upload Documents. One Scanner Intake is one business context plus one physical scan job producing one consolidated multi-page PDF. The operator explicitly submits the READY scan; the bridge durably queues it and may let the operator start the next package immediately while authenticated/idempotent delivery proceeds asynchronously. Accepted scanner submissions use `SCANNER_INTAKE` source classification and then converge on the existing Business Record, validation, processing, Manual Review, approval, delivery/export and Dashboard lifecycle. See `../scanner-bridge/SCANNER_INTAKE_END_TO_END.md`.
+
+API, watched-folder, polling and scanner intake use or will converge on the same downstream document-processing lifecycle while preserving their own trigger/identifier/idempotency contracts.
 
 ### Machine Push API intake
 
@@ -71,7 +72,11 @@ The capability remains distinct from Manual Review so future separation-of-dutie
 `Reprocess from Retained Original` is a business lifecycle action for a valid completed/exported package while the retained original still exists.
 
 - Document Supervisor and Business Admin may perform it; Processor may not.
-- Reprocessing is bounded by the existing lifecycle/export-cycle rules.
+- The UI requires explicit confirmation before the request is sent.
+- Once accepted, the package immediately leaves `COMPLETED` and is shown as Processing/Reprocessing while the asynchronous pipeline runs.
+- `canReprocess` is false unless the package is currently `COMPLETED`; refreshing or reopening the page cannot expose a second reprocess action while a cycle is active.
+- The backend independently rejects reprocess requests for any non-`COMPLETED` package, so UI state is not the authorization/state boundary.
+- Reprocessing is bounded by the existing lifecycle/export-cycle and retained-original rules; successful export of the new cycle resets the existing retention deadlines through the normal lifecycle policy.
 - It is not the same operation as technical retry.
 
 ## 6. Technical retry

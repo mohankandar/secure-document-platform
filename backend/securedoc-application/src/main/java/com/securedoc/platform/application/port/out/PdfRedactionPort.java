@@ -5,8 +5,9 @@ import java.util.List;
 
 /**
  * Outbound port for performing PDF redaction.
- * Implementation must produce a burn-flat redacted PDF where original text
- * is NOT preserved underneath redaction areas.
+ * Implementations must permanently burn every target so original content is not recoverable
+ * on a redacted page. Untouched pages may retain native PDF text/vector content when doing so
+ * does not copy unsafe active content.
  *
  * <p>The application layer depends only on this interface — never on
  * PDFBox or other PDF manipulation libraries.
@@ -17,16 +18,17 @@ public interface PdfRedactionPort {
      * Creates a redacted PDF from the original content.
      * The implementation must:
      * <ul>
-     *   <li>Render pages to images</li>
-     *   <li>Apply solid redaction rectangles over target areas</li>
-     *   <li>Create a new PDF from the redacted images</li>
-     *   <li>NOT copy original text layer, metadata, annotations, or attachments</li>
+     *   <li>Burn-flatten every page containing one or more redaction targets.</li>
+     *   <li>Apply solid redaction rectangles over all target areas before output.</li>
+     *   <li>Never preserve the source text layer or active annotations on a redacted page.</li>
+     *   <li>May preserve untouched static pages losslessly to retain searchability and compact size.</li>
+     *   <li>Must not copy document-level metadata or attachments into the finished artifact.</li>
      * </ul>
      *
      * @param originalPdf the original PDF content
      * @param targets     the areas to redact (page number + normalized bounding box); may be empty
-     *                    to produce a verified burn-flat safe output when no sensitive findings exist
-     * @return the redacted PDF content as bytes
+     *                    when no sensitive findings exist
+     * @return replayable redacted PDF content backed by bounded-memory infrastructure
      */
     RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets);
 
@@ -74,9 +76,9 @@ public interface PdfRedactionPort {
     /**
      * Result of the redaction operation.
      */
-    record RedactionOutput(byte[] redactedPdfContent, int pagesRendered, int redactionsApplied) {
+    record RedactionOutput(ReplayableContent redactedPdfContent, int pagesRendered, int redactionsApplied) {
         public RedactionOutput {
-            if (redactedPdfContent == null || redactedPdfContent.length == 0) {
+            if (redactedPdfContent == null || redactedPdfContent.contentLength() <= 0) {
                 throw new IllegalArgumentException("Redacted PDF content must not be empty");
             }
         }

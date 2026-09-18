@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveContentAnalysisPort {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaSensitiveContentAnalysisAdapter.class);
-    private static final String VERSION = "1.2.0";
+    private static final String VERSION = "1.3.0";
     private static final int MAX_BATCH_SIZE = 8;
 
     private final URI chatEndpoint;
@@ -149,9 +149,15 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         JsonNode responseSchema = structuredOutput ? buildResponseSchema() : null;
         long startedNanos = System.nanoTime();
 
-        StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.of(
-                "provider", "ollama", "model", model, "pageCount", nonBlankPages.size(),
-                "batchCount", batches.size(), "maxAttempts", pageMaxAttempts),
+        StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.ofEntries(
+                Map.entry("provider", "ollama"),
+                Map.entry("model", model),
+                Map.entry("pageCount", nonBlankPages.size()),
+                Map.entry("batchCount", batches.size()),
+                Map.entry("maxAttempts", pageMaxAttempts),
+                Map.entry("parallelism", parallelism),
+                Map.entry("pageBatchSize", pageBatchSize),
+                Map.entry("pageBatchMaxCharacters", pageBatchMaxCharacters)),
                 "AI analysis started");
 
         ExecutorService executor = Executors.newFixedThreadPool(parallelism);
@@ -181,11 +187,23 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 }
             }
 
-            StructuredLogContext.info(log, "AI_ANALYSIS_COMPLETED", Map.of(
-                    "provider", "ollama", "model", model, "pageCount", nonBlankPages.size(),
-                    "batchCount", batches.size(), "providerCalls", providerCallCount.get(),
-                    "findingCount", discoveries.size(), "pageRetries", pageRetryCount.get(),
-                    "durationMs", elapsedMillis(startedNanos)), "AI analysis completed");
+            StructuredLogContext.info(log, "AI_ANALYSIS_COMPLETED", Map.ofEntries(
+                    Map.entry("provider", "ollama"),
+                    Map.entry("model", model),
+                    Map.entry("pageCount", nonBlankPages.size()),
+                    Map.entry("batchCount", batches.size()),
+                    Map.entry("providerCalls", providerCallCount.get()),
+                    Map.entry("findingCount", discoveries.size()),
+                    Map.entry("pageRetries", pageRetryCount.get()),
+                    Map.entry("parallelism", parallelism),
+                    Map.entry("pageBatchSize", pageBatchSize),
+                    Map.entry("pageBatchMaxCharacters", pageBatchMaxCharacters),
+                    Map.entry("providerLoadMs", nanosToMillis(aggregate.loadDurationNanos())),
+                    Map.entry("promptEvalTokens", aggregate.promptEvalCount()),
+                    Map.entry("providerPromptEvalMs", nanosToMillis(aggregate.promptEvalDurationNanos())),
+                    Map.entry("outputEvalTokens", aggregate.evalCount()),
+                    Map.entry("providerEvalMs", nanosToMillis(aggregate.evalDurationNanos())),
+                    Map.entry("durationMs", elapsedMillis(startedNanos))), "AI analysis completed");
             return new AnalysisOutput(discoveries);
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
@@ -194,11 +212,19 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             int attempts = e instanceof TechnicalDependencyException technical
                     ? technical.attempts()
                     : 1;
-            StructuredLogContext.warn(log, "AI_ANALYSIS_FAILED", Map.of(
-                    "provider", "ollama", "model", model, "pageCount", nonBlankPages.size(),
-                    "batchCount", batches.size(), "providerCalls", providerCallCount.get(),
-                    "reasonCode", reason, "attempt", attempts, "pageRetries", pageRetryCount.get(),
-                    "durationMs", elapsedMillis(startedNanos)), "AI analysis failed");
+            StructuredLogContext.warn(log, "AI_ANALYSIS_FAILED", Map.ofEntries(
+                    Map.entry("provider", "ollama"),
+                    Map.entry("model", model),
+                    Map.entry("pageCount", nonBlankPages.size()),
+                    Map.entry("batchCount", batches.size()),
+                    Map.entry("providerCalls", providerCallCount.get()),
+                    Map.entry("reasonCode", reason),
+                    Map.entry("attempt", attempts),
+                    Map.entry("pageRetries", pageRetryCount.get()),
+                    Map.entry("parallelism", parallelism),
+                    Map.entry("pageBatchSize", pageBatchSize),
+                    Map.entry("pageBatchMaxCharacters", pageBatchMaxCharacters),
+                    Map.entry("durationMs", elapsedMillis(startedNanos))), "AI analysis failed");
             throw e;
         } finally {
             executor.shutdownNow();
@@ -502,6 +528,26 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             promptEvalDurationNanos.addAndGet(other.promptEvalDurationNanos.get());
             evalCount.addAndGet(other.evalCount.get());
             evalDurationNanos.addAndGet(other.evalDurationNanos.get());
+        }
+
+        long loadDurationNanos() {
+            return loadDurationNanos.get();
+        }
+
+        long promptEvalCount() {
+            return promptEvalCount.get();
+        }
+
+        long promptEvalDurationNanos() {
+            return promptEvalDurationNanos.get();
+        }
+
+        long evalCount() {
+            return evalCount.get();
+        }
+
+        long evalDurationNanos() {
+            return evalDurationNanos.get();
         }
     }
 }

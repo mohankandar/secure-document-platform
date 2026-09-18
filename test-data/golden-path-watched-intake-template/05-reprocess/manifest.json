@@ -1,0 +1,12 @@
+{
+  "businessIdentifiers": {
+    "contract_number": "000900000005",
+    "member_number": "00900000005",
+    "service_entity": "001"
+  },
+  "metadata": {
+    "test_suite": "LEXAVAULT_V1_GOLDEN_PATH",
+    "test_scenario": "REPROCESS_CYCLE"
+  },
+  "files": ["05_reprocess_cycle.pdf"]
+}

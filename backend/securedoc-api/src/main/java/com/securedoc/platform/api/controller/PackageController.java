@@ -86,9 +86,10 @@ public class PackageController {
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(httpRequest);
         CorrelationId correlationId = contextResolver.resolveCorrelationId(httpRequest);
         PackageType packageType = PackageType.valueOf(request.packageType());
-        if (packageType == PackageType.FOLDER_INTAKE) {
+        if (packageType == PackageType.FOLDER_INTAKE || packageType == PackageType.SCANNER_INTAKE) {
+            String source = packageType == PackageType.FOLDER_INTAKE ? "Watched-folder" : "Scanner";
             throw new com.securedoc.platform.application.exception.ValidationException(
-                    "Watched-folder batches must be created from a trigger/manifest scan");
+                    source + " batches must be created through their trusted intake boundary");
         }
 
         CreatePackageCommand command = CreatePackageCommand.of(packageType, request.businessIdentifiers(), request.metadata(), correlationId);

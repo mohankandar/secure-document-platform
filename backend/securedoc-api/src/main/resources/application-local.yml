@@ -19,9 +19,15 @@ spring:
 securedoc:
   logging:
     environment: local
+    node-id: ${SECUREDOC_NODE_ID:LOCAL-APP-01}
   storage:
     local:
       root-path: ./securedoc-storage
+  licensing:
+    # Keep normal developer/demo workflows frictionless. LOCAL alone may override the vendor key for ephemeral test licenses.
+    enforcement: ${SECUREDOC_LICENSING_ENFORCEMENT:DISABLED}
+    allow-development-key-override: true
+    development-public-key: ${SECUREDOC_LICENSING_PUBLIC_KEY:}
   security:
     mode: LOCAL
     cors:
@@ -31,6 +37,7 @@ securedoc:
     tenant-name: "Local Demo Tenant"
     tenant-slug: "local-demo"
     actor-id: "00000000-0000-0000-0000-000000000099"
+    scanner-client-principal: ${SECUREDOC_DEMO_SCANNER_CLIENT_PRINCIPAL:scanner-bridge-local}
 
   ai:
     # Requirement 5 accepted LOCAL/demo reference model. Gemma3:12b remains explicitly selectable
@@ -41,7 +48,8 @@ securedoc:
     page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
     page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
     # Keep the model resident, constrain output, disable unnecessary reasoning, and batch two
-    # moderate pages per Ollama call. Oversized pages are automatically isolated by max characters.
+    # moderate pages per Ollama call by default. The standard LOCAL launcher may apply a measured
+    # model-specific batch override for the qwen3.5:4b reference profile.
     ollama-keep-alive: ${SECUREDOC_AI_OLLAMA_KEEP_ALIVE:30m}
     ollama-structured-output: ${SECUREDOC_AI_OLLAMA_STRUCTURED_OUTPUT:true}
     ollama-thinking-enabled: ${SECUREDOC_AI_OLLAMA_THINKING_ENABLED:false}
@@ -49,6 +57,16 @@ securedoc:
     ollama-max-output-tokens: ${SECUREDOC_AI_OLLAMA_MAX_OUTPUT_TOKENS:2048}
     ollama-page-batch-size: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE:2}
     ollama-page-batch-max-characters: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS:14000}
+    # Production inference pool. Disabled preserves the single-endpoint behavior.
+    # Entries may be comma-separated URLs or stableId=URL (for example ai-1=http://ai01:11434).
+    pool-enabled: ${SECUREDOC_AI_POOL_ENABLED:false}
+    pool-node-urls: ${SECUREDOC_AI_POOL_NODE_URLS:}
+    pool-max-concurrent-per-node: ${SECUREDOC_AI_POOL_MAX_CONCURRENT_PER_NODE:1}
+    pool-max-node-attempts: ${SECUREDOC_AI_POOL_MAX_NODE_ATTEMPTS:2}
+    pool-health-probe-timeout-ms: ${SECUREDOC_AI_POOL_HEALTH_PROBE_TIMEOUT_MS:1500}
+    pool-health-check-interval-ms: ${SECUREDOC_AI_POOL_HEALTH_CHECK_INTERVAL_MS:5000}
+    pool-circuit-open-ms: ${SECUREDOC_AI_POOL_CIRCUIT_OPEN_MS:10000}
+    pool-queue-wait-ms: ${SECUREDOC_AI_POOL_QUEUE_WAIT_MS:5000}
     # Direct Spring startup also preloads the selected local model; fail closed if the configured model cannot be loaded.
     ollama-preload-enabled: ${SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED:true}
     ollama-preload-fail-on-error: ${SECUREDOC_AI_OLLAMA_PRELOAD_FAIL_ON_ERROR:true}
@@ -58,22 +76,33 @@ securedoc:
     type: local
   intake:
     watched-folder:
-      enabled: false
-      root-path: ./watched-intake
-      trigger-file-name: manifest.json
+      # LOCAL/demo profile actively watches backend/watched-intake. Production remains opt-in.
+      enabled: ${SECUREDOC_WATCHED_FOLDER_ENABLED:true}
+      root-path: ${SECUREDOC_WATCHED_FOLDER_ROOT_PATH:./watched-intake}
+      trigger-file-name: ${SECUREDOC_WATCHED_FOLDER_TRIGGER_FILE_NAME:manifest.json}
       incomplete-visibility-minutes: 15
-      accepted-behavior: LEAVE
-      rejected-behavior: LEAVE
+      # Terminal folders are removed from the live root so scheduled scans do not re-observe them.
+      accepted-behavior: ${SECUREDOC_WATCHED_FOLDER_ACCEPTED_BEHAVIOR:MOVE_TO_ARCHIVE}
+      rejected-behavior: ${SECUREDOC_WATCHED_FOLDER_REJECTED_BEHAVIOR:MOVE_TO_PROBLEM}
+      processing-directory: _processing
       archive-directory: _archive
       problem-directory: _problem
+      # LOCAL test default. Production should choose a value larger than a normal intake-claim duration.
+      stale-claim-after-ms: ${SECUREDOC_WATCHED_FOLDER_STALE_CLAIM_AFTER_MS:300000}
 
   platform-admin:
-    # Scheduler stays off by default; enable explicitly for local watched-folder automation.
-    watched-folder-scheduling-enabled: false
-    watched-folder-scan-interval-ms: 60000
+    # LOCAL/demo automatically scans the watched intake root. Override with the environment variable to pause it.
+    watched-folder-scheduling-enabled: ${SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED:true}
+    watched-folder-scan-interval-ms: ${SECUREDOC_WATCHED_FOLDER_SCAN_INTERVAL_MS:10000}
     watched-folder-tenant-id: "00000000-0000-0000-0000-000000000001"
     watched-folder-actor-id: "00000000-0000-0000-0000-000000000099"
     watched-folder-actor-username: watched-folder-service
+    # Multi-node coordination is enabled in LOCAL so three IntelliJ instances can share one DB + folder.
+    # Give each run configuration a logical node name (APP-01/02/03); each process also has an automatic unique incarnation ID.
+    watched-folder-coordination-enabled: ${SECUREDOC_WATCHED_FOLDER_COORDINATION_ENABLED:true}
+    watched-folder-node-id: ${SECUREDOC_WATCHED_FOLDER_NODE_ID:LOCAL-APP-01}
+    watched-folder-lease-name: ${SECUREDOC_WATCHED_FOLDER_LEASE_NAME:watched-folder-intake}
+    watched-folder-lease-duration-ms: ${SECUREDOC_WATCHED_FOLDER_LEASE_DURATION_MS:30000}
 
 logging:
   # Keep local/demo close to production observability: JSON is the default.

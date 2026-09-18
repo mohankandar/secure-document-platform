@@ -1,0 +1,21 @@
+Tenant Licensing R1 Iteration 2 candidate changed files
+
+Frontend
+- frontend/securedoc-ui/src/pages/LicensingPanel.tsx (new)
+- frontend/securedoc-ui/src/pages/PlatformAdminPage.tsx
+- frontend/securedoc-ui/src/App.tsx
+- frontend/securedoc-ui/src/api/client.ts
+- frontend/securedoc-ui/src/types/index.ts
+- frontend/securedoc-ui/src/index.css
+
+Documentation
+- README.md
+- docs/continuity/CURRENT_STATE.md
+- docs/continuity/CHANGELOG.md
+- docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+- TENANT_LICENSING_R1_ITERATION2_CANDIDATE_README.md (new)
+- TENANT_LICENSING_R1_ITERATION2_CHANGED_FILES.txt (new)
+
+Database / backend
+- No change. Liquibase remains 70 changeSets through 029-tenant-licensing.xml.
+- Existing Iteration 1 licensing APIs are reused unchanged.

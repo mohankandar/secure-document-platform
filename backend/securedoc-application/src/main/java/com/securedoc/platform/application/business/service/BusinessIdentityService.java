@@ -48,8 +48,16 @@ public final class BusinessIdentityService {
                     "At least one business identifier is required");
         }
 
-        List<BusinessIdentifier> requested = input.entrySet().stream()
-                .map(e -> BusinessIdentifier.from(byKey.get(e.getKey()), e.getValue()))
+        List<BusinessIdentifier> requested = new ArrayList<>();
+        for (Map.Entry<String,String> entry : input.entrySet()) {
+            BusinessIdentifierDefinition definition = byKey.get(entry.getKey());
+            try {
+                requested.add(BusinessIdentifier.from(definition, entry.getValue()));
+            } catch (IllegalArgumentException e) {
+                throw new IntakeValidationException(IntakeRejectionCode.INVALID_IDENTIFIER_VALUE, e.getMessage());
+            }
+        }
+        requested = requested.stream()
                 .sorted(Comparator.comparingInt(BusinessIdentifier::displayOrder))
                 .toList();
 

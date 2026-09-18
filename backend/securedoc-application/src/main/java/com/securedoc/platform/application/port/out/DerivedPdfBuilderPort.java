@@ -5,5 +5,5 @@ import java.util.List;
 
 /** Builds a new PDF from already-redacted source pages while preserving original page order. */
 public interface DerivedPdfBuilderPort {
-    byte[] build(InputStream redactedPdf, List<Integer> pageNumbers);
+    ReplayableContent build(InputStream redactedPdf, List<Integer> pageNumbers);
 }

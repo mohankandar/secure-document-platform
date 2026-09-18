@@ -4,6 +4,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.intake.command.SubmitPackageCommand;
+import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.port.in.SubmitPackageUseCase;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.application.port.out.PackageRepository;
@@ -25,16 +26,19 @@ public final class SubmitPackageService implements SubmitPackageUseCase {
     private final TenantContextService tenantContextService;
     private final CapabilityEnforcementService capabilityEnforcement;
     private final PackageRepository packageRepository;
+    private final TenantLicensingService tenantLicensingService;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
 
     public SubmitPackageService(TenantContextService tenantContextService,
                                  CapabilityEnforcementService capabilityEnforcement,
+                                 TenantLicensingService tenantLicensingService,
                                  PackageRepository packageRepository,
                                  DomainEventPublisher eventPublisher,
                                  AuditService auditService) {
         this.tenantContextService = Objects.requireNonNull(tenantContextService);
         this.capabilityEnforcement = Objects.requireNonNull(capabilityEnforcement);
+        this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
@@ -48,6 +52,7 @@ public final class SubmitPackageService implements SubmitPackageUseCase {
         // 1. Validate tenant context
         Tenant tenant = tenantContextService.resolveAndValidate(principal);
         capabilityEnforcement.require(tenant, Capability.DOCUMENT_UPLOAD);
+        tenantLicensingService.requireDocumentProcessing(principal.tenantId(), principal.actorId(), command.correlationId());
 
         // 2. Validate package exists and belongs to tenant
         DocumentPackage documentPackage = packageRepository

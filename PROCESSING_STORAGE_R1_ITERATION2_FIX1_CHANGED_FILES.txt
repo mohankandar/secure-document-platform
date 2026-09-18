@@ -1,0 +1,18 @@
+# LexaVault Processing Storage R1 Iteration 2 FIX1 — changed files
+
+Final status: **VERIFIED / FROZEN** after focused HA topology retest on 2026-09-17.
+
+- `PROCESSING_STORAGE_R1_ITERATION2_CANDIDATE_README.md`
+- `PROCESSING_STORAGE_R1_ITERATION2_FIX1_README.md`
+- `PROCESSING_STORAGE_R1_ITERATION2_FIX1_CHANGED_FILES.txt`
+- `README.md`
+- `backend/securedoc-application/src/main/java/com/securedoc/platform/application/storage/ProcessingStorageConfigurationService.java`
+- `backend/securedoc-application/src/test/java/com/securedoc/platform/application/storage/ProcessingStorageConfigurationServiceTest.java`
+- `backend/securedoc-api/src/main/java/com/securedoc/platform/api/storage/ProcessingStorageNodeReadiness.java`
+- `backend/securedoc-api/src/main/java/com/securedoc/platform/api/platform/PlatformHealthService.java`
+- `backend/securedoc-api/src/test/java/com/securedoc/platform/infrastructure/storage/LocalFileStorageAdapterTopologyTest.java`
+- `backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/storage/LocalFileStorageAdapter.java`
+- `frontend/securedoc-ui/src/pages/ProcessingStoragePanel.tsx`
+- `docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md`
+- `docs/continuity/CURRENT_STATE.md`
+- `docs/continuity/CHANGELOG.md`

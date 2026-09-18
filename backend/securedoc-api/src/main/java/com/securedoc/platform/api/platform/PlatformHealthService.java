@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.platform;
 
 import com.securedoc.platform.api.config.AiRuntimeProperties;
+import com.securedoc.platform.api.config.OllamaInferencePoolConfiguration;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
@@ -17,7 +18,9 @@ import com.securedoc.platform.infrastructure.delivery.LocalDeliveryProperties;
 import com.securedoc.platform.infrastructure.intake.WatchedFolderProperties;
 import com.securedoc.platform.infrastructure.ocr.TesseractOcrProperties;
 import com.securedoc.platform.infrastructure.resilience.TechnicalResilienceProperties;
-import com.securedoc.platform.infrastructure.storage.LocalStorageProperties;
+import com.securedoc.platform.application.storage.ProcessingStorageConfigurationService;
+import com.securedoc.platform.domain.storage.ProcessingStorageProvider;
+import com.securedoc.platform.domain.storage.ProcessingStorageProviderType;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
@@ -45,7 +48,7 @@ public class PlatformHealthService {
     private final DataSource dataSource;
     private final AiRuntimeProperties ai;
     private final TesseractOcrProperties ocr;
-    private final LocalStorageProperties storage;
+    private final ProcessingStorageConfigurationService processingStorage;
     private final LocalDeliveryProperties localDelivery;
     private final IntegrationConnectionRepository integrationConnections;
     private final WatchedFolderProperties watchedFolder;
@@ -60,7 +63,7 @@ public class PlatformHealthService {
     public PlatformHealthService(DataSource dataSource,
                                  AiRuntimeProperties ai,
                                  TesseractOcrProperties ocr,
-                                 LocalStorageProperties storage,
+                                 ProcessingStorageConfigurationService processingStorage,
                                  LocalDeliveryProperties localDelivery,
                                  IntegrationConnectionRepository integrationConnections,
                                  WatchedFolderProperties watchedFolder,
@@ -74,7 +77,7 @@ public class PlatformHealthService {
         this.dataSource = dataSource;
         this.ai = ai;
         this.ocr = ocr;
-        this.storage = storage;
+        this.processingStorage = processingStorage;
         this.localDelivery = localDelivery;
         this.integrationConnections = integrationConnections;
         this.watchedFolder = watchedFolder;
@@ -177,14 +180,19 @@ public class PlatformHealthService {
     private PlatformHealthItem aiHealth(boolean probe) {
         String provider = safe(ai.getProvider()).toLowerCase();
         boolean heuristic = "heuristic".equals(provider);
+        boolean poolConfigured = ai.isPoolEnabled() && notBlank(ai.getPoolNodeUrls());
         boolean configured = notBlank(ai.getProvider())
-                && (heuristic || (notBlank(ai.getBaseUrl()) && notBlank(ai.getModel())));
+                && (heuristic || (notBlank(ai.getModel()) && (poolConfigured || notBlank(ai.getBaseUrl()))));
         if (!probe || heuristic || !configured) {
             return item("ai", "Sensitive-content AI", "AI", provider, configured ? "CONFIGURED" : "NOT_CONFIGURED",
                     configured, aiDetail());
         }
         try {
             var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+            if ("ollama".equals(provider) && ai.isPoolEnabled()) {
+                return ollamaPoolHealth(client, configured);
+            }
+
             HttpRequest.Builder requestBuilder;
             if ("ollama".equals(provider)) {
                 String base = ai.getBaseUrl().replaceAll("/+$", "");
@@ -207,10 +215,67 @@ public class PlatformHealthService {
         }
     }
 
+    private PlatformHealthItem ollamaPoolHealth(HttpClient client, boolean configured) {
+        List<OllamaInferencePoolConfiguration.NodeTarget> nodes =
+                OllamaInferencePoolConfiguration.parse(ai.getPoolNodeUrls());
+        int ready = 0;
+        int reachable = 0;
+        for (OllamaInferencePoolConfiguration.NodeTarget node : nodes) {
+            try {
+                String base = node.baseUrl().replaceAll("/+$", "");
+                var request = HttpRequest.newBuilder(URI.create(base + "/api/tags"))
+                        .timeout(Duration.ofSeconds(3)).GET().build();
+                var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    reachable++;
+                    if (ollamaResponseContainsModel(response.body(), ai.getModel())) {
+                        ready++;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Aggregate health deliberately tolerates individual-node failure.
+            }
+        }
+        boolean ok = ready > 0;
+        String detail = aiDetail() + "; ready nodes: " + ready + "/" + nodes.size()
+                + "; reachable nodes: " + reachable + "/" + nodes.size();
+        return item("ai", "Sensitive-content AI", "AI", "ollama",
+                ok ? "HEALTHY" : "UNHEALTHY", configured, detail);
+    }
+
+    private boolean ollamaResponseContainsModel(String responseBody, String requiredModel) {
+        if (responseBody == null || responseBody.isBlank() || requiredModel == null || requiredModel.isBlank()) {
+            return false;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(responseBody);
+            for (com.fasterxml.jackson.databind.JsonNode candidate : root.path("models")) {
+                if (requiredModel.equals(candidate.path("name").asText(""))
+                        || requiredModel.equals(candidate.path("model").asText(""))) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+        return false;
+    }
+
     private String aiDetail() {
         String model = safe(ai.getModel());
         int tenantProfiles = ai.getTenantProfiles().size();
         String base = model.isBlank() ? "Provider selected" : "Default model: " + model;
+        if (ai.isPoolEnabled()) {
+            int configuredNodes;
+            try {
+                configuredNodes = OllamaInferencePoolConfiguration.parse(ai.getPoolNodeUrls()).size();
+            } catch (RuntimeException ignored) {
+                configuredNodes = 0;
+            }
+            base += "; inference pool: enabled; configured nodes: " + configuredNodes;
+        } else {
+            base += "; inference pool: disabled";
+        }
         return base + "; tenant profiles: " + tenantProfiles;
     }
 
@@ -244,17 +309,29 @@ public class PlatformHealthService {
     }
 
     private PlatformHealthItem storageHealth(boolean probe) {
-        Path root = Path.of(storage.getRootPath()).toAbsolutePath().normalize();
-        if (!probe) return item("storage", "Internal storage", "Storage", "local", "CONFIGURED", true,
-                "Local filesystem");
         try {
-            Files.createDirectories(root);
-            boolean ok = Files.isDirectory(root) && Files.isWritable(root);
-            return item("storage", "Internal storage", "Storage", "local", ok ? "HEALTHY" : "UNHEALTHY", true,
-                    "Local filesystem");
+            var overview = processingStorage.overview();
+            if (overview.deploymentDefault() == null) {
+                return item("storage", "Processing storage", "Storage", "managed", "NOT_CONFIGURED", false,
+                        "Platform Operations setup required; document intake/processing is disabled");
+            }
+            ProcessingStorageProvider provider = overview.providers().stream()
+                    .filter(p -> p.id().equals(overview.deploymentDefault().providerId()))
+                    .findFirst().orElse(null);
+            String providerType = provider == null ? "managed" : provider.providerType().name().toLowerCase();
+            String status = overview.ready() ? "HEALTHY" : "UNHEALTHY";
+            boolean unsafeLocalCluster = provider != null
+                    && provider.providerType() == ProcessingStorageProviderType.LOCAL_FILESYSTEM
+                    && overview.activeNodeCount() > 1;
+            String detail = overview.ready()
+                    ? "Configured and validated on every active node"
+                    : unsafeLocalCluster
+                        ? "LOCAL_FILESYSTEM is not permitted with multiple active application nodes; activate SHARED_FILESYSTEM"
+                        : "Configured but not healthy on every active node";
+            return item("storage", "Processing storage", "Storage", providerType, status, true, detail);
         } catch (Exception e) {
-            return item("storage", "Internal storage", "Storage", "local", "UNHEALTHY", true,
-                    "Filesystem unavailable");
+            return item("storage", "Processing storage", "Storage", "managed", "UNHEALTHY", false,
+                    "Processing storage configuration unavailable");
         }
     }
 

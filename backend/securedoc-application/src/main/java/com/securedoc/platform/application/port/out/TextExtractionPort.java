@@ -27,6 +27,11 @@ public interface TextExtractionPort {
         OCR
     }
 
+    /** Provider-neutral non-text page evidence used only for safe spatial reasoning. */
+    enum VisualRegionType {
+        SOLID_DARK_RECTANGLE
+    }
+
     /**
      * Result of a text extraction operation.
      * Contains per-page text and safe metadata — never stored in events or audit.
@@ -84,6 +89,7 @@ public interface TextExtractionPort {
             int height,
             String text,
             List<TextSpan> spans,
+            List<VisualRegion> visualRegions,
             ExtractionSource source,
             double sourceConfidence
     ) {
@@ -99,6 +105,11 @@ public interface TextExtractionPort {
             } else {
                 spans = List.copyOf(spans);
             }
+            if (visualRegions == null) {
+                visualRegions = List.of();
+            } else {
+                visualRegions = List.copyOf(visualRegions);
+            }
             if (source == null) {
                 source = ExtractionSource.NATIVE_PDF_TEXT;
             }
@@ -107,12 +118,43 @@ public interface TextExtractionPort {
             }
         }
 
+        public PageText(int pageNumber, int width, int height, String text, List<TextSpan> spans,
+                        ExtractionSource source, double sourceConfidence) {
+            this(pageNumber, width, height, text, spans, List.of(), source, sourceConfidence);
+        }
+
         public PageText(int pageNumber, int width, int height, String text, List<TextSpan> spans) {
-            this(pageNumber, width, height, text, spans, ExtractionSource.NATIVE_PDF_TEXT, 1.0);
+            this(pageNumber, width, height, text, spans, List.of(), ExtractionSource.NATIVE_PDF_TEXT, 1.0);
         }
 
         public PageText(int pageNumber, int width, int height, String text) {
             this(pageNumber, width, height, text, List.of());
+        }
+    }
+
+    /**
+     * Trusted visual evidence recovered from the rendered page without storing page pixels.
+     * Coordinates use the same normalized top-left coordinate system as {@link TextSpan}.
+     */
+    record VisualRegion(
+            VisualRegionType type,
+            double left,
+            double top,
+            double width,
+            double height,
+            double confidence
+    ) {
+        public VisualRegion {
+            if (type == null) {
+                throw new IllegalArgumentException("Visual region type is required");
+            }
+            if (left < 0.0 || top < 0.0 || width <= 0.0 || height <= 0.0
+                    || left > 1.0 || top > 1.0 || left + width > 1.000001 || top + height > 1.000001) {
+                throw new IllegalArgumentException("Visual region coordinates must be normalized to the page");
+            }
+            if (Double.isNaN(confidence) || confidence < 0.0 || confidence > 1.0) {
+                throw new IllegalArgumentException("Visual region confidence must be between 0.0 and 1.0");
+            }
         }
     }
 

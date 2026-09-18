@@ -33,7 +33,7 @@ class OllamaPerformanceProfileTest {
     }
 
     @Test
-    void batchesPagesAndSendsOptimizedOllamaInferenceControls() throws Exception {
+    void batchesFourModeratePagesAndSendsOptimizedOllamaInferenceControls() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         CopyOnWriteArrayList<String> requestBodies = new CopyOnWriteArrayList<>();
         startServer(exchange -> {
@@ -57,7 +57,7 @@ class OllamaPerformanceProfileTest {
                 false,
                 8192,
                 768,
-                2,
+                4,
                 14_000);
 
         AnalysisOutput output = adapter.analyze(List.of(
@@ -66,7 +66,7 @@ class OllamaPerformanceProfileTest {
                 new PageContent(3, "Another ordinary page"),
                 new PageContent(4, "Final ordinary page")));
 
-        assertEquals(2, calls.get(), "four moderate pages should use two provider calls at batch-size two");
+        assertEquals(1, calls.get(), "four moderate pages should use one provider call at batch-size four");
         assertEquals(1, output.findings().size());
         assertEquals(2, output.findings().getFirst().pageNumber());
 
@@ -78,6 +78,31 @@ class OllamaPerformanceProfileTest {
         assertTrue(request.contains("\"format\":{"), "structured JSON schema should be sent to Ollama");
         assertTrue(request.contains("<PAGE number=\\\"1\\\">"));
         assertTrue(request.contains("<PAGE number=\\\"2\\\">"));
+        assertTrue(request.contains("<PAGE number=\\\"3\\\">"));
+        assertTrue(request.contains("<PAGE number=\\\"4\\\">"));
+    }
+
+    @Test
+    void characterBudgetStillBoundsFourPageBatching() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        startServer(exchange -> {
+            calls.incrementAndGet();
+            send(exchange, 200, envelope("{\"findings\":[]}"));
+        });
+
+        String page = "X".repeat(400);
+        OllamaSensitiveContentAnalysisAdapter adapter = new OllamaSensitiveContentAnalysisAdapter(
+                "http://localhost:" + server.getAddress().getPort(), "qwen3.5:4b", Duration.ofSeconds(5),
+                1, 1, Duration.ZERO, "30m", true, false, 8192, 2048, 4, 1000);
+
+        adapter.analyze(List.of(
+                new PageContent(1, page),
+                new PageContent(2, page),
+                new PageContent(3, page),
+                new PageContent(4, page)));
+
+        assertEquals(2, calls.get(),
+                "character budget must split a nominal four-page batch when combined text is too large");
     }
 
     @Test

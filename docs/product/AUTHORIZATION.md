@@ -103,5 +103,5 @@ Removal path: migrate IdP assignments to canonical groups, confirm no legacy ass
 - `Remove from Dashboard` is visibility-only; it retains database metadata and audit/report history.
 - No user role manually performs physical original deletion; retention lifecycle owns purge.
 - `Reprocess from Retained Original` is a business rerun and is separate from classified transient technical retry.
-- `REPORT_VIEWER` sees only authorized aggregate reporting and cannot export CSV or drill into technical issue payloads/actions.
+- `REPORT_VIEWER` is executive/aggregate reporting only. It can view Executive and Usage/Adoption reporting, cannot export, cannot access Operational Details by role alone, and cannot drill into protected package/document/technical payloads.
 - `BUSINESS_ADMIN` means approved business functionality, not system/technical administration.

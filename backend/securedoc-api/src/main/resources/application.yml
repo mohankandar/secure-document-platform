@@ -14,9 +14,17 @@ spring:
 securedoc:
   logging:
     environment: ${SECUREDOC_ENVIRONMENT:production}
+    node-id: ${SECUREDOC_NODE_ID:unknown}
   demo:
     tenant-id: "00000000-0000-0000-0000-000000000001"
     actor-id: "00000000-0000-0000-0000-000000000099"
+  licensing:
+    # On-prem/SaaS tenant licensing foundation. Production defaults fail closed.
+    # Production trusts only the vendor public key packaged with the application; the private signing key never ships.
+    enforcement: ${SECUREDOC_LICENSING_ENFORCEMENT:ENFORCED}
+    verification-key-resource: classpath:licensing/lexavault-license-public-key.pem
+    allow-development-key-override: false
+    development-public-key: ""
   security:
     # Unit 25: secure default. The explicit local profile overrides this to LOCAL.
     mode: ${SECUREDOC_SECURITY_MODE:OIDC}
@@ -64,6 +72,16 @@ securedoc:
     ollama-max-output-tokens: ${SECUREDOC_AI_OLLAMA_MAX_OUTPUT_TOKENS:0}
     ollama-page-batch-size: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE:1}
     ollama-page-batch-max-characters: ${SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS:14000}
+    # Production inference pool. Disabled preserves the single-endpoint behavior.
+    # Entries may be comma-separated URLs or stableId=URL (for example ai-1=http://ai01:11434).
+    pool-enabled: ${SECUREDOC_AI_POOL_ENABLED:false}
+    pool-node-urls: ${SECUREDOC_AI_POOL_NODE_URLS:}
+    pool-max-concurrent-per-node: ${SECUREDOC_AI_POOL_MAX_CONCURRENT_PER_NODE:1}
+    pool-max-node-attempts: ${SECUREDOC_AI_POOL_MAX_NODE_ATTEMPTS:2}
+    pool-health-probe-timeout-ms: ${SECUREDOC_AI_POOL_HEALTH_PROBE_TIMEOUT_MS:1500}
+    pool-health-check-interval-ms: ${SECUREDOC_AI_POOL_HEALTH_CHECK_INTERVAL_MS:5000}
+    pool-circuit-open-ms: ${SECUREDOC_AI_POOL_CIRCUIT_OPEN_MS:10000}
+    pool-queue-wait-ms: ${SECUREDOC_AI_POOL_QUEUE_WAIT_MS:5000}
     # Optional startup preload for the default Ollama model. Disabled in secure base config; explicit local/demo profiles enable it.
     ollama-preload-enabled: ${SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED:false}
     ollama-preload-fail-on-error: ${SECUREDOC_AI_OLLAMA_PRELOAD_FAIL_ON_ERROR:false}
@@ -110,6 +128,16 @@ securedoc:
     # Unit 18: retry only explicitly transient dependency failures. Business/content review is never retried.
     max-attempts: ${SECUREDOC_RETRY_MAX_ATTEMPTS:2}
     initial-backoff-ms: ${SECUREDOC_RETRY_INITIAL_BACKOFF_MS:250}
+  processing:
+    # Existing processing-worker flag remains separate from the R3 HA coordination controls.
+    enabled: false
+    # R3 FIX4: durable ownership + crash recovery for asynchronous package processing.
+    coordination:
+      enabled: ${SECUREDOC_PROCESSING_COORDINATION_ENABLED:true}
+      lease-duration-ms: ${SECUREDOC_PROCESSING_LEASE_DURATION_MS:30000}
+      heartbeat-interval-ms: ${SECUREDOC_PROCESSING_HEARTBEAT_INTERVAL_MS:10000}
+      recovery-scan-interval-ms: ${SECUREDOC_PROCESSING_RECOVERY_SCAN_INTERVAL_MS:5000}
+      recovery-batch-size: ${SECUREDOC_PROCESSING_RECOVERY_BATCH_SIZE:100}
   platform-admin:
     # Unit 24. Provider credentials remain deployment-managed and are never returned by the admin API.
     watched-folder-scheduling-enabled: ${SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED:false}
@@ -117,8 +145,6 @@ securedoc:
     watched-folder-tenant-id: ${SECUREDOC_WATCHED_FOLDER_TENANT_ID:}
     watched-folder-actor-id: ${SECUREDOC_WATCHED_FOLDER_ACTOR_ID:}
     watched-folder-actor-username: ${SECUREDOC_WATCHED_FOLDER_ACTOR_USERNAME:watched-folder-service}
-  processing:
-    enabled: false
   worker:
     enabled: false
     poll-interval-seconds: 30

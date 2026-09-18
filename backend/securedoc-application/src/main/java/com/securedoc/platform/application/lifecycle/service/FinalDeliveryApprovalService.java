@@ -4,7 +4,7 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ApproveFinalDeliveryCommand;
 import com.securedoc.platform.application.port.in.ApproveFinalDeliveryUseCase;
-import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
+import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.service.AuditService;
@@ -19,16 +19,16 @@ import java.util.Objects;
 public final class FinalDeliveryApprovalService implements ApproveFinalDeliveryUseCase {
     private final PackageRepository packageRepository;
     private final PackageLifecycleService lifecycleService;
-    private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
+    private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final AuditService auditService;
 
     public FinalDeliveryApprovalService(PackageRepository packageRepository,
                                         PackageLifecycleService lifecycleService,
-                                        TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+                                        PackageProcessingDispatcher packageProcessingDispatcher,
                                         AuditService auditService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
-        this.triggerPackageProcessingUseCase = Objects.requireNonNull(triggerPackageProcessingUseCase);
+        this.packageProcessingDispatcher = Objects.requireNonNull(packageProcessingDispatcher);
         this.auditService = Objects.requireNonNull(auditService);
     }
 
@@ -45,7 +45,7 @@ public final class FinalDeliveryApprovalService implements ApproveFinalDeliveryU
         auditService.recordSuccess(command.tenantId(), command.actorId(), AuditAction.PACKAGE_FINAL_APPROVED,
                 "DocumentPackage", command.packageId().toString(), command.correlationId(),
                 "Final delivery approved");
-        triggerPackageProcessingUseCase.execute(TriggerPackageProcessingCommand.of(
+        packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
                 command.packageId(), command.tenantId(), command.actorId(), command.correlationId()));
     }
 }

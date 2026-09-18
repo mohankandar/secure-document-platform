@@ -30,6 +30,8 @@ function Stop-Tree {
 Write-Host ""
 Write-Host "=== LexaVault LOCAL shutdown ===" -ForegroundColor Cyan
 
+# Stop local scanner acquisition first so it cannot enqueue/deliver while the backend is shutting down.
+Stop-Tree "Scanner Bridge" (Join-Path $RunDir "scanner-bridge-shell.pid")
 Stop-Tree "Frontend" (Join-Path $RunDir "frontend-shell.pid")
 Stop-Tree "Backend" (Join-Path $RunDir "backend-shell.pid")
 

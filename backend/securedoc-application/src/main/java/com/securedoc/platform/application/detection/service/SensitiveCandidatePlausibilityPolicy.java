@@ -33,6 +33,18 @@ final class SensitiveCandidatePlausibilityPolicy {
     private static final Pattern SSN_CONTEXT = Pattern.compile(
             "(?i)\\b(?:ssn|social\\s+security(?:\\s+number)?)\\b");
 
+    /**
+     * Labels for tax/business identifiers that can also contain nine digits but are not SSNs.
+     * These are intentionally separate from the generic business-identifier pattern because
+     * government tax forms frequently present "Federal ID Number OR Social Security Number"
+     * in the same visual cell. The candidate must be bound to the nearest applicable label.
+     */
+    private static final Pattern NON_SSN_TAX_ID_CONTEXT = Pattern.compile(
+            "(?i)\\b(?:federal\\s+(?:employer\\s+)?id(?:entification)?(?:\\s+number)?|"
+                    + "employer\\s+identification(?:\\s+number)?|e\\.?i\\.?n\\.?|f\\.?e\\.?i\\.?n\\.?|"
+                    + "business\\s+(?:tax\\s+)?id(?:entification)?(?:\\s+number)?|"
+                    + "taxpayer\\s+identification(?:\\s+number)?|tax\\s+id(?:entification)?(?:\\s+number)?)\\b");
+
     private static final Pattern CARD_CONTEXT = Pattern.compile(
             "(?i)\\b(?:credit\\s+card|debit\\s+card|card\\s*(?:number|no\\.?|#)|payment\\s+card|"
                     + "pan|visa|master\\s*card|mastercard|amex|american\\s+express|discover)\\b");
@@ -102,8 +114,10 @@ final class SensitiveCandidatePlausibilityPolicy {
                                    ValidationOutcome deterministicValidation) {
         String digits = digits(value);
         int ssnGap = nearestContextGap(SSN_CONTEXT, value, context);
+        int nonSsnTaxIdGap = nearestContextGap(NON_SSN_TAX_ID_CONTEXT, value, context);
         int businessIdentifierGap = nearestContextGap(BUSINESS_IDENTIFIER_CONTEXT, value, context);
         boolean explicitSsnContext = ssnGap >= 0 && ssnGap <= 80;
+        boolean nonSsnTaxIdContext = nonSsnTaxIdGap >= 0 && nonSsnTaxIdGap <= 80;
         boolean businessIdentifierContext = businessIdentifierGap >= 0 && businessIdentifierGap <= 80;
 
         if (digits.length() == 4) {
@@ -117,6 +131,20 @@ final class SensitiveCandidatePlausibilityPolicy {
 
         if (digits.length() != 9) {
             return Evaluation.reject("SSN_VALUE_NOT_NINE_DIGITS");
+        }
+
+        // EIN/FEIN and similar business tax IDs are nine digits too. Government forms can place
+        // "Federal ID Number" and "Social Security Number" in the same cell, so the presence of
+        // SSN wording somewhere nearby is not sufficient. When this exact value is closer to a
+        // non-SSN tax-ID label, reject it as an SSN. The common EIN 2-7 rendering is an additional
+        // strong signal, but proximity is what keeps a real 3-2-4 SSN below the SSN label valid.
+        boolean einShaped = value.matches("\\d{2}[- ]\\d{7}");
+        if (einShaped) {
+            return Evaluation.reject("SSN_EIN_SHAPE");
+        }
+        if (nonSsnTaxIdContext
+                && (!explicitSsnContext || nonSsnTaxIdGap <= ssnGap)) {
+            return Evaluation.reject("SSN_NON_PERSON_TAX_ID_CONTEXT");
         }
         if (deterministicValidation == ValidationOutcome.CONTRADICTS) {
             return Evaluation.reject("SSN_INVALID_STRUCTURE");

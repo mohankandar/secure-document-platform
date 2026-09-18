@@ -1,0 +1,12 @@
+{
+  "businessIdentifiers": {
+    "contract_number": "000900000004",
+    "member_number": "00900000004",
+    "service_entity": "001"
+  },
+  "metadata": {
+    "test_suite": "LEXAVAULT_V1_GOLDEN_PATH",
+    "test_scenario": "APPROVAL_FLOW"
+  },
+  "files": ["04_approval_flow.pdf"]
+}

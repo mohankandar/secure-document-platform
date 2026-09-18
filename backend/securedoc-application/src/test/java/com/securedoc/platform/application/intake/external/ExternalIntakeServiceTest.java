@@ -2,6 +2,7 @@ package com.securedoc.platform.application.intake.external;
 
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.IntakeConflictException;
+import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.integration.IntegrationConnectionService;
 import com.securedoc.platform.application.intake.command.*;
 import com.securedoc.platform.application.port.in.*;
@@ -81,6 +82,143 @@ class ExternalIntakeServiceTest {
         assertEquals("SOURCE_REVISION_REUSED", conflict.errorCode());
     }
 
+    @Test
+    void scannerIntakeIsOneConsolidatedPdfAndUsesScannerPackageSource() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-10T12:00:00Z"));
+        TenantId tenant = TenantId.generate();
+        ActorId actor = ActorId.generate();
+        AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actor, tenant, "scanner-client", Set.of());
+        AuditService auditService = new AuditService(record -> { });
+        FakeConnectionRepository connections = new FakeConnectionRepository();
+        connections.save(IntegrationConnection.create(tenant, "Scanner", null, IntegrationPurpose.INGESTION_SOURCE,
+                IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER, IntegrationAuthenticationType.NONE,
+                "scanner-client", null, null, null, 60, 2, 24, 1, 10_000_000L, 100,
+                IntegrationAcknowledgementMode.NONE, true, clock.instant()));
+        IntegrationConnectionService connectionService = new IntegrationConnectionService(connections, auditService);
+        FakeExternalIntakeRepository intakes = new FakeExternalIntakeRepository();
+        FakePackageRepository packages = new FakePackageRepository();
+        List<CreatePackageCommand> commands = new ArrayList<>();
+        CreatePackageUseCase create = (command, p) -> {
+            commands.add(command);
+            DocumentPackage pkg = DocumentPackage.create(p.tenantId(), command.packageType(), p.actorId(), PackageMetadata.of(command.metadata()));
+            packages.save(pkg);
+            return CreatePackageResult.of(pkg.id(), BusinessRecordId.generate(), pkg.status(), pkg.createdAt());
+        };
+        ChecksumPort checksum = input -> Checksum.sha256("a".repeat(64));
+        PdfIntakeValidationPort pdf = input -> new PdfIntakeValidationPort.PdfInfo(1);
+        ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
+                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+        ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create,
+                (command, p) -> { throw new AssertionError("upload not expected"); },
+                (command, p) -> { throw new AssertionError("submit not expected"); },
+                command -> { throw new AssertionError("dispatch not expected"); }, checksum, pdf, auditService, maintenance, clock);
+
+        String submissionId = UUID.randomUUID().toString();
+        String sourceDocumentId = UUID.randomUUID().toString();
+        Map<String, String> scannerMetadata = new LinkedHashMap<>();
+        scannerMetadata.put("scannerCaptureMode", "SIMULATOR");
+        scannerMetadata.put("bridgeId", "BRIDGE-LAS-01");
+        scannerMetadata.put("siteId", "LAS-01");
+        scannerMetadata.put("scannerId", "SCANNER-01");
+        scannerMetadata.put("scanSessionId", UUID.randomUUID().toString());
+        scannerMetadata.put("scanStartedAt", "2026-09-10T11:59:00Z");
+        scannerMetadata.put("scanCompletedAt", "2026-09-10T12:00:00Z");
+        scannerMetadata.put("scannerSubmittedAt", "2026-09-10T12:00:01Z");
+        scannerMetadata.put("sourceSubmissionId", submissionId);
+        scannerMetadata.put("sourceDocumentId", sourceDocumentId);
+        scannerMetadata.put("sourceFileSizeBytes", "4727");
+        scannerMetadata.put("sourceSha256", "a".repeat(64));
+        PushIntakeCreateInput input = new PushIntakeCreateInput(submissionId, "1",
+                Map.of("contract_number", "000900009901"), scannerMetadata,
+                List.of(new PushIntakeCreateInput.ManifestDocumentInput(sourceDocumentId, "scan.pdf", "a".repeat(64))));
+        service.createScannerIntake(input, principal, CorrelationId.generate());
+
+        assertEquals(1, commands.size());
+        assertEquals(PackageType.SCANNER_INTAKE, commands.get(0).packageType());
+        assertEquals("SCANNER", commands.get(0).metadata().get("intakeChannel"));
+        assertEquals("BRIDGE-LAS-01", commands.get(0).metadata().get("bridgeId"));
+        assertEquals("LAS-01", commands.get(0).metadata().get("siteId"));
+        assertEquals(sourceDocumentId, commands.get(0).metadata().get("sourceDocumentId"));
+        assertEquals(submissionId, commands.get(0).metadata().get("sourceSubmissionId"));
+
+        PushIntakeCreateInput invalid = new PushIntakeCreateInput(UUID.randomUUID().toString(), "1", Map.of(), Map.of(), List.of(
+                new PushIntakeCreateInput.ManifestDocumentInput("DOC-A", "a.pdf", null),
+                new PushIntakeCreateInput.ManifestDocumentInput("DOC-B", "b.pdf", null)));
+        assertThrows(ValidationException.class, () -> service.createScannerIntake(invalid, principal, CorrelationId.generate()));
+    }
+
+    @Test
+    void scannerDocumentReceiptConvergesIntoCommonSubmitAndProcessingDispatcher() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-10T12:00:00Z"));
+        TenantId tenant = TenantId.generate();
+        ActorId actor = ActorId.generate();
+        AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actor, tenant, "scanner-client", Set.of());
+        AuditService auditService = new AuditService(record -> { });
+        FakeConnectionRepository connections = new FakeConnectionRepository();
+        connections.save(IntegrationConnection.create(tenant, "Scanner", null, IntegrationPurpose.INGESTION_SOURCE,
+                IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER, IntegrationAuthenticationType.NONE,
+                "scanner-client", null, null, null, 60, 2, 24, 1, 10_000_000L, 100,
+                IntegrationAcknowledgementMode.NONE, true, clock.instant()));
+        IntegrationConnectionService connectionService = new IntegrationConnectionService(connections, auditService);
+        FakeExternalIntakeRepository intakes = new FakeExternalIntakeRepository();
+        FakePackageRepository packages = new FakePackageRepository();
+        CreatePackageUseCase create = (command, p) -> {
+            DocumentPackage pkg = DocumentPackage.create(p.tenantId(), command.packageType(), p.actorId(), PackageMetadata.of(command.metadata()));
+            packages.save(pkg);
+            return CreatePackageResult.of(pkg.id(), BusinessRecordId.generate(), pkg.status(), pkg.createdAt());
+        };
+        int[] uploads = {0};
+        int[] submits = {0};
+        int[] dispatches = {0};
+        UploadDocumentUseCase upload = (command, p) -> {
+            uploads[0]++;
+            return UploadDocumentResult.of(DocumentId.generate(), ArtifactId.generate(), DocumentStatus.UPLOADED);
+        };
+        SubmitPackageUseCase submit = (command, p) -> submits[0]++;
+        PackageProcessingDispatcher dispatcher = command -> dispatches[0]++;
+        ChecksumPort checksum = input -> Checksum.sha256("a".repeat(64));
+        PdfIntakeValidationPort pdf = input -> new PdfIntakeValidationPort.PdfInfo(1);
+        ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
+                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+        ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create, upload,
+                submit, dispatcher, checksum, pdf, auditService, maintenance, clock);
+
+        String submissionId = UUID.randomUUID().toString();
+        String sourceDocumentId = UUID.randomUUID().toString();
+        Map<String, String> metadata = new LinkedHashMap<>();
+        metadata.put("scannerCaptureMode", "SIMULATOR");
+        metadata.put("bridgeId", "BRIDGE-LAS-01");
+        metadata.put("siteId", "LAS-01");
+        metadata.put("scannerId", "SCANNER-01");
+        metadata.put("scanSessionId", UUID.randomUUID().toString());
+        metadata.put("scanStartedAt", "2026-09-10T11:59:00Z");
+        metadata.put("scanCompletedAt", "2026-09-10T12:00:00Z");
+        metadata.put("scannerSubmittedAt", "2026-09-10T12:00:01Z");
+        metadata.put("sourceFileSizeBytes", "23");
+        PushIntakeCreateInput input = new PushIntakeCreateInput(submissionId, "1",
+                Map.of("contract_number", "000900009901"), metadata,
+                List.of(new PushIntakeCreateInput.ManifestDocumentInput(sourceDocumentId, "scan.pdf", "a".repeat(64))));
+
+        ExternalIntakeSnapshot created = service.createScannerIntake(input, principal, CorrelationId.generate());
+        UploadContent content = new UploadContent() {
+            private final byte[] bytes = "%PDF-1.4\nscanner\n%%EOF\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+            @Override public InputStream openStream() { return new java.io.ByteArrayInputStream(bytes); }
+            @Override public long contentLength() { return bytes.length; }
+        };
+        ExternalDocumentReceipt receipt = service.receiveScannerDocument(PackageId.of(created.packageId()), sourceDocumentId,
+                submissionId + ":" + sourceDocumentId, "a".repeat(64), "application/pdf", content,
+                principal, CorrelationId.generate());
+
+        assertEquals(ExternalIntakeStatus.ACCEPTED_FOR_PROCESSING, receipt.intakeStatus());
+        assertEquals(1, uploads[0]);
+        assertEquals(1, submits[0]);
+        assertEquals(1, dispatches[0]);
+        DocumentPackage receivedPackage = packages.findByIdAndTenantId(PackageId.of(created.packageId()), tenant).orElseThrow();
+        assertEquals("23", receivedPackage.metadata().get("sourceFileSizeBytes").orElseThrow());
+        assertEquals("1", receivedPackage.metadata().get("sourcePageCount").orElseThrow());
+        assertEquals("a".repeat(64), receivedPackage.metadata().get("sourceSha256").orElseThrow());
+    }
+
     private static final class MutableClock extends Clock {
         private Instant instant;
         MutableClock(Instant instant) { this.instant = instant; }
@@ -95,6 +233,7 @@ class ExternalIntakeServiceTest {
         public List<IntegrationConnection> findByTenantId(TenantId t) { return values.stream().filter(v -> v.tenantId().equals(t)).toList(); }
         public Optional<IntegrationConnection> findByTenantIdAndId(TenantId t, IntegrationConnectionId id) { return values.stream().filter(v -> v.tenantId().equals(t) && v.id().equals(id)).findFirst(); }
         public Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId t, String p) { return values.stream().filter(v -> v.tenantId().equals(t) && v.enabled() && v.providerType() == IntegrationProviderType.PUSH_API && p.equals(v.clientPrincipal())).findFirst(); }
+        public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId t, String p) { return values.stream().filter(v -> v.tenantId().equals(t) && v.enabled() && v.providerType() == IntegrationProviderType.SCANNER && p.equals(v.clientPrincipal())).findFirst(); }
         public boolean existsByTenantIdAndNameIgnoreCase(TenantId t, String n, IntegrationConnectionId e) { return false; }
         public boolean existsByTenantIdAndClientPrincipal(TenantId t, String p, IntegrationConnectionId e) { return false; }
         public void save(IntegrationConnection c) { values.add(c); }

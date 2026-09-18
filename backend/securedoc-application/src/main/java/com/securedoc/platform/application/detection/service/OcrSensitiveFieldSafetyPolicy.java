@@ -4,6 +4,8 @@ import com.securedoc.platform.application.port.out.SensitiveDataDetectionPort.De
 import com.securedoc.platform.application.port.out.TextExtractionPort.ExtractionSource;
 import com.securedoc.platform.application.port.out.TextExtractionPort.PageText;
 import com.securedoc.platform.application.port.out.TextExtractionPort.TextSpan;
+import com.securedoc.platform.application.port.out.TextExtractionPort.VisualRegion;
+import com.securedoc.platform.application.port.out.TextExtractionPort.VisualRegionType;
 import com.securedoc.platform.domain.finding.EntityType;
 
 import java.util.ArrayList;
@@ -34,7 +36,7 @@ import java.util.regex.Pattern;
 final class OcrSensitiveFieldSafetyPolicy {
 
     private static final String DETECTOR_NAME = "ocr-sensitive-field-guard";
-    private static final String DETECTOR_VERSION = "1.2.0";
+    private static final String DETECTOR_VERSION = "1.4.0";
     private static final double LOCATED_SCORE_CONFIDENCE = 0.94;
     private static final double REVIEW_SIGNAL_CONFIDENCE = 0.50;
 
@@ -53,7 +55,9 @@ final class OcrSensitiveFieldSafetyPolicy {
     private static final Pattern MASKED_CARD = Pattern.compile(
             "(?i)^(?=.*[x*])(?:[x*0-9][ -]?){4,25}$");
     private static final Pattern SAFE_EMPTY_VALUE = Pattern.compile(
-            "(?i)^(?:n/?a|none|not\\s+applicable|blank|unknown|not\\s+provided)?$");
+            "(?i)^(?:n/?a|none|not\\s+applicable|blank|unknown|not\\s+provided|redacted|masked)?$");
+    private static final Pattern MASK_GRAPHIC_TEXT = Pattern.compile(
+            "^[\\s|_\\-\u2013\u2014\u2580-\u259f]+$");
 
     // Geometry fallback thresholds. Normal prose word spacing is much tighter than a form's
     // label/value gap. The minimum gap keeps "credit score and payment history" from looking like
@@ -89,10 +93,19 @@ final class OcrSensitiveFieldSafetyPolicy {
 
                 String rawValue = matcher.group(3) == null ? "" : matcher.group(3).trim();
                 if (rawValue.isBlank()) {
-                    // OCR may separate a visually adjacent value onto another logical line. A strong
-                    // sensitive field label with no already-resolved value on this page is therefore
-                    // unresolved, not safe. Defer the score decision until the geometry fallback has
-                    // a chance to recover it; otherwise create a review signal below.
+                    // A source document may already contain a permanent blackout. OCR then recovers
+                    // the strong label but no value characters at all. Trusted visual evidence from
+                    // the rendered page can prove that the expected value region is a solid dark
+                    // rectangle; in that case there is no exposed value left for a reviewer to find.
+                    if (hasVerifiedVisualMaskBesideLabel(
+                            page, matcher.start(1), matcher.end(1), type)) {
+                        continue;
+                    }
+
+                    // OCR may also separate a genuinely exposed value onto another logical line. A
+                    // strong sensitive field label with no resolved value and no verified blackout is
+                    // therefore still unresolved, not safe. Defer the score decision until geometry
+                    // fallback has a chance to recover it; otherwise create a review signal below.
                     if (!hasTypeOnPage(existingEntities, located, type, page.pageNumber())) {
                         unresolvedBlankLabels.add(type);
                     }
@@ -104,6 +117,14 @@ final class OcrSensitiveFieldSafetyPolicy {
 
                 int valueStart = matcher.start(3);
                 int valueEnd = matcher.end(3);
+                if (isAlreadyMaskedOcrArtifact(page, rawValue, valueStart, valueEnd, type)) {
+                    // A pre-masked/redacted source value is already safe. OCR commonly renders a
+                    // solid black rectangle as '|', '_' or a very low-confidence short token.
+                    // Treating that graphic noise as an unresolved sensitive value creates an
+                    // impossible Manual Review task even though no exposed value remains.
+                    unresolvedBlankLabels.remove(type);
+                    continue;
+                }
 
                 if (type == EntityType.CREDIT_SCORE) {
                     DetectedEntity scoreEntity = exactScoreEntity(page.pageNumber(), rawValue, valueStart);
@@ -252,12 +273,163 @@ final class OcrSensitiveFieldSafetyPolicy {
                 }
             }
 
-            // A non-empty, form-like value exists beside a strong Credit Score label but cannot be
-            // safely interpreted (e.g. 76B). It must block export and be reviewed.
-            unresolvedCandidate = true;
+            // Only a value-shaped OCR token should become a fail-safe review item. A bare
+            // "credit score" phrase in prose/title text frequently has an ordinary word to its
+            // right ("and", "appears", "or", "fields", etc.). Those are category mentions,
+            // not unresolved customer values. Keep review fail-safe behavior for score-shaped
+            // OCR ambiguity such as 76B / 7B8 / an out-of-range 3-digit token.
+            if (looksLikeAmbiguousCreditScoreValue(candidate)) {
+                unresolvedCandidate = true;
+            }
         }
 
         return new SpatialScoreResult(null, strongLabelSeen, candidateSeen, unresolvedCandidate);
+    }
+
+    private boolean looksLikeAmbiguousCreditScoreValue(OcrToken candidate) {
+        String compact = candidate.raw().replaceAll("[^A-Za-z0-9]", "");
+        if (compact.length() != 3) {
+            return false;
+        }
+        long digitCount = compact.chars().filter(Character::isDigit).count();
+        return digitCount >= 2;
+    }
+
+
+    private boolean hasVerifiedVisualMaskBesideLabel(PageText page,
+                                                     int labelStart,
+                                                     int labelEnd,
+                                                     EntityType type) {
+        if (page.visualRegions().isEmpty() || page.spans().isEmpty()) {
+            return false;
+        }
+
+        List<TextSpan> labelSpans = page.spans().stream()
+                .filter(span -> span.startOffset() < labelEnd && labelStart < span.endOffset())
+                .toList();
+        if (labelSpans.isEmpty()) {
+            return false;
+        }
+
+        double labelRight = labelSpans.stream()
+                .mapToDouble(span -> span.left() + span.width())
+                .max()
+                .orElse(0.0);
+        double labelTop = labelSpans.stream().mapToDouble(TextSpan::top).min().orElse(0.0);
+        double labelBottom = labelSpans.stream()
+                .mapToDouble(span -> span.top() + span.height())
+                .max()
+                .orElse(labelTop);
+        double labelHeight = Math.max(0.0001, labelBottom - labelTop);
+        double labelCenter = labelTop + (labelHeight / 2.0);
+
+        double minimumWidth = switch (type) {
+            case CREDIT_CARD_NUMBER -> 0.045;
+            case SSN, DATE_OF_BIRTH -> 0.030;
+            case CREDIT_SCORE -> 0.018;
+            default -> 0.030;
+        };
+
+        for (VisualRegion region : page.visualRegions()) {
+            if (region.type() != VisualRegionType.SOLID_DARK_RECTANGLE
+                    || region.confidence() < 0.90
+                    || region.width() < minimumWidth
+                    || region.height() < 0.005
+                    || region.height() > 0.045
+                    || region.width() / region.height() < 1.40) {
+                continue;
+            }
+
+            double regionRight = region.left() + region.width();
+            double horizontalGap = region.left() - labelRight;
+            if (regionRight <= labelRight || horizontalGap < -0.005 || horizontalGap > 0.25) {
+                continue;
+            }
+
+            double regionCenter = region.top() + (region.height() / 2.0);
+            double centerGap = Math.abs(regionCenter - labelCenter);
+            double verticalTolerance = Math.max(
+                    0.020, 1.75 * Math.max(labelHeight, region.height()));
+            if (centerGap <= verticalTolerance) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isAlreadyMaskedOcrArtifact(PageText page,
+                                               String rawValue,
+                                               int valueStart,
+                                               int valueEnd,
+                                               EntityType type) {
+        String trimmed = rawValue == null ? "" : rawValue.trim();
+        if (trimmed.isBlank()) {
+            return false;
+        }
+
+        List<TextSpan> overlapping = page.spans().stream()
+                .filter(span -> span.startOffset() < valueEnd && valueStart < span.endOffset())
+                .toList();
+        if (overlapping.isEmpty()) {
+            // Text alone is not enough to call a field pre-masked. If OCR recovered a strong
+            // label but provided no positional evidence for the apparent value, keep the existing
+            // fail-safe review behavior.
+            return false;
+        }
+
+        double averageConfidence = overlapping.stream()
+                .mapToDouble(TextSpan::confidence)
+                .average()
+                .orElse(1.0);
+        double tallestSpan = overlapping.stream()
+                .mapToDouble(TextSpan::height)
+                .max()
+                .orElse(0.0);
+        double widestSpan = overlapping.stream()
+                .mapToDouble(TextSpan::width)
+                .max()
+                .orElse(0.0);
+        double medianPageSpanHeight = medianSpanHeight(page.spans());
+
+        if (MASK_GRAPHIC_TEXT.matcher(trimmed).matches()) {
+            // Solid redaction rectangles frequently OCR as one or more vertical bars. Require
+            // geometry that looks materially taller than ordinary text plus weak OCR confidence;
+            // this avoids treating a normal visible digit/character OCR failure as already safe.
+            double maskHeightFloor = Math.max(0.014, medianPageSpanHeight * 1.45);
+            return averageConfidence < 0.75 && tallestSpan >= maskHeightFloor;
+        }
+
+        // Tesseract can emit a solid rectangle as a very short alphabetic token with a huge
+        // bounding box (for example "Pe" across a full card-number blackout). Restrict this
+        // heuristic to payment-card fields and require all three signals so genuinely unreadable
+        // but value-shaped OCR still fails safe to Manual Review.
+        if (type != EntityType.CREDIT_CARD_NUMBER || trimmed.chars().anyMatch(Character::isDigit)) {
+            return false;
+        }
+        String alphaNumeric = trimmed.replaceAll("[^A-Za-z0-9]", "");
+        if (alphaNumeric.isBlank() || alphaNumeric.length() > 3) {
+            return false;
+        }
+        return averageConfidence < 0.35 && widestSpan >= 0.08;
+    }
+
+    private double medianSpanHeight(List<TextSpan> spans) {
+        if (spans == null || spans.isEmpty()) {
+            return 0.0;
+        }
+        List<Double> heights = spans.stream()
+                .map(TextSpan::height)
+                .filter(height -> height > 0.0)
+                .sorted()
+                .toList();
+        if (heights.isEmpty()) {
+            return 0.0;
+        }
+        int middle = heights.size() / 2;
+        if ((heights.size() & 1) == 1) {
+            return heights.get(middle);
+        }
+        return (heights.get(middle - 1) + heights.get(middle)) / 2.0;
     }
 
     private OcrToken findScoreTokenSameRow(List<OcrToken> tokens, int startIndex, OcrToken credit) {

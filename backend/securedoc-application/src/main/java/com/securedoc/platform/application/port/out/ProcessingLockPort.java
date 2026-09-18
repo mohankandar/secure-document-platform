@@ -27,6 +27,12 @@ public interface ProcessingLockPort {
     void release(String resourceKey, String lockToken);
 
     /**
+     * Administrative recovery operation used only after a distributed package-processing lease
+     * has expired. It removes any stale document-processing lock regardless of its token.
+     */
+    void forceRelease(String resourceKey);
+
+    /**
      * Checks if a lock is currently held for the resource.
      */
     boolean isLocked(String resourceKey);

@@ -20,7 +20,16 @@ public final class StructuredLogContext {
             "tenantId", "actorId", "correlationId", "packageId", "documentId", "incidentId",
             "eventName", "stage", "component", "failureCategory", "reasonCode", "provider", "model",
             "attempt", "maxAttempts", "retryable", "durationMs", "status", "decision", "scope",
-            "businessOutcome", "pageCount", "batchCount", "providerCalls", "pageRetries", "findingCount"
+            "inferenceNodeId", "inflightCount", "healthyNodeCount", "nextNodeEligible", "configuredNodeCount",
+            "businessOutcome", "pageCount", "batchCount", "providerCalls", "pageRetries", "findingCount",
+            "parallelism", "pageBatchSize", "pageBatchMaxCharacters",
+            "providerLoadMs", "promptEvalTokens", "providerPromptEvalMs", "outputEvalTokens", "providerEvalMs",
+            "processingCycle", "intelligenceRequestedMode", "intelligenceEffectiveMode", "intelligenceBundleVersion",
+            "intelligencePolicyVersion", "intelligenceExecutionAllowed", "intelligenceInfluenceAllowed",
+            "baselineDiscoveryRequired", "intelligenceFallbackToBaseline",
+            "queueWaitMs", "activeWorkers", "workerPoolSize", "workerCorePoolSize", "recovery",
+            "workerMaxPoolSize", "workerQueueDepth", "workerQueueRemaining",
+            "exportCycle", "enabledRules", "documents", "matchedRules", "ambiguousPages"
     );
 
     private StructuredLogContext() {
@@ -68,12 +77,47 @@ public final class StructuredLogContext {
         MDC.remove("status");
         MDC.remove("decision");
         MDC.remove("scope");
+        MDC.remove("inferenceNodeId");
+        MDC.remove("inflightCount");
+        MDC.remove("healthyNodeCount");
+        MDC.remove("nextNodeEligible");
+        MDC.remove("configuredNodeCount");
         MDC.remove("businessOutcome");
         MDC.remove("pageCount");
         MDC.remove("batchCount");
         MDC.remove("providerCalls");
         MDC.remove("pageRetries");
         MDC.remove("findingCount");
+        MDC.remove("parallelism");
+        MDC.remove("pageBatchSize");
+        MDC.remove("pageBatchMaxCharacters");
+        MDC.remove("providerLoadMs");
+        MDC.remove("promptEvalTokens");
+        MDC.remove("providerPromptEvalMs");
+        MDC.remove("outputEvalTokens");
+        MDC.remove("providerEvalMs");
+        MDC.remove("processingCycle");
+        MDC.remove("intelligenceRequestedMode");
+        MDC.remove("intelligenceEffectiveMode");
+        MDC.remove("intelligenceBundleVersion");
+        MDC.remove("intelligencePolicyVersion");
+        MDC.remove("intelligenceExecutionAllowed");
+        MDC.remove("intelligenceInfluenceAllowed");
+        MDC.remove("baselineDiscoveryRequired");
+        MDC.remove("intelligenceFallbackToBaseline");
+        MDC.remove("queueWaitMs");
+        MDC.remove("recovery");
+        MDC.remove("activeWorkers");
+        MDC.remove("workerPoolSize");
+        MDC.remove("workerCorePoolSize");
+        MDC.remove("workerMaxPoolSize");
+        MDC.remove("workerQueueDepth");
+        MDC.remove("workerQueueRemaining");
+        MDC.remove("exportCycle");
+        MDC.remove("enabledRules");
+        MDC.remove("documents");
+        MDC.remove("matchedRules");
+        MDC.remove("ambiguousPages");
     }
 
     public static Map<String, String> snapshot() {

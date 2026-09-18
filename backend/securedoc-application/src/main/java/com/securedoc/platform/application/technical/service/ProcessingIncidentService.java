@@ -66,7 +66,7 @@ public final class ProcessingIncidentService {
         ProcessingIncident incident = ProcessingIncident.open(
                 tenantId, packageId, documentId, stage, component, category, reasonCode,
                 classification.retryable(), classification.attempts(), correlationId,
-                sanitizeSummary(safeSummary), sanitizeMap(fingerprintProvider.currentFingerprint()),
+                sanitizeSummary(safeSummary), sanitizeMap(fingerprintProvider.currentFingerprint(tenantId, packageId)),
                 sanitizeMap(metadata), now);
         try {
             repository.save(incident);

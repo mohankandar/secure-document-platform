@@ -34,6 +34,17 @@ public class AiRuntimeProperties {
     private int ollamaPreloadTimeoutSeconds = 300;
     private boolean requireTenantProfile = false;
 
+    // Production inference-pool routing. Disabled preserves the legacy single-endpoint behavior.
+    // poolNodeUrls accepts comma-separated entries in either URL or stableId=URL form.
+    private boolean poolEnabled = false;
+    private String poolNodeUrls = "";
+    private int poolMaxConcurrentPerNode = 1;
+    private int poolMaxNodeAttempts = 2;
+    private long poolHealthProbeTimeoutMs = 1500;
+    private long poolHealthCheckIntervalMs = 5000;
+    private long poolCircuitOpenMs = 10000;
+    private long poolQueueWaitMs = 5000;
+
     private boolean secondaryEnabled = false;
     private String secondaryProvider = "ollama";
     private String secondaryBaseUrl = "http://localhost:11434";
@@ -81,6 +92,22 @@ public class AiRuntimeProperties {
     public void setOllamaPreloadTimeoutSeconds(int ollamaPreloadTimeoutSeconds) { this.ollamaPreloadTimeoutSeconds = ollamaPreloadTimeoutSeconds; }
     public boolean isRequireTenantProfile() { return requireTenantProfile; }
     public void setRequireTenantProfile(boolean requireTenantProfile) { this.requireTenantProfile = requireTenantProfile; }
+    public boolean isPoolEnabled() { return poolEnabled; }
+    public void setPoolEnabled(boolean poolEnabled) { this.poolEnabled = poolEnabled; }
+    public String getPoolNodeUrls() { return poolNodeUrls; }
+    public void setPoolNodeUrls(String poolNodeUrls) { this.poolNodeUrls = poolNodeUrls == null ? "" : poolNodeUrls; }
+    public int getPoolMaxConcurrentPerNode() { return poolMaxConcurrentPerNode; }
+    public void setPoolMaxConcurrentPerNode(int poolMaxConcurrentPerNode) { this.poolMaxConcurrentPerNode = poolMaxConcurrentPerNode; }
+    public int getPoolMaxNodeAttempts() { return poolMaxNodeAttempts; }
+    public void setPoolMaxNodeAttempts(int poolMaxNodeAttempts) { this.poolMaxNodeAttempts = poolMaxNodeAttempts; }
+    public long getPoolHealthProbeTimeoutMs() { return poolHealthProbeTimeoutMs; }
+    public void setPoolHealthProbeTimeoutMs(long poolHealthProbeTimeoutMs) { this.poolHealthProbeTimeoutMs = poolHealthProbeTimeoutMs; }
+    public long getPoolHealthCheckIntervalMs() { return poolHealthCheckIntervalMs; }
+    public void setPoolHealthCheckIntervalMs(long poolHealthCheckIntervalMs) { this.poolHealthCheckIntervalMs = poolHealthCheckIntervalMs; }
+    public long getPoolCircuitOpenMs() { return poolCircuitOpenMs; }
+    public void setPoolCircuitOpenMs(long poolCircuitOpenMs) { this.poolCircuitOpenMs = poolCircuitOpenMs; }
+    public long getPoolQueueWaitMs() { return poolQueueWaitMs; }
+    public void setPoolQueueWaitMs(long poolQueueWaitMs) { this.poolQueueWaitMs = poolQueueWaitMs; }
 
     public boolean isSecondaryEnabled() { return secondaryEnabled; }
     public void setSecondaryEnabled(boolean secondaryEnabled) { this.secondaryEnabled = secondaryEnabled; }
@@ -117,6 +144,17 @@ public class AiRuntimeProperties {
         private int ollamaMaxOutputTokens = -1;
         private int ollamaPageBatchSize;
         private int ollamaPageBatchMaxCharacters;
+
+        // Optional tenant-scoped deployment profile for dedicated/shared future SaaS inference pools.
+        // Null/blank/zero values inherit the deployment default.
+        private Boolean poolEnabled;
+        private String poolNodeUrls;
+        private int poolMaxConcurrentPerNode;
+        private int poolMaxNodeAttempts;
+        private long poolHealthProbeTimeoutMs = -1L;
+        private long poolHealthCheckIntervalMs = -1L;
+        private long poolCircuitOpenMs = -1L;
+        private long poolQueueWaitMs = -1L;
 
         private boolean secondaryEnabled;
         private String secondaryProvider;
@@ -155,6 +193,22 @@ public class AiRuntimeProperties {
         public void setOllamaPageBatchSize(int ollamaPageBatchSize) { this.ollamaPageBatchSize = ollamaPageBatchSize; }
         public int getOllamaPageBatchMaxCharacters() { return ollamaPageBatchMaxCharacters; }
         public void setOllamaPageBatchMaxCharacters(int ollamaPageBatchMaxCharacters) { this.ollamaPageBatchMaxCharacters = ollamaPageBatchMaxCharacters; }
+        public Boolean getPoolEnabled() { return poolEnabled; }
+        public void setPoolEnabled(Boolean poolEnabled) { this.poolEnabled = poolEnabled; }
+        public String getPoolNodeUrls() { return poolNodeUrls; }
+        public void setPoolNodeUrls(String poolNodeUrls) { this.poolNodeUrls = poolNodeUrls; }
+        public int getPoolMaxConcurrentPerNode() { return poolMaxConcurrentPerNode; }
+        public void setPoolMaxConcurrentPerNode(int poolMaxConcurrentPerNode) { this.poolMaxConcurrentPerNode = poolMaxConcurrentPerNode; }
+        public int getPoolMaxNodeAttempts() { return poolMaxNodeAttempts; }
+        public void setPoolMaxNodeAttempts(int poolMaxNodeAttempts) { this.poolMaxNodeAttempts = poolMaxNodeAttempts; }
+        public long getPoolHealthProbeTimeoutMs() { return poolHealthProbeTimeoutMs; }
+        public void setPoolHealthProbeTimeoutMs(long poolHealthProbeTimeoutMs) { this.poolHealthProbeTimeoutMs = poolHealthProbeTimeoutMs; }
+        public long getPoolHealthCheckIntervalMs() { return poolHealthCheckIntervalMs; }
+        public void setPoolHealthCheckIntervalMs(long poolHealthCheckIntervalMs) { this.poolHealthCheckIntervalMs = poolHealthCheckIntervalMs; }
+        public long getPoolCircuitOpenMs() { return poolCircuitOpenMs; }
+        public void setPoolCircuitOpenMs(long poolCircuitOpenMs) { this.poolCircuitOpenMs = poolCircuitOpenMs; }
+        public long getPoolQueueWaitMs() { return poolQueueWaitMs; }
+        public void setPoolQueueWaitMs(long poolQueueWaitMs) { this.poolQueueWaitMs = poolQueueWaitMs; }
         public boolean isSecondaryEnabled() { return secondaryEnabled; }
         public void setSecondaryEnabled(boolean secondaryEnabled) { this.secondaryEnabled = secondaryEnabled; }
         public String getSecondaryProvider() { return secondaryProvider; }

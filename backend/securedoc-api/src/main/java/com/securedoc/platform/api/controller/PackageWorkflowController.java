@@ -5,7 +5,7 @@ import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.in.FinalizePackageUseCase;
-import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
+import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.processing.command.FinalizePackageCommand;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.processing.result.FinalizePackageResult;
@@ -30,14 +30,14 @@ import java.util.UUID;
 @RequestMapping("/api/v1/packages")
 public class PackageWorkflowController {
 
-    private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
+    private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final FinalizePackageUseCase finalizePackageUseCase;
     private final RequestContextResolver contextResolver;
 
-    public PackageWorkflowController(TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+    public PackageWorkflowController(PackageProcessingDispatcher packageProcessingDispatcher,
                                       FinalizePackageUseCase finalizePackageUseCase,
                                       RequestContextResolver contextResolver) {
-        this.triggerPackageProcessingUseCase = triggerPackageProcessingUseCase;
+        this.packageProcessingDispatcher = packageProcessingDispatcher;
         this.finalizePackageUseCase = finalizePackageUseCase;
         this.contextResolver = contextResolver;
     }
@@ -61,7 +61,7 @@ public class PackageWorkflowController {
 
         TriggerPackageProcessingCommand command = TriggerPackageProcessingCommand.of(
                 pkgId, principal.tenantId(), principal.actorId(), correlationId);
-        triggerPackageProcessingUseCase.execute(command);
+        packageProcessingDispatcher.dispatch(command);
 
         return ResponseEntity.ok(Map.of(
                 "packageId", packageId,

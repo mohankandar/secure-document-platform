@@ -192,8 +192,9 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 textArtifact.id().toString()
         );
 
-        ArtifactStorageReference storageRef = storagePort.store(
+        ArtifactStorageReference storageRef = storagePort.storeForPackage(
                 command.tenantId(),
+                command.packageId(),
                 storagePath,
                 new ByteArrayInputStream(textBytes),
                 textBytes.length,

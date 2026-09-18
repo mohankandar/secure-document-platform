@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Generic tenant-configured business-identifier validation. Existing definitions retain
+         historical TEXT/UPPER behavior until a Business Admin configures stronger rules. -->
+    <changeSet id="022-01-business-identifier-validation" author="securedoc">
+        <addColumn tableName="business_identifier_definitions">
+            <column name="validation_type" type="VARCHAR(32)" defaultValue="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="exact_length" type="INT"/>
+            <column name="min_length" type="INT"/>
+            <column name="max_length" type="INT"/>
+            <column name="case_normalization" type="VARCHAR(16)" defaultValue="UPPER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="strip_separators_flag" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="allowed_values" type="TEXT"/>
+            <column name="custom_pattern" type="VARCHAR(512)"/>
+        </addColumn>
+
+    </changeSet>
+</databaseChangeLog>

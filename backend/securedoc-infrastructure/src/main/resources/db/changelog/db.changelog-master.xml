@@ -27,4 +27,12 @@
     <include file="db/changelog/019-primary-business-identifier-resolution.xml"/>
     <include file="db/changelog/020-primary-business-identifier-concurrency.xml"/>
     <include file="db/changelog/021-processing-incidents.xml"/>
+    <include file="db/changelog/022-business-identifier-validation.xml"/>
+    <include file="db/changelog/023-document-intelligence-foundation.xml"/>
+    <include file="db/changelog/024-watched-folder-multi-node-coordination.xml"/>
+    <include file="db/changelog/025-reporting-package-facts.xml"/>
+    <include file="db/changelog/026-reporting-dimensions-sla.xml"/>
+    <include file="db/changelog/027-package-processing-ha.xml"/>
+    <include file="db/changelog/028-processing-storage-management.xml"/>
+    <include file="db/changelog/029-tenant-licensing.xml"/>
 </databaseChangeLog>

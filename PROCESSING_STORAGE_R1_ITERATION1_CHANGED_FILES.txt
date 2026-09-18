@@ -1,0 +1,28 @@
+Processing Storage R1 Iteration 1 / FIX1 changed files
+
+Backend / domain / application / infrastructure / API foundation from R1 candidate:
+- backend/securedoc-domain/src/main/java/com/securedoc/platform/domain/storage/*
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/storage/*
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/port/out/ProcessingStorageConfigurationRepository.java
+- backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/storage/JdbcProcessingStorageConfigurationRepository.java
+- backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/storage/ProcessingStorageFilesystemProbe.java
+- backend/securedoc-infrastructure/src/main/resources/db/changelog/028-processing-storage-management.xml
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/storage/*
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/controller/ProcessingStorageController.java
+- processing dispatcher/storage wiring and related R1 integration files from the original candidate
+
+FIX1-specific source changes:
+- backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/storage/JdbcProcessingStorageConfigurationRepository.java
+  * convert Instant JDBC parameters to java.sql.Timestamp for PostgreSQL timestamptz binding
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/storage/ProcessingStorageNodeMonitor.java
+  * retain exception stack/root detail on monitor failures
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/storage/ProcessingStorageLocalBootstrap.java
+  * retain exception stack/root detail on bootstrap failures
+
+Continuity / candidate docs updated:
+- docs/continuity/CURRENT_STATE.md
+- docs/continuity/CHANGELOG.md
+- docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+- PROCESSING_STORAGE_R1_ITERATION1_CANDIDATE_README.md
+- PROCESSING_STORAGE_R1_ITERATION1_FIX1_README.md
+- PROCESSING_STORAGE_R1_ITERATION1_CHANGED_FILES.txt

@@ -63,6 +63,56 @@ SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS=14000
 
 Legacy `SECUREDOC_AI_OLLAMA_BASE_URL` and `SECUREDOC_AI_OLLAMA_MODEL` remain accepted as fallback for the current LOCAL scripts.
 
+## Production Ollama inference pool (R1 candidate)
+
+Pool mode is opt-in. A one-node deployment can continue using `base-url` exactly as before. For HA/scale, configure homogeneous Ollama nodes that expose the **same exact approved model name**:
+
+```yaml
+securedoc:
+  ai:
+    provider: ollama
+    model: qwen3.5:4b
+    pool-enabled: true
+    pool-node-urls: ai-1=http://ai-node-1:11434,ai-2=http://ai-node-2:11434
+    pool-max-concurrent-per-node: 1
+    pool-max-node-attempts: 2
+    pool-health-probe-timeout-ms: 1500
+    pool-health-check-interval-ms: 5000
+    pool-circuit-open-ms: 10000
+    pool-queue-wait-ms: 5000
+```
+
+Equivalent environment variables:
+
+```text
+SECUREDOC_AI_POOL_ENABLED=true
+SECUREDOC_AI_POOL_NODE_URLS=ai-1=http://ai-node-1:11434,ai-2=http://ai-node-2:11434
+SECUREDOC_AI_POOL_MAX_CONCURRENT_PER_NODE=1
+SECUREDOC_AI_POOL_MAX_NODE_ATTEMPTS=2
+SECUREDOC_AI_POOL_HEALTH_PROBE_TIMEOUT_MS=1500
+SECUREDOC_AI_POOL_HEALTH_CHECK_INTERVAL_MS=5000
+SECUREDOC_AI_POOL_CIRCUIT_OPEN_MS=10000
+SECUREDOC_AI_POOL_QUEUE_WAIT_MS=5000
+```
+
+Pool behavior:
+
+- `/api/tags` is used as a content-free readiness/model check; nodes missing the exact configured model are excluded before customer text is sent;
+- routing prefers the least-inflight eligible node with round-robin tie rotation;
+- each node has a bounded document-level concurrency permit;
+- if all healthy nodes are busy, the request waits only for the bounded pool queue window;
+- infrastructure failures (`AI_UNAVAILABLE`, `AI_TIMEOUT`, `AI_RATE_LIMITED`) can fail over to another eligible node;
+- a failed node opens a bounded circuit and is health-probed before rejoining;
+- after targeted node/page attempts plus pool failover are exhausted, the error is marked non-retryable so the outer document resilience layer does not replay the whole document again;
+- startup model preload is pool-aware: fail-closed startup requires at least one ready node, not every configured node;
+- Platform health reports the aggregate number of configured/reachable/model-ready pool nodes without returning prompts, model responses or endpoint credentials.
+
+There is **no automatic model substitution**. A reachable node with another model is treated as not ready. The existing explicit secondary-provider mechanism remains separate and must be deliberately configured.
+
+### Operational ownership
+
+For on-prem deployments, Platform Operations enables/governs the capability and supported provider/model guardrails; `TENANT_IT_ADMIN` owns the tenant/deployment endpoint configuration and day-to-day node operation. Business Admin does not manage infrastructure endpoints. In a future SaaS deployment, this same boundary allows Platform Operations to run shared platform pools while tenant profiles can select approved shared or dedicated capacity.
+
 ## Requirement 5 Ollama performance controls
 
 The Ollama adapter supports deployment/profile-level inference tuning without changing business policy:
@@ -139,6 +189,20 @@ securedoc:
 ```
 
 The profile key comes from trusted tenant identity in the application request, not a production caller-controlled header.
+
+An Ollama tenant profile may also override the pool controls. This supports an on-prem dedicated tenant pool now and a future SaaS shared/dedicated routing model without changing the application port:
+
+```yaml
+securedoc:
+  ai:
+    tenant-profiles:
+      "00000000-0000-0000-0000-000000000001":
+        provider: ollama
+        model: qwen3.5:4b
+        pool-enabled: true
+        pool-node-urls: tenant-a-1=http://tenant-a-ai-1:11434,tenant-a-2=http://tenant-a-ai-2:11434
+        pool-max-concurrent-per-node: 1
+```
 
 ## Fail closed when every tenant must have its own AI
 

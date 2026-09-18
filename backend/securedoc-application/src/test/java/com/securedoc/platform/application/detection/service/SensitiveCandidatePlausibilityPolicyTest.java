@@ -75,6 +75,36 @@ class SensitiveCandidatePlausibilityPolicyTest {
     }
 
     @Test
+    void corporateFederalIdIsNotAnSsnWhenDualPurposeTaxFormAlsoMentionsSocialSecurityNumber() {
+        var result = evaluate(EntityType.SSN, "71-0390438",
+                "Entity TRANSFEROR Name WYNDHAM VACATION RESORTS, INC. "
+                        + "Federal ID Number 71-0390438 OR Social Security Number",
+                ValidationOutcome.SUPPORTS);
+
+        assertFalse(result.plausible());
+        assertEquals("SSN_EIN_SHAPE", result.reasonCode());
+    }
+
+    @Test
+    void einShapeIsRejectedEvenWhenOcrDropsFederalIdLabelButKeepsSsnWording() {
+        var result = evaluate(EntityType.SSN, "71-0390438",
+                "WYNDHAM VACATION RESORTS INC 71-0390438 Social Security Number",
+                ValidationOutcome.NOT_APPLICABLE);
+
+        assertFalse(result.plausible());
+        assertEquals("SSN_EIN_SHAPE", result.reasonCode());
+    }
+
+    @Test
+    void actualSsnRemainsPlausibleInDualPurposeFederalIdOrSsnField() {
+        var result = evaluate(EntityType.SSN, "123-45-6789",
+                "Federal ID Number OR Social Security Number 123-45-6789",
+                ValidationOutcome.SUPPORTS);
+
+        assertTrue(result.plausible());
+    }
+
+    @Test
     void maskedCardLastFourIsNotAStandaloneV1Finding() {
         var result = evaluate(EntityType.CREDIT_CARD_NUMBER, "XXXX6304",
                 "Credit Card #: XXXX6304", ValidationOutcome.CONTRADICTS);

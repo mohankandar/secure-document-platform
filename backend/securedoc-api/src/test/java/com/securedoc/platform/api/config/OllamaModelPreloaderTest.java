@@ -68,6 +68,39 @@ class OllamaModelPreloaderTest {
         }
     }
 
+    @Test
+    void poolPreloadRequiresAtLeastOneReadyNodeInsteadOfEveryNode() throws Exception {
+        HttpServer failed = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        failed.createContext("/api/generate", exchange -> {
+            byte[] response = "{}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(503, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        failed.start();
+
+        HttpServer healthy = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        healthy.createContext("/api/generate", exchange -> {
+            byte[] response = "{\"done\":true,\"load_duration\":1}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        healthy.start();
+
+        try {
+            AiRuntimeProperties properties = properties(healthy.getAddress().getPort());
+            properties.setPoolEnabled(true);
+            properties.setPoolNodeUrls("ai-failed=http://127.0.0.1:" + failed.getAddress().getPort()
+                    + ",ai-ready=http://127.0.0.1:" + healthy.getAddress().getPort());
+
+            new OllamaModelPreloader(properties, objectMapper).preload();
+        } finally {
+            failed.stop(0);
+            healthy.stop(0);
+        }
+    }
+
     private AiRuntimeProperties properties(int port) {
         AiRuntimeProperties properties = new AiRuntimeProperties();
         properties.setProvider("ollama");

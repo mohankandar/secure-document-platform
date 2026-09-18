@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { PlatformAdminOverview, PlatformHealthItem } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
+import ProcessingStoragePanel from './ProcessingStoragePanel';
+import LicensingPanel from './LicensingPanel';
 
 function statusClass(status: string) {
   const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -27,12 +29,13 @@ function ProviderCard({ item }: { item: PlatformHealthItem }) {
   );
 }
 
-export default function PlatformAdminPage() {
+export default function PlatformAdminPage({ canManagePlatformOperations = false }: { canManagePlatformOperations?: boolean }) {
   const [data, setData] = useState<PlatformAdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [runningHealth, setRunningHealth] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'overview' | 'storage' | 'licensing'>('overview');
 
   const load = useCallback(async () => {
     try {
@@ -90,14 +93,32 @@ export default function PlatformAdminPage() {
           <h1>Technical Administration</h1>
           <p>Technical providers, intake connections, resilience, integrations and operational health.</p>
         </div>
-        <div className="platform-header-actions">
-          <button className="secondary" onClick={() => void load()}>Refresh</button>
-          <button className="primary" disabled={runningHealth} onClick={() => void runHealth()}>
-            {runningHealth ? 'Checking…' : 'Run health checks'}
-          </button>
-        </div>
+        {activeTab === 'overview' && (
+          <div className="platform-header-actions">
+            <button className="secondary" onClick={() => void load()}>Refresh</button>
+            <button className="primary" disabled={runningHealth} onClick={() => void runHealth()}>
+              {runningHealth ? 'Checking…' : 'Run health checks'}
+            </button>
+          </div>
+        )}
       </div>
 
+      <div className="platform-tabs" role="tablist" aria-label="Platform Operations sections">
+        <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')} role="tab" aria-selected={activeTab === 'overview'}>Overview</button>
+        {canManagePlatformOperations && (
+          <>
+            <button className={activeTab === 'storage' ? 'active' : ''} onClick={() => setActiveTab('storage')} role="tab" aria-selected={activeTab === 'storage'}>Processing Storage</button>
+            <button className={activeTab === 'licensing' ? 'active' : ''} onClick={() => setActiveTab('licensing')} role="tab" aria-selected={activeTab === 'licensing'}>Licensing</button>
+          </>
+        )}
+      </div>
+
+      {activeTab === 'storage' && canManagePlatformOperations ? (
+        <ProcessingStoragePanel />
+      ) : activeTab === 'licensing' && canManagePlatformOperations ? (
+        <LicensingPanel />
+      ) : (
+        <>
       {error && <div className="platform-error">{error}</div>}
 
       {data && (
@@ -123,6 +144,12 @@ export default function PlatformAdminPage() {
               <dl className="platform-definition-list">
                 <div><dt>Connection</dt><dd>{data.watchedFolder.enabled ? 'Enabled' : 'Disabled'}</dd></div>
                 <div><dt>Automatic scan</dt><dd>{data.watchedFolder.schedulingEnabled ? `Every ${Math.round(data.watchedFolder.scanIntervalMs / 1000)}s` : 'Disabled'}</dd></div>
+                <div><dt>Coordination</dt><dd>{data.watchedFolder.coordinationEnabled ? 'Multi-node' : 'Single-node'}</dd></div>
+                <div><dt>This node</dt><dd>{data.watchedFolder.nodeId || 'Not configured'} · {(data.watchedFolder.scannerRole || 'UNKNOWN').replace(/_/g, ' ')}</dd></div>
+                <div><dt>Lease owner</dt><dd>{data.watchedFolder.leaseOwner ? data.watchedFolder.leaseOwner.split('/')[0] : 'None'}</dd></div>
+                <div><dt>Fencing generation</dt><dd>{data.watchedFolder.fencingToken ?? '—'}</dd></div>
+                <div><dt>Lease expiry</dt><dd>{data.watchedFolder.leaseExpiresAt ? new Date(data.watchedFolder.leaseExpiresAt).toLocaleTimeString() : '—'}</dd></div>
+                <div><dt>Takeovers</dt><dd>{data.watchedFolder.takeoverCount ?? 0}</dd></div>
                 <div><dt>Trigger</dt><dd>{data.watchedFolder.triggerFileName}</dd></div>
                 <div><dt>Incomplete visibility</dt><dd>{data.watchedFolder.incompleteVisibilityMinutes} min</dd></div>
                 <div><dt>Accepted / rejected</dt><dd>{data.watchedFolder.acceptedBehavior} / {data.watchedFolder.rejectedBehavior}</dd></div>
@@ -182,6 +209,8 @@ export default function PlatformAdminPage() {
               </div>
             )}
           </section>
+        </>
+      )}
         </>
       )}
     </div>

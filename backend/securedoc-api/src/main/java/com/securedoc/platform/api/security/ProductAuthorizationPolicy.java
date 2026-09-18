@@ -48,7 +48,7 @@ public class ProductAuthorizationPolicy {
                     capabilities.add(UserCapability.TENANT_POLICY_MANAGE);
                     capabilities.add(UserCapability.TENANT_IDENTIFIER_MANAGE);
                 }
-                case "REPORT_VIEWER" -> capabilities.addAll(REPORT_READ_CAPABILITIES);
+                case "REPORT_VIEWER" -> capabilities.add(UserCapability.REPORT_EXECUTIVE_VIEW);
                 case "TENANT_IT_ADMIN" -> {
                     capabilities.add(UserCapability.DASHBOARD_ACCESS);
                     capabilities.addAll(REPORT_READ_CAPABILITIES);

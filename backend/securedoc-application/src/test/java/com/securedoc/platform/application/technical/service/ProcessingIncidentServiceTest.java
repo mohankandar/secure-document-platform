@@ -25,7 +25,7 @@ class ProcessingIncidentServiceTest {
     void recordsAiFailureAsGenericStructuredIncidentWithSafeFingerprintAndHistory() {
         InMemoryRepository repository = new InMemoryRepository();
         ProcessingIncidentService service = new ProcessingIncidentService(repository,
-                () -> Map.of("applicationVersion", "0.1.0", "aiProvider", "ollama", "aiModel", "qwen3.5:4b"));
+                (tenantId, packageId) -> Map.of("applicationVersion", "0.1.0", "aiProvider", "ollama", "aiModel", "qwen3.5:4b"));
         TenantId tenantId = TenantId.generate();
         PackageId packageId = PackageId.generate();
         DocumentId documentId = DocumentId.generate();
@@ -55,7 +55,7 @@ class ProcessingIncidentServiceTest {
     void dropsUnsafeMetadataKeysBeforePersistence() {
         InMemoryRepository repository = new InMemoryRepository();
         ProcessingIncidentService service = new ProcessingIncidentService(repository,
-                () -> Map.of("aiModel", "qwen3.5:4b", "rawPrompt", "must never persist"));
+                (tenantId, packageId) -> Map.of("aiModel", "qwen3.5:4b", "rawPrompt", "must never persist"));
         TenantId tenantId = TenantId.generate();
         PackageId packageId = PackageId.generate();
         ProcessingIncident incident = service.recordFailure(tenantId, packageId, DocumentId.generate(),
@@ -73,7 +73,7 @@ class ProcessingIncidentServiceTest {
     @Test
     void businessCompletionDoesNotResolveTechnicalIncident() {
         InMemoryRepository repository = new InMemoryRepository();
-        ProcessingIncidentService service = new ProcessingIncidentService(repository, Map::of);
+        ProcessingIncidentService service = new ProcessingIncidentService(repository, (tenantId, packageId) -> Map.of());
         TenantId tenantId = TenantId.generate();
         PackageId packageId = PackageId.generate();
         CorrelationId failureCorrelation = CorrelationId.generate();
@@ -97,7 +97,7 @@ class ProcessingIncidentServiceTest {
     @Test
     void successfulTechnicalRetryResolvesIncidentWhenBusinessFallbackWasNotUsed() {
         InMemoryRepository repository = new InMemoryRepository();
-        ProcessingIncidentService service = new ProcessingIncidentService(repository, Map::of);
+        ProcessingIncidentService service = new ProcessingIncidentService(repository, (tenantId, packageId) -> Map.of());
         TenantId tenantId = TenantId.generate();
         PackageId packageId = PackageId.generate();
         service.recordFailure(tenantId, packageId, DocumentId.generate(), ProcessingStage.TEXT_EXTRACTION,

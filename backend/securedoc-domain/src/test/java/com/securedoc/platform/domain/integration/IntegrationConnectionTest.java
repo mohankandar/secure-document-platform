@@ -75,6 +75,41 @@ class IntegrationConnectionTest {
     }
 
     @Test
+    void scannerSourceRequiresOneConsolidatedPdfAndAuthenticatedClientBinding() {
+        var scanner = IntegrationConnection.create(tenantId, "Las Vegas Scanner", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
+                IntegrationAuthenticationType.NONE, "scanner-las-01", null, null, null, 60, 2, 24, 1,
+                IntegrationConnection.MAX_PDF_SIZE_BYTES, IntegrationConnection.MAX_PDF_PAGES,
+                IntegrationAcknowledgementMode.NONE, true, now);
+        assertEquals(1, scanner.maxDocumentsPerIntake());
+        assertEquals("scanner-las-01", scanner.clientPrincipal());
+
+        var scannerDefaults = IntegrationConnection.create(tenantId, "Default scanner limits", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
+                IntegrationAuthenticationType.NONE, "scanner-las-default", null, null, null, 60, 2, 24, null, null, null,
+                IntegrationAcknowledgementMode.NONE, true, now);
+        assertEquals(1, scannerDefaults.maxDocumentsPerIntake());
+        assertEquals(IntegrationConnection.MAX_PDF_SIZE_BYTES, scannerDefaults.maxPdfSizeBytes());
+        assertEquals(IntegrationConnection.MAX_PDF_PAGES, scannerDefaults.maxPdfPages());
+
+        assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad scanner", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
+                IntegrationAuthenticationType.NONE, "scanner-las-02", null, null, null, 60, 2, 24, 2,
+                IntegrationConnection.MAX_PDF_SIZE_BYTES, IntegrationConnection.MAX_PDF_PAGES,
+                IntegrationAcknowledgementMode.NONE, true, now));
+        assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Unbound scanner", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
+                IntegrationAuthenticationType.NONE, null, null, null, null, 60, 2, 24, 1,
+                IntegrationConnection.MAX_PDF_SIZE_BYTES, IntegrationConnection.MAX_PDF_PAGES,
+                IntegrationAcknowledgementMode.NONE, true, now));
+        assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad scanner ack", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
+                IntegrationAuthenticationType.NONE, "scanner-las-03", null, null, null, 60, 2, 24, 1,
+                IntegrationConnection.MAX_PDF_SIZE_BYTES, IntegrationConnection.MAX_PDF_PAGES,
+                IntegrationAcknowledgementMode.HTTP_SUCCESS, true, now));
+    }
+
+    @Test
     void configurationUpdateIncrementsVersionAndCanPreserveSecretReference() {
         var connection = IntegrationConnection.create(tenantId, "Title API", null,
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,

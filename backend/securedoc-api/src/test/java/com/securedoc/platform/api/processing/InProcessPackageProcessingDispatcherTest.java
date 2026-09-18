@@ -13,6 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -91,6 +92,71 @@ class InProcessPackageProcessingDispatcherTest {
         } finally {
             endSynchronization();
         }
+    }
+
+    @Test
+    void distributedLeasePreventsDuplicateExecutionAndIsReleasedAfterWork() {
+        AtomicInteger executions = new AtomicInteger();
+        AtomicInteger releases = new AtomicInteger();
+        PackageProcessingDispatchLease lease = new PackageProcessingDispatchLease() {
+            @Override
+            public Optional<Claim> tryClaim(TriggerPackageProcessingCommand command) {
+                return Optional.of(Claim.singleNode(command.packageId(), command.tenantId()));
+            }
+
+            @Override
+            public void release(Claim claim) {
+                releases.incrementAndGet();
+            }
+        };
+        InProcessPackageProcessingDispatcher dispatcher = new InProcessPackageProcessingDispatcher(
+                new SyncTaskExecutor(), command -> executions.incrementAndGet(), lease);
+
+        dispatcher.dispatch(command());
+
+        assertEquals(1, executions.get());
+        assertEquals(1, releases.get());
+
+        PackageProcessingDispatchLease denied = new PackageProcessingDispatchLease() {
+            @Override public Optional<Claim> tryClaim(TriggerPackageProcessingCommand command) { return Optional.empty(); }
+            @Override public void release(Claim claim) { releases.incrementAndGet(); }
+        };
+        InProcessPackageProcessingDispatcher duplicate = new InProcessPackageProcessingDispatcher(
+                new SyncTaskExecutor(), command -> executions.incrementAndGet(), denied);
+        duplicate.dispatch(command());
+
+        assertEquals(1, executions.get(), "A package owned by another node must not execute twice");
+        assertEquals(1, releases.get(), "A denied claim must not be released by the losing node");
+    }
+
+    @Test
+    void staleLeaseIsRejectedImmediatelyBeforeQueuedWorkStartsAndReleased() {
+        AtomicInteger executions = new AtomicInteger();
+        AtomicInteger releases = new AtomicInteger();
+        PackageProcessingDispatchLease stale = new PackageProcessingDispatchLease() {
+            @Override
+            public Optional<Claim> tryClaim(TriggerPackageProcessingCommand command) {
+                return Optional.of(new Claim(command.packageId(), command.tenantId(), "node/process", 7L, true));
+            }
+
+            @Override
+            public boolean isCurrent(Claim claim) {
+                return false;
+            }
+
+            @Override
+            public void release(Claim claim) {
+                releases.incrementAndGet();
+            }
+        };
+
+        InProcessPackageProcessingDispatcher dispatcher = new InProcessPackageProcessingDispatcher(
+                new SyncTaskExecutor(), command -> executions.incrementAndGet(), stale);
+
+        dispatcher.dispatch(command());
+
+        assertEquals(0, executions.get(), "A stale fencing generation must never begin package processing");
+        assertEquals(1, releases.get(), "A stale queued claim must still be cleaned up");
     }
 
     @Test

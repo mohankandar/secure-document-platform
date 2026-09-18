@@ -46,7 +46,7 @@ public final class OperationsQueryService implements GetOperationsDashboardQuery
             throw new IllegalArgumentException("Report range cannot exceed 366 days");
         }
         String safeSource = source == null ? "ALL" : source.trim().toUpperCase();
-        if (!Set.of("ALL", "MANUAL_UPLOAD", "API_SUBMISSION", "FOLDER_INTAKE").contains(safeSource)) {
+        if (!Set.of("ALL", "MANUAL_UPLOAD", "API_SUBMISSION", "FOLDER_INTAKE", "SCANNER_INTAKE").contains(safeSource)) {
             throw new IllegalArgumentException("Unsupported report source");
         }
         String safeOutcome = outcome == null ? "ALL" : outcome.trim().toUpperCase();

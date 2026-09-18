@@ -7,7 +7,7 @@ Provide a secure AI-first document-redaction workflow that accepts business-iden
 ## In scope
 
 - PDF intake: digital/text, scanned/image, and mixed PDFs.
-- Manual UI, manifest-first authenticated push API, watched-folder intake, and frozen scheduled pull/polling integration architecture.
+- Manual UI, local Scanner Bridge-assisted intake, manifest-first authenticated push API, watched-folder intake, and frozen scheduled pull/polling integration architecture.
 - Multiple tenant-configured business identifiers with exactly one Primary identifier.
 - AI contextual sensitive-content discovery on every normalized document.
 - Deterministic recognizers/validators as supporting evidence for structured categories.

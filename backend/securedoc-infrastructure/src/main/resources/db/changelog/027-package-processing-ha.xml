@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="027-01-package-processing-ha" author="lexavault">
+        <createTable tableName="package_processing_leases">
+            <column name="package_id" type="UUID">
+                <constraints primaryKey="true" nullable="false" primaryKeyName="pk_package_processing_leases"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="owner_id" type="VARCHAR(240)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fencing_token" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="acquired_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="heartbeat_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="lease_expires_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="package_processing_leases" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_package_processing_leases_package" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="package_processing_leases" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_package_processing_leases_tenant"/>
+        <createIndex tableName="package_processing_leases" indexName="idx_package_processing_leases_expiry">
+            <column name="lease_expires_at"/>
+        </createIndex>
+        <createIndex tableName="package_processing_leases" indexName="idx_package_processing_leases_tenant">
+            <column name="tenant_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

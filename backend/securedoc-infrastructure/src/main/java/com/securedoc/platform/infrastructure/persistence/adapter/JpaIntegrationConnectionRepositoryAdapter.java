@@ -36,6 +36,12 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
     }
 
     @Override
+    public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) {
+        return repository.findByTenantIdAndClientPrincipalAndProviderTypeAndEnabledTrue(
+                tenantId.value(), clientPrincipal, IntegrationProviderType.SCANNER.name()).map(this::toDomain);
+    }
+
+    @Override
     public Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) {
         List<IntegrationConnectionEntity> matches = repository.findByTenantIdAndPurposeAndDirectionAndProviderTypeAndEnabledTrueOrderByNameAsc(
                 tenantId.value(), IntegrationPurpose.SDV_DELIVERY.name(), IntegrationDirection.OUTBOUND.name(),

@@ -104,6 +104,7 @@ class SdvDeliveryAdapterTest {
         public List<IntegrationConnection> findByTenantId(TenantId tenantId) { return List.of(current); }
         public Optional<IntegrationConnection> findByTenantIdAndId(TenantId tenantId, IntegrationConnectionId id) { return Optional.of(current); }
         public Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
+        public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
         public Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) { return current.enabled() ? Optional.of(current) : Optional.empty(); }
         public boolean existsByTenantIdAndNameIgnoreCase(TenantId tenantId, String name, IntegrationConnectionId excludeId) { return false; }
         public boolean existsByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal, IntegrationConnectionId excludeId) { return false; }

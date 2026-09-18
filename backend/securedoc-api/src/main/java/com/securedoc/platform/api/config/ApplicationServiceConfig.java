@@ -1,7 +1,12 @@
 package com.securedoc.platform.api.config;
 
 import com.securedoc.platform.application.business.service.BusinessIdentityService;
+import com.securedoc.platform.application.storage.ProcessingStorageConfigurationService;
 import com.securedoc.platform.application.business.admin.BusinessAdminConfigurationService;
+import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceConfigurationService;
+import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
+import com.securedoc.platform.application.port.out.ReportingConfigurationRepository;
+import com.securedoc.platform.application.port.out.ProcessingStorageConfigurationRepository;
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.BusinessRecordRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
@@ -13,6 +18,7 @@ import com.securedoc.platform.application.intake.external.ExternalIntakeService;
 import com.securedoc.platform.application.intake.polling.PollingIntakeService;
 import com.securedoc.platform.application.intake.external.ExternalIntakeMaintenanceService;
 import com.securedoc.platform.application.port.out.WatchedFolderSourcePort;
+import com.securedoc.platform.application.port.out.WatchedFolderLeasePort;
 import com.securedoc.platform.application.port.out.IntakeObservationRepository;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.ExternalIntakeRepository;
@@ -75,6 +81,9 @@ import com.securedoc.platform.application.port.out.ProcessingLockPort;
 import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.port.out.SupportIncidentSearchRepository;
 import com.securedoc.platform.application.port.out.ProcessingFingerprintProvider;
+import com.securedoc.platform.application.port.out.DocumentIntelligenceBundleRepository;
+import com.securedoc.platform.application.port.out.TenantDocumentIntelligencePolicyRepository;
+import com.securedoc.platform.application.port.out.PackageProcessingIntelligenceSnapshotRepository;
 import com.securedoc.platform.application.port.out.ReviewTaskRepository;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
 import com.securedoc.platform.application.port.out.SensitiveDataDetectionPort;
@@ -83,6 +92,9 @@ import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.application.port.out.RedactionVerificationPort;
 import com.securedoc.platform.application.port.out.ReviewPageRenderPort;
 import com.securedoc.platform.application.port.out.TenantRepository;
+import com.securedoc.platform.application.licensing.LicenseTokenVerifier;
+import com.securedoc.platform.application.licensing.TenantLicenseRepository;
+import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
 import com.securedoc.platform.application.port.out.AccessRequestRepository;
 import com.securedoc.platform.application.port.out.VaultEntryRepository;
@@ -128,11 +140,15 @@ import com.securedoc.platform.application.service.TenantContextService;
 import com.securedoc.platform.application.service.UploadDocumentService;
 import com.securedoc.platform.ai.analysis.LocalHeuristicSensitiveContentAnalysisAdapter;
 import com.securedoc.platform.ai.analysis.OllamaSensitiveContentAnalysisAdapter;
+import com.securedoc.platform.ai.analysis.OllamaInferencePoolSensitiveContentAnalysisAdapter;
 import com.securedoc.platform.ai.analysis.OpenAiCompatibleSensitiveContentAnalysisAdapter;
 import com.securedoc.platform.api.processing.InProcessPackageProcessingDispatcher;
+import com.securedoc.platform.api.processing.PackageProcessingDispatchLease;
+import com.securedoc.platform.api.storage.ProcessingStorageNodeReadiness;
 import com.securedoc.platform.api.observability.MdcTaskDecorator;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.resilience.TechnicalResilienceProperties;
+import com.securedoc.platform.infrastructure.licensing.Ed25519LicenseTokenVerifier;
 import com.securedoc.platform.worker.processing.ProcessingWorkCoordinator;
 import com.securedoc.platform.worker.processing.ProcessingWorker;
 import com.securedoc.platform.worker.processing.ProcessingWorkerConfig;
@@ -142,11 +158,14 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -158,20 +177,101 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class ApplicationServiceConfig {
 
     @Bean
+    @ConfigurationProperties(prefix = "securedoc.licensing")
+    public LicensingProperties licensingProperties() {
+        return new LicensingProperties();
+    }
+
+    @Bean
+    public LicenseTokenVerifier licenseTokenVerifier(LicensingProperties licensingProperties,
+                                                     ResourceLoader resourceLoader) {
+        String publicKey = "";
+        if (licensingProperties.isAllowDevelopmentKeyOverride()
+                && licensingProperties.getDevelopmentPublicKey() != null
+                && !licensingProperties.getDevelopmentPublicKey().isBlank()) {
+            publicKey = licensingProperties.getDevelopmentPublicKey();
+        } else {
+            try {
+                var resource = resourceLoader.getResource(licensingProperties.getVerificationKeyResource());
+                if (resource.exists()) {
+                    try (var in = resource.getInputStream()) {
+                        publicKey = new String(in.readAllBytes(), StandardCharsets.US_ASCII);
+                    }
+                }
+            } catch (Exception ignored) {
+                // Missing/unreadable vendor key is represented as CONFIGURATION_ERROR by the verifier.
+            }
+        }
+        return new Ed25519LicenseTokenVerifier(publicKey);
+    }
+
+    @Bean
+    public TenantLicensingService tenantLicensingService(
+            TenantLicenseRepository tenantLicenseRepository,
+            TenantRepository tenantRepository,
+            LicenseTokenVerifier licenseTokenVerifier,
+            AuditService auditService,
+            LicensingProperties licensingProperties) {
+        return new TenantLicensingService(tenantLicenseRepository, tenantRepository, licenseTokenVerifier,
+                auditService, licensingProperties.enforcementEnabled());
+    }
+
+    @Bean
+    public ProcessingStorageConfigurationService processingStorageConfigurationService(
+            ProcessingStorageConfigurationRepository repository,
+            TenantRepository tenantRepository) {
+        return new ProcessingStorageConfigurationService(repository, tenantRepository);
+    }
+
+    @Bean
     public TenantContextService tenantContextService(TenantRepository tenantRepository) {
         return new TenantContextService(tenantRepository);
     }
 
     @Bean
-    public ProcessingFingerprintProvider processingFingerprintProvider(Environment environment) {
-        return () -> {
+    public ProcessingFingerprintProvider processingFingerprintProvider(
+            Environment environment,
+            PackageProcessingIntelligenceSnapshotRepository intelligenceSnapshotRepository) {
+        return (tenantId, packageId) -> {
             Map<String, String> fingerprint = new LinkedHashMap<>();
             putIfPresent(fingerprint, "applicationVersion", environment.getProperty("securedoc.build.version", "0.1.0-SNAPSHOT"));
             putIfPresent(fingerprint, "aiProvider", environment.getProperty("securedoc.ai.provider"));
             putIfPresent(fingerprint, "aiModel", environment.getProperty("securedoc.ai.model"));
             putIfPresent(fingerprint, "profile", environment.getProperty("spring.profiles.active", "default"));
+            if (tenantId != null && packageId != null) {
+                try {
+                    intelligenceSnapshotRepository.findLatestByTenantIdAndPackageId(tenantId, packageId).ifPresent(snapshot -> {
+                        fingerprint.put("intelligenceRequestedMode", snapshot.requestedMode().name());
+                        fingerprint.put("intelligenceEffectiveMode", snapshot.effectiveMode().name());
+                        fingerprint.put("intelligenceBundleVersion", snapshot.bundleVersion());
+                        fingerprint.put("intelligencePolicyVersion", Integer.toString(snapshot.policyConfigurationVersion()));
+                        fingerprint.put("intelligenceExecutionAllowed", Boolean.toString(snapshot.intelligenceExecutionAllowed()));
+                        fingerprint.put("intelligenceInfluenceAllowed", Boolean.toString(snapshot.decisionInfluenceAllowed()));
+                        fingerprint.put("baselineDiscoveryRequired", Boolean.toString(snapshot.baselineDiscoveryRequired()));
+                        fingerprint.put("intelligenceFallbackToBaseline", Boolean.toString(snapshot.fallbackToBaseline()));
+                    });
+                } catch (RuntimeException ignored) {
+                    // Support fingerprint enrichment must never interfere with incident capture.
+                }
+            }
             return Map.copyOf(fingerprint);
         };
+    }
+
+    @Bean
+    public DocumentIntelligenceConfigurationService documentIntelligenceConfigurationService(
+            DocumentIntelligenceBundleRepository bundleRepository,
+            TenantDocumentIntelligencePolicyRepository policyRepository,
+            AuditService auditService) {
+        return new DocumentIntelligenceConfigurationService(bundleRepository, policyRepository, auditService);
+    }
+
+    @Bean
+    public DocumentIntelligenceExecutionService documentIntelligenceExecutionService(
+            TenantDocumentIntelligencePolicyRepository policyRepository,
+            DocumentIntelligenceBundleRepository bundleRepository,
+            PackageProcessingIntelligenceSnapshotRepository snapshotRepository) {
+        return new DocumentIntelligenceExecutionService(policyRepository, bundleRepository, snapshotRepository);
     }
 
     @Bean
@@ -272,9 +372,11 @@ public class ApplicationServiceConfig {
             BusinessIdentifierDefinitionRepository definitionRepository,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
+            ReportingConfigurationRepository reportingConfigurationRepository,
             AuditService auditService) {
         return new BusinessAdminConfigurationService(
-                definitionRepository, tenantRedactionPolicyRepository, tenantLifecyclePolicyRepository, auditService);
+                definitionRepository, tenantRedactionPolicyRepository, tenantLifecyclePolicyRepository,
+                reportingConfigurationRepository, auditService);
     }
 
     @Bean
@@ -282,35 +384,39 @@ public class ApplicationServiceConfig {
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
             BusinessIdentityService businessIdentityService,
+            TenantLicensingService tenantLicensingService,
             PackageRepository packageRepository,
             DomainEventPublisher eventPublisher,
             AuditService auditService) {
         return new CreatePackageService(
-                tenantContextService, capabilityEnforcementService, businessIdentityService,
+                tenantContextService, capabilityEnforcementService, businessIdentityService, tenantLicensingService,
                 packageRepository, eventPublisher, auditService);
     }
 
     @Bean
     public WatchedFolderIntakeService watchedFolderIntakeService(
             WatchedFolderSourcePort sourcePort,
+            WatchedFolderLeasePort watchedFolderLeasePort,
             IntakeObservationRepository observationRepository,
             PackageRepository packageRepository,
             CreatePackageUseCase createPackageUseCase,
             UploadDocumentUseCase uploadDocumentUseCase,
             SubmitPackageUseCase submitPackageUseCase,
-            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+            PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService,
             WatchedFolderProperties properties) {
-        return new WatchedFolderIntakeService(sourcePort, observationRepository, packageRepository,
+        return new WatchedFolderIntakeService(sourcePort, watchedFolderLeasePort, observationRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase,
-                triggerPackageProcessingUseCase, auditService,
-                Duration.ofMinutes(Math.max(0, properties.getIncompleteVisibilityMinutes())));
+                packageProcessingDispatcher, auditService,
+                Duration.ofMinutes(Math.max(0, properties.getIncompleteVisibilityMinutes())),
+                Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())));
     }
 
     @Bean
     public UploadDocumentUseCase uploadDocumentUseCase(
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
+            TenantLicensingService tenantLicensingService,
             PackageRepository packageRepository,
             DocumentRepository documentRepository,
             ArtifactRepository artifactRepository,
@@ -319,7 +425,7 @@ public class ApplicationServiceConfig {
             DomainEventPublisher eventPublisher,
             AuditService auditService) {
         return new UploadDocumentService(
-                tenantContextService, capabilityEnforcementService,
+                tenantContextService, capabilityEnforcementService, tenantLicensingService,
                 packageRepository, documentRepository, artifactRepository,
                 storagePort, checksumPort, eventPublisher, auditService);
     }
@@ -328,11 +434,12 @@ public class ApplicationServiceConfig {
     public SubmitPackageUseCase submitPackageUseCase(
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
+            TenantLicensingService tenantLicensingService,
             PackageRepository packageRepository,
             DomainEventPublisher eventPublisher,
             AuditService auditService) {
         return new SubmitPackageService(
-                tenantContextService, capabilityEnforcementService,
+                tenantContextService, capabilityEnforcementService, tenantLicensingService,
                 packageRepository, eventPublisher, auditService);
     }
 
@@ -439,6 +546,9 @@ public class ApplicationServiceConfig {
                 properties.getOllamaKeepAlive(), properties.isOllamaStructuredOutput(), properties.isOllamaThinkingEnabled(),
                 properties.getOllamaContextWindowTokens(), properties.getOllamaMaxOutputTokens(),
                 properties.getOllamaPageBatchSize(), properties.getOllamaPageBatchMaxCharacters(),
+                properties.isPoolEnabled(), properties.getPoolNodeUrls(), properties.getPoolMaxConcurrentPerNode(),
+                properties.getPoolMaxNodeAttempts(), properties.getPoolHealthProbeTimeoutMs(),
+                properties.getPoolHealthCheckIntervalMs(), properties.getPoolCircuitOpenMs(), properties.getPoolQueueWaitMs(),
                 properties.isSecondaryEnabled(), properties.getSecondaryProvider(),
                 properties.getSecondaryBaseUrl(), properties.getSecondaryModel(), properties.getSecondaryApiKey(),
                 properties.getSecondaryTimeoutSeconds(),
@@ -471,12 +581,22 @@ public class ApplicationServiceConfig {
             int maxOutputTokens = nonNegativeOrDefault(profile.getOllamaMaxOutputTokens(), properties.getOllamaMaxOutputTokens());
             int pageBatchSize = positiveOrDefault(profile.getOllamaPageBatchSize(), properties.getOllamaPageBatchSize());
             int pageBatchMaxCharacters = positiveOrDefault(profile.getOllamaPageBatchMaxCharacters(), properties.getOllamaPageBatchMaxCharacters());
+            boolean poolEnabled = booleanOrDefault(profile.getPoolEnabled(), properties.isPoolEnabled());
+            String poolNodeUrls = stringOrDefault(profile.getPoolNodeUrls(), properties.getPoolNodeUrls());
+            int poolMaxConcurrentPerNode = positiveOrDefault(profile.getPoolMaxConcurrentPerNode(), properties.getPoolMaxConcurrentPerNode());
+            int poolMaxNodeAttempts = positiveOrDefault(profile.getPoolMaxNodeAttempts(), properties.getPoolMaxNodeAttempts());
+            long poolHealthProbeTimeoutMs = nonNegativeOrDefault(profile.getPoolHealthProbeTimeoutMs(), properties.getPoolHealthProbeTimeoutMs());
+            long poolHealthCheckIntervalMs = nonNegativeOrDefault(profile.getPoolHealthCheckIntervalMs(), properties.getPoolHealthCheckIntervalMs());
+            long poolCircuitOpenMs = nonNegativeOrDefault(profile.getPoolCircuitOpenMs(), properties.getPoolCircuitOpenMs());
+            long poolQueueWaitMs = nonNegativeOrDefault(profile.getPoolQueueWaitMs(), properties.getPoolQueueWaitMs());
 
             SensitiveContentAnalysisPort tenantProfile = buildResilientAnalysisProfile(
                     profile.getProvider(), profile.getBaseUrl(), profile.getModel(), profile.getApiKey(),
                     timeoutSeconds, parallelism, pageMaxAttempts, pageBackoffMs,
                     keepAlive, structuredOutput, thinkingEnabled, contextWindowTokens, maxOutputTokens,
                     pageBatchSize, pageBatchMaxCharacters,
+                    poolEnabled, poolNodeUrls, poolMaxConcurrentPerNode, poolMaxNodeAttempts,
+                    poolHealthProbeTimeoutMs, poolHealthCheckIntervalMs, poolCircuitOpenMs, poolQueueWaitMs,
                     profile.isSecondaryEnabled(), profile.getSecondaryProvider(), profile.getSecondaryBaseUrl(),
                     profile.getSecondaryModel(), profile.getSecondaryApiKey(), secondaryTimeout,
                     selectiveRetryExecutor, false);
@@ -503,6 +623,14 @@ public class ApplicationServiceConfig {
             int ollamaMaxOutputTokens,
             int ollamaPageBatchSize,
             int ollamaPageBatchMaxCharacters,
+            boolean poolEnabled,
+            String poolNodeUrls,
+            int poolMaxConcurrentPerNode,
+            int poolMaxNodeAttempts,
+            long poolHealthProbeTimeoutMs,
+            long poolHealthCheckIntervalMs,
+            long poolCircuitOpenMs,
+            long poolQueueWaitMs,
             boolean secondaryEnabled,
             String secondaryProvider,
             String secondaryBaseUrl,
@@ -511,11 +639,14 @@ public class ApplicationServiceConfig {
             int secondaryTimeoutSeconds,
             SelectiveRetryExecutor selectiveRetryExecutor,
             boolean allowHeuristic) {
-        SensitiveContentAnalysisPort primary = buildAnalysisProvider(
+        SensitiveContentAnalysisPort primary = buildPrimaryAnalysisProvider(
                 provider, baseUrl, model, apiKey, timeoutSeconds, parallelism,
                 pageMaxAttempts, pageRetryBackoffMs, ollamaKeepAlive, ollamaStructuredOutput,
                 ollamaThinkingEnabled, ollamaContextWindowTokens, ollamaMaxOutputTokens,
-                ollamaPageBatchSize, ollamaPageBatchMaxCharacters, allowHeuristic);
+                ollamaPageBatchSize, ollamaPageBatchMaxCharacters,
+                poolEnabled, poolNodeUrls, poolMaxConcurrentPerNode, poolMaxNodeAttempts,
+                poolHealthProbeTimeoutMs, poolHealthCheckIntervalMs, poolCircuitOpenMs, poolQueueWaitMs,
+                allowHeuristic);
         SensitiveContentAnalysisPort secondary = null;
         if (secondaryEnabled) {
             secondary = buildAnalysisProvider(
@@ -526,6 +657,66 @@ public class ApplicationServiceConfig {
                     ollamaPageBatchMaxCharacters, false);
         }
         return new ResilientSensitiveContentAnalysisPort(primary, secondary, selectiveRetryExecutor);
+    }
+
+    private SensitiveContentAnalysisPort buildPrimaryAnalysisProvider(
+            String providerValue,
+            String baseUrl,
+            String model,
+            String apiKey,
+            int timeoutSeconds,
+            int parallelism,
+            int pageMaxAttempts,
+            long pageRetryBackoffMs,
+            String ollamaKeepAlive,
+            boolean ollamaStructuredOutput,
+            boolean ollamaThinkingEnabled,
+            int ollamaContextWindowTokens,
+            int ollamaMaxOutputTokens,
+            int ollamaPageBatchSize,
+            int ollamaPageBatchMaxCharacters,
+            boolean poolEnabled,
+            String poolNodeUrls,
+            int poolMaxConcurrentPerNode,
+            int poolMaxNodeAttempts,
+            long poolHealthProbeTimeoutMs,
+            long poolHealthCheckIntervalMs,
+            long poolCircuitOpenMs,
+            long poolQueueWaitMs,
+            boolean allowHeuristic) {
+        String provider = providerValue == null ? "" : providerValue.trim().toLowerCase();
+        if (!poolEnabled) {
+            return buildAnalysisProvider(providerValue, baseUrl, model, apiKey, timeoutSeconds, parallelism,
+                    pageMaxAttempts, pageRetryBackoffMs, ollamaKeepAlive, ollamaStructuredOutput,
+                    ollamaThinkingEnabled, ollamaContextWindowTokens, ollamaMaxOutputTokens,
+                    ollamaPageBatchSize, ollamaPageBatchMaxCharacters, allowHeuristic);
+        }
+        if (!"ollama".equals(provider)) {
+            throw new IllegalArgumentException("securedoc.ai.pool-enabled is currently supported only for provider=ollama");
+        }
+
+        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds));
+        int boundedParallelism = Math.max(1, Math.min(16, parallelism));
+        int boundedPageAttempts = Math.max(1, Math.min(5, pageMaxAttempts));
+        Duration pageBackoff = Duration.ofMillis(Math.max(0L, pageRetryBackoffMs));
+        int boundedMaxConcurrent = Math.max(1, Math.min(64, poolMaxConcurrentPerNode));
+        List<OllamaInferencePoolSensitiveContentAnalysisAdapter.NodeDefinition> nodes =
+                OllamaInferencePoolConfiguration.parse(poolNodeUrls).stream()
+                        .map(node -> new OllamaInferencePoolSensitiveContentAnalysisAdapter.NodeDefinition(
+                                node.id(), node.baseUrl(), boundedMaxConcurrent))
+                        .toList();
+
+        return new OllamaInferencePoolSensitiveContentAnalysisAdapter(
+                nodes, model, timeout, boundedParallelism, boundedPageAttempts, pageBackoff,
+                ollamaKeepAlive, ollamaStructuredOutput, ollamaThinkingEnabled,
+                Math.max(0, ollamaContextWindowTokens), Math.max(0, ollamaMaxOutputTokens),
+                Math.max(1, Math.min(8, ollamaPageBatchSize)),
+                Math.max(1_000, Math.min(200_000, ollamaPageBatchMaxCharacters)),
+                Duration.ofMillis(Math.max(100L, poolHealthProbeTimeoutMs)),
+                Duration.ofMillis(Math.max(0L, poolHealthCheckIntervalMs)),
+                Duration.ofMillis(Math.max(0L, poolCircuitOpenMs)),
+                Duration.ofMillis(Math.max(0L, poolQueueWaitMs)),
+                Math.max(1, Math.min(nodes.size(), poolMaxNodeAttempts)));
     }
 
     private SensitiveContentAnalysisPort buildAnalysisProvider(String providerValue,
@@ -576,6 +767,10 @@ public class ApplicationServiceConfig {
 
     private int nonNegativeOrDefault(int value, int fallback) {
         return value >= 0 ? value : fallback;
+    }
+
+    private long nonNegativeOrDefault(long value, long fallback) {
+        return value >= 0L ? value : fallback;
     }
 
     private String stringOrDefault(String value, String fallback) {
@@ -781,6 +976,8 @@ public class ApplicationServiceConfig {
             PackageRepository packageRepository,
             DocumentRepository documentRepository,
             FindingRepository findingRepository,
+            ArtifactRepository artifactRepository,
+            ProcessingLockPort processingLockPort,
             StartPackageProcessingUseCase startPackageProcessingUseCase,
             StartDocumentProcessingUseCase startDocumentProcessingUseCase,
             ExtractDocumentTextUseCase extractDocumentTextUseCase,
@@ -790,13 +987,16 @@ public class ApplicationServiceConfig {
             ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
             SelectiveRetryExecutor selectiveRetryExecutor,
             PackageLifecycleService packageLifecycleService,
+            DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
             AuditService auditService,
-            ProcessingIncidentService processingIncidentService) {
+            ProcessingIncidentService processingIncidentService,
+            TenantLicensingService tenantLicensingService) {
         return new TriggerPackageProcessingService(packageRepository, documentRepository,
-                findingRepository, startPackageProcessingUseCase, startDocumentProcessingUseCase,
+                findingRepository, artifactRepository, processingLockPort,
+                startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase,
                 exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService,
-                auditService, processingIncidentService);
+                documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService);
     }
 
 
@@ -834,9 +1034,12 @@ public class ApplicationServiceConfig {
     @Bean
     public PackageProcessingDispatcher packageProcessingDispatcher(
             @Qualifier("reviewResumeTaskExecutor") TaskExecutor reviewResumeTaskExecutor,
-            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase) {
+            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+            PackageProcessingDispatchLease packageProcessingDispatchLease,
+            ProcessingStorageNodeReadiness processingStorageNodeReadiness) {
         return new InProcessPackageProcessingDispatcher(
-                reviewResumeTaskExecutor, triggerPackageProcessingUseCase);
+                reviewResumeTaskExecutor, triggerPackageProcessingUseCase, packageProcessingDispatchLease,
+                processingStorageNodeReadiness::readyFor);
     }
 
     @Bean
@@ -930,17 +1133,19 @@ public class ApplicationServiceConfig {
             PackageRepository packageRepository, DocumentRepository documentRepository,
             FindingRepository findingRepository, ArtifactRepository artifactRepository,
             PackageLifecycleService packageLifecycleService,
-            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase, AuditService auditService) {
+            PackageProcessingDispatcher packageProcessingDispatcher, AuditService auditService,
+            TenantLicensingService tenantLicensingService) {
         return new ReprocessPackageService(packageRepository, documentRepository, findingRepository,
-                artifactRepository, packageLifecycleService, triggerPackageProcessingUseCase, auditService);
+                artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService,
+                tenantLicensingService);
     }
 
     @Bean
     public ApproveFinalDeliveryUseCase approveFinalDeliveryUseCase(
             PackageRepository packageRepository, PackageLifecycleService packageLifecycleService,
-            TriggerPackageProcessingUseCase triggerPackageProcessingUseCase, AuditService auditService) {
+            PackageProcessingDispatcher packageProcessingDispatcher, AuditService auditService) {
         return new FinalDeliveryApprovalService(packageRepository, packageLifecycleService,
-                triggerPackageProcessingUseCase, auditService);
+                packageProcessingDispatcher, auditService);
     }
 
 

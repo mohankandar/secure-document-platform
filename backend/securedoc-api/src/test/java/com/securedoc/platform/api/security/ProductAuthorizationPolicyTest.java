@@ -54,7 +54,7 @@ class ProductAuthorizationPolicyTest {
     @Test
     void reportViewerIsReportsOnlyAndReadOnly() {
         var caps = policy.capabilitiesFor(Set.of("REPORT_VIEWER"));
-        assertEquals(EnumSet.of(UserCapability.REPORT_EXECUTIVE_VIEW, UserCapability.REPORT_OPERATIONAL_VIEW), caps);
+        assertEquals(EnumSet.of(UserCapability.REPORT_EXECUTIVE_VIEW), caps);
         assertFalse(caps.contains(UserCapability.DASHBOARD_ACCESS));
         assertFalse(caps.contains(UserCapability.DOCUMENT_INTAKE));
         assertFalse(caps.contains(UserCapability.REPORT_EXPORT));

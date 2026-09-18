@@ -1,0 +1,12 @@
+{
+  "businessIdentifiers": {
+    "contract_number": "000900000003",
+    "member_number": "00900000003",
+    "service_entity": "001"
+  },
+  "metadata": {
+    "test_suite": "LEXAVAULT_V1_GOLDEN_PATH",
+    "test_scenario": "MANUAL_REVIEW_AMBIGUOUS_SCORE"
+  },
+  "files": ["03_manual_review_ambiguous_score.pdf"]
+}

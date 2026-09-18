@@ -1,0 +1,12 @@
+{
+  "businessIdentifiers": {
+    "contract_number": "000900000002",
+    "member_number": "00900000002",
+    "service_entity": "001"
+  },
+  "metadata": {
+    "test_suite": "LEXAVAULT_V1_GOLDEN_PATH",
+    "test_scenario": "AUTO_REDACTION_CREDIT_SCORE"
+  },
+  "files": ["02_auto_redaction_credit_score.pdf"]
+}

@@ -1,0 +1,12 @@
+{
+  "businessIdentifiers": {
+    "contract_number": "000900000007",
+    "member_number": "00900000007",
+    "service_entity": "001"
+  },
+  "metadata": {
+    "test_suite": "LEXAVAULT_V1_GOLDEN_PATH",
+    "test_scenario": "EXPORT_DELIVERY"
+  },
+  "files": ["07_export_delivery.pdf"]
+}

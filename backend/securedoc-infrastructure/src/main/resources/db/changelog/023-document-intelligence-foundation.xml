@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="023-01-document-intelligence-foundation" author="openai">
+        <!-- Global immutable/safe bundle catalog. Adaptive profile content itself is not stored here. -->
+        <createTable tableName="document_intelligence_bundles">
+            <column name="version" type="VARCHAR(80)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="status" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="model_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="prompt_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="detector_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="ocr_rules_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="profile_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="validation_rules_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="thresholds_version" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="description" type="VARCHAR(500)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="promoted_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+
+        <!-- The frozen pre-profile baseline is always available as the safe rollback target. -->
+        <insert tableName="document_intelligence_bundles">
+            <column name="version" value="r11-baseline-v1"/>
+            <column name="status" value="PROMOTED"/>
+            <column name="model_version" value="qwen3.5:4b"/>
+            <column name="prompt_version" value="r11"/>
+            <column name="detector_version" value="r11"/>
+            <column name="ocr_rules_version" value="r11"/>
+            <column name="profile_version" value="none"/>
+            <column name="validation_rules_version" value="r11"/>
+            <column name="thresholds_version" value="r11"/>
+            <column name="description" value="Frozen R11 baseline; adaptive document-profile intelligence disabled."/>
+            <column name="created_at" valueComputed="CURRENT_TIMESTAMP"/>
+            <column name="promoted_at" valueComputed="CURRENT_TIMESTAMP"/>
+        </insert>
+
+        <createTable tableName="tenant_document_intelligence_policies">
+            <column name="tenant_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="mode" type="VARCHAR(24)" defaultValue="DISABLED"><constraints nullable="false"/></column>
+            <column name="active_bundle_version" type="VARCHAR(80)" defaultValue="r11-baseline-v1"><constraints nullable="false"/></column>
+            <column name="last_known_good_bundle_version" type="VARCHAR(80)" defaultValue="r11-baseline-v1"><constraints nullable="false"/></column>
+            <column name="configuration_version" type="INT" defaultValueNumeric="1"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="tenant_document_intelligence_policies" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_intelligence_policy_tenant"/>
+        <addForeignKeyConstraint baseTableName="tenant_document_intelligence_policies" baseColumnNames="active_bundle_version"
+                                 referencedTableName="document_intelligence_bundles" referencedColumnNames="version"
+                                 constraintName="fk_tenant_intelligence_policy_active_bundle"/>
+        <addForeignKeyConstraint baseTableName="tenant_document_intelligence_policies" baseColumnNames="last_known_good_bundle_version"
+                                 referencedTableName="document_intelligence_bundles" referencedColumnNames="version"
+                                 constraintName="fk_tenant_intelligence_policy_lkg_bundle"/>
+
+        <!-- Immutable per-processing-cycle evidence. One row survives success, failure, review and reprocess. -->
+        <createTable tableName="package_processing_intelligence_snapshots">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="processing_cycle" type="INT"><constraints nullable="false"/></column>
+            <column name="requested_mode" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="effective_mode" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="bundle_version" type="VARCHAR(80)"><constraints nullable="false"/></column>
+            <column name="policy_configuration_version" type="INT"><constraints nullable="false"/></column>
+            <column name="intelligence_execution_allowed" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="decision_influence_allowed" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="baseline_discovery_required" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="fallback_to_baseline" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="captured_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="package_processing_intelligence_snapshots" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_package_intelligence_snapshot_tenant"/>
+        <addForeignKeyConstraint baseTableName="package_processing_intelligence_snapshots" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_package_intelligence_snapshot_package"/>
+        <addForeignKeyConstraint baseTableName="package_processing_intelligence_snapshots" baseColumnNames="bundle_version"
+                                 referencedTableName="document_intelligence_bundles" referencedColumnNames="version"
+                                 constraintName="fk_package_intelligence_snapshot_bundle"/>
+        <addUniqueConstraint tableName="package_processing_intelligence_snapshots"
+                             columnNames="tenant_id, package_id, processing_cycle"
+                             constraintName="uq_package_intelligence_snapshot_cycle"/>
+        <createIndex tableName="package_processing_intelligence_snapshots" indexName="idx_package_intelligence_snapshot_lookup">
+            <column name="tenant_id"/><column name="package_id"/><column name="processing_cycle" descending="true"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

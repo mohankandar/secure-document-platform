@@ -1,99 +1,135 @@
 package com.securedoc.platform.infrastructure.redaction;
 
 import com.securedoc.platform.application.port.out.PdfRedactionPort;
-import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.stereotype.Component;
+import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
+import com.securedoc.platform.infrastructure.pdf.TempFileReplayableContent;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Local/demo PDF redaction using Apache PDFBox.
- * Produces a burn-flat redacted PDF where:
+ * PDFBox V1 permanent-redaction adapter.
+ *
+ * <p>The class name is retained for compatibility, but the implementation is intentionally
+ * selective rather than flattening the entire document:
  * <ul>
- *   <li>Each page is rendered to an image</li>
- *   <li>Solid black rectangles are drawn over redaction areas on the image</li>
- *   <li>A new PDF is created from the redacted page images</li>
- *   <li>Original text layer is NOT preserved (no text under redaction boxes)</li>
- *   <li>Original metadata, annotations, and attachments are NOT copied</li>
+ *   <li>Pages that contain redaction targets are rendered and burn-flattened.</li>
+ *   <li>Pages with interactive annotations are also rendered so visible annotation/form
+ *       appearance is preserved without copying active annotation objects.</li>
+ *   <li>Static untouched pages are imported losslessly so their native text/vector content,
+ *       searchability, and compact representation are preserved.</li>
+ *   <li>A new document is always created, so source document metadata/catalog attachments are
+ *       not copied. Imported static pages are stripped of page-level metadata/actions.</li>
+ *   <li>Original text is never preserved on a page that contains a redaction target.</li>
  * </ul>
  *
- * <p>This produces a safe, flattened redacted document suitable for local/demo use.
- * File size may be larger than the original due to image-based pages.
+ * <p>This keeps irreversible redaction semantics while avoiding the large file-size and
+ * searchability penalty of rasterizing every page in a mostly-unredacted document.
  *
- * <p>PDFBox types are NOT exposed outside this class.
- * Document text/content is NOT logged.
+ * <p>PDFBox types are not exposed outside this class. Document text/content is not logged.
  */
 @Component
 public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
 
-    /** Render at 150 DPI for reasonable quality vs. file size balance. */
+    /** Render redacted/dynamic pages at 150 DPI for current V1 visual quality. */
     private static final float RENDER_DPI = 150f;
 
     @Override
     public RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets) {
-        List<RedactionTarget> safeTargets = targets == null ? List.of() : targets;
-
-        // Group targets by page number for efficient processing. An empty list is valid:
-        // the adapter still burn-flattens the source to create a safe output artifact.
+        List<RedactionTarget> safeTargets = targets == null ? List.of() : List.copyOf(targets);
         Map<Integer, List<RedactionTarget>> targetsByPage = safeTargets.stream()
                 .collect(Collectors.groupingBy(RedactionTarget::pageNumber));
+        Path outputPath = null;
 
-        try (PDDocument sourceDoc = Loader.loadPDF(originalPdf.readAllBytes())) {
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(originalPdf, "lexavault-redaction-source-");
+             PDDocument outputDoc = PdfBoxTempFileSupport.newDiskBackedDocument()) {
+            PDDocument sourceDoc = staged.document();
             int pageCount = sourceDoc.getNumberOfPages();
             PDFRenderer renderer = new PDFRenderer(sourceDoc);
-
             int totalRedactions = 0;
 
-            // Create a new document from rendered/redacted images
-            try (PDDocument outputDoc = new PDDocument()) {
-                for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-                    int pageNumber = pageIndex + 1;
+            for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+                int pageNumber = pageIndex + 1;
+                PDPage sourcePage = sourceDoc.getPage(pageIndex);
+                List<RedactionTarget> pageTargets = targetsByPage.getOrDefault(pageNumber, List.of());
 
-                    // Render page to image
+                if (!pageTargets.isEmpty() || hasAnnotations(sourcePage)) {
                     BufferedImage pageImage = renderer.renderImageWithDPI(pageIndex, RENDER_DPI);
-
-                    // Apply redaction boxes if this page has targets
-                    List<RedactionTarget> pageTargets = targetsByPage.get(pageNumber);
-                    if (pageTargets != null && !pageTargets.isEmpty()) {
-                        applyRedactionBoxes(pageImage, pageTargets);
-                        totalRedactions += pageTargets.size();
+                    try {
+                        if (!pageTargets.isEmpty()) {
+                            applyRedactionBoxes(pageImage, pageTargets);
+                            totalRedactions += pageTargets.size();
+                        }
+                        addImagePage(outputDoc, pageImage);
+                    } finally {
+                        pageImage.flush();
                     }
-
-                    // Add redacted image as a new page in output PDF
-                    addImagePage(outputDoc, pageImage);
+                } else {
+                    importStaticPage(outputDoc, sourcePage);
                 }
-
-                // Serialize output PDF to bytes
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                outputDoc.save(outputStream);
-
-                return new RedactionOutput(outputStream.toByteArray(), pageCount, totalRedactions);
             }
 
+            outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-redaction-output-");
+            outputDoc.save(outputPath.toFile());
+            TempFileReplayableContent content = TempFileReplayableContent.owned(outputPath);
+            outputPath = null;
+            return new RedactionOutput(content, pageCount, totalRedactions);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to perform PDF redaction", e);
+        } finally {
+            if (outputPath != null) {
+                try { Files.deleteIfExists(outputPath); } catch (IOException ignored) { }
+            }
         }
     }
 
+    private boolean hasAnnotations(PDPage page) throws IOException {
+        return !page.getAnnotations().isEmpty();
+    }
+
     /**
-     * Draws solid black rectangles on the rendered page image at the specified normalized coordinates.
+     * Imports an untouched static page without rasterizing it. Effective resources are explicitly
+     * retained because PDFBox importPage intentionally ignores inherited page-tree resources.
+     * Page-level active/auxiliary objects are removed so the output remains a controlled artifact.
      */
+    private void importStaticPage(PDDocument outputDoc, PDPage sourcePage) throws IOException {
+        PDPage importedPage = outputDoc.importPage(sourcePage);
+
+        PDResources effectiveResources = sourcePage.getResources();
+        if (effectiveResources != null) {
+            importedPage.setResources(effectiveResources);
+        }
+
+        COSDictionary pageDictionary = importedPage.getCOSObject();
+        pageDictionary.removeItem(COSName.ANNOTS);
+        pageDictionary.removeItem(COSName.AA);
+        pageDictionary.removeItem(COSName.METADATA);
+        pageDictionary.removeItem(COSName.getPDFName("PieceInfo"));
+        pageDictionary.removeItem(COSName.getPDFName("Thumb"));
+        pageDictionary.removeItem(COSName.getPDFName("StructParents"));
+    }
+
+    /** Draws solid black rectangles on the rendered page image at normalized coordinates. */
     private void applyRedactionBoxes(BufferedImage image, List<RedactionTarget> targets) {
         int imgWidth = image.getWidth();
         int imgHeight = image.getHeight();
@@ -103,19 +139,16 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
             g2d.setColor(Color.BLACK);
 
             for (RedactionTarget target : targets) {
-                // Convert normalized coordinates (0.0-1.0) to pixel coordinates
                 int x = (int) Math.round(target.left() * imgWidth);
                 int y = (int) Math.round(target.top() * imgHeight);
                 int w = (int) Math.round(target.width() * imgWidth);
                 int h = (int) Math.round(target.height() * imgHeight);
 
-                // Ensure minimum 1px size
                 w = Math.max(w, 1);
                 h = Math.max(h, 1);
 
-                // Clamp to image bounds
-                x = Math.min(x, imgWidth - 1);
-                y = Math.min(y, imgHeight - 1);
+                x = Math.max(0, Math.min(x, imgWidth - 1));
+                y = Math.max(0, Math.min(y, imgHeight - 1));
                 w = Math.min(w, imgWidth - x);
                 h = Math.min(h, imgHeight - y);
 
@@ -126,11 +159,8 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
         }
     }
 
-    /**
-     * Adds a BufferedImage as a full-page image in the output PDF document.
-     */
+    /** Adds a rendered page image as a new PDF page. */
     private void addImagePage(PDDocument doc, BufferedImage image) throws IOException {
-        // Create page with dimensions matching the image at render DPI
         float pageWidth = image.getWidth() * 72f / RENDER_DPI;
         float pageHeight = image.getHeight() * 72f / RENDER_DPI;
 
@@ -138,7 +168,6 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
         doc.addPage(page);
 
         PDImageXObject pdImage = LosslessFactory.createFromImage(doc, image);
-
         try (PDPageContentStream contentStream = new PDPageContentStream(doc, page)) {
             contentStream.drawImage(pdImage, 0, 0, pageWidth, pageHeight);
         }

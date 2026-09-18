@@ -1,4 +1,4 @@
-/* Batch 2 — one-page, multi-PDF, scan-ready manual intake. */
+/* One-page, multi-PDF manual upload intake. Scanner intake uses the dedicated Scanner Bridge page. */
 .intake-page { width: min(1120px, 100%); margin: 0 auto; }
 .intake-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .intake-header h1 { margin: 0.15rem 0 0.25rem; }
@@ -59,4 +59,11 @@
   .intake-remove-document { grid-column: 3; grid-row: 1 / span 2; }
   .intake-submit-panel { bottom: 0; flex-direction: column; align-items: stretch; border-radius: 14px 14px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
   .intake-submit-button { width: 100%; min-height: 48px; }
+}
+
+.field-error {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  color: #b33939;
 }

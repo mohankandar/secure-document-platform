@@ -1,0 +1,85 @@
+server:
+  # Local bridge is loopback-only. A runtime guard rejects wildcard/LAN overrides fail-closed.
+  address: ${SECUREDOC_SCAN_BRIDGE_BIND_ADDRESS:127.0.0.1}
+  port: ${SECUREDOC_SCAN_BRIDGE_PORT:10090}
+
+spring:
+  application:
+    name: securedoc-scan-bridge
+  servlet:
+    multipart:
+      # Simulator QA acquisition and large scanner packages must stream/spool instead of relying on tiny defaults.
+      max-file-size: ${SECUREDOC_SCAN_BRIDGE_MAX_TEST_PDF_SIZE:2GB}
+      max-request-size: ${SECUREDOC_SCAN_BRIDGE_MAX_TEST_REQUEST_SIZE:2100MB}
+  task:
+    scheduling:
+      # Acquisition must remain responsive while a large queued PDF is being delivered to LexaVault.
+      # One scheduler thread services acquisition/status maintenance while another may block on delivery.
+      pool:
+        size: ${SECUREDOC_SCAN_BRIDGE_SCHEDULER_POOL_SIZE:2}
+      thread-name-prefix: scan-bridge-scheduler-
+
+securedoc:
+  scan-bridge:
+    enabled: ${SECUREDOC_SCAN_BRIDGE_ENABLED:true}
+    tenant-id: ${SECUREDOC_SCAN_BRIDGE_TENANT_ID:00000000-0000-0000-0000-000000000001}
+    bridge-id: ${SECUREDOC_SCAN_BRIDGE_ID:BRIDGE-LOCAL-01}
+    site-id: ${SECUREDOC_SCAN_BRIDGE_SITE_ID:HOME-LAB}
+    scanner-id: ${SECUREDOC_SCAN_BRIDGE_SCANNER_ID:SCANNER-SIM-01}
+    # SIMULATOR is an explicit QA/development acquisition adapter. PHYSICAL never falls back to it.
+    mode: ${SECUREDOC_SCAN_BRIDGE_MODE:SIMULATOR}
+    lexavault-base-url: ${SECUREDOC_SCAN_BRIDGE_LEXAVAULT_BASE_URL:http://localhost:8080/api/v1}
+    # LOCAL profile integration identity. Production OIDC deployments provide a service bearer token instead.
+    client-principal: ${SECUREDOC_SCAN_BRIDGE_CLIENT_PRINCIPAL:scanner-bridge-local}
+    local-actor-id: ${SECUREDOC_SCAN_BRIDGE_LOCAL_ACTOR_ID:00000000-0000-0000-0000-000000000099}
+    authorization-bearer-token: ${SECUREDOC_SCAN_BRIDGE_AUTH_BEARER_TOKEN:}
+    # Durable ownership/error roots are acquisition-mode independent.
+    work-path: ${SECUREDOC_SCAN_BRIDGE_WORK_PATH:C:/LexaVaultTest/scanner-bridge-work}
+    problem-path: ${SECUREDOC_SCAN_BRIDGE_PROBLEM_PATH:C:/LexaVaultTest/scanner-bridge-problem}
+    allowed-origins:
+      - ${SECUREDOC_SCAN_BRIDGE_UI_ORIGIN:http://localhost:5173}
+      - ${SECUREDOC_SCAN_BRIDGE_UI_ORIGIN_ALT:http://127.0.0.1:5173}
+    simulator:
+      inbox-path: ${SECUREDOC_SCAN_BRIDGE_INBOX_PATH:C:/LexaVaultTest/scanner-inbox}
+      scan-interval-ms: ${SECUREDOC_SCAN_BRIDGE_SCAN_INTERVAL_MS:1000}
+      stable-window-ms: ${SECUREDOC_SCAN_BRIDGE_STABLE_WINDOW_MS:1500}
+    physical:
+      # Windows V1 physical adapter. WIA is explicit; there is no simulator fallback.
+      provider: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_PROVIDER:WIA}
+      # Optional selectors. If neither is set and multiple WIA scanners exist, Windows presents a device picker.
+      device-id: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_DEVICE_ID:}
+      device-name: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_DEVICE_NAME:}
+      # AUTO prefers a loaded feeder and otherwise uses flatbed. FEEDER/FLATBED are also supported.
+      source: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_SOURCE:AUTO}
+      duplex: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_DUPLEX:false}
+      dpi: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_DPI:300}
+      max-pages: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_MAX_PAGES:250}
+      acquisition-timeout-seconds: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_TIMEOUT_SECONDS:900}
+      availability-cache-ms: ${SECUREDOC_SCAN_BRIDGE_PHYSICAL_AVAILABILITY_CACHE_MS:10000}
+    storage:
+      # Scanner work is disk-backed. Refuse new scans before low disk space can corrupt a package.
+      max-scan-pdf-size-bytes: ${SECUREDOC_SCAN_BRIDGE_MAX_SCAN_PDF_SIZE_BYTES:2147483648}
+      minimum-usable-space-bytes: ${SECUREDOC_SCAN_BRIDGE_MIN_USABLE_SPACE_BYTES:5368709120}
+    delivery:
+      poll-interval-ms: ${SECUREDOC_SCAN_BRIDGE_DELIVERY_POLL_MS:1000}
+      retry-initial-delay-ms: ${SECUREDOC_SCAN_BRIDGE_RETRY_INITIAL_DELAY_MS:2000}
+      retry-max-delay-ms: ${SECUREDOC_SCAN_BRIDGE_RETRY_MAX_DELAY_MS:60000}
+      request-timeout-seconds: ${SECUREDOC_SCAN_BRIDGE_REQUEST_TIMEOUT_SECONDS:600}
+      cleanup-accepted-pdf: ${SECUREDOC_SCAN_BRIDGE_CLEANUP_ACCEPTED_PDF:true}
+      # Terminal state contains safe technical reconciliation data only. Keep it briefly for diagnostics,
+      # then purge it so high-volume workstations do not accumulate state forever.
+      terminal-state-retention-hours: ${SECUREDOC_SCAN_BRIDGE_TERMINAL_STATE_RETENTION_HOURS:72}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    com.securedoc.platform.scanbridge: INFO

@@ -37,6 +37,13 @@ public class JpaTenantRepositoryAdapter implements TenantRepository {
                 .map(entity -> toDomainWithCapabilities(entity));
     }
 
+    @Override
+    public List<Tenant> findAll() {
+        return tenantRepo.findAll().stream()
+                .map(this::toDomainWithCapabilities)
+                .toList();
+    }
+
     private Tenant toDomainWithCapabilities(TenantEntity entity) {
         List<TenantCapabilityEntity> capabilities = capabilityRepo.findByTenantId(entity.getId());
         return TenantMapper.toDomain(entity, capabilities);

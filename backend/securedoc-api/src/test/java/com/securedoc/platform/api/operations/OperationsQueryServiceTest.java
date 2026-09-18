@@ -42,6 +42,19 @@ class OperationsQueryServiceTest {
     }
 
     @Test
+    void acceptsScannerAsFirstClassReportSource() {
+        OperationsReadPort port = mock(OperationsReadPort.class);
+        OperationsQueryService service = new OperationsQueryService(port);
+        Instant from = Instant.parse("2026-09-09T00:00:00Z");
+        Instant to = Instant.parse("2026-09-10T00:00:00Z");
+
+        service.execute(PRINCIPAL, from, to, " scanner_intake ", "ALL");
+
+        verify(port).loadReports(eq(TENANT), any(Instant.class), eq(from), eq(to),
+                eq("SCANNER_INTAKE"), eq("ALL"));
+    }
+
+    @Test
     void rejectsInvalidOrExcessiveRangesAndUnknownSources() {
         OperationsReadPort port = mock(OperationsReadPort.class);
         OperationsQueryService service = new OperationsQueryService(port);

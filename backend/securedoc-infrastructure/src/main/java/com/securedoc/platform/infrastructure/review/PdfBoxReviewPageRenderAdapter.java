@@ -3,8 +3,7 @@ package com.securedoc.platform.infrastructure.review;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.ReviewPageRenderPort;
 import com.securedoc.platform.domain.finding.FindingLocation;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
+import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.slf4j.Logger;
@@ -45,39 +44,40 @@ public class PdfBoxReviewPageRenderAdapter implements ReviewPageRenderPort {
             throw new ValidationException("Review page number must be at least 1");
         }
         List<FindingLocation.BoundingBox> safeMasks = previewMasks == null ? List.of() : List.copyOf(previewMasks);
-        try (PDDocument document = Loader.loadPDF(pdfContent.readAllBytes())) {
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(pdfContent, "lexavault-review-")) {
+            var document = staged.document();
             if (pageNumber > document.getNumberOfPages()) {
                 throw new ValidationException("Review page is outside the source document");
             }
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, PREVIEW_DPI, ImageType.RGB);
-            applyPreviewMasks(image, safeMasks);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            if (!ImageIO.write(image, "png", output)) {
-                throw new IllegalStateException("PNG writer is unavailable");
+            try {
+                applyPreviewMasks(image, safeMasks);
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                if (!ImageIO.write(image, "png", output)) {
+                    throw new IllegalStateException("PNG writer is unavailable");
+                }
+                if (!safeMasks.isEmpty()) {
+                    log.info("REVIEW_PREVIEW_MASK_APPLIED page={} masks={} width={} height={}",
+                            pageNumber, safeMasks.size(), image.getWidth(), image.getHeight());
+                }
+                return new RenderedPage(output.toByteArray(), "image/png", image.getWidth(), image.getHeight());
+            } finally {
+                image.flush();
             }
-            if (!safeMasks.isEmpty()) {
-                log.info("REVIEW_PREVIEW_MASK_APPLIED page={} masks={} width={} height={}",
-                        pageNumber, safeMasks.size(), image.getWidth(), image.getHeight());
-            }
-            return new RenderedPage(output.toByteArray(), "image/png", image.getWidth(), image.getHeight());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to render review page preview", e);
         }
     }
 
     private void applyPreviewMasks(BufferedImage image, List<FindingLocation.BoundingBox> previewMasks) {
-        if (previewMasks.isEmpty()) {
-            return;
-        }
+        if (previewMasks.isEmpty()) return;
         Graphics2D graphics = image.createGraphics();
         try {
             graphics.setColor(Color.BLACK);
             for (FindingLocation.BoundingBox mask : previewMasks) {
-                int left = Math.max(0,
-                        (int) Math.floor(mask.left() * image.getWidth()) - MASK_PADDING_PIXELS);
-                int top = Math.max(0,
-                        (int) Math.floor(mask.top() * image.getHeight()) - MASK_PADDING_PIXELS);
+                int left = Math.max(0, (int) Math.floor(mask.left() * image.getWidth()) - MASK_PADDING_PIXELS);
+                int top = Math.max(0, (int) Math.floor(mask.top() * image.getHeight()) - MASK_PADDING_PIXELS);
                 int right = Math.min(image.getWidth(),
                         (int) Math.ceil((mask.left() + mask.width()) * image.getWidth()) + MASK_PADDING_PIXELS);
                 int bottom = Math.min(image.getHeight(),

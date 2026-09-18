@@ -1,7 +1,6 @@
 package com.securedoc.platform.infrastructure.extraction;
 
 import com.securedoc.platform.application.port.out.TextExtractionPort;
-import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -10,6 +9,7 @@ import org.apache.pdfbox.text.TextPosition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,52 +44,50 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
             return new TextExtractionOutput(List.of(), 0, false);
         }
 
-        try (PDDocument document = Loader.loadPDF(content.readAllBytes())) {
-            int pageCount = document.getNumberOfPages();
-
-            if (pageCount == 0) {
-                return new TextExtractionOutput(List.of(), 0, false);
-            }
-
-            List<PageText> pages = new ArrayList<>(pageCount);
-            long totalChars = 0;
-
-            for (int i = 1; i <= pageCount; i++) {
-                PDPage pdPage = document.getPage(i - 1);
-                PDRectangle mediaBox = pdPage.getMediaBox();
-                float pageWidth = mediaBox.getWidth();
-                float pageHeight = mediaBox.getHeight();
-
-                PositionCapturingStripper stripper = new PositionCapturingStripper(pageWidth, pageHeight);
-                stripper.setStartPage(i);
-                stripper.setEndPage(i);
-
-                // Drive the stripper (output discarded); we build page text from the
-                // captured buffer so text offsets and span offsets are guaranteed aligned.
-                stripper.getText(document);
-
-                String pageText = stripper.getCapturedText();
-                pages.add(new PageText(
-                        i,
-                        Math.round(pageWidth),
-                        Math.round(pageHeight),
-                        pageText,
-                        stripper.getSpans()));
-                totalChars += pageText.length();
-            }
-
-            boolean hasEmbeddedText = totalChars > 0;
-
-            if (!hasEmbeddedText) {
-                log.info("PDF has no extractable embedded text ({} pages). " +
-                        "OCR provider required for scanned documents.", pageCount);
-            }
-
-            return new TextExtractionOutput(pages, totalChars, hasEmbeddedText);
-
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(content, "lexavault-native-text-")) {
+            return extractDocument(staged.document());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to extract text from PDF", e);
         }
+    }
+
+    /** Package-private reuse for the hybrid adapter so a large PDF is staged only once. */
+    TextExtractionOutput extractDocument(PDDocument document) throws IOException {
+        int pageCount = document.getNumberOfPages();
+
+        if (pageCount == 0) {
+            return new TextExtractionOutput(List.of(), 0, false);
+        }
+
+        List<PageText> pages = new ArrayList<>(pageCount);
+        long totalChars = 0;
+
+        for (int i = 1; i <= pageCount; i++) {
+            PDPage pdPage = document.getPage(i - 1);
+            PDRectangle mediaBox = pdPage.getMediaBox();
+            float pageWidth = mediaBox.getWidth();
+            float pageHeight = mediaBox.getHeight();
+
+            PositionCapturingStripper stripper = new PositionCapturingStripper(pageWidth, pageHeight);
+            stripper.setStartPage(i);
+            stripper.setEndPage(i);
+            stripper.getText(document);
+
+            String pageText = stripper.getCapturedText();
+            pages.add(new PageText(
+                    i,
+                    Math.round(pageWidth),
+                    Math.round(pageHeight),
+                    pageText,
+                    stripper.getSpans()));
+            totalChars += pageText.length();
+        }
+
+        boolean hasEmbeddedText = totalChars > 0;
+        if (!hasEmbeddedText) {
+            log.info("PDF has no extractable embedded text ({} pages). OCR provider required for scanned documents.", pageCount);
+        }
+        return new TextExtractionOutput(pages, totalChars, hasEmbeddedText);
     }
 
     /**

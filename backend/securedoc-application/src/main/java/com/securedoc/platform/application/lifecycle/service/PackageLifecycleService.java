@@ -149,13 +149,15 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
 
     @Override
     public PackageLifecycleSummary execute(PackageId packageId, TenantId tenantId) {
-        PackageLifecycle lifecycle = lifecycleFor(packageId, tenantId);
+        DocumentPackage pkg = ensurePackageExists(packageId, tenantId);
+        PackageLifecycle lifecycle = lifecycleRepository.findByPackageIdAndTenantId(packageId, tenantId)
+                .orElseGet(() -> PackageLifecycle.create(packageId, tenantId));
         TenantLifecyclePolicy policy = policyFor(tenantId);
         String lastDestination = exportRecordRepository.findByPackageIdAndTenantId(packageId, tenantId).stream()
                 .max(Comparator.comparingInt(PackageExportRecord::cycleNumber))
                 .map(PackageExportRecord::destinationType)
                 .orElse(null);
-        return toSummary(lifecycle, policy, lastDestination, Instant.now());
+        return toSummary(lifecycle, policy, lastDestination, Instant.now(), pkg.status() == PackageStatus.COMPLETED);
     }
 
     @Override
@@ -232,7 +234,11 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
     }
 
     public boolean canReprocess(PackageId packageId, TenantId tenantId) {
-        return lifecycleFor(packageId, tenantId).canReprocess(Instant.now());
+        DocumentPackage pkg = ensurePackageExists(packageId, tenantId);
+        if (pkg.status() != PackageStatus.COMPLETED) return false;
+        PackageLifecycle lifecycle = lifecycleRepository.findByPackageIdAndTenantId(packageId, tenantId)
+                .orElseGet(() -> PackageLifecycle.create(packageId, tenantId));
+        return lifecycle.canReprocess(Instant.now());
     }
 
     private boolean isTerminalForPurge(PackageLifecycle lifecycle) {
@@ -276,11 +282,11 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
     }
 
     private PackageLifecycleSummary toSummary(PackageLifecycle lifecycle, TenantLifecyclePolicy policy,
-                                              String lastDestination, Instant now) {
+                                              String lastDestination, Instant now, boolean packageCompleted) {
         return new PackageLifecycleSummary(
                 lifecycle.packageId(), lifecycle.successfulExportCycles(),
                 TenantLifecyclePolicy.MAX_SUCCESSFUL_EXPORT_CYCLES,
-                lifecycle.canReprocess(now), policy.finalApprovalRequired(), lifecycle.finalApprovalGranted(),
+                packageCompleted && lifecycle.canReprocess(now), policy.finalApprovalRequired(), lifecycle.finalApprovalGranted(),
                 lifecycle.lastExportedAt().orElse(null), lifecycle.originalDeleteAt().orElse(null),
                 lifecycle.redactedDeleteAt().orElse(null), lifecycle.technicalHoldUntil().orElse(null),
                 lifecycle.redactedPurgedAt().orElse(null), lifecycle.originalPurgedAt().orElse(null),

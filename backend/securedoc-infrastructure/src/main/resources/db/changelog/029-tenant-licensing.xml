@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="029-01-tenant-license-records" author="lexavault">
+        <createTable tableName="tenant_license_records">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="license_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="signed_token" type="TEXT"><constraints nullable="false"/></column>
+            <column name="payload_sha256" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="installed_by" type="UUID"><constraints nullable="false"/></column>
+            <column name="installed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="tenant_license_records" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_license_record_tenant"/>
+        <addUniqueConstraint tableName="tenant_license_records" columnNames="tenant_id, license_id"
+                             constraintName="uq_tenant_license_record_license"/>
+        <createIndex tableName="tenant_license_records" indexName="idx_tenant_license_records_tenant_installed">
+            <column name="tenant_id"/><column name="installed_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="029-02-tenant-license-assignment" author="lexavault">
+        <createTable tableName="tenant_license_assignments">
+            <column name="tenant_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="license_record_id" type="UUID"><constraints nullable="false" unique="true"/></column>
+            <column name="activated_by" type="UUID"><constraints nullable="false"/></column>
+            <column name="activated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="tenant_license_assignments" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_license_assignment_tenant"/>
+        <addForeignKeyConstraint baseTableName="tenant_license_assignments" baseColumnNames="license_record_id"
+                                 referencedTableName="tenant_license_records" referencedColumnNames="id"
+                                 constraintName="fk_tenant_license_assignment_record"/>
+    </changeSet>
+</databaseChangeLog>

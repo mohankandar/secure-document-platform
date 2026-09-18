@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="026-01-reporting-tenant-settings" author="securedoc">
+        <createTable tableName="reporting_tenant_settings">
+            <column name="tenant_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="delivery_target_minutes" type="INT" defaultValueNumeric="240"><constraints nullable="false"/></column>
+            <column name="delivery_target_percent" type="DECIMAL(5,2)" defaultValueNumeric="95.00"><constraints nullable="false"/></column>
+            <column name="straight_through_target_percent" type="DECIMAL(5,2)" defaultValueNumeric="90.00"><constraints nullable="false"/></column>
+            <column name="review_wait_target_minutes" type="INT" defaultValueNumeric="60"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="reporting_tenant_settings" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_reporting_tenant_settings_tenant"/>
+        <sql><![CDATA[
+            insert into reporting_tenant_settings (
+                tenant_id, delivery_target_minutes, delivery_target_percent,
+                straight_through_target_percent, review_wait_target_minutes, updated_at
+            )
+            select id, 240, 95.00, 90.00, 60, now() from tenants
+            on conflict (tenant_id) do nothing;
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="026-02-reporting-dimension-definitions" author="securedoc">
+        <createTable tableName="reporting_dimension_definitions">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="definition_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="dimension_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="dimension_label" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="enabled_flag" type="BOOLEAN" defaultValueBoolean="true"><constraints nullable="false"/></column>
+            <column name="display_order" type="INT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="reporting_dimension_definitions" columnNames="tenant_id,definition_id"
+                       constraintName="pk_reporting_dimension_definitions"/>
+        <addForeignKeyConstraint baseTableName="reporting_dimension_definitions" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_reporting_dimension_definition_tenant"/>
+        <addUniqueConstraint tableName="reporting_dimension_definitions" columnNames="tenant_id,dimension_key"
+                             constraintName="uq_reporting_dimension_key"/>
+        <createIndex tableName="reporting_dimension_definitions" indexName="idx_reporting_dimension_tenant_order">
+            <column name="tenant_id"/><column name="enabled_flag"/><column name="display_order"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="026-03-reporting-package-dimensions" author="securedoc">
+        <createTable tableName="reporting_package_dimensions">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="dimension_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="dimension_label" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="dimension_value" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="captured_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="reporting_package_dimensions" columnNames="tenant_id,package_id,dimension_key"
+                       constraintName="pk_reporting_package_dimensions"/>
+        <addForeignKeyConstraint baseTableName="reporting_package_dimensions" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_reporting_package_dimension_tenant"/>
+        <createIndex tableName="reporting_package_dimensions" indexName="idx_reporting_package_dimension_value">
+            <column name="tenant_id"/><column name="dimension_key"/><column name="dimension_value"/>
+        </createIndex>
+        <createIndex tableName="reporting_package_dimensions" indexName="idx_reporting_package_dimension_package">
+            <column name="tenant_id"/><column name="package_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="026-04-reporting-dimension-capture" author="securedoc" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            create or replace function reporting_capture_package_dimensions(
+                p_tenant uuid, p_package uuid, p_business_record uuid
+            ) returns void language plpgsql as $$
+            begin
+                if p_business_record is null then
+                    return;
+                end if;
+                insert into reporting_package_dimensions (
+                    tenant_id, package_id, dimension_key, dimension_label, dimension_value, captured_at
+                )
+                select p_tenant, p_package, rd.dimension_key, rd.dimension_label,
+                       bri.identifier_value, now()
+                  from reporting_dimension_definitions rd
+                  join business_record_identifiers bri
+                    on bri.tenant_id=rd.tenant_id and bri.definition_id=rd.definition_id
+                 where rd.tenant_id=p_tenant and rd.enabled_flag=true
+                   and bri.business_record_id=p_business_record
+                on conflict (tenant_id, package_id, dimension_key) do update set
+                    dimension_label=excluded.dimension_label,
+                    dimension_value=excluded.dimension_value;
+            end $$;
+
+            create or replace function reporting_backfill_tenant_dimensions(p_tenant uuid)
+            returns integer language plpgsql as $$
+            declare affected integer;
+            begin
+                insert into reporting_package_dimensions (
+                    tenant_id, package_id, dimension_key, dimension_label, dimension_value, captured_at
+                )
+                select f.tenant_id, f.package_id, rd.dimension_key, rd.dimension_label,
+                       bri.identifier_value, now()
+                  from reporting_package_facts f
+                  join reporting_dimension_definitions rd
+                    on rd.tenant_id=f.tenant_id and rd.enabled_flag=true
+                  join business_record_identifiers bri
+                    on bri.tenant_id=f.tenant_id and bri.business_record_id=f.business_record_id
+                   and bri.definition_id=rd.definition_id
+                 where f.tenant_id=p_tenant and f.business_record_id is not null
+                on conflict (tenant_id, package_id, dimension_key) do update set
+                    dimension_label=excluded.dimension_label,
+                    dimension_value=excluded.dimension_value;
+                get diagnostics affected = row_count;
+                return affected;
+            end $$;
+
+            create or replace function reporting_capture_dimension_fact_trigger()
+            returns trigger language plpgsql as $$
+            begin
+                perform reporting_capture_package_dimensions(new.tenant_id, new.package_id, new.business_record_id);
+                return new;
+            end $$;
+
+            drop trigger if exists trg_reporting_package_dimension_capture on reporting_package_facts;
+            create trigger trg_reporting_package_dimension_capture
+            after insert or update of business_record_id on reporting_package_facts
+            for each row execute function reporting_capture_dimension_fact_trigger();
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                drop trigger if exists trg_reporting_package_dimension_capture on reporting_package_facts;
+                drop function if exists reporting_capture_dimension_fact_trigger();
+                drop function if exists reporting_backfill_tenant_dimensions(uuid);
+                drop function if exists reporting_capture_package_dimensions(uuid,uuid,uuid);
+            ]]></sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

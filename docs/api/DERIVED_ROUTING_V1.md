@@ -32,3 +32,7 @@ One derived-delivery record is created per tenant + package + export cycle + sou
 States: `PENDING`, `DELIVERING`, `RETRY_PENDING`, `DELIVERED`, `ATTENTION_REQUIRED`.
 
 Technical failures are independent of the master SDV export. Delivery retries reuse the already-created derived redacted artifact; they do not rerun OCR, AI detection, review, or redaction.
+
+## Performance implementation note
+
+Production Performance R2A preserves the routing contract while optimizing `TEXT_PATTERN` evaluation on native digital pages. Embedded text is inspected only inside the same fixed TOP_RIGHT/BOTTOM_LEFT geometry. A region with usable native text is matched directly without OCR; regions without usable native text fall back to the existing rendered-crop OCR path. BARCODE and QR_CODE detection remains rendered-crop based. Native-text extraction failure also falls back to the legacy path. No marker/document text is logged.

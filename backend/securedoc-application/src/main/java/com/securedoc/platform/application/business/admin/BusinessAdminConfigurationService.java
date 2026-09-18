@@ -4,9 +4,12 @@ import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
+import com.securedoc.platform.application.port.out.ReportingConfigurationRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
+import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
+import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -41,15 +44,18 @@ public final class BusinessAdminConfigurationService {
     private final BusinessIdentifierDefinitionRepository identifierRepository;
     private final TenantRedactionPolicyRepository policyRepository;
     private final TenantLifecyclePolicyRepository lifecyclePolicyRepository;
+    private final ReportingConfigurationRepository reportingConfigurationRepository;
     private final AuditService auditService;
 
     public BusinessAdminConfigurationService(BusinessIdentifierDefinitionRepository identifierRepository,
                                              TenantRedactionPolicyRepository policyRepository,
                                              TenantLifecyclePolicyRepository lifecyclePolicyRepository,
+                                             ReportingConfigurationRepository reportingConfigurationRepository,
                                              AuditService auditService) {
         this.identifierRepository = Objects.requireNonNull(identifierRepository);
         this.policyRepository = Objects.requireNonNull(policyRepository);
         this.lifecyclePolicyRepository = Objects.requireNonNull(lifecyclePolicyRepository);
+        this.reportingConfigurationRepository = Objects.requireNonNull(reportingConfigurationRepository);
         this.auditService = Objects.requireNonNull(auditService);
     }
 
@@ -59,7 +65,8 @@ public final class BusinessAdminConfigurationService {
                 .orElseGet(() -> TenantRedactionPolicy.defaults(tenantId));
         TenantLifecyclePolicy lifecyclePolicy = lifecyclePolicyRepository.findByTenantId(tenantId)
                 .orElseGet(() -> TenantLifecyclePolicy.defaults(tenantId));
-        return new BusinessAdminConfiguration(identifiers, policy, lifecyclePolicy);
+        ReportingConfiguration reportingConfiguration = reportingConfigurationRepository.findByTenantId(tenantId);
+        return new BusinessAdminConfiguration(identifiers, policy, lifecyclePolicy, reportingConfiguration);
     }
 
     public List<BusinessIdentifierDefinition> updateIdentifiers(TenantId tenantId, ActorId actorId,
@@ -113,14 +120,37 @@ public final class BusinessAdminConfigurationService {
                 if (definition == null) {
                     throw new ValidationException("Business identifier definition does not belong to this tenant");
                 }
-                active.add(definition.reconfigure(input.label(), input.required(), input.primary(),
-                        input.searchable(), input.extractable(), input.displayable(), displayOrder));
+                if (!hasValidationConfiguration(input)) {
+                    active.add(definition.reconfigure(input.label(), input.required(), input.primary(),
+                            input.searchable(), input.extractable(), input.displayable(), displayOrder));
+                } else {
+                    BusinessIdentifierCaseNormalization requestedCase = parseCaseNormalization(input.caseNormalization());
+                    boolean requestedStripSeparators = Boolean.TRUE.equals(input.stripSeparators());
+                    if (requestedCase != definition.caseNormalization() || requestedStripSeparators != definition.stripSeparators()) {
+                        throw new ValidationException("Canonical normalization cannot be changed for an existing business identifier in V1");
+                    }
+                    try {
+                        active.add(definition.reconfigure(input.label(), input.required(), input.primary(),
+                                input.searchable(), input.extractable(), input.displayable(), displayOrder,
+                                parseValidationType(input.validationType()), input.exactLength(), input.minLength(), input.maxLength(),
+                                requestedCase, requestedStripSeparators, safeAllowedValues(input.allowedValues()), input.customPattern()));
+                    } catch (IllegalArgumentException e) {
+                        throw new ValidationException("Invalid validation configuration for " + input.label() + ": " + e.getMessage());
+                    }
+                }
             } else {
                 String key = uniqueKey(input.label(), usedKeys);
                 usedKeys.add(key);
-                active.add(BusinessIdentifierDefinition.create(tenantId, key, input.label(),
-                        input.required(), input.primary(), input.searchable(), input.extractable(),
-                        input.displayable(), displayOrder));
+                try {
+                    active.add(BusinessIdentifierDefinition.create(tenantId, key, input.label(),
+                            input.required(), input.primary(), input.searchable(), input.extractable(),
+                            input.displayable(), displayOrder, parseValidationType(input.validationType()),
+                            input.exactLength(), input.minLength(), input.maxLength(),
+                            parseCaseNormalization(input.caseNormalization()), Boolean.TRUE.equals(input.stripSeparators()),
+                            safeAllowedValues(input.allowedValues()), input.customPattern()));
+                } catch (IllegalArgumentException e) {
+                    throw new ValidationException("Invalid validation configuration for " + input.label() + ": " + e.getMessage());
+                }
             }
         }
 
@@ -224,10 +254,94 @@ public final class BusinessAdminConfigurationService {
     public record BusinessAdminConfiguration(
             List<BusinessIdentifierDefinition> identifiers,
             TenantRedactionPolicy sensitiveDataPolicy,
-            TenantLifecyclePolicy lifecyclePolicy) {
+            TenantLifecyclePolicy lifecyclePolicy,
+            ReportingConfiguration reportingConfiguration) {
         public BusinessAdminConfiguration {
             identifiers = List.copyOf(identifiers);
         }
+    }
+
+
+
+    public ReportingConfiguration updateReportingConfiguration(TenantId tenantId, ActorId actorId,
+                                                                CorrelationId correlationId,
+                                                                List<UUID> enabledDimensionDefinitionIds,
+                                                                int deliveryTargetMinutes,
+                                                                double deliveryTargetPercent,
+                                                                double straightThroughTargetPercent,
+                                                                int reviewWaitTargetMinutes) {
+        List<BusinessIdentifierDefinition> active = identifierRepository.findActiveByTenantId(tenantId);
+        Map<UUID, BusinessIdentifierDefinition> byId = active.stream()
+                .collect(java.util.stream.Collectors.toMap(d -> d.id().value(), d -> d));
+        LinkedHashSet<UUID> requested = enabledDimensionDefinitionIds == null
+                ? new LinkedHashSet<>() : new LinkedHashSet<>(enabledDimensionDefinitionIds);
+        List<ReportingConfiguration.Dimension> dimensions = new ArrayList<>();
+        int order = 1;
+        for (UUID definitionId : requested) {
+            BusinessIdentifierDefinition definition = byId.get(definitionId);
+            if (definition == null) {
+                throw new ValidationException("Reporting dimension does not belong to this tenant or is inactive");
+            }
+            // V1 reporting dimensions must be low-cardinality, tenant-controlled values.
+            // allowedValues is enforced by BusinessIdentifierValidator for every validation type,
+            // so a NUMERIC/ALPHANUMERIC/etc. identifier with an explicit small allowed-value set
+            // is just as safe for reporting as validationType=ALLOW_LIST.
+            if (definition.allowedValues().isEmpty() || definition.allowedValues().size() > 100) {
+                throw new ValidationException("Reporting dimensions must define 1-100 allowed values");
+            }
+            dimensions.add(new ReportingConfiguration.Dimension(definition.id().value(), definition.key(),
+                    definition.label(), true, order++));
+        }
+        ReportingConfiguration configuration;
+        try {
+            configuration = new ReportingConfiguration(dimensions, deliveryTargetMinutes, deliveryTargetPercent,
+                    straightThroughTargetPercent, reviewWaitTargetMinutes);
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(e.getMessage());
+        }
+        reportingConfigurationRepository.save(tenantId, configuration);
+        auditService.recordSuccess(tenantId, actorId, AuditAction.REPORTING_CONFIGURATION_CHANGED,
+                "ReportingConfiguration", tenantId.toString(), correlationId,
+                "Reporting configuration changed: dimensions=" + dimensions.size()
+                        + "; deliveryTargetMinutes=" + deliveryTargetMinutes
+                        + "; deliveryTargetPercent=" + deliveryTargetPercent
+                        + "; straightThroughTargetPercent=" + straightThroughTargetPercent
+                        + "; reviewWaitTargetMinutes=" + reviewWaitTargetMinutes);
+        return configuration;
+    }
+
+    private boolean hasValidationConfiguration(IdentifierConfigurationInput input) {
+        return (input.validationType() != null && !input.validationType().isBlank())
+                || input.exactLength() != null || input.minLength() != null || input.maxLength() != null
+                || (input.caseNormalization() != null && !input.caseNormalization().isBlank())
+                || input.stripSeparators() != null || input.allowedValues() != null || input.customPattern() != null;
+    }
+
+    private BusinessIdentifierValidationType parseValidationType(String value) {
+        if (value == null || value.isBlank()) return BusinessIdentifierValidationType.TEXT;
+        try {
+            return BusinessIdentifierValidationType.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException("Unsupported business identifier validation type");
+        }
+    }
+
+    private BusinessIdentifierCaseNormalization parseCaseNormalization(String value) {
+        if (value == null || value.isBlank()) return BusinessIdentifierCaseNormalization.UPPER;
+        try {
+            return BusinessIdentifierCaseNormalization.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException("Unsupported business identifier case normalization");
+        }
+    }
+
+    private Set<String> safeAllowedValues(Set<String> values) {
+        if (values == null) return Set.of();
+        LinkedHashSet<String> cleaned = new LinkedHashSet<>();
+        for (String value : values) {
+            if (value != null && !value.isBlank()) cleaned.add(value.trim());
+        }
+        return Set.copyOf(cleaned);
     }
 
     public record IdentifierConfigurationInput(
@@ -237,6 +351,14 @@ public final class BusinessAdminConfigurationService {
             boolean primary,
             boolean searchable,
             boolean extractable,
-            boolean displayable) {
+            boolean displayable,
+            String validationType,
+            Integer exactLength,
+            Integer minLength,
+            Integer maxLength,
+            String caseNormalization,
+            Boolean stripSeparators,
+            Set<String> allowedValues,
+            String customPattern) {
     }
 }

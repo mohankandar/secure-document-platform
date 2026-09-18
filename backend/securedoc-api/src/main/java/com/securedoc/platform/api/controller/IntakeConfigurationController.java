@@ -24,7 +24,9 @@ public class IntakeConfigurationController {
     public ResponseEntity<List<IdentifierDefinitionResponse>> definitions(HttpServletRequest request){
         var principal=contextResolver.resolvePrincipal(request);
         var result=businessIdentityService.definitions(principal.tenantId()).stream()
-                .map(d->new IdentifierDefinitionResponse(d.key(),d.label(),d.required(),d.primary(),d.searchable(),d.extractable(),d.displayable(),d.displayOrder()))
+                .map(d->new IdentifierDefinitionResponse(d.key(),d.label(),d.required(),d.primary(),d.searchable(),d.extractable(),d.displayable(),d.displayOrder(),
+                        d.validationType().name(), d.exactLength(), d.minLength(), d.maxLength(), d.caseNormalization().name(),
+                        d.stripSeparators(), d.allowedValues(), d.customPattern()))
                 .toList();
         return ResponseEntity.ok(result);
     }

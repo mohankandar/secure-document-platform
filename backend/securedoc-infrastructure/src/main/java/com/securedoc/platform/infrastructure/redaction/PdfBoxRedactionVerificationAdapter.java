@@ -2,7 +2,7 @@ package com.securedoc.platform.infrastructure.redaction;
 
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 import com.securedoc.platform.application.port.out.RedactionVerificationPort;
-import org.apache.pdfbox.Loader;
+import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -10,16 +10,21 @@ import org.springframework.stereotype.Component;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.io.InputStream;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * Verification for the current burn-flat V1 output.
+ * Security verification for the selective V1 redaction artifact.
  *
- * <p>A safe artifact must be a readable PDF with the independently recorded source page count,
- * no extractable text layer, and a visually opaque/dark interior for every expected redaction
- * target. The visual target check catches a misplaced/missed burn-flat box that a text-layer-only
- * check cannot detect.
+ * <p>Untouched static pages may retain native searchable text. Every page containing an expected
+ * redaction target, however, must be burn-flattened with no extractable text layer. No active
+ * annotations may remain anywhere in the finished artifact. Each expected target must also be
+ * visually covered by an opaque dark region. Page count is checked against independently recorded
+ * source extraction metadata.
  */
 @Component
 public class PdfBoxRedactionVerificationAdapter implements RedactionVerificationPort {
@@ -30,11 +35,11 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
     private static final double INTERIOR_MARGIN_RATIO = 0.15;
 
     @Override
-    public VerificationResult verify(byte[] pdfContent,
+    public VerificationResult verify(InputStream pdfContent,
                                      int expectedSourcePageCount,
                                      List<RedactionTarget> expectedTargets) {
         List<RedactionTarget> targets = expectedTargets == null ? List.of() : List.copyOf(expectedTargets);
-        if (pdfContent == null || pdfContent.length == 0) {
+        if (pdfContent == null) {
             return VerificationResult.failed(0, targets.size(), 0, false, "Generated PDF is empty");
         }
         if (expectedSourcePageCount < 1) {
@@ -42,18 +47,22 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
                     "Source page count is unavailable for verification");
         }
 
-        try (PDDocument document = Loader.loadPDF(pdfContent)) {
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(pdfContent, "lexavault-redaction-verify-")) {
+            PDDocument document = staged.document();
             int pageCount = document.getNumberOfPages();
             if (pageCount != expectedSourcePageCount) {
                 return VerificationResult.failed(pageCount, targets.size(), 0, false,
                         "Generated PDF page count does not match source");
             }
 
-            String extracted = new PDFTextStripper().getText(document);
-            boolean hasText = extracted != null && !extracted.isBlank();
-            if (hasText) {
+            Set<Integer> redactedPages = targetPages(targets);
+            if (hasExtractableTextOnPages(document, redactedPages)) {
                 return VerificationResult.failed(pageCount, targets.size(), 0, true,
-                        "Generated PDF still contains an extractable text layer");
+                        "A redacted page still contains an extractable text layer");
+            }
+            if (hasAnyAnnotations(document)) {
+                return VerificationResult.failed(pageCount, targets.size(), 0, false,
+                        "Generated PDF still contains annotations");
             }
 
             int covered = verifyTargetCoverage(document, targets);
@@ -63,36 +72,58 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
             }
 
             return VerificationResult.safe(pageCount, targets.size(), covered);
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             return VerificationResult.failed(0, targets.size(), 0, false,
                     "Generated PDF could not be parsed for verification");
         }
     }
 
+    private Set<Integer> targetPages(List<RedactionTarget> targets) {
+        Set<Integer> pages = new LinkedHashSet<>();
+        for (RedactionTarget target : targets) pages.add(target.pageNumber());
+        return pages;
+    }
+
+    private boolean hasExtractableTextOnPages(PDDocument document, Set<Integer> pageNumbers) throws IOException {
+        for (int pageNumber : pageNumbers) {
+            if (pageNumber < 1 || pageNumber > document.getNumberOfPages()) return true;
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setStartPage(pageNumber);
+            stripper.setEndPage(pageNumber);
+            String extracted = stripper.getText(document);
+            if (extracted != null && !extracted.isBlank()) return true;
+        }
+        return false;
+    }
+
+    private boolean hasAnyAnnotations(PDDocument document) throws IOException {
+        for (int pageIndex = 0; pageIndex < document.getNumberOfPages(); pageIndex++) {
+            if (!document.getPage(pageIndex).getAnnotations().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    /** Render one target page at a time so verification memory is page-bounded. */
     private int verifyTargetCoverage(PDDocument document, List<RedactionTarget> targets) throws IOException {
-        if (targets.isEmpty()) {
-            return 0;
+        if (targets.isEmpty()) return 0;
+
+        Map<Integer, List<RedactionTarget>> targetsByPage = new LinkedHashMap<>();
+        for (RedactionTarget target : targets) {
+            targetsByPage.computeIfAbsent(target.pageNumber(), ignored -> new java.util.ArrayList<>()).add(target);
         }
 
         PDFRenderer renderer = new PDFRenderer(document);
-        List<BufferedImage> renderedPages = new ArrayList<>(document.getNumberOfPages());
-        for (int i = 0; i < document.getNumberOfPages(); i++) {
-            renderedPages.add(null);
-        }
-
         int covered = 0;
-        for (RedactionTarget target : targets) {
-            int pageIndex = target.pageNumber() - 1;
-            if (pageIndex < 0 || pageIndex >= renderedPages.size()) {
-                continue;
-            }
-            BufferedImage image = renderedPages.get(pageIndex);
-            if (image == null) {
-                image = renderer.renderImageWithDPI(pageIndex, VERIFY_DPI);
-                renderedPages.set(pageIndex, image);
-            }
-            if (isRegionDark(image, target)) {
-                covered++;
+        for (Map.Entry<Integer, List<RedactionTarget>> entry : targetsByPage.entrySet()) {
+            int pageIndex = entry.getKey() - 1;
+            if (pageIndex < 0 || pageIndex >= document.getNumberOfPages()) continue;
+            BufferedImage image = renderer.renderImageWithDPI(pageIndex, VERIFY_DPI);
+            try {
+                for (RedactionTarget target : entry.getValue()) {
+                    if (isRegionDark(image, target)) covered++;
+                }
+            } finally {
+                image.flush();
             }
         }
         return covered;
@@ -107,7 +138,6 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
         double width = target.width();
         double height = target.height();
 
-        // Sample the interior to avoid anti-aliased box edges affecting the result.
         double marginX = width * INTERIOR_MARGIN_RATIO;
         double marginY = height * INTERIOR_MARGIN_RATIO;
         double sampleLeft = left + marginX;
@@ -131,18 +161,14 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
                 int g = (rgb >> 8) & 0xFF;
                 int b = rgb & 0xFF;
                 sampled++;
-                if (r <= DARK_CHANNEL_THRESHOLD && g <= DARK_CHANNEL_THRESHOLD && b <= DARK_CHANNEL_THRESHOLD) {
-                    dark++;
-                }
+                if (r <= DARK_CHANNEL_THRESHOLD && g <= DARK_CHANNEL_THRESHOLD && b <= DARK_CHANNEL_THRESHOLD) dark++;
             }
         }
         return sampled > 0 && ((double) dark / sampled) >= REQUIRED_DARK_RATIO;
     }
 
     private int clamp(int value, int min, int max) {
-        if (max < min) {
-            return min;
-        }
+        if (max < min) return min;
         return Math.max(min, Math.min(max, value));
     }
 }

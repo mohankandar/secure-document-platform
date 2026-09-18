@@ -1,5 +1,7 @@
 package com.securedoc.platform.api.dto;
 
+import java.util.Set;
+
 public record IdentifierDefinitionResponse(
         String key,
         String label,
@@ -8,5 +10,13 @@ public record IdentifierDefinitionResponse(
         boolean searchable,
         boolean extractable,
         boolean displayable,
-        int displayOrder
+        int displayOrder,
+        String validationType,
+        Integer exactLength,
+        Integer minLength,
+        Integer maxLength,
+        String caseNormalization,
+        boolean stripSeparators,
+        Set<String> allowedValues,
+        String customPattern
 ) {}

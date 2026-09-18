@@ -9,6 +9,7 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.exception.IntakeExpiredException;
 import com.securedoc.platform.application.exception.IntakeConflictException;
+import com.securedoc.platform.application.licensing.LicenseEnforcementException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.observability.StructuredLogContext;
 import com.securedoc.platform.api.observability.RequestCorrelationFilter;
@@ -34,6 +35,18 @@ import java.util.UUID;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+
+    @ExceptionHandler(LicenseEnforcementException.class)
+    public ResponseEntity<ApiErrorResponse> handleLicenseEnforcement(LicenseEnforcementException ex,
+                                                                      HttpServletRequest request) {
+        HttpStatus status = ex.serviceUnavailable() ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.FORBIDDEN;
+        StructuredLogContext.warn(log, "LICENSE_ENFORCEMENT_REJECTED",
+                Map.of("reasonCode", ex.errorCode(), "licenseStatus", ex.status().name()),
+                "Tenant license rejected the requested operation");
+        return ResponseEntity.status(status)
+                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
+    }
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(ValidationException ex, HttpServletRequest request) {

@@ -105,28 +105,52 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         Object[] previousVolumes = periodVolumes(tenant, previousFrom, from, source, outcome);
 
         Query durationQuery = entityManager.createNativeQuery("""
-                select extract(epoch from (min(e.exported_at)-p.created_at))/3600.0
-                  from document_packages p
-                  join package_export_records e on e.package_id=p.id and e.tenant_id=p.tenant_id
-                 where p.tenant_id=:tenant and p.created_at>=:from and p.created_at<:to%s%s
-                 group by p.id,p.created_at
-                """.formatted(sourceClause, outcomeClause));
+                select extract(epoch from (f.first_delivered_at-f.received_at))/3600.0
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to
+                   and f.first_delivered_at is not null%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
         bindReport(durationQuery, tenant, from, to, source);
         List<?> durationRows = durationQuery.getResultList();
         List<Double> durations = durationRows.stream().map(r -> ((Number) row(r)[0]).doubleValue()).sorted().toList();
 
         Query automationQuery = entityManager.createNativeQuery("""
-                select count(distinct e.package_id),
-                       count(distinct case when exists (
-                         select 1 from review_tasks rt where rt.tenant_id=p.tenant_id
-                          and rt.package_id=p.id
-                       ) then e.package_id end)
-                  from package_export_records e
-                  join document_packages p on p.id=e.package_id and p.tenant_id=e.tenant_id
-                 where e.tenant_id=:tenant and e.exported_at>=:from and e.exported_at<:to%s%s
-                """.formatted(sourceClause, outcomeClause));
+                select count(*),
+                       coalesce(sum(case when f.reviewed_flag then 1 else 0 end),0)
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.first_delivered_at>=:from and f.first_delivered_at<:to%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
         bindReport(automationQuery, tenant, from, to, source);
         Object[] automation = row(automationQuery.getSingleResult());
+
+        Query activeProcessingQuery = entityManager.createNativeQuery("""
+                select f.active_processing_seconds/3600.0
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to
+                   and f.active_processing_seconds>0%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(activeProcessingQuery, tenant, from, to, source);
+        List<?> activeProcessingRows = activeProcessingQuery.getResultList();
+        List<Double> activeProcessingDurations = activeProcessingRows.stream()
+                .map(r -> ((Number) row(r)[0]).doubleValue())
+                .sorted().toList();
+
+        Query reviewTimingQuery = entityManager.createNativeQuery("""
+                select
+                  extract(epoch from (f.first_review_started_at-f.first_review_created_at))/3600.0 review_wait_hours,
+                  extract(epoch from (f.first_review_completed_at-f.first_review_started_at))/3600.0 review_handling_hours
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(reviewTimingQuery, tenant, from, to, source);
+        @SuppressWarnings("unchecked")
+        List<Object[]> reviewTimingRows = reviewTimingQuery.getResultList();
+        List<Double> reviewWaitDurations = reviewTimingRows.stream().map(r -> r[0])
+                .filter(java.util.Objects::nonNull).map(v -> ((Number) v).doubleValue())
+                .filter(v -> v >= 0).sorted().toList();
+        List<Double> reviewHandlingDurations = reviewTimingRows.stream().map(r -> r[1])
+                .filter(java.util.Objects::nonNull).map(v -> ((Number) v).doubleValue())
+                .filter(v -> v >= 0).sorted().toList();
 
         Query backlogQuery = entityManager.createNativeQuery("""
                 select count(*),
@@ -138,13 +162,28 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         bindCurrent(backlogQuery, tenant, now, source);
         Object[] backlog = row(backlogQuery.getSingleResult());
 
+        Query backlogAgingQuery = entityManager.createNativeQuery("""
+                select
+                  coalesce(sum(case when :now-p.created_at < interval '1 hour' then 1 else 0 end),0),
+                  coalesce(sum(case when :now-p.created_at >= interval '1 hour' and :now-p.created_at < interval '4 hours' then 1 else 0 end),0),
+                  coalesce(sum(case when :now-p.created_at >= interval '4 hours' and :now-p.created_at < interval '24 hours' then 1 else 0 end),0),
+                  coalesce(sum(case when :now-p.created_at >= interval '24 hours' and :now-p.created_at < interval '72 hours' then 1 else 0 end),0),
+                  coalesce(sum(case when :now-p.created_at >= interval '72 hours' then 1 else 0 end),0),
+                  coalesce(extract(epoch from (:now-min(p.created_at)))/3600.0,0)
+                  from document_packages p
+                 where p.tenant_id=:tenant and p.status not in ('COMPLETED','REJECTED','CANCELLED')%s%s
+                """.formatted(sourceClause, outcomeClause));
+        bindCurrent(backlogAgingQuery, tenant, now, source);
+        Object[] backlogAging = row(backlogAgingQuery.getSingleResult());
+
         Query channelsQuery = entityManager.createNativeQuery("""
                 select count(*),
                        coalesce(sum(case when package_type='MANUAL_UPLOAD' then 1 else 0 end),0),
                        coalesce(sum(case when package_type='API_SUBMISSION' then 1 else 0 end),0),
-                       coalesce(sum(case when package_type='FOLDER_INTAKE' then 1 else 0 end),0)
-                  from document_packages p where tenant_id=:tenant and p.created_at>=:from and p.created_at<:to%s%s
-                """.formatted(sourceClause, outcomeClause));
+                       coalesce(sum(case when package_type='FOLDER_INTAKE' then 1 else 0 end),0),
+                       coalesce(sum(case when package_type='SCANNER_INTAKE' then 1 else 0 end),0)
+                  from reporting_package_facts f where tenant_id=:tenant and f.received_at>=:from and f.received_at<:to%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
         bindReport(channelsQuery, tenant, from, to, source);
         Object[] channels = row(channelsQuery.getSingleResult());
 
@@ -161,11 +200,11 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 """).setParameter("tenant", tenant).setParameter("now", now).getSingleResult());
 
         Query exportQuery = entityManager.createNativeQuery("""
-                select count(distinct e.package_id), count(*)
-                  from package_export_records e
-                  join document_packages p on p.id=e.package_id and p.tenant_id=e.tenant_id
-                 where e.tenant_id=:tenant%s%s
-                """.formatted(sourceClause, outcomeClause));
+                select coalesce(sum(case when f.first_delivered_at is not null then 1 else 0 end),0),
+                       coalesce(sum(f.successful_export_cycles),0)
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
         bindTenantAndSource(exportQuery, tenant, source);
         Object[] export = row(exportQuery.getSingleResult());
 
@@ -188,25 +227,74 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
 
         Query trendQuery = entityManager.createNativeQuery("""
                 select day,
-                       (select count(*) from document_packages p where p.tenant_id=:tenant
-                         and p.created_at>=day and p.created_at<day+interval '1 day'%s%s),
-                       (select count(distinct e.package_id) from package_export_records e
-                         join document_packages p on p.id=e.package_id and p.tenant_id=e.tenant_id
-                        where e.tenant_id=:tenant and e.exported_at>=day and e.exported_at<day+interval '1 day'%s%s)
+                       (select count(*) from reporting_package_facts f where f.tenant_id=:tenant
+                         and f.received_at>=day and f.received_at<day+interval '1 day'%s%s),
+                       (select count(*) from reporting_package_facts f where f.tenant_id=:tenant
+                         and f.first_delivered_at>=day and f.first_delivered_at<day+interval '1 day'%s%s)
                   from generate_series(date_trunc('day',cast(:from as timestamptz)),
                        date_trunc('day',cast(:to as timestamptz)-interval '1 second'), interval '1 day') day
                  order by day
-                """.formatted(sourceClause, outcomeClause, sourceClause, outcomeClause));
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome),
+                        sourceClause("f", source), outcomeClause("f", outcome)));
         bindReport(trendQuery, tenant, from, to, source);
         @SuppressWarnings("unchecked")
         List<Object[]> trendRows = trendQuery.getResultList();
         List<OperationalReportSnapshot.TrendPoint> trend = trendRows.stream().map(r ->
                 new OperationalReportSnapshot.TrendPoint(instant(r[0]), number(r[1]), number(r[2]))).toList();
 
+        Query reprocessQuery = entityManager.createNativeQuery("""
+                select count(distinct ev.package_id)
+                  from reporting_package_events ev
+                  join reporting_package_facts f on f.tenant_id=ev.tenant_id and f.package_id=ev.package_id
+                 where ev.tenant_id=:tenant and ev.event_type='REPROCESS_REQUESTED'
+                   and ev.occurred_at>=:from and ev.occurred_at<:to%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(reprocessQuery, tenant, from, to, source);
+        long reprocessedPackages = number(reprocessQuery.getSingleResult());
+
         long batches = number(periodVolumes[0]);
         long completed = number(periodVolumes[3]);
         long delivered = number(periodVolumes[4]);
+        long periodIntakeDelivered = number(periodVolumes[5]);
         long reviewed = number(automation[1]);
+        long deliveredSample = number(automation[0]);
+        long straightThrough = Math.max(0, deliveredSample - reviewed);
+        long documents = number(periodVolumes[1]);
+        long pages = number(periodVolumes[2]);
+
+        Object[] reportingSettings = reportingSettings(tenant);
+        int deliveryTargetMinutes = ((Number) reportingSettings[0]).intValue();
+        double deliveryTargetPercent = ((Number) reportingSettings[1]).doubleValue();
+        double straightThroughTargetPercent = ((Number) reportingSettings[2]).doubleValue();
+        int reviewWaitTargetMinutes = ((Number) reportingSettings[3]).intValue();
+
+        Query deliverySlaQuery = entityManager.createNativeQuery("""
+                select count(*) filter (where f.first_delivered_at is not null and f.first_delivered_at<:to),
+                       count(*) filter (where f.first_delivered_at is not null and f.first_delivered_at<:to
+                           and extract(epoch from (f.first_delivered_at-f.received_at)) <= :deliveryTargetSeconds)
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(deliverySlaQuery, tenant, from, to, source);
+        deliverySlaQuery.setParameter("deliveryTargetSeconds", deliveryTargetMinutes * 60L);
+        Object[] deliverySla = row(deliverySlaQuery.getSingleResult());
+        long deliveryEligible = number(deliverySla[0]);
+        long deliveryWithinTarget = number(deliverySla[1]);
+
+        Query reviewSlaQuery = entityManager.createNativeQuery("""
+                select count(*) filter (where f.first_review_created_at is not null and f.first_review_started_at is not null),
+                       count(*) filter (where f.first_review_created_at is not null and f.first_review_started_at is not null
+                           and extract(epoch from (f.first_review_started_at-f.first_review_created_at)) <= :reviewTargetSeconds)
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to%s%s
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(reviewSlaQuery, tenant, from, to, source);
+        reviewSlaQuery.setParameter("reviewTargetSeconds", reviewWaitTargetMinutes * 60L);
+        Object[] reviewSla = row(reviewSlaQuery.getSingleResult());
+        long reviewEligible = number(reviewSla[0]);
+        long reviewWithinTarget = number(reviewSla[1]);
+
+        List<OperationalReportSnapshot.DimensionBreakdown> dimensions = dimensionBreakdowns(tenant, from, to, source, outcome);
 
         return new OperationalReportSnapshot(
                 now,
@@ -214,12 +302,13 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 new OperationalReportSnapshot.Executive(
                         batches, number(previousVolumes[0]), number(periodVolumes[1]), number(periodVolumes[2]),
                         completed, number(previousVolumes[3]), delivered, number(previousVolumes[4]),
-                        percent(completed, batches), percent(delivered, batches), percentile(durations, .50),
-                        percentile(durations, .95), percent(number(automation[0]) - reviewed, number(automation[0])),
+                        periodIntakeDelivered, number(previousVolumes[5]),
+                        percent(completed, batches), percent(delivered, batches), percent(periodIntakeDelivered, batches), percentile(durations, .50),
+                        percentile(durations, .95), percent(straightThrough, deliveredSample),
                         percent(reviewed, number(automation[0])), number(backlog[0]), number(backlog[1]),
                         ((Number) backlog[2]).doubleValue(), trend),
                 new OperationalReportSnapshot.Intake(
-                        number(channels[0]), number(channels[1]), number(channels[2]), number(channels[3]),
+                        number(channels[0]), number(channels[1]), number(channels[2]), number(channels[3]), number(channels[4]),
                         includeObservations(source, outcome) ? number(observations[0]) : 0,
                         includeObservations(source, outcome) ? number(observations[1]) : 0,
                         includeObservations(source, outcome) ? number(observations[2]) : 0),
@@ -229,25 +318,161 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 new OperationalReportSnapshot.Export(number(export[0]), number(export[1]), overview.needsApproval()),
                 new OperationalReportSnapshot.Retention(
                         number(retention[0]), number(retention[1]), number(retention[2]), number(retention[3]),
-                        number(retention[4]), number(retention[5]))
+                        number(retention[4]), number(retention[5])),
+                new OperationalReportSnapshot.Timing(
+                        percentile(durations, .50), percentile(durations, .95),
+                        percentile(activeProcessingDurations, .50), percentile(activeProcessingDurations, .95),
+                        percentile(reviewWaitDurations, .50), percentile(reviewHandlingDurations, .50),
+                        durations.size(), activeProcessingDurations.size(),
+                        reviewWaitDurations.size(), reviewHandlingDurations.size()),
+                new OperationalReportSnapshot.Backlog(
+                        number(backlogAging[0]), number(backlogAging[1]), number(backlogAging[2]),
+                        number(backlogAging[3]), number(backlogAging[4]), ((Number) backlogAging[5]).doubleValue()),
+                new OperationalReportSnapshot.Usage(
+                        batches, documents, pages, batches == 0 ? 0 : documents * 1.0 / batches,
+                        batches == 0 ? 0 : pages * 1.0 / batches, reviewed, straightThrough, reprocessedPackages),
+                new OperationalReportSnapshot.ServiceLevel(
+                        deliveryTargetMinutes, deliveryTargetPercent, percent(deliveryWithinTarget, deliveryEligible),
+                        deliveryEligible, Math.max(0, deliveryEligible - deliveryWithinTarget),
+                        straightThroughTargetPercent, percent(straightThrough, deliveredSample),
+                        reviewWaitTargetMinutes, percent(reviewWithinTarget, reviewEligible),
+                        reviewEligible, Math.max(0, reviewEligible - reviewWithinTarget)),
+                dimensions
         );
     }
 
+    private Object[] reportingSettings(UUID tenant) {
+        Query query = entityManager.createNativeQuery("""
+                select delivery_target_minutes, delivery_target_percent,
+                       straight_through_target_percent, review_wait_target_minutes
+                  from reporting_tenant_settings where tenant_id=:tenant
+                """).setParameter("tenant", tenant);
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = query.getResultList();
+        if (rows.isEmpty()) return new Object[]{240, 95.0, 90.0, 60};
+        return rows.get(0);
+    }
+
+    private static final String LEGACY_DIMENSION_VALUE = "Legacy / Unmapped";
+    private static final String UNKNOWN_DIMENSION_VALUE = "Not provided / Unknown";
+
+    private List<OperationalReportSnapshot.DimensionBreakdown> dimensionBreakdowns(
+            UUID tenant, Instant from, Instant to, String source, String outcome) {
+        Query definitionQuery = entityManager.createNativeQuery("""
+                select rd.dimension_key, rd.dimension_label, bid.allowed_values, rd.display_order
+                  from reporting_dimension_definitions rd
+                  join business_identifier_definitions bid
+                    on bid.tenant_id=rd.tenant_id and bid.id=rd.definition_id
+                 where rd.tenant_id=:tenant and rd.enabled_flag=true
+                 order by rd.display_order, rd.dimension_label
+                """).setParameter("tenant", tenant);
+        @SuppressWarnings("unchecked")
+        List<Object[]> definitionRows = definitionQuery.getResultList();
+        if (definitionRows.isEmpty()) return List.of();
+
+        Query query = entityManager.createNativeQuery("""
+                with normalized_dimension_rows as (
+                    select rd.dimension_key,
+                           rd.dimension_label,
+                           rd.display_order,
+                           case
+                             when d.dimension_value is null
+                               then cast(:unknownValue as varchar)
+                             when d.dimension_value = any(string_to_array(coalesce(bid.allowed_values,''), chr(10)))
+                               then d.dimension_value
+                             else cast(:legacyValue as varchar)
+                           end as normalized_value,
+                           f.received_at,
+                           f.first_delivered_at
+                      from reporting_dimension_definitions rd
+                      join business_identifier_definitions bid
+                        on bid.tenant_id=rd.tenant_id and bid.id=rd.definition_id
+                      join reporting_package_facts f
+                        on f.tenant_id=rd.tenant_id
+                      left join reporting_package_dimensions d
+                        on d.tenant_id=f.tenant_id and d.package_id=f.package_id
+                       and d.dimension_key=rd.dimension_key
+                     where rd.tenant_id=:tenant and rd.enabled_flag=true
+                       and f.received_at>=:from and f.received_at<:to%s%s
+                )
+                select dimension_key,
+                       max(dimension_label),
+                       normalized_value,
+                       count(*),
+                       coalesce(sum(case when first_delivered_at is not null and first_delivered_at<:to then 1 else 0 end),0),
+                       percentile_cont(0.5) within group (order by extract(epoch from (first_delivered_at-received_at))/3600.0)
+                           filter (where first_delivered_at is not null and first_delivered_at<:to),
+                       min(display_order)
+                  from normalized_dimension_rows
+                 group by dimension_key, normalized_value
+                 order by min(display_order), normalized_value
+                """.formatted(sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(query, tenant, from, to, source);
+        query.setParameter("legacyValue", LEGACY_DIMENSION_VALUE);
+        query.setParameter("unknownValue", UNKNOWN_DIMENSION_VALUE);
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = query.getResultList();
+
+        Map<String, Map<String, OperationalReportSnapshot.DimensionValue>> actual = new LinkedHashMap<>();
+        for (Object[] r : rows) {
+            String key = string(r[0]);
+            long packages = number(r[3]);
+            long delivered = number(r[4]);
+            double median = r[5] == null ? 0 : ((Number) r[5]).doubleValue();
+            actual.computeIfAbsent(key, ignored -> new LinkedHashMap<>()).put(string(r[2]),
+                    new OperationalReportSnapshot.DimensionValue(string(r[2]), packages, delivered,
+                            percent(delivered, packages), Math.round(median * 1000.0) / 1000.0));
+        }
+
+        List<OperationalReportSnapshot.DimensionBreakdown> result = new ArrayList<>();
+        for (Object[] definition : definitionRows) {
+            String key = string(definition[0]);
+            String label = string(definition[1]);
+            List<String> allowedValues = allowedDimensionValues(definition[2]);
+            Map<String, OperationalReportSnapshot.DimensionValue> observed = actual.getOrDefault(key, Map.of());
+            boolean hasLegacy = observed.containsKey(LEGACY_DIMENSION_VALUE);
+            boolean hasUnknown = observed.containsKey(UNKNOWN_DIMENSION_VALUE);
+            int specialRows = (hasLegacy ? 1 : 0) + (hasUnknown ? 1 : 0);
+            int allowedLimit = Math.max(0, 12 - specialRows);
+            List<OperationalReportSnapshot.DimensionValue> values = new ArrayList<>();
+            for (String allowed : allowedValues) {
+                if (values.size() >= allowedLimit) break;
+                values.add(observed.getOrDefault(allowed,
+                        new OperationalReportSnapshot.DimensionValue(allowed, 0, 0, 0, 0)));
+            }
+            if (hasLegacy) values.add(observed.get(LEGACY_DIMENSION_VALUE));
+            if (hasUnknown) values.add(observed.get(UNKNOWN_DIMENSION_VALUE));
+            result.add(new OperationalReportSnapshot.DimensionBreakdown(key, label, values));
+        }
+        return result;
+    }
+
+    private static List<String> allowedDimensionValues(Object encodedAllowedValues) {
+        if (encodedAllowedValues == null) return List.of();
+        return java.util.Arrays.stream(encodedAllowedValues.toString().split("\n", -1))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
     private Object[] periodVolumes(UUID tenant, Instant from, Instant to, String source, String outcome) {
-        String documentFilter = sourceClause("dp", source) + outcomeClause("dp", outcome);
-        String exportFilter = sourceClause("ep", source) + outcomeClause("ep", outcome);
-        String packageFilter = sourceClause("p", source) + outcomeClause("p", outcome);
+        String factSource = sourceClause("f", source);
+        String factOutcome = outcomeClause("f", outcome);
+        String deliveredSource = sourceClause("df", source);
+        String deliveredOutcome = outcomeClause("df", outcome);
         Query query = entityManager.createNativeQuery("""
                 select count(*),
-                       (select count(*) from documents d join document_packages dp on dp.id=d.package_id and dp.tenant_id=d.tenant_id
-                         where d.tenant_id=:tenant and dp.created_at>=:from and dp.created_at<:to%s),
-                       (select coalesce(sum(d.page_count),0) from documents d join document_packages dp on dp.id=d.package_id and dp.tenant_id=d.tenant_id
-                         where d.tenant_id=:tenant and dp.created_at>=:from and dp.created_at<:to%s),
-                       coalesce(sum(case when p.status='COMPLETED' then 1 else 0 end),0),
-                       (select count(distinct e.package_id) from package_export_records e join document_packages ep on ep.id=e.package_id and ep.tenant_id=e.tenant_id
-                         where e.tenant_id=:tenant and e.exported_at>=:from and e.exported_at<:to%s)
-                  from document_packages p where p.tenant_id=:tenant and p.created_at>=:from and p.created_at<:to%s
-                """.formatted(documentFilter, documentFilter, exportFilter, packageFilter));
+                       coalesce(sum(f.document_count),0),
+                       coalesce(sum(f.page_count),0),
+                       coalesce(sum(case when f.status='COMPLETED' then 1 else 0 end),0),
+                       (select count(*) from reporting_package_facts df
+                         where df.tenant_id=:tenant and df.first_delivered_at>=:from and df.first_delivered_at<:to%s%s),
+                       coalesce(sum(case when f.first_delivered_at is not null and f.first_delivered_at<:to then 1 else 0 end),0)
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to%s%s
+                """.formatted(deliveredSource, deliveredOutcome, factSource, factOutcome));
         query.setParameter("tenant", tenant).setParameter("from", from).setParameter("to", to);
         if (!"ALL".equals(source)) query.setParameter("source", source);
         return row(query.getSingleResult());
@@ -295,7 +520,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     private static double percentile(List<Double> values, double percentile) {
         if (values.isEmpty()) return 0;
         int index = (int) Math.ceil(percentile * values.size()) - 1;
-        return Math.round(values.get(Math.max(0, Math.min(index, values.size() - 1))) * 10.0) / 10.0;
+        return Math.round(values.get(Math.max(0, Math.min(index, values.size() - 1))) * 1000.0) / 1000.0;
     }
 
     private DashboardOverview loadOverview(UUID tenant, boolean dashboardVisibleOnly) {

@@ -136,6 +136,35 @@ public final class Document {
     }
 
     /**
+     * Resets work that was interrupted by process/node loss so it can be replayed from the retained original.
+     * Only transient in-flight states are eligible; completed, failed, or review-held documents are never
+     * silently rewound by HA recovery.
+     */
+    public void recoverInterruptedProcessing() {
+        if (status != DocumentStatus.EXTRACTING
+                && status != DocumentStatus.DETECTING
+                && status != DocumentStatus.REDACTING) {
+            throw new IllegalStateException("Cannot recover interrupted processing in status: " + status);
+        }
+        pages.clear();
+        status = DocumentStatus.UPLOADED;
+        updatedAt = Instant.now();
+    }
+
+    /**
+     * Replays a document whose status reached PROCESSED but whose required redacted output did not
+     * become durably available before the process died. Callers must verify that output is missing.
+     */
+    public void recoverMissingProcessedOutput() {
+        if (status != DocumentStatus.PROCESSED) {
+            throw new IllegalStateException("Only a processed document with missing output can be recovered");
+        }
+        pages.clear();
+        status = DocumentStatus.UPLOADED;
+        updatedAt = Instant.now();
+    }
+
+    /**
      * Prepares a failed document for full-document manual redaction without discarding
      * the extraction/OCR page metadata needed for page-safe rendering and verification.
      */

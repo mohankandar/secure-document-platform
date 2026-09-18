@@ -5,7 +5,6 @@ import com.securedoc.platform.application.port.out.OcrPort;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
 import com.securedoc.platform.infrastructure.ocr.OcrProcessingException;
 import com.securedoc.platform.infrastructure.ocr.TesseractOcrProperties;
-import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -13,10 +12,10 @@ import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,41 +56,37 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
             return nativeExtractor.extract(content, mimeType);
         }
 
-        try {
-            byte[] pdfBytes = content.readAllBytes();
-            TextExtractionOutput nativeOutput = nativeExtractor.extract(
-                    new ByteArrayInputStream(pdfBytes), mimeType);
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(content, "lexavault-hybrid-text-")) {
+            PDDocument document = staged.document();
+            TextExtractionOutput nativeOutput = nativeExtractor.extractDocument(document);
+            PDFRenderer renderer = new PDFRenderer(document);
+            List<PageText> normalizedPages = new ArrayList<>(document.getNumberOfPages());
+            boolean hasEmbeddedText = false;
+            boolean usedOcr = false;
+            long totalChars = 0;
 
-            try (PDDocument document = Loader.loadPDF(pdfBytes)) {
-                PDFRenderer renderer = new PDFRenderer(document);
-                List<PageText> normalizedPages = new ArrayList<>(document.getNumberOfPages());
-                boolean hasEmbeddedText = false;
-                boolean usedOcr = false;
-                long totalChars = 0;
+            for (int index = 0; index < document.getNumberOfPages(); index++) {
+                int pageNumber = index + 1;
+                PageText nativePage = nativePage(nativeOutput.pages(), pageNumber);
 
-                for (int index = 0; index < document.getNumberOfPages(); index++) {
-                    int pageNumber = index + 1;
-                    PageText nativePage = nativePage(nativeOutput.pages(), pageNumber);
-
-                    if (nativePage != null && !nativePage.text().isBlank()) {
-                        hasEmbeddedText = true;
-                    }
-
-                    if (hasMeaningfulNativeText(nativePage)
-                            && !shouldOcrSparseNativePage(renderer, index, nativePage)) {
-                        normalizedPages.add(nativePage);
-                        totalChars += nativePage.text().length();
-                        continue;
-                    }
-
-                    PageText ocrPage = recognizePage(document.getPage(index), renderer, index, pageNumber);
-                    normalizedPages.add(ocrPage);
-                    totalChars += ocrPage.text().length();
-                    usedOcr = true;
+                if (nativePage != null && !nativePage.text().isBlank()) {
+                    hasEmbeddedText = true;
                 }
 
-                return new TextExtractionOutput(normalizedPages, totalChars, hasEmbeddedText, usedOcr);
+                if (hasMeaningfulNativeText(nativePage)
+                        && !shouldOcrSparseNativePage(renderer, index, nativePage)) {
+                    normalizedPages.add(nativePage);
+                    totalChars += nativePage.text().length();
+                    continue;
+                }
+
+                PageText ocrPage = recognizePage(document.getPage(index), renderer, index, pageNumber);
+                normalizedPages.add(ocrPage);
+                totalChars += ocrPage.text().length();
+                usedOcr = true;
             }
+
+            return new TextExtractionOutput(normalizedPages, totalChars, hasEmbeddedText, usedOcr);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to normalize PDF text", e);
         }
@@ -101,39 +96,43 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                                    int pageIndex, int pageNumber) throws IOException {
         int dpi = Math.max(72, properties.getRenderDpi());
         BufferedImage image = renderer.renderImageWithDPI(pageIndex, dpi, ImageType.RGB);
+        try {
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            if (!ImageIO.write(image, "png", png)) {
+                throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "Unable to render PDF page for OCR");
+            }
 
-        ByteArrayOutputStream png = new ByteArrayOutputStream();
-        if (!ImageIO.write(image, "png", png)) {
-            throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "Unable to render PDF page for OCR");
+            OcrPort.OcrPageOutput output = ocrPort.recognize(new OcrPort.OcrPageInput(
+                    pageNumber, png.toByteArray(), "image/png", image.getWidth(), image.getHeight()));
+
+            boolean visuallyBlank = isVisuallyBlank(image);
+            if (output.text().isBlank() && !visuallyBlank) {
+                throw new OcrProcessingException(
+                        TechnicalFailureCode.OCR_PROCESS_FAILED, false,
+                        "OCR produced no readable text for a non-blank page");
+            }
+            if (!output.text().isBlank()
+                    && output.confidence() < clamp01(properties.getMinimumPageConfidence())) {
+                throw new OcrProcessingException(
+                        TechnicalFailureCode.OCR_PROCESS_FAILED, false,
+                        "OCR confidence is below the configured minimum");
+            }
+
+            PDRectangle mediaBox = page.getMediaBox();
+            int pageWidth = Math.round(mediaBox.getWidth());
+            int pageHeight = Math.round(mediaBox.getHeight());
+            List<TextSpan> spans = output.spans().stream()
+                    .map(span -> new TextSpan(
+                            span.startOffset(), span.endOffset(),
+                            span.left(), span.top(), span.width(), span.height(), span.confidence()))
+                    .toList();
+
+            var visualRegions = SolidDarkRectangleDetector.detect(image);
+            return new PageText(pageNumber, pageWidth, pageHeight,
+                    output.text(), spans, visualRegions, ExtractionSource.OCR, output.confidence());
+        } finally {
+            image.flush();
         }
-
-        OcrPort.OcrPageOutput output = ocrPort.recognize(new OcrPort.OcrPageInput(
-                pageNumber, png.toByteArray(), "image/png", image.getWidth(), image.getHeight()));
-
-        boolean visuallyBlank = isVisuallyBlank(image);
-        if (output.text().isBlank() && !visuallyBlank) {
-            throw new OcrProcessingException(
-                    TechnicalFailureCode.OCR_PROCESS_FAILED, false,
-                    "OCR produced no readable text for a non-blank page");
-        }
-        if (!output.text().isBlank()
-                && output.confidence() < clamp01(properties.getMinimumPageConfidence())) {
-            throw new OcrProcessingException(
-                    TechnicalFailureCode.OCR_PROCESS_FAILED, false,
-                    "OCR confidence is below the configured minimum");
-        }
-
-        PDRectangle mediaBox = page.getMediaBox();
-        int pageWidth = Math.round(mediaBox.getWidth());
-        int pageHeight = Math.round(mediaBox.getHeight());
-        List<TextSpan> spans = output.spans().stream()
-                .map(span -> new TextSpan(
-                        span.startOffset(), span.endOffset(),
-                        span.left(), span.top(), span.width(), span.height(), span.confidence()))
-                .toList();
-
-        return new PageText(pageNumber, pageWidth, pageHeight,
-                output.text(), spans, ExtractionSource.OCR, output.confidence());
     }
 
     private boolean hasMeaningfulNativeText(PageText page) {
@@ -165,8 +164,12 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
 
         int inspectionDpi = Math.max(36, properties.getSparseNativeImageCheckDpi());
         BufferedImage preview = renderer.renderImageWithDPI(pageIndex, inspectionDpi, ImageType.GRAY);
-        double darkRatio = darkPixelRatio(preview);
-        return darkRatio >= clamp01(properties.getSparseNativeImageDarkPixelRatio());
+        try {
+            double darkRatio = darkPixelRatio(preview);
+            return darkRatio >= clamp01(properties.getSparseNativeImageDarkPixelRatio());
+        } finally {
+            preview.flush();
+        }
     }
 
     /**

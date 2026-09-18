@@ -141,8 +141,18 @@ public final class IntegrationConnectionService {
                         "Authenticated client is not bound to an enabled push-ingestion source"));
     }
 
+    public IntegrationConnection resolveEnabledScannerSource(TenantId tenantId, String clientPrincipal) {
+        if (clientPrincipal == null || clientPrincipal.isBlank()) {
+            throw new ValidationException("Authenticated scanner client principal is required");
+        }
+        return repository.findEnabledScannerSourceByTenantIdAndClientPrincipal(tenantId, clientPrincipal.trim())
+                .orElseThrow(() -> new com.securedoc.platform.application.exception.AccessDeniedException(
+                        "Authenticated client is not bound to an enabled scanner-ingestion source"));
+    }
+
     private void ensureUniqueClientPrincipal(TenantId tenantId, ConnectionInput input, IntegrationConnectionId excludeId) {
-        if (input.providerType() != IntegrationProviderType.PUSH_API || input.clientPrincipal() == null || input.clientPrincipal().isBlank()) return;
+        if ((input.providerType() != IntegrationProviderType.PUSH_API && input.providerType() != IntegrationProviderType.SCANNER)
+                || input.clientPrincipal() == null || input.clientPrincipal().isBlank()) return;
         if (repository.existsByTenantIdAndClientPrincipal(tenantId, input.clientPrincipal().trim(), excludeId)) {
             throw new ValidationException("Authenticated client principal is already bound to another tenant integration source");
         }

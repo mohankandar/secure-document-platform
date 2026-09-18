@@ -16,6 +16,7 @@
         <module>securedoc-domain</module>
         <module>securedoc-ai</module>
         <module>securedoc-agent</module>
+        <module>securedoc-scan-bridge</module>
         <module>securedoc-redaction</module>
         <module>securedoc-application</module>
         <module>securedoc-infrastructure</module>

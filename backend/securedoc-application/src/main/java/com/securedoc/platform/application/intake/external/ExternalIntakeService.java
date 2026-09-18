@@ -9,6 +9,7 @@ import com.securedoc.platform.application.port.out.*;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
+import com.securedoc.platform.domain.document.PackageMetadata;
 import com.securedoc.platform.domain.document.PackageType;
 import com.securedoc.platform.domain.identity.*;
 import com.securedoc.platform.domain.integration.IntegrationConnection;
@@ -88,6 +89,105 @@ public final class ExternalIntakeService {
         return createMachineIntake(input, source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
     }
 
+    public ExternalIntakeSnapshot createScannerIntake(PushIntakeCreateInput input, AuthenticatedPrincipal principal,
+                                                       CorrelationId correlationId) {
+        Objects.requireNonNull(principal, "Authenticated scanner principal is required");
+        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
+                principal.tenantId(), principal.username());
+        if (input == null || input.documents().size() != 1) {
+            throw new ValidationException("Scanner intake requires exactly one consolidated PDF");
+        }
+        Map<String, String> metadata = new LinkedHashMap<>(input.metadata());
+        PushIntakeCreateInput.ManifestDocumentInput scannerDocument = input.documents().get(0);
+        String sourceSubmissionId = normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId");
+        String sourceDocumentId = normalizeRequired(scannerDocument.externalSourceDocumentId(), "externalSourceDocumentId");
+        final String sourceSha256;
+        try {
+            sourceSha256 = ExternalManifestDocument.normalizeSha256(scannerDocument.sha256(), true);
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException(ex.getMessage());
+        }
+        // These values already exist as authoritative source identity on the scanner intake request.
+        // Persist server-derived copies for reporting instead of trusting duplicate metadata supplied by a client.
+        metadata.put("intakeChannel", "SCANNER");
+        metadata.put("sourceSubmissionId", sourceSubmissionId);
+        metadata.put("sourceDocumentId", sourceDocumentId);
+        metadata.put("sourceSha256", sourceSha256);
+        validateScannerProvenance(metadata);
+        PushIntakeCreateInput scannerInput = new PushIntakeCreateInput(
+                input.externalSourcePackageId(), input.sourceRevision(), input.businessIdentifiers(), metadata,
+                input.documents(), input.retry());
+        return createMachineIntake(scannerInput, source, ExternalIntakeChannel.SCANNER, principal, correlationId);
+    }
+
+    /**
+     * Scanner provenance is reporting/audit data, not business identity. Require a stable minimum
+     * contract so downstream reporting never has to infer scanner source from filenames or logs.
+     */
+    private void validateScannerProvenance(Map<String, String> metadata) {
+        String captureMode = requiredMetadata(metadata, "scannerCaptureMode");
+        if (!Set.of("SIMULATOR", "PHYSICAL").contains(captureMode)) {
+            throw new ValidationException("scannerCaptureMode must be SIMULATOR or PHYSICAL");
+        }
+        requiredMetadata(metadata, "bridgeId");
+        requiredMetadata(metadata, "siteId");
+        requiredMetadata(metadata, "scannerId");
+        parseUuidMetadata(metadata, "scanSessionId");
+        parseUuidMetadata(metadata, "sourceSubmissionId");
+        parseUuidMetadata(metadata, "sourceDocumentId");
+        String sourceSha256 = requiredMetadata(metadata, "sourceSha256");
+        String size = requiredMetadata(metadata, "sourceFileSizeBytes");
+        try {
+            if (Long.parseLong(size) < 1) throw new NumberFormatException();
+        } catch (NumberFormatException ex) {
+            throw new ValidationException("sourceFileSizeBytes must be a positive integer");
+        }
+        Instant started;
+        Instant completed;
+        Instant submitted;
+        try {
+            started = Instant.parse(requiredMetadata(metadata, "scanStartedAt"));
+            completed = Instant.parse(requiredMetadata(metadata, "scanCompletedAt"));
+            submitted = Instant.parse(requiredMetadata(metadata, "scannerSubmittedAt"));
+        } catch (RuntimeException ex) {
+            throw new ValidationException("Scanner timestamps must be ISO-8601 instants");
+        }
+        if (completed.isBefore(started)) {
+            throw new ValidationException("scanCompletedAt cannot be before scanStartedAt");
+        }
+        if (submitted.isBefore(completed)) {
+            throw new ValidationException("scannerSubmittedAt cannot be before scanCompletedAt");
+        }
+
+        String reportedPages = metadata.get("scannerReportedPageCount");
+        if (reportedPages != null && !reportedPages.isBlank()) {
+            try {
+                int pages = Integer.parseInt(reportedPages.trim());
+                if (pages < 1 || pages > IntegrationConnection.MAX_PDF_PAGES) throw new NumberFormatException();
+            } catch (NumberFormatException ex) {
+                throw new ValidationException("scannerReportedPageCount must be between 1 and " + IntegrationConnection.MAX_PDF_PAGES);
+            }
+        }
+
+        try { ExternalManifestDocument.normalizeSha256(sourceSha256, true); }
+        catch (IllegalArgumentException ex) { throw new ValidationException(ex.getMessage()); }
+    }
+
+    private String requiredMetadata(Map<String, String> metadata, String key) {
+        String value = metadata.get(key);
+        if (value == null || value.isBlank()) throw new ValidationException("Scanner metadata is missing " + key);
+        return value.trim();
+    }
+
+    private String parseUuidMetadata(Map<String, String> metadata, String key) {
+        String value = requiredMetadata(metadata, key);
+        try {
+            return UUID.fromString(value).toString();
+        } catch (IllegalArgumentException ex) {
+            throw new ValidationException(key + " must be a UUID");
+        }
+    }
+
     public ExternalIntakeSnapshot createPollingIntake(PushIntakeCreateInput input, IntegrationConnection source,
                                                       AuthenticatedPrincipal principal, CorrelationId correlationId) {
         if (source == null || !source.enabled() || !source.pollingSource() || !source.tenantId().equals(principal.tenantId())) {
@@ -133,7 +233,9 @@ public final class ExternalIntakeService {
         String sourcePackageId = normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId");
         String sourceRevision = normalizeRequired(input.sourceRevision(), "sourceRevision");
         String intakeFingerprint = sha256Hex(source.id() + "|" + sourcePackageId + "|" + sourceRevision + "|attempt=" + attemptNumber);
-        var createResult = createPackageUseCase.execute(new CreatePackageCommand(PackageType.API_SUBMISSION,
+        PackageType packageType = channel == ExternalIntakeChannel.SCANNER
+                ? PackageType.SCANNER_INTAKE : PackageType.API_SUBMISSION;
+        var createResult = createPackageUseCase.execute(new CreatePackageCommand(packageType,
                 input.businessIdentifiers(), input.metadata(), intakeFingerprint, sourcePackageId, correlationId), principal);
 
         Instant createdAt = Instant.now(clock);
@@ -162,6 +264,17 @@ public final class ExternalIntakeService {
                 principal.tenantId(), principal.username());
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
                 source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
+    }
+
+    public ExternalDocumentReceipt receiveScannerDocument(PackageId packageId, String externalSourceDocumentId,
+                                                           String idempotencyKey, String sourceSha256,
+                                                           String mimeType, UploadContent content,
+                                                           AuthenticatedPrincipal principal, CorrelationId correlationId) {
+        Objects.requireNonNull(principal);
+        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
+                principal.tenantId(), principal.username());
+        return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
+                source, ExternalIntakeChannel.SCANNER, principal, correlationId);
     }
 
     public ExternalDocumentReceipt receivePollingDocument(PackageId packageId, String externalSourceDocumentId,
@@ -216,6 +329,9 @@ public final class ExternalIntakeService {
         if (content.contentLength() < 1 || content.contentLength() > source.maxPdfSizeBytes()) {
             throw new ValidationException("PDF size exceeds the configured source limit");
         }
+        if (channel == ExternalIntakeChannel.SCANNER) {
+            validateScannerDeclaredSize(packageId, principal.tenantId(), content.contentLength());
+        }
         if (!"application/pdf".equalsIgnoreCase(normalizeRequired(mimeType, "mimeType"))) {
             throw new ValidationException("Machine intake supports application/pdf only");
         }
@@ -235,9 +351,10 @@ public final class ExternalIntakeService {
             throw new IntakeConflictException("CONTENT_CHECKSUM_MISMATCH",
                     "Uploaded PDF content does not match X-Content-SHA256");
         }
+        final int pageCount;
         try (InputStream pdfStream = content.openStream()) {
-            int pages = pdfValidationPort.inspect(pdfStream).pageCount();
-            if (pages > source.maxPdfPages()) {
+            pageCount = pdfValidationPort.inspect(pdfStream).pageCount();
+            if (pageCount > source.maxPdfPages()) {
                 throw new ValidationException("PDF page count exceeds the configured source limit");
             }
         } catch (IOException e) {
@@ -255,6 +372,10 @@ public final class ExternalIntakeService {
             throw new IntakeConflictException("INVALID_INTAKE_STATE", e.getMessage());
         }
         externalIntakeRepository.save(intake);
+        if (channel == ExternalIntakeChannel.SCANNER) {
+            recordScannerReceiptProvenance(packageId, principal.tenantId(), content.contentLength(),
+                    pageCount, actual.value());
+        }
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.EXTERNAL_DOCUMENT_RECEIVED,
                 "Document", uploadResult.documentId().toString(), correlationId,
                 "External document durably received: sourceConnection=" + source.id() + ",received="
@@ -271,10 +392,47 @@ public final class ExternalIntakeService {
         return receipt(intake, intake.document(normalizedExternalId), false);
     }
 
+    private void validateScannerDeclaredSize(PackageId packageId, TenantId tenantId, long actualSizeBytes) {
+        var documentPackage = packageRepository.findByIdAndTenantId(packageId, tenantId)
+                .orElseThrow(() -> new NotFoundException("DocumentPackage", packageId.toString()));
+        String declared = documentPackage.metadata().get("sourceFileSizeBytes")
+                .orElseThrow(() -> new ValidationException("Scanner metadata is missing sourceFileSizeBytes"));
+        final long declaredSize;
+        try {
+            declaredSize = Long.parseLong(declared);
+        } catch (NumberFormatException ex) {
+            throw new ValidationException("sourceFileSizeBytes must be a positive integer");
+        }
+        if (declaredSize != actualSizeBytes) {
+            throw new IntakeConflictException("SCANNER_SOURCE_SIZE_MISMATCH",
+                    "Scanner PDF size does not match the size declared when the intake was created");
+        }
+    }
+
+    private void recordScannerReceiptProvenance(PackageId packageId, TenantId tenantId, long actualSizeBytes,
+                                                 int pageCount, String actualSha256) {
+        var documentPackage = packageRepository.findByIdAndTenantId(packageId, tenantId)
+                .orElseThrow(() -> new NotFoundException("DocumentPackage", packageId.toString()));
+        PackageMetadata verified = documentPackage.metadata()
+                .with("sourceFileSizeBytes", Long.toString(actualSizeBytes))
+                .with("sourcePageCount", Integer.toString(pageCount))
+                .with("sourceSha256", actualSha256);
+        documentPackage.updateMetadata(verified);
+        packageRepository.save(documentPackage);
+    }
+
     public ExternalIntakeSnapshot status(PackageId packageId, AuthenticatedPrincipal principal, CorrelationId correlationId) {
         IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
                 principal.tenantId(), principal.username());
         ExternalIntake intake = authorizedIntake(principal, source, packageId, ExternalIntakeChannel.PUSH_API, true);
+        expireForRequestIfDue(intake, principal.actorId(), correlationId);
+        return snapshot(intake);
+    }
+
+    public ExternalIntakeSnapshot scannerStatus(PackageId packageId, AuthenticatedPrincipal principal, CorrelationId correlationId) {
+        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
+                principal.tenantId(), principal.username());
+        ExternalIntake intake = authorizedIntake(principal, source, packageId, ExternalIntakeChannel.SCANNER, true);
         expireForRequestIfDue(intake, principal.actorId(), correlationId);
         return snapshot(intake);
     }

@@ -4,11 +4,12 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ReprocessPackageCommand;
 import com.securedoc.platform.application.lifecycle.result.ReprocessPackageResult;
+import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.port.in.ReprocessPackageUseCase;
-import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.FindingRepository;
+import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.service.AuditService;
@@ -31,27 +32,31 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
     private final FindingRepository findingRepository;
     private final ArtifactRepository artifactRepository;
     private final PackageLifecycleService lifecycleService;
-    private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
+    private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final AuditService auditService;
+    private final TenantLicensingService tenantLicensingService;
 
     public ReprocessPackageService(PackageRepository packageRepository,
                                    DocumentRepository documentRepository,
                                    FindingRepository findingRepository,
                                    ArtifactRepository artifactRepository,
                                    PackageLifecycleService lifecycleService,
-                                   TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
-                                   AuditService auditService) {
+                                   PackageProcessingDispatcher packageProcessingDispatcher,
+                                   AuditService auditService,
+                                   TenantLicensingService tenantLicensingService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
-        this.triggerPackageProcessingUseCase = Objects.requireNonNull(triggerPackageProcessingUseCase);
+        this.packageProcessingDispatcher = Objects.requireNonNull(packageProcessingDispatcher);
         this.auditService = Objects.requireNonNull(auditService);
+        this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
     }
 
     @Override
     public ReprocessPackageResult execute(ReprocessPackageCommand command) {
+        tenantLicensingService.requireDocumentProcessing(command.tenantId(), command.actorId(), command.correlationId());
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (pkg.status() != PackageStatus.COMPLETED) {
@@ -91,10 +96,10 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
                 "DocumentPackage", command.packageId().toString(), command.correlationId(),
                 "Package reprocessing requested: nextExportCycle=" + nextCycle);
 
-        triggerPackageProcessingUseCase.execute(TriggerPackageProcessingCommand.of(
+        // Reprocessing uses the same asynchronous post-commit processing contract as normal intake.
+        // The request returns promptly with the durable SUBMITTED state; the worker moves it to PROCESSING.
+        packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
                 command.packageId(), command.tenantId(), command.actorId(), command.correlationId()));
-        DocumentPackage refreshed = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
-                .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
-        return new ReprocessPackageResult(command.packageId(), refreshed.status(), nextCycle);
+        return new ReprocessPackageResult(command.packageId(), pkg.status(), nextCycle);
     }
 }

@@ -1,0 +1,68 @@
+.scan-intake-page { width: min(1180px, 100%); margin: 0 auto; }
+.scan-intake-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.scan-intake-header h1 { margin: 0.15rem 0 0.25rem; }
+.scan-intake-header p, .scan-intake-help { color: #667085; font-size: 0.86rem; }
+.scan-intake-eyebrow { color: #175cd3; font-size: 0.72rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+.scan-bridge-state { padding: 0.35rem 0.65rem; border-radius: 999px; font-size: 0.74rem; font-weight: 700; white-space: nowrap; }
+.scan-bridge-state.is-online { background: #ecfdf3; color: #027a48; }
+.scan-bridge-state.is-offline { background: #fef3f2; color: #b42318; }
+.scan-intake-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr); gap: 1rem; align-items: start; }
+.scan-intake-card { margin: 0; }
+.scan-intake-card h2, .scan-boundary-card h2 { margin-bottom: 0.25rem; font-size: 1.05rem; color: #101828; }
+.scan-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; margin-top: 1rem; }
+.scan-device-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; margin: 1rem 0; }
+.scan-device-summary > div, .scan-technical-grid > div { padding: 0.65rem; border: 1px solid #eaecf0; border-radius: 8px; background: #f8fafc; min-width: 0; }
+.scan-device-summary span, .scan-technical-grid span { display: block; margin-bottom: 0.15rem; color: #667085; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.scan-device-summary strong { display: block; overflow-wrap: anywhere; font-size: 0.78rem; color: #344054; }
+.scan-action-panel, .scan-waiting-panel, .scan-ready-panel { margin-top: 1rem; padding: 1rem; border-radius: 10px; }
+.scan-action-panel { border: 1px solid #d0d5dd; background: #fff; }
+.scan-action-panel p { margin-bottom: 0.75rem; color: #667085; font-size: 0.82rem; }
+.scan-waiting-panel { border: 1px solid #b2ddff; background: #eff8ff; text-align: center; }
+.scan-waiting-panel h3 { margin: 0.25rem 0; color: #175cd3; }
+.scan-waiting-panel p { color: #475467; font-size: 0.82rem; overflow-wrap: anywhere; }
+.scan-waiting-panel.is-disconnected { border-color: #fecdca; background: #fef3f2; }
+.scan-waiting-panel.is-disconnected h3 { color: #b42318; }
+.scan-pulse, .scan-disconnected-indicator { width: 14px; height: 14px; margin: 0 auto 0.4rem; border-radius: 999px; }
+.scan-pulse { background: #2e90fa; box-shadow: 0 0 0 6px rgba(46, 144, 250, 0.12); }
+.scan-disconnected-indicator { background: #f04438; box-shadow: 0 0 0 6px rgba(240, 68, 56, 0.12); }
+.scan-session-reference { margin: 0.7rem 0; color: #667085; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem; overflow-wrap: anywhere; }
+.scan-ready-panel { border: 1px solid #abefc6; background: #ecfdf3; }
+.scan-ready-panel h3 { margin: 0.4rem 0 0.75rem; color: #05603a; }
+.scan-ready-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 999px; background: #d1fadf; color: #027a48; font-size: 0.7rem; font-weight: 800; }
+.scan-technical-grid { display: grid; gap: 0.5rem; }
+.scan-technical-grid code { display: block; color: #344054; font-size: 0.7rem; white-space: normal; overflow-wrap: anywhere; }
+.scan-ready-panel .scan-intake-help { margin: 0.8rem 0; }
+.scan-boundary-card { margin-top: 1rem; }
+.scan-boundary-card > p { color: #667085; font-size: 0.82rem; }
+.scan-prohibited-list { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
+.scan-prohibited-list span { padding: 0.3rem 0.55rem; border-radius: 999px; background: #f2f4f7; color: #475467; font-size: 0.68rem; font-weight: 650; }
+
+@media (max-width: 900px) {
+  .scan-intake-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .scan-intake-header { flex-direction: column; }
+  .scan-field-grid, .scan-device-summary { grid-template-columns: 1fr; }
+}
+
+.scan-notice { margin-bottom: 0.8rem; padding: 0.7rem 0.8rem; border: 1px solid #b2ddff; border-radius: 8px; background: #eff8ff; color: #175cd3; font-size: 0.82rem; }
+.scan-queue-summary { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; color: #475467; font-size: 0.78rem; }
+.scan-queue-summary span { padding: 0.3rem 0.55rem; border-radius: 999px; background: #f2f4f7; }
+.scan-queue-summary .is-attention { background: #fffaeb; color: #b54708; }
+.scan-connected-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.9rem 0; color: #344054; }
+.scan-connected-dot, .scan-offline-dot { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+.scan-connected-dot { background: #12b76a; }
+.scan-offline-dot { background: #f04438; }
+.scan-device-details, .scan-technical-details { margin: 0.75rem 0; }
+.scan-device-details summary, .scan-technical-details summary { cursor: pointer; color: #475467; font-size: 0.78rem; font-weight: 650; }
+.scan-hidden-file { display: none; }
+.scan-cancel-button { margin-left: 0.45rem; }
+.scan-primary-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin-top: 0.85rem; }
+.scan-queued-panel, .scan-attention-panel { margin-top: 1rem; padding: 1rem; border-radius: 10px; }
+.scan-queued-panel { border: 1px solid #b2ddff; background: #eff8ff; }
+.scan-queued-panel h3 { margin: 0.45rem 0; color: #175cd3; }
+.scan-queued-panel p, .scan-attention-panel p { color: #475467; font-size: 0.82rem; }
+.scan-attention-panel { border: 1px solid #fedf89; background: #fffaeb; }
+.scan-attention-panel h3 { margin: 0.45rem 0; color: #93370d; }
+.scan-attention-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 999px; background: #fef0c7; color: #b54708; font-size: 0.7rem; font-weight: 800; }
+.scan-safe-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

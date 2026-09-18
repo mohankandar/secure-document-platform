@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="028-01-processing-storage-providers" author="lexavault">
+        <createSequence sequenceName="processing_storage_configuration_version_seq" startValue="1" incrementBy="1"/>
+        <createTable tableName="processing_storage_providers">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false" primaryKeyName="pk_processing_storage_providers"/></column>
+            <column name="name" type="VARCHAR(120)"><constraints nullable="false"/></column>
+            <column name="provider_type" type="VARCHAR(40)"><constraints nullable="false"/></column>
+            <column name="root_path" type="VARCHAR(2048)"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="configuration_version" type="INT"><constraints nullable="false"/></column>
+            <column name="created_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="processing_storage_providers" indexName="idx_processing_storage_provider_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="028-02-processing-storage-assignments" author="lexavault">
+        <createTable tableName="processing_storage_assignments">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false" primaryKeyName="pk_processing_storage_assignments"/></column>
+            <column name="scope_key" type="VARCHAR(80)"><constraints nullable="false" unique="true" uniqueConstraintName="uq_processing_storage_assignment_scope"/></column>
+            <column name="tenant_id" type="UUID"/>
+            <column name="provider_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="activated_by" type="UUID"/>
+            <column name="activated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="processing_storage_assignments" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_processing_storage_assignment_tenant" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="processing_storage_assignments" baseColumnNames="provider_id"
+                                 referencedTableName="processing_storage_providers" referencedColumnNames="id"
+                                 constraintName="fk_processing_storage_assignment_provider"/>
+        <createIndex tableName="processing_storage_assignments" indexName="idx_processing_storage_assignment_provider">
+            <column name="provider_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="028-03-processing-storage-cycle-pins" author="lexavault">
+        <createTable tableName="processing_storage_cycle_pins">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="processing_cycle" type="INT"><constraints nullable="false"/></column>
+            <column name="provider_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="processing_storage_cycle_pins" columnNames="tenant_id,package_id,processing_cycle"
+                       constraintName="pk_processing_storage_cycle_pins"/>
+        <addForeignKeyConstraint baseTableName="processing_storage_cycle_pins" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_processing_storage_pin_tenant"/>
+        <addForeignKeyConstraint baseTableName="processing_storage_cycle_pins" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_processing_storage_pin_package" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="processing_storage_cycle_pins" baseColumnNames="provider_id"
+                                 referencedTableName="processing_storage_providers" referencedColumnNames="id"
+                                 constraintName="fk_processing_storage_pin_provider"/>
+        <createIndex tableName="processing_storage_cycle_pins" indexName="idx_processing_storage_pin_provider">
+            <column name="provider_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="028-04-processing-storage-node-validation" author="lexavault">
+        <createTable tableName="processing_storage_nodes">
+            <column name="node_id" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="process_instance_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="heartbeat_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="processing_storage_nodes" columnNames="node_id,process_instance_id"
+                       constraintName="pk_processing_storage_nodes"/>
+        <createIndex tableName="processing_storage_nodes" indexName="idx_processing_storage_nodes_heartbeat">
+            <column name="heartbeat_at"/>
+        </createIndex>
+
+        <createTable tableName="processing_storage_node_validations">
+            <column name="node_id" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="process_instance_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="provider_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="failure_code" type="VARCHAR(120)"/>
+            <column name="checked_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="processing_storage_node_validations" columnNames="node_id,process_instance_id,provider_id"
+                       constraintName="pk_processing_storage_node_validations"/>
+        <addForeignKeyConstraint baseTableName="processing_storage_node_validations" baseColumnNames="provider_id"
+                                 referencedTableName="processing_storage_providers" referencedColumnNames="id"
+                                 constraintName="fk_processing_storage_validation_provider" onDelete="CASCADE"/>
+        <createIndex tableName="processing_storage_node_validations" indexName="idx_processing_storage_validation_provider">
+            <column name="provider_id"/>
+            <column name="checked_at"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

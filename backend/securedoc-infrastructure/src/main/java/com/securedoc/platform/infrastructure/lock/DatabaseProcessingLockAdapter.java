@@ -65,6 +65,12 @@ public class DatabaseProcessingLockAdapter implements ProcessingLockPort {
     }
 
     @Override
+    @Transactional
+    public void forceRelease(String resourceKey) {
+        lockRepo.deleteById(resourceKey);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public boolean isLocked(String resourceKey) {
         return lockRepo.findActiveLock(resourceKey, Instant.now()).isPresent();
