@@ -124,6 +124,7 @@ export default function IntegrationsPage() {
   const showFileShare = draft.providerType === 'FILE_SHARE';
   const secretNeeded = draft.authenticationType !== 'NONE';
   const isPollingSource = draft.purpose === 'INGESTION_SOURCE' && draft.providerType === 'HTTP_API' && draft.direction === 'OUTBOUND';
+  const isScannerSource = draft.providerType === 'SCANNER';
 
   const sortedConnections = useMemo(
     () => [...connections].sort((a, b) => a.name.localeCompare(b.name)),
@@ -151,6 +152,11 @@ export default function IntegrationsPage() {
         next.endpoint = '';
         next.fileShareRoot = '';
         next.acknowledgementMode = 'NONE';
+        if (providerType === 'SCANNER') {
+          next.maxDocumentsPerIntake = 1;
+          next.maxPdfSizeBytes = 2147483648;
+          next.maxPdfPages = 10000;
+        }
         next.pollingScheduleType = undefined; next.pollingIntervalMinutes = undefined; next.pollingLocalTime = undefined; next.pollingTimeZone = undefined; next.pollingBatchLimit = undefined;
       } else if (providerType === 'FILE_SHARE') {
         next.direction = 'OUTBOUND';
@@ -186,14 +192,14 @@ export default function IntegrationsPage() {
         direction: draft.direction,
         providerType: draft.providerType,
         authenticationType: draft.authenticationType,
-        clientPrincipal: draft.providerType === 'PUSH_API' ? draft.clientPrincipal || undefined : undefined,
+        clientPrincipal: draft.providerType === 'PUSH_API' || draft.providerType === 'SCANNER' ? draft.clientPrincipal || undefined : undefined,
         endpoint: showEndpoint ? draft.endpoint || undefined : undefined,
         fileShareRoot: showFileShare ? draft.fileShareRoot || undefined : undefined,
         secretReference: draft.secretReference || undefined,
         timeoutSeconds: draft.timeoutSeconds,
         retryMaxAttempts: draft.retryMaxAttempts,
         incompleteWindowHours: draft.incompleteWindowHours,
-        maxDocumentsPerIntake: draft.maxDocumentsPerIntake,
+        maxDocumentsPerIntake: isScannerSource ? 1 : draft.maxDocumentsPerIntake,
         maxPdfSizeBytes: draft.maxPdfSizeBytes,
         maxPdfPages: draft.maxPdfPages,
         pollingScheduleType: isPollingSource ? draft.pollingScheduleType : undefined,
@@ -201,7 +207,7 @@ export default function IntegrationsPage() {
         pollingLocalTime: isPollingSource && draft.pollingScheduleType === 'DAILY' ? draft.pollingLocalTime : undefined,
         pollingTimeZone: isPollingSource && draft.pollingScheduleType === 'DAILY' ? draft.pollingTimeZone : undefined,
         pollingBatchLimit: isPollingSource ? draft.pollingBatchLimit : undefined,
-        acknowledgementMode: draft.acknowledgementMode,
+        acknowledgementMode: isScannerSource ? 'NONE' : draft.acknowledgementMode,
         enabled: editing ? undefined : Boolean(draft.enabled),
       };
       const saved = draft.connectionId
@@ -327,9 +333,9 @@ export default function IntegrationsPage() {
             <label><span>Purpose</span><select value={draft.purpose} onChange={(e) => applyPurpose(e.target.value as IntegrationPurpose)}>{purposeOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
             <label><span>Provider</span><select value={draft.providerType} onChange={(e) => applyProvider(e.target.value as IntegrationProviderType)}>{providerOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
             <label><span>Direction</span><select value={draft.direction} onChange={(e) => update('direction', e.target.value as IntegrationDirection)}><option value="INBOUND">Inbound</option><option value="OUTBOUND">Outbound</option></select></label>
-            {draft.providerType === 'PUSH_API' && <label className="integration-wide"><span>Authenticated client principal</span><input value={draft.clientPrincipal || ''} placeholder="OIDC subject / preferred username bound to this source" onChange={(e) => update('clientPrincipal', e.target.value)} /></label>}
+            {(draft.providerType === 'PUSH_API' || draft.providerType === 'SCANNER') && <label className="integration-wide"><span>Authenticated client principal</span><input value={draft.clientPrincipal || ''} placeholder="OIDC subject / preferred username bound to this source" onChange={(e) => update('clientPrincipal', e.target.value)} /></label>}
             <label><span>Authentication</span><select value={draft.authenticationType} onChange={(e) => update('authenticationType', e.target.value as IntegrationAuthenticationType)}>{authOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
-            <label><span>Acknowledgement</span><select value={draft.acknowledgementMode} onChange={(e) => update('acknowledgementMode', e.target.value as IntegrationAcknowledgementMode)}>{acknowledgementOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
+            <label><span>Acknowledgement</span><select disabled={isScannerSource} value={isScannerSource ? 'NONE' : draft.acknowledgementMode} onChange={(e) => update('acknowledgementMode', e.target.value as IntegrationAcknowledgementMode)}>{acknowledgementOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select>{isScannerSource && <small>Scanner delivery uses the built-in idempotent intake/reconciliation contract.</small>}</label>
             {showEndpoint && <label className="integration-wide"><span>Endpoint</span><input value={draft.endpoint || ''} placeholder="https://..." onChange={(e) => update('endpoint', e.target.value)} /></label>}
             {showFileShare && <label className="integration-wide"><span>Secure file-share root</span><input value={draft.fileShareRoot || ''} onChange={(e) => update('fileShareRoot', e.target.value)} /></label>}
             {secretNeeded && <label className="integration-wide"><span>Protected secret reference</span><input type="password" value={draft.secretReference || ''} placeholder={draft.secretConfigured ? 'Configured — leave blank to keep existing reference' : 'Deployment-managed secret reference'} onChange={(e) => update('secretReference', e.target.value)} /></label>}
@@ -337,7 +343,7 @@ export default function IntegrationsPage() {
             <label><span>Retry attempts</span><input type="number" min={0} max={10} value={draft.retryMaxAttempts ?? 2} onChange={(e) => update('retryMaxAttempts', Number(e.target.value))} /></label>
             {draft.purpose === 'INGESTION_SOURCE' && <>
               <label><span>Incomplete window (hours)</span><input type="number" min={1} max={168} value={draft.incompleteWindowHours ?? 24} onChange={(e) => update('incompleteWindowHours', Number(e.target.value))} /></label>
-              <label><span>Max documents / intake</span><input type="number" min={1} max={1000} value={draft.maxDocumentsPerIntake ?? 100} onChange={(e) => update('maxDocumentsPerIntake', Number(e.target.value))} /></label>
+              <label><span>Max documents / intake</span><input type="number" min={1} max={1000} disabled={isScannerSource} value={isScannerSource ? 1 : (draft.maxDocumentsPerIntake ?? 100)} onChange={(e) => update('maxDocumentsPerIntake', Number(e.target.value))} />{isScannerSource && <small>Scanner Intake is one consolidated PDF per physical package.</small>}</label>
               <label><span>Max PDF size (MB)</span><input type="number" min={1} max={2048} value={Math.round((draft.maxPdfSizeBytes ?? 262144000) / 1048576)} onChange={(e) => update('maxPdfSizeBytes', Number(e.target.value) * 1048576)} /></label>
               <label><span>Max PDF pages</span><input type="number" min={1} max={10000} value={draft.maxPdfPages ?? 2000} onChange={(e) => update('maxPdfPages', Number(e.target.value))} /></label>
             </>}

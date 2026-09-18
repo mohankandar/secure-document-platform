@@ -1,3 +1,17 @@
+export type BusinessIdentifierValidationType = 'TEXT' | 'NUMERIC' | 'ALPHANUMERIC' | 'EMAIL' | 'UUID' | 'ALLOW_LIST' | 'CUSTOM_PATTERN';
+export type BusinessIdentifierCaseNormalization = 'PRESERVE' | 'UPPER' | 'LOWER';
+
+export interface BusinessIdentifierValidationConfiguration {
+  validationType: BusinessIdentifierValidationType;
+  exactLength?: number | null;
+  minLength?: number | null;
+  maxLength?: number | null;
+  caseNormalization: BusinessIdentifierCaseNormalization;
+  stripSeparators: boolean;
+  allowedValues: string[];
+  customPattern?: string | null;
+}
+
 export interface BusinessIdentifier {
   key: string;
   label: string;
@@ -8,7 +22,7 @@ export interface BusinessIdentifier {
   displayOrder: number;
 }
 
-export interface IdentifierDefinition {
+export interface IdentifierDefinition extends BusinessIdentifierValidationConfiguration {
   key: string;
   label: string;
   required: boolean;
@@ -22,6 +36,30 @@ export interface IdentifierDefinition {
 
 export interface BusinessAdminIdentifierDefinition extends IdentifierDefinition {
   id: string;
+}
+
+export type DocumentIntelligenceMode = 'DISABLED' | 'OBSERVE' | 'ENABLED';
+
+export interface IntelligenceBundleConfiguration {
+  version: string;
+  status: 'CANDIDATE' | 'PROMOTED' | 'RETIRED' | string;
+  modelVersion: string;
+  promptVersion: string;
+  detectorVersion: string;
+  ocrRulesVersion: string;
+  profileVersion: string;
+  validationRulesVersion: string;
+  thresholdsVersion: string;
+  description?: string | null;
+}
+
+export interface DocumentIntelligenceConfiguration {
+  mode: DocumentIntelligenceMode;
+  activeBundleVersion: string;
+  lastKnownGoodBundleVersion: string;
+  configurationVersion: number;
+  baselineDiscoveryRequired: boolean;
+  availableBundles: IntelligenceBundleConfiguration[];
 }
 
 export type BusinessReviewMode = 'UNCERTAIN_ONLY' | 'REVIEW_ALL';
@@ -52,14 +90,33 @@ export interface DashboardAdminColumnConfiguration {
   displayOrder: number;
 }
 
+
+export interface ReportingDimensionConfiguration {
+  definitionId: string;
+  key: string;
+  label: string;
+  enabled: boolean;
+  displayOrder: number;
+}
+
+export interface ReportingConfiguration {
+  dimensions: ReportingDimensionConfiguration[];
+  deliveryTargetMinutes: number;
+  deliveryTargetPercent: number;
+  straightThroughTargetPercent: number;
+  reviewWaitTargetMinutes: number;
+}
+
 export interface BusinessAdminConfiguration {
   identifiers: BusinessAdminIdentifierDefinition[];
   dashboardColumns: DashboardAdminColumnConfiguration[];
   sensitiveDataPolicy: SensitiveDataPolicyConfiguration;
   lifecyclePolicy: LifecyclePolicyConfiguration;
+  documentIntelligence: DocumentIntelligenceConfiguration;
+  reportingConfiguration: ReportingConfiguration;
 }
 
-export interface BusinessAdminIdentifierDraft {
+export interface BusinessAdminIdentifierDraft extends BusinessIdentifierValidationConfiguration {
   id?: string;
   label: string;
   required: boolean;
@@ -372,8 +429,11 @@ export interface OperationalReports {
     previousCompleted: number;
     delivered: number;
     previousDelivered: number;
+    periodIntakeDelivered: number;
+    previousPeriodIntakeDelivered: number;
     completionRate: number;
     deliveryRate: number;
+    periodIntakeDeliveryRate: number;
     medianDeliveryHours: number;
     p95DeliveryHours: number;
     straightThroughRate: number;
@@ -388,6 +448,7 @@ export interface OperationalReports {
     manual: number;
     api: number;
     watchedFolder: number;
+    scanner: number;
     waitingForTrigger: number;
     duplicateObservations: number;
     rejectedObservations: number;
@@ -413,6 +474,55 @@ export interface OperationalReports {
     originalsOverdue: number;
     redactedCopiesOverdue: number;
   };
+  timing: {
+    medianTurnaroundHours: number;
+    p95TurnaroundHours: number;
+    medianActiveProcessingHours: number;
+    p95ActiveProcessingHours: number;
+    medianReviewWaitHours: number;
+    medianReviewHandlingHours: number;
+    turnaroundSamples: number;
+    activeProcessingSamples: number;
+    reviewWaitSamples: number;
+    reviewHandlingSamples: number;
+  };
+  backlog: {
+    underOneHour: number;
+    oneToFourHours: number;
+    fourToTwentyFourHours: number;
+    oneToThreeDays: number;
+    overThreeDays: number;
+    oldestHours: number;
+  };
+  usage: {
+    packages: number;
+    documents: number;
+    pages: number;
+    averageDocumentsPerPackage: number;
+    averagePagesPerPackage: number;
+    reviewedPackages: number;
+    straightThroughPackages: number;
+    reprocessedPackages: number;
+  };
+  serviceLevel: {
+    deliveryTargetMinutes: number;
+    deliveryTargetPercent: number;
+    deliveryWithinTargetRate: number;
+    deliveryEligible: number;
+    deliveryBreaches: number;
+    straightThroughTargetPercent: number;
+    straightThroughActualPercent: number;
+    reviewWaitTargetMinutes: number;
+    reviewWithinTargetRate: number;
+    reviewEligible: number;
+    reviewBreaches: number;
+  };
+  dimensions: Array<{
+    key: string;
+    label: string;
+    values: Array<{ value: string; packages: number; delivered: number; deliveryRate: number; medianTurnaroundHours: number }>;
+  }>;
+
 }
 
 
@@ -530,6 +640,17 @@ export interface WatchedFolderAdminStatus {
   incompleteVisibilityMinutes: number;
   acceptedBehavior: string;
   rejectedBehavior: string;
+  processingDirectory: string;
+  coordinationEnabled: boolean;
+  nodeId?: string | null;
+  nodeInstanceId?: string | null;
+  scannerRole?: string | null;
+  leaseOwner?: string | null;
+  fencingToken?: number | null;
+  leaseAcquiredAt?: string | null;
+  leaseHeartbeatAt?: string | null;
+  leaseExpiresAt?: string | null;
+  takeoverCount?: number;
   lastScanAt?: string | null;
   lastScanOutcome: string;
   lastScanResult?: {
@@ -559,6 +680,100 @@ export interface PlatformAdminOverview {
     productionIdentityConfigured: boolean;
   };
   technicalExceptions: TechnicalExceptionItem[];
+}
+
+export type ProcessingStorageProviderType = 'LOCAL_FILESYSTEM' | 'SHARED_FILESYSTEM';
+export type ProcessingStorageProviderStatus = 'CANDIDATE' | 'AVAILABLE' | 'RETIRED' | string;
+
+export interface ProcessingStorageProvider {
+  id: string;
+  name: string;
+  providerType: ProcessingStorageProviderType | string;
+  rootPath: string;
+  status: ProcessingStorageProviderStatus;
+  configurationVersion: number;
+}
+
+export interface ProcessingStorageAssignment {
+  id: string;
+  tenantId?: string | null;
+  providerId: string;
+  scope: 'DEPLOYMENT_DEFAULT' | 'TENANT_OVERRIDE' | string;
+  activatedAt: string;
+}
+
+export interface ProcessingStorageNodeValidation {
+  nodeId: string;
+  processInstanceId: string;
+  providerId: string;
+  status: 'HEALTHY' | 'UNHEALTHY' | string;
+  failureCode?: string | null;
+  checkedAt: string;
+}
+
+export interface ProcessingStorageTenant {
+  tenantId: string;
+  name: string;
+  slug: string;
+  status: string;
+}
+
+export interface ProcessingStorageOverview {
+  ready: boolean;
+  deploymentDefault?: ProcessingStorageAssignment | null;
+  tenantOverrides: ProcessingStorageAssignment[];
+  providers: ProcessingStorageProvider[];
+  nodeValidations: ProcessingStorageNodeValidation[];
+  tenants: ProcessingStorageTenant[];
+  activeNodeCount: number;
+}
+
+export interface CreateProcessingStorageProviderRequest {
+  name: string;
+  providerType: ProcessingStorageProviderType;
+  rootPath: string;
+}
+
+export interface LicenseClaims {
+  schemaVersion: number;
+  licenseId: string;
+  tenantId: string;
+  customerName: string;
+  edition: string;
+  issuedAt: string;
+  notBefore?: string | null;
+  expiresAt?: string | null;
+  entitlements: string[];
+  limits: Record<string, number>;
+}
+
+export interface TenantLicenseStatus {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  status: string;
+  processingAllowed: boolean;
+  licenseRecordId?: string | null;
+  claims?: LicenseClaims | null;
+  reasonCode: string;
+}
+
+export interface LicensingOverview {
+  enforcementEnabled: boolean;
+  verificationKeyConfigured: boolean;
+  tenants: TenantLicenseStatus[];
+}
+
+export interface LicenseHistoryItem {
+  recordId: string;
+  licenseId: string;
+  installedAt: string;
+  installedBy: string;
+  active: boolean;
+  status: string;
+  claims?: LicenseClaims | null;
+  reasonCode: string;
+  verificationEvidence?: 'CURRENT_KEY' | 'VERIFIED_AT_INSTALL' | 'UNAVAILABLE' | string;
 }
 
 export interface CurrentUser {

@@ -6,6 +6,7 @@ import { beginOidcLogin, clearOidcSession, getAccessToken, handleOidcCallback, i
 import type { CurrentUser } from './types';
 import DashboardPage from './pages/DashboardPage';
 import CreatePackagePage from './pages/CreatePackagePage';
+import ScanIntakePage from './pages/ScanIntakePage';
 import PackageDetailPage from './pages/PackageDetailPage';
 import ReviewPage from './pages/ReviewPage';
 import AuditPage from './pages/AuditPage';
@@ -133,6 +134,7 @@ export default function App() {
         <nav>
           {hasCapability('DASHBOARD_ACCESS') && <NavLink to="/" end>Dashboard</NavLink>}
           {hasCapability('DOCUMENT_INTAKE') && <NavLink to="/packages/new">Upload Documents</NavLink>}
+          {hasCapability('DOCUMENT_INTAKE') && <NavLink to="/scanner-intake">Scan Documents</NavLink>}
           {hasCapability('MANUAL_REVIEW') && <NavLink to="/review">Manual Review</NavLink>}
           {hasCapability('REPORT_EXECUTIVE_VIEW') && <NavLink to="/reports">Reports</NavLink>}
           {(hasCapability('TENANT_POLICY_MANAGE') || hasCapability('TECHNICAL_ADMIN_VIEW') || hasCapability('AUDIT_VIEW')) && (
@@ -162,15 +164,20 @@ export default function App() {
         <Routes>
           <Route path="/" element={hasCapability('DASHBOARD_ACCESS') ? <DashboardPage /> : hasCapability('REPORT_EXECUTIVE_VIEW') ? <Navigate to="/reports" replace /> : <PermissionDenied />} />
           <Route path="/packages/new" element={hasCapability('DOCUMENT_INTAKE') ? <CreatePackagePage /> : <PermissionDenied />} />
+          <Route path="/scanner-intake" element={hasCapability('DOCUMENT_INTAKE') ? <ScanIntakePage /> : <PermissionDenied />} />
           <Route path="/packages/:packageId" element={hasCapability('DASHBOARD_ACCESS') ? <PackageDetailPage /> : <PermissionDenied />} />
           <Route path="/review" element={hasCapability('MANUAL_REVIEW') ? <ReviewPage /> : <PermissionDenied />} />
           <Route path="/packages/:packageId/manual-processing" element={hasCapability('MANUAL_REVIEW') ? <ManualFallbackPage /> : <PermissionDenied />} />
           <Route path="/reports" element={hasCapability('REPORT_EXECUTIVE_VIEW')
-            ? <ReportsPage canViewOperations={hasCapability('REPORT_OPERATIONAL_VIEW')} canExport={hasCapability('REPORT_EXPORT')} />
+            ? <ReportsPage
+              canViewOperations={hasCapability('REPORT_OPERATIONAL_VIEW')}
+              canViewBusiness={hasCapability('TENANT_IDENTIFIER_MANAGE')}
+              canExport={hasCapability('REPORT_EXPORT')}
+              canDrillDown={hasCapability('DASHBOARD_ACCESS')} />
             : <PermissionDenied />} />
           <Route path="/audit" element={hasCapability('AUDIT_VIEW') ? <AuditPage /> : <PermissionDenied />} />
           <Route path="/business-admin" element={hasCapability('TENANT_POLICY_MANAGE') ? <BusinessAdminPage /> : <PermissionDenied />} />
-          <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage /> : <PermissionDenied />} />
+          <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage canManagePlatformOperations={hasCapability('PLATFORM_OPERATIONS')} /> : <PermissionDenied />} />
           <Route path="/integrations" element={hasCapability('TENANT_INTEGRATION_MANAGE') ? <IntegrationsPage /> : <PermissionDenied />} />
           <Route path="/technical-exceptions/:packageId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <TechnicalIssueDetailPage /> : <PermissionDenied />} />
           <Route path="/support/incidents" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentsPage /> : <PermissionDenied />} />

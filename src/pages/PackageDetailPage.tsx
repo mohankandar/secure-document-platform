@@ -15,6 +15,8 @@ export default function PackageDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [manualFallbackActive, setManualFallbackActive] = useState(false);
+  const [confirmReprocess, setConfirmReprocess] = useState(false);
+  const [reprocessSubmitting, setReprocessSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPackage = async () => {
@@ -48,6 +50,27 @@ export default function PackageDetailPage() {
   };
 
   useEffect(() => { loadPackage(); }, [packageId]);
+
+  const reprocessingActive = Boolean(
+    pkg && lifecycle
+      && lifecycle.successfulExportCycles > 0
+      && (pkg.status === 'SUBMITTED' || pkg.status === 'PROCESSING')
+  );
+
+  useEffect(() => {
+    if (!reprocessingActive) return;
+    const timer = window.setTimeout(() => { void loadPackage(); }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [reprocessingActive, pkg?.status, lifecycle?.successfulExportCycles, packageId]);
+
+  useEffect(() => {
+    if (!confirmReprocess) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !reprocessSubmitting) setConfirmReprocess(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [confirmReprocess, reprocessSubmitting]);
 
   const handleUpload = async () => {
     const file = fileInputRef.current?.files?.[0];
@@ -93,16 +116,22 @@ export default function PackageDetailPage() {
   };
 
   const handleReprocess = async () => {
-    if (!packageId) return;
+    if (!packageId || reprocessSubmitting) return;
+    setReprocessSubmitting(true);
     setError(null);
     setSuccessMsg(null);
     try {
       const result = await apiClient.reprocessPackage(packageId);
+      setConfirmReprocess(false);
+      setPkg((current) => current ? { ...current, status: result.status } : current);
+      setLifecycle((current) => current ? { ...current, canReprocess: false } : current);
       setSuccessMsg(`Reprocessing started for export cycle ${result.nextExportCycle}.`);
       await loadPackage();
     } catch (err) {
       const apiErr = err as ApiError;
       setError(apiErr.message || 'Unable to reprocess this intake');
+    } finally {
+      setReprocessSubmitting(false);
     }
   };
 
@@ -132,6 +161,7 @@ export default function PackageDetailPage() {
     ?.filter((identifier) => identifier.displayable)
     .sort((a, b) => Number(b.primary) - Number(a.primary) || a.displayOrder - b.displayOrder)[0];
   const intakeLabel = intakeBreadcrumbLabel(primaryIdentifier);
+  const displayedPackageStatus = reprocessingActive ? 'REPROCESSING' : pkg?.status;
 
   if (loading && !pkg) {
     return (
@@ -161,7 +191,7 @@ export default function PackageDetailPage() {
                 <tr><td><strong>Intake Source</strong></td><td>{pkg.packageType}</td></tr>
                 <tr>
                   <td><strong>Status</strong></td>
-                  <td><span className={`badge badge-${pkg.status.toLowerCase()}`}>{pkg.status}</span></td>
+                  <td><span className={`badge badge-${(displayedPackageStatus || pkg.status).toLowerCase()}`}>{displayedPackageStatus || pkg.status}</span></td>
                 </tr>
                 <tr><td><strong>Documents</strong></td><td>{pkg.documentCount}</td></tr>
                 <tr><td><strong>Created</strong></td><td>{new Date(pkg.createdAt).toLocaleString()}</td></tr>
@@ -228,8 +258,18 @@ export default function PackageDetailPage() {
                 Processing, verification, and delivery completed successfully.
               </p>
               {lifecycle?.canReprocess && hasCurrentCapability('PACKAGE_REPROCESS') && (
-                <button className="secondary" onClick={() => void handleReprocess()}>Reprocess from Retained Original</button>
+                <button className="secondary" type="button" onClick={() => setConfirmReprocess(true)}>Reprocess from Retained Original</button>
               )}
+            </div>
+          )}
+
+
+          {reprocessingActive && (
+            <div className="card">
+              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Reprocessing</h2>
+              <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>
+                The retained original has been accepted for a new processing/export cycle. The reprocess action remains unavailable until this cycle reaches a terminal business state.
+              </p>
             </div>
           )}
 
@@ -325,6 +365,49 @@ export default function PackageDetailPage() {
             <button className="secondary" onClick={loadPackage}>Refresh</button>
           </div>
         </>
+      )}
+
+      {confirmReprocess && pkg && (
+        <div
+          className="dashboard-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !reprocessSubmitting) setConfirmReprocess(false);
+          }}
+        >
+          <section className="dashboard-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="reprocess-package-title">
+            <div className="dashboard-confirm-modal-handle" aria-hidden="true" />
+            <h2 id="reprocess-package-title">Reprocess from retained original?</h2>
+            {primaryIdentifier && (
+              <p className="dashboard-confirm-identifier">
+                <span>{primaryIdentifier.label}</span>
+                <strong>{primaryIdentifier.value}</strong>
+              </p>
+            )}
+            <p>
+              This package will leave Completed status and start a new processing/export cycle from the retained original.
+              Existing processing rules and the current tenant configuration will be applied.
+            </p>
+            <div className="dashboard-confirm-actions">
+              <button
+                className="dashboard-confirm-cancel"
+                type="button"
+                disabled={reprocessSubmitting}
+                onClick={() => setConfirmReprocess(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="reprocess-confirm-submit"
+                type="button"
+                disabled={reprocessSubmitting}
+                onClick={() => void handleReprocess()}
+              >
+                {reprocessSubmitting ? 'Starting…' : 'Reprocess'}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

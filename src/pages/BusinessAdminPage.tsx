@@ -8,12 +8,15 @@ import type {
   BusinessReviewMode,
   SensitiveDataPolicyConfiguration,
   LifecyclePolicyConfiguration,
+  DocumentIntelligenceConfiguration,
+  DocumentIntelligenceMode,
   DashboardAdminColumnConfiguration,
   RoutingRule,
   RoutingRuleRequest,
   RoutingDestinationOption,
   RoutingMarkerType,
   RoutingScanRegion,
+  ReportingConfiguration,
 } from '../types';
 
 const SENSITIVE_TYPES = [
@@ -28,7 +31,9 @@ export default function BusinessAdminPage() {
   const [identifiers, setIdentifiers] = useState<BusinessAdminIdentifierDraft[]>([]);
   const [policy, setPolicy] = useState<SensitiveDataPolicyConfiguration | null>(null);
   const [lifecyclePolicy, setLifecyclePolicy] = useState<LifecyclePolicyConfiguration | null>(null);
+  const [documentIntelligence, setDocumentIntelligence] = useState<DocumentIntelligenceConfiguration | null>(null);
   const [dashboardColumns, setDashboardColumns] = useState<DashboardAdminColumnConfiguration[]>([]);
+  const [reportingConfiguration, setReportingConfiguration] = useState<ReportingConfiguration | null>(null);
   const [routingRules, setRoutingRules] = useState<RoutingRule[]>([]);
   const [routingDestinations, setRoutingDestinations] = useState<RoutingDestinationOption[]>([]);
   const [routingDraft, setRoutingDraft] = useState<(RoutingRuleRequest & { ruleId?: string })>({
@@ -38,8 +43,10 @@ export default function BusinessAdminPage() {
   const [savingIdentifiers, setSavingIdentifiers] = useState(false);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
+  const [savingIntelligence, setSavingIntelligence] = useState(false);
   const [savingDashboardColumns, setSavingDashboardColumns] = useState(false);
   const [savingRouting, setSavingRouting] = useState(false);
+  const [savingReporting, setSavingReporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -72,7 +79,8 @@ export default function BusinessAdminPage() {
     setIdentifiers(
       [...result.identifiers]
         .sort((a, b) => a.displayOrder - b.displayOrder)
-        .map(({ id, label, required, primary, searchable, extractable, displayable }) => ({
+        .map(({ id, label, required, primary, searchable, extractable, displayable, validationType,
+                exactLength, minLength, maxLength, caseNormalization, stripSeparators, allowedValues, customPattern }) => ({
           id,
           label,
           required,
@@ -80,6 +88,14 @@ export default function BusinessAdminPage() {
           searchable,
           extractable,
           displayable,
+          validationType,
+          exactLength,
+          minLength,
+          maxLength,
+          caseNormalization,
+          stripSeparators,
+          allowedValues: [...allowedValues],
+          customPattern,
         }))
     );
     setDashboardColumns([...result.dashboardColumns].sort((a, b) => a.displayOrder - b.displayOrder));
@@ -90,6 +106,14 @@ export default function BusinessAdminPage() {
       maskSsnLastFour: result.sensitiveDataPolicy.maskSsnLastFour,
     });
     setLifecyclePolicy({ ...result.lifecyclePolicy });
+    setDocumentIntelligence({
+      ...result.documentIntelligence,
+      availableBundles: [...result.documentIntelligence.availableBundles],
+    });
+    setReportingConfiguration({
+      ...result.reportingConfiguration,
+      dimensions: result.reportingConfiguration.dimensions.map((dimension) => ({ ...dimension })),
+    });
   };
 
   const identifierValidation = useMemo(() => {
@@ -98,8 +122,26 @@ export default function BusinessAdminPage() {
     if (identifiers.filter((item) => item.primary).length !== 1) return 'Choose exactly one Primary identifier.';
     const labels = identifiers.map((item) => item.label.trim().toLowerCase());
     if (new Set(labels).size !== labels.length) return 'Identifier labels must be unique.';
+    for (const item of identifiers) {
+      const lengths = [item.exactLength, item.minLength, item.maxLength].filter((value): value is number => value != null);
+      if (lengths.some((value) => value < 1 || value > 512)) return `${item.label || 'Identifier'}: length constraints must be between 1 and 512.`;
+      if (item.exactLength != null && (item.minLength != null || item.maxLength != null)) return `${item.label || 'Identifier'}: exact length cannot be combined with min/max length.`;
+      if (item.minLength != null && item.maxLength != null && item.minLength > item.maxLength) return `${item.label || 'Identifier'}: minimum length cannot exceed maximum length.`;
+      if (item.validationType === 'ALLOW_LIST' && item.allowedValues.filter((value) => value.trim().length > 0).length === 0) return `${item.label || 'Identifier'}: at least one allowed value is required.`;
+      if (item.validationType === 'CUSTOM_PATTERN' && !item.customPattern?.trim()) return `${item.label || 'Identifier'}: custom pattern is required.`;
+    }
     return null;
   }, [identifiers]);
+
+  const intelligenceDirty = !!(documentIntelligence && configuration && (
+    documentIntelligence.mode !== configuration.documentIntelligence.mode
+      || documentIntelligence.activeBundleVersion !== configuration.documentIntelligence.activeBundleVersion
+  ));
+
+  const selectedIntelligenceBundle = useMemo(
+    () => documentIntelligence?.availableBundles.find((bundle) => bundle.version === documentIntelligence.activeBundleVersion) ?? null,
+    [documentIntelligence],
+  );
 
   const updateIdentifier = (index: number, patch: Partial<BusinessAdminIdentifierDraft>) => {
     setIdentifiers((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -133,6 +175,14 @@ export default function BusinessAdminPage() {
         searchable: true,
         extractable: false,
         displayable: true,
+        validationType: 'TEXT',
+        exactLength: null,
+        minLength: null,
+        maxLength: null,
+        caseNormalization: 'UPPER',
+        stripSeparators: false,
+        allowedValues: [],
+        customPattern: null,
       },
     ]);
   };
@@ -155,7 +205,11 @@ export default function BusinessAdminPage() {
     setSuccess(null);
     try {
       const result = await apiClient.updateBusinessIdentifiers(
-        identifiers.map((item) => ({ ...item, label: item.label.trim() }))
+        identifiers.map((item) => ({
+          ...item,
+          label: item.label.trim(),
+          allowedValues: item.allowedValues.map((value) => value.trim()).filter(Boolean),
+        }))
       );
       applyConfiguration(result);
       setSuccess('Business identifiers saved. New intakes will use this configuration.');
@@ -165,6 +219,42 @@ export default function BusinessAdminPage() {
     } finally {
       setSavingIdentifiers(false);
     }
+  };
+
+  const eligibleReportingDimensions = useMemo(() => {
+    if (!configuration) return [];
+    const selected = new Set(reportingConfiguration?.dimensions.filter((dimension) => dimension.enabled).map((dimension) => dimension.definitionId) ?? []);
+    return configuration.identifiers
+      .filter((identifier) => identifier.allowedValues.length > 0 && identifier.allowedValues.length <= 100)
+      .map((identifier, index) => ({
+        definitionId: identifier.id,
+        key: identifier.key,
+        label: identifier.label,
+        enabled: selected.has(identifier.id),
+        displayOrder: index + 1,
+      }));
+  }, [configuration, reportingConfiguration]);
+
+  const toggleReportingDimension = (definitionId: string, enabled: boolean) => {
+    if (!reportingConfiguration) return;
+    const current = new Map(reportingConfiguration.dimensions.map((dimension) => [dimension.definitionId, dimension]));
+    const eligible = eligibleReportingDimensions.find((dimension) => dimension.definitionId === definitionId);
+    if (!eligible) return;
+    current.set(definitionId, { ...eligible, enabled });
+    setReportingConfiguration({ ...reportingConfiguration, dimensions: [...current.values()] });
+  };
+
+  const saveReportingConfiguration = async () => {
+    if (!reportingConfiguration) return;
+    setSavingReporting(true); setError(null); setSuccess(null);
+    try {
+      const result = await apiClient.updateReportingConfiguration(reportingConfiguration);
+      applyConfiguration(result);
+      setSuccess('Reporting dimensions and business targets saved. Historical reporting facts remain aggregate-only and package-independent.');
+    } catch (err) {
+      const apiError = err as ApiError;
+      setError(apiError.message || 'Unable to save reporting configuration');
+    } finally { setSavingReporting(false); }
   };
 
   const updateDashboardColumn = (index: number, patch: Partial<DashboardAdminColumnConfiguration>) => {
@@ -247,6 +337,60 @@ export default function BusinessAdminPage() {
     }
   };
 
+  const saveDocumentIntelligence = async () => {
+    if (!documentIntelligence) return;
+    setSavingIntelligence(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await apiClient.updateDocumentIntelligence(
+        documentIntelligence.mode, documentIntelligence.activeBundleVersion);
+      applyConfiguration(result);
+      setSuccess('Document Intelligence configuration saved. It applies to new processing cycles only.');
+    } catch (err) {
+      const apiError = err as ApiError;
+      setError(apiError.message || 'Unable to save Document Intelligence configuration');
+    } finally {
+      setSavingIntelligence(false);
+    }
+  };
+
+  const rollbackDocumentIntelligence = async () => {
+    setSavingIntelligence(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await apiClient.rollbackDocumentIntelligence();
+      applyConfiguration(result);
+      setSuccess('Document Intelligence rolled back to the tenant last-known-good bundle.');
+    } catch (err) {
+      const apiError = err as ApiError;
+      setError(apiError.message || 'Unable to roll back Document Intelligence');
+    } finally {
+      setSavingIntelligence(false);
+    }
+  };
+
+  const markDocumentIntelligenceLastKnownGood = async () => {
+    setSavingIntelligence(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await apiClient.markDocumentIntelligenceLastKnownGood();
+      applyConfiguration(result);
+      setSuccess('Current intelligence bundle marked as the tenant last-known-good version.');
+    } catch (err) {
+      const apiError = err as ApiError;
+      setError(apiError.message || 'Unable to update the last-known-good intelligence bundle');
+    } finally {
+      setSavingIntelligence(false);
+    }
+  };
+
+  const setDocumentIntelligenceMode = (mode: DocumentIntelligenceMode) => {
+    if (documentIntelligence) setDocumentIntelligence({ ...documentIntelligence, mode });
+  };
+
   const setReviewMode = (reviewMode: BusinessReviewMode) => {
     if (policy) setPolicy({ ...policy, reviewMode });
   };
@@ -318,54 +462,104 @@ export default function BusinessAdminPage() {
 
         <div className="identifier-admin-list">
           {identifiers.map((item, index) => (
-            <div className="identifier-admin-row" key={item.id || `new-${index}`}>
-              <div className="identifier-order-controls" aria-label="Reorder identifier">
-                <button className="icon-button" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up">↑</button>
-                <button className="icon-button" onClick={() => moveIdentifier(index, 1)} disabled={index === identifiers.length - 1} title="Move down">↓</button>
+            <div className="identifier-admin-card" key={item.id || `new-${index}`}>
+              <div className="identifier-admin-row">
+                <div className="identifier-order-controls" aria-label="Reorder identifier">
+                  <button className="icon-button" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up">↑</button>
+                  <button className="icon-button" onClick={() => moveIdentifier(index, 1)} disabled={index === identifiers.length - 1} title="Move down">↓</button>
+                </div>
+
+                <div className="identifier-main-field">
+                  <label>Label</label>
+                  <input
+                    value={item.label}
+                    placeholder="e.g. Business Reference"
+                    onChange={(event) => updateIdentifier(index, { label: event.target.value })}
+                    maxLength={128}
+                  />
+                </div>
+
+                <label className="admin-check primary-choice">
+                  <input type="radio" name="primaryIdentifier" checked={item.primary} onChange={() => selectPrimary(index)} />
+                  <span>Primary</span>
+                </label>
+                <label className="admin-check">
+                  <input type="checkbox" checked={item.required} disabled={item.primary} onChange={(event) => updateIdentifier(index, { required: event.target.checked })} />
+                  <span>Required</span>
+                </label>
+                <label className="admin-check">
+                  <input type="checkbox" checked={item.searchable} onChange={(event) => updateIdentifier(index, { searchable: event.target.checked })} />
+                  <span>Searchable</span>
+                </label>
+                <label className="admin-check">
+                  <input type="checkbox" checked={item.extractable} onChange={(event) => updateIdentifier(index, { extractable: event.target.checked })} />
+                  <span>Extractable</span>
+                </label>
+                <label className="admin-check">
+                  <input type="checkbox" checked={item.displayable} disabled={item.primary} onChange={(event) => updateIdentifier(index, { displayable: event.target.checked })} />
+                  <span>Displayable</span>
+                </label>
+                <button className="admin-remove" onClick={() => removeIdentifier(index)} disabled={identifiers.length === 1}>Remove</button>
               </div>
 
-              <div className="identifier-main-field">
-                <label>Label</label>
-                <input
-                  value={item.label}
-                  placeholder="e.g. Contract Number"
-                  onChange={(event) => updateIdentifier(index, { label: event.target.value })}
-                  maxLength={128}
-                />
+              <div className="identifier-validation-grid">
+                <div className="form-group">
+                  <label>Validation</label>
+                  <select value={item.validationType} onChange={(event) => updateIdentifier(index, { validationType: event.target.value as BusinessAdminIdentifierDraft['validationType'], customPattern: event.target.value === 'CUSTOM_PATTERN' ? item.customPattern : null })}>
+                    <option value="TEXT">Text</option>
+                    <option value="NUMERIC">Numeric (digits only)</option>
+                    <option value="ALPHANUMERIC">Alphanumeric</option>
+                    <option value="EMAIL">Email</option>
+                    <option value="UUID">UUID</option>
+                    <option value="ALLOW_LIST">Allow list / enum</option>
+                    <option value="CUSTOM_PATTERN">Custom pattern / regex</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Exact length</label>
+                  <input type="number" min={1} max={512} value={item.exactLength ?? ''} onChange={(event) => updateIdentifier(index, { exactLength: event.target.value ? Number(event.target.value) : null, minLength: event.target.value ? null : item.minLength, maxLength: event.target.value ? null : item.maxLength })} />
+                </div>
+                <div className="form-group">
+                  <label>Min length</label>
+                  <input type="number" min={1} max={512} disabled={item.exactLength != null} value={item.minLength ?? ''} onChange={(event) => updateIdentifier(index, { minLength: event.target.value ? Number(event.target.value) : null })} />
+                </div>
+                <div className="form-group">
+                  <label>Max length</label>
+                  <input type="number" min={1} max={512} disabled={item.exactLength != null} value={item.maxLength ?? ''} onChange={(event) => updateIdentifier(index, { maxLength: event.target.value ? Number(event.target.value) : null })} />
+                </div>
+                <div className="form-group">
+                  <label>Canonical case</label>
+                  <select disabled={!!item.id} value={item.caseNormalization} onChange={(event) => updateIdentifier(index, { caseNormalization: event.target.value as BusinessAdminIdentifierDraft['caseNormalization'] })}>
+                    <option value="PRESERVE">Preserve</option>
+                    <option value="UPPER">Uppercase</option>
+                    <option value="LOWER">Lowercase</option>
+                  </select>
+                </div>
+                <label className="admin-check validation-checkbox">
+                  <input type="checkbox" disabled={!!item.id} checked={item.stripSeparators} onChange={(event) => updateIdentifier(index, { stripSeparators: event.target.checked })} />
+                  <span>Remove spaces/hyphens in canonical value{item.id ? ' (fixed after creation)' : ''}</span>
+                </label>
+                <div className="form-group identifier-allowed-values">
+                  <label>Allowed values <span>(optional, one per line or comma-separated)</span></label>
+                  <textarea
+                    rows={2}
+                    value={item.allowedValues.join(', ')}
+                    onChange={(event) => updateIdentifier(index, {
+                      // Keep an empty trailing token while the admin is typing a comma/new line.
+                      // Filtering here made the controlled textarea immediately remove the delimiter,
+                      // which prevented entering a second allowed value. Empty tokens are removed on save.
+                      allowedValues: event.target.value.split(/[\n,]/).map((value) => value.trim()),
+                    })}
+                    placeholder="e.g. 000, 001, 002"
+                  />
+                </div>
+                {item.validationType === 'CUSTOM_PATTERN' && (
+                  <div className="form-group identifier-custom-pattern">
+                    <label>Custom regular expression</label>
+                    <input value={item.customPattern ?? ''} onChange={(event) => updateIdentifier(index, { customPattern: event.target.value })} maxLength={512} placeholder="^[A-Z]{2}[0-9]{8}$" />
+                  </div>
+                )}
               </div>
-
-              <label className="admin-check primary-choice">
-                <input type="radio" name="primaryIdentifier" checked={item.primary} onChange={() => selectPrimary(index)} />
-                <span>Primary</span>
-              </label>
-              <label className="admin-check">
-                <input
-                  type="checkbox"
-                  checked={item.required}
-                  disabled={item.primary}
-                  onChange={(event) => updateIdentifier(index, { required: event.target.checked })}
-                />
-                <span>Required</span>
-              </label>
-              <label className="admin-check">
-                <input type="checkbox" checked={item.searchable} onChange={(event) => updateIdentifier(index, { searchable: event.target.checked })} />
-                <span>Searchable</span>
-              </label>
-              <label className="admin-check">
-                <input type="checkbox" checked={item.extractable} onChange={(event) => updateIdentifier(index, { extractable: event.target.checked })} />
-                <span>Extractable</span>
-              </label>
-              <label className="admin-check">
-                <input
-                  type="checkbox"
-                  checked={item.displayable}
-                  disabled={item.primary}
-                  onChange={(event) => updateIdentifier(index, { displayable: event.target.checked })}
-                />
-                <span>Displayable</span>
-              </label>
-
-              <button className="admin-remove" onClick={() => removeIdentifier(index)} disabled={identifiers.length === 1}>Remove</button>
             </div>
           ))}
         </div>
@@ -380,6 +574,59 @@ export default function BusinessAdminPage() {
           </button>
         </div>
       </section>
+
+
+      {reportingConfiguration && (
+        <section className="card admin-section-card">
+          <div className="admin-section-heading">
+            <div>
+              <h2>Reporting & Business Targets</h2>
+              <p>Choose approved low-cardinality business dimensions and the targets used to judge delivery, automation, and review performance.</p>
+            </div>
+          </div>
+
+          <div className="policy-controls-grid">
+            <div className="policy-control-card">
+              <label>Delivery time target</label>
+              <div className="threshold-row"><input type="number" min="1" max="10080" value={reportingConfiguration.deliveryTargetMinutes} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, deliveryTargetMinutes: Number(e.target.value) })} /><strong>{reportingConfiguration.deliveryTargetMinutes}m</strong></div>
+              <p>Measured from intake to first successful delivery.</p>
+            </div>
+            <div className="policy-control-card">
+              <label>Delivery SLA target</label>
+              <div className="threshold-row"><input type="number" min="1" max="100" step="0.1" value={reportingConfiguration.deliveryTargetPercent} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, deliveryTargetPercent: Number(e.target.value) })} /><strong>{reportingConfiguration.deliveryTargetPercent.toFixed(1)}%</strong></div>
+              <p>Target share of eligible packages delivered within the configured time.</p>
+            </div>
+            <div className="policy-control-card">
+              <label>Straight-through target</label>
+              <div className="threshold-row"><input type="number" min="0" max="100" step="0.1" value={reportingConfiguration.straightThroughTargetPercent} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, straightThroughTargetPercent: Number(e.target.value) })} /><strong>{reportingConfiguration.straightThroughTargetPercent.toFixed(1)}%</strong></div>
+              <p>Target share of delivered packages with no recorded review workflow.</p>
+            </div>
+            <div className="policy-control-card">
+              <label>Review wait target</label>
+              <div className="threshold-row"><input type="number" min="1" max="10080" value={reportingConfiguration.reviewWaitTargetMinutes} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, reviewWaitTargetMinutes: Number(e.target.value) })} /><strong>{reportingConfiguration.reviewWaitTargetMinutes}m</strong></div>
+              <p>Target time from review creation until a reviewer starts work.</p>
+            </div>
+          </div>
+
+          <div className="admin-section-heading reporting-dimension-heading">
+            <div>
+              <h3>Approved reporting dimensions</h3>
+              <p>V1 allows identifiers with a tenant-controlled allowed-value set of 1–100 values. This supports dimensions such as Service Entity while preventing high-cardinality identifiers such as contract/member numbers from becoming reporting dimensions.</p>
+            </div>
+          </div>
+          <div className="sensitive-type-grid">
+            {eligibleReportingDimensions.length === 0 && <div className="admin-help-row"><span>No eligible low-cardinality identifier is configured. Add 1–100 allowed values to an approved business identifier first.</span></div>}
+            {eligibleReportingDimensions.map((dimension) => (
+              <button type="button" key={dimension.definitionId} className={`sensitive-type-card ${dimension.enabled ? 'enabled' : ''}`} onClick={() => toggleReportingDimension(dimension.definitionId, !dimension.enabled)} aria-pressed={dimension.enabled}>
+                <span className="policy-toggle-indicator">{dimension.enabled ? '✓' : ''}</span>
+                <span>{dimension.label}</span>
+                <small>{dimension.enabled ? 'Included in reporting' : 'Not used as a reporting dimension'}</small>
+              </button>
+            ))}
+          </div>
+          <div className="admin-save-row"><button className="primary" disabled={savingReporting} onClick={() => void saveReportingConfiguration()}>{savingReporting ? 'Saving...' : 'Save Reporting Targets'}</button></div>
+        </section>
+      )}
 
       <section className="card admin-section-card">
         <div className="admin-section-heading">
@@ -524,6 +771,98 @@ export default function BusinessAdminPage() {
           </>
         )}
       </section>
+
+      {documentIntelligence && (
+        <section className="card admin-section-card">
+          <div className="admin-section-heading">
+            <div>
+              <h2>Document Intelligence</h2>
+              <p>Control optional adaptive/profile intelligence without changing the frozen baseline discovery path.</p>
+            </div>
+          </div>
+
+          <div className="policy-controls-grid">
+            <div className="policy-control-card">
+              <span className="policy-control-label">Activation mode</span>
+              <label className={`review-mode-option ${documentIntelligence.mode === 'DISABLED' ? 'selected' : ''}`}>
+                <input type="radio" checked={documentIntelligence.mode === 'DISABLED'} onChange={() => setDocumentIntelligenceMode('DISABLED')} />
+                <span>
+                  <strong>Disabled</strong>
+                  <small>Use the frozen R11/general-AI baseline only. Adaptive/profile intelligence is skipped.</small>
+                </span>
+              </label>
+              <label className={`review-mode-option ${documentIntelligence.mode === 'OBSERVE' ? 'selected' : ''}`}>
+                <input type="radio" checked={documentIntelligence.mode === 'OBSERVE'} onChange={() => setDocumentIntelligenceMode('OBSERVE')} />
+                <span>
+                  <strong>Observe</strong>
+                  <small>Installed intelligence may evaluate documents, but cannot affect redaction, review, or export decisions.</small>
+                </span>
+              </label>
+              <label className={`review-mode-option ${documentIntelligence.mode === 'ENABLED' ? 'selected' : ''}`}>
+                <input type="radio" checked={documentIntelligence.mode === 'ENABLED'} onChange={() => setDocumentIntelligenceMode('ENABLED')} />
+                <span>
+                  <strong>Enabled</strong>
+                  <small>Installed intelligence may contribute priors/context. Baseline discovery remains mandatory.</small>
+                </span>
+              </label>
+            </div>
+
+            <div className="policy-control-card">
+              <label htmlFor="documentIntelligenceBundle">Pinned intelligence bundle</label>
+              <select
+                id="documentIntelligenceBundle"
+                value={documentIntelligence.activeBundleVersion}
+                onChange={(event) => setDocumentIntelligence({ ...documentIntelligence, activeBundleVersion: event.target.value })}
+              >
+                {documentIntelligence.availableBundles
+                  .filter((bundle) => bundle.status === 'PROMOTED' || bundle.version === documentIntelligence.activeBundleVersion)
+                  .map((bundle) => <option key={bundle.version} value={bundle.version}>{bundle.version} · {bundle.status}</option>)}
+              </select>
+              <p>Only promoted bundles can be newly selected. Configuration v{documentIntelligence.configurationVersion}.</p>
+              <dl className="technical-fingerprint-grid">
+                <div><dt>Active</dt><dd>{documentIntelligence.activeBundleVersion}</dd></div>
+                <div><dt>Last known good</dt><dd>{documentIntelligence.lastKnownGoodBundleVersion}</dd></div>
+                {selectedIntelligenceBundle && <>
+                  <div><dt>Model version</dt><dd>{selectedIntelligenceBundle.modelVersion}</dd></div>
+                  <div><dt>Prompt version</dt><dd>{selectedIntelligenceBundle.promptVersion}</dd></div>
+                  <div><dt>Detector version</dt><dd>{selectedIntelligenceBundle.detectorVersion}</dd></div>
+                  <div><dt>OCR rules</dt><dd>{selectedIntelligenceBundle.ocrRulesVersion}</dd></div>
+                  <div><dt>Profile version</dt><dd>{selectedIntelligenceBundle.profileVersion}</dd></div>
+                  <div><dt>Validation rules</dt><dd>{selectedIntelligenceBundle.validationRulesVersion}</dd></div>
+                  <div><dt>Thresholds</dt><dd>{selectedIntelligenceBundle.thresholdsVersion}</dd></div>
+                </>}
+              </dl>
+            </div>
+
+            <div className="policy-control-card">
+              <span className="policy-control-label">Safety boundary</span>
+              <p><strong>Baseline discovery is always on.</strong> Document Intelligence cannot suppress the existing R11/general-AI, OCR, deterministic, review, or export-safety paths.</p>
+              <p>Changing this setting affects only new processing cycles. Existing package cycles keep the version snapshot captured when they started.</p>
+              <p>The current baseline bundle contains no adaptive document profile, so enabling it does not change R11 behavior by itself.</p>
+            </div>
+          </div>
+
+          <div className="admin-save-row">
+            <button className="primary" disabled={savingIntelligence} onClick={() => void saveDocumentIntelligence()}>
+              {savingIntelligence ? 'Saving...' : 'Save Document Intelligence'}
+            </button>
+            <button
+              className="secondary"
+              disabled={savingIntelligence || intelligenceDirty || documentIntelligence.activeBundleVersion === documentIntelligence.lastKnownGoodBundleVersion}
+              onClick={() => void rollbackDocumentIntelligence()}
+            >
+              Roll back to Last Known Good
+            </button>
+            <button
+              className="secondary"
+              disabled={savingIntelligence || intelligenceDirty || documentIntelligence.activeBundleVersion === documentIntelligence.lastKnownGoodBundleVersion}
+              onClick={() => void markDocumentIntelligenceLastKnownGood()}
+            >
+              Mark Current as Last Known Good
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="card admin-section-card">
         <div className="admin-section-heading">
@@ -670,7 +1009,7 @@ export default function BusinessAdminPage() {
 
       {configuration && (
         <p className="admin-footer-note">
-          Delivery-provider connections, watched-folder connections, AI/OCR providers and authentication remain IT / Platform Admin configuration.
+          Delivery-provider connections, watched-folder connections, AI/OCR providers and authentication remain IT / Platform Admin configuration. Document Intelligence activation and version pinning are Business Admin policy.
         </p>
       )}
     </div>

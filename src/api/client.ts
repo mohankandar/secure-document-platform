@@ -21,6 +21,8 @@ import type {
   DashboardAdminColumnConfiguration,
   SensitiveDataPolicyConfiguration,
   LifecyclePolicyConfiguration,
+  DocumentIntelligenceMode,
+  ReportingConfiguration,
   PackageLifecycleSummary,
   OperationsDashboard,
   OperationalReports,
@@ -39,6 +41,12 @@ import type {
   RoutingRuleRequest,
   RoutingDestinationOption,
   DerivedDelivery,
+  ProcessingStorageOverview,
+  ProcessingStorageProvider,
+  CreateProcessingStorageProviderRequest,
+  LicensingOverview,
+  TenantLicenseStatus,
+  LicenseHistoryItem,
 } from '../types';
 
 class ApiClient {
@@ -112,6 +120,34 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(policy),
     });
+  }
+
+  async updateReportingConfiguration(configuration: ReportingConfiguration): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/reporting-configuration', {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabledDimensionDefinitionIds: configuration.dimensions.filter((dimension) => dimension.enabled).map((dimension) => dimension.definitionId),
+        deliveryTargetMinutes: configuration.deliveryTargetMinutes,
+        deliveryTargetPercent: configuration.deliveryTargetPercent,
+        straightThroughTargetPercent: configuration.straightThroughTargetPercent,
+        reviewWaitTargetMinutes: configuration.reviewWaitTargetMinutes,
+      }),
+    });
+  }
+
+  async updateDocumentIntelligence(mode: DocumentIntelligenceMode, activeBundleVersion: string): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/document-intelligence', {
+      method: 'PUT',
+      body: JSON.stringify({ mode, activeBundleVersion }),
+    });
+  }
+
+  async rollbackDocumentIntelligence(): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/document-intelligence/rollback', { method: 'POST' });
+  }
+
+  async markDocumentIntelligenceLastKnownGood(): Promise<BusinessAdminConfiguration> {
+    return this.request('/business-admin/document-intelligence/last-known-good', { method: 'POST' });
   }
 
 
@@ -228,6 +264,57 @@ class ApiClient {
 
   async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number }> {
     return this.request('/platform-admin/watched-folder/scan', { method: 'POST' });
+  }
+
+  // --- Platform-managed processing storage ---
+
+  async getProcessingStorageOverview(): Promise<ProcessingStorageOverview> {
+    return this.request('/platform/processing-storage');
+  }
+
+  async createProcessingStorageProvider(body: CreateProcessingStorageProviderRequest): Promise<ProcessingStorageProvider> {
+    return this.request('/platform/processing-storage/providers', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async testProcessingStorageProvider(providerId: string): Promise<ProcessingStorageOverview> {
+    return this.request(`/platform/processing-storage/providers/${providerId}/test`, { method: 'POST' });
+  }
+
+  async activateProcessingStorageDefault(providerId: string): Promise<ProcessingStorageProvider> {
+    return this.request(`/platform/processing-storage/providers/${providerId}/activate-default`, { method: 'POST' });
+  }
+
+  async activateProcessingStorageTenant(providerId: string, tenantId: string): Promise<ProcessingStorageProvider> {
+    return this.request(`/platform/processing-storage/providers/${providerId}/activate-tenant/${tenantId}`, { method: 'POST' });
+  }
+
+  async clearProcessingStorageTenantOverride(tenantId: string): Promise<void> {
+    await this.request(`/platform/processing-storage/tenant-overrides/${tenantId}`, { method: 'DELETE' });
+  }
+
+  async retireProcessingStorageProvider(providerId: string): Promise<ProcessingStorageProvider> {
+    return this.request(`/platform/processing-storage/providers/${providerId}/retire`, { method: 'POST' });
+  }
+
+  // --- Tenant licensing ---
+
+  async getLicensingOverview(): Promise<LicensingOverview> {
+    return this.request('/platform/licensing');
+  }
+
+  async getTenantLicenseStatus(tenantId: string): Promise<TenantLicenseStatus> {
+    return this.request(`/platform/licensing/tenants/${tenantId}`);
+  }
+
+  async installTenantLicense(tenantId: string, licenseToken: string): Promise<TenantLicenseStatus> {
+    return this.request(`/platform/licensing/tenants/${tenantId}/licenses`, {
+      method: 'POST',
+      body: JSON.stringify({ licenseToken }),
+    });
+  }
+
+  async getTenantLicenseHistory(tenantId: string): Promise<LicenseHistoryItem[]> {
+    return this.request(`/platform/licensing/tenants/${tenantId}/history`);
   }
 
   async getTechnicalException(packageId: string): Promise<TechnicalExceptionDetail> {

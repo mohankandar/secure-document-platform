@@ -34,6 +34,8 @@ const KPI_CARDS: Array<{ stage: DashboardStage; title: string; countKey: keyof O
 ];
 
 function safeStoredStage(): DashboardStage {
+  const requested = new URLSearchParams(window.location.search).get('stage') as DashboardStage | null;
+  if (STAGES.some((stage) => stage.key === requested)) return requested!;
   const stored = localStorage.getItem(STAGE_KEY) as DashboardStage | null;
   return STAGES.some((stage) => stage.key === stored) ? stored! : 'ALL';
 }
@@ -47,6 +49,7 @@ function sourceLabel(type: string) {
     case 'MANUAL_UPLOAD': return 'Manual Upload';
     case 'API_SUBMISSION': return 'API';
     case 'FOLDER_INTAKE': return 'Watched Folder';
+    case 'SCANNER_INTAKE': return 'Scanner';
     default: return type.replace(/_/g, ' ');
   }
 }

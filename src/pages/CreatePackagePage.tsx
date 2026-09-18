@@ -5,13 +5,11 @@ import type { ApiError, IdentifierDefinition } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
 import './CreatePackagePage.css';
 
-type DraftSource = 'FILES' | 'SCAN';
 type DraftStatus = 'READY' | 'UPLOADING' | 'UPLOADED' | 'FAILED';
 
 interface DraftDocument {
   id: string;
   file: File;
-  source: DraftSource;
   status: DraftStatus;
   error?: string;
 }
@@ -29,13 +27,41 @@ const isPdf = (file: File) => {
 
 const fileIdentity = (file: File) => `${file.name.toLowerCase()}::${file.size}::${file.lastModified}`;
 
+const canonicalIdentifierValue = (definition: IdentifierDefinition, raw: string) => {
+  let value = raw.trim().replace(/\s+/g, ' ');
+  if (definition.stripSeparators) value = value.replace(/[ -]/g, '');
+  if (definition.caseNormalization === 'UPPER') value = value.toUpperCase();
+  if (definition.caseNormalization === 'LOWER') value = value.toLowerCase();
+  return value;
+};
+
+const validateIdentifierValue = (definition: IdentifierDefinition, raw: string): string | null => {
+  if (!raw.trim()) return definition.required ? `${definition.label} is required.` : null;
+  const value = canonicalIdentifierValue(definition, raw);
+  if (definition.validationType === 'NUMERIC' && !/^[0-9]+$/.test(value)) return `${definition.label} must contain digits only.`;
+  if (definition.validationType === 'ALPHANUMERIC' && !/^[A-Za-z0-9]+$/.test(value)) return `${definition.label} must contain letters and digits only.`;
+  if (definition.validationType === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `${definition.label} must be a valid email address.`;
+  if (definition.validationType === 'UUID' && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)) return `${definition.label} must be a valid UUID.`;
+  // CUSTOM_PATTERN uses the backend's Java regex engine. Do not duplicate that rule in
+  // JavaScript because the two regex dialects are not guaranteed to be equivalent. The backend
+  // remains authoritative for custom patterns while the UI still validates portable constraints.
+  if (definition.exactLength != null && value.length !== definition.exactLength) return `${definition.label} must contain exactly ${definition.exactLength} characters.`;
+  if (definition.minLength != null && value.length < definition.minLength) return `${definition.label} must contain at least ${definition.minLength} characters.`;
+  if (definition.maxLength != null && value.length > definition.maxLength) return `${definition.label} must contain no more than ${definition.maxLength} characters.`;
+  if (definition.allowedValues.length > 0) {
+    const allowed = definition.allowedValues.map((item) => canonicalIdentifierValue(definition, item));
+    if (!allowed.includes(value)) return `${definition.label} must be one of: ${definition.allowedValues.join(', ')}.`;
+  }
+  return null;
+};
+
 export default function CreatePackagePage() {
   const navigate = useNavigate();
   const browseInputRef = useRef<HTMLInputElement>(null);
-  const scanInputRef = useRef<HTMLInputElement>(null);
   const nextDraftId = useRef(0);
   const [definitions, setDefinitions] = useState<IdentifierDefinition[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [touchedIdentifiers, setTouchedIdentifiers] = useState<Set<string>>(() => new Set());
   const [documents, setDocuments] = useState<DraftDocument[]>([]);
   const [draftPackageId, setDraftPackageId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,10 +85,14 @@ export default function CreatePackagePage() {
       .finally(() => setLoadingConfig(false));
   }, []);
 
+  const identifierErrors = useMemo(() => Object.fromEntries(
+    definitions.map((definition) => [definition.key, validateIdentifierValue(definition, values[definition.key] || '')])
+  ), [definitions, values]);
   const missingRequired = useMemo(
     () => definitions.some((definition) => definition.required && !(values[definition.key] || '').trim()),
     [definitions, values]
   );
+  const hasIdentifierErrors = Object.values(identifierErrors).some(Boolean);
 
   const hasUploadInProgress = documents.some((document) => document.status === 'UPLOADING');
   const hasFailedDocuments = documents.some((document) => document.status === 'FAILED');
@@ -71,6 +101,7 @@ export default function CreatePackagePage() {
   const canSubmit = configurationAvailable
     && !loadingConfig
     && !missingRequired
+    && !hasIdentifierErrors
     && documents.length > 0
     && !submitting
     && !hasUploadInProgress;
@@ -81,6 +112,8 @@ export default function CreatePackagePage() {
       ? 'Tenant intake fields must be configured before documents can be submitted.'
       : missingRequired
         ? 'Complete all required business identifiers.'
+        : hasIdentifierErrors
+          ? 'Correct the highlighted business identifier values.'
         : documents.length === 0
           ? 'Add at least one PDF document.'
           : hasFailedDocuments
@@ -93,7 +126,7 @@ export default function CreatePackagePage() {
     )));
   };
 
-  const addDocuments = (files: File[], source: DraftSource) => {
+  const addDocuments = (files: File[]) => {
     setSelectionMessage(null);
     const invalid = files.filter((file) => !isPdf(file));
     const valid = files.filter(isPdf);
@@ -106,7 +139,6 @@ export default function CreatePackagePage() {
         return {
           id: `draft-${nextDraftId.current}`,
           file,
-          source,
           status: 'READY' as const,
         };
       });
@@ -120,11 +152,10 @@ export default function CreatePackagePage() {
     setDocuments((current) => [...current, ...additions]);
   };
 
-  const handleFileSelection = (files: FileList | null, source: DraftSource) => {
+  const handleFileSelection = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    addDocuments(Array.from(files), source);
-    if (source === 'FILES' && browseInputRef.current) browseInputRef.current.value = '';
-    if (source === 'SCAN' && scanInputRef.current) scanInputRef.current.value = '';
+    addDocuments(Array.from(files));
+    if (browseInputRef.current) browseInputRef.current.value = '';
   };
 
   const removeDocument = (id: string) => {
@@ -136,7 +167,7 @@ export default function CreatePackagePage() {
     event.preventDefault();
     setDragActive(false);
     if (documentSelectionLocked) return;
-    handleFileSelection(event.dataTransfer.files, 'FILES');
+    handleFileSelection(event.dataTransfer.files);
   };
 
   const handleSubmit = async () => {
@@ -222,7 +253,9 @@ export default function CreatePackagePage() {
             <p>No business identifier fields are configured for this tenant.</p>
           ) : (
             <div className="intake-identifier-grid">
-              {definitions.map((definition) => (
+              {definitions.map((definition) => {
+                const visibleError = touchedIdentifiers.has(definition.key) ? identifierErrors[definition.key] : null;
+                return (
                 <div className="form-group" key={definition.key}>
                   <label htmlFor={`identifier-${definition.key}`}>
                     {definition.label}
@@ -236,12 +269,25 @@ export default function CreatePackagePage() {
                       ...current,
                       [definition.key]: event.target.value,
                     }))}
+                    onBlur={() => setTouchedIdentifiers((current) => {
+                      const next = new Set(current);
+                      next.add(definition.key);
+                      return next;
+                    })}
                     required={definition.required}
                     disabled={fieldsLocked}
                     autoComplete="off"
+                    inputMode={definition.validationType === 'NUMERIC' ? 'numeric' : undefined}
+                    maxLength={definition.stripSeparators ? 512 : (definition.exactLength ?? definition.maxLength ?? 512)}
+                    aria-invalid={!!visibleError}
+                    aria-describedby={visibleError ? `identifier-${definition.key}-error` : undefined}
                   />
+                  {visibleError && (
+                    <small id={`identifier-${definition.key}-error`} className="field-error">{visibleError}</small>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -266,7 +312,7 @@ export default function CreatePackagePage() {
           >
             <div className="intake-drop-icon" aria-hidden="true">PDF</div>
             <strong>Drag and drop PDFs here</strong>
-            <p>Or use either document source below. Multiple PDFs can be added to the same intake.</p>
+            <p>Or browse for PDFs. Multiple PDFs can be added to the same intake.</p>
             <div className="intake-source-actions">
               <button
                 type="button"
@@ -276,14 +322,6 @@ export default function CreatePackagePage() {
               >
                 Browse Files
               </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => scanInputRef.current?.click()}
-                disabled={documentSelectionLocked}
-              >
-                Scan Documents
-              </button>
             </div>
             <input
               ref={browseInputRef}
@@ -291,16 +329,7 @@ export default function CreatePackagePage() {
               type="file"
               accept="application/pdf,.pdf"
               multiple
-              onChange={(event) => handleFileSelection(event.target.files, 'FILES')}
-              tabIndex={-1}
-            />
-            <input
-              ref={scanInputRef}
-              className="intake-hidden-input"
-              type="file"
-              accept="application/pdf,.pdf"
-              multiple
-              onChange={(event) => handleFileSelection(event.target.files, 'SCAN')}
+              onChange={(event) => handleFileSelection(event.target.files)}
               tabIndex={-1}
             />
           </div>
@@ -319,7 +348,7 @@ export default function CreatePackagePage() {
                   <div className="intake-document-icon" aria-hidden="true">PDF</div>
                   <div className="intake-document-summary">
                     <strong title={document.file.name}>{document.file.name}</strong>
-                    <span>{formatBytes(document.file.size)} · {document.source === 'SCAN' ? 'Scan Documents' : 'Browse / Drop'}</span>
+                    <span>{formatBytes(document.file.size)} · Browse / Drop</span>
                     {document.error && <span className="intake-document-error">{document.error}</span>}
                   </div>
                   <span className={`intake-upload-status status-${document.status.toLowerCase()}`}>
