@@ -3,6 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { SupportIncidentDetail } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
+import StatusBadge from '../components/ui/StatusBadge';
+import { hasCurrentCapability } from '../api/config';
 
 export default function SupportIncidentDetailPage() {
   const { incidentId = '' } = useParams();
@@ -10,6 +13,8 @@ export default function SupportIncidentDetailPage() {
   const tenantId = searchParams.get('tenantId') || undefined;
   const [data, setData] = useState<SupportIncidentDetail | null>(null);
   const [error, setError] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -23,6 +28,23 @@ export default function SupportIncidentDetailPage() {
 
   const supportListPath = tenantId ? `/support/incidents?tenantId=${encodeURIComponent(tenantId)}` : '/support/incidents';
 
+  const runAction = async (action: string, holdDays?: number, resolutionCode?: string) => {
+    if (!incidentId) return;
+    setActionBusy(true);
+    setError('');
+    setActionMessage('');
+    try {
+      await apiClient.actOnSupportIncident(incidentId, { action, holdDays, resolutionCode }, tenantId);
+      const refreshed = await apiClient.getSupportIncident(incidentId, tenantId);
+      setData(refreshed);
+      setActionMessage(`Action accepted: ${action.replace(/_/g, ' ')}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to update support incident.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   if (error) return <div><Breadcrumbs items={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident' }]} /><div className="error-message">{error}</div></div>;
   if (!data) return <div><Breadcrumbs items={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident' }]} /><p>Loading incident…</p></div>;
 
@@ -31,13 +53,18 @@ export default function SupportIncidentDetailPage() {
   return (
     <div>
       <Breadcrumbs items={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident Details' }]} />
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Support Case</p>
-          <h1>{data.primaryIdentifierValue || data.incidentId}</h1>
-          <p>{data.primaryIdentifierLabel || 'Incident ID'} · {data.incidentId}</p>
-        </div>
-        {!tenantId && <Link className="button-link secondary" to={`/packages/${data.packageId}`}>Open intake</Link>}
+      <PageHeader
+        eyebrow="Support case"
+        title={data.primaryIdentifierValue || data.incidentId}
+        description={`${data.primaryIdentifierLabel || 'Incident ID'} · ${data.incidentId}`}
+        actions={!tenantId ? <Link className="ui-button secondary" to={`/packages/${data.packageId}`}>Open intake</Link> : undefined}
+      />
+
+      <div className="support-case-summary-strip">
+        <div><span>Incident</span><StatusBadge value={data.status} /></div>
+        <div><span>Business impact</span><StatusBadge value={data.businessImpact === 'BLOCKED' ? 'BLOCKED' : data.businessImpact} label={data.businessImpact.replace(/_/g, ' ')} /></div>
+        <div><span>Business outcome</span><strong>{data.businessOutcome?.replace(/_/g, ' ') || 'In progress'}</strong></div>
+        <div><span>Last observed</span><strong>{new Date(data.lastObservedAt).toLocaleString()}</strong></div>
       </div>
 
       {businessCompleteTechnicalOpen && (
@@ -50,6 +77,12 @@ export default function SupportIncidentDetailPage() {
         <div className="support-banner blocked">
           <strong>Business processing is currently blocked.</strong>
           <span>Prioritize safe recovery or escalation according to the reason code and retry policy.</span>
+        </div>
+      )}
+      {data.artifactAvailability === 'PURGED' && (
+        <div className="support-banner">
+          <strong>Processing artifacts are no longer available.</strong>
+          <span>The retention lifecycle purged temporary processing content; the package outcome, incident timeline, audit and reporting history remain available.</span>
         </div>
       )}
 
@@ -68,6 +101,9 @@ export default function SupportIncidentDetailPage() {
             <div><dt>First observed</dt><dd>{new Date(data.firstObservedAt).toLocaleString()}</dd></div>
             <div><dt>Last observed</dt><dd>{new Date(data.lastObservedAt).toLocaleString()}</dd></div>
             <div><dt>Resolved</dt><dd>{data.resolvedAt ? new Date(data.resolvedAt).toLocaleString() : 'No'}</dd></div>
+            <div><dt>Processing artifacts</dt><dd>{data.artifactAvailability?.replace(/_/g, ' ') || 'Unknown'}</dd></div>
+            <div><dt>Retained until</dt><dd>{data.technicalAttentionRetainedUntil ? new Date(data.technicalAttentionRetainedUntil).toLocaleString() : '—'}</dd></div>
+            <div><dt>Artifacts purged</dt><dd>{data.artifactsPurgedAt ? new Date(data.artifactsPurgedAt).toLocaleString() : 'No'}</dd></div>
           </dl>
         </section>
 
@@ -85,6 +121,27 @@ export default function SupportIncidentDetailPage() {
           </dl>
         </section>
       </div>
+
+      {hasCurrentCapability('TECHNICAL_HOLD_MANAGE') && data.packageStatus === 'FAILED' && !['RESOLVED', 'AUTO_CLOSED'].includes(data.status) && (
+        <section className="card">
+          <h2>Exceptional IT actions</h2>
+          <p>Normal business continuity is automatic. Use these controls only when Tenant IT is investigating an exceptional failure.</p>
+          {actionMessage && <div className="success-message">{actionMessage}</div>}
+          <div className="integration-card-actions">
+            {hasCurrentCapability('TECHNICAL_RETRY') && (
+              <button className="primary" disabled={actionBusy} onClick={() => void runAction('REPROCESS')}>Reprocess after fix</button>
+            )}
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 7)}>Preserve 7 days</button>
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 14)}>Preserve 14 days</button>
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 30)}>Preserve 30 days</button>
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('RELEASE_HOLD')}>Release hold</button>
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('RESOLVE_NO_REPROCESS')}>Resolve — no reprocess</button>
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('SUPERSEDED')}>Mark superseded</button>
+            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('DUPLICATE')}>Mark duplicate</button>
+          </div>
+          <p className="support-subtle">Actions preserve the failed package outcome, incident timeline, audit and reporting history. Retention controls processing-artifact availability only.</p>
+        </section>
+      )}
 
       <section className="card">
         <h2>Processing fingerprint</h2>

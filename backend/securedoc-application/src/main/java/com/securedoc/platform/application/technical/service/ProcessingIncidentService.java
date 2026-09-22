@@ -4,6 +4,7 @@ import com.securedoc.platform.application.port.out.ProcessingFingerprintProvider
 import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.observability.StructuredLogContext;
+import com.securedoc.platform.application.telemetry.ProductTelemetryService;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -27,15 +28,24 @@ public final class ProcessingIncidentService {
     private static final Logger log = LoggerFactory.getLogger(ProcessingIncidentService.class);
     private final ProcessingIncidentRepository repository;
     private final ProcessingFingerprintProvider fingerprintProvider;
+    private final ProductTelemetryService productTelemetryService;
 
     public ProcessingIncidentService(ProcessingIncidentRepository repository,
                                      ProcessingFingerprintProvider fingerprintProvider) {
+        this(repository, fingerprintProvider, ProductTelemetryService.noop());
+    }
+
+    public ProcessingIncidentService(ProcessingIncidentRepository repository,
+                                     ProcessingFingerprintProvider fingerprintProvider,
+                                     ProductTelemetryService productTelemetryService) {
         this.repository = Objects.requireNonNull(repository);
         this.fingerprintProvider = Objects.requireNonNull(fingerprintProvider);
+        this.productTelemetryService = Objects.requireNonNull(productTelemetryService);
     }
 
     public static ProcessingIncidentService noop() {
-        return new ProcessingIncidentService(ProcessingIncidentRepository.none(), ProcessingFingerprintProvider.empty());
+        return new ProcessingIncidentService(ProcessingIncidentRepository.none(), ProcessingFingerprintProvider.empty(),
+                ProductTelemetryService.noop());
     }
 
     public ProcessingIncident recordFailure(TenantId tenantId,
@@ -84,7 +94,95 @@ public final class ProcessingIncidentService {
         } catch (RuntimeException ignored) {
             // Incident persistence is support telemetry and must never mask the original processing failure.
         }
+        try {
+            productTelemetryService.processingFailure(tenantId, packageId, stage.name(), component, category,
+                    reasonCode, classification.retryable(), classification.attempts());
+        } catch (RuntimeException ignored) {
+            // Product telemetry is non-authoritative and must never mask the processing failure.
+        }
         return incident;
+    }
+
+    public ProcessingIncident recordRecoveryExhausted(TenantId tenantId,
+                                                       PackageId packageId,
+                                                       int attempts,
+                                                       int maxAttempts,
+                                                       CorrelationId correlationId) {
+        Objects.requireNonNull(tenantId);
+        Objects.requireNonNull(packageId);
+        Objects.requireNonNull(correlationId);
+        Instant now = Instant.now();
+        String reasonCode = "PROCESSING_RECOVERY_EXHAUSTED";
+        ProcessingIncident incident = ProcessingIncident.open(
+                tenantId, packageId, null, ProcessingStage.DOCUMENT_PROCESSING,
+                "PACKAGE_PROCESSING_COORDINATION", "RECOVERY_EXHAUSTED", reasonCode,
+                false, Math.max(1, attempts), correlationId,
+                "Automatic package-processing recovery attempts exhausted",
+                sanitizeMap(fingerprintProvider.currentFingerprint(tenantId, packageId)),
+                Map.of("scope", "PACKAGE", "maxAttempts", String.valueOf(maxAttempts)), now);
+        try {
+            repository.save(incident);
+            repository.saveEvent(ProcessingIncidentEvent.create(
+                    incident.id(), tenantId, ProcessingIncidentEventType.PROCESSING_RECOVERY_EXHAUSTED,
+                    Math.max(1, attempts), "PACKAGE", reasonCode, false, correlationId,
+                    Map.of("maxAttempts", String.valueOf(maxAttempts)), now));
+            StructuredLogContext.warn(log, "PROCESSING_RECOVERY_EXHAUSTED", Map.of(
+                    "tenantId", tenantId, "packageId", packageId, "incidentId", incident.id(),
+                    "reasonCode", reasonCode, "attempt", Math.max(1, attempts),
+                    "maxAttempts", maxAttempts, "retryable", false, "status", incident.status()),
+                    "Automatic package-processing recovery exhausted");
+        } catch (RuntimeException ignored) {
+            // Support telemetry must never prevent the authoritative package state transition.
+        }
+        return incident;
+    }
+
+    public void markInvestigationHold(PackageId packageId, TenantId tenantId, CorrelationId correlationId,
+                                      int holdHours) {
+        safelyAdvance(packageId, tenantId, incident -> {
+            Instant now = Instant.now();
+            repository.save(incident.investigating(now));
+            repository.saveEvent(ProcessingIncidentEvent.create(
+                    incident.id(), tenantId, ProcessingIncidentEventType.INVESTIGATION_HOLD_APPLIED,
+                    null, "SUPPORT", incident.reasonCode(), null, correlationId,
+                    Map.of("holdHours", String.valueOf(holdHours)), now));
+        });
+    }
+
+    public void markInvestigationHoldReleased(PackageId packageId, TenantId tenantId, CorrelationId correlationId) {
+        safelyAdvance(packageId, tenantId, incident -> {
+            Instant now = Instant.now();
+            repository.saveEvent(ProcessingIncidentEvent.create(
+                    incident.id(), tenantId, ProcessingIncidentEventType.INVESTIGATION_HOLD_RELEASED,
+                    null, "SUPPORT", incident.reasonCode(), null, correlationId, Map.of(), now));
+        });
+    }
+
+    public void resolveNoReprocess(PackageId packageId, TenantId tenantId, CorrelationId correlationId,
+                                   String outcome, boolean superseded) {
+        safelyAdvanceAllActive(packageId, tenantId, incident -> {
+            Instant now = Instant.now();
+            String normalized = outcome == null || outcome.isBlank()
+                    ? (superseded ? "SUPERSEDED" : "RESOLVED_NO_REPROCESS")
+                    : outcome.trim().toUpperCase(java.util.Locale.ROOT);
+            repository.save(incident.resolvedWithOutcome(normalized, now));
+            repository.saveEvent(ProcessingIncidentEvent.create(
+                    incident.id(), tenantId, superseded ? ProcessingIncidentEventType.SUPERSEDED
+                            : ProcessingIncidentEventType.RESOLVED_NO_REPROCESS,
+                    null, "SUPPORT", incident.reasonCode(), null, correlationId,
+                    Map.of("resolution", normalized), now));
+        });
+    }
+
+    public void markTechnicalAttentionAutoClosed(PackageId packageId, TenantId tenantId, CorrelationId correlationId) {
+        safelyAdvanceAllActive(packageId, tenantId, incident -> {
+            Instant now = Instant.now();
+            repository.save(incident.autoClosed("RETENTION_EXPIRED", now));
+            repository.saveEvent(ProcessingIncidentEvent.create(
+                    incident.id(), tenantId, ProcessingIncidentEventType.AUTO_CLOSED_BY_RETENTION,
+                    null, "RETENTION", incident.reasonCode(), null, correlationId,
+                    Map.of("resolution", "RETENTION_EXPIRED"), now));
+        });
     }
 
     public void markRetryScheduled(PackageId packageId, TenantId tenantId, CorrelationId correlationId) {
@@ -178,6 +276,18 @@ public final class ProcessingIncidentService {
             repository.findLatestByPackageIdAndTenantId(packageId, tenantId).ifPresent(transition);
         } catch (RuntimeException ignored) {
             // Support telemetry must never block retry, business continuity, redaction or delivery.
+        }
+    }
+
+    private void safelyAdvanceAllActive(PackageId packageId, TenantId tenantId,
+                                        java.util.function.Consumer<ProcessingIncident> transition) {
+        try {
+            repository.findRecentByPackageIdAndTenantId(packageId, tenantId, 50).stream()
+                    .filter(incident -> incident.status() != ProcessingIncidentStatus.RESOLVED
+                            && incident.status() != ProcessingIncidentStatus.AUTO_CLOSED)
+                    .forEach(transition);
+        } catch (RuntimeException ignored) {
+            // Support telemetry must never block package lifecycle completion.
         }
     }
 

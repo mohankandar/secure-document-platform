@@ -19,9 +19,10 @@ public record TenantLifecyclePolicy(
 ) {
     public static final int DEFAULT_ORIGINAL_RETENTION_HOURS = 24;
     public static final int DEFAULT_REDACTED_CACHE_HOURS = 24;
-    public static final int DEFAULT_NEVER_EXPORTED_HOLD_HOURS = 72;
+    public static final int MIN_NEVER_EXPORTED_HOLD_HOURS = 72;
+    public static final int DEFAULT_NEVER_EXPORTED_HOLD_HOURS = 7 * 24;
     public static final int MAX_REDACTED_CACHE_HOURS = 72;
-    public static final int MAX_NEVER_EXPORTED_HOLD_HOURS = 14 * 24;
+    public static final int MAX_NEVER_EXPORTED_HOLD_HOURS = 30 * 24;
     public static final int MAX_SUCCESSFUL_EXPORT_CYCLES = 3;
 
     public TenantLifecyclePolicy {
@@ -33,10 +34,10 @@ public record TenantLifecyclePolicy(
         if (redactedCacheHours < 1 || redactedCacheHours > MAX_REDACTED_CACHE_HOURS) {
             throw new IllegalArgumentException("redactedCacheHours must be between 1 and " + MAX_REDACTED_CACHE_HOURS);
         }
-        if (neverExportedHoldHours < DEFAULT_NEVER_EXPORTED_HOLD_HOURS
+        if (neverExportedHoldHours < MIN_NEVER_EXPORTED_HOLD_HOURS
                 || neverExportedHoldHours > MAX_NEVER_EXPORTED_HOLD_HOURS) {
             throw new IllegalArgumentException("neverExportedHoldHours must be between "
-                    + DEFAULT_NEVER_EXPORTED_HOLD_HOURS + " and " + MAX_NEVER_EXPORTED_HOLD_HOURS);
+                    + MIN_NEVER_EXPORTED_HOLD_HOURS + " and " + MAX_NEVER_EXPORTED_HOLD_HOURS);
         }
     }
 

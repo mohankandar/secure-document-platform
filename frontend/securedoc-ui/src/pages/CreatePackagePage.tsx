@@ -4,6 +4,8 @@ import { apiClient } from '../api/client';
 import type { ApiError, IdentifierDefinition } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
 import './CreatePackagePage.css';
+import PageHeader from '../components/ui/PageHeader';
+import WorkflowStepper from '../components/ui/WorkflowStepper';
 
 type DraftStatus = 'READY' | 'UPLOADING' | 'UPLOADED' | 'FAILED';
 
@@ -98,6 +100,8 @@ export default function CreatePackagePage() {
   const hasFailedDocuments = documents.some((document) => document.status === 'FAILED');
   const fieldsLocked = submitting || draftPackageId !== null;
   const documentSelectionLocked = submitting;
+  const identifiersReady = configurationAvailable && !loadingConfig && !missingRequired && !hasIdentifierErrors;
+  const documentsReady = documents.length > 0 && !hasUploadInProgress && !hasFailedDocuments;
   const canSubmit = configurationAvailable
     && !loadingConfig
     && !missingRequired
@@ -226,13 +230,16 @@ export default function CreatePackagePage() {
   return (
     <div className="intake-page">
       <Breadcrumbs items={[{ label: 'Upload Documents' }]} />
-      <div className="intake-header">
-        <div>
-          <p className="intake-eyebrow">Manual intake</p>
-          <h1>Upload Documents</h1>
-          <p>Enter the business identifiers and add every PDF for this intake in one workspace.</p>
-        </div>
-      </div>
+      <PageHeader eyebrow="Manual intake" title="Upload Documents" description="Create one intake, add every PDF that belongs together, then submit once for processing." />
+
+      <WorkflowStepper
+        ariaLabel="Manual intake progress"
+        steps={[
+          { label: 'Business details', description: 'Identify the intake', state: identifiersReady ? 'complete' : 'current' },
+          { label: 'Documents', description: 'Add one or more PDFs', state: !identifiersReady ? 'upcoming' : documentsReady ? 'complete' : 'current' },
+          { label: 'Review & submit', description: 'Start processing once', state: identifiersReady && documentsReady ? 'current' : 'upcoming' },
+        ]}
+      />
 
       {error && <div className="error-msg" role="alert">{error}</div>}
       {selectionMessage && <div className="intake-selection-message" role="status">{selectionMessage}</div>}

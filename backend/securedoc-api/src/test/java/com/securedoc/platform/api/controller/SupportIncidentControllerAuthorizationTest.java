@@ -77,6 +77,17 @@ class SupportIncidentControllerAuthorizationTest {
         assertEquals(otherTenant, captured.get().tenantId().value());
     }
 
+    @Test
+    void springWiringUsesTheFourArgumentConstructor() throws Exception {
+        var constructor = SupportIncidentController.class.getConstructor(
+                SupportIncidentQueryService.class,
+                com.securedoc.platform.application.support.service.SupportIncidentActionService.class,
+                RequestContextResolver.class,
+                ProductAuthorizationPolicy.class);
+
+        assertNotNull(constructor.getAnnotation(org.springframework.beans.factory.annotation.Autowired.class));
+    }
+
     private static SupportIncidentSearchRepository noopSearchRepository() {
         return new SupportIncidentSearchRepository() {
             @Override public SupportIncidentSearchPage search(SupportIncidentSearchCriteria criteria) {

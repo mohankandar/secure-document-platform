@@ -1,3 +1,11 @@
 node_modules
 dist
 .vite
+
+# Playwright acceptance-test artifacts (do not commit or ship)
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
+playwright/.cache/
+.last-run.json

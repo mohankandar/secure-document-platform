@@ -199,7 +199,7 @@ export default function ProcessingStoragePanel() {
         <div className="platform-section-heading">
           <div>
             <h2>Create processing storage</h2>
-            <p>The filesystem root must already exist. LexaVault uses the operating-system/service identity and does not store SMB/NFS passwords.</p>
+            <p>The filesystem root must already exist. The platform uses the operating-system/service identity and does not store SMB/NFS passwords.</p>
           </div>
         </div>
         <form className="processing-storage-form" onSubmit={(event) => void createProvider(event)}>
@@ -216,7 +216,7 @@ export default function ProcessingStoragePanel() {
           </label>
           <label className="processing-storage-path-field">
             <span>Filesystem path</span>
-            <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder={providerType === 'SHARED_FILESYSTEM' ? '\\\\NAS01\\LexaVault\\Processing or /mnt/lexavault/processing' : 'C:\\ProgramData\\LexaVault\\Processing'} />
+            <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder={providerType === 'SHARED_FILESYSTEM' ? '\\\\NAS01\\DocumentPlatform\\Processing or /mnt/document-platform/processing' : 'C:\\ProgramData\\DocumentPlatform\\Processing'} />
           </label>
           <button className="primary" type="submit" disabled={busyKey !== ''}>{busyKey === 'create' ? 'Creating…' : 'Create candidate'}</button>
         </form>

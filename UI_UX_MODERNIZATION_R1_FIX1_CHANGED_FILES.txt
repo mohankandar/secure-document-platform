@@ -1,0 +1,13 @@
+UI/UX Modernization R1 FIX1 changed files
+
+frontend/securedoc-ui/src/App.tsx
+frontend/securedoc-ui/src/components/ui/useMediaQuery.ts
+frontend/securedoc-ui/src/pages/DashboardPage.tsx
+frontend/securedoc-ui/src/pages/BrandingPanel.tsx
+frontend/securedoc-ui/src/index.css
+README.md
+docs/continuity/CURRENT_STATE.md
+docs/continuity/CHANGELOG.md
+docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+UI_UX_MODERNIZATION_R1_FIX1_CANDIDATE_README.md
+UI_UX_MODERNIZATION_R1_FIX1_CHANGED_FILES.txt

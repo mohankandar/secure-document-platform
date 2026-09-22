@@ -8,9 +8,11 @@ import com.securedoc.platform.application.support.model.SupportIncidentDetail;
 import com.securedoc.platform.application.support.model.SupportIncidentSearchCriteria;
 import com.securedoc.platform.application.support.model.SupportIncidentSearchPage;
 import com.securedoc.platform.application.support.service.SupportIncidentQueryService;
+import com.securedoc.platform.application.support.service.SupportIncidentActionService;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.domain.identity.TenantId;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,20 +20,30 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Read-only incident search/triage API for Tenant IT and Platform Operations.
- * Protected document/provider content is intentionally absent from this contract.
+ * Incident search/triage API for Tenant IT and Platform Operations. Exceptional actions preserve
+ * durable package/audit/support history; protected document/provider content is absent from this contract.
  */
 @RestController
 @RequestMapping("/api/v1/support/incidents")
 public class SupportIncidentController {
     private final SupportIncidentQueryService queryService;
+    private final SupportIncidentActionService actionService;
     private final RequestContextResolver contextResolver;
     private final ProductAuthorizationPolicy authorizationPolicy;
 
     public SupportIncidentController(SupportIncidentQueryService queryService,
                                      RequestContextResolver contextResolver,
                                      ProductAuthorizationPolicy authorizationPolicy) {
+        this(queryService, null, contextResolver, authorizationPolicy);
+    }
+
+    @Autowired
+    public SupportIncidentController(SupportIncidentQueryService queryService,
+                                     SupportIncidentActionService actionService,
+                                     RequestContextResolver contextResolver,
+                                     ProductAuthorizationPolicy authorizationPolicy) {
         this.queryService = queryService;
+        this.actionService = actionService;
         this.contextResolver = contextResolver;
         this.authorizationPolicy = authorizationPolicy;
     }
@@ -74,6 +86,32 @@ public class SupportIncidentController {
         TenantId effectiveTenant = resolveTenant(principal.tenantId(), tenantId, principal);
         return ResponseEntity.ok(queryService.detail(incidentId, effectiveTenant));
     }
+
+    @PostMapping("/{incidentId}/actions")
+    @RequireCapability(UserCapability.TECHNICAL_HOLD_MANAGE)
+    public ResponseEntity<SupportIncidentActionService.ActionResult> action(
+            @PathVariable UUID incidentId,
+            @RequestParam(required = false) UUID tenantId,
+            @RequestBody IncidentActionRequest body,
+            HttpServletRequest request) {
+        if (body == null || body.action() == null || body.action().isBlank()) {
+            throw new IllegalArgumentException("Support incident action is required");
+        }
+        var principal = contextResolver.resolvePrincipal(request);
+        TenantId effectiveTenant = resolveTenant(principal.tenantId(), tenantId, principal);
+        if ("REPROCESS".equalsIgnoreCase(body.action())
+                && !authorizationPolicy.has(principal, UserCapability.TECHNICAL_RETRY)) {
+            throw new AccessDeniedException("Reprocess requires Technical Retry capability");
+        }
+        if (actionService == null) {
+            throw new IllegalStateException("Support incident actions are not configured");
+        }
+        return ResponseEntity.accepted().body(actionService.execute(incidentId, effectiveTenant,
+                principal.actorId(), contextResolver.resolveCorrelationId(request),
+                body.action(), body.holdDays(), body.resolutionCode()));
+    }
+
+    public record IncidentActionRequest(String action, Integer holdDays, String resolutionCode) {}
 
     private TenantId resolveTenant(TenantId principalTenant,
                                    UUID requestedTenant,

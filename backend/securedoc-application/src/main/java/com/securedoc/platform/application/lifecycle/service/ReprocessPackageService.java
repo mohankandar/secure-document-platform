@@ -98,7 +98,7 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
 
         // Reprocessing uses the same asynchronous post-commit processing contract as normal intake.
         // The request returns promptly with the durable SUBMITTED state; the worker moves it to PROCESSING.
-        packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
+        packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.freshCycle(
                 command.packageId(), command.tenantId(), command.actorId(), command.correlationId()));
         return new ReprocessPackageResult(command.packageId(), pkg.status(), nextCycle);
     }

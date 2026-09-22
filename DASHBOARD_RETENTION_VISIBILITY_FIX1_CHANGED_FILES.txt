@@ -1,0 +1,10 @@
+DASHBOARD_RETENTION_VISIBILITY_FIX1_CANDIDATE_README.md
+DASHBOARD_RETENTION_VISIBILITY_FIX1_CHANGED_FILES.txt
+README.md
+docs/continuity/CURRENT_STATE.md
+docs/continuity/CHANGELOG.md
+docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+backend/securedoc-application/src/main/java/com/securedoc/platform/application/lifecycle/service/PackageLifecycleService.java
+backend/securedoc-api/src/main/java/com/securedoc/platform/api/config/ApplicationServiceConfig.java
+backend/securedoc-application/src/test/java/com/securedoc/platform/application/lifecycle/service/ReprocessPackageServiceTest.java
+backend/securedoc-application/src/test/java/com/securedoc/platform/application/lifecycle/service/PackageLifecycleDashboardRetentionTest.java

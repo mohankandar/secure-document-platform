@@ -5,6 +5,9 @@ import type { PlatformAdminOverview, PlatformHealthItem } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
 import ProcessingStoragePanel from './ProcessingStoragePanel';
 import LicensingPanel from './LicensingPanel';
+import BrandingPanel from './BrandingPanel';
+import ProductTelemetryPanel from './ProductTelemetryPanel';
+import PageHeader from '../components/ui/PageHeader';
 
 function statusClass(status: string) {
   const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -35,7 +38,7 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
   const [runningHealth, setRunningHealth] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'storage' | 'licensing'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'storage' | 'licensing' | 'branding' | 'telemetry'>('overview');
 
   const load = useCallback(async () => {
     try {
@@ -87,21 +90,17 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
   return (
     <div className="platform-admin-page">
       <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Technical Administration' }]} />
-      <div className="platform-admin-header">
-        <div>
-          <div className="platform-eyebrow">Administration</div>
-          <h1>Technical Administration</h1>
-          <p>Technical providers, intake connections, resilience, integrations and operational health.</p>
-        </div>
-        {activeTab === 'overview' && (
-          <div className="platform-header-actions">
-            <button className="secondary" onClick={() => void load()}>Refresh</button>
-            <button className="primary" disabled={runningHealth} onClick={() => void runHealth()}>
-              {runningHealth ? 'Checking…' : 'Run health checks'}
-            </button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="Administration"
+        title="Technical Administration"
+        description="Platform health, processing infrastructure, licensing and customer-facing branding."
+        actions={activeTab === 'overview' ? (<>
+          <button className="ui-button secondary" onClick={() => void load()}>Refresh</button>
+          <button className="ui-button primary" disabled={runningHealth} onClick={() => void runHealth()}>
+            {runningHealth ? 'Checking…' : 'Run health checks'}
+          </button>
+        </>) : undefined}
+      />
 
       <div className="platform-tabs" role="tablist" aria-label="Platform Operations sections">
         <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')} role="tab" aria-selected={activeTab === 'overview'}>Overview</button>
@@ -109,6 +108,8 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
           <>
             <button className={activeTab === 'storage' ? 'active' : ''} onClick={() => setActiveTab('storage')} role="tab" aria-selected={activeTab === 'storage'}>Processing Storage</button>
             <button className={activeTab === 'licensing' ? 'active' : ''} onClick={() => setActiveTab('licensing')} role="tab" aria-selected={activeTab === 'licensing'}>Licensing</button>
+            <button className={activeTab === 'branding' ? 'active' : ''} onClick={() => setActiveTab('branding')} role="tab" aria-selected={activeTab === 'branding'}>Branding</button>
+            <button className={activeTab === 'telemetry' ? 'active' : ''} onClick={() => setActiveTab('telemetry')} role="tab" aria-selected={activeTab === 'telemetry'}>Product Telemetry</button>
           </>
         )}
       </div>
@@ -117,6 +118,10 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
         <ProcessingStoragePanel />
       ) : activeTab === 'licensing' && canManagePlatformOperations ? (
         <LicensingPanel />
+      ) : activeTab === 'branding' && canManagePlatformOperations ? (
+        <BrandingPanel />
+      ) : activeTab === 'telemetry' && canManagePlatformOperations ? (
+        <ProductTelemetryPanel />
       ) : (
         <>
       {error && <div className="platform-error">{error}</div>}
@@ -169,8 +174,9 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
             <section className="platform-section platform-panel">
               <div className="platform-section-heading compact"><div><h2>Resilience & integrations</h2><p>Active deployment policy and safe configuration state.</p></div></div>
               <dl className="platform-definition-list">
-                <div><dt>Retry attempts</dt><dd>{data.resilience.maxAttempts}</dd></div>
+                <div><dt>Transient operation attempts</dt><dd>{data.resilience.maxAttempts}</dd></div>
                 <div><dt>Initial backoff</dt><dd>{data.resilience.initialBackoffMs} ms</dd></div>
+                <div><dt>Package processing attempts</dt><dd>{data.resilience.packageProcessingMaxAttempts}</dd></div>
                 <div><dt>AI failover</dt><dd>{data.resilience.aiSecondaryEnabled ? `${data.resilience.aiSecondaryProvider}${data.resilience.aiSecondaryModel ? ` · ${data.resilience.aiSecondaryModel}` : ''}` : 'Disabled'}</dd></div>
                 <div><dt>Delivery</dt><dd>{data.integrations.deliveryType}</dd></div>
                 <div><dt>SDV configured</dt><dd>{data.integrations.sdvConfigured ? 'Yes' : 'No'}</dd></div>

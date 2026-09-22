@@ -29,7 +29,11 @@ public final class StructuredLogContext {
             "baselineDiscoveryRequired", "intelligenceFallbackToBaseline",
             "queueWaitMs", "activeWorkers", "workerPoolSize", "workerCorePoolSize", "recovery",
             "workerMaxPoolSize", "workerQueueDepth", "workerQueueRemaining",
-            "exportCycle", "enabledRules", "documents", "matchedRules", "ambiguousPages"
+            "exportCycle", "enabledRules", "documents", "matchedRules", "ambiguousPages",
+            // Dedicated privacy-safe product telemetry identifiers/metadata. These are pseudonymous
+            // or deployment-controlled tokens and never contain customer document/business content.
+            "telemetryMode", "installationTelemetryId", "tenantTelemetryId", "packageTelemetryId",
+            "appVersion", "feature", "documentCount", "holdDays"
     );
 
     private StructuredLogContext() {
@@ -118,6 +122,14 @@ public final class StructuredLogContext {
         MDC.remove("documents");
         MDC.remove("matchedRules");
         MDC.remove("ambiguousPages");
+        MDC.remove("telemetryMode");
+        MDC.remove("installationTelemetryId");
+        MDC.remove("tenantTelemetryId");
+        MDC.remove("packageTelemetryId");
+        MDC.remove("appVersion");
+        MDC.remove("feature");
+        MDC.remove("documentCount");
+        MDC.remove("holdDays");
     }
 
     public static Map<String, String> snapshot() {

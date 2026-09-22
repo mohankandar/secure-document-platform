@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.support.service;
 
+import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.port.out.SupportIncidentSearchRepository;
 import com.securedoc.platform.application.support.model.SupportIncidentDetail;
@@ -16,11 +17,19 @@ import java.util.UUID;
 public class SupportIncidentQueryService {
     private final SupportIncidentSearchRepository searchRepository;
     private final ProcessingIncidentRepository incidentRepository;
+    private final PackageLifecycleRepository lifecycleRepository;
 
     public SupportIncidentQueryService(SupportIncidentSearchRepository searchRepository,
                                        ProcessingIncidentRepository incidentRepository) {
+        this(searchRepository, incidentRepository, null);
+    }
+
+    public SupportIncidentQueryService(SupportIncidentSearchRepository searchRepository,
+                                       ProcessingIncidentRepository incidentRepository,
+                                       PackageLifecycleRepository lifecycleRepository) {
         this.searchRepository = searchRepository;
         this.incidentRepository = incidentRepository;
+        this.lifecycleRepository = lifecycleRepository;
     }
 
     public SupportIncidentSearchPage search(SupportIncidentSearchCriteria criteria) {
@@ -32,6 +41,17 @@ public class SupportIncidentQueryService {
                 .orElseThrow(() -> new NotFoundException("Support incident", incidentId.toString()));
         ProcessingIncident incident = incidentRepository.findByIdAndTenantId(incidentId, tenantId)
                 .orElseThrow(() -> new NotFoundException("Support incident", incidentId.toString()));
+        var lifecycle = lifecycleRepository == null
+                ? java.util.Optional.<com.securedoc.platform.domain.lifecycle.PackageLifecycle>empty()
+                : lifecycleRepository.findByPackageIdAndTenantId(incident.packageId(), tenantId);
+        java.time.Instant retainedUntil = lifecycle.map(value -> value.successfulExportCycles() > 0
+                ? value.originalDeleteAt().orElse(null)
+                : value.technicalHoldUntil().orElse(null)).orElse(null);
+        java.time.Instant purgedAt = lifecycle.flatMap(value -> value.purgedAt()).orElse(null);
+        String artifactAvailability = purgedAt != null ? "PURGED"
+                : retainedUntil != null && !java.time.Instant.now().isBefore(retainedUntil) ? "PENDING_PURGE"
+                : retainedUntil != null ? "RETAINED_UNTIL_POLICY_EXPIRY" : "UNKNOWN";
+
         var events = incidentRepository.findEvents(incidentId, tenantId, 100).stream()
                 .map(event -> new SupportIncidentDetail.Event(
                         event.eventType().name(),
@@ -64,6 +84,9 @@ public class SupportIncidentQueryService {
                 incident.attempts(),
                 incident.correlationId().value(),
                 incident.safeSummary(),
+                artifactAvailability,
+                retainedUntil,
+                purgedAt,
                 incident.processingFingerprint(),
                 incident.safeMetadata(),
                 incident.firstObservedAt(),

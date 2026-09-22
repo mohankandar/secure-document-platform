@@ -1,3 +1,112 @@
+## 2026-09-21 — Operational Continuity R1 FIX2 attempt-budget continuity
+
+- Focused Kiro verification: B HA/fencing PASS, C legacy PROCESSING PASS, D Technical Attention retention PASS, E privacy telemetry PASS; A processing attempt budget FAIL on post-review continuation reset.
+- Root cause: PostgreSQL attempt lease upsert reset every non-recovery conflict to attempt 1, so recovered attempt 2 could return from human review as attempt 1.
+- FIX2 distinguishes ordinary continuation from explicit fresh redrive. Continuation preserves durable attempt count; recovery increments; Tenant IT/explicit reprocess resets to attempt 1 for a new cycle.
+- Added focused regression tests; no schema change, Liquibase remains 73.
+- Local full build + focused attempt-2 → review → continuation runtime proof required before freeze.
+
+
+## 2026-09-21 — Operational Continuity R1 FIX1 startup wiring
+
+- User full local build PASS; Liquibase applied `031-01-processing-attempt-budget` and `031-02-technical-attention-default`, reaching 73 total changeSets.
+- LOCAL API startup then failed creating `SupportIncidentController`: multiple constructors were present and no constructor was explicitly selected for dependency injection, causing Spring to look for a default constructor.
+- FIX1 marks the 4-argument production constructor (including `SupportIncidentActionService`) with `@Autowired` and adds a focused regression assertion.
+- No recovery, retention, Technical Attention, telemetry, security, API contract, frontend, or schema semantics changed.
+- Status: BUILD PASS / STARTUP FIX IMPLEMENTED / LOCAL RUNTIME REVALIDATION REQUIRED.
+
+## 2026-09-21 — Operational Continuity, Technical Attention & Privacy Telemetry R1 candidate
+
+- Added configurable package-processing recovery budget: 3 total attempts by default; recovery scans do not count, acquired processing-lease generations do.
+- Added safe recovery eligibility for legacy/pre-HA `PROCESSING` packages with no lease after a configurable grace; repeated recovery exhaustion transitions to Technical Attention with `PROCESSING_RECOVERY_EXHAUSTED`.
+- Added lifecycle-driven Technical Attention cleanup: default/new policy 168h, processing artifact purge, operational Dashboard hide, Support Incident auto-close on retention expiry, durable package/audit/reporting/support history retained. Existing tenant-configured hold values are not rewritten.
+- Added exceptional Tenant IT support actions: reprocess, 7/14/30-day investigation hold, release hold, resolve without reprocess, superseded and duplicate.
+- Added privacy-preserving product telemetry foundation: OFF/BASIC/ENHANCED (default OFF), pseudonymous identifiers, explicit allow-list, dedicated JSONL output, no document/OCR/extracted/business/customer-path/prompt/model-response/actor content; telemetry remains non-authoritative.
+- Added `031-operational-continuity.xml`; candidate schema is **73 changeSets**.
+- Corrected manual lifecycle maintenance documentation to maximum supported `POST /api/v1/lifecycle/purge-due?limit=500`.
+- Assistant checks: Java 21 domain/application compile **457 sources PASS**; changed processing persistence, scheduler/API, support/telemetry compile checks PASS; Liquibase parse PASS; focused tests **18/18 PASS**. Full local Maven/frontend/runtime validation required.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL VALIDATION REQUIRED**.
+
+## 2026-09-21 — Dashboard Retention Visibility Synchronization FIX2 candidate
+
+- Local FIX1 runtime validation exposed an upgrade/backfill gap: future retention events were correct, but completed exports already marked final-purged before FIX1 were excluded from `findDueFinalPurge(...)` and could remain visible on Dashboard indefinitely.
+- FIX2 retains the FIX1 future path and adds bounded backend reconciliation for successfully exported `COMPLETED` packages with `purged_at` populated and `dashboard_hidden_at` still null.
+- Reconciliation uses the authoritative existing `purged_at` timestamp for Dashboard hiding and does not recalculate 24h, rerun artifact deletion, or rewrite completed retention history.
+- Failed visibility reconciliation is audited and retryable on a later maintenance cycle; never-exported technical-hold packages remain excluded.
+- No scheduler change, frontend timer, package deletion or migration; Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Assistant checks: Java 21 domain/application compile **453 sources PASS**; changed persistence compile PASS with compatibility stubs; focused retention harness **5/5 PASS**; affected test-source compile PASS. Maven/full local build still required.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL BACKEND + RUNTIME VALIDATION REQUIRED**.
+
+## 2026-09-20 — Dashboard Retention Visibility Synchronization FIX1 candidate
+
+- Corrects post-freeze Dashboard lifecycle behavior: completed/exported packages remain visible until the tenant-configured Business Administration `originalRetentionHours` deadline reaches the normal final retention purge.
+- The same successful final processing-retention purge now hides the completed/exported package from normal Dashboard rows/KPIs through the existing dashboard visibility metadata/port.
+- No separate Dashboard timer and no hard-coded 24h behavior; a 48h focused test proves policy-driven timing.
+- Durable package rows, reporting facts, audit history and export history remain; operational reporting continues to include Dashboard-hidden packages.
+- Never-exported technical-hold purges are not auto-hidden by this fix; existing manual Approver removal remains unchanged.
+- Assistant checks: Java 21 domain/application source compilation PASS; focused retention harness 3/3 PASS. Maven/full local build not run because Maven is unavailable in the assistant runtime.
+- No migration; Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL BACKEND + RUNTIME VALIDATION REQUIRED**.
+
+## 2026-09-20 — UI/UX Modernization R2–R5 final acceptance — VERIFIED / FROZEN
+
+- Accepted the combined R2–R5 application modernization on the frozen R1 foundation after broad user runtime walkthroughs plus focused FIX1–FIX4 validation.
+- User reported both backend and frontend builds successful for the combined release.
+- Operator flows accepted: Dashboard, Upload, Scanner Intake, Package Details and Manual Review, including durable scanner handoff, normal lifecycle continuation, fresh review rendering and automatic resume after review completion.
+- Administration accepted: Business Administration persistence and role boundaries; section-based summary-first editing; Integrations purpose groups; purpose locking; provider scoping; on-demand editor; final FIX4 group-switch editor reset; Technical Administration frozen R1 branding/storage/licensing behavior unchanged.
+- Reports/Support/Audit accepted: Executive/Usage/Operational reports, Support Incident progressive filters, responsive layouts, and default suppression of routine zero-discovery scheduled watched-folder audit events while preserving access through `Show routine activity`.
+- Responsive validation covered representative desktop plus 1180×820 landscape and 820×1180 portrait behavior.
+- Final assistant checks for the Integrations correction: TypeScript/TSX syntax transpile PASS and frontend authorization tests 8/8 PASS.
+- No backend API/schema/security/storage/licensing/scanner/retention/delivery semantic changes were introduced by the final FIX4 correction; Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Status: **VERIFIED / FROZEN**. Next workstream: **On-Prem Installer & First-Run Setup**.
+
+## 2026-09-20 — UI/UX Modernization R2–R5 FIX4 candidate
+
+- Fixed Integrations draft leakage across purpose-group tabs: switching groups now closes/resets the open create/edit editor.
+- Purpose remains locked for Intake Sources, Master Delivery and Derived Delivery regardless of transient draft state.
+- Provider choices are constrained to combinations valid for the active purpose group; All Connections remains unrestricted and purpose-selectable.
+- Assistant validation: `IntegrationsPage.tsx` syntax transpile PASS; frontend authorization tests 8/8 PASS.
+- No backend/API/schema/security/storage/licensing/scanner/retention/delivery changes; Liquibase remains 71.
+
+## 2026-09-20 — UI/UX Modernization R2–R5 FIX3 candidate
+
+- Focused FIX2 runtime validation confirmed Intake Sources, Master Delivery, Derived Delivery and All Connections grouping, counts, editor behavior and derived-attention scoping.
+- Final UX guardrail: Purpose is now locked/read-only when creating or editing from a purpose-specific group, preventing accidental cross-category configuration.
+- All Connections intentionally keeps Purpose selectable as the neutral inventory/creation surface.
+- No backend/API/schema/security or delivery semantics changed; Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Status: **IMPLEMENTED CANDIDATE / FRONTEND BUILD + NARROW INTEGRATIONS VALIDATION REQUIRED**.
+
+## 2026-09-20 — UI/UX Modernization R2–R5 FIX2 candidate
+
+- User runtime validation of FIX1-era surfaces is broadly PASS: Upload/Scanner/package lifecycle, Manual Review, Business Administration persistence and role boundaries, Reporting, Support Incidents, Audit routine-activity filtering, Package Details document count, and responsive shell behavior were exercised successfully.
+- Remaining UX concern is isolated to Integrations information architecture: intake, master-delivery and derived-delivery connections were still mixed in one configured-connections list.
+- Integrations now has purpose-group navigation: **Intake Sources**, **Master Delivery**, **Derived Delivery**, and **All Connections**, each with counts and purpose-specific descriptions.
+- New Connection inherits the active purpose group; routine review keeps the editor closed, while New/Edit opens it intentionally. Editor Reset restores the edited connection or the current group defaults.
+- Derived-delivery attention appears only in Derived Delivery / All Connections. CRUD, provider execution, health tests, polling, enable/disable, retry, secrets, authorization and backend APIs are unchanged.
+- Assistant checks: frontend authorization tests **8/8 PASS**; modified `IntegrationsPage.tsx` parses with no syntax diagnostics; CSS brace balance PASS. Full local build + focused Integrations visual validation remain required before freeze.
+- No migration; Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL BUILD + INTEGRATIONS FOCUSED VALIDATION REQUIRED**.
+
+## 2026-09-20 — UI/UX Modernization R2–R5 FIX1 candidate
+
+- Broad local runtime walkthrough of the original combined R2–R5 candidate passed core Upload, Scanner simulator, package workflow, Manual Review, role-boundary, Reporting and tablet-shell behavior, but exposed information-density and presentation defects in administration/support surfaces.
+- Business Administration now uses one-at-a-time section tabs instead of a single long settings page. Existing business identifiers are compact collapsible rows, new identifiers open directly for editing, and derived-routing configuration follows summary-first Add/Edit behavior.
+- Integrations now uses collapsible configured-connection summaries and keeps the large technical editor closed until New/Edit is selected. Existing CRUD/test/poll/enable-disable/retry/secret semantics are unchanged.
+- Support Incidents now presents business identifier, incident ID and status as primary triage controls, with correlation/package/document/stage/reason/continuity/retry/date fields under Advanced Filters. Collapsed advanced filters retain an active-filter count.
+- Audit keeps all durable records but hides routine `WATCHED_FOLDER_SCAN_TRIGGERED` events where `mode=SCHEDULED` and `discovered=0` from the default timeline; operators can reveal them with `Show routine activity`.
+- Package Details now derives a missing detail-response `documentCount` from the returned document list, removing the visible `Documents (undefined)` defect without changing backend API/schema behavior.
+- Assistant checks: TS/TSX syntax parse **PASS across 34 source files**, authorization tests **8/8 PASS**, global/Reports CSS brace balance PASS. Full local build and focused runtime validation are required before R2–R5 freeze.
+- No migration; Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL BUILD + FOCUSED VALIDATION REQUIRED**.
+
+## 2026-09-20 — UI/UX Modernization R1 FIX1 VERIFIED / FROZEN
+
+- Accepted the modern design-system/app-shell/white-label/iPad foundation after focused desktop and tablet runtime validation.
+- 1180×820 landscape: compact rail default, reduced Dashboard operational columns, no page-level horizontal overflow, Branding editor/preview stacking and tenant actions PASS.
+- 820×1180 portrait: drawer shell, adaptive Dashboard package cards, 2×2 metrics, wrapped controls, Branding form/preview/tenant override layout and bottom Save/Reset actions PASS.
+- Deployment/tenant branding inheritance/reset, accessible theme colors, primary/compact logo and favicon upload, and preview/shell logo fallback rules PASS.
+- No backend/schema change in FIX1; frozen post-V1 baseline remains 71 Liquibase changeSets through `030-ui-branding.xml`.
+
 ## 2026-09-18 — Tenant Licensing R1 Iteration 2 FIX1 final acceptance — VERIFIED / FROZEN
 
 - Platform Operations `Licensing` UI and FIX1 history/expiry hardening accepted after focused local runtime/UI validation.
@@ -13,6 +122,44 @@
 - Next planned workstream is **UI/UX Modernization with responsive iPad/tablet support**, followed by On-Prem Installer / First-Run Setup.
 
 # Continuity Changelog
+
+## 2026-09-20 — UI/UX Modernization R2–R5 combined candidate
+
+- Started the combined post-R1 application modernization program from the **UI/UX Modernization R1 FIX1 VERIFIED / FROZEN** baseline. One codebase/release is used with hard internal checkpoints A–E.
+- Added shared `WorkflowStepper`, `StatusBadge` and `InfoGrid` UI primitives for consistent progress, semantic state and responsive detail presentation.
+- Core operator workflows: Upload and Scan now expose explicit three-step progress; Package Details is reorganized into a modern responsive intake workspace with contextual action, Overview/Documents/Delivery & retention/Derived routing tabs and responsive cards. Existing package APIs, approval, reprocess, manual-continuation and derived-delivery behavior remain unchanged.
+- Human review: Manual Review adopts the shared page foundation plus portrait decision access; Manual Processing preserves the existing page/redaction tools while adopting the modern header/responsive foundation.
+- Administration: Business Administration gains sticky/scrollable section navigation across major policy areas; Integrations gains operational summary cards and shared page treatment without changing connection behavior. Frozen Processing Storage/Licensing/Branding functionality is untouched.
+- Reports/Support/Audit: report interactions are aligned to brand tokens without semantic changes; Support results become responsive record cards on tablet/portrait and detail pages gain summary treatment; Audit results become responsive event cards instead of a wide table while retaining privacy-safe identifiers/correlation fields.
+- Responsive styling covers desktop, tablet landscape, tablet portrait and smaller fallbacks while preserving R1 shell/branding behavior.
+- No backend/schema change. Liquibase remains **71 changeSets** through `030-ui-branding.xml`.
+- Assistant checks: TS/TSX syntax transpile PASS across 34 source files; frontend authorization **8/8 PASS**; global/Reports CSS brace balance PASS. Full local build and checkpoint runtime validation are required before freeze.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL VALIDATION REQUIRED**.
+
+## 2026-09-18 — UI/UX Modernization R1 FIX1 candidate
+
+- Full local R1 build passed. Focused desktop plus 1180×820 and 820×1180 validation confirmed deployment/tenant branding, controlled theme colors, logo/favicon assets, portrait drawer navigation, portrait Dashboard package cards and responsive Technical Administration behavior.
+- FIX1 removes duplicate/truncated application-name text when a configured primary logo is already occupying the expanded sidebar or tablet drawer brand slot; compact rail/mobile top bar continue to use the compact logo/short name where appropriate.
+- Branding live preview now applies the same primary-logo versus compact-logo fallback rules as the real shell.
+- 900–1199 px tablet landscape now defaults to a compact rail but remains temporarily expandable by the user.
+- Dashboard tablet landscape now uses a separate responsive column preference initialized to an intentional reduced set (primary identifier, one searchable secondary identifier, Stage, Documents, Intake Source, Last Updated); the existing Columns menu can still add approved fields without changing desktop preferences.
+- Branding editor/live-preview stacking now occurs earlier on constrained desktop/tablet widths to avoid right-edge clipping.
+- Long tenant branding overrides now provide Save/Reset actions at the bottom of the form, with portrait-friendly reachability.
+- No database/backend behavior change; Liquibase remains **71 changeSets** through `030-ui-branding.xml`. Frozen processing, licensing, storage, security, scanner and delivery behavior is unchanged.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL BUILD + FOCUSED RUNTIME VALIDATION REQUIRED**.
+
+
+## 2026-09-18 — UI/UX Modernization R1 candidate
+
+- Added a modern responsive application shell with grouped navigation, desktop collapse/expand, tablet portrait drawer behavior, touch-friendly controls and shared design tokens/page-header/icon foundations.
+- Added database-backed white-label branding resolution: built-in codename/default -> deployment override -> tenant override. Visible application/short/organization names, page title, accent/secondary colors, primary/compact logos and favicon are configurable without changing tenant/licensing identity.
+- Added Platform Operations-only `Technical Administration -> Branding` with deployment and tenant editing, inherit/reset semantics, PNG/WebP assets, contrast validation and live responsive preview.
+- Added branding APIs and audit event `BRANDING_CONFIGURATION_CHANGED`; all-tenant overview omits binary tenant asset payloads and loads the selected tenant detail on demand.
+- Primary accent is server-validated for WCAG-AA white-text contrast; arbitrary CSS and semantic status-color overrides are not supported.
+- Modernized Dashboard hierarchy and added intentional tablet-portrait package cards; Upload, Scan and Technical Administration adopt the shared page header. Scanner Intake now uses resolved product naming and explains the workstation Scanner Bridge boundary for tablet/iPad use.
+- Added `030-ui-branding.xml`; current post-V1 candidate baseline is **71 Liquibase changeSets**. Frozen V1 and all licensing/processing-storage/delivery semantics remain unchanged.
+- Assistant-environment checks: branding application-layer javac PASS, API/infrastructure branding syntax javac PASS against framework stubs, Liquibase XML parse PASS, and frontend TS/TSX syntax transpile PASS. Full local build/runtime/iPad/security regression is still required.
+- Status: **IMPLEMENTED CANDIDATE / LOCAL VALIDATION REQUIRED**.
 
 ## 2026-09-18 — Tenant Licensing R1 Iteration 2 FIX1 candidate
 

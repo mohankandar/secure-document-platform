@@ -114,6 +114,70 @@ class ProcessingIncidentServiceTest {
         assertTrue(repository.events.stream().anyMatch(e -> e.eventType() == ProcessingIncidentEventType.RESOLVED));
     }
 
+    @Test
+    void retentionAutoCloseClosesAllActiveIncidentsForThePackageButKeepsHistory() {
+        MultiIncidentRepository repository = new MultiIncidentRepository();
+        ProcessingIncidentService service = new ProcessingIncidentService(repository, (tenantId, packageId) -> Map.of());
+        TenantId tenantId = TenantId.generate();
+        PackageId packageId = PackageId.generate();
+        java.time.Instant now = java.time.Instant.now();
+
+        ProcessingIncident first = ProcessingIncident.open(tenantId, packageId, null,
+                ProcessingStage.TEXT_EXTRACTION, "OCR", "TIMEOUT", "OCR_TIMEOUT", true, 2,
+                CorrelationId.generate(), "Extraction failed", Map.of(), Map.of(), now.minusSeconds(60));
+        ProcessingIncident second = ProcessingIncident.open(tenantId, packageId, null,
+                ProcessingStage.DOCUMENT_PROCESSING, "PACKAGE_PROCESSING_COORDINATION",
+                "RECOVERY_EXHAUSTED", "PROCESSING_RECOVERY_EXHAUSTED", false, 3,
+                CorrelationId.generate(), "Recovery exhausted", Map.of(), Map.of(), now.minusSeconds(30));
+        repository.values.add(first);
+        repository.values.add(second);
+
+        service.markTechnicalAttentionAutoClosed(packageId, tenantId, CorrelationId.generate());
+
+        assertEquals(2, repository.values.size(), "incident rows are durable history and must not be deleted");
+        assertTrue(repository.values.stream().allMatch(i -> i.status() == ProcessingIncidentStatus.AUTO_CLOSED));
+        assertTrue(repository.values.stream().allMatch(i -> "RETENTION_EXPIRED".equals(i.businessOutcome())));
+        assertEquals(2, repository.events.stream()
+                .filter(e -> e.eventType() == ProcessingIncidentEventType.AUTO_CLOSED_BY_RETENTION).count());
+    }
+
+    private static final class MultiIncidentRepository implements ProcessingIncidentRepository {
+        final List<ProcessingIncident> values = new ArrayList<>();
+        final List<ProcessingIncidentEvent> events = new ArrayList<>();
+
+        @Override public void save(ProcessingIncident incident) {
+            for (int i = 0; i < values.size(); i++) {
+                if (values.get(i).id().equals(incident.id())) {
+                    values.set(i, incident);
+                    return;
+                }
+            }
+            values.add(incident);
+        }
+        @Override public Optional<ProcessingIncident> findByIdAndTenantId(UUID incidentId, TenantId tenantId) {
+            return values.stream().filter(i -> i.id().equals(incidentId) && i.tenantId().equals(tenantId)).findFirst();
+        }
+        @Override public Optional<ProcessingIncident> findLatestByPackageIdAndTenantId(PackageId packageId, TenantId tenantId) {
+            return findRecentByPackageIdAndTenantId(packageId, tenantId, 1).stream().findFirst();
+        }
+        @Override public List<ProcessingIncident> findRecentByPackageIdAndTenantId(PackageId packageId, TenantId tenantId, int limit) {
+            return values.stream()
+                    .filter(i -> i.packageId().equals(packageId) && i.tenantId().equals(tenantId))
+                    .sorted(java.util.Comparator.comparing(ProcessingIncident::lastObservedAt).reversed())
+                    .limit(limit).toList();
+        }
+        @Override public List<ProcessingIncident> findRecentByTenantId(TenantId tenantId, int limit) {
+            return values.stream().filter(i -> i.tenantId().equals(tenantId))
+                    .sorted(java.util.Comparator.comparing(ProcessingIncident::lastObservedAt).reversed())
+                    .limit(limit).toList();
+        }
+        @Override public void saveEvent(ProcessingIncidentEvent event) { events.add(event); }
+        @Override public List<ProcessingIncidentEvent> findEvents(UUID incidentId, TenantId tenantId, int limit) {
+            return events.stream().filter(e -> e.incidentId().equals(incidentId) && e.tenantId().equals(tenantId))
+                    .limit(limit).toList();
+        }
+    }
+
     private static final class InMemoryRepository implements ProcessingIncidentRepository {
         Optional<ProcessingIncident> latest = Optional.empty();
         final List<ProcessingIncidentEvent> events = new ArrayList<>();

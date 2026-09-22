@@ -55,6 +55,13 @@ public class JpaPackageLifecycleRepositoryAdapter implements PackageLifecycleRep
         return repository.findDueFinal(now, PageRequest.of(0, limit)).stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public List<PackageLifecycle> findPurgedPackagesNeedingDashboardHide(int limit) {
+        return repository.findPurgedPackagesNeedingDashboardHide(PageRequest.of(0, limit)).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private PackageLifecycle toDomain(PackageLifecycleEntity entity) {
         return PackageLifecycle.reconstitute(
                 PackageId.of(entity.getPackageId()), TenantId.of(entity.getTenantId()),

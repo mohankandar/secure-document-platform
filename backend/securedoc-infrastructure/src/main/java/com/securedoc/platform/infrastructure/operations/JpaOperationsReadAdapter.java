@@ -157,7 +157,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                        coalesce(sum(case when status in ('PENDING_REVIEW','IN_REVIEW','PENDING_FINAL_APPROVAL','FAILED') then 1 else 0 end),0),
                        coalesce(extract(epoch from (:now-min(created_at)))/3600.0,0)
                   from document_packages p
-                 where p.tenant_id=:tenant and p.status not in ('COMPLETED','REJECTED','CANCELLED')%s%s
+                 where p.tenant_id=:tenant and p.dashboard_hidden_at is null and p.status not in ('COMPLETED','REJECTED','CANCELLED')%s%s
                 """.formatted(sourceClause, outcomeClause));
         bindCurrent(backlogQuery, tenant, now, source);
         Object[] backlog = row(backlogQuery.getSingleResult());
@@ -171,7 +171,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                   coalesce(sum(case when :now-p.created_at >= interval '72 hours' then 1 else 0 end),0),
                   coalesce(extract(epoch from (:now-min(p.created_at)))/3600.0,0)
                   from document_packages p
-                 where p.tenant_id=:tenant and p.status not in ('COMPLETED','REJECTED','CANCELLED')%s%s
+                 where p.tenant_id=:tenant and p.dashboard_hidden_at is null and p.status not in ('COMPLETED','REJECTED','CANCELLED')%s%s
                 """.formatted(sourceClause, outcomeClause));
         bindCurrent(backlogAgingQuery, tenant, now, source);
         Object[] backlogAging = row(backlogAgingQuery.getSingleResult());

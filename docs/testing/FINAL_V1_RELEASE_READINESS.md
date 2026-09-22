@@ -27,7 +27,7 @@ The default rule is **reuse accepted evidence unless the final candidate changed
 1. Full backend Maven build/tests through repository build script.
 2. Frontend TypeScript + Vite production build.
 3. Frontend authorization test suite.
-4. Frozen V1 evidence baseline contained exactly 64 changeSets through `027-package-processing-ha.xml`; the current post-V1 frozen Tenant Licensing baseline contains 70 changeSets through `029-tenant-licensing.xml`.
+4. Frozen V1 evidence baseline contained exactly 64 changeSets through `027-package-processing-ha.xml`; the frozen Tenant Licensing baseline contains 70 changeSets through `029-tenant-licensing.xml`; the active post-V1 UI/UX R1 candidate adds `030-ui-branding.xml` for a 71-changeSet candidate baseline.
 5. Required frozen implementation files are present.
 6. No generated build/cache/performance-result directories are present in the release archive.
 

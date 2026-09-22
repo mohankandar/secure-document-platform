@@ -98,8 +98,15 @@ public class PlatformHealthService {
         providers.add(storageHealth(probe));
         providers.add(deliveryHealth(tenantId, probe));
 
+        int packageProcessingMaxAttempts;
+        try {
+            packageProcessingMaxAttempts = Math.max(2, Integer.parseInt(environment.getProperty(
+                    "securedoc.processing.coordination.max-processing-attempts", "3")));
+        } catch (NumberFormatException ignored) {
+            packageProcessingMaxAttempts = 3;
+        }
         var resilienceSummary = new PlatformAdminOverviewResponse.ResilienceSummary(
-                resilience.getMaxAttempts(), resilience.getInitialBackoffMs(),
+                resilience.getMaxAttempts(), resilience.getInitialBackoffMs(), packageProcessingMaxAttempts,
                 ai.isSecondaryEnabled(), ai.getSecondaryProvider(), safe(ai.getSecondaryModel()));
         String deliveryType = environment.getProperty("securedoc.delivery.type", "local");
         String identityMode = environment.getProperty("securedoc.security.mode", "OIDC").trim().toUpperCase();
@@ -112,13 +119,21 @@ public class PlatformHealthService {
         // Structured incidents are authoritative for new failures and remain visible even when
         // business completes through manual continuity. Legacy audit discovery below preserves
         // visibility for incidents created before migration 021.
-        processingIncidentRepository.findRecentByTenantId(tenantId, 100).stream()
-                .filter(incident -> incident.status() != ProcessingIncidentStatus.RESOLVED)
+        Map<String, ProcessingIncident> latestIncidentByPackage = new LinkedHashMap<>();
+        processingIncidentRepository.findRecentByTenantId(tenantId, 100).forEach(incident ->
+                latestIncidentByPackage.putIfAbsent(incident.packageId().toString(), incident));
+        latestIncidentByPackage.values().stream()
+                .filter(incident -> incident.status() != ProcessingIncidentStatus.RESOLVED
+                        && incident.status() != ProcessingIncidentStatus.AUTO_CLOSED)
                 .forEach(incident -> packageRepository.findByIdAndTenantId(incident.packageId(), tenantId)
                         .ifPresent(pkg -> exceptionByPackage.putIfAbsent(pkg.id().toString(), technicalExceptionItem(pkg, tenantId, incident))));
 
         packageRepository.findByTenantId(tenantId, 0, 250).stream()
                 .filter(pkg -> pkg.status() == PackageStatus.FAILED)
+                .filter(pkg -> processingIncidentRepository.findLatestByPackageIdAndTenantId(pkg.id(), tenantId)
+                        .map(incident -> incident.status() != ProcessingIncidentStatus.RESOLVED
+                                && incident.status() != ProcessingIncidentStatus.AUTO_CLOSED)
+                        .orElse(true))
                 .forEach(pkg -> exceptionByPackage.putIfAbsent(pkg.id().toString(), technicalExceptionItem(pkg, tenantId)));
 
         auditQueryPort.findByFilter(new AuditRecordFilter(tenantId,

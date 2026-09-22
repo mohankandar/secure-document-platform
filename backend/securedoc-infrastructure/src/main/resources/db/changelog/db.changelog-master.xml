@@ -35,4 +35,6 @@
     <include file="db/changelog/027-package-processing-ha.xml"/>
     <include file="db/changelog/028-processing-storage-management.xml"/>
     <include file="db/changelog/029-tenant-licensing.xml"/>
+    <include file="db/changelog/030-ui-branding.xml"/>
+    <include file="db/changelog/031-operational-continuity.xml"/>
 </databaseChangeLog>

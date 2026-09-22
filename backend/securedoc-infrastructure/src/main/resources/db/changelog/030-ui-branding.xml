@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="030-01-ui-branding" author="lexavault">
+        <createTable tableName="branding_configurations">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"/>
+            <column name="application_name" type="VARCHAR(80)"/>
+            <column name="short_name" type="VARCHAR(32)"/>
+            <column name="organization_name" type="VARCHAR(100)"/>
+            <column name="page_title" type="VARCHAR(100)"/>
+            <column name="accent_color" type="VARCHAR(7)"/>
+            <column name="secondary_color" type="VARCHAR(7)"/>
+            <column name="primary_logo" type="BYTEA"/>
+            <column name="primary_logo_media_type" type="VARCHAR(32)"/>
+            <column name="compact_logo" type="BYTEA"/>
+            <column name="compact_logo_media_type" type="VARCHAR(32)"/>
+            <column name="favicon" type="BYTEA"/>
+            <column name="favicon_media_type" type="VARCHAR(32)"/>
+            <column name="updated_by" type="UUID"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="branding_configurations" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_branding_configuration_tenant" onDelete="CASCADE"/>
+        <createIndex tableName="branding_configurations" indexName="idx_branding_configuration_tenant" unique="true">
+            <column name="tenant_id"/>
+        </createIndex>
+        <sql>CREATE UNIQUE INDEX ux_branding_deployment_singleton ON branding_configurations ((tenant_id IS NULL)) WHERE tenant_id IS NULL;</sql>
+    </changeSet>
+</databaseChangeLog>

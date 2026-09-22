@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="031-01-processing-attempt-budget" author="lexavault">
+        <addColumn tableName="package_processing_leases">
+            <column name="attempt_count" type="INT" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql dbms="postgresql">
+            ALTER TABLE package_processing_leases
+            ADD CONSTRAINT chk_package_processing_attempt_count CHECK (attempt_count &gt;= 1);
+        </sql>
+    </changeSet>
+
+    <!-- New/default policies use seven days. Existing tenant-configured values are intentionally preserved. -->
+    <changeSet id="031-02-technical-attention-default" author="lexavault">
+        <addDefaultValue tableName="tenant_lifecycle_policies"
+                         columnName="never_exported_hold_hours"
+                         columnDataType="INT"
+                         defaultValueNumeric="168"/>
+    </changeSet>
+</databaseChangeLog>

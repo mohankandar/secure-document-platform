@@ -120,6 +120,13 @@ securedoc:
     type: ${SECUREDOC_DELIVERY_TYPE:sdv}
     local:
       output-path: ${SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH:./securedoc-output}
+  product-telemetry:
+    # Privacy-safe product telemetry is opt-in for on-prem deployments. BASIC/ENHANCED emit only
+    # an explicit allow-list to the dedicated PRODUCT_TELEMETRY logger/file; customer content is forbidden.
+    mode: ${SECUREDOC_PRODUCT_TELEMETRY_MODE:OFF}
+    installation-id: ${SECUREDOC_PRODUCT_TELEMETRY_INSTALLATION_ID:}
+    application-version: ${SECUREDOC_APP_VERSION:unknown}
+    output-path: ${SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH:./logs/product-telemetry.jsonl}
   lifecycle:
     # Unit 22 in-process V1 retention maintenance. Can be replaced with durable scheduling later.
     purge-scheduler-enabled: ${SECUREDOC_LIFECYCLE_PURGE_SCHEDULER_ENABLED:true}
@@ -138,6 +145,10 @@ securedoc:
       heartbeat-interval-ms: ${SECUREDOC_PROCESSING_HEARTBEAT_INTERVAL_MS:10000}
       recovery-scan-interval-ms: ${SECUREDOC_PROCESSING_RECOVERY_SCAN_INTERVAL_MS:5000}
       recovery-batch-size: ${SECUREDOC_PROCESSING_RECOVERY_BATCH_SIZE:100}
+      # One acquired lease generation is one package-processing attempt. Scan cycles are not attempts.
+      max-processing-attempts: ${SECUREDOC_PROCESSING_MAX_ATTEMPTS:3}
+      # Legacy/pre-HA PROCESSING rows without any lease are eligible for safe recovery after this grace.
+      orphan-without-lease-grace-ms: ${SECUREDOC_PROCESSING_ORPHAN_WITHOUT_LEASE_GRACE_MS:60000}
   platform-admin:
     # Unit 24. Provider credentials remain deployment-managed and are never returned by the admin API.
     watched-folder-scheduling-enabled: ${SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED:false}

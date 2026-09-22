@@ -34,6 +34,7 @@ import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
+import com.securedoc.platform.application.telemetry.ProductTelemetryService;
 import com.securedoc.platform.domain.artifact.ArtifactStatus;
 import com.securedoc.platform.domain.artifact.ArtifactType;
 import com.securedoc.platform.domain.audit.AuditAction;
@@ -94,6 +95,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final AuditService auditService;
     private final ProcessingIncidentService processingIncidentService;
     private final TenantLicensingService tenantLicensingService;
+    private final ProductTelemetryService productTelemetryService;
 
     public TriggerPackageProcessingService(PackageRepository packageRepository,
                                            DocumentRepository documentRepository,
@@ -112,7 +114,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
                                            AuditService auditService,
                                            ProcessingIncidentService processingIncidentService,
-                                           TenantLicensingService tenantLicensingService) {
+                                           TenantLicensingService tenantLicensingService,
+                                           ProductTelemetryService productTelemetryService) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -131,6 +134,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.auditService = Objects.requireNonNull(auditService);
         this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
         this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
+        this.productTelemetryService = Objects.requireNonNull(productTelemetryService);
     }
 
     @Override
@@ -172,8 +176,17 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             } catch (RuntimeException ignored) {
                 // Observability must never mask the real processing result/failure.
             }
+            long durationMs = elapsedMillis(startedNanos);
             log.info("PACKAGE_PROCESSING_FINISHED package={} status={} durationMs={}",
-                    command.packageId(), finalStatus, elapsedMillis(startedNanos));
+                    command.packageId(), finalStatus, durationMs);
+            try {
+                int documentCount = documentRepository.findByPackageIdAndTenantId(
+                        command.packageId(), command.tenantId()).size();
+                productTelemetryService.processingFinished(command.tenantId(), command.packageId(),
+                        finalStatus == null ? "UNKNOWN" : finalStatus.name(), durationMs, documentCount);
+            } catch (RuntimeException ignored) {
+                // Product telemetry must never mask processing outcome.
+            }
         }
     }
 

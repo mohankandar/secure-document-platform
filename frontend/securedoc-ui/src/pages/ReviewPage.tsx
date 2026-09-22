@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { apiClient } from '../api/client';
 import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
 import type {
   ApiError,
   FocusedReviewItem,
@@ -306,28 +307,20 @@ export default function ReviewPage() {
   return (
     <div className="review-page">
       <Breadcrumbs items={breadcrumbItems} />
-      <div className="review-header">
-        <div>
-          <h1>Manual Review</h1>
-          {packageId ? (
-            <>
-              <p>Only findings for this intake appear here.</p>
-              {scopedIdentifier && (
-                <p className="review-scope-label">
-                  <strong>{scopedIdentifier.label}:</strong> {scopedIdentifier.value}
-                </p>
-              )}
-            </>
-          ) : (
-            <p>Only findings that currently need a human decision appear here.</p>
-          )}
-        </div>
-        <div className="review-header-actions">
-          <span className="review-count">{totalItems} need attention</span>
-          {packageId && <Link className="button-link secondary" to="/review">View all reviews</Link>}
-          <button className="secondary" onClick={() => loadQueue(selectedId)}>Refresh</button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Human review"
+        title="Manual Review"
+        description={packageId
+          ? `Resolve only the findings that need a human decision for this intake${scopedIdentifier ? ` · ${scopedIdentifier.label} ${scopedIdentifier.value}` : ''}.`
+          : 'Resolve only findings that currently need a human decision; high-confidence findings continue automatically.'}
+        actions={
+          <div className="review-header-actions">
+            <span className="review-count">{totalItems} need attention</span>
+            {packageId && <Link className="ui-button secondary" to="/review">View all reviews</Link>}
+            <button className="ui-button secondary" onClick={() => loadQueue(selectedId)}>Refresh</button>
+          </div>
+        }
+      />
 
       {error && <div className="error-msg">{error}</div>}
       {success && <div className="success-msg">{success}</div>}
@@ -521,6 +514,27 @@ export default function ReviewPage() {
               </>
             )}
           </aside>
+        </div>
+      )}
+
+      {items.length > 0 && selected && (
+        <div className="review-mobile-action-bar" aria-label="Review decision actions">
+          <div className="review-mobile-action-copy">
+            <strong>{entityLabel(selected.entityType)}</strong>
+            <span>{reasonLabel(selected.reason)} · {Math.round(selected.confidence * 100)}%</span>
+          </div>
+          {!confirmDismiss ? (
+            <div className="review-mobile-action-buttons">
+              <button className="secondary" disabled={resolving} onClick={() => setConfirmDismiss(true)}>Not Sensitive</button>
+              <button className="primary" disabled={resolving || !box} onClick={() => void resolve('confirm')}>{resolving ? 'Saving…' : 'Confirm'}</button>
+            </div>
+          ) : (
+            <div className="review-mobile-dismiss-confirm">
+              <span>Mark as not sensitive?</span>
+              <button className="secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
+              <button className="secondary review-dismiss-final" disabled={resolving} onClick={() => void resolve('dismiss')}>Yes</button>
+            </div>
+          )}
         </div>
       )}
     </div>

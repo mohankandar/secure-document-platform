@@ -19,7 +19,8 @@ public record TriggerPackageProcessingCommand(
         TenantId tenantId,
         ActorId actorId,
         CorrelationId correlationId,
-        boolean recovery
+        boolean recovery,
+        boolean resetAttemptBudget
 ) {
     public TriggerPackageProcessingCommand {
         Objects.requireNonNull(packageId, "PackageId must not be null");
@@ -30,11 +31,21 @@ public record TriggerPackageProcessingCommand(
 
     public static TriggerPackageProcessingCommand of(PackageId packageId, TenantId tenantId,
                                                       ActorId actorId, CorrelationId correlationId) {
-        return new TriggerPackageProcessingCommand(packageId, tenantId, actorId, correlationId, false);
+        return new TriggerPackageProcessingCommand(packageId, tenantId, actorId, correlationId, false, false);
+    }
+
+    /**
+     * Starts an explicitly requested fresh processing/redrive cycle. This is distinct from a normal
+     * continuation after review/final approval: a fresh cycle intentionally receives a new automatic
+     * recovery budget beginning at attempt 1.
+     */
+    public static TriggerPackageProcessingCommand freshCycle(PackageId packageId, TenantId tenantId,
+                                                              ActorId actorId, CorrelationId correlationId) {
+        return new TriggerPackageProcessingCommand(packageId, tenantId, actorId, correlationId, false, true);
     }
 
     public static TriggerPackageProcessingCommand recovery(PackageId packageId, TenantId tenantId,
                                                             ActorId actorId, CorrelationId correlationId) {
-        return new TriggerPackageProcessingCommand(packageId, tenantId, actorId, correlationId, true);
+        return new TriggerPackageProcessingCommand(packageId, tenantId, actorId, correlationId, true, false);
     }
 }

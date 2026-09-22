@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
+import PageHeader from '../components/ui/PageHeader';
+import useMediaQuery from '../components/ui/useMediaQuery';
 import type {
   ApiError,
   DashboardColumnDefinition,
@@ -14,6 +16,7 @@ const OVERVIEW_KEY = 'securedoc.dashboard.overviewCollapsed.v1';
 const STAGE_KEY = 'securedoc.dashboard.stage.v1';
 const SEARCH_KEY = 'securedoc.dashboard.search.v1';
 const COLUMNS_KEY = 'securedoc.dashboard.columns.v1';
+const TABLET_COLUMNS_KEY = 'securedoc.dashboard.tabletColumns.v1';
 const SORT_KEY = 'securedoc.dashboard.sort.v1';
 
 const STAGES: Array<{ key: DashboardStage; label: string; countKey: keyof OperationsDashboard['overview'] }> = [
@@ -29,7 +32,7 @@ const STAGES: Array<{ key: DashboardStage; label: string; countKey: keyof Operat
 const KPI_CARDS: Array<{ stage: DashboardStage; title: string; countKey: keyof OperationsDashboard['overview']; tone: string; help: string }> = [
   { stage: 'PROCESSING', title: 'Processing', countKey: 'processing', tone: 'blue', help: 'Intakes moving through the redaction pipeline' },
   { stage: 'NEEDS_REVIEW', title: 'Needs Review', countKey: 'needsReview', tone: 'amber', help: 'Only items that need a business decision' },
-  { stage: 'EXPORTED', title: 'Exported', countKey: 'exported', tone: 'green', help: 'Successfully delivered intake batches' },
+  { stage: 'NEEDS_APPROVAL', title: 'Needs Approval', countKey: 'needsApproval', tone: 'violet', help: 'Packages waiting for final business approval' },
   { stage: 'TECHNICAL_ATTENTION', title: 'Technical Attention', countKey: 'technicalAttention', tone: 'red', help: 'Processing or delivery issues for operations' },
 ];
 
@@ -67,15 +70,26 @@ function getIdentifier(item: DashboardItem, key: string) {
   return item.identifiers.find((identifier) => identifier.key === key)?.value || '—';
 }
 
-function loadColumnPreference(): string[] | null {
+function loadColumnPreference(storageKey = COLUMNS_KEY): string[] | null {
   try {
-    const raw = localStorage.getItem(COLUMNS_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.every((value) => typeof value === 'string') ? parsed : null;
   } catch {
     return null;
   }
+}
+
+
+function recommendedTabletColumns(columns: DashboardColumnDefinition[]) {
+  const identifiers = columns.filter((column) => column.kind === 'IDENTIFIER');
+  const primary = identifiers.find((column) => column.primary);
+  const secondary = identifiers.find((column) => !column.primary && column.searchable);
+  const preferred = [primary?.key, secondary?.key, 'stage', 'documents', 'intakeSource', 'lastUpdated']
+    .filter((key): key is string => Boolean(key));
+  const available = new Set(columns.map((column) => column.key));
+  return Array.from(new Set(preferred.filter((key) => available.has(key))));
 }
 
 export default function DashboardPage() {
@@ -101,6 +115,10 @@ export default function DashboardPage() {
   const savedColumnPreference = useRef<string[] | null>(loadColumnPreference());
   const hasInitializedColumnPreference = useRef(savedColumnPreference.current !== null);
   const [columnOrder, setColumnOrder] = useState<string[]>(() => savedColumnPreference.current || []);
+  const savedTabletColumnPreference = useRef<string[] | null>(loadColumnPreference(TABLET_COLUMNS_KEY));
+  const hasInitializedTabletColumnPreference = useRef(savedTabletColumnPreference.current !== null);
+  const [tabletColumnOrder, setTabletColumnOrder] = useState<string[]>(() => savedTabletColumnPreference.current || []);
+  const tabletLandscape = useMediaQuery('(min-width: 900px) and (max-width: 1199px)');
   const requestId = useRef(0);
 
   const loadDashboard = useCallback(async (silent = false) => {
@@ -124,6 +142,19 @@ export default function DashboardPage() {
         const defaults = result.columns.filter((column) => column.defaultVisible).map((column) => column.key);
         const next = defaults.length > 0 ? defaults : result.columns.slice(0, 1).map((column) => column.key);
         localStorage.setItem(COLUMNS_KEY, JSON.stringify(next));
+        return next;
+      });
+      setTabletColumnOrder((existing) => {
+        const available = new Set(result.columns.map((column) => column.key));
+        if (hasInitializedTabletColumnPreference.current) {
+          const retained = existing.filter((key) => available.has(key));
+          const next = retained.length > 0 ? retained : recommendedTabletColumns(result.columns);
+          localStorage.setItem(TABLET_COLUMNS_KEY, JSON.stringify(next));
+          return next;
+        }
+        hasInitializedTabletColumnPreference.current = true;
+        const next = recommendedTabletColumns(result.columns);
+        localStorage.setItem(TABLET_COLUMNS_KEY, JSON.stringify(next));
         return next;
       });
     } catch (err) {
@@ -199,10 +230,11 @@ export default function DashboardPage() {
     ? getIdentifier(packagePendingRemoval, primaryIdentifierColumn.key.slice('identifier:'.length))
     : null;
 
+  const effectiveColumnOrder = tabletLandscape ? tabletColumnOrder : columnOrder;
   const visibleColumns = useMemo(() => {
     const byKey = new Map(availableColumns.map((column) => [column.key, column]));
-    return columnOrder.map((key) => byKey.get(key)).filter((column): column is DashboardColumnDefinition => Boolean(column));
-  }, [availableColumns, columnOrder]);
+    return effectiveColumnOrder.map((key) => byKey.get(key)).filter((column): column is DashboardColumnDefinition => Boolean(column));
+  }, [availableColumns, effectiveColumnOrder]);
 
   const searchableLabels = useMemo(() => availableColumns
     .filter((column) => column.kind === 'IDENTIFIER' && column.searchable)
@@ -231,17 +263,22 @@ export default function DashboardPage() {
 
   const setVisibleColumns = (keys: string[]) => {
     if (keys.length === 0) return;
-    setColumnOrder(keys);
-    localStorage.setItem(COLUMNS_KEY, JSON.stringify(keys));
+    if (tabletLandscape) {
+      setTabletColumnOrder(keys);
+      localStorage.setItem(TABLET_COLUMNS_KEY, JSON.stringify(keys));
+    } else {
+      setColumnOrder(keys);
+      localStorage.setItem(COLUMNS_KEY, JSON.stringify(keys));
+    }
   };
 
   const toggleColumn = (key: string) => {
-    if (columnOrder.includes(key)) {
-      if (columnOrder.length === 1) return;
-      setVisibleColumns(columnOrder.filter((item) => item !== key));
+    if (effectiveColumnOrder.includes(key)) {
+      if (effectiveColumnOrder.length === 1) return;
+      setVisibleColumns(effectiveColumnOrder.filter((item) => item !== key));
     } else {
       const availableIndex = availableColumns.findIndex((column) => column.key === key);
-      const next = [...columnOrder];
+      const next = [...effectiveColumnOrder];
       const insertAt = next.findIndex((existing) => {
         const index = availableColumns.findIndex((column) => column.key === existing);
         return index > availableIndex;
@@ -252,10 +289,10 @@ export default function DashboardPage() {
   };
 
   const moveColumn = (key: string, direction: -1 | 1) => {
-    const index = columnOrder.indexOf(key);
+    const index = effectiveColumnOrder.indexOf(key);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= columnOrder.length) return;
-    const next = [...columnOrder];
+    if (index < 0 || target < 0 || target >= effectiveColumnOrder.length) return;
+    const next = [...effectiveColumnOrder];
     [next[index], next[target]] = [next[target], next[index]];
     setVisibleColumns(next);
   };
@@ -359,21 +396,19 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-page">
-      <header className="dashboard-header">
-        <div>
-          <p className="eyebrow">Document operations</p>
-          <h1>Dashboard</h1>
-          <p className="dashboard-subtitle">One place to track intake, review, delivery, and exceptions.</p>
-          <p className="dashboard-refresh-status">
-            Auto-refresh {hasActiveProcessing ? 'every 5 seconds while processing' : 'every 30 seconds while idle'}
-            {lastRefreshedAt ? ` · Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}
-          </p>
-        </div>
-        <div className="dashboard-header-actions">
-          <Link to="/reports" className="button-link secondary">View Reports</Link>
-          <Link to="/packages/new" className="button-link primary">Upload Documents</Link>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Work"
+        title="Dashboard"
+        description="Track intake, review, delivery and technical attention across document packages."
+        actions={<>
+          {hasCurrentCapability('REPORT_EXECUTIVE_VIEW') && <Link to="/reports" className="ui-button secondary">View reports</Link>}
+          {hasCurrentCapability('DOCUMENT_INTAKE') && <Link to="/packages/new" className="ui-button primary">Upload documents</Link>}
+        </>}
+      />
+      <p className="dashboard-refresh-status modern">
+        Auto-refresh {hasActiveProcessing ? 'every 5 seconds while processing' : 'every 30 seconds while idle'}
+        {lastRefreshedAt ? ` · Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}
+      </p>
 
       {error && <div className="error-msg">{error}</div>}
       {notice && <div className="success-msg">{notice}</div>}
@@ -440,11 +475,11 @@ export default function DashboardPage() {
               {columnsOpen && (
                 <div className="columns-menu">
                   <div className="columns-menu-heading">
-                    <strong>Visible columns</strong>
-                    <span>Show, hide, and reorder approved fields</span>
+                    <strong>{tabletLandscape ? 'Tablet columns' : 'Visible columns'}</strong>
+                    <span>{tabletLandscape ? 'Optimized for landscape; add fields when needed' : 'Show, hide, and reorder approved fields'}</span>
                   </div>
                   {availableColumns.map((column) => {
-                    const visibleIndex = columnOrder.indexOf(column.key);
+                    const visibleIndex = effectiveColumnOrder.indexOf(column.key);
                     const checked = visibleIndex >= 0;
                     return (
                       <div className="column-option" key={column.key}>
@@ -456,7 +491,7 @@ export default function DashboardPage() {
                         {checked && (
                           <div className="column-order-buttons">
                             <button onClick={() => moveColumn(column.key, -1)} disabled={visibleIndex === 0} aria-label={`Move ${column.label} left`}>↑</button>
-                            <button onClick={() => moveColumn(column.key, 1)} disabled={visibleIndex === columnOrder.length - 1} aria-label={`Move ${column.label} right`}>↓</button>
+                            <button onClick={() => moveColumn(column.key, 1)} disabled={visibleIndex === effectiveColumnOrder.length - 1} aria-label={`Move ${column.label} right`}>↓</button>
                           </div>
                         )}
                       </div>
@@ -481,6 +516,31 @@ export default function DashboardPage() {
               {!search && stage === 'ALL' && <Link to="/packages/new" className="button-link primary">Upload Documents</Link>}
             </div>
           ) : (
+            <>
+            <div className="dashboard-mobile-list" aria-label="Packages">
+              {data.items.map((item) => {
+                const primaryValue = primaryIdentifierColumn?.key.startsWith('identifier:')
+                  ? getIdentifier(item, primaryIdentifierColumn.key.slice('identifier:'.length))
+                  : item.packageId.slice(0, 8);
+                return (
+                  <Link className="dashboard-mobile-card" key={item.packageId} to={`/packages/${item.packageId}`}>
+                    <div className="dashboard-mobile-card-top">
+                      <div><span className="dashboard-mobile-label">{primaryIdentifierColumn?.label || 'Package'}</span><strong>{primaryValue}</strong></div>
+                      <span className={`stage-pill stage-${item.stage.toLowerCase()}`}>{stageLabel(item.stage)}</span>
+                    </div>
+                    <div className="dashboard-mobile-meta">
+                      <span><small>Documents</small><strong>{item.documentCount}</strong></span>
+                      <span><small>Source</small><strong>{sourceLabel(item.packageType)}</strong></span>
+                      <span><small>Updated</small><strong>{formatDate(item.updatedAt, true)}</strong></span>
+                    </div>
+                    <div className="dashboard-mobile-card-footer">
+                      <span className={`mobile-attention attention-${item.attention.toLowerCase()}`}>{item.attention === 'NONE' ? 'No attention required' : item.attention.replace(/_/g, ' ')}</span>
+                      <span aria-hidden="true">›</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
             <table className="operations-table">
               <thead>
                 <tr>
@@ -497,6 +557,7 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
+            </>
           )}
         </div>
 

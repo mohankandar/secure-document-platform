@@ -1,0 +1,43 @@
+UI/UX Modernization R1 — changed files
+
+Backend
+- backend/securedoc-domain/src/main/java/com/securedoc/platform/domain/audit/AuditAction.java
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/branding/BrandingConfiguration.java
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/branding/BrandingConfigurationRepository.java
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/branding/BrandingUpdate.java
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/branding/EffectiveBranding.java
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/branding/BrandingOverview.java
+- backend/securedoc-application/src/main/java/com/securedoc/platform/application/branding/BrandingService.java
+- backend/securedoc-application/src/test/java/com/securedoc/platform/application/branding/BrandingServiceTest.java
+- backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/branding/JdbcBrandingConfigurationRepositoryAdapter.java
+- backend/securedoc-infrastructure/src/main/resources/db/changelog/030-ui-branding.xml
+- backend/securedoc-infrastructure/src/main/resources/db/changelog/db.changelog-master.xml
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/controller/BrandingController.java
+- backend/securedoc-api/src/main/java/com/securedoc/platform/api/config/ApplicationServiceConfig.java
+
+Frontend
+- frontend/securedoc-ui/src/App.tsx
+- frontend/securedoc-ui/src/index.css
+- frontend/securedoc-ui/src/types/index.ts
+- frontend/securedoc-ui/src/api/client.ts
+- frontend/securedoc-ui/src/branding/BrandingContext.tsx
+- frontend/securedoc-ui/src/components/ui/Icon.tsx
+- frontend/securedoc-ui/src/components/ui/PageHeader.tsx
+- frontend/securedoc-ui/src/pages/BrandingPanel.tsx
+- frontend/securedoc-ui/src/pages/DashboardPage.tsx
+- frontend/securedoc-ui/src/pages/PlatformAdminPage.tsx
+- frontend/securedoc-ui/src/pages/CreatePackagePage.tsx
+- frontend/securedoc-ui/src/pages/ScanIntakePage.tsx
+- frontend/securedoc-ui/src/pages/LicensingPanel.tsx
+- frontend/securedoc-ui/src/pages/ProcessingStoragePanel.tsx
+- frontend/securedoc-ui/src/pages/ReportsPage.tsx
+- frontend/securedoc-ui/src/pages/BusinessAdminPage.tsx
+
+Documentation
+- README.md
+- docs/continuity/CURRENT_STATE.md
+- docs/continuity/CHANGELOG.md
+- docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+- docs/testing/FINAL_V1_RELEASE_READINESS.md
+- UI_UX_MODERNIZATION_R1_CANDIDATE_README.md
+- UI_UX_MODERNIZATION_R1_CHANGED_FILES.txt

@@ -80,6 +80,18 @@ public record ProcessingIncident(
         return copy(ProcessingIncidentStatus.RETRY_SCHEDULED, businessContinuityUsed, businessOutcome, now, resolvedAt);
     }
 
+    public ProcessingIncident investigating(Instant now) {
+        return copy(ProcessingIncidentStatus.INVESTIGATING, businessContinuityUsed, businessOutcome, now, null);
+    }
+
+    public ProcessingIncident resolvedWithOutcome(String outcome, Instant now) {
+        return copy(ProcessingIncidentStatus.RESOLVED, businessContinuityUsed, outcome, now, now);
+    }
+
+    public ProcessingIncident autoClosed(String outcome, Instant now) {
+        return copy(ProcessingIncidentStatus.AUTO_CLOSED, businessContinuityUsed, outcome, now, now);
+    }
+
     public ProcessingIncident businessContinuityStarted(Instant now) {
         return copy(ProcessingIncidentStatus.BUSINESS_CONTINUED, true, "IN_PROGRESS", now, null);
     }

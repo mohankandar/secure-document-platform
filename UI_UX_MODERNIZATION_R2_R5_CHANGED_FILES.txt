@@ -1,0 +1,37 @@
+UI/UX Modernization R2–R5 combined candidate — files changed from frozen R1
+
+Documentation
+- README.md
+- docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+- docs/continuity/CHANGELOG.md
+- docs/continuity/CURRENT_STATE.md
+- UI_UX_MODERNIZATION_R2_R5_CANDIDATE_README.md
+- UI_UX_MODERNIZATION_R2_R5_CHANGED_FILES.txt
+
+Shared frontend UI
+- frontend/securedoc-ui/src/components/ui/WorkflowStepper.tsx (new)
+- frontend/securedoc-ui/src/components/ui/StatusBadge.tsx (new)
+- frontend/securedoc-ui/src/components/ui/InfoGrid.tsx (new)
+- frontend/securedoc-ui/src/index.css
+
+Checkpoint A — core operator workflows
+- frontend/securedoc-ui/src/pages/CreatePackagePage.tsx
+- frontend/securedoc-ui/src/pages/ScanIntakePage.tsx
+- frontend/securedoc-ui/src/pages/PackageDetailPage.tsx
+
+Checkpoint B — review workflows
+- frontend/securedoc-ui/src/pages/ReviewPage.tsx
+- frontend/securedoc-ui/src/pages/ManualFallbackPage.tsx
+
+Checkpoint C — administration
+- frontend/securedoc-ui/src/pages/BusinessAdminPage.tsx
+- frontend/securedoc-ui/src/pages/IntegrationsPage.tsx
+
+Checkpoint D — reports/support/audit
+- frontend/securedoc-ui/src/pages/ReportsPage.css
+- frontend/securedoc-ui/src/pages/SupportIncidentsPage.tsx
+- frontend/securedoc-ui/src/pages/SupportIncidentDetailPage.tsx
+- frontend/securedoc-ui/src/pages/TechnicalIssueDetailPage.tsx
+- frontend/securedoc-ui/src/pages/AuditPage.tsx
+
+No backend/schema files changed. Liquibase remains 71 changeSets through 030-ui-branding.xml.

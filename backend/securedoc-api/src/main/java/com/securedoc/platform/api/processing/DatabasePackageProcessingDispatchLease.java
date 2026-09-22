@@ -2,6 +2,7 @@ package com.securedoc.platform.api.processing;
 
 import com.securedoc.platform.application.port.out.PackageProcessingLeasePort;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
+import com.securedoc.platform.application.telemetry.ProductTelemetryService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,18 +29,24 @@ public class DatabasePackageProcessingDispatchLease implements PackageProcessing
     private final boolean enabled;
     private final String logicalNodeId;
     private final long leaseDurationMs;
+    private final int maxProcessingAttempts;
+    private final ProductTelemetryService productTelemetryService;
     private final String processInstanceId = UUID.randomUUID().toString();
     private final Map<UUID, Claim> activeClaims = new ConcurrentHashMap<>();
 
     public DatabasePackageProcessingDispatchLease(
             PackageProcessingLeasePort leasePort,
+            ProductTelemetryService productTelemetryService,
             @Value("${securedoc.processing.coordination.enabled:true}") boolean enabled,
             @Value("${securedoc.logging.node-id:unknown}") String logicalNodeId,
-            @Value("${securedoc.processing.coordination.lease-duration-ms:30000}") long leaseDurationMs) {
+            @Value("${securedoc.processing.coordination.lease-duration-ms:30000}") long leaseDurationMs,
+            @Value("${securedoc.processing.coordination.max-processing-attempts:3}") int maxProcessingAttempts) {
         this.leasePort = leasePort;
+        this.productTelemetryService = productTelemetryService;
         this.enabled = enabled;
         this.logicalNodeId = logicalNodeId == null || logicalNodeId.isBlank() ? "unknown" : logicalNodeId.trim();
         this.leaseDurationMs = Math.max(5000L, leaseDurationMs);
+        this.maxProcessingAttempts = Math.max(2, maxProcessingAttempts);
     }
 
     @Override
@@ -53,8 +60,9 @@ public class DatabasePackageProcessingDispatchLease implements PackageProcessing
         }
 
         String ownerId = ownerId();
-        Optional<PackageProcessingLeasePort.LeaseSnapshot> acquired = leasePort.acquireOrRenew(
-                command.packageId(), command.tenantId(), ownerId, Duration.ofMillis(leaseDurationMs));
+        Optional<PackageProcessingLeasePort.LeaseSnapshot> acquired = leasePort.acquireProcessingAttempt(
+                command.packageId(), command.tenantId(), ownerId, Duration.ofMillis(leaseDurationMs),
+                command.recovery(), command.resetAttemptBudget(), maxProcessingAttempts);
         if (acquired.isEmpty()) {
             return Optional.empty();
         }
@@ -62,8 +70,16 @@ public class DatabasePackageProcessingDispatchLease implements PackageProcessing
         Claim claim = new Claim(command.packageId(), command.tenantId(), ownerId,
                 lease.fencingToken(), true);
         activeClaims.put(key, claim);
-        log.info("PACKAGE_PROCESSING_LEASE_ACQUIRED package={} tenant={} nodeId={} fencingToken={} recovery={}",
-                command.packageId(), command.tenantId(), logicalNodeId, lease.fencingToken(), command.recovery());
+        try {
+            productTelemetryService.processingAttempt(command.tenantId(), command.packageId(),
+                    lease.attemptCount(), maxProcessingAttempts,
+                    command.recovery(), command.recovery() && lease.fencingToken() == 1 && lease.attemptCount() == 2);
+        } catch (RuntimeException ignored) {
+            // Product telemetry must never affect processing ownership.
+        }
+        log.info("PACKAGE_PROCESSING_LEASE_ACQUIRED package={} tenant={} nodeId={} fencingToken={} attempt={} maxAttempts={} recovery={} resetAttemptBudget={}",
+                command.packageId(), command.tenantId(), logicalNodeId, lease.fencingToken(), lease.attemptCount(),
+                maxProcessingAttempts, command.recovery(), command.resetAttemptBudget());
         return Optional.of(claim);
     }
 

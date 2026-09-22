@@ -3,6 +3,7 @@
     <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="securedoc-platform"/>
     <springProperty scope="context" name="environment" source="securedoc.logging.environment" defaultValue="production"/>
     <springProperty scope="context" name="nodeId" source="securedoc.logging.node-id" defaultValue="unknown"/>
+    <springProperty scope="context" name="productTelemetryPath" source="securedoc.product-telemetry.output-path" defaultValue="./logs/product-telemetry.jsonl"/>
 
     <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
@@ -53,6 +54,44 @@
             <includeMdcKeyName>workerQueueRemaining</includeMdcKeyName>
         </encoder>
     </appender>
+
+    <appender name="PRODUCT_TELEMETRY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${productTelemetryPath}</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${productTelemetryPath}.%d{yyyy-MM-dd}.gz</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${serviceName}","environment":"${environment}","telemetryStream":"product"}</customFields>
+            <includeContext>false</includeContext>
+            <includeCallerData>false</includeCallerData>
+            <includeMdc>true</includeMdc>
+            <includeMdcKeyName>eventName</includeMdcKeyName>
+            <includeMdcKeyName>telemetryMode</includeMdcKeyName>
+            <includeMdcKeyName>installationTelemetryId</includeMdcKeyName>
+            <includeMdcKeyName>tenantTelemetryId</includeMdcKeyName>
+            <includeMdcKeyName>packageTelemetryId</includeMdcKeyName>
+            <includeMdcKeyName>appVersion</includeMdcKeyName>
+            <includeMdcKeyName>stage</includeMdcKeyName>
+            <includeMdcKeyName>component</includeMdcKeyName>
+            <includeMdcKeyName>failureCategory</includeMdcKeyName>
+            <includeMdcKeyName>feature</includeMdcKeyName>
+            <includeMdcKeyName>decision</includeMdcKeyName>
+            <includeMdcKeyName>reasonCode</includeMdcKeyName>
+            <includeMdcKeyName>attempt</includeMdcKeyName>
+            <includeMdcKeyName>maxAttempts</includeMdcKeyName>
+            <includeMdcKeyName>retryable</includeMdcKeyName>
+            <includeMdcKeyName>durationMs</includeMdcKeyName>
+            <includeMdcKeyName>documentCount</includeMdcKeyName>
+            <includeMdcKeyName>holdDays</includeMdcKeyName>
+            <includeMdcKeyName>status</includeMdcKeyName>
+            <includeMdcKeyName>recovery</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <logger name="PRODUCT_TELEMETRY" level="INFO" additivity="false">
+        <appender-ref ref="PRODUCT_TELEMETRY_FILE"/>
+    </logger>
 
     <root level="INFO">
         <appender-ref ref="JSON_CONSOLE"/>

@@ -95,6 +95,8 @@ import com.securedoc.platform.application.port.out.TenantRepository;
 import com.securedoc.platform.application.licensing.LicenseTokenVerifier;
 import com.securedoc.platform.application.licensing.TenantLicenseRepository;
 import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.branding.BrandingConfigurationRepository;
+import com.securedoc.platform.application.branding.BrandingService;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
 import com.securedoc.platform.application.port.out.AccessRequestRepository;
 import com.securedoc.platform.application.port.out.VaultEntryRepository;
@@ -113,6 +115,7 @@ import com.securedoc.platform.application.manual.service.ManualFallbackPagePrevi
 import com.securedoc.platform.application.processing.service.DocumentProcessingService;
 import com.securedoc.platform.application.processing.service.PackageFinalizationService;
 import com.securedoc.platform.application.processing.service.PackageProcessingService;
+import com.securedoc.platform.application.processing.service.PackageProcessingRecoveryService;
 import com.securedoc.platform.application.processing.service.TriggerPackageProcessingService;
 import com.securedoc.platform.application.operations.service.OperationsQueryService;
 import com.securedoc.platform.application.operations.service.PackageDashboardVisibilityService;
@@ -124,7 +127,9 @@ import com.securedoc.platform.application.lifecycle.service.FinalDeliveryApprova
 import com.securedoc.platform.application.technical.service.TechnicalExceptionQueryService;
 import com.securedoc.platform.application.technical.service.RetryTechnicalFailureService;
 import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
+import com.securedoc.platform.application.telemetry.ProductTelemetryService;
 import com.securedoc.platform.application.support.service.SupportIncidentQueryService;
+import com.securedoc.platform.application.support.service.SupportIncidentActionService;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.port.out.DeliverySubmissionRepository;
@@ -217,6 +222,13 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
+    public BrandingService brandingService(BrandingConfigurationRepository brandingConfigurationRepository,
+                                           TenantRepository tenantRepository,
+                                           AuditService auditService) {
+        return new BrandingService(brandingConfigurationRepository, tenantRepository, auditService);
+    }
+
+    @Bean
     public ProcessingStorageConfigurationService processingStorageConfigurationService(
             ProcessingStorageConfigurationRepository repository,
             TenantRepository tenantRepository) {
@@ -275,18 +287,42 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
+    public ProductTelemetryService productTelemetryService(
+            @org.springframework.beans.factory.annotation.Value("${securedoc.product-telemetry.mode:OFF}") String mode,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.product-telemetry.installation-id:}") String installationId,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.product-telemetry.application-version:unknown}") String applicationVersion) {
+        return new ProductTelemetryService(mode, installationId, applicationVersion);
+    }
+
+    @Bean
     public ProcessingIncidentService processingIncidentService(ProcessingIncidentRepository processingIncidentRepository,
-                                                               ProcessingFingerprintProvider processingFingerprintProvider) {
-        return new ProcessingIncidentService(processingIncidentRepository, processingFingerprintProvider);
+                                                               ProcessingFingerprintProvider processingFingerprintProvider,
+                                                               ProductTelemetryService productTelemetryService) {
+        return new ProcessingIncidentService(processingIncidentRepository, processingFingerprintProvider,
+                productTelemetryService);
     }
 
 
 
     @Bean
+    public SupportIncidentActionService supportIncidentActionService(
+            ProcessingIncidentRepository processingIncidentRepository,
+            PackageLifecycleService packageLifecycleService,
+            ProcessingIncidentService processingIncidentService,
+            RetryTechnicalFailureService retryTechnicalFailureUseCase,
+            AuditService auditService,
+            ProductTelemetryService productTelemetryService) {
+        return new SupportIncidentActionService(processingIncidentRepository, packageLifecycleService,
+                processingIncidentService, retryTechnicalFailureUseCase, auditService, productTelemetryService);
+    }
+
+    @Bean
     public SupportIncidentQueryService supportIncidentQueryService(
             SupportIncidentSearchRepository supportIncidentSearchRepository,
-            ProcessingIncidentRepository processingIncidentRepository) {
-        return new SupportIncidentQueryService(supportIncidentSearchRepository, processingIncidentRepository);
+            ProcessingIncidentRepository processingIncidentRepository,
+            PackageLifecycleRepository packageLifecycleRepository) {
+        return new SupportIncidentQueryService(supportIncidentSearchRepository, processingIncidentRepository,
+                packageLifecycleRepository);
     }
 
     @Bean
@@ -949,13 +985,17 @@ public class ApplicationServiceConfig {
             PackageLifecycleRepository packageLifecycleRepository,
             PackageExportRecordRepository packageExportRecordRepository,
             PackageRepository packageRepository,
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort,
             DocumentRepository documentRepository,
             ArtifactRepository artifactRepository,
             StoragePort storagePort,
-            AuditService auditService) {
+            AuditService auditService,
+            ProcessingIncidentService processingIncidentService,
+            ProductTelemetryService productTelemetryService) {
         return new PackageLifecycleService(tenantLifecyclePolicyRepository, packageLifecycleRepository,
-                packageExportRecordRepository, packageRepository, documentRepository, artifactRepository,
-                storagePort, auditService);
+                packageExportRecordRepository, packageRepository, packageDashboardVisibilityPort,
+                documentRepository, artifactRepository, storagePort, auditService, processingIncidentService,
+                productTelemetryService);
     }
 
     // --- Package finalization ---
@@ -969,6 +1009,17 @@ public class ApplicationServiceConfig {
             AuditService auditService) {
         return new PackageFinalizationService(packageRepository, documentRepository,
                 findingRepository, eventPublisher, auditService);
+    }
+
+    @Bean
+    public PackageProcessingRecoveryService packageProcessingRecoveryService(
+            PackageRepository packageRepository,
+            PackageLifecycleService packageLifecycleService,
+            ProcessingIncidentService processingIncidentService,
+            AuditService auditService,
+            ProductTelemetryService productTelemetryService) {
+        return new PackageProcessingRecoveryService(packageRepository, packageLifecycleService,
+                processingIncidentService, auditService, productTelemetryService);
     }
 
     @Bean
@@ -990,13 +1041,15 @@ public class ApplicationServiceConfig {
             DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
             AuditService auditService,
             ProcessingIncidentService processingIncidentService,
-            TenantLicensingService tenantLicensingService) {
+            TenantLicensingService tenantLicensingService,
+            ProductTelemetryService productTelemetryService) {
         return new TriggerPackageProcessingService(packageRepository, documentRepository,
                 findingRepository, artifactRepository, processingLockPort,
                 startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase,
                 exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService,
-                documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService);
+                documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService,
+                productTelemetryService);
     }
 
 
@@ -1113,7 +1166,7 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public RetryTechnicalFailureUseCase retryTechnicalFailureUseCase(
+    public RetryTechnicalFailureService retryTechnicalFailureUseCase(
             GetTechnicalExceptionQuery technicalExceptionQuery,
             PackageRepository packageRepository,
             DocumentRepository documentRepository,
@@ -1122,10 +1175,11 @@ public class ApplicationServiceConfig {
             PackageLifecycleService packageLifecycleService,
             PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService,
-            ProcessingIncidentService processingIncidentService) {
+            ProcessingIncidentService processingIncidentService,
+            ProcessingLockPort processingLockPort) {
         return new RetryTechnicalFailureService(technicalExceptionQuery, packageRepository, documentRepository,
                 findingRepository, artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService,
-                processingIncidentService);
+                processingIncidentService, processingLockPort);
     }
 
     @Bean

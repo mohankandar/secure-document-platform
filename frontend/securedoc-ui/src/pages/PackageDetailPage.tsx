@@ -4,6 +4,9 @@ import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
 import type { PackageDetail, PackageLifecycleSummary, ApiError, DerivedDelivery } from '../types';
 import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
+import StatusBadge from '../components/ui/StatusBadge';
+import InfoGrid from '../components/ui/InfoGrid';
 
 export default function PackageDetailPage() {
   const { packageId } = useParams<{ packageId: string }>();
@@ -17,6 +20,7 @@ export default function PackageDetailPage() {
   const [manualFallbackActive, setManualFallbackActive] = useState(false);
   const [confirmReprocess, setConfirmReprocess] = useState(false);
   const [reprocessSubmitting, setReprocessSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'delivery' | 'routing'>('overview');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPackage = async () => {
@@ -163,207 +167,245 @@ export default function PackageDetailPage() {
   const intakeLabel = intakeBreadcrumbLabel(primaryIdentifier);
   const displayedPackageStatus = reprocessingActive ? 'REPROCESSING' : pkg?.status;
 
+  const secondaryIdentifiers = pkg?.businessIdentifiers
+    ?.filter((identifier) => identifier.displayable && identifier.key !== primaryIdentifier?.key)
+    .sort((a, b) => a.displayOrder - b.displayOrder) || [];
+
+  const renderCurrentAction = () => {
+    if (!pkg) return null;
+    if (pkg.status === 'CREATED') {
+      return (
+        <section className="package-action-card tone-info">
+          <div>
+            <span className="package-action-eyebrow">Draft intake</span>
+            <h2>Add documents and submit</h2>
+            <p>This intake exists but processing has not started.</p>
+          </div>
+          <div className="package-created-upload">
+            <input type="file" ref={fileInputRef} accept=".pdf" aria-label="Choose PDF to upload" />
+            <div className="inline-actions">
+              <button className="secondary" onClick={handleUpload}>Upload PDF</button>
+              <button className="primary" onClick={handleSubmit} disabled={pkg.documentCount === 0}>Submit Documents</button>
+            </div>
+          </div>
+        </section>
+      );
+    }
+    if (pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') {
+      return (
+        <section className="package-action-card tone-warning">
+          <div>
+            <span className="package-action-eyebrow">Human decision required</span>
+            <h2>{manualFallbackActive ? 'Manual processing in progress' : 'Manual review required'}</h2>
+            <p>{manualFallbackActive
+              ? 'Automatic analysis could not complete. Review every page and mark sensitive areas before delivery.'
+              : 'Only findings that need a human decision are waiting. High-confidence findings continue automatically.'}</p>
+          </div>
+          {hasCurrentCapability('MANUAL_REVIEW') ? (
+            <Link className="ui-button primary" to={manualFallbackActive
+              ? `/packages/${packageId}/manual-processing`
+              : `/review?packageId=${packageId}`}>
+              {manualFallbackActive ? 'Continue manual processing' : 'Open manual review'}
+            </Link>
+          ) : <span className="package-action-waiting">Waiting for an authorized reviewer</span>}
+        </section>
+      );
+    }
+    if (pkg.status === 'PENDING_FINAL_APPROVAL') {
+      return (
+        <section className="package-action-card tone-warning">
+          <div>
+            <span className="package-action-eyebrow">Delivery approval</span>
+            <h2>Ready for final delivery approval</h2>
+            <p>Redaction and verification are complete. Tenant policy requires an approver before delivery.</p>
+          </div>
+          {hasCurrentCapability('PACKAGE_APPROVE_DELIVERY')
+            ? <button className="primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
+            : <span className="package-action-waiting">Waiting for an authorized approver</span>}
+        </section>
+      );
+    }
+    if (reprocessingActive) {
+      return (
+        <section className="package-action-card tone-info">
+          <div>
+            <span className="package-action-eyebrow">New export cycle</span>
+            <h2>Reprocessing retained original</h2>
+            <p>The package is applying current tenant configuration to a new processing/export cycle.</p>
+          </div>
+        </section>
+      );
+    }
+    if (pkg.status === 'COMPLETED') {
+      return (
+        <section className="package-action-card tone-success">
+          <div>
+            <span className="package-action-eyebrow">Business complete</span>
+            <h2>Processing and delivery completed</h2>
+            <p>{lifecycle?.lastExportedAt ? `Last exported ${formatTime(lifecycle.lastExportedAt)}.` : 'The package reached its completed business state.'}</p>
+          </div>
+          {lifecycle?.canReprocess && hasCurrentCapability('PACKAGE_REPROCESS') && (
+            <button className="secondary" type="button" onClick={() => setConfirmReprocess(true)}>Reprocess retained original</button>
+          )}
+        </section>
+      );
+    }
+    if (pkg.status === 'FAILED') {
+      return (
+        <section className="package-action-card tone-danger">
+          <div>
+            <span className="package-action-eyebrow">Technical attention</span>
+            <h2>Automatic processing stopped</h2>
+            <p>Business can continue manually when the PDF is still safe to render and redact.</p>
+          </div>
+          <div className="inline-actions">
+            {hasCurrentCapability('MANUAL_REVIEW') && <button className="primary" onClick={() => void handleManualFallback()}>Continue manually</button>}
+            {hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') && <Link className="ui-button secondary" to={`/technical-exceptions/${packageId}`}>View technical issue</Link>}
+          </div>
+        </section>
+      );
+    }
+    return null;
+  };
+
   if (loading && !pkg) {
     return (
-      <div>
+      <div className="package-detail-page">
         <Breadcrumbs items={[{ label: 'Intake Details' }]} />
-        <p>Loading...</p>
+        <div className="ui-loading-state">Loading intake details…</div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="package-detail-page">
       <Breadcrumbs items={[{ label: intakeLabel }]} />
-      <h1>Intake Details</h1>
+      <PageHeader
+        eyebrow="Intake workspace"
+        title={primaryIdentifier ? `${primaryIdentifier.label} ${primaryIdentifier.value}` : 'Intake Details'}
+        description="Review the package state, documents, delivery lifecycle and any business action that still needs attention."
+        actions={<button className="ui-button secondary" onClick={() => void loadPackage()}>Refresh</button>}
+      />
 
       {error && <div className="error-msg">{error}</div>}
       {successMsg && <div className="success-msg">{successMsg}</div>}
 
       {pkg && (
         <>
-          <div className="card">
-            <table>
-              <tbody>
-                {pkg.businessIdentifiers?.filter((i) => i.displayable).map((identifier) => (
-                  <tr key={identifier.key}><td><strong>{identifier.label}</strong></td><td>{identifier.value}</td></tr>
+          <section className="package-summary-card">
+            <div className="package-summary-main">
+              <div className="package-summary-status"><StatusBadge value={displayedPackageStatus || pkg.status} /></div>
+              <div className="package-summary-copy">
+                <span>{pkg.packageType.replace(/_/g, ' ')}</span>
+                <strong>{pkg.documentCount} document{pkg.documentCount === 1 ? '' : 's'}</strong>
+                <small>Created {new Date(pkg.createdAt).toLocaleString()}</small>
+              </div>
+            </div>
+            {secondaryIdentifiers.length > 0 && (
+              <div className="package-identifier-chips">
+                {secondaryIdentifiers.map((identifier) => (
+                  <span key={identifier.key}><small>{identifier.label}</small><strong>{identifier.value}</strong></span>
                 ))}
-                <tr><td><strong>Intake Source</strong></td><td>{pkg.packageType}</td></tr>
-                <tr>
-                  <td><strong>Status</strong></td>
-                  <td><span className={`badge badge-${(displayedPackageStatus || pkg.status).toLowerCase()}`}>{displayedPackageStatus || pkg.status}</span></td>
-                </tr>
-                <tr><td><strong>Documents</strong></td><td>{pkg.documentCount}</td></tr>
-                <tr><td><strong>Created</strong></td><td>{new Date(pkg.createdAt).toLocaleString()}</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Upload & Submit — only when CREATED */}
-          {pkg.status === 'CREATED' && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Upload Document</h2>
-              <div className="form-group">
-                <input type="file" ref={fileInputRef} accept=".pdf" />
               </div>
-              <div className="inline-actions">
-                <button className="primary" onClick={handleUpload}>Upload</button>
-                <button className="primary" onClick={handleSubmit} disabled={pkg.documentCount === 0}>
-                  Submit Documents
-                </button>
+            )}
+          </section>
+
+          {renderCurrentAction()}
+
+          <nav className="package-tabs" aria-label="Intake detail sections">
+            {([
+              ['overview', 'Overview'],
+              ['documents', `Documents (${pkg.documentCount})`],
+              ['delivery', 'Delivery & retention'],
+              ['routing', `Derived routing${derivedDeliveries.length ? ` (${derivedDeliveries.length})` : ''}`],
+            ] as const).map(([key, label]) => (
+              <button key={key} type="button" className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>{label}</button>
+            ))}
+          </nav>
+
+          {activeTab === 'overview' && (
+            <section className="package-tab-panel">
+              <div className="package-section-heading">
+                <div><span className="ui-eyebrow">Business context</span><h2>Intake overview</h2><p>Identifiers and current operational state for this package.</p></div>
               </div>
-            </div>
-          )}
-
-          {(pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>
-                {manualFallbackActive ? 'Manual Processing in Progress' : 'Manual Review Required'}
-              </h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
-                {manualFallbackActive
-                  ? 'Automatic analysis could not complete. Review every page and mark all sensitive areas before delivery.'
-                  : 'One or more findings need a human decision. High-confidence findings do not need to be re-reviewed.'}
-              </p>
-              {hasCurrentCapability('MANUAL_REVIEW') ? (
-                <Link className="button-link primary" to={manualFallbackActive
-                  ? `/packages/${packageId}/manual-processing`
-                  : `/review?packageId=${packageId}`}>
-                  {manualFallbackActive ? 'Continue Manual Processing' : 'Open Manual Review'}
-                </Link>
-              ) : (
-                <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>Waiting for an authorized reviewer.</p>
+              <InfoGrid items={[
+                ...(pkg.businessIdentifiers?.filter((identifier) => identifier.displayable).map((identifier) => ({ label: identifier.label, value: identifier.value, emphasis: identifier.primary })) || []),
+                { label: 'Intake source', value: pkg.packageType.replace(/_/g, ' ') },
+                { label: 'Current status', value: <StatusBadge value={displayedPackageStatus || pkg.status} /> },
+                { label: 'Documents', value: pkg.documentCount },
+                { label: 'Created', value: new Date(pkg.createdAt).toLocaleString() },
+                { label: 'Last updated', value: new Date(pkg.updatedAt).toLocaleString() },
+              ]} />
+              {lifecycle && (
+                <div className="package-mini-metrics">
+                  <div><span>Successful exports</span><strong>{lifecycle.successfulExportCycles}</strong><small>of {lifecycle.maximumExportCycles} allowed</small></div>
+                  <div><span>Final approval</span><strong>{lifecycle.finalApprovalRequired ? (lifecycle.finalApprovalGranted ? 'Granted' : 'Required') : 'Not required'}</strong><small>Tenant lifecycle policy</small></div>
+                  <div><span>Last destination</span><strong>{lifecycle.lastDestinationType || '—'}</strong><small>{formatTime(lifecycle.lastExportedAt)}</small></div>
+                </div>
               )}
-            </div>
+            </section>
           )}
 
-          {pkg.status === 'PENDING_FINAL_APPROVAL' && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Ready for Final Delivery Approval</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
-                Redaction and verification are complete. Tenant policy requires an Approver before the package is delivered.
-              </p>
-              {hasCurrentCapability('PACKAGE_APPROVE_DELIVERY') ? (
-                <button className="primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
-              ) : (
-                <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>Waiting for an authorized approver.</p>
-              )}
-            </div>
-          )}
-
-          {pkg.status === 'COMPLETED' && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Completed</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: lifecycle?.canReprocess ? '0.75rem' : 0 }}>
-                Processing, verification, and delivery completed successfully.
-              </p>
-              {lifecycle?.canReprocess && hasCurrentCapability('PACKAGE_REPROCESS') && (
-                <button className="secondary" type="button" onClick={() => setConfirmReprocess(true)}>Reprocess from Retained Original</button>
-              )}
-            </div>
-          )}
-
-
-          {reprocessingActive && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Reprocessing</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', margin: 0 }}>
-                The retained original has been accepted for a new processing/export cycle. The reprocess action remains unavailable until this cycle reaches a terminal business state.
-              </p>
-            </div>
-          )}
-
-          {pkg.status === 'FAILED' && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Technical Attention</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72', marginBottom: '0.75rem' }}>
-                Automatic processing stopped because of a technical issue. Business can continue manually when the PDF is still safe to render and redact.
-              </p>
-              <div className="inline-actions">
-                {hasCurrentCapability('MANUAL_REVIEW') && (
-                  <button className="primary" onClick={() => void handleManualFallback()}>Continue Manually</button>
-                )}
-                {hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') && (
-                  <Link className="button-link secondary" to={`/technical-exceptions/${packageId}`}>View Technical Issue</Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          {lifecycle && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Delivery & Retention</h2>
-              <table>
-                <tbody>
-                  <tr><td><strong>Successful exports</strong></td><td>{lifecycle.successfulExportCycles} of {lifecycle.maximumExportCycles}</td></tr>
-                  <tr><td><strong>Last destination</strong></td><td>{lifecycle.lastDestinationType || '—'}</td></tr>
-                  <tr><td><strong>Last exported</strong></td><td>{formatTime(lifecycle.lastExportedAt)}</td></tr>
-                  <tr><td><strong>Original retained until</strong></td><td>{formatTime(lifecycle.originalDeleteAt)}</td></tr>
-                  <tr><td><strong>Internal redacted copy until</strong></td><td>{formatTime(lifecycle.redactedDeleteAt)}</td></tr>
-                  {lifecycle.technicalHoldUntil && (
-                    <tr><td><strong>Technical hold until</strong></td><td>{formatTime(lifecycle.technicalHoldUntil)}</td></tr>
-                  )}
-                  {lifecycle.purgedAt && (
-                    <tr><td><strong>Internal artifacts purged</strong></td><td>{formatTime(lifecycle.purgedAt)}</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {derivedDeliveries.length > 0 && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Derived Document Routing</h2>
-              <p style={{ fontSize: '0.85rem', color: '#636e72' }}>These page-subset PDFs are separate from the full master export. A routing failure does not undo the master delivery.</p>
-              <table>
-                <thead><tr><th>Destination</th><th>Marker</th><th>Pages</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>{derivedDeliveries.map((d) => <tr key={d.derivedDeliveryId}>
-                  <td>{d.destinationLabel || 'Routing attention'}</td>
-                  <td>{d.markerValue || d.failureCategory || '—'}</td>
-                  <td>{d.pageNumbers.length ? d.pageNumbers.join(', ') : '—'}</td>
-                  <td><span className={`badge badge-${d.status.toLowerCase()}`}>{d.status}</span></td>
-                  <td>{d.status !== 'ATTENTION_REQUIRED' && <button className="secondary" onClick={() => void handleDerivedSend(d.derivedDeliveryId)}>{d.status === 'DELIVERED' ? 'Resend' : 'Send'}</button>}</td>
-                </tr>)}</tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Documents table */}
-          {pkg.documents && pkg.documents.length > 0 && (
-            <div className="card">
-              <h2 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Documents</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Document</th>
-                    <th>Status</th>
-                    <th>Type</th>
-                    <th>MIME</th>
-                    <th>Size</th>
-                  </tr>
-                </thead>
-                <tbody>
+          {activeTab === 'documents' && (
+            <section className="package-tab-panel">
+              <div className="package-section-heading"><div><span className="ui-eyebrow">Package contents</span><h2>Documents</h2><p>Each uploaded PDF remains an independently tracked document.</p></div></div>
+              {pkg.documents?.length ? (
+                <div className="package-document-list">
                   {pkg.documents.map((doc) => (
-                    <tr key={doc.documentId}>
-                      <td>{doc.fileName || 'Document'}</td>
-                      <td>
-                        <span className={`badge badge-${doc.status.toLowerCase()}`}>
-                          {doc.status}
-                        </span>
-                      </td>
-                      <td>{doc.documentType || '-'}</td>
-                      <td>{doc.mimeType}</td>
-                      <td>{(doc.sizeBytes / 1024).toFixed(1)} KB</td>
-                    </tr>
+                    <article className="package-document-card" key={doc.documentId}>
+                      <div className="package-document-icon">PDF</div>
+                      <div className="package-document-copy">
+                        <strong>{doc.fileName || 'Document'}</strong>
+                        <span>{doc.documentType || 'PDF'} · {doc.mimeType}</span>
+                        <small>{(doc.sizeBytes / 1024).toFixed(1)} KB · ID {doc.documentId.slice(0, 8)}</small>
+                      </div>
+                      <StatusBadge value={doc.status} />
+                    </article>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              ) : <div className="ui-empty-state">No documents are attached to this intake.</div>}
+            </section>
           )}
 
-          <div className="inline-actions">
-            <button className="secondary" onClick={loadPackage}>Refresh</button>
-          </div>
+          {activeTab === 'delivery' && (
+            <section className="package-tab-panel">
+              <div className="package-section-heading"><div><span className="ui-eyebrow">Lifecycle</span><h2>Delivery & retention</h2><p>Delivery outcomes and temporary internal-artifact retention windows.</p></div></div>
+              {lifecycle ? (
+                <InfoGrid items={[
+                  { label: 'Successful exports', value: `${lifecycle.successfulExportCycles} of ${lifecycle.maximumExportCycles}`, emphasis: true },
+                  { label: 'Last destination', value: lifecycle.lastDestinationType || '—' },
+                  { label: 'Last exported', value: formatTime(lifecycle.lastExportedAt) },
+                  { label: 'Original retained until', value: formatTime(lifecycle.originalDeleteAt) },
+                  { label: 'Internal redacted copy until', value: formatTime(lifecycle.redactedDeleteAt) },
+                  ...(lifecycle.technicalHoldUntil ? [{ label: 'Technical hold until', value: formatTime(lifecycle.technicalHoldUntil) }] : []),
+                  ...(lifecycle.purgedAt ? [{ label: 'Internal artifacts purged', value: formatTime(lifecycle.purgedAt) }] : []),
+                ]} />
+              ) : <div className="ui-empty-state">Lifecycle information is not available yet.</div>}
+            </section>
+          )}
+
+          {activeTab === 'routing' && (
+            <section className="package-tab-panel">
+              <div className="package-section-heading"><div><span className="ui-eyebrow">External routing</span><h2>Derived document routing</h2><p>Page-subset PDFs route independently from the full master delivery.</p></div></div>
+              {derivedDeliveries.length > 0 ? (
+                <div className="derived-delivery-list">
+                  {derivedDeliveries.map((delivery) => (
+                    <article className="derived-delivery-card" key={delivery.derivedDeliveryId}>
+                      <div>
+                        <strong>{delivery.destinationLabel || 'Routing attention'}</strong>
+                        <span>{delivery.markerValue || delivery.failureCategory || 'No marker detail'}</span>
+                        <small>Pages {delivery.pageNumbers.length ? delivery.pageNumbers.join(', ') : '—'} · Attempt {delivery.attemptCount}</small>
+                      </div>
+                      <StatusBadge value={delivery.status} />
+                      {delivery.status !== 'ATTENTION_REQUIRED' && (
+                        <button className="secondary" onClick={() => void handleDerivedSend(delivery.derivedDeliveryId)}>{delivery.status === 'DELIVERED' ? 'Resend' : 'Send'}</button>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : <div className="ui-empty-state">No derived-document deliveries exist for this package.</div>}
+            </section>
+          )}
         </>
       )}
 
@@ -389,22 +431,8 @@ export default function PackageDetailPage() {
               Existing processing rules and the current tenant configuration will be applied.
             </p>
             <div className="dashboard-confirm-actions">
-              <button
-                className="dashboard-confirm-cancel"
-                type="button"
-                disabled={reprocessSubmitting}
-                onClick={() => setConfirmReprocess(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="reprocess-confirm-submit"
-                type="button"
-                disabled={reprocessSubmitting}
-                onClick={() => void handleReprocess()}
-              >
-                {reprocessSubmitting ? 'Starting…' : 'Reprocess'}
-              </button>
+              <button className="dashboard-confirm-cancel" type="button" disabled={reprocessSubmitting} onClick={() => setConfirmReprocess(false)}>Cancel</button>
+              <button className="reprocess-confirm-submit" type="button" disabled={reprocessSubmitting} onClick={() => void handleReprocess()}>{reprocessSubmitting ? 'Starting…' : 'Reprocess'}</button>
             </div>
           </section>
         </div>

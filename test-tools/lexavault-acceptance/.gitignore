@@ -1,0 +1,2 @@
+# Per-run evidence (backend logs, Playwright artifact copies, result.json)
+evidence/

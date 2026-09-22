@@ -12,6 +12,7 @@ public record PlatformAdminOverviewResponse(
         List<TechnicalExceptionItem> technicalExceptions) {
 
     public record ResilienceSummary(int maxAttempts, long initialBackoffMs,
+                                    int packageProcessingMaxAttempts,
                                     boolean aiSecondaryEnabled, String aiSecondaryProvider,
                                     String aiSecondaryModel) {}
 

@@ -13,4 +13,15 @@ public interface PackageLifecycleRepository {
     void save(PackageLifecycle lifecycle);
     List<PackageLifecycle> findDueRedactedPurge(Instant now, int limit);
     List<PackageLifecycle> findDueFinalPurge(Instant now, int limit);
+
+    /** Reconciles Dashboard visibility for any package whose final processing retention already completed. */
+    default List<PackageLifecycle> findPurgedPackagesNeedingDashboardHide(int limit) {
+        return findPurgedCompletedExportsNeedingDashboardHide(limit);
+    }
+
+    /** Compatibility hook retained for focused/unit fakes created by the frozen FIX1/FIX2 baseline. */
+    @Deprecated
+    default List<PackageLifecycle> findPurgedCompletedExportsNeedingDashboardHide(int limit) {
+        return List.of();
+    }
 }

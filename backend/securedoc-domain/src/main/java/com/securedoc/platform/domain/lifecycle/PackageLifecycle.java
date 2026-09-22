@@ -112,6 +112,20 @@ public final class PackageLifecycle {
         updatedAt = now;
     }
 
+    /** Replaces an investigation extension with a fresh normal technical-attention retention window. */
+    public void restartTechnicalHold(Instant now, TenantLifecyclePolicy policy) {
+        Objects.requireNonNull(now);
+        Objects.requireNonNull(policy);
+        if (successfulExportCycles > 0) {
+            throw new IllegalStateException("Technical hold applies only before the first successful export");
+        }
+        if (purgedAt != null) {
+            throw new IllegalStateException("Package lifecycle has already been purged");
+        }
+        technicalHoldUntil = now.plus(policy.neverExportedHoldHours(), ChronoUnit.HOURS);
+        updatedAt = now;
+    }
+
     public void grantFinalApproval(Instant now) {
         if (purgedAt != null) throw new IllegalStateException("Package lifecycle has already been purged");
         finalApprovalGranted = true;

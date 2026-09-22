@@ -1,0 +1,14 @@
+DASHBOARD_RETENTION_VISIBILITY_FIX2_CANDIDATE_README.md
+DASHBOARD_RETENTION_VISIBILITY_FIX2_CHANGED_FILES.txt
+README.md
+docs/continuity/CURRENT_STATE.md
+docs/continuity/CHANGELOG.md
+docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
+backend/securedoc-application/src/main/java/com/securedoc/platform/application/port/out/PackageLifecycleRepository.java
+backend/securedoc-application/src/main/java/com/securedoc/platform/application/lifecycle/service/PackageLifecycleService.java
+backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/persistence/repository/SpringDataPackageLifecycleRepository.java
+backend/securedoc-infrastructure/src/main/java/com/securedoc/platform/infrastructure/persistence/adapter/JpaPackageLifecycleRepositoryAdapter.java
+backend/securedoc-application/src/test/java/com/securedoc/platform/application/lifecycle/service/PackageLifecycleDashboardRetentionTest.java
+backend/securedoc-application/src/test/java/com/securedoc/platform/application/lifecycle/service/ReprocessPackageServiceTest.java
+backend/securedoc-application/src/test/java/com/securedoc/platform/application/technical/service/TechnicalExceptionQueryServiceStructuredIncidentTest.java
+backend/securedoc-application/src/test/java/com/securedoc/platform/application/technical/service/TechnicalExceptionQueryServiceManualFallbackTest.java

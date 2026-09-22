@@ -4,7 +4,9 @@ package com.securedoc.platform.domain.processing;
 public enum ProcessingIncidentStatus {
     OPEN,
     RETRY_SCHEDULED,
+    INVESTIGATING,
     BUSINESS_CONTINUED,
     RESOLVED,
+    AUTO_CLOSED,
     ESCALATED
 }

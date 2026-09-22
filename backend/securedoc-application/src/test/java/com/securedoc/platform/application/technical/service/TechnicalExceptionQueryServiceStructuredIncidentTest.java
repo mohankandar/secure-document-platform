@@ -81,6 +81,7 @@ class TechnicalExceptionQueryServiceStructuredIncidentTest {
         @Override public void save(PackageLifecycle lifecycle) { }
         @Override public List<PackageLifecycle> findDueRedactedPurge(Instant now, int limit) { return List.of(); }
         @Override public List<PackageLifecycle> findDueFinalPurge(Instant now, int limit) { return List.of(); }
+        @Override public List<PackageLifecycle> findPurgedCompletedExportsNeedingDashboardHide(int limit) { return List.of(); }
     }
 
     private static final class EmptyArtifactRepository implements ArtifactRepository {

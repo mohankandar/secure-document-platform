@@ -79,7 +79,7 @@ class ReprocessPackageServiceTest {
 
         PackageLifecycleService lifecycleService = new PackageLifecycleService(
                 new DefaultPolicyRepository(), lifecycles, new EmptyExportRepository(), packages,
-                documents, artifacts, storage, new AuditService(audit));
+                (packageId, tenant, actor, hiddenAt) -> { }, documents, artifacts, storage, new AuditService(audit));
         AuditService auditService = new AuditService(audit);
         ReprocessPackageService service = new ReprocessPackageService(
                 packages, documents, new EmptyFindingRepository(), artifacts,
@@ -169,6 +169,7 @@ class ReprocessPackageServiceTest {
         @Override public void save(PackageLifecycle value) { lifecycle = value; }
         @Override public List<PackageLifecycle> findDueRedactedPurge(Instant now, int limit) { return List.of(); }
         @Override public List<PackageLifecycle> findDueFinalPurge(Instant now, int limit) { return List.of(); }
+        @Override public List<PackageLifecycle> findPurgedCompletedExportsNeedingDashboardHide(int limit) { return List.of(); }
     }
 
     private static final class DefaultPolicyRepository implements TenantLifecyclePolicyRepository {
