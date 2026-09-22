@@ -28,6 +28,7 @@ import type {
   OperationalReports,
   DashboardStage,
   PlatformAdminOverview,
+  ProductTelemetryStatus,
   CurrentUser,
   TechnicalExceptionDetail,
   SupportIncidentSearchPage,
@@ -47,6 +48,11 @@ import type {
   LicensingOverview,
   TenantLicenseStatus,
   LicenseHistoryItem,
+  EffectiveBranding,
+  BrandingOverview,
+  BrandingConfiguration,
+  BrandingUpdateRequest,
+  TenantBrandingDetail,
 } from '../types';
 
 class ApiClient {
@@ -78,6 +84,33 @@ class ApiClient {
   async getCurrentUser(): Promise<CurrentUser> {
     return this.request('/me');
   }
+
+  // --- UI branding ---
+
+  async getCurrentBranding(): Promise<EffectiveBranding> {
+    return this.request('/branding/current');
+  }
+
+  async getBrandingOverview(): Promise<BrandingOverview> {
+    return this.request('/platform/branding');
+  }
+
+  async getTenantBranding(tenantId: string): Promise<TenantBrandingDetail> {
+    return this.request(`/platform/branding/tenants/${tenantId}`);
+  }
+
+  async updateDeploymentBranding(body: BrandingUpdateRequest): Promise<BrandingConfiguration> {
+    return this.request('/platform/branding/deployment', { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async updateTenantBranding(tenantId: string, body: BrandingUpdateRequest): Promise<BrandingConfiguration> {
+    return this.request(`/platform/branding/tenants/${tenantId}`, { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async clearTenantBranding(tenantId: string): Promise<void> {
+    await this.request(`/platform/branding/tenants/${tenantId}`, { method: 'DELETE' });
+  }
+
 
   // --- Package intake ---
 
@@ -262,6 +295,10 @@ class ApiClient {
     return this.request('/platform-admin/health-check', { method: 'POST' });
   }
 
+  async getProductTelemetryStatus(): Promise<ProductTelemetryStatus> {
+    return this.request('/platform/product-telemetry/status');
+  }
+
   async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number }> {
     return this.request('/platform-admin/watched-folder/scan', { method: 'POST' });
   }
@@ -356,12 +393,28 @@ class ApiClient {
     return this.request(`/support/incidents/${incidentId}${suffix}`);
   }
 
+  async actOnSupportIncident(incidentId: string, body: { action: string; holdDays?: number; resolutionCode?: string }, tenantId?: string): Promise<{ incidentId: string; packageId: string; action: string; status: string }> {
+    const suffix = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+    return this.request(`/support/incidents/${incidentId}/actions${suffix}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   async listPackages(): Promise<PackageSummary[]> {
     return this.request('/packages');
   }
 
   async getPackage(packageId: string): Promise<PackageDetail> {
-    return this.request(`/packages/${packageId}`);
+    const detail = await this.request<PackageDetail>(`/packages/${packageId}`);
+    return {
+      ...detail,
+      // The detail endpoint historically omitted documentCount even though the
+      // dashboard summary includes it. Derive it defensively so the UI never
+      // renders "Documents (undefined)" while remaining compatible with a
+      // future API response that includes the field explicitly.
+      documentCount: Number.isFinite(detail.documentCount) ? detail.documentCount : (detail.documents?.length ?? 0),
+    };
   }
 
   async getPackageLifecycle(packageId: string): Promise<PackageLifecycleSummary> {

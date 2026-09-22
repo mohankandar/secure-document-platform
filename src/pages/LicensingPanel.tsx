@@ -265,7 +265,7 @@ export default function LicensingPanel() {
                 </div>
               </>
             ) : (
-              <div className="platform-empty licensing-no-license"><strong>No active license claims</strong><span>Install a signed LexaVault license for this tenant.</span></div>
+              <div className="platform-empty licensing-no-license"><strong>No active license claims</strong><span>Install a signed tenant license for this tenant.</span></div>
             )}
           </section>
 

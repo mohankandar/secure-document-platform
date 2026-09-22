@@ -4,6 +4,9 @@ import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
 import type { ApiError, PackageDetail, TechnicalExceptionDetail } from '../types';
 import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
+import StatusBadge from '../components/ui/StatusBadge';
+import InfoGrid from '../components/ui/InfoGrid';
 
 function friendlyStage(stage: string) {
   return stage.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -83,14 +86,12 @@ export default function TechnicalIssueDetailPage() {
     <div className="technical-issue-page">
       <Breadcrumbs items={breadcrumbItems} />
 
-      <header className="technical-issue-header">
-        <div>
-          <p className="eyebrow">Technical Attention</p>
-          <h1>Technical Issue Details</h1>
-          {primaryIdentifier && <p>{primaryIdentifier.label}: <strong>{primaryIdentifier.value}</strong></p>}
-        </div>
-        <span className="platform-status platform-status-unhealthy">Attention</span>
-      </header>
+      <PageHeader
+        eyebrow="Technical attention"
+        title="Technical Issue Details"
+        description={primaryIdentifier ? `${primaryIdentifier.label}: ${primaryIdentifier.value}` : 'Safe operational diagnostics for this package.'}
+        actions={<StatusBadge value="ATTENTION_REQUIRED" label="Attention" />}
+      />
 
       {error && <div className="error-msg">{error}</div>}
       {notice && <div className="success-msg">{notice}</div>}
@@ -100,17 +101,15 @@ export default function TechnicalIssueDetailPage() {
           <section className="card technical-issue-summary">
             <h2>What happened</h2>
             <p className="technical-issue-explanation">{detail.explanation}</p>
-            <table>
-              <tbody>
-                <tr><td><strong>Failure category</strong></td><td>{friendlyStage(detail.failureCategory)}</td></tr>
-                <tr><td><strong>Failed stage</strong></td><td>{friendlyStage(detail.failedStage)}</td></tr>
-                <tr><td><strong>Document</strong></td><td>{failedDocument?.fileName || (detail.documentId ? 'Affected document' : 'Package-level operation')}</td></tr>
-                <tr><td><strong>Retryable</strong></td><td>{detail.retryable ? 'Yes' : 'No'}</td></tr>
-                <tr><td><strong>Failed at</strong></td><td>{new Date(detail.failedAt).toLocaleString()}</td></tr>
-                <tr><td><strong>Original retained until</strong></td><td>{detail.originalRetainedUntil ? new Date(detail.originalRetainedUntil).toLocaleString() : '—'}</td></tr>
-                <tr><td><strong>Correlation ID</strong></td><td><code>{detail.correlationId || '—'}</code></td></tr>
-              </tbody>
-            </table>
+            <InfoGrid items={[
+              { label: 'Failure category', value: friendlyStage(detail.failureCategory), emphasis: true },
+              { label: 'Failed stage', value: friendlyStage(detail.failedStage) },
+              { label: 'Document', value: failedDocument?.fileName || (detail.documentId ? 'Affected document' : 'Package-level operation') },
+              { label: 'Retryable', value: detail.retryable ? 'Yes' : 'No' },
+              { label: 'Failed at', value: new Date(detail.failedAt).toLocaleString() },
+              { label: 'Original retained until', value: detail.originalRetainedUntil ? new Date(detail.originalRetainedUntil).toLocaleString() : '—' },
+              { label: 'Correlation ID', value: <code>{detail.correlationId || '—'}</code> },
+            ]} />
           </section>
 
 

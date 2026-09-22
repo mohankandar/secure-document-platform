@@ -13,8 +13,10 @@ import type {
   DerivedDelivery,
 } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
 
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
+type IntegrationView = IntegrationPurpose | 'ALL';
 
 const emptyDraft = (): Draft => ({
   name: '',
@@ -44,8 +46,32 @@ const emptyDraft = (): Draft => ({
 
 const purposeOptions: IntegrationPurpose[] = ['INGESTION_SOURCE', 'SDV_DELIVERY', 'DERIVED_DOCUMENT_DELIVERY'];
 const providerOptions: IntegrationProviderType[] = ['PUSH_API', 'HTTP_API', 'FILE_SHARE', 'WATCHED_FOLDER', 'SCANNER'];
+
+const providersByPurpose: Record<IntegrationPurpose, IntegrationProviderType[]> = {
+  INGESTION_SOURCE: ['PUSH_API', 'HTTP_API', 'WATCHED_FOLDER', 'SCANNER'],
+  SDV_DELIVERY: ['HTTP_API'],
+  DERIVED_DOCUMENT_DELIVERY: ['HTTP_API', 'FILE_SHARE'],
+};
 const authOptions: IntegrationAuthenticationType[] = ['NONE', 'BASIC', 'API_KEY', 'JWT', 'OAUTH2_CLIENT_CREDENTIALS', 'MTLS'];
 const acknowledgementOptions: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SDV_SUBMISSION_ACK'];
+
+const integrationViews: Array<{ id: IntegrationView; label: string; description: string; empty: string }> = [
+  { id: 'INGESTION_SOURCE', label: 'Intake Sources', description: 'Trusted sources that send or supply document packages into this tenant.', empty: 'No intake-source connections are configured.' },
+  { id: 'SDV_DELIVERY', label: 'Master Delivery', description: 'Destinations for the completed redacted master package.', empty: 'No master-delivery connections are configured.' },
+  { id: 'DERIVED_DOCUMENT_DELIVERY', label: 'Derived Delivery', description: 'Destinations used by derived-document routing rules.', empty: 'No derived-delivery connections are configured.' },
+  { id: 'ALL', label: 'All Connections', description: 'Review every configured tenant integration in one place.', empty: 'No tenant integration connections are configured yet.' },
+];
+
+function emptyDraftForPurpose(purpose: IntegrationPurpose): Draft {
+  const draft = emptyDraft();
+  if (purpose === 'SDV_DELIVERY') {
+    return { ...draft, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' };
+  }
+  if (purpose === 'DERIVED_DOCUMENT_DELIVERY') {
+    return { ...draft, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'DESTINATION_RECEIPT' };
+  }
+  return draft;
+}
 
 function human(value: string) {
   return value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -95,6 +121,8 @@ export default function IntegrationsPage() {
   const [message, setMessage] = useState('');
   const [pollingStatus, setPollingStatus] = useState<Record<string, PollingConnectionStatus>>({});
   const [derivedAttention, setDerivedAttention] = useState<DerivedDelivery[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [activeView, setActiveView] = useState<IntegrationView>('INGESTION_SOURCE');
 
   const load = useCallback(async () => {
     try {
@@ -125,13 +153,53 @@ export default function IntegrationsPage() {
   const secretNeeded = draft.authenticationType !== 'NONE';
   const isPollingSource = draft.purpose === 'INGESTION_SOURCE' && draft.providerType === 'HTTP_API' && draft.direction === 'OUTBOUND';
   const isScannerSource = draft.providerType === 'SCANNER';
+  const purposeLocked = activeView !== 'ALL';
+  const visibleProviderOptions = activeView === 'ALL' ? providerOptions : providersByPurpose[activeView];
 
   const sortedConnections = useMemo(
     () => [...connections].sort((a, b) => a.name.localeCompare(b.name)),
     [connections]
   );
+  const viewCounts = useMemo(() => ({
+    INGESTION_SOURCE: connections.filter((connection) => connection.purpose === 'INGESTION_SOURCE').length,
+    SDV_DELIVERY: connections.filter((connection) => connection.purpose === 'SDV_DELIVERY').length,
+    DERIVED_DOCUMENT_DELIVERY: connections.filter((connection) => connection.purpose === 'DERIVED_DOCUMENT_DELIVERY').length,
+    ALL: connections.length,
+  }), [connections]);
+  const visibleConnections = useMemo(
+    () => activeView === 'ALL' ? sortedConnections : sortedConnections.filter((connection) => connection.purpose === activeView),
+    [activeView, sortedConnections]
+  );
+  const activeViewConfig = integrationViews.find((view) => view.id === activeView) || integrationViews[0];
+  const showDerivedAttention = derivedAttention.length > 0 && (activeView === 'DERIVED_DOCUMENT_DELIVERY' || activeView === 'ALL');
 
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+
+  const changeActiveView = (view: IntegrationView) => {
+    if (view === activeView) return;
+    setActiveView(view);
+    setEditorOpen(false);
+    setDraft(view === 'ALL' ? emptyDraft() : emptyDraftForPurpose(view));
+    setError('');
+  };
+
+  const startNewConnection = (view: IntegrationView = activeView) => {
+    const purpose: IntegrationPurpose = view === 'ALL' ? 'INGESTION_SOURCE' : view;
+    setDraft(emptyDraftForPurpose(purpose));
+    setEditorOpen(true);
+  };
+
+  const resetEditor = () => {
+    if (draft.connectionId) {
+      const original = connections.find((connection) => connection.connectionId === draft.connectionId);
+      if (original) {
+        setDraft(toDraft(original));
+        return;
+      }
+    }
+    const purpose: IntegrationPurpose = activeView === 'ALL' ? 'INGESTION_SOURCE' : activeView;
+    setDraft(emptyDraftForPurpose(purpose));
+  };
 
   const applyPurpose = (purpose: IntegrationPurpose) => {
     if (purpose === 'SDV_DELIVERY') {
@@ -139,7 +207,20 @@ export default function IntegrationsPage() {
     } else if (purpose === 'DERIVED_DOCUMENT_DELIVERY') {
       setDraft((current) => ({ ...current, purpose, direction: 'OUTBOUND', providerType: current.providerType === 'FILE_SHARE' ? 'FILE_SHARE' : 'HTTP_API', acknowledgementMode: current.providerType === 'FILE_SHARE' ? 'DURABLE_FILE_WRITE' : 'DESTINATION_RECEIPT' }));
     } else {
-      setDraft((current) => ({ ...current, purpose, direction: current.providerType === 'HTTP_API' ? 'OUTBOUND' : 'INBOUND', acknowledgementMode: current.providerType === 'HTTP_API' ? 'SOURCE_PICKUP_ACK' : 'NONE', pollingScheduleType: current.providerType === 'HTTP_API' ? (current.pollingScheduleType || 'INTERVAL') : undefined, pollingIntervalMinutes: current.providerType === 'HTTP_API' ? (current.pollingIntervalMinutes || 60) : undefined, pollingBatchLimit: current.providerType === 'HTTP_API' ? (current.pollingBatchLimit || 100) : undefined }));
+      setDraft((current) => {
+        const providerType = providersByPurpose.INGESTION_SOURCE.includes(current.providerType) ? current.providerType : 'PUSH_API';
+        const polling = providerType === 'HTTP_API';
+        return {
+          ...current,
+          purpose,
+          providerType,
+          direction: polling ? 'OUTBOUND' : 'INBOUND',
+          acknowledgementMode: polling ? 'SOURCE_PICKUP_ACK' : 'NONE',
+          pollingScheduleType: polling ? (current.pollingScheduleType || 'INTERVAL') : undefined,
+          pollingIntervalMinutes: polling ? (current.pollingIntervalMinutes || 60) : undefined,
+          pollingBatchLimit: polling ? (current.pollingBatchLimit || 100) : undefined,
+        };
+      });
     }
   };
 
@@ -214,7 +295,9 @@ export default function IntegrationsPage() {
         ? await apiClient.updateIntegrationConnection(draft.connectionId, payload)
         : await apiClient.createIntegrationConnection(payload);
       setMessage(`${saved.name} ${editing ? 'updated' : 'created'}.`);
+      if (activeView !== 'ALL') setActiveView(saved.purpose);
       setDraft(emptyDraft());
+      setEditorOpen(false);
       await load();
     } catch (err) {
       setError((err as { message?: string }).message || 'Unable to save integration');
@@ -273,34 +356,59 @@ export default function IntegrationsPage() {
   return (
     <div className="platform-admin-page">
       <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Integrations' }]} />
-      <div className="platform-admin-header">
-        <div>
-          <div className="platform-eyebrow">Tenant technical administration</div>
-          <h1>Integrations</h1>
-          <p>Manage trusted ingestion sources and delivery destinations without exposing credential values.</p>
-        </div>
-        <button className="secondary" onClick={() => void load()}>Refresh</button>
+      <PageHeader
+        eyebrow="Tenant technical administration"
+        title="Integrations"
+        description="Manage trusted ingestion sources and delivery destinations while credential values remain protected."
+        actions={<button className="ui-button secondary" onClick={() => void load()}>Refresh</button>}
+      />
+
+      <div className="integration-summary-grid">
+        <div><span>Configured</span><strong>{connections.length}</strong></div>
+        <div><span>Enabled</span><strong>{connections.filter((connection) => connection.enabled).length}</strong></div>
+        <div className={derivedAttention.length ? 'needs-attention' : ''}><span>Derived attention</span><strong>{derivedAttention.length}</strong></div>
       </div>
 
       {error && <div className="platform-error">{error}</div>}
       {message && <div className="integration-success">{message}</div>}
 
-      <div className="integration-layout">
+      <nav className="integration-group-nav" aria-label="Integration connection groups">
+        {integrationViews.map((view) => (
+          <button
+            type="button"
+            key={view.id}
+            className={`integration-group-tab${activeView === view.id ? ' active' : ''}`}
+            aria-pressed={activeView === view.id}
+            onClick={() => changeActiveView(view.id)}
+          >
+            <span>{view.label}</span>
+            <strong>{viewCounts[view.id]}</strong>
+          </button>
+        ))}
+      </nav>
+
+      <div className={`integration-layout${editorOpen ? ' editor-open' : ''}`}>
         <section className="platform-section">
-          <div className="platform-section-heading">
-            <div><h2>Configured connections</h2><p>Disabled connections remain auditable and are never deleted by this screen.</p></div>
-            <span className="platform-count">{connections.length}</span>
+          <div className="platform-section-heading integration-section-heading">
+            <div><h2>{activeViewConfig.label}</h2><p>{activeViewConfig.description} Disabled connections remain auditable.</p></div>
+            <div className="integration-heading-actions">
+              <span className="platform-count">{visibleConnections.length}</span>
+              <button className="ui-button primary" onClick={() => startNewConnection()}>+ New connection</button>
+            </div>
           </div>
-          {loading ? <p>Loading integrations…</p> : sortedConnections.length === 0 ? (
-            <div className="platform-empty">No tenant integration connections configured yet.</div>
+          {loading ? <p>Loading integrations…</p> : visibleConnections.length === 0 ? (
+            <div className="platform-empty integration-empty">
+              <strong>{activeViewConfig.empty}</strong>
+              <span>Create a connection here when this tenant needs one.</span>
+            </div>
           ) : (
             <div className="integration-list">
-              {sortedConnections.map((connection) => (
-                <div className="platform-provider-card" key={connection.connectionId}>
-                  <div className="platform-provider-top">
-                    <div><div className="platform-provider-category">{human(connection.purpose)}</div><h3>{connection.name}</h3></div>
+              {visibleConnections.map((connection) => (
+                <details className="platform-provider-card integration-disclosure" key={connection.connectionId}>
+                  <summary className="integration-connection-summary">
+                    <div><div className="platform-provider-category">{human(connection.purpose)}</div><h3>{connection.name}</h3><span>{human(connection.providerType)} · {human(connection.direction)}</span></div>
                     <span className={statusClass(connection.enabled ? connection.healthStatus : 'DISABLED')}>{human(connection.enabled ? connection.healthStatus : 'DISABLED')}</span>
-                  </div>
+                  </summary>
                   <dl className="platform-definition-list">
                     <div><dt>Provider</dt><dd>{human(connection.providerType)}</dd></div>
                     <div><dt>Direction</dt><dd>{human(connection.direction)}</dd></div>
@@ -310,28 +418,28 @@ export default function IntegrationsPage() {
                     {connection.purpose === 'INGESTION_SOURCE' && connection.providerType === 'HTTP_API' && <div><dt>Next poll</dt><dd>{pollingStatus[connection.connectionId]?.nextScheduledAt ? new Date(pollingStatus[connection.connectionId].nextScheduledAt!).toLocaleString() : 'Not scheduled'}</dd></div>}
                   </dl>
                   <div className="integration-card-actions">
-                    <button className="secondary" onClick={() => setDraft(toDraft(connection))}>Edit</button>
+                    <button className="secondary" onClick={() => { setDraft(toDraft(connection)); setEditorOpen(true); }}>Edit</button>
                     {connection.purpose === 'INGESTION_SOURCE' && connection.providerType === 'HTTP_API' && <button className="secondary" disabled={!connection.enabled} onClick={() => void runNow(connection)}>Run now</button>}
                     {connection.purpose === 'SDV_DELIVERY' && connection.providerType === 'HTTP_API' && <button className="secondary" disabled={!connection.enabled} onClick={() => void testSdv(connection)}>Test connection</button>}
                     {connection.purpose === 'DERIVED_DOCUMENT_DELIVERY' && <button className="secondary" disabled={!connection.enabled} onClick={() => void testDerived(connection)}>Test connection</button>}
                     <button className="secondary" onClick={() => void toggle(connection)}>{connection.enabled ? 'Disable' : 'Enable'}</button>
                   </div>
-                </div>
+                </details>
               ))}
             </div>
           )}
         </section>
 
-        <section className="platform-section integration-editor">
+        {editorOpen ? <section className="platform-section integration-editor">
           <div className="platform-section-heading compact">
             <div><h2>{editing ? 'Edit connection' : 'New connection'}</h2><p>Technical configuration is tenant scoped and provider validated.</p></div>
-            {editing && <button className="secondary" onClick={() => setDraft(emptyDraft())}>New</button>}
+            <button className="secondary" onClick={() => { setDraft(emptyDraft()); setEditorOpen(false); }}>Close</button>
           </div>
 
           <div className="integration-form-grid">
             <label><span>Name</span><input value={draft.name} onChange={(e) => update('name', e.target.value)} /></label>
-            <label><span>Purpose</span><select value={draft.purpose} onChange={(e) => applyPurpose(e.target.value as IntegrationPurpose)}>{purposeOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
-            <label><span>Provider</span><select value={draft.providerType} onChange={(e) => applyProvider(e.target.value as IntegrationProviderType)}>{providerOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
+            <label><span>Purpose</span><select disabled={purposeLocked} value={draft.purpose} onChange={(e) => applyPurpose(e.target.value as IntegrationPurpose)}>{purposeOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select>{purposeLocked && <small>Locked to the current connection group. Use All Connections when you need to choose a different purpose.</small>}</label>
+            <label><span>Provider</span><select value={draft.providerType} onChange={(e) => applyProvider(e.target.value as IntegrationProviderType)}>{visibleProviderOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
             <label><span>Direction</span><select value={draft.direction} onChange={(e) => update('direction', e.target.value as IntegrationDirection)}><option value="INBOUND">Inbound</option><option value="OUTBOUND">Outbound</option></select></label>
             {(draft.providerType === 'PUSH_API' || draft.providerType === 'SCANNER') && <label className="integration-wide"><span>Authenticated client principal</span><input value={draft.clientPrincipal || ''} placeholder="OIDC subject / preferred username bound to this source" onChange={(e) => update('clientPrincipal', e.target.value)} /></label>}
             <label><span>Authentication</span><select value={draft.authenticationType} onChange={(e) => update('authenticationType', e.target.value as IntegrationAuthenticationType)}>{authOptions.map((v) => <option key={v} value={v}>{human(v)}</option>)}</select></label>
@@ -361,12 +469,12 @@ export default function IntegrationsPage() {
 
           <div className="integration-form-actions">
             <button className="primary" disabled={saving || !draft.name.trim()} onClick={() => void save()}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create connection'}</button>
-            <button className="secondary" disabled={saving} onClick={() => setDraft(emptyDraft())}>Reset</button>
+            <button className="secondary" disabled={saving} onClick={resetEditor}>Reset</button>
           </div>
           <p className="platform-boundary-note">Credential values are not displayed or returned by this screen. Provider-specific execution and safe health checks are available when the corresponding provider is implemented; test actions never send a customer PDF.</p>
-        </section>
+        </section> : null}
 
-        {derivedAttention.length > 0 && <section className="platform-section integration-editor">
+        {showDerivedAttention && <section className="platform-section integration-attention">
           <div className="platform-section-heading compact"><div><h2>Derived delivery attention</h2><p>Technical destination failures are independent of the completed master SDV export.</p></div><span className="platform-count">{derivedAttention.length}</span></div>
           <div className="integration-list">{derivedAttention.map((d) => <div className="platform-provider-card" key={d.derivedDeliveryId}>
             <div className="platform-provider-top"><div><div className="platform-provider-category">{d.destinationLabel || 'Routing attention'}</div><h3>{d.failureCategory || d.status}</h3></div><span className={statusClass(d.status)}>{human(d.status)}</span></div>

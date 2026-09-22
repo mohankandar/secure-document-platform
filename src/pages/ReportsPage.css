@@ -234,3 +234,18 @@ button.report-kpi { cursor:pointer; font:inherit; width:100%; }
 /* Reporting R3 FIX5: missing retained dimension values remain explicit for reconciliation. */
 .unknown-dimension-row strong{color:#475569}
 .unknown-dimension-row>div i{background:#94a3b8}
+
+/* UI/UX Modernization R2-R5 — reporting visual integration */
+.report-page { --report-brand: var(--brand-accent, #315cf4); }
+.report-experience-tabs button.active,
+.report-period-preset.active,
+.report-filter-button.open { border-color: color-mix(in srgb, var(--report-brand) 42%, #cbd5e1); }
+.report-experience-tabs button.active { color: var(--report-brand); box-shadow: inset 0 -2px 0 var(--report-brand); }
+.report-filter-chip { border-color: color-mix(in srgb, var(--report-brand) 18%, #dbe3ed); }
+.report-filter-chip strong { color: var(--report-brand); }
+.dimension-row>div i { background: var(--report-brand); }
+@media(max-width:899px){
+  .report-page { padding-left: 0; padding-right: 0; }
+  .report-actions .primary-button,.report-actions .secondary-button { min-height:44px; }
+  .report-filter-button { min-height:48px; }
+}

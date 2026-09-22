@@ -290,7 +290,7 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
       { key: 'executive', label: 'Executive', sub: 'Leadership pulse' },
     ];
     if (canViewBusiness) values.push({ key: 'business', label: 'Business Admin', sub: 'Workflow performance' });
-    values.push({ key: 'usage', label: 'Usage & Adoption', sub: 'How LexaVault is used' });
+    values.push({ key: 'usage', label: 'Usage & Adoption', sub: 'How the platform is used' });
     if (canViewOperations) values.push({ key: 'operations', label: 'Operational Details', sub: 'Investigate the pipeline' });
     return values;
   }, [canViewBusiness, canViewOperations]);
@@ -306,7 +306,7 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
   return <div className="reports-page-v3">
     <Breadcrumbs items={[{ label: 'Reports' }]} />
     <header className="report-header">
-      <div><p className="eyebrow">Business intelligence</p><h1>Reporting</h1><p>See how work enters LexaVault, how much is automated, how long it takes, and where the business needs attention.</p></div>
+      <div><p className="eyebrow">Business intelligence</p><h1>Reporting</h1><p>See how work enters the platform, how much is automated, how long it takes, and where the business needs attention.</p></div>
       <div className="report-actions"><button className="toolbar-button" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>{canExport && <button className="primary-button" onClick={exportCsv}>Export</button>}</div>
     </header>
 
@@ -339,7 +339,7 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
     {report && <div className="report-context"><span>{new Date(report.period.from).toLocaleDateString()} – {new Date(new Date(report.period.to).getTime() - 1).toLocaleDateString()}</span><span>Compared with the immediately preceding equal period</span><span>Updated {new Date(report.generatedAt).toLocaleString()}</span></div>}
 
     {report && view === 'executive' && <>
-      <section className="report-section-intro executive-section-intro"><div><p className="eyebrow">Period performance</p><h2>{period.label}</h2></div><p>Flow metrics below describe the selected period. Delivery conversion follows only packages that entered LexaVault during this period.</p></section>
+      <section className="report-section-intro executive-section-intro"><div><p className="eyebrow">Period performance</p><h2>{period.label}</h2></div><p>Flow metrics below describe the selected period. Delivery conversion follows only packages that entered the platform during this period.</p></section>
       <section className="report-kpis four">
         <Kpi label="Packages received" value={formatNumber.format(report.executive.batches)} detail={`${formatNumber.format(report.executive.documents)} documents · ${formatNumber.format(report.executive.pages)} pages`} current={report.executive.batches} previous={report.executive.previousBatches} />
         <Kpi label="Selected intake delivered" value={formatSafeNumber(report.executive.periodIntakeDelivered)} detail={`${pct(report.executive.periodIntakeDeliveryRate)} delivered by period end`} current={safeNumber(report.executive.periodIntakeDelivered)} previous={safeNumber(report.executive.previousPeriodIntakeDelivered)} tone="green" />
@@ -349,7 +349,7 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
 
       <section className="report-grid executive-grid period-grid">
         <article className="report-panel journey-panel"><PanelHeader eyebrow="Selected intake progress" title="What happened to work received in this period" /><IntakeProgress report={report} /></article>
-        <article className="report-panel source-panel"><PanelHeader eyebrow="Channel mix" title="How work enters LexaVault" /><SourceMix intake={report.intake} /></article>
+        <article className="report-panel source-panel"><PanelHeader eyebrow="Channel mix" title="How work enters the platform" /><SourceMix intake={report.intake} /></article>
         <article className="report-panel trend-panel"><PanelHeader eyebrow="Activity trend" title="Received vs delivered activity" aside="Daily volume" /><Trend points={report.executive.trend} /><p className="report-definition">Delivered activity can include packages received before the selected period. Intake conversion above tracks only packages received in this period.</p></article>
       </section>
 
@@ -399,7 +399,7 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
     </>}
 
     {report && view === 'usage' && <>
-      <section className="report-section-intro"><div><p className="eyebrow">Usage & adoption</p><h2>How the organization is using LexaVault</h2></div><p>Volume, document/page load, channel adoption, and repeat processing show where the platform is creating value.</p></section>
+      <section className="report-section-intro"><div><p className="eyebrow">Usage & adoption</p><h2>How the organization is using the platform</h2></div><p>Volume, document/page load, channel adoption, and repeat processing show where the platform is creating value.</p></section>
       <section className="usage-hero">
         <div><span>Packages</span><strong>{formatNumber.format(report.usage.packages)}</strong><small>selected period</small></div>
         <div><span>Documents</span><strong>{formatNumber.format(report.usage.documents)}</strong><small>{report.usage.averageDocumentsPerPackage.toFixed(1)} per package</small></div>

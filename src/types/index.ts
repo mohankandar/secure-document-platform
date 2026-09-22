@@ -662,6 +662,15 @@ export interface WatchedFolderAdminStatus {
   } | null;
 }
 
+export interface ProductTelemetryStatus {
+  mode: 'OFF' | 'BASIC' | 'ENHANCED' | string;
+  enabled: boolean;
+  installationIdConfigured: boolean;
+  privacyContract: string;
+  eventAllowList: string[];
+  prohibitedData: string[];
+}
+
 export interface PlatformAdminOverview {
   generatedAt: string;
   providers: PlatformHealthItem[];
@@ -669,6 +678,7 @@ export interface PlatformAdminOverview {
   resilience: {
     maxAttempts: number;
     initialBackoffMs: number;
+    packageProcessingMaxAttempts: number;
     aiSecondaryEnabled: boolean;
     aiSecondaryProvider: string;
     aiSecondaryModel: string;
@@ -846,6 +856,9 @@ export interface SupportIncidentDetail {
   attemptCount: number;
   correlationId: string;
   safeSummary: string;
+  artifactAvailability?: 'PURGED' | 'PENDING_PURGE' | 'RETAINED_UNTIL_POLICY_EXPIRY' | 'UNKNOWN' | string;
+  technicalAttentionRetainedUntil?: string | null;
+  artifactsPurgedAt?: string | null;
   processingFingerprint: Record<string, string>;
   safeMetadata: Record<string, string>;
   firstObservedAt: string;
@@ -877,4 +890,68 @@ export interface TechnicalExceptionDetail {
     attempts: number;
     environment: string;
   } | null;
+}
+
+export interface EffectiveBranding {
+  tenantId?: string | null;
+  applicationName: string;
+  shortName: string;
+  organizationName?: string | null;
+  pageTitle: string;
+  accentColor: string;
+  secondaryColor: string;
+  primaryLogoDataUrl?: string | null;
+  compactLogoDataUrl?: string | null;
+  faviconDataUrl?: string | null;
+}
+
+export interface BrandingConfiguration {
+  id: string;
+  tenantId?: string | null;
+  applicationName?: string | null;
+  shortName?: string | null;
+  organizationName?: string | null;
+  pageTitle?: string | null;
+  accentColor?: string | null;
+  secondaryColor?: string | null;
+  primaryLogoDataUrl?: string | null;
+  compactLogoDataUrl?: string | null;
+  faviconDataUrl?: string | null;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface TenantBrandingSummary {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  customBranding: boolean;
+}
+
+export interface TenantBrandingDetail {
+  tenantId: string;
+  customBranding: boolean;
+  configuration?: BrandingConfiguration | null;
+}
+
+export interface BrandingOverview {
+  deployment?: BrandingConfiguration | null;
+  tenants: TenantBrandingSummary[];
+}
+
+export interface BrandingAssetUpdate {
+  dataUrl?: string | null;
+  clear?: boolean;
+}
+
+export interface BrandingUpdateRequest {
+  applicationName?: string | null;
+  shortName?: string | null;
+  organizationName?: string | null;
+  pageTitle?: string | null;
+  accentColor?: string | null;
+  secondaryColor?: string | null;
+  primaryLogo?: BrandingAssetUpdate | null;
+  compactLogo?: BrandingAssetUpdate | null;
+  favicon?: BrandingAssetUpdate | null;
 }

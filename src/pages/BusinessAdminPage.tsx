@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '../api/client';
 import Breadcrumbs from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
 import type {
   ApiError,
   BusinessAdminConfiguration,
@@ -27,6 +28,7 @@ const SENSITIVE_TYPES = [
 ] as const;
 
 export default function BusinessAdminPage() {
+  const [activeSection, setActiveSection] = useState<'identifiers' | 'reporting' | 'dashboard' | 'sensitive' | 'intelligence' | 'routing' | 'retention'>('identifiers');
   const [configuration, setConfiguration] = useState<BusinessAdminConfiguration | null>(null);
   const [identifiers, setIdentifiers] = useState<BusinessAdminIdentifierDraft[]>([]);
   const [policy, setPolicy] = useState<SensitiveDataPolicyConfiguration | null>(null);
@@ -49,6 +51,7 @@ export default function BusinessAdminPage() {
   const [savingReporting, setSavingReporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [routingEditorOpen, setRoutingEditorOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -395,9 +398,12 @@ export default function BusinessAdminPage() {
     if (policy) setPolicy({ ...policy, reviewMode });
   };
 
-  const resetRoutingDraft = () => setRoutingDraft({
-    destinationLabel: '', markerType: 'TEXT_PATTERN', markerValue: '', scanRegion: 'TOP_RIGHT', destinationConnectionId: '', enabled: true,
-  });
+  const resetRoutingDraft = () => {
+    setRoutingDraft({
+      destinationLabel: '', markerType: 'TEXT_PATTERN', markerValue: '', scanRegion: 'TOP_RIGHT', destinationConnectionId: '', enabled: true,
+    });
+    setRoutingEditorOpen(false);
+  };
 
   const saveRoutingRule = async () => {
     if (!routingDraft.destinationLabel.trim() || !routingDraft.markerValue.trim() || !routingDraft.destinationConnectionId) {
@@ -417,10 +423,13 @@ export default function BusinessAdminPage() {
     } finally { setSavingRouting(false); }
   };
 
-  const editRoutingRule = (rule: RoutingRule) => setRoutingDraft({
-    ruleId: rule.ruleId, destinationLabel: rule.destinationLabel, markerType: rule.markerType,
-    markerValue: rule.markerValue, scanRegion: rule.scanRegion, destinationConnectionId: rule.destinationConnectionId, enabled: rule.enabled,
-  });
+  const editRoutingRule = (rule: RoutingRule) => {
+    setRoutingDraft({
+      ruleId: rule.ruleId, destinationLabel: rule.destinationLabel, markerType: rule.markerType,
+      markerValue: rule.markerValue, scanRegion: rule.scanRegion, destinationConnectionId: rule.destinationConnectionId, enabled: rule.enabled,
+    });
+    setRoutingEditorOpen(true);
+  };
 
   const deleteRoutingRule = async (ruleId: string) => {
     setError(null); setSuccess(null);
@@ -440,18 +449,31 @@ export default function BusinessAdminPage() {
   return (
     <div className="business-admin-page">
       <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Business Admin' }]} />
-      <div className="business-admin-header">
-        <div>
-          <h1>Business Admin</h1>
-          <p>Configure business terminology and how sensitive information is handled.</p>
-        </div>
-        <button className="secondary" onClick={() => void load()}>Refresh</button>
-      </div>
+      <PageHeader
+        eyebrow="Business administration"
+        title="Business Administration"
+        description="Configure tenant-owned terminology, review policy, routing, reporting targets and lifecycle rules without changing technical platform settings."
+        actions={<button className="ui-button secondary" onClick={() => void load()}>Refresh</button>}
+      />
 
       {error && <div className="error-msg">{error}</div>}
       {success && <div className="success-msg">{success}</div>}
 
-      <section className="card admin-section-card">
+      <nav className="admin-section-nav" aria-label="Business administration sections">
+        {([
+          ['identifiers', 'Identifiers'],
+          ['reporting', 'Reporting'],
+          ['dashboard', 'Dashboard'],
+          ['sensitive', 'Sensitive data'],
+          ['intelligence', 'Document intelligence'],
+          ['routing', 'Routing'],
+          ['retention', 'Retention'],
+        ] as const).map(([key, label]) => (
+          <button key={key} type="button" className={activeSection === key ? 'active' : ''} onClick={() => setActiveSection(key)}>{label}</button>
+        ))}
+      </nav>
+
+      {activeSection === 'identifiers' && <section id="business-identifiers" className="card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Business Identifiers</h2>
@@ -462,7 +484,20 @@ export default function BusinessAdminPage() {
 
         <div className="identifier-admin-list">
           {identifiers.map((item, index) => (
-            <div className="identifier-admin-card" key={item.id || `new-${index}`}>
+            <details className="identifier-admin-card admin-disclosure" key={item.id || `new-${index}`} open={!item.id || undefined}>
+              <summary className="identifier-summary-row">
+                <div>
+                  <strong>{item.label.trim() || 'New identifier'}</strong>
+                  <span>{item.validationType.replace(/_/g, ' ').toLowerCase()}</span>
+                </div>
+                <div className="identifier-summary-badges" aria-label="Identifier attributes">
+                  {item.primary && <span>Primary</span>}
+                  {item.required && <span>Required</span>}
+                  {item.searchable && <span>Searchable</span>}
+                  {item.extractable && <span>Extractable</span>}
+                </div>
+              </summary>
+              <div className="identifier-editor-body">
               <div className="identifier-admin-row">
                 <div className="identifier-order-controls" aria-label="Reorder identifier">
                   <button className="icon-button" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up">↑</button>
@@ -560,7 +595,8 @@ export default function BusinessAdminPage() {
                   </div>
                 )}
               </div>
-            </div>
+              </div>
+            </details>
           ))}
         </div>
 
@@ -573,11 +609,11 @@ export default function BusinessAdminPage() {
             {savingIdentifiers ? 'Saving...' : 'Save Identifiers'}
           </button>
         </div>
-      </section>
+      </section>}
 
 
-      {reportingConfiguration && (
-        <section className="card admin-section-card">
+      {activeSection === 'reporting' && reportingConfiguration && (
+        <section id="reporting-targets" className="card admin-section-card admin-anchor-section">
           <div className="admin-section-heading">
             <div>
               <h2>Reporting & Business Targets</h2>
@@ -628,7 +664,7 @@ export default function BusinessAdminPage() {
         </section>
       )}
 
-      <section className="card admin-section-card">
+      {activeSection === 'dashboard' && <section id="dashboard-columns" className="card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Dashboard Columns</h2>
@@ -679,13 +715,13 @@ export default function BusinessAdminPage() {
             {savingDashboardColumns ? 'Saving...' : 'Save Dashboard Columns'}
           </button>
         </div>
-      </section>
+      </section>}
 
-      <section className="card admin-section-card">
+      {activeSection === 'sensitive' && <section id="sensitive-policy" className="card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Sensitive Data Policy</h2>
-            <p>Choose what LexaVault should find and permanently redact for this tenant.</p>
+            <p>Choose what the platform should find and permanently redact for this tenant.</p>
           </div>
         </div>
 
@@ -770,10 +806,10 @@ export default function BusinessAdminPage() {
             </div>
           </>
         )}
-      </section>
+      </section>}
 
-      {documentIntelligence && (
-        <section className="card admin-section-card">
+      {activeSection === 'intelligence' && documentIntelligence && (
+        <section id="document-intelligence" className="card admin-section-card admin-anchor-section">
           <div className="admin-section-heading">
             <div>
               <h2>Document Intelligence</h2>
@@ -864,14 +900,16 @@ export default function BusinessAdminPage() {
         </section>
       )}
 
-      <section className="card admin-section-card">
+      {activeSection === 'routing' && <section id="derived-routing" className="card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Derived Document Routing</h2>
             <p>Map deterministic markers to destinations configured by Tenant IT. The full redacted master remains intact and exports independently.</p>
           </div>
+          <button className="secondary" type="button" onClick={() => { resetRoutingDraft(); setRoutingEditorOpen(true); }}>+ Add Routing Rule</button>
         </div>
 
+        {routingEditorOpen && <div className="admin-inline-editor">
         <div className="policy-controls-grid">
           <div className="policy-control-card">
             <label>Destination label</label>
@@ -912,25 +950,34 @@ export default function BusinessAdminPage() {
         </div>
         <div className="admin-save-row">
           <button className="primary" disabled={savingRouting} onClick={() => void saveRoutingRule()}>{savingRouting ? 'Saving…' : routingDraft.ruleId ? 'Update Routing Rule' : 'Add Routing Rule'}</button>
-          {routingDraft.ruleId && <button className="secondary" onClick={resetRoutingDraft}>Cancel edit</button>}
+          <button className="secondary" onClick={resetRoutingDraft}>Cancel</button>
         </div>
+        </div>}
 
-        {routingRules.length > 0 && <table>
-          <thead><tr><th>Marker</th><th>Region</th><th>Destination</th><th>Status</th><th></th></tr></thead>
-          <tbody>{routingRules.map((rule) => <tr key={rule.ruleId}>
-            <td><strong>{rule.markerValue}</strong><br/><small>{rule.markerType}</small></td>
-            <td>{rule.scanRegion.replace(/_/g, ' ')}</td><td>{rule.destinationLabel}</td><td>{rule.enabled ? 'Enabled' : 'Disabled'}</td>
-            <td><div className="inline-actions"><button className="secondary" onClick={() => editRoutingRule(rule)}>Edit</button><button className="secondary" onClick={() => void deleteRoutingRule(rule.ruleId)}>Remove</button></div></td>
-          </tr>)}</tbody>
-        </table>}
-      </section>
+        {routingRules.length === 0 ? <div className="ui-empty-state">No derived routing rules configured.</div> : (
+          <div className="admin-disclosure-list">
+            {routingRules.map((rule) => (
+              <details className="admin-summary-row" key={rule.ruleId}>
+                <summary>
+                  <div><strong>{rule.destinationLabel}</strong><span>{rule.markerType.replace(/_/g, ' ')} · {rule.markerValue}</span></div>
+                  <div className="admin-summary-meta"><span>{rule.scanRegion.replace(/_/g, ' ')}</span><span className={rule.enabled ? 'is-enabled' : ''}>{rule.enabled ? 'Enabled' : 'Disabled'}</span></div>
+                </summary>
+                <div className="admin-summary-actions">
+                  <button className="secondary" onClick={() => editRoutingRule(rule)}>Edit rule</button>
+                  <button className="secondary" onClick={() => void deleteRoutingRule(rule.ruleId)}>Remove</button>
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
+      </section>}
 
-      {lifecyclePolicy && (
-        <section className="card admin-section-card">
+      {activeSection === 'retention' && lifecyclePolicy && (
+        <section id="retention-delivery" className="card admin-section-card admin-anchor-section">
           <div className="admin-section-heading">
             <div>
               <h2>Retention & Delivery Approval</h2>
-              <p>Control how long LexaVault keeps temporary internal artifacts after delivery.</p>
+              <p>Control how long the platform keeps temporary internal artifacts after delivery.</p>
             </div>
           </div>
 
@@ -967,19 +1014,19 @@ export default function BusinessAdminPage() {
             </div>
 
             <div className="policy-control-card">
-              <label htmlFor="technicalHoldHours">Never-exported technical hold</label>
+              <label htmlFor="technicalHoldHours">Technical Attention retention</label>
               <div className="threshold-row">
                 <input
                   id="technicalHoldHours"
                   type="number"
                   min="72"
-                  max="336"
+                  max="720"
                   value={lifecyclePolicy.neverExportedHoldHours}
                   onChange={(event) => setLifecyclePolicy({ ...lifecyclePolicy, neverExportedHoldHours: Number(event.target.value) })}
                 />
                 <strong>{lifecyclePolicy.neverExportedHoldHours}h</strong>
               </div>
-              <p>Failed packages that never exported are held temporarily for IT recovery, never indefinitely.</p>
+              <p>Failed packages that never exported remain actionable on the Dashboard for this period, then processing artifacts are purged and the item leaves the operational Dashboard. Support/audit history remains.</p>
             </div>
 
             <div className="policy-control-card">

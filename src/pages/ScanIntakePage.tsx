@@ -5,6 +5,9 @@ import { apiClient } from '../api/client';
 import { scanBridgeClient, type ScanBridgeConfiguration, type ScanBridgeError, type ScanSession, type ScannerStatus } from '../api/scanBridgeClient';
 import type { ApiError, IdentifierDefinition } from '../types';
 import './ScanIntakePage.css';
+import { useBranding } from '../branding/BrandingContext';
+import PageHeader from '../components/ui/PageHeader';
+import WorkflowStepper from '../components/ui/WorkflowStepper';
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -41,6 +44,7 @@ const isBridgeUnavailableError = (error: ScanBridgeError) => error.source === 's
 const LOST_SESSION_MESSAGE = 'The previous scan session is no longer active. Start a new scan.';
 
 export default function ScanIntakePage() {
+  const { branding } = useBranding();
   const [definitions, setDefinitions] = useState<IdentifierDefinition[]>([]);
   const [bridgeConfig, setBridgeConfig] = useState<ScanBridgeConfiguration | null>(null);
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus | null>(null);
@@ -186,6 +190,7 @@ export default function ScanIntakePage() {
     definitions.map((definition) => [definition.key, validateIdentifierValue(definition, identifierValues[definition.key] || '')])
   ), [definitions, identifierValues]);
 
+  const identifiersReady = definitions.length > 0 && !Object.values(identifierErrors).some(Boolean);
   const storageHealthy = scannerStatus?.storageHealthy !== false;
   const acquisitionAvailable = scannerStatus?.acquisitionAvailable === true;
   const canStart = !loading && bridgeAvailable === true && !!bridgeConfig?.enabled && acquisitionAvailable && storageHealthy
@@ -271,16 +276,21 @@ export default function ScanIntakePage() {
   return (
     <div className="scan-intake-page">
       <Breadcrumbs items={[{ label: 'Scanner Intake' }]} />
-      <div className="scan-intake-header">
-        <div>
-          <div className="scan-intake-eyebrow">Scanner Intake</div>
-          <h1>Scan Documents</h1>
-          <p>Enter the package identifiers, scan the complete paper package, then submit it to LexaVault.</p>
-        </div>
-        {bridgeState && <div className={`scan-bridge-state ${bridgeState.className}`}>{bridgeState.label}</div>}
-      </div>
+      <PageHeader eyebrow="Scanner intake" title="Scan Documents"
+        description={`Prepare the business identifiers, capture one complete paper package, then queue it safely to ${branding.applicationName}.`}
+        actions={bridgeState ? <div className={`scan-bridge-state ${bridgeState.className}`}>{bridgeState.label}</div> : undefined} />
+
+      <WorkflowStepper
+        ariaLabel="Scanner intake progress"
+        steps={[
+          { label: 'Identify package', description: 'Business fields', state: session || identifiersReady ? 'complete' : 'current' },
+          { label: 'Capture document', description: 'One consolidated PDF', state: !session ? 'upcoming' : session.status === 'WAITING_FOR_SCAN' ? 'current' : 'complete' },
+          { label: 'Queue & continue', description: 'Durable handoff', state: session?.status === 'READY' ? 'current' : session && ['QUEUED', 'SUBMITTING', 'SUBMITTED', 'ATTENTION_REQUIRED'].includes(session.status) ? 'complete' : 'upcoming' },
+        ]}
+      />
 
       {bridgeError && <div className="error-msg">{bridgeError}</div>}
+      {bridgeAvailable === false && <div className="scan-device-capability-note">Physical scanner acquisition runs on a workstation with the Scanner Bridge. Tablet and iPad users can still view package status and continue other browser workflows.</div>}
       {scannerStatus && !scannerStatus.storageHealthy && (
         <div className="error-msg">Scanner workstation storage needs attention before a new package can be scanned.</div>
       )}
@@ -296,7 +306,7 @@ export default function ScanIntakePage() {
       <div className="scan-intake-grid">
         <section className="card scan-intake-card">
           <h2>1. Business information</h2>
-          <p className="scan-intake-help">Fields are controlled by this tenant's Business Admin configuration and are validated again by LexaVault on submission.</p>
+          <p className="scan-intake-help">Fields are controlled by this tenant's Business Admin configuration and are validated again by {branding.applicationName} on submission.</p>
           {loading ? <p>Loading tenant intake requirements…</p> : definitions.length === 0 ? (
             <div className="error-msg">No business identifier definitions are configured for this tenant.</div>
           ) : (
@@ -375,7 +385,7 @@ export default function ScanIntakePage() {
                   </button>
                 </>
               ) : (
-                <p>Scan the complete package using the connected document feeder. LexaVault will wait for the scanner to finish the consolidated PDF.</p>
+                <p>Scan the complete package using the connected document feeder. {branding.applicationName} will wait for the scanner to finish the consolidated PDF.</p>
               )}
               <button className="secondary scan-cancel-button" disabled={bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
             </div>
@@ -385,7 +395,7 @@ export default function ScanIntakePage() {
             <div className="scan-ready-panel">
               <div className="scan-ready-badge">DOCUMENT RECEIVED</div>
               <h3>{session.preparedScan.fileName}</h3>
-              <p><strong>{formatBytes(session.preparedScan.sizeBytes)}</strong> · Ready to submit to LexaVault</p>
+              <p><strong>{formatBytes(session.preparedScan.sizeBytes)}</strong> · Ready to submit to {branding.applicationName}</p>
               <div className="scan-primary-actions">
                 <button className="primary" disabled={submitting || bridgeAvailable !== true} onClick={() => void submitScan()}>
                   {submitting ? 'Queueing…' : 'Submit'}
@@ -406,7 +416,7 @@ export default function ScanIntakePage() {
           {(session?.status === 'QUEUED' || session?.status === 'SUBMITTING') && (
             <div className="scan-queued-panel">
               <div className="scan-ready-badge">SAFELY QUEUED</div>
-              <h3>{session.status === 'SUBMITTING' ? 'Sending to LexaVault…' : 'Package queued for delivery'}</h3>
+              <h3>{session.status === 'SUBMITTING' ? `Sending to ${branding.applicationName}…` : 'Package queued for delivery'}</h3>
               <p>The local bridge owns this package durably. You can start the next package without waiting for OCR, redaction, review, or export.</p>
               <div className="scan-primary-actions">
                 <button className="primary" onClick={startNext}>Start Next Package</button>
@@ -419,7 +429,7 @@ export default function ScanIntakePage() {
             <div className="scan-ready-panel">
               <div className="scan-ready-badge">ACCEPTED BY LEXAVAULT</div>
               <h3>Package submitted successfully</h3>
-              <p>Processing continues through the normal LexaVault workflow. Any required review will appear in the existing Manual Review flow.</p>
+              <p>Processing continues through the normal {branding.applicationName} workflow. Any required review will appear in the existing Manual Review flow.</p>
               <div className="scan-primary-actions">
                 <button className="primary" onClick={startNext}>Start Next Package</button>
                 {session.lexavaultPackageId && <Link className="button-link secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}

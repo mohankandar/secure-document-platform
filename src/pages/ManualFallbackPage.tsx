@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { ApiError, ManualFallbackDetail, PackageDetail, ReviewBoundingBox } from '../types';
 import Breadcrumbs from '../components/Breadcrumbs';
+import PageHeader from '../components/ui/PageHeader';
 
 const MIN_BOX_SIZE = 0.008;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -351,13 +352,12 @@ export default function ManualFallbackPage() {
   return (
     <div className="review-page">
       <Breadcrumbs items={[{ label: 'Intake Details', to: packageId ? `/packages/${packageId}` : '/' }, { label: 'Manual Processing' }]} />
-      <div className="review-header">
-        <div>
-          <h1>Manual Processing</h1>
-          <p>Automatic sensitive-data analysis could not complete. Scan the document, open any page that needs attention, and mark every area that must be permanently redacted.</p>
-        </div>
-        {packageId && <Link className="button-link secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link>}
-      </div>
+      <PageHeader
+        eyebrow="Business continuity"
+        title="Manual Processing"
+        description="Automatic sensitive-data analysis could not complete. Scan the document, open any page that needs attention, and mark every area that must be permanently redacted."
+        actions={packageId ? <Link className="ui-button secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link> : undefined}
+      />
 
       <div className={`manual-fallback-warning${continuityExpanded ? ' expanded' : ' compact'}`}>
         <div className="manual-fallback-warning-copy">
