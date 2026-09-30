@@ -1,6 +1,9 @@
 package com.securedoc.platform.api.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.documentplatform.identity.IdentityClaimConfig;
+import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
+import com.documentplatform.identity.spring.RequiredAudienceValidator;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -69,9 +72,22 @@ public class SecurityConfig {
         }
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer).build();
         OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
-        OAuth2TokenValidator<Jwt> audienceValidator = new OidcAudienceValidator(audience);
+        OAuth2TokenValidator<Jwt> audienceValidator = new RequiredAudienceValidator(audience);
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, audienceValidator));
         return decoder;
+    }
+
+
+    @Bean
+    OidcJwtIdentityNormalizer oidcJwtIdentityNormalizer(SecurityProperties properties) {
+        var oidc = properties.getOidc();
+        return new OidcJwtIdentityNormalizer(
+                oidc.getProviderId(),
+                new IdentityClaimConfig(
+                        oidc.getUsernameClaim(),
+                        oidc.getEmailClaim(),
+                        oidc.getDisplayNameClaim(),
+                        oidc.getRolesClaim()));
     }
 
     @Bean

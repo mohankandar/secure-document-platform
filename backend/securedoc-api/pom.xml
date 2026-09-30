@@ -53,6 +53,13 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- Shared enterprise identity foundation (product-neutral OIDC identity normalization). -->
+        <dependency>
+            <groupId>com.documentplatform.identity</groupId>
+            <artifactId>enterprise-identity-spring</artifactId>
+            <version>0.1.0</version>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

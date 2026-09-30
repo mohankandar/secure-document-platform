@@ -33,8 +33,15 @@ securedoc:
     oidc:
       issuer-uri: ${SECUREDOC_SECURITY_OIDC_ISSUER_URI:}
       audience: ${SECUREDOC_SECURITY_OIDC_AUDIENCE:}
+      provider-id: ${SECUREDOC_SECURITY_OIDC_PROVIDER_ID:customer-oidc}
+      # Internal tenant mapping owned by this OIDC connection. Customer IdP does not need to emit it.
+      tenant-id: ${SECUREDOC_SECURITY_OIDC_TENANT_ID:}
+      # Backward-compatible fallback only for older deployments.
       tenant-claim: ${SECUREDOC_SECURITY_OIDC_TENANT_CLAIM:tenant_id}
       username-claim: ${SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM:preferred_username}
+      email-claim: ${SECUREDOC_SECURITY_OIDC_EMAIL_CLAIM:email}
+      display-name-claim: ${SECUREDOC_SECURITY_OIDC_DISPLAY_NAME_CLAIM:name}
+      # External customer groups are normalized by the shared identity module; LexaVault owns role mapping.
       roles-claim: ${SECUREDOC_SECURITY_OIDC_ROLES_CLAIM:groups}
       role-mappings:
         DOCUMENT_PROCESSOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_PROCESSOR:securedoc-document-processor}

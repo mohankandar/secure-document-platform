@@ -21,21 +21,33 @@ public class SecurityProperties {
     public static class Oidc {
         private String issuerUri = "";
         private String audience = "";
+        private String tenantId = "";
         private String tenantClaim = "tenant_id";
         private String usernameClaim = "preferred_username";
         private String rolesClaim = "groups";
+        private String providerId = "customer-oidc";
+        private String emailClaim = "email";
+        private String displayNameClaim = "name";
         private final Map<String, String> roleMappings = new LinkedHashMap<>();
 
         public String getIssuerUri() { return issuerUri; }
         public void setIssuerUri(String issuerUri) { this.issuerUri = safe(issuerUri); }
         public String getAudience() { return audience; }
         public void setAudience(String audience) { this.audience = safe(audience); }
+        public String getTenantId() { return tenantId; }
+        public void setTenantId(String tenantId) { this.tenantId = safe(tenantId); }
         public String getTenantClaim() { return tenantClaim; }
         public void setTenantClaim(String tenantClaim) { this.tenantClaim = safeOrDefault(tenantClaim, "tenant_id"); }
         public String getUsernameClaim() { return usernameClaim; }
         public void setUsernameClaim(String usernameClaim) { this.usernameClaim = safeOrDefault(usernameClaim, "preferred_username"); }
         public String getRolesClaim() { return rolesClaim; }
         public void setRolesClaim(String rolesClaim) { this.rolesClaim = safeOrDefault(rolesClaim, "groups"); }
+        public String getProviderId() { return providerId; }
+        public void setProviderId(String providerId) { this.providerId = safeOrDefault(providerId, "customer-oidc"); }
+        public String getEmailClaim() { return emailClaim; }
+        public void setEmailClaim(String emailClaim) { this.emailClaim = safeOrDefault(emailClaim, "email"); }
+        public String getDisplayNameClaim() { return displayNameClaim; }
+        public void setDisplayNameClaim(String displayNameClaim) { this.displayNameClaim = safeOrDefault(displayNameClaim, "name"); }
         public Map<String, String> getRoleMappings() { return roleMappings; }
 
         private static String safe(String value) { return value == null ? "" : value.trim(); }

@@ -1,9 +1,12 @@
 package com.securedoc.platform.api.context;
 
+import com.documentplatform.identity.AuthenticatedIdentity;
+import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.SecurityProperties;
 import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
+import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.observability.StructuredLogContext;
@@ -40,19 +43,25 @@ public class RequestContextResolver {
     private final UUID demoActorId;
     private final SecurityProperties securityProperties;
     private final OidcRoleMapper oidcRoleMapper;
+    private final OidcTenantResolver oidcTenantResolver;
     private final TrustedActorResolver trustedActorResolver;
+    private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
 
     public RequestContextResolver(
             @Value("${securedoc.demo.tenant-id}") String demoTenantId,
             @Value("${securedoc.demo.actor-id}") String demoActorId,
             SecurityProperties securityProperties,
             OidcRoleMapper oidcRoleMapper,
-            TrustedActorResolver trustedActorResolver) {
+            OidcTenantResolver oidcTenantResolver,
+            TrustedActorResolver trustedActorResolver,
+            OidcJwtIdentityNormalizer oidcIdentityNormalizer) {
         this.demoTenantId = UUID.fromString(demoTenantId);
         this.demoActorId = UUID.fromString(demoActorId);
         this.securityProperties = securityProperties;
         this.oidcRoleMapper = oidcRoleMapper;
+        this.oidcTenantResolver = oidcTenantResolver;
         this.trustedActorResolver = trustedActorResolver;
+        this.oidcIdentityNormalizer = oidcIdentityNormalizer;
     }
 
     public AuthenticatedPrincipal resolvePrincipal(HttpServletRequest request) {
@@ -122,21 +131,30 @@ public class RequestContextResolver {
     private AuthenticatedPrincipal resolveOidcIntegrationPrincipal() {
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
-        TenantId tenantId = resolveOidcTenant(jwt);
+        TenantId tenantId = oidcTenantResolver.resolve(jwt);
         ActorId actorId = trustedActorResolver.resolve(jwt);
-        String username = resolveOidcUsername(jwt);
-        return AuthenticatedPrincipal.of(actorId, tenantId, username, Set.of());
+        AuthenticatedIdentity identity = normalizeIdentity(jwt);
+        return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), Set.of());
     }
 
     private AuthenticatedPrincipal resolveOidcPrincipal() {
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
-        TenantId tenantId = resolveOidcTenant(jwt);
-        Set<String> roles = oidcRoleMapper.map(jwt.getClaim(securityProperties.getOidc().getRolesClaim()));
+        TenantId tenantId = oidcTenantResolver.resolve(jwt);
+        AuthenticatedIdentity identity = normalizeIdentity(jwt);
+        Set<String> roles = oidcRoleMapper.map(identity.groups());
         ActorId actorId = trustedActorResolver.resolve(jwt);
-        return AuthenticatedPrincipal.of(actorId, tenantId, resolveOidcUsername(jwt), roles);
+        return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
     }
 
+
+    private AuthenticatedIdentity normalizeIdentity(org.springframework.security.oauth2.jwt.Jwt jwt) {
+        try {
+            return oidcIdentityNormalizer.normalize(jwt);
+        } catch (IllegalArgumentException ex) {
+            throw new SecurityContextException("Authenticated identity has invalid OIDC identity claims");
+        }
+    }
 
     private JwtAuthenticationToken requireOidcToken() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -144,15 +162,6 @@ public class RequestContextResolver {
             throw new SecurityContextException("Authenticated OIDC identity is required");
         }
         return token;
-    }
-
-    private TenantId resolveOidcTenant(org.springframework.security.oauth2.jwt.Jwt jwt) {
-        String rawTenant = jwt.getClaimAsString(securityProperties.getOidc().getTenantClaim());
-        try {
-            return TenantId.of(UUID.fromString(rawTenant == null ? "" : rawTenant.trim()));
-        } catch (IllegalArgumentException ex) {
-            throw new SecurityContextException("Authenticated identity has an invalid tenant claim");
-        }
     }
 
     private String resolveOidcUsername(org.springframework.security.oauth2.jwt.Jwt jwt) {

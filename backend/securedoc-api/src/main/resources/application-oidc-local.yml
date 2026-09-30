@@ -1,0 +1,8 @@
+# Local infrastructure + real OIDC/JWT authentication.
+# Activate together with `local`: --spring.profiles.active=local,oidc-local
+# This profile is for development/runtime validation only; it is not a production deployment profile.
+securedoc:
+  security:
+    mode: OIDC
+    cors:
+      allowed-origins: ${SECUREDOC_SECURITY_CORS_ALLOWED_ORIGINS:http://localhost:5173}

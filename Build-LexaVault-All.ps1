@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir = Join-Path $ProjectRoot "backend"
+$SharedIdentityDir = Join-Path $ProjectRoot "shared\enterprise-identity"
 $FrontendDir = Join-Path $ProjectRoot "frontend\securedoc-ui"
 
 function Require-Command {
@@ -68,6 +69,16 @@ Write-Host "Node: $(& node --version)"
 Write-Host "npm:  $(& npm --version)"
 
 $overallStart = Get-Date
+
+Push-Location $SharedIdentityDir
+try {
+    Run-Step "SHARED IDENTITY - Maven install" {
+        & mvn clean install -DskipTests
+    }
+}
+finally {
+    Pop-Location
+}
 
 Push-Location $BackendDir
 try {

@@ -1,8 +1,12 @@
 package com.securedoc.platform.api.security;
 
+import com.documentplatform.identity.IdentityClaimConfig;
+import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
+
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.context.SecurityContextException;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
+import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -35,7 +39,7 @@ class RequestContextResolverSecurityTest {
     void oidcUsesVerifiedClaimsAndIgnoresSpoofedIdentityHeaders() {
         SecurityProperties properties = oidcProperties();
         RequestContextResolver resolver = resolver(properties);
-        Jwt jwt = jwt("00000000-0000-0000-0000-000000000001", List.of("securedoc-business-admin"));
+        Jwt jwt = jwt("00000000-0000-0000-0000-000000000002", List.of("securedoc-business-admin"));
         SecurityContextHolder.getContext().setAuthentication(authenticated(jwt));
 
         HttpServletRequest request = mock(HttpServletRequest.class);
@@ -51,11 +55,12 @@ class RequestContextResolverSecurityTest {
     }
 
     @Test
-    void oidcFailsClosedForMissingTenantOrUnmappedRole() {
+    void oidcUsesConnectionOwnedTenantAndFailsClosedForUnmappedRole() {
         SecurityProperties properties = oidcProperties();
         RequestContextResolver resolver = resolver(properties);
         SecurityContextHolder.getContext().setAuthentication(authenticated(jwt(null, List.of("securedoc-user"))));
-        assertThrows(SecurityContextException.class, () -> resolver.resolvePrincipal(mock(HttpServletRequest.class)));
+        assertEquals("00000000-0000-0000-0000-000000000001",
+                resolver.resolvePrincipal(mock(HttpServletRequest.class)).tenantId().toString());
 
         SecurityContextHolder.clearContext();
         SecurityContextHolder.getContext().setAuthentication(authenticated(
@@ -125,12 +130,21 @@ class RequestContextResolverSecurityTest {
                 "00000000-0000-0000-0000-000000000099",
                 properties,
                 new OidcRoleMapper(properties),
-                new TrustedActorResolver());
+                new OidcTenantResolver(properties),
+                new TrustedActorResolver(),
+                new OidcJwtIdentityNormalizer(
+                        properties.getOidc().getProviderId(),
+                        new IdentityClaimConfig(
+                                properties.getOidc().getUsernameClaim(),
+                                properties.getOidc().getEmailClaim(),
+                                properties.getOidc().getDisplayNameClaim(),
+                                properties.getOidc().getRolesClaim())));
     }
 
     private SecurityProperties oidcProperties() {
         SecurityProperties properties = new SecurityProperties();
         properties.setMode(SecurityMode.OIDC);
+        properties.getOidc().setTenantId("00000000-0000-0000-0000-000000000001");
         properties.getOidc().getRoleMappings().put("DOCUMENT_PROCESSOR", "securedoc-document-processor");
         properties.getOidc().getRoleMappings().put("DOCUMENT_SUPERVISOR", "securedoc-document-supervisor");
         properties.getOidc().getRoleMappings().put("USER", "securedoc-user");

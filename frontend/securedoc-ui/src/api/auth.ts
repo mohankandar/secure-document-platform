@@ -1,5 +1,6 @@
 const MODE = String(import.meta.env.VITE_SECURITY_MODE || (import.meta.env.DEV ? 'LOCAL' : 'OIDC')).toUpperCase();
 const TOKEN_KEY = 'securedoc.oidc.access-token';
+const ID_TOKEN_KEY = 'securedoc.oidc.id-token';
 const STATE_KEY = 'securedoc.oidc.state';
 const VERIFIER_KEY = 'securedoc.oidc.pkce-verifier';
 
@@ -18,6 +19,7 @@ export function getAccessToken(): string | null {
 
 export function clearOidcSession(): void {
   sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(ID_TOKEN_KEY);
   sessionStorage.removeItem(STATE_KEY);
   sessionStorage.removeItem(VERIFIER_KEY);
 }
@@ -54,16 +56,38 @@ export async function handleOidcCallback(): Promise<boolean> {
     clearOidcSession();
     throw new Error('OIDC token exchange failed');
   }
-  const token = await response.json() as { access_token?: string };
+  const token = await response.json() as { access_token?: string; id_token?: string };
   if (!token.access_token) {
     clearOidcSession();
     throw new Error('OIDC token response did not include an access token');
   }
   sessionStorage.setItem(TOKEN_KEY, token.access_token);
+  if (token.id_token) sessionStorage.setItem(ID_TOKEN_KEY, token.id_token);
   sessionStorage.removeItem(STATE_KEY);
   sessionStorage.removeItem(VERIFIER_KEY);
   window.history.replaceState({}, document.title, url.pathname || '/');
   return true;
+}
+
+export async function endOidcSession(): Promise<void> {
+  if (!isOidcSecurityMode()) return;
+  const config = oidcConfig();
+  const idToken = sessionStorage.getItem(ID_TOKEN_KEY);
+  try {
+    const discovery = await loadDiscovery(config.issuer);
+    const endSessionEndpoint = discovery.end_session_endpoint;
+    clearOidcSession();
+    if (endSessionEndpoint) {
+      const logout = new URL(endSessionEndpoint);
+      if (idToken) logout.searchParams.set('id_token_hint', idToken);
+      logout.searchParams.set('post_logout_redirect_uri', config.redirectUri);
+      window.location.assign(logout.toString());
+      return;
+    }
+  } catch {
+    clearOidcSession();
+  }
+  window.location.assign(config.redirectUri);
 }
 
 export async function beginOidcLogin(): Promise<void> {
@@ -98,12 +122,12 @@ function oidcConfig() {
   };
 }
 
-async function loadDiscovery(issuer: string): Promise<{ authorization_endpoint: string; token_endpoint: string }> {
+async function loadDiscovery(issuer: string): Promise<{ authorization_endpoint: string; token_endpoint: string; end_session_endpoint?: string }> {
   const response = await fetch(`${issuer}/.well-known/openid-configuration`, { cache: 'no-store' });
   if (!response.ok) throw new Error('OIDC discovery failed');
-  const json = await response.json() as { authorization_endpoint?: string; token_endpoint?: string };
+  const json = await response.json() as { authorization_endpoint?: string; token_endpoint?: string; end_session_endpoint?: string };
   if (!json.authorization_endpoint || !json.token_endpoint) throw new Error('OIDC discovery document is incomplete');
-  return { authorization_endpoint: json.authorization_endpoint, token_endpoint: json.token_endpoint };
+  return { authorization_endpoint: json.authorization_endpoint, token_endpoint: json.token_endpoint, end_session_endpoint: json.end_session_endpoint };
 }
 
 function randomBase64Url(bytes: number): string {
