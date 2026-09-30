@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
-import { beginOidcLogin, clearOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode } from './api/auth';
+import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode } from './api/auth';
 import type { CurrentUser } from './types';
 import DashboardPage from './pages/DashboardPage';
 import CreatePackagePage from './pages/CreatePackagePage';
@@ -272,7 +272,13 @@ export default function App() {
     );
   }
 
-  const signOut = () => { clearOidcSession(); setCurrentCapabilities([]); setCurrentRoles('DOCUMENT_PROCESSOR'); setCurrentUser(null); };
+  const signOut = () => {
+    setCurrentCapabilities([]);
+    setCurrentRoles('DOCUMENT_PROCESSOR');
+    setCurrentUser(null);
+    if (localMode) { clearOidcSession(); return; }
+    void endOidcSession();
+  };
 
   return (
     <BrandingProvider>
