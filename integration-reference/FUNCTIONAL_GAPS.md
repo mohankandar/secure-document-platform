@@ -50,3 +50,7 @@ User's LOCAL-mode Desk screenshot showed the Case File structure and live packag
 ## LOCAL role parity follow-up (`63f16ac`, `58d3cd5`, `f9143fe`)
 
 The preview Case File header now displays a role selector only when the existing `App` runs in LOCAL security mode. It is wired to the existing `handleRoleChange` handler that resets capabilities and re-requests `/me`; OIDC mode does not render it. Runtime tests must confirm every `ROLE_OPTIONS` entry gets the correct effective capabilities and that no stale privileged navigation remains across transitions. No OIDC demo-role switching was introduced. This is an integration candidate, not VERIFIED parity.
+
+## Canonical CSS contract correction (`3c3c68d`, `8c1d9f8`)
+
+The approved prototype's Case File light/dark `--cf-*` token declarations were moved unchanged from `src/studio/studio.css` to the existing canonical `src/tokens.css`. This addresses the local `uiFrameworkContract.test.ts` failure requiring raw hex color declarations to reside only in `tokens.css`. Production legacy root tokens, test assertions, and backend were not modified. **Test rerun pending:** execute `npm run test:ui-framework` and `npm run build` locally; only mark PASS after actual execution. Full UI visual parity is separately pending.
