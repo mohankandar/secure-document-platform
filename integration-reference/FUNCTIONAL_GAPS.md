@@ -30,3 +30,9 @@ This is a ledger, not approval to omit or defer high-severity workflows from fin
 ## Integration checkpoint — compatibility route staging (`8136641`)
 
 The Case File shell now retains the existing Support Incidents list/detail, technical-exception detail, and manual-fallback React routes using existing production pages. Navigation for support-only capability was added, and legacy intake redirects are capability gated. This does **not** imply that the Case File shell is mounted in `App.tsx`, that these pages are styled or tested within the new layout, or that functional parity is VERIFIED. Keep LV-FG-001, 002, 003, and 005 OPEN pending build, runtime, negative-permission tests, and deep-link validation. Do not remove corresponding legacy routes.
+
+## Integration checkpoint — opt-in shell (`a72ff55`, `5fb9b3f`)
+
+The production `App.tsx` continues to handle OIDC callback, `/me` session verification, capability assignment, expiration and sign-out. An explicitly enabled `VITE_CASE_FILE_UI_ENABLED=true` build mounts the Case File shell only after a non-null authenticated `CurrentUser` is available. The flag is off by default so the legacy shell remains active. The Case File shell takes that authenticated principal as a prop rather than loading `/me` independently; tenant/deployment branding is sourced from the existing `BrandingProvider` and the sign-out control delegates to the existing App handler. No demo role controls are shown inside the Case File shell.
+
+**Not verified:** TypeScript/build, actual OIDC browser flow, local-mode capabilities, CSS theme interactions, desktop/iPad screenshots, permission-denial and deep-link coverage, all Case File workflows and negative security tests. LV-FG-004 and 006 remain OPEN until runtime proof. Never enable this flag in production or delete legacy routes before acceptance.
