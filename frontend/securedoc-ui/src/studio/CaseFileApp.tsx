@@ -12,6 +12,10 @@ import Intake from './Intake';
 import Review from './Review';
 import Reports from './reports/Reports';
 import Admin from './admin/Admin';
+import SupportIncidentsPage from '../pages/SupportIncidentsPage';
+import SupportIncidentDetailPage from '../pages/SupportIncidentDetailPage';
+import TechnicalIssueDetailPage from '../pages/TechnicalIssueDetailPage';
+import ManualFallbackPage from '../pages/ManualFallbackPage';
 import './studio.css';
 
 const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -51,7 +55,7 @@ export default function CaseFileApp() {
   }
 
   const caps = me.capabilities;
-  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
+  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
 
   return (
     <div className="cf">
@@ -69,6 +73,7 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
   const canReview = caps.includes(CAP.review);
   const canReports = caps.includes(CAP.reportExecutive);
   const canAdmin = ADMIN_CAPS.some((c) => caps.includes(c));
+  const canSupport = caps.includes(CAP.technicalView);
 
   const { data: packages } = usePackages(canDesk);
   const { data: queue } = useReviewQueue(canReview);
@@ -86,7 +91,7 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const home = canDesk ? '/' : canReview ? '/review' : canIntake ? '/intake' : canReports ? '/reports' : '/admin';
+  const home = canDesk ? '/' : canReview ? '/review' : canIntake ? '/intake' : canReports ? '/reports' : canAdmin ? '/admin' : '/support/incidents';
 
   return (
     <div className="cf-shell">
@@ -120,6 +125,9 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
           {canAdmin && (
             <NavLink to="/admin" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Admin</NavLink>
           )}
+          {canSupport && (
+            <NavLink to="/support/incidents" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Support</NavLink>
+          )}
         </nav>
 
         <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)}>
@@ -148,8 +156,12 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
           <Route path="/reports" element={canReports ? <Reports caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/admin" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
           <Route path="/admin/:area" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
-          <Route path="/packages/new" element={<Navigate to="/intake?via=upload" replace />} />
-          <Route path="/scanner-intake" element={<Navigate to="/intake?via=scan" replace />} />
+          <Route path="/support/incidents" element={canSupport ? <SupportIncidentsPage /> : <Navigate to={home} replace />} />
+          <Route path="/support/incidents/:incidentId" element={canSupport ? <SupportIncidentDetailPage /> : <Navigate to={home} replace />} />
+          <Route path="/technical-exceptions/:packageId" element={canSupport ? <TechnicalIssueDetailPage /> : <Navigate to={home} replace />} />
+          <Route path="/packages/:packageId/manual-processing" element={canReview ? <ManualFallbackPage /> : <Navigate to={home} replace />} />
+          <Route path="/packages/new" element={canIntake ? <Navigate to="/intake?via=upload" replace /> : <Navigate to={home} replace />} />
+          <Route path="/scanner-intake" element={canIntake ? <Navigate to="/intake?via=scan" replace /> : <Navigate to={home} replace />} />
           <Route path="/packages/:caseId" element={<LegacyCaseRedirect />} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
@@ -173,7 +185,7 @@ function OutOfScope({ me }: { me: CurrentUser }) {
         <h1>Nothing here is assigned to this role</h1>
         <p>
           {displayName(me.username)} is signed in as {me.roles.join(', ').replace(/_/g, ' ').toLowerCase()}, which holds no case, reporting or
-          administration capability. Switch roles in Demo controls to explore the workspace.
+          administration or support capability. Contact your administrator if you believe you should have access.
         </p>
       </div>
     </div>
