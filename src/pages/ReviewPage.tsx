@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { apiClient } from '../api/client';
 import { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
 import PageScaffold from '../components/ui/PageScaffold';
+import Icon from '../components/ui/Icon';
 import type {
   ApiError,
   FocusedReviewItem,
@@ -321,7 +322,7 @@ export default function ReviewPage() {
 
       {items.length === 0 ? (
         <div className="ui-card ui-empty-state review-empty-layout">
-          <div className="review-empty-icon">✓</div>
+          <div className="review-empty-icon"><Icon name="check" /></div>
           <h2>You're all caught up</h2>
           <p>{packageId
             ? 'This intake has no findings currently waiting for Manual Review.'
