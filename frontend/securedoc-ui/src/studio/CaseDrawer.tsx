@@ -47,7 +47,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
         approve: 'Delivery approved.', reprocess: 'Reprocessing started.', 'technical-retry': 'Retry started.', 'manual-fallback': 'Manual review opened.',
       };
       toast(done[kind] ?? 'Done.', 'mark');
-      if (kind === 'manual-fallback') navigate(`/review?case=${packageId}`);
+      if (kind === 'manual-fallback') navigate(`/packages/${packageId}/manual-processing`);
     } catch (err) {
       setActionError(errorMessage(err, 'That action could not be completed. Nothing was changed.'));
       await mutate();
@@ -202,7 +202,7 @@ function headingFor(stage: StageKey, status: string, openFindings: number, actio
     case 'redacting': return 'LexaVault is redacting';
     case 'review':
       if (openFindings > 0) return `${openFindings} ${openFindings === 1 ? 'finding needs' : 'findings need'} a decision`;
-      return 'Review decisions recorded';
+      return 'No open findings in the current queue';
     case 'approval': return actionable ? 'Ready for your sign-off' : 'Waiting for sign-off';
     case 'delivered': return 'Delivered';
     case 'stopped': return status === 'REJECTED' ? 'Rejected at intake' : 'Processing stopped';
