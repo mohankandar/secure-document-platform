@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import App from './App';
+import CaseFileApp from './studio/CaseFileApp';
 import { setCurrentRoles } from './api/config';
 import { ROLE_CAPABILITIES } from './demo/roles';
 import { installDemoServer, storedDemoRole } from './demo/server';
@@ -18,7 +18,7 @@ if (savedRole && ROLE_CAPABILITIES[savedRole]) setCurrentRoles(savedRole);
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <CaseFileApp />
     </BrowserRouter>
     <DemoControls />
   </React.StrictMode>
