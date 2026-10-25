@@ -210,7 +210,7 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
                 null,
                 null,
                 null,
-                limit));
+                limit, true));
     }
 
     private boolean containsStructuredClassification(AuditRecordSummary record) {

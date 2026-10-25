@@ -3,6 +3,7 @@ import { apiClient } from '../api/client';
 import type { BrandingConfiguration, BrandingOverview, BrandingUpdateRequest } from '../types';
 import { useBranding } from '../branding/BrandingContext';
 import Icon from '../components/ui/Icon';
+import StatusBadge from '../components/ui/StatusBadge';
 
 type EditableBranding = {
   applicationName: string;
@@ -204,23 +205,23 @@ export default function BrandingPanel() {
 
   return (
     <div className="branding-panel">
-      {error && <div className="platform-error">{error}</div>}{notice && <div className="success-msg">{notice}</div>}
-      <section className="platform-section branding-intro">
+      {error && <div className="ui-alert tone-danger">{error}</div>}{notice && <div className="ui-alert tone-success">{notice}</div>}
+      <section className="ui-card platform-section-layout branding-intro">
         <div><span className="platform-eyebrow">White-label foundation</span><h2>Branding & theme</h2><p>Change customer-facing names, logos and brand colors without changing tenant IDs, licensing identity, APIs, audit records or exported documents.</p></div>
         <div className="branding-policy-note"><Icon name="palette"/><span>Semantic success, warning and error colors remain platform controlled.</span></div>
       </section>
 
       <div className="branding-layout">
-        <section className="platform-section platform-panel branding-editor">
+        <section className="ui-card platform-section-layout platform-panel branding-editor">
           <div className="platform-section-heading compact"><div><h2>Deployment branding</h2><p>Default presentation for this installation and any tenant that does not override it.</p></div></div>
           <BrandingForm value={deployment} onChange={setDeployment} />
           <div className="branding-form-actions"><button className="ui-button primary" disabled={saving} onClick={() => void saveDeployment()}>{saving ? 'Saving…' : 'Save deployment branding'}</button></div>
         </section>
-        <aside className="platform-section platform-panel branding-preview-card"><div className="platform-section-heading compact"><div><h2>Live preview</h2><p>Responsive shell preview using the current edit values.</p></div></div><Preview value={deployment}/></aside>
+        <aside className="ui-card platform-section-layout platform-panel branding-preview-card"><div className="platform-section-heading compact"><div><h2>Live preview</h2><p>Responsive shell preview using the current edit values.</p></div></div><Preview value={deployment}/></aside>
       </div>
 
-      <section className="platform-section platform-panel branding-tenant-section">
-        <div className="platform-section-heading"><div><h2>Tenant overrides</h2><p>Override only what a tenant needs; blank values inherit deployment branding.</p></div>{selectedTenant?.customBranding && <span className="platform-status platform-status-active">Custom branding</span>}</div>
+      <section className="ui-card platform-section-layout platform-panel branding-tenant-section">
+        <div className="platform-section-heading"><div><h2>Tenant overrides</h2><p>Override only what a tenant needs; blank values inherit deployment branding.</p></div>{selectedTenant?.customBranding && <StatusBadge value="ACTIVE" label="Custom branding" />}</div>
         <div className="branding-tenant-controls"><label className="ui-field"><span>Tenant</span><select value={selectedTenantId} onChange={(e) => changeTenant(e.target.value)}>{overview?.tenants.map((tenant) => <option key={tenant.tenantId} value={tenant.tenantId}>{tenant.tenantName} · {tenant.tenantSlug}</option>)}</select></label><div className="branding-tenant-actions"><button className="ui-button secondary" disabled={saving || !selectedTenantId} onClick={() => void saveTenant()}>Save tenant override</button><button className="ui-button tertiary" disabled={saving || !selectedTenant?.customBranding} onClick={() => void resetTenant()}>Reset to deployment</button></div></div>
         {selectedTenant && <div className="branding-layout tenant"><div><BrandingForm value={tenantValue} onChange={setTenantValue} tenantMode /><div className="branding-tenant-bottom-actions"><button className="ui-button primary" disabled={saving || !selectedTenantId} onClick={() => void saveTenant()}>{saving ? 'Saving…' : 'Save tenant override'}</button><button className="ui-button tertiary" disabled={saving || !selectedTenant?.customBranding} onClick={() => void resetTenant()}>Reset to deployment</button></div></div><div className="branding-preview-card"><h3>{selectedTenant.tenantName} preview</h3><Preview value={tenantValue} inherited={overview?.deployment}/></div></div>}
       </section>

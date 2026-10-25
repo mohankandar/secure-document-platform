@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { apiClient } from '../api/client';
-import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
+import PageScaffold from '../components/ui/PageScaffold';
 import type {
   ApiError,
   FocusedReviewItem,
@@ -297,42 +297,36 @@ export default function ReviewPage() {
 
   if (loading) {
     return (
-      <div className="review-page">
-        <Breadcrumbs items={breadcrumbItems} />
-        <div className="review-loading">Loading Manual Review…</div>
-      </div>
+      <PageScaffold className="review-page" breadcrumbs={breadcrumbItems} title="Manual Review">
+        <div className="ui-loading-state">Loading Manual Review…</div>
+      </PageScaffold>
     );
   }
 
   return (
-    <div className="review-page">
-      <Breadcrumbs items={breadcrumbItems} />
-      <PageHeader
-        eyebrow="Human review"
-        title="Manual Review"
-        description={packageId
-          ? `Resolve only the findings that need a human decision for this intake${scopedIdentifier ? ` · ${scopedIdentifier.label} ${scopedIdentifier.value}` : ''}.`
-          : 'Resolve only findings that currently need a human decision; high-confidence findings continue automatically.'}
-        actions={
-          <div className="review-header-actions">
-            <span className="review-count">{totalItems} need attention</span>
-            {packageId && <Link className="ui-button secondary" to="/review">View all reviews</Link>}
-            <button className="ui-button secondary" onClick={() => loadQueue(selectedId)}>Refresh</button>
-          </div>
-        }
-      />
+    <PageScaffold className="review-page" breadcrumbs={breadcrumbItems} eyebrow="Human review" title="Manual Review"
+      description={packageId
+        ? `Resolve only the findings that need a human decision for this intake${scopedIdentifier ? ` · ${scopedIdentifier.label} ${scopedIdentifier.value}` : ''}.`
+        : 'Resolve only findings that currently need a human decision; high-confidence findings continue automatically.'}
+      actions={
+        <div className="review-header-actions">
+          <span className="review-count">{totalItems} need attention</span>
+          {packageId && <Link className="ui-button secondary" to="/review">View all reviews</Link>}
+          <button className="ui-button tertiary review-refresh" onClick={() => loadQueue(selectedId)}>Refresh</button>
+        </div>
+      }>
 
-      {error && <div className="error-msg">{error}</div>}
-      {success && <div className="success-msg">{success}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {success && <div className="ui-alert tone-success">{success}</div>}
 
       {items.length === 0 ? (
-        <div className="review-empty card">
+        <div className="ui-card ui-empty-state review-empty-layout">
           <div className="review-empty-icon">✓</div>
           <h2>You're all caught up</h2>
           <p>{packageId
             ? 'This intake has no findings currently waiting for Manual Review.'
             : 'There are no findings currently waiting for Manual Review.'}</p>
-          {packageId && <Link className="button-link secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link>}
+          {packageId && <Link className="ui-button secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link>}
         </div>
       ) : (
         <div className="review-workbench-grid">
@@ -385,7 +379,7 @@ export default function ReviewPage() {
                     <div className="review-preview-loading review-preview-error">
                       <strong>Unable to render page {selected.pageNumber}.</strong>
                       <span>{previewError}</span>
-                      <button className="secondary" onClick={() => loadQueue(selected.findingId)}>Refresh review item</button>
+                      <button className="ui-button secondary" onClick={() => loadQueue(selected.findingId)}>Refresh review item</button>
                     </div>
                   )}
                   {previewUrl && (
@@ -436,17 +430,17 @@ export default function ReviewPage() {
                       : 'Draw a box around the sensitive value.'}
                   </span>
                   {box && !editing && (
-                    <button className="link-button" onClick={() => setEditing(true)}>Adjust area</button>
+                    <button className="ui-button tertiary small" onClick={() => setEditing(true)}>Adjust area</button>
                   )}
                   {editing && (
                     <div className="review-toolbar-actions">
                       {originalBox && boxChanged(box, originalBox) && (
-                        <button className="link-button" onClick={() => setBox(originalBox)}>Reset</button>
+                        <button className="ui-button tertiary small" onClick={() => setBox(originalBox)}>Reset</button>
                       )}
                       {!originalBox && box && (
-                        <button className="link-button" onClick={() => setBox(null)}>Clear</button>
+                        <button className="ui-button tertiary small" onClick={() => setBox(null)}>Clear</button>
                       )}
-                      <button className="link-button" onClick={() => box && setEditing(false)} disabled={!box}>Done</button>
+                      <button className="ui-button tertiary small" onClick={() => box && setEditing(false)} disabled={!box}>Done</button>
                     </div>
                   )}
                 </div>
@@ -483,7 +477,7 @@ export default function ReviewPage() {
 
                 <div className="review-decision-actions">
                   <button
-                    className="primary review-confirm"
+                    className="ui-button primary review-confirm"
                     disabled={resolving || !box}
                     onClick={() => resolve('confirm')}
                   >
@@ -491,7 +485,7 @@ export default function ReviewPage() {
                   </button>
                   {!confirmDismiss ? (
                     <button
-                      className="secondary review-dismiss"
+                      className="ui-button secondary review-dismiss"
                       disabled={resolving}
                       onClick={() => setConfirmDismiss(true)}
                     >
@@ -501,8 +495,8 @@ export default function ReviewPage() {
                     <div className="review-dismiss-confirm">
                       <span>Mark this item as not sensitive?</span>
                       <div>
-                        <button className="secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
-                        <button className="secondary review-dismiss-final" disabled={resolving} onClick={() => resolve('dismiss')}>Yes, not sensitive</button>
+                        <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
+                        <button className="ui-button secondary review-dismiss-final" disabled={resolving} onClick={() => resolve('dismiss')}>Yes, not sensitive</button>
                       </div>
                     </div>
                   )}
@@ -525,18 +519,18 @@ export default function ReviewPage() {
           </div>
           {!confirmDismiss ? (
             <div className="review-mobile-action-buttons">
-              <button className="secondary" disabled={resolving} onClick={() => setConfirmDismiss(true)}>Not Sensitive</button>
-              <button className="primary" disabled={resolving || !box} onClick={() => void resolve('confirm')}>{resolving ? 'Saving…' : 'Confirm'}</button>
+              <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(true)}>Not Sensitive</button>
+              <button className="ui-button primary" disabled={resolving || !box} onClick={() => void resolve('confirm')}>{resolving ? 'Saving…' : 'Confirm'}</button>
             </div>
           ) : (
             <div className="review-mobile-dismiss-confirm">
               <span>Mark as not sensitive?</span>
-              <button className="secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
-              <button className="secondary review-dismiss-final" disabled={resolving} onClick={() => void resolve('dismiss')}>Yes</button>
+              <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
+              <button className="ui-button secondary review-dismiss-final" disabled={resolving} onClick={() => void resolve('dismiss')}>Yes</button>
             </div>
           )}
         </div>
       )}
-    </div>
+    </PageScaffold>
   );
 }

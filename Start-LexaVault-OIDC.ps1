@@ -290,6 +290,7 @@ else {
     $jarPathEscaped = $apiJar.FullName.Replace("'", "''")
     $backendDirEscaped = $BackendDir.Replace("'", "''")
     $effectivePath = $env:PATH.Replace("'", "''")
+    $webClientIdEscaped = $WebClientId.Replace("'", "''")
     $tessdataPrefix = if ($env:TESSDATA_PREFIX) { $env:TESSDATA_PREFIX.Replace("'", "''") } else { "" }
 
     $backendCommand = @"
@@ -311,6 +312,8 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_SECURITY_MODE = 'OIDC'
 `$env:SECUREDOC_SECURITY_OIDC_ISSUER_URI = '$IssuerUri'
 `$env:SECUREDOC_SECURITY_OIDC_AUDIENCE = '$Audience'
+`$env:SECUREDOC_SECURITY_OIDC_BROWSER_CLIENT_ID = '$webClientIdEscaped'
+`$env:SECUREDOC_SECURITY_OIDC_PERSISTENT_CONNECTION_ENABLED = 'true'
 `$env:SECUREDOC_SECURITY_OIDC_PROVIDER_ID = '$ProviderId'
 `$env:SECUREDOC_SECURITY_OIDC_TENANT_ID = '$TenantId'
 `$env:SECUREDOC_SECURITY_OIDC_TENANT_CLAIM = '$TenantClaim'
@@ -322,6 +325,9 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_SECURITY_ROLE_REPORT_VIEWER = 'ReportViewers'
 `$env:SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN = 'TenantITAdmins'
 `$env:SECUREDOC_SECURITY_ROLE_PLATFORM_OPERATIONS_ADMIN = 'PlatformOperationsAdmins'
+# Local OIDC diagnostics only. Do not enable verbose Spring Security logging in deployed profiles.
+`$env:LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY = 'DEBUG'
+`$env:LOGGING_LEVEL_COM_SECUREDOC_PLATFORM_API_SECURITY = 'DEBUG'
 java -jar '$jarPathEscaped' --spring.profiles.active=local,oidc-local --spring.main.banner-mode=$BannerMode
 "@
 

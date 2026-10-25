@@ -127,11 +127,16 @@ public class WatchedFolderScheduler {
             var response = new WatchedFolderScanResponse(result.discovered(), result.waitingForTrigger(),
                     result.accepted(), result.rejected(), result.duplicates());
             last.set(new Snapshot(Instant.now(), "SUCCESS", response));
-            auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.WATCHED_FOLDER_SCAN_TRIGGERED,
-                    "WatchedFolder", mode, correlationId,
-                    "Watched-folder scan completed: mode=" + mode + ", discovered=" + result.discovered());
-            log.info("WATCHED_FOLDER_SCAN_COMPLETED mode={} nodeId={} fencingToken={} discovered={} accepted={} rejected={} duplicates={}",
-                    mode, logicalNodeId(), scanLease.get().fencingToken(), result.discovered(), result.accepted(), result.rejected(), result.duplicates());
+            boolean meaningfulActivity = result.discovered() > 0 || result.accepted() > 0
+                    || result.rejected() > 0 || result.duplicates() > 0;
+            boolean routineScheduledNoOp = "SCHEDULED".equals(mode) && !meaningfulActivity;
+            if (!routineScheduledNoOp) {
+                auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.WATCHED_FOLDER_SCAN_TRIGGERED,
+                        "WatchedFolder", mode, correlationId,
+                        "Watched-folder scan completed: mode=" + mode + ", discovered=" + result.discovered());
+                log.info("WATCHED_FOLDER_SCAN_COMPLETED mode={} nodeId={} fencingToken={} discovered={} accepted={} rejected={} duplicates={}",
+                        mode, logicalNodeId(), scanLease.get().fencingToken(), result.discovered(), result.accepted(), result.rejected(), result.duplicates());
+            }
             return response;
         } catch (RuntimeException e) {
             last.set(new Snapshot(Instant.now(), "FAILED", null));

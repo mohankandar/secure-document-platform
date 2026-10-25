@@ -45,7 +45,7 @@ class Ed25519LicenseTokenVerifierTest {
         var mismatch = verifier.verify(token, TenantId.generate(), now);
         assertEquals(LicenseValidationStatus.TENANT_MISMATCH, mismatch.status());
 
-        String tampered = token.substring(0, token.length() - 2) + "AA";
+        String tampered = tamperSignature(token);
         assertNotEquals(LicenseValidationStatus.ACTIVE, verifier.verify(tampered, tenantId, now).status());
     }
 
@@ -82,6 +82,14 @@ class Ed25519LicenseTokenVerifierTest {
         assertTrue(historicalClaims.isPresent());
         assertEquals("ENTERPRISE", historicalClaims.orElseThrow().edition());
         assertEquals(licenseId, historicalClaims.orElseThrow().licenseId());
+    }
+
+    private static String tamperSignature(String token) {
+        String[] parts = token.split("\\.", -1);
+        byte[] signature = Base64.getUrlDecoder().decode(parts[2]);
+        signature[0] ^= 0x01;
+        return parts[0] + "." + parts[1] + "."
+                + Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
     }
 
     private static String sign(KeyPair pair, String payload) throws Exception {

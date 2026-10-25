@@ -3,8 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
 import type { SupportIncidentSearchPage } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
+import StatusBadge from '../components/ui/StatusBadge';
 
 const EMPTY: SupportIncidentSearchPage = { items: [], total: 0, page: 0, size: 25 };
 
@@ -112,15 +112,9 @@ export default function SupportIncidentsPage() {
   ].filter(Boolean).length;
 
   return (
-    <div>
-      <Breadcrumbs items={[{ label: 'Support Incidents' }]} />
-      <PageHeader
-        eyebrow="Technical support"
-        title="Incident Search & Triage"
-        description="Find durable processing incidents and safe operational evidence without exposing document or provider content."
-      />
+    <PageScaffold className="support-incidents-page" breadcrumbs={[{ label: 'Support Incidents' }]} title="Incident Search & Triage" eyebrow="Technical operations" description="Search, filter, and investigate processing incidents without crossing tenant or authorization boundaries.">
 
-      <form className="card support-filter-panel" onSubmit={submit}>
+      <form className="ui-card support-filter-panel" onSubmit={submit}>
         <div className="support-primary-filters">
           <label>Primary business identifier
             <input value={businessIdentifier} onChange={(e) => setBusinessIdentifier(e.target.value)} placeholder="Contract, member or configured primary ID" />
@@ -141,11 +135,11 @@ export default function SupportIncidentsPage() {
             </select>
           </label>
           <div className="support-filter-actions">
-            <button className="primary-button" type="submit">Search</button>
-            <button className="secondary-button" type="button" onClick={() => setAdvancedOpen((current) => !current)}>
+            <button className="ui-button primary" type="submit">Search</button>
+            <button className="ui-button secondary" type="button" onClick={() => setAdvancedOpen((current) => !current)}>
               {advancedOpen ? 'Hide advanced' : `Advanced filters${advancedFilterCount ? ` (${advancedFilterCount})` : ''}`}
             </button>
-            <button className="secondary-button" type="button" onClick={clear}>Clear</button>
+            <button className="ui-button secondary" type="button" onClick={clear}>Clear</button>
           </div>
         </div>
 
@@ -201,15 +195,15 @@ export default function SupportIncidentsPage() {
         </div>}
       </form>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
 
-      <div className="card">
+      <div className="ui-card">
         <div className="support-results-header">
           <div><h2>Incidents</h2><p>{data.total} matching incident{data.total === 1 ? '' : 's'}</p></div>
           <span>Page {data.page + 1} of {pages}</span>
         </div>
         {loading ? <p>Loading incidents…</p> : data.items.length === 0 ? (
-          <div className="platform-empty">No incidents match the current tenant-scoped search.</div>
+          <div className="ui-empty-state">No incidents match the current tenant-scoped search.</div>
         ) : (
           <div className="table-scroll">
             <table className="support-table">
@@ -223,7 +217,7 @@ export default function SupportIncidentsPage() {
                       <strong>{item.primaryIdentifierValue || '—'}</strong>
                       <div className="support-subtle">{item.primaryIdentifierLabel || 'Business identifier'}</div>
                     </td>
-                    <td data-label="Impact"><span className={`support-impact impact-${item.businessImpact.toLowerCase()}`}>{item.businessImpact.replace(/_/g, ' ')}</span></td>
+                    <td data-label="Impact"><StatusBadge value={item.businessImpact} /></td>
                     <td data-label="Stage / Reason"><strong>{item.stage.replace(/_/g, ' ')}</strong><div className="support-subtle">{item.reasonCode}</div></td>
                     <td data-label="Status"><strong>{item.status.replace(/_/g, ' ')}</strong><div className="support-subtle">{item.businessOutcome?.replace(/_/g, ' ') || 'No business outcome'}</div></td>
                     <td data-label="Last observed">{new Date(item.lastObservedAt).toLocaleString()}</td>
@@ -235,10 +229,10 @@ export default function SupportIncidentsPage() {
           </div>
         )}
         <div className="support-pagination">
-          <button className="secondary-button" disabled={data.page <= 0 || loading} onClick={() => void load(data.page - 1)}>Previous</button>
-          <button className="secondary-button" disabled={data.page + 1 >= pages || loading} onClick={() => void load(data.page + 1)}>Next</button>
+          <button className="ui-button secondary" disabled={data.page <= 0 || loading} onClick={() => void load(data.page - 1)}>Previous</button>
+          <button className="ui-button secondary" disabled={data.page + 1 >= pages || loading} onClick={() => void load(data.page + 1)}>Next</button>
         </div>
       </div>
-    </div>
+    </PageScaffold>
   );
 }

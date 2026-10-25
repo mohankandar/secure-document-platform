@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
 import type { PackageDetail, PackageLifecycleSummary, ApiError, DerivedDelivery } from '../types';
-import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
+import PageScaffold from '../components/ui/PageScaffold';
 import StatusBadge from '../components/ui/StatusBadge';
+import HorizontalTabs from '../components/ui/HorizontalTabs';
 import InfoGrid from '../components/ui/InfoGrid';
 
 export default function PackageDetailPage() {
@@ -21,6 +22,7 @@ export default function PackageDetailPage() {
   const [confirmReprocess, setConfirmReprocess] = useState(false);
   const [reprocessSubmitting, setReprocessSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'delivery' | 'routing'>('overview');
+  const [selectedUploadName, setSelectedUploadName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPackage = async () => {
@@ -84,6 +86,8 @@ export default function PackageDetailPage() {
     try {
       await apiClient.uploadDocument(packageId, file);
       setSuccessMsg('Document uploaded successfully.');
+      setSelectedUploadName(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       loadPackage();
     } catch (err) {
       const apiErr = err as ApiError;
@@ -175,17 +179,28 @@ export default function PackageDetailPage() {
     if (!pkg) return null;
     if (pkg.status === 'CREATED') {
       return (
-        <section className="package-action-card tone-info">
+        <section className="ui-card package-action-card tone-info">
           <div>
             <span className="package-action-eyebrow">Draft intake</span>
             <h2>Add documents and submit</h2>
             <p>This intake exists but processing has not started.</p>
           </div>
           <div className="package-created-upload">
-            <input type="file" ref={fileInputRef} accept=".pdf" aria-label="Choose PDF to upload" />
-            <div className="inline-actions">
-              <button className="secondary" onClick={handleUpload}>Upload PDF</button>
-              <button className="primary" onClick={handleSubmit} disabled={pkg.documentCount === 0}>Submit Documents</button>
+            <input
+              className="package-upload-input"
+              type="file"
+              ref={fileInputRef}
+              accept=".pdf"
+              aria-label="Choose PDF to upload"
+              onChange={(event) => setSelectedUploadName(event.target.files?.[0]?.name || null)}
+            />
+            <div className="package-upload-picker">
+              <button className="ui-button secondary" type="button" onClick={() => fileInputRef.current?.click()}>Browse PDF</button>
+              <span className={selectedUploadName ? 'has-file' : ''} aria-live="polite">{selectedUploadName || 'No PDF selected'}</span>
+            </div>
+            <div className="package-upload-actions">
+              <button className="ui-button secondary" type="button" onClick={handleUpload} disabled={!selectedUploadName}>Upload PDF</button>
+              <button className="ui-button primary" type="button" onClick={handleSubmit} disabled={pkg.documentCount === 0}>Submit Documents</button>
             </div>
           </div>
         </section>
@@ -193,7 +208,7 @@ export default function PackageDetailPage() {
     }
     if (pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') {
       return (
-        <section className="package-action-card tone-warning">
+        <section className="ui-card package-action-card tone-warning">
           <div>
             <span className="package-action-eyebrow">Human decision required</span>
             <h2>{manualFallbackActive ? 'Manual processing in progress' : 'Manual review required'}</h2>
@@ -213,21 +228,21 @@ export default function PackageDetailPage() {
     }
     if (pkg.status === 'PENDING_FINAL_APPROVAL') {
       return (
-        <section className="package-action-card tone-warning">
+        <section className="ui-card package-action-card tone-warning">
           <div>
             <span className="package-action-eyebrow">Delivery approval</span>
             <h2>Ready for final delivery approval</h2>
             <p>Redaction and verification are complete. Tenant policy requires an approver before delivery.</p>
           </div>
           {hasCurrentCapability('PACKAGE_APPROVE_DELIVERY')
-            ? <button className="primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
+            ? <button className="ui-button primary" onClick={() => void handleApproveDelivery()}>Approve & Deliver</button>
             : <span className="package-action-waiting">Waiting for an authorized approver</span>}
         </section>
       );
     }
     if (reprocessingActive) {
       return (
-        <section className="package-action-card tone-info">
+        <section className="ui-card package-action-card tone-info">
           <div>
             <span className="package-action-eyebrow">New export cycle</span>
             <h2>Reprocessing retained original</h2>
@@ -238,28 +253,28 @@ export default function PackageDetailPage() {
     }
     if (pkg.status === 'COMPLETED') {
       return (
-        <section className="package-action-card tone-success">
+        <section className="ui-card package-action-card tone-success">
           <div>
             <span className="package-action-eyebrow">Business complete</span>
             <h2>Processing and delivery completed</h2>
             <p>{lifecycle?.lastExportedAt ? `Last exported ${formatTime(lifecycle.lastExportedAt)}.` : 'The package reached its completed business state.'}</p>
           </div>
           {lifecycle?.canReprocess && hasCurrentCapability('PACKAGE_REPROCESS') && (
-            <button className="secondary" type="button" onClick={() => setConfirmReprocess(true)}>Reprocess retained original</button>
+            <button className="ui-button secondary" type="button" onClick={() => setConfirmReprocess(true)}>Reprocess retained original</button>
           )}
         </section>
       );
     }
     if (pkg.status === 'FAILED') {
       return (
-        <section className="package-action-card tone-danger">
+        <section className="ui-card package-action-card tone-danger">
           <div>
             <span className="package-action-eyebrow">Technical attention</span>
             <h2>Automatic processing stopped</h2>
             <p>Business can continue manually when the PDF is still safe to render and redact.</p>
           </div>
           <div className="inline-actions">
-            {hasCurrentCapability('MANUAL_REVIEW') && <button className="primary" onClick={() => void handleManualFallback()}>Continue manually</button>}
+            {hasCurrentCapability('MANUAL_REVIEW') && <button className="ui-button primary" onClick={() => void handleManualFallback()}>Continue manually</button>}
             {hasCurrentCapability('TECHNICAL_EXCEPTION_VIEW') && <Link className="ui-button secondary" to={`/technical-exceptions/${packageId}`}>View technical issue</Link>}
           </div>
         </section>
@@ -270,29 +285,24 @@ export default function PackageDetailPage() {
 
   if (loading && !pkg) {
     return (
-      <div className="package-detail-page">
-        <Breadcrumbs items={[{ label: 'Intake Details' }]} />
+      <PageScaffold className="package-detail-page" breadcrumbs={[{ label: 'Intake Details' }]} title="Intake Details">
         <div className="ui-loading-state">Loading intake details…</div>
-      </div>
+      </PageScaffold>
     );
   }
 
   return (
-    <div className="package-detail-page">
-      <Breadcrumbs items={[{ label: intakeLabel }]} />
-      <PageHeader
-        eyebrow="Intake workspace"
-        title={primaryIdentifier ? `${primaryIdentifier.label} ${primaryIdentifier.value}` : 'Intake Details'}
-        description="Review the package state, documents, delivery lifecycle and any business action that still needs attention."
-        actions={<button className="ui-button secondary" onClick={() => void loadPackage()}>Refresh</button>}
-      />
+    <PageScaffold className="package-detail-page" breadcrumbs={[{ label: intakeLabel }]}
+      title={primaryIdentifier ? `${primaryIdentifier.label} ${primaryIdentifier.value}` : 'Intake Details'}
+      eyebrow="Intake details" description="Review package identity, lifecycle state, documents, delivery, and routing."
+      actions={<button className="ui-button secondary" onClick={() => void loadPackage()}>Refresh</button>}>
 
-      {error && <div className="error-msg">{error}</div>}
-      {successMsg && <div className="success-msg">{successMsg}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {successMsg && <div className="ui-alert tone-success">{successMsg}</div>}
 
       {pkg && (
         <>
-          <section className="package-summary-card">
+          <section className="ui-card package-summary-card">
             <div className="package-summary-main">
               <div className="package-summary-status"><StatusBadge value={displayedPackageStatus || pkg.status} /></div>
               <div className="package-summary-copy">
@@ -312,7 +322,7 @@ export default function PackageDetailPage() {
 
           {renderCurrentAction()}
 
-          <nav className="package-tabs" aria-label="Intake detail sections">
+          <HorizontalTabs ariaLabel="Intake detail sections" className="package-tabs">
             {([
               ['overview', 'Overview'],
               ['documents', `Documents (${pkg.documentCount})`],
@@ -321,14 +331,14 @@ export default function PackageDetailPage() {
             ] as const).map(([key, label]) => (
               <button key={key} type="button" className={activeTab === key ? 'active' : ''} onClick={() => setActiveTab(key)}>{label}</button>
             ))}
-          </nav>
+          </HorizontalTabs>
 
           {activeTab === 'overview' && (
-            <section className="package-tab-panel">
+            <section className="ui-card package-tab-panel">
               <div className="package-section-heading">
                 <div><span className="ui-eyebrow">Business context</span><h2>Intake overview</h2><p>Identifiers and current operational state for this package.</p></div>
               </div>
-              <InfoGrid items={[
+              <InfoGrid className="package-overview-grid" items={[
                 ...(pkg.businessIdentifiers?.filter((identifier) => identifier.displayable).map((identifier) => ({ label: identifier.label, value: identifier.value, emphasis: identifier.primary })) || []),
                 { label: 'Intake source', value: pkg.packageType.replace(/_/g, ' ') },
                 { label: 'Current status', value: <StatusBadge value={displayedPackageStatus || pkg.status} /> },
@@ -347,12 +357,12 @@ export default function PackageDetailPage() {
           )}
 
           {activeTab === 'documents' && (
-            <section className="package-tab-panel">
+            <section className="ui-card package-tab-panel">
               <div className="package-section-heading"><div><span className="ui-eyebrow">Package contents</span><h2>Documents</h2><p>Each uploaded PDF remains an independently tracked document.</p></div></div>
               {pkg.documents?.length ? (
                 <div className="package-document-list">
                   {pkg.documents.map((doc) => (
-                    <article className="package-document-card" key={doc.documentId}>
+                    <article className="ui-card package-document-card" key={doc.documentId}>
                       <div className="package-document-icon">PDF</div>
                       <div className="package-document-copy">
                         <strong>{doc.fileName || 'Document'}</strong>
@@ -368,7 +378,7 @@ export default function PackageDetailPage() {
           )}
 
           {activeTab === 'delivery' && (
-            <section className="package-tab-panel">
+            <section className="ui-card package-tab-panel">
               <div className="package-section-heading"><div><span className="ui-eyebrow">Lifecycle</span><h2>Delivery & retention</h2><p>Delivery outcomes and temporary internal-artifact retention windows.</p></div></div>
               {lifecycle ? (
                 <InfoGrid items={[
@@ -385,12 +395,12 @@ export default function PackageDetailPage() {
           )}
 
           {activeTab === 'routing' && (
-            <section className="package-tab-panel">
+            <section className="ui-card package-tab-panel">
               <div className="package-section-heading"><div><span className="ui-eyebrow">External routing</span><h2>Derived document routing</h2><p>Page-subset PDFs route independently from the full master delivery.</p></div></div>
               {derivedDeliveries.length > 0 ? (
                 <div className="derived-delivery-list">
                   {derivedDeliveries.map((delivery) => (
-                    <article className="derived-delivery-card" key={delivery.derivedDeliveryId}>
+                    <article className="ui-card derived-delivery-card" key={delivery.derivedDeliveryId}>
                       <div>
                         <strong>{delivery.destinationLabel || 'Routing attention'}</strong>
                         <span>{delivery.markerValue || delivery.failureCategory || 'No marker detail'}</span>
@@ -398,7 +408,7 @@ export default function PackageDetailPage() {
                       </div>
                       <StatusBadge value={delivery.status} />
                       {delivery.status !== 'ATTENTION_REQUIRED' && (
-                        <button className="secondary" onClick={() => void handleDerivedSend(delivery.derivedDeliveryId)}>{delivery.status === 'DELIVERED' ? 'Resend' : 'Send'}</button>
+                        <button className="ui-button secondary" onClick={() => void handleDerivedSend(delivery.derivedDeliveryId)}>{delivery.status === 'DELIVERED' ? 'Resend' : 'Send'}</button>
                       )}
                     </article>
                   ))}
@@ -431,12 +441,12 @@ export default function PackageDetailPage() {
               Existing processing rules and the current tenant configuration will be applied.
             </p>
             <div className="dashboard-confirm-actions">
-              <button className="dashboard-confirm-cancel" type="button" disabled={reprocessSubmitting} onClick={() => setConfirmReprocess(false)}>Cancel</button>
-              <button className="reprocess-confirm-submit" type="button" disabled={reprocessSubmitting} onClick={() => void handleReprocess()}>{reprocessSubmitting ? 'Starting…' : 'Reprocess'}</button>
+              <button className="ui-button secondary dashboard-confirm-cancel" type="button" disabled={reprocessSubmitting} onClick={() => setConfirmReprocess(false)}>Cancel</button>
+              <button className="ui-button primary reprocess-confirm-submit" type="button" disabled={reprocessSubmitting} onClick={() => void handleReprocess()}>{reprocessSubmitting ? 'Starting…' : 'Reprocess'}</button>
             </div>
           </section>
         </div>
       )}
-    </div>
+    </PageScaffold>
   );
 }

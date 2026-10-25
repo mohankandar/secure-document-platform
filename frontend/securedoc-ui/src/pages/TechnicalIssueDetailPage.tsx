@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
 import type { ApiError, PackageDetail, TechnicalExceptionDetail } from '../types';
-import Breadcrumbs, { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import { intakeBreadcrumbLabel } from '../components/Breadcrumbs';
+import PageScaffold from '../components/ui/PageScaffold';
 import StatusBadge from '../components/ui/StatusBadge';
 import InfoGrid from '../components/ui/InfoGrid';
 
@@ -75,30 +75,23 @@ export default function TechnicalIssueDetailPage() {
 
   if (loading) {
     return (
-      <div className="technical-issue-page">
-        <Breadcrumbs items={[{ label: 'Technical Issue' }]} />
-        <p>Loading technical issue…</p>
-      </div>
+      <PageScaffold className="technical-issue-page" breadcrumbs={[{ label: 'Technical Issue' }]} title="Technical Issue Details">
+        <div className="ui-loading-state">Loading technical issue…</div>
+      </PageScaffold>
     );
   }
 
   return (
-    <div className="technical-issue-page">
-      <Breadcrumbs items={breadcrumbItems} />
+    <PageScaffold className="technical-issue-page" breadcrumbs={breadcrumbItems} eyebrow="Technical attention" title="Technical Issue Details"
+      description={primaryIdentifier ? `${primaryIdentifier.label}: ${primaryIdentifier.value}` : 'Safe operational diagnostics for this package.'}
+      actions={<StatusBadge value="ATTENTION_REQUIRED" label="Attention" />}>
 
-      <PageHeader
-        eyebrow="Technical attention"
-        title="Technical Issue Details"
-        description={primaryIdentifier ? `${primaryIdentifier.label}: ${primaryIdentifier.value}` : 'Safe operational diagnostics for this package.'}
-        actions={<StatusBadge value="ATTENTION_REQUIRED" label="Attention" />}
-      />
-
-      {error && <div className="error-msg">{error}</div>}
-      {notice && <div className="success-msg">{notice}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {notice && <div className="ui-alert tone-success">{notice}</div>}
 
       {detail && (
         <>
-          <section className="card technical-issue-summary">
+          <section className="ui-card technical-issue-summary">
             <h2>What happened</h2>
             <p className="technical-issue-explanation">{detail.explanation}</p>
             <InfoGrid items={[
@@ -114,13 +107,13 @@ export default function TechnicalIssueDetailPage() {
 
 
           {detail.incidentId && (
-            <section className="card technical-incident-record">
+            <section className="ui-card technical-incident-record">
               <div className="technical-incident-record-head">
                 <div>
                   <p className="eyebrow">Structured incident</p>
                   <h2>Incident record</h2>
                 </div>
-                <span className="platform-status">{friendlyStage(detail.incidentStatus || 'OPEN')}</span>
+                <StatusBadge value={detail.incidentStatus || 'OPEN'} label={friendlyStage(detail.incidentStatus || 'OPEN')} />
               </div>
               <table>
                 <tbody>
@@ -165,7 +158,7 @@ export default function TechnicalIssueDetailPage() {
           )}
 
           {detail.operatorDiagnostics && (
-            <section className="card technical-operator-diagnostics">
+            <section className="ui-card technical-operator-diagnostics">
               <h2>Platform operations diagnostics</h2>
               <p>Safe internal metadata for platform support. No document values, credentials, or stack traces are shown.</p>
               <table>
@@ -181,12 +174,12 @@ export default function TechnicalIssueDetailPage() {
 
           <div className="technical-issue-actions">
             {detail.retryable && hasCurrentCapability('TECHNICAL_RETRY') && (
-              <button className="primary" disabled={retrying} onClick={() => void retry()}>
+              <button className="ui-button primary" disabled={retrying} onClick={() => void retry()}>
                 {retrying ? 'Scheduling retry…' : 'Retry Processing'}
               </button>
             )}
-            {packageId && <Link className="button-link secondary" to={`/packages/${packageId}`}>Open Intake</Link>}
-            <Link className="button-link secondary" to="/">Dashboard</Link>
+            {packageId && <Link className="ui-button secondary" to={`/packages/${packageId}`}>Open Intake</Link>}
+            <Link className="ui-button secondary" to="/">Dashboard</Link>
           </div>
 
           {!detail.retryable && (
@@ -196,6 +189,6 @@ export default function TechnicalIssueDetailPage() {
           )}
         </>
       )}
-    </div>
+    </PageScaffold>
   );
 }

@@ -1,4 +1,4 @@
-import { getAccessToken, isLocalSecurityMode } from './auth';
+import { getValidAccessToken, isLocalSecurityMode } from './auth';
 
 export const API_BASE_URL = '/api/v1';
 export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -23,7 +23,7 @@ export function generateCorrelationId(): string {
   });
 }
 
-function identityHeaders(): Record<string, string> {
+async function identityHeaders(): Promise<Record<string, string>> {
   if (isLocalSecurityMode()) {
     return {
       'X-Tenant-Id': DEFAULT_TENANT_ID,
@@ -31,14 +31,14 @@ function identityHeaders(): Record<string, string> {
       'X-Actor-Roles': currentRoles,
     };
   }
-  const token = getAccessToken();
+  const token = await getValidAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export function defaultHeaders(): Record<string, string> {
-  return { 'Content-Type': 'application/json', ...identityHeaders(), 'X-Correlation-Id': generateCorrelationId() };
+export async function defaultHeaders(): Promise<Record<string, string>> {
+  return { 'Content-Type': 'application/json', ...(await identityHeaders()), 'X-Correlation-Id': generateCorrelationId() };
 }
 
-export function baseHeaders(): Record<string, string> {
-  return { ...identityHeaders(), 'X-Correlation-Id': generateCorrelationId() };
+export async function baseHeaders(): Promise<Record<string, string>> {
+  return { ...(await identityHeaders()), 'X-Correlation-Id': generateCorrelationId() };
 }

@@ -21,19 +21,19 @@ export default function ProductTelemetryPanel() {
 
   useEffect(() => { void load(); }, []);
 
-  if (loading) return <section className="platform-section"><p>Loading product telemetry…</p></section>;
-  if (error) return <section className="platform-section"><div className="platform-error">{error}</div></section>;
+  if (loading) return <section className="ui-card platform-section-layout"><p>Loading product telemetry…</p></section>;
+  if (error) return <section className="ui-card platform-section-layout"><div className="ui-alert tone-danger">{error}</div></section>;
   if (!data) return null;
 
   return (
     <>
-      <section className="platform-section">
+      <section className="ui-card platform-section-layout">
         <div className="platform-section-heading">
           <div>
             <h2>Privacy-safe product telemetry</h2>
             <p>Product-improvement events use an explicit allow-list and exclude customer document and business content.</p>
           </div>
-          <button className="secondary" onClick={() => void load()}>Refresh</button>
+          <button className="ui-button secondary" onClick={() => void load()}>Refresh</button>
         </div>
         <dl className="platform-definition-list">
           <div><dt>Mode</dt><dd>{data.mode}</dd></div>
@@ -47,13 +47,13 @@ export default function ProductTelemetryPanel() {
       </section>
 
       <div className="platform-two-column">
-        <section className="platform-section platform-panel">
+        <section className="ui-card platform-section-layout platform-panel">
           <div className="platform-section-heading compact"><div><h2>Allowed events</h2><p>Only these product event families are emitted.</p></div></div>
           <ul>
             {data.eventAllowList.map((eventName) => <li key={eventName}><code>{eventName}</code></li>)}
           </ul>
         </section>
-        <section className="platform-section platform-panel">
+        <section className="ui-card platform-section-layout platform-panel">
           <div className="platform-section-heading compact"><div><h2>Explicitly prohibited</h2><p>These data classes must never enter the product telemetry stream.</p></div></div>
           <ul>
             {data.prohibitedData.map((item) => <li key={item}>{item}</li>)}

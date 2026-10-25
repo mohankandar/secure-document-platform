@@ -27,6 +27,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <enterprise.identity.version>0.2.0</enterprise.identity.version>
+        <jackson.version>2.18.9</jackson.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -164,15 +164,6 @@ public class RequestContextResolver {
         return token;
     }
 
-    private String resolveOidcUsername(org.springframework.security.oauth2.jwt.Jwt jwt) {
-        String username = jwt.getClaimAsString(securityProperties.getOidc().getUsernameClaim());
-        if (username == null || username.isBlank()) username = jwt.getSubject();
-        if (username == null || username.isBlank()) {
-            throw new SecurityContextException("Authenticated identity has no usable username/subject");
-        }
-        return username.trim();
-    }
-
     private UUID resolveLocalUuid(HttpServletRequest request, String headerName, UUID fallback) {
         String header = request.getHeader(headerName);
         if (header != null && !header.isBlank()) {

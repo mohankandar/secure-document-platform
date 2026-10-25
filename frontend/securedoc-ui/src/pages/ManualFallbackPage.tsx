@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { ApiError, ManualFallbackDetail, PackageDetail, ReviewBoundingBox } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
+import HorizontalTabs from '../components/ui/HorizontalTabs';
 
 const MIN_BOX_SIZE = 0.008;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -350,14 +350,10 @@ export default function ManualFallbackPage() {
   };
 
   return (
-    <div className="review-page">
-      <Breadcrumbs items={[{ label: 'Intake Details', to: packageId ? `/packages/${packageId}` : '/' }, { label: 'Manual Processing' }]} />
-      <PageHeader
-        eyebrow="Business continuity"
-        title="Manual Processing"
-        description="Automatic sensitive-data analysis could not complete. Scan the document, open any page that needs attention, and mark every area that must be permanently redacted."
-        actions={packageId ? <Link className="ui-button secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link> : undefined}
-      />
+    <PageScaffold className="review-page manual-processing-page" breadcrumbs={[{ label: 'Intake Details', to: packageId ? `/packages/${packageId}` : '/' }, { label: 'Manual Processing' }]} title="Manual Processing"
+      eyebrow="Controlled recovery"
+      description="Complete required document handling while preserving redaction, verification, and incident traceability."
+      actions={packageId ? <Link className="ui-button secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link> : undefined}>
 
       <div className={`manual-fallback-warning${continuityExpanded ? ' expanded' : ' compact'}`}>
         <div className="manual-fallback-warning-copy">
@@ -371,12 +367,12 @@ export default function ManualFallbackPage() {
         </button>
       </div>
 
-      {error && <div className="error-msg">{error}</div>}
-      {success && <div className="success-msg">{success}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {success && <div className="ui-alert tone-success">{success}</div>}
 
-      {!detail ? <div className="card">Loading manual processing…</div> : (
+      {!detail ? <div className="ui-card">Loading manual processing…</div> : (
         <div className={`manual-fallback-grid${pagesCollapsed ? ' pages-collapsed' : ''}`} style={manualGridStyle}>
-          <aside className="card manual-fallback-sidebar">
+          <aside className="ui-card manual-fallback-sidebar">
             <div className="review-section-title">Business & tools</div>
             <div className="manual-document-summary">
               <span className="manual-field-label">{businessIdentityLabel}</span>
@@ -390,8 +386,8 @@ export default function ManualFallbackPage() {
               </select>
             </label>
             <p className="manual-help">Drag a rectangle over the sensitive content, then add it to the redaction list.</p>
-            <button className="primary" disabled={!draftBox || busy} onClick={() => void addRegion()}>Add Redaction Area</button>
-            {draftBox && <button className="secondary" disabled={busy} onClick={() => setDraftBox(null)}>Clear Draft</button>}
+            <button className="ui-button primary" disabled={!draftBox || busy} onClick={() => void addRegion()}>Add Redaction Area</button>
+            {draftBox && <button className="ui-button secondary" disabled={busy} onClick={() => setDraftBox(null)}>Clear Draft</button>}
 
             <div className="manual-sidebar-divider" />
             <div className="review-section-title">Redactions on this page</div>
@@ -400,7 +396,7 @@ export default function ManualFallbackPage() {
                 {pageRegions.map((region) => (
                   <div key={region.findingId} className="manual-region-row">
                     <span>{entityLabel(region.entityType)}</span>
-                    <button className="secondary" disabled={busy} onClick={() => void removeRegion(region.findingId)}>Remove</button>
+                    <button className="ui-button secondary" disabled={busy} onClick={() => void removeRegion(region.findingId)}>Remove</button>
                   </div>
                 ))}
               </div>
@@ -412,7 +408,7 @@ export default function ManualFallbackPage() {
               <input type="checkbox" checked={reviewAttested} onChange={(e) => setReviewAttested(e.target.checked)} />
               <span>I confirm that I reviewed this document as necessary and marked all sensitive information that must be permanently redacted.</span>
             </label>
-            <button className="primary" disabled={!reviewAttested || busy} onClick={() => void submit()}>
+            <button className="ui-button primary" disabled={!reviewAttested || busy} onClick={() => void submit()}>
               Submit Manual Processing
             </button>
             <p className="manual-help">Submission resumes the normal permanent-redaction, verification, approval, and delivery pipeline.</p>
@@ -443,7 +439,7 @@ export default function ManualFallbackPage() {
             </div>
           </section>
 
-          <aside className={`card manual-fallback-pages-panel${pagesCollapsed ? ' collapsed' : ''}`}>
+          <aside className={`ui-card manual-fallback-pages-panel${pagesCollapsed ? ' collapsed' : ''}`}>
             {pagesCollapsed ? (
               <button
                 type="button"
@@ -490,7 +486,7 @@ export default function ManualFallbackPage() {
                   </button>
                 </div>
                 {detail.documents.length > 1 && (
-                  <div className="manual-document-tabs" aria-label="Documents in this package">
+                  <HorizontalTabs ariaLabel="Documents in this package" >
                     {detail.documents.map((document) => (
                       <button
                         key={document.documentId}
@@ -502,7 +498,7 @@ export default function ManualFallbackPage() {
                         {document.fileName}
                       </button>
                     ))}
-                  </div>
+                  </HorizontalTabs>
                 )}
                 <p className="manual-help manual-thumbnail-help">Scroll the page images and click the page you recognize. Drag the left edge to resize this panel.</p>
                 <div className="manual-thumbnail-list" aria-label="Document page previews">
@@ -529,6 +525,6 @@ export default function ManualFallbackPage() {
           </aside>
         </div>
       )}
-    </div>
+    </PageScaffold>
   );
 }

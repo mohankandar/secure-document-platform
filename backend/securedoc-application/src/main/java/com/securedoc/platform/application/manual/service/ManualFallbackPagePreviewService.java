@@ -110,6 +110,6 @@ public final class ManualFallbackPagePreviewService implements GetManualFallback
     private boolean manualFallbackStarted(PackageId packageId, TenantId tenantId) {
         return !auditQueryPort.findByFilter(new AuditRecordFilter(
                 tenantId, AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED.name(), null,
-                "DocumentPackage", packageId.toString(), null, null, null, null, 10)).isEmpty();
+                "DocumentPackage", packageId.toString(), null, null, null, null, 10, true)).isEmpty();
     }
 }

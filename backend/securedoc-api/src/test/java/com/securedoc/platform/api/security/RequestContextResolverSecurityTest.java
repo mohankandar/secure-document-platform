@@ -1,6 +1,8 @@
 package com.securedoc.platform.api.security;
 
 import com.documentplatform.identity.IdentityClaimConfig;
+import com.documentplatform.identity.OidcConnectionBinding;
+import com.documentplatform.identity.OidcConnectionBindingResolver;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
@@ -16,8 +18,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -130,7 +135,7 @@ class RequestContextResolverSecurityTest {
                 "00000000-0000-0000-0000-000000000099",
                 properties,
                 new OidcRoleMapper(properties),
-                new OidcTenantResolver(properties),
+                new OidcTenantResolver(properties, persistedConnectionResolver(properties)),
                 new TrustedActorResolver(),
                 new OidcJwtIdentityNormalizer(
                         properties.getOidc().getProviderId(),
@@ -141,9 +146,24 @@ class RequestContextResolverSecurityTest {
                                 properties.getOidc().getRolesClaim())));
     }
 
+    private OidcConnectionBindingResolver persistedConnectionResolver(SecurityProperties properties) {
+        return (providerId, issuer, audience) -> {
+            if (!properties.getOidc().getProviderId().equals(providerId)
+                    || !URI.create("https://identity.example.test").equals(issuer)
+                    || !properties.getOidc().getAudience().equals(audience)) {
+                return Optional.empty();
+            }
+            return Optional.of(new OidcConnectionBinding(
+                    UUID.fromString("00000000-0000-0000-0000-000000000010"),
+                    UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                    providerId, issuer, audience, 1));
+        };
+    }
+
     private SecurityProperties oidcProperties() {
         SecurityProperties properties = new SecurityProperties();
         properties.setMode(SecurityMode.OIDC);
+        properties.getOidc().setAudience("lexavault-api");
         properties.getOidc().setTenantId("00000000-0000-0000-0000-000000000001");
         properties.getOidc().getRoleMappings().put("DOCUMENT_PROCESSOR", "securedoc-document-processor");
         properties.getOidc().getRoleMappings().put("DOCUMENT_SUPERVISOR", "securedoc-document-supervisor");

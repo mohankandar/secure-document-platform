@@ -48,10 +48,10 @@ public class JpaAuditQueryPortAdapter implements AuditQueryPort {
             // Always filter by tenant (mandatory)
             predicates.add(cb.equal(root.get("tenantId"), filter.tenantId().value()));
 
-            filter.actionOpt().ifPresent(a ->
-                    predicates.add(cb.equal(root.get("action"), a)));
-            filter.outcomeOpt().ifPresent(o ->
-                    predicates.add(cb.equal(root.get("outcome"), o)));
+            filter.actionOpt().ifPresent(a -> predicates.add(cb.equal(root.get("action"), a)));
+            if (!filter.actions().isEmpty()) predicates.add(root.get("action").in(filter.actions()));
+            filter.outcomeOpt().ifPresent(o -> predicates.add(cb.equal(root.get("outcome"), o)));
+            if (!filter.outcomes().isEmpty()) predicates.add(root.get("outcome").in(filter.outcomes()));
             filter.resourceTypeOpt().ifPresent(rt ->
                     predicates.add(cb.equal(root.get("resourceType"), rt)));
             filter.resourceIdOpt().ifPresent(ri ->
@@ -64,6 +64,18 @@ public class JpaAuditQueryPortAdapter implements AuditQueryPort {
                     predicates.add(cb.greaterThanOrEqualTo(root.get("occurredAt"), from)));
             filter.toOpt().ifPresent(to ->
                     predicates.add(cb.lessThanOrEqualTo(root.get("occurredAt"), to)));
+
+            if (!filter.includeRoutineNoOpScans()) {
+                // Exclude scheduler heartbeat/no-op scans in SQL before pagination. If this
+                // were filtered in the UI after PageRequest, a page full of routine scans
+                // could incorrectly render as an empty Audit Timeline.
+                Predicate routineScheduledNoOpScan = cb.and(
+                        cb.equal(root.get("action"), "WATCHED_FOLDER_SCAN_TRIGGERED"),
+                        cb.isNotNull(root.get("detail")),
+                        cb.like(cb.upper(root.get("detail")), "%MODE=SCHEDULED, DISCOVERED=0")
+                );
+                predicates.add(cb.not(routineScheduledNoOpScan));
+            }
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };

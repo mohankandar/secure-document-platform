@@ -1,4 +1,5 @@
 import { API_BASE_URL, defaultHeaders, baseHeaders } from './config';
+import { expireOidcSession, isOidcSecurityMode } from './auth';
 import type {
   PackageSummary,
   PackageDetail,
@@ -53,6 +54,8 @@ import type {
   BrandingConfiguration,
   BrandingUpdateRequest,
   TenantBrandingDetail,
+  EnterpriseIdentityOverview,
+  EnterpriseIdentityDraftRequest,
 } from '../types';
 
 class ApiClient {
@@ -60,16 +63,25 @@ class ApiClient {
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const headers = { ...defaultHeaders(), ...options.headers };
+    const headers = { ...(await defaultHeaders()), ...options.headers };
 
+    if (import.meta.env.DEV && path === '/me') console.info('[LexaVault OIDC] Calling authenticated GET /api/v1/me. Bearer token value is intentionally not logged.');
     const response = await fetch(url, { ...options, headers });
+    if (import.meta.env.DEV && path === '/me') console.info('[LexaVault OIDC] GET /api/v1/me response.', { status: response.status, statusText: response.statusText });
 
     if (!response.ok) {
+      if (response.status === 401 && isOidcSecurityMode()) {
+        expireOidcSession();
+      }
       let error: ApiError = { message: 'Request failed' };
       try {
         error = await response.json();
       } catch {
         error.message = `HTTP ${response.status}: ${response.statusText}`;
+      }
+      if (import.meta.env.DEV && path === '/me') {
+        console.error('[LexaVault OIDC] GET /api/v1/me rejected.', { status: response.status, statusText: response.statusText, error });
+        throw { ...error, httpStatus: response.status, httpStatusText: response.statusText };
       }
       throw error;
     }
@@ -83,6 +95,26 @@ class ApiClient {
 
   async getCurrentUser(): Promise<CurrentUser> {
     return this.request('/me');
+  }
+
+  async getEnterpriseIdentityOverview(): Promise<EnterpriseIdentityOverview> {
+    return this.request('/admin/enterprise-identity');
+  }
+
+  async saveEnterpriseIdentityDraft(body: EnterpriseIdentityDraftRequest): Promise<EnterpriseIdentityOverview> {
+    return this.request('/admin/enterprise-identity/draft', { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async testEnterpriseIdentityDraft(): Promise<EnterpriseIdentityOverview> {
+    return this.request('/admin/enterprise-identity/draft/test', { method: 'POST' });
+  }
+
+  async activateEnterpriseIdentityDraft(connectionId: string, expectedConfigurationVersion: number): Promise<EnterpriseIdentityOverview> {
+    return this.request('/admin/enterprise-identity/draft/activate', { method: 'POST', body: JSON.stringify({ connectionId, expectedConfigurationVersion, confirmation: 'ACTIVATE' }) });
+  }
+
+  async rollbackEnterpriseIdentity(connectionId: string, expectedConfigurationVersion: number): Promise<EnterpriseIdentityOverview> {
+    return this.request('/admin/enterprise-identity/rollback', { method: 'POST', body: JSON.stringify({ connectionId, expectedConfigurationVersion, confirmation: 'ROLLBACK' }) });
   }
 
   // --- UI branding ---
@@ -454,7 +486,7 @@ class ApiClient {
     const url = `${this.baseUrl}/packages/${packageId}/documents`;
     const response = await fetch(url, {
       method: 'POST',
-      headers: baseHeaders(),
+      headers: await baseHeaders(),
       body: formData,
     });
 
@@ -493,7 +525,7 @@ class ApiClient {
   async getReviewPagePreview(findingId: string): Promise<ReviewPagePreview> {
     const url = `${this.baseUrl}/review-items/${findingId}/page-preview`;
     const response = await fetch(url, {
-      headers: { ...baseHeaders(), Accept: 'image/png, application/json' },
+      headers: { ...(await baseHeaders()), Accept: 'image/png, application/json' },
       cache: 'no-store',
     });
     if (!response.ok) {
@@ -554,7 +586,7 @@ class ApiClient {
   ): Promise<ManualFallbackPagePreview> {
     const url = `${this.baseUrl}/packages/${packageId}/manual-fallback/documents/${documentId}/pages/${pageNumber}/preview`;
     const response = await fetch(url, {
-      headers: { ...baseHeaders(), Accept: 'image/png, application/json' },
+      headers: { ...(await baseHeaders()), Accept: 'image/png, application/json' },
       cache: 'no-store',
     });
     if (!response.ok) {
@@ -653,7 +685,7 @@ class ApiClient {
 
   async downloadRedactedArtifact(documentId: string): Promise<Blob> {
     const url = `${this.baseUrl}/documents/${documentId}/artifacts/redacted/content`;
-    const response = await fetch(url, { headers: baseHeaders() });
+    const response = await fetch(url, { headers: await baseHeaders() });
     if (!response.ok) {
       let error: ApiError = { message: 'Download failed' };
       try {
@@ -679,6 +711,17 @@ class ApiClient {
     }
     const query = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/audit-records${query}`);
+  }
+
+  async exportAuditRecords(filters: Record<string, string>, format: 'csv' | 'json'): Promise<Blob> {
+    const params = new URLSearchParams({ ...filters, format });
+    const response = await fetch(`${this.baseUrl}/audit-records/export?${params.toString()}`, { headers: await baseHeaders() });
+    if (!response.ok) {
+      let error: ApiError = { message: 'Audit export failed' };
+      try { error = await response.json(); } catch { error.message = `HTTP ${response.status}: ${response.statusText}`; }
+      throw error;
+    }
+    return response.blob();
   }
 }
 

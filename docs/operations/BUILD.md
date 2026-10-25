@@ -27,12 +27,13 @@ backend\
   mvn clean install
 ```
 
-Then it builds the frontend:
+Then it verifies and builds the frontend:
 
 ```text
 frontend\securedoc-ui\
   npm ci                # only when node_modules is missing
   npx tsc --noEmit
+  npm run test:ui-framework
   npm run build
 ```
 

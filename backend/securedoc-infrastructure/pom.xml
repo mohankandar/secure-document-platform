@@ -17,11 +17,19 @@
     <properties>
         <spring-boot.version>3.3.2</spring-boot.version>
         <liquibase.version>4.28.0</liquibase.version>
-        <jackson.version>2.17.2</jackson.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Keep the Jackson family aligned on one patched line. This import must precede
+                 Spring Boot's BOM because Maven uses the first imported BOM on version conflicts. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -33,6 +41,11 @@
     </dependencyManagement>
 
     <dependencies>
+        <dependency>
+            <groupId>com.documentplatform.identity</groupId>
+            <artifactId>enterprise-identity-core</artifactId>
+            <version>${enterprise.identity.version}</version>
+        </dependency>
         <!-- Internal modules -->
         <dependency>
             <groupId>com.securedoc.platform</groupId>

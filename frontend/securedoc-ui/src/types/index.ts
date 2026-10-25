@@ -955,3 +955,37 @@ export interface BrandingUpdateRequest {
   compactLogo?: BrandingAssetUpdate | null;
   favicon?: BrandingAssetUpdate | null;
 }
+
+export interface EnterpriseIdentityConnection {
+  connectionId: string;
+  tenantId: string;
+  providerId: string;
+  providerType: 'OIDC' | 'SAML' | 'LDAP_AD';
+  displayName: string;
+  issuerUri: string;
+  browserClientId: string | null;
+  apiAudience: string;
+  status: 'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'DISABLED';
+  configurationVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  lastTestedAt: string | null;
+  lastTestStatus: 'PASSED' | 'FAILED' | null;
+  lastTestMessage: string | null;
+}
+
+export interface EnterpriseIdentityOverview {
+  active: EnterpriseIdentityConnection | null;
+  staged: EnterpriseIdentityConnection | null;
+  rollbackCandidates: EnterpriseIdentityConnection[];
+  activationSupported: boolean;
+  activationMaxTestAgeSeconds: number;
+}
+
+export interface EnterpriseIdentityDraftRequest {
+  providerId: string;
+  displayName: string;
+  issuerUri: string;
+  browserClientId: string;
+  apiAudience: string;
+}

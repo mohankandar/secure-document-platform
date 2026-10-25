@@ -1,8 +1,0 @@
-frontend/securedoc-ui/src/index.css
-frontend/securedoc-ui/src/pages/IntegrationsPage.tsx
-README.md
-docs/LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md
-docs/continuity/CHANGELOG.md
-docs/continuity/CURRENT_STATE.md
-UI_UX_MODERNIZATION_R2_R5_FIX2_CANDIDATE_README.md
-UI_UX_MODERNIZATION_R2_R5_FIX2_CHANGED_FILES.txt

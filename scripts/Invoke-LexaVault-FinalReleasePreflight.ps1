@@ -3,7 +3,7 @@ param(
     [switch]$SkipFrontendAuth,
     [switch]$RequireLocalRuntime,
     [string]$ExpectedAiModel = "qwen3.5:4b",
-    [int]$ExpectedLiquibaseChangesets = 70,
+    [int]$ExpectedLiquibaseChangesets = 76,
     [string]$OutputRoot = ".\release-readiness-results"
 )
 
@@ -87,10 +87,11 @@ $requiredFiles = @(
     "frontend\securedoc-ui\package.json",
     "backend\securedoc-infrastructure\src\main\resources\db\changelog\027-package-processing-ha.xml",
     "backend\securedoc-infrastructure\src\main\resources\db\changelog\028-processing-storage-management.xml",
+    "backend\securedoc-infrastructure\src\main\resources\db\changelog\034-enterprise-identity-activation.xml",
     "backend\securedoc-api\src\main\java\com\securedoc\platform\api\processing\DatabasePackageProcessingDispatchLease.java",
     "backend\securedoc-api\src\main\java\com\securedoc\platform\api\processing\PackageProcessingRecoveryScheduler.java",
     "backend\securedoc-application\src\main\java\com\securedoc\platform\application\processing\service\TriggerPackageProcessingService.java",
-    "docs\LEXAVAULT_V1_MASTER_WORK_ITEM_MATRIX.md"
+    "docs\continuity\CURRENT_STATE.md"
 )
 foreach ($relative in $requiredFiles) {
     $full = Join-Path $ProjectRoot $relative

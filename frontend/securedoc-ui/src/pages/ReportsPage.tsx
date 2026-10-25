@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import type { ApiError, DashboardStage, OperationalReports } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
+import PageScaffold from '../components/ui/PageScaffold';
+import HorizontalTabs from '../components/ui/HorizontalTabs';
+import Icon, { type IconName } from '../components/ui/Icon';
 import './ReportsPage.css';
 
 type ReportView = 'executive' | 'business' | 'usage' | 'operations';
@@ -103,7 +105,7 @@ function Kpi({ label, value, detail, current, previous, tone = 'blue', onClick }
   const content = <>
     <span className="report-kpi-label">{label}</span>
     <strong>{value}</strong>
-    {current !== undefined && previous !== undefined ? <Delta current={current} previous={previous} /> : <span className="report-kpi-detail">{detail}</span>}
+    {current !== undefined && previous !== undefined && <Delta current={current} previous={previous} />}
     <p>{detail}</p>
   </>;
   return onClick
@@ -231,7 +233,7 @@ function PeriodPicker({ period, onApply, onClose }: { period: PeriodSelection; o
         {customMode === 'QUARTER' && <><label>Quarter<select value={quarter} onChange={(event) => setQuarter(event.target.value)}><option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option></select></label><label>Year<input type="number" min="2000" max="2100" value={year} onChange={(event) => setYear(event.target.value)} /></label></>}
         {customMode === 'YEAR' && <label>Year<input type="number" min="2000" max="2100" value={year} onChange={(event) => setYear(event.target.value)} /></label>}
       </div>
-      <button type="button" className="primary-button period-apply" onClick={applyCustom}>Apply period</button>
+      <button type="button" className="ui-button primary period-apply" onClick={applyCustom}>Apply period</button>
     </>}
   </div>;
 }
@@ -286,12 +288,12 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
   };
 
   const tabs = useMemo(() => {
-    const values: Array<{ key: ReportView; label: string; sub: string }> = [
-      { key: 'executive', label: 'Executive', sub: 'Leadership pulse' },
+    const values: Array<{ key: ReportView; label: string; icon: IconName }> = [
+      { key: 'executive', label: 'Executive', icon: 'reports' },
     ];
-    if (canViewBusiness) values.push({ key: 'business', label: 'Business Admin', sub: 'Workflow performance' });
-    values.push({ key: 'usage', label: 'Usage & Adoption', sub: 'How the platform is used' });
-    if (canViewOperations) values.push({ key: 'operations', label: 'Operational Details', sub: 'Investigate the pipeline' });
+    if (canViewBusiness) values.push({ key: 'business', label: 'Business Admin', icon: 'admin' });
+    values.push({ key: 'usage', label: 'Usage & Adoption', icon: 'dashboard' });
+    if (canViewOperations) values.push({ key: 'operations', label: 'Operational Details', icon: 'support' });
     return values;
   }, [canViewBusiness, canViewOperations]);
 
@@ -303,16 +305,11 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
   const outcomeLabel = outcomeOptions.find(([key]) => key === outcome)?.[1] || outcome;
   const activeFilters = [source !== 'ALL' ? sourceLabel : null, outcome !== 'ALL' ? outcomeLabel : null].filter(Boolean);
 
-  return <div className="reports-page-v3">
-    <Breadcrumbs items={[{ label: 'Reports' }]} />
-    <header className="report-header">
-      <div><p className="eyebrow">Business intelligence</p><h1>Reporting</h1><p>See how work enters the platform, how much is automated, how long it takes, and where the business needs attention.</p></div>
-      <div className="report-actions"><button className="toolbar-button" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>{canExport && <button className="primary-button" onClick={exportCsv}>Export</button>}</div>
-    </header>
-
-    <section className="report-experience-tabs" aria-label="Reporting views">
-      {tabs.map((tab) => <button type="button" key={tab.key} className={view === tab.key ? 'active' : ''} onClick={() => setView(tab.key)}><strong>{tab.label}</strong><small>{tab.sub}</small></button>)}
-    </section>
+  return <PageScaffold className="reports-page-v3" breadcrumbs={[{ label: 'Reports' }]} title="Reporting"
+    actions={<div className="report-actions"><button className="ui-button secondary" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>{canExport && <button className="ui-button primary" onClick={exportCsv}>Export</button>}</div>}
+    primaryNavigation={<HorizontalTabs ariaLabel="Reporting views" className="report-experience-tabs">
+      {tabs.map((tab) => <button type="button" key={tab.key} className={view === tab.key ? 'active' : ''} onClick={() => setView(tab.key)}><Icon name={tab.icon} className="report-tab-icon" /><strong>{tab.label}</strong></button>)}
+    </HorizontalTabs>}>
 
     <section className="report-toolbar" aria-label="Report controls" ref={toolbarRef}>
       <div className="report-filter-rail">
@@ -333,13 +330,13 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
 
     {activeFilters.length > 0 && <div className="report-filter-chips">{source !== 'ALL' && <button type="button" onClick={() => setSource('ALL')}>{sourceLabel} ×</button>}{outcome !== 'ALL' && <button type="button" onClick={() => setOutcome('ALL')}>{outcomeLabel} ×</button>}</div>}
 
-    {error && <div className="error-msg">{error}</div>}
-    {!report && loading && <div className="report-loading">Loading reporting data…</div>}
+    {error && <div className="ui-alert tone-danger">{error}</div>}
+    {!report && loading && <div className="ui-loading-state">Loading reporting data…</div>}
 
     {report && <div className="report-context"><span>{new Date(report.period.from).toLocaleDateString()} – {new Date(new Date(report.period.to).getTime() - 1).toLocaleDateString()}</span><span>Compared with the immediately preceding equal period</span><span>Updated {new Date(report.generatedAt).toLocaleString()}</span></div>}
 
     {report && view === 'executive' && <>
-      <section className="report-section-intro executive-section-intro"><div><p className="eyebrow">Period performance</p><h2>{period.label}</h2></div><p>Flow metrics below describe the selected period. Delivery conversion follows only packages that entered the platform during this period.</p></section>
+      <section className="report-section-intro executive-section-intro"><div><p className="eyebrow">Period performance</p><h2>{period.label}</h2></div></section>
       <section className="report-kpis four">
         <Kpi label="Packages received" value={formatNumber.format(report.executive.batches)} detail={`${formatNumber.format(report.executive.documents)} documents · ${formatNumber.format(report.executive.pages)} pages`} current={report.executive.batches} previous={report.executive.previousBatches} />
         <Kpi label="Selected intake delivered" value={formatSafeNumber(report.executive.periodIntakeDelivered)} detail={`${pct(report.executive.periodIntakeDeliveryRate)} delivered by period end`} current={safeNumber(report.executive.periodIntakeDelivered)} previous={safeNumber(report.executive.previousPeriodIntakeDelivered)} tone="green" />
@@ -348,19 +345,19 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
       </section>
 
       <section className="report-grid executive-grid period-grid">
-        <article className="report-panel journey-panel"><PanelHeader eyebrow="Selected intake progress" title="What happened to work received in this period" /><IntakeProgress report={report} /></article>
-        <article className="report-panel source-panel"><PanelHeader eyebrow="Channel mix" title="How work enters the platform" /><SourceMix intake={report.intake} /></article>
-        <article className="report-panel trend-panel"><PanelHeader eyebrow="Activity trend" title="Received vs delivered activity" aside="Daily volume" /><Trend points={report.executive.trend} /><p className="report-definition">Delivered activity can include packages received before the selected period. Intake conversion above tracks only packages received in this period.</p></article>
+        <article className="ui-card report-panel-layout journey-panel"><PanelHeader eyebrow="Selected intake progress" title="What happened to work received in this period" /><IntakeProgress report={report} /></article>
+        <article className="ui-card report-panel-layout source-panel"><PanelHeader eyebrow="Channel mix" title="How work enters the platform" /><SourceMix intake={report.intake} /></article>
+        <article className="ui-card report-panel-layout trend-panel"><PanelHeader eyebrow="Activity trend" title="Received vs delivered activity" aside="Daily volume" /><Trend points={report.executive.trend} /><p className="report-definition">Delivered activity can include packages received before the selected period. Intake conversion above tracks only packages received in this period.</p></article>
       </section>
 
-      <section className="report-section-intro current-risk-intro"><div><p className="eyebrow">Current operational risk</p><h2>Right now</h2></div><p>Point-in-time workload. These counts are intentionally separate from the selected reporting period.</p></section>
+      <section className="report-section-intro current-risk-intro"><div><p className="eyebrow">Current operational risk</p><h2>Right now</h2></div></section>
       <section className="risk-hero">
         <div><span>Open now</span><strong>{formatNumber.format(report.executive.currentBacklog)}</strong><small>all currently open packages</small></div>
         <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('TECHNICAL_ATTENTION')}><span>Needs action now</span><strong>{formatNumber.format(report.executive.currentAttention)}</strong><small>technical, review, or approval attention</small></button>
         <div><span>Oldest open work</span><strong>{hours(report.backlog.oldestHours)}</strong><small>age of the oldest current package</small></div>
       </section>
       <section className="report-grid current-risk-grid">
-        <article className="report-panel attention-panel"><PanelHeader eyebrow="Leadership focus" title="Where action is needed" />
+        <article className="ui-card report-panel-layout attention-panel"><PanelHeader eyebrow="Leadership focus" title="Where action is needed" />
           <div className="attention-list">
             <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('TECHNICAL_ATTENTION')}><span><i className="danger-dot" />Technical attention</span><strong>{report.processing.technicalAttention}</strong><small>Processing or delivery issue</small></button>
             <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_REVIEW')}><span><i className="warning-dot" />Manual review</span><strong>{report.processing.needsReview}</strong><small>Current business review queue</small></button>
@@ -369,19 +366,19 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
           <p className="report-definition">Straight-through above describes deliveries in the selected period. Manual review here is the current queue, so both can be true at the same time.</p>
           {!canDrillDown && <p className="report-definition">Executive access is aggregate-only. Authorized workflow owners can investigate individual packages.</p>}
         </article>
-        <article className="report-panel backlog-panel"><PanelHeader eyebrow="Backlog risk" title="Age of open work" aside={`Oldest ${hours(report.backlog.oldestHours)}`} /><BacklogAging backlog={report.backlog} /></article>
+        <article className="ui-card report-panel-layout backlog-panel"><PanelHeader eyebrow="Backlog risk" title="Age of open work" aside={`Oldest ${hours(report.backlog.oldestHours)}`} /><BacklogAging backlog={report.backlog} /></article>
       </section>
     </>}
 
     {report && view === 'business' && canViewBusiness && <>
       <section className="report-section-intro"><div><p className="eyebrow">Business Admin</p><h2>Workflow performance and business value</h2></div><p>Understand automation, human effort, turnaround, intake quality, delivery, and backlog without exposing document contents.</p></section>
       <section className="report-grid business-grid">
-        <article className="report-panel"><PanelHeader eyebrow="Automation" title="Touchless vs reviewed delivery" /><div className="large-stat-split"><div><span>Straight-through</span><strong>{pct(report.executive.straightThroughRate)}</strong><small>{report.usage.straightThroughPackages} packages</small></div><div><span>With review</span><strong>{pct(report.executive.reviewRate)}</strong><small>{report.usage.reviewedPackages} packages</small></div></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Processing time" title="Where elapsed time goes" /><div className="timing-grid"><div><span>Active processing median</span><strong>{sampledHours(report.timing.medianActiveProcessingHours, report.timing.activeProcessingSamples)}</strong><small>{report.timing.activeProcessingSamples ? `P95 ${sampledHours(report.timing.p95ActiveProcessingHours, report.timing.activeProcessingSamples)}` : 'No completed processing sample'}</small></div><div><span>Review wait median</span><strong>{sampledHours(report.timing.medianReviewWaitHours, report.timing.reviewWaitSamples)}</strong><small>{report.timing.reviewWaitSamples ? `${report.timing.reviewWaitSamples} review samples` : 'No completed review sample'}</small></div><div><span>Review handling median</span><strong>{sampledHours(report.timing.medianReviewHandlingHours, report.timing.reviewHandlingSamples)}</strong><small>{report.timing.reviewHandlingSamples ? 'Start to decision' : 'No completed review sample'}</small></div><div><span>End-to-end median</span><strong>{sampledHours(report.timing.medianTurnaroundHours, report.timing.turnaroundSamples)}</strong><small>{report.timing.turnaroundSamples ? `P95 ${sampledHours(report.timing.p95TurnaroundHours, report.timing.turnaroundSamples)}` : 'No delivered sample'}</small></div></div><p className="report-definition">Timing is based on retained reporting telemetry. Older packages can show No data when their historical lifecycle did not contain enough timing evidence.</p></article>
-        <article className="report-panel"><PanelHeader eyebrow="Backlog" title="Open work aging" /><BacklogAging backlog={report.backlog} /></article>
-        <article className="report-panel"><PanelHeader eyebrow="Intake quality" title="Exceptions before processing" /><div className="report-metric-list"><span>Waiting for trigger <strong>{report.intake.waitingForTrigger}</strong></span><span>Duplicate observations <strong>{report.intake.duplicateObservations}</strong></span><span>Rejected observations <strong>{report.intake.rejectedObservations}</strong></span><span>Reprocessed packages <strong>{report.usage.reprocessedPackages}</strong></span></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Delivery" title="Release and export activity" /><div className="report-metric-list"><span>Delivered during period <strong>{formatSafeNumber(report.executive.delivered)}</strong></span><span>Selected intake delivered <strong>{formatSafeNumber(report.executive.periodIntakeDelivered)}</strong></span><span>Successful export cycles <strong>{formatSafeNumber(report.export.successfulExportCycles)}</strong></span><span>Selected-intake conversion <strong>{pct(report.executive.periodIntakeDeliveryRate)}</strong></span></div><p className="report-definition">A package can have more than one successful export cycle after reprocessing, so export-cycle totals may be higher than delivered-package totals.</p></article>
-        <article className="report-panel"><PanelHeader eyebrow="Service level" title="Targets vs actual" /><div className="report-metric-list target-list">
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Automation" title="Touchless vs reviewed delivery" /><div className="large-stat-split"><div><span>Straight-through</span><strong>{pct(report.executive.straightThroughRate)}</strong><small>{report.usage.straightThroughPackages} packages</small></div><div><span>With review</span><strong>{pct(report.executive.reviewRate)}</strong><small>{report.usage.reviewedPackages} packages</small></div></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Processing time" title="Where elapsed time goes" /><div className="timing-grid"><div><span>Active processing median</span><strong>{sampledHours(report.timing.medianActiveProcessingHours, report.timing.activeProcessingSamples)}</strong><small>{report.timing.activeProcessingSamples ? `P95 ${sampledHours(report.timing.p95ActiveProcessingHours, report.timing.activeProcessingSamples)}` : 'No completed processing sample'}</small></div><div><span>Review wait median</span><strong>{sampledHours(report.timing.medianReviewWaitHours, report.timing.reviewWaitSamples)}</strong><small>{report.timing.reviewWaitSamples ? `${report.timing.reviewWaitSamples} review samples` : 'No completed review sample'}</small></div><div><span>Review handling median</span><strong>{sampledHours(report.timing.medianReviewHandlingHours, report.timing.reviewHandlingSamples)}</strong><small>{report.timing.reviewHandlingSamples ? 'Start to decision' : 'No completed review sample'}</small></div><div><span>End-to-end median</span><strong>{sampledHours(report.timing.medianTurnaroundHours, report.timing.turnaroundSamples)}</strong><small>{report.timing.turnaroundSamples ? `P95 ${sampledHours(report.timing.p95TurnaroundHours, report.timing.turnaroundSamples)}` : 'No delivered sample'}</small></div></div><p className="report-definition">Timing is based on retained reporting telemetry. Older packages can show No data when their historical lifecycle did not contain enough timing evidence.</p></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Backlog" title="Open work aging" /><BacklogAging backlog={report.backlog} /></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Intake quality" title="Exceptions before processing" /><div className="report-metric-list"><span>Waiting for trigger <strong>{report.intake.waitingForTrigger}</strong></span><span>Duplicate observations <strong>{report.intake.duplicateObservations}</strong></span><span>Rejected observations <strong>{report.intake.rejectedObservations}</strong></span><span>Reprocessed packages <strong>{report.usage.reprocessedPackages}</strong></span></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Delivery" title="Release and export activity" /><div className="report-metric-list"><span>Delivered during period <strong>{formatSafeNumber(report.executive.delivered)}</strong></span><span>Selected intake delivered <strong>{formatSafeNumber(report.executive.periodIntakeDelivered)}</strong></span><span>Successful export cycles <strong>{formatSafeNumber(report.export.successfulExportCycles)}</strong></span><span>Selected-intake conversion <strong>{pct(report.executive.periodIntakeDeliveryRate)}</strong></span></div><p className="report-definition">A package can have more than one successful export cycle after reprocessing, so export-cycle totals may be higher than delivered-package totals.</p></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Service level" title="Targets vs actual" /><div className="report-metric-list target-list">
           <span>Delivery within {report.serviceLevel.deliveryTargetMinutes}m <strong>{report.serviceLevel.deliveryEligible ? pct(report.serviceLevel.deliveryWithinTargetRate) : 'No data'}</strong><small>Target {pct(report.serviceLevel.deliveryTargetPercent)} · {report.serviceLevel.deliveryBreaches} breaches <em className={`target-status ${targetStatus(report.serviceLevel.deliveryWithinTargetRate, report.serviceLevel.deliveryTargetPercent, report.serviceLevel.deliveryEligible > 0).cls}`}>{targetStatus(report.serviceLevel.deliveryWithinTargetRate, report.serviceLevel.deliveryTargetPercent, report.serviceLevel.deliveryEligible > 0).label}</em></small></span>
           <span>Straight-through delivery <strong>{pct(report.serviceLevel.straightThroughActualPercent)}</strong><small>Target {pct(report.serviceLevel.straightThroughTargetPercent)} <em className={`target-status ${targetStatus(report.serviceLevel.straightThroughActualPercent, report.serviceLevel.straightThroughTargetPercent).cls}`}>{targetStatus(report.serviceLevel.straightThroughActualPercent, report.serviceLevel.straightThroughTargetPercent).label}</em></small></span>
           <span>Review started within {report.serviceLevel.reviewWaitTargetMinutes}m <strong>{report.serviceLevel.reviewEligible ? pct(report.serviceLevel.reviewWithinTargetRate) : 'No data'}</strong><small>{report.serviceLevel.reviewEligible ? `${report.serviceLevel.reviewBreaches} breaches` : 'No completed review-start samples'} <em className={`target-status ${!report.serviceLevel.reviewEligible ? 'neutral' : report.serviceLevel.reviewBreaches === 0 ? 'good' : 'bad'}`}>{!report.serviceLevel.reviewEligible ? 'No target assessment yet' : report.serviceLevel.reviewBreaches === 0 ? 'No breaches' : `${report.serviceLevel.reviewBreaches} outside target`}</em></small></span>
@@ -389,12 +386,12 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
         {report.dimensions.map((dimension) => {
           const hasLegacyValues = dimension.values.some((value) => value.value === 'Legacy / Unmapped');
           const hasUnknownValues = dimension.values.some((value) => value.value === 'Not provided / Unknown');
-          return <article className="report-panel dimension-panel" key={dimension.key}><PanelHeader eyebrow="Business dimension" title={dimension.label} aside="Selected-period intake" /><div className="dimension-breakdown">{dimension.values.map((value) => {
+          return <article className="ui-card report-panel-layout dimension-panel" key={dimension.key}><PanelHeader eyebrow="Business dimension" title={dimension.label} aside="Selected-period intake" /><div className="dimension-breakdown">{dimension.values.map((value) => {
             const specialClass = value.value === 'Legacy / Unmapped' ? 'legacy-dimension-row' : value.value === 'Not provided / Unknown' ? 'unknown-dimension-row' : '';
             return <div className={`dimension-row ${specialClass}`} key={value.value}><span><strong>{value.value}</strong><small>{formatNumber.format(value.packages)} packages · {formatNumber.format(value.delivered)} delivered</small></span><div><i style={{ width: `${Math.min(100, Math.max(0, value.deliveryRate))}%` }} /></div><b>{pct(value.deliveryRate)}</b></div>;
           })}</div>{dimension.values.length === 0 && <p className="report-definition">No selected-period packages are available for this dimension.</p>}{hasLegacyValues && <p className="report-definition">Legacy / Unmapped groups retained historical values that no longer match the tenant's current approved value set.</p>}{hasUnknownValues && <p className="report-definition">Not provided / Unknown represents selected-period packages with no retained value for this dimension. It is kept separate from legacy values so the breakdown reconciles to the selected-period cohort.</p>}</article>;
         })}
-        <article className="report-panel"><PanelHeader eyebrow="Retention" title="Records due for lifecycle action" /><div className="report-metric-list"><span>Originals overdue <strong className={report.retention.originalsOverdue ? 'danger-text' : ''}>{report.retention.originalsOverdue}</strong></span><span>Redacted copies overdue <strong className={report.retention.redactedCopiesOverdue ? 'danger-text' : ''}>{report.retention.redactedCopiesOverdue}</strong></span><span>Originals due within 24h <strong>{report.retention.originalsDueWithin24Hours}</strong></span><span>Redacted due within 24h <strong>{report.retention.redactedCopiesDueWithin24Hours}</strong></span></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Retention" title="Records due for lifecycle action" /><div className="report-metric-list"><span>Originals overdue <strong className={report.retention.originalsOverdue ? 'danger-text' : ''}>{report.retention.originalsOverdue}</strong></span><span>Redacted copies overdue <strong className={report.retention.redactedCopiesOverdue ? 'danger-text' : ''}>{report.retention.redactedCopiesOverdue}</strong></span><span>Originals due within 24h <strong>{report.retention.originalsDueWithin24Hours}</strong></span><span>Redacted due within 24h <strong>{report.retention.redactedCopiesDueWithin24Hours}</strong></span></div></article>
       </section>
     </>}
 
@@ -408,23 +405,23 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
         <div><span>Reprocess rate</span><strong>{pct(report.usage.packages ? report.usage.reprocessedPackages / report.usage.packages * 100 : 0)}</strong><small>{formatNumber.format(report.usage.reprocessedPackages)} of {formatNumber.format(report.usage.packages)} packages</small></div>
       </section>
       <section className="report-grid usage-grid">
-        <article className="report-panel"><PanelHeader eyebrow="Adoption" title="Intake source mix" /><SourceMix intake={report.intake} /></article>
-        <article className="report-panel"><PanelHeader eyebrow="Volume" title="Usage over time" aside="Received vs delivered" /><Trend points={report.executive.trend} /></article>
-        <article className="report-panel"><PanelHeader eyebrow="Efficiency" title="Human touch" /><div className="large-stat-split"><div><span>Touchless</span><strong>{report.usage.straightThroughPackages}</strong><small>{pct(report.executive.straightThroughRate)} of delivered</small></div><div><span>Reviewed</span><strong>{report.usage.reviewedPackages}</strong><small>{pct(report.executive.reviewRate)} of delivered</small></div></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Turnaround" title="Time to business outcome" /><div className="timing-grid compact"><div><span>Median</span><strong>{sampledHours(report.timing.medianTurnaroundHours, report.timing.turnaroundSamples)}</strong></div><div><span>P95</span><strong>{sampledHours(report.timing.p95TurnaroundHours, report.timing.turnaroundSamples)}</strong></div></div><p className="report-definition">Measured from package intake to first successful delivery. Active processing is shown separately in Business Admin reporting.</p></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Adoption" title="Intake source mix" /><SourceMix intake={report.intake} /></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Volume" title="Usage over time" aside="Received vs delivered" /><Trend points={report.executive.trend} /></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Efficiency" title="Human touch" /><div className="large-stat-split"><div><span>Touchless</span><strong>{report.usage.straightThroughPackages}</strong><small>{pct(report.executive.straightThroughRate)} of delivered</small></div><div><span>Reviewed</span><strong>{report.usage.reviewedPackages}</strong><small>{pct(report.executive.reviewRate)} of delivered</small></div></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Turnaround" title="Time to business outcome" /><div className="timing-grid compact"><div><span>Median</span><strong>{sampledHours(report.timing.medianTurnaroundHours, report.timing.turnaroundSamples)}</strong></div><div><span>P95</span><strong>{sampledHours(report.timing.p95TurnaroundHours, report.timing.turnaroundSamples)}</strong></div></div><p className="report-definition">Measured from package intake to first successful delivery. Active processing is shown separately in Business Admin reporting.</p></article>
       </section>
     </>}
 
     {report && view === 'operations' && canViewOperations && <>
-      <section className="report-section-intro"><div><p className="eyebrow">Operational details</p><h2>Investigate pipeline health</h2></div><p>Current work, intake controls, exports, and retention exceptions for authorized operational users.</p></section>
+      <section className="report-section-intro"><div><p className="eyebrow">Operational details</p><h2>Pipeline health</h2></div></section>
       <section className="report-grid operations-grid">
-        <article className="report-panel"><PanelHeader eyebrow="Current pipeline" title="Work by stage" /><div className="report-metric-list actionable-list"><button disabled={!canDrillDown} onClick={() => navigateStage('PROCESSING')}>Processing <strong>{report.processing.processing}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_REVIEW')}>Needs review <strong>{report.processing.needsReview}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_APPROVAL')}>Needs approval <strong>{report.processing.needsApproval}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('TECHNICAL_ATTENTION')}>Technical attention <strong>{report.processing.technicalAttention}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('REJECTED')}>Rejected <strong>{report.processing.rejected}</strong></button></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Intake controls" title="Observed-folder health" /><div className="report-metric-list"><span>Waiting for trigger <strong>{report.intake.waitingForTrigger}</strong></span><span>Duplicate observations <strong>{report.intake.duplicateObservations}</strong></span><span>Rejected observations <strong>{report.intake.rejectedObservations}</strong></span></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Delivery" title="Export activity" /><div className="report-metric-list"><span>Packages ever exported <strong>{report.export.exportedPackages}</strong></span><span>Successful export cycles <strong>{report.export.successfulExportCycles}</strong></span><span>Awaiting final approval <strong>{report.export.pendingFinalApproval}</strong></span></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Retention risk" title="Overdue and due soon" /><div className="report-metric-list"><span>Originals overdue <strong className={report.retention.originalsOverdue ? 'danger-text' : ''}>{report.retention.originalsOverdue}</strong></span><span>Redacted copies overdue <strong className={report.retention.redactedCopiesOverdue ? 'danger-text' : ''}>{report.retention.redactedCopiesOverdue}</strong></span><span>Technical holds due within 24h <strong>{report.retention.technicalHoldsDueWithin24Hours}</strong></span><span>Purged packages <strong>{report.retention.purgedPackages}</strong></span></div></article>
-        <article className="report-panel"><PanelHeader eyebrow="Capacity signal" title="Backlog aging" aside={`Oldest ${hours(report.backlog.oldestHours)}`} /><BacklogAging backlog={report.backlog} /></article>
-        <article className="report-panel"><PanelHeader eyebrow="Processing" title="Active processing time" /><div className="large-stat-split"><div><span>Median</span><strong>{sampledHours(report.timing.medianActiveProcessingHours, report.timing.activeProcessingSamples)}</strong><small>sum of completed processing cycles</small></div><div><span>P95</span><strong>{sampledHours(report.timing.p95ActiveProcessingHours, report.timing.activeProcessingSamples)}</strong><small>{report.timing.activeProcessingSamples} selected-period samples</small></div></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Current pipeline" title="Work by stage" /><div className="report-metric-list actionable-list"><button disabled={!canDrillDown} onClick={() => navigateStage('PROCESSING')}>Processing <strong>{report.processing.processing}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_REVIEW')}>Needs review <strong>{report.processing.needsReview}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_APPROVAL')}>Needs approval <strong>{report.processing.needsApproval}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('TECHNICAL_ATTENTION')}>Technical attention <strong>{report.processing.technicalAttention}</strong></button><button disabled={!canDrillDown} onClick={() => navigateStage('REJECTED')}>Rejected <strong>{report.processing.rejected}</strong></button></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Intake controls" title="Observed-folder health" /><div className="report-metric-list"><span>Waiting for trigger <strong>{report.intake.waitingForTrigger}</strong></span><span>Duplicate observations <strong>{report.intake.duplicateObservations}</strong></span><span>Rejected observations <strong>{report.intake.rejectedObservations}</strong></span></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Delivery" title="Export activity" /><div className="report-metric-list"><span>Packages ever exported <strong>{report.export.exportedPackages}</strong></span><span>Successful export cycles <strong>{report.export.successfulExportCycles}</strong></span><span>Awaiting final approval <strong>{report.export.pendingFinalApproval}</strong></span></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Retention risk" title="Overdue and due soon" /><div className="report-metric-list"><span>Originals overdue <strong className={report.retention.originalsOverdue ? 'danger-text' : ''}>{report.retention.originalsOverdue}</strong></span><span>Redacted copies overdue <strong className={report.retention.redactedCopiesOverdue ? 'danger-text' : ''}>{report.retention.redactedCopiesOverdue}</strong></span><span>Technical holds due within 24h <strong>{report.retention.technicalHoldsDueWithin24Hours}</strong></span><span>Purged packages <strong>{report.retention.purgedPackages}</strong></span></div></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Capacity signal" title="Backlog aging" aside={`Oldest ${hours(report.backlog.oldestHours)}`} /><BacklogAging backlog={report.backlog} /></article>
+        <article className="ui-card report-panel-layout"><PanelHeader eyebrow="Processing" title="Active processing time" /><div className="large-stat-split"><div><span>Median</span><strong>{sampledHours(report.timing.medianActiveProcessingHours, report.timing.activeProcessingSamples)}</strong><small>sum of completed processing cycles</small></div><div><span>P95</span><strong>{sampledHours(report.timing.p95ActiveProcessingHours, report.timing.activeProcessingSamples)}</strong><small>{report.timing.activeProcessingSamples} selected-period samples</small></div></div></article>
       </section>
     </>}
-  </div>;
+  </PageScaffold>;
 }

@@ -1,63 +1,74 @@
-# LexaVault V1 — VERIFIED / FROZEN + UI/UX Modernization R1–R5 — VERIFIED / FROZEN
+# LexaVault
 
-V1 status: **FINAL V1 REGRESSION / RELEASE-READINESS — COMPLETE / VERIFIED / FROZEN**.
+LexaVault is the mortgage/real-estate secure-document processing application built on the `secure-document-platform` codebase. The repository contains the Java 21 backend, React/TypeScript frontend, scanner bridge, local/demo infrastructure, reusable test tooling, and the current canonical product/architecture documentation.
 
-Latest completed post-V1 adjustments: **Platform-Managed Processing Storage — VERIFIED / FROZEN**, **Tenant Licensing R1 Iteration 1 Foundation — VERIFIED / FROZEN**, **Tenant Licensing R1 Iteration 2 FIX1 — VERIFIED / FROZEN**, and **UI/UX Modernization R1–R5 — VERIFIED / FROZEN**. Dashboard Retention Visibility FIX2 remains in the active post-freeze validation line, and the current candidate is **Operational Continuity, Technical Attention & Privacy Telemetry R1**. It adds a configurable 3-total-attempt package-processing recovery budget, safe reclamation of legacy/no-lease PROCESSING packages, recovery-exhausted Technical Attention, lifecycle-driven Technical Attention cleanup with durable history preservation, exceptional Tenant IT actions, and opt-in privacy-safe product telemetry with an explicit field allow-list and pseudonymous identifiers. `031-operational-continuity.xml` brings the candidate schema to **73 Liquibase changeSets**. The previously documented manual lifecycle endpoint maximum is corrected to `POST /api/v1/lifecycle/purge-due?limit=500`. **Full local build/runtime validation is required before this candidate is frozen; On-Prem Installer / First-Run Setup remains next afterward.**
+## Current baseline
 
-Tenant Licensing R1 Iteration 1 provides tenant-bound signed/offline Ed25519 license verification, immutable license history/current assignment, document-processing entitlement enforcement, Platform Operations licensing APIs, and privacy-safe audit events. LOCAL remains unenforced by default for developer/demo use; enforced deployments fail closed. Focused runtime validation on 2026-09-18 covered missing-license denial, tamper rejection, valid-license processing admission, history/token secrecy, wrong-tenant rejection, automatic expiry, missing `DOCUMENT_PROCESSING` entitlement denial, and restoration/revalidation of the original license.
+- LexaVault V1 product behavior: **VERIFIED / FROZEN**.
+- Enterprise Identity Administration R1: **VERIFIED / FROZEN**.
+- Browser OIDC session continuity: **VERIFIED / FROZEN**.
+- SecureDocs UI Framework implementation/consolidation: **VERIFIED / FROZEN** with framework contract **17/17 PASS**.
+- Market-Ready Visual Design R1 (R1A-R1D): **VERIFIED / FROZEN** after desktop/laptop/iPad acceptance and independent review.
+- Dependency Security Hardening R1: **VERIFIED / FROZEN WITH 2 ACCEPTED MODERATE FRONTEND FINDINGS**. Jackson is aligned at `2.18.9`; frontend Vite is `6.4.3`; no critical findings are known from the completed checks. See `SECURITY-DEPS.md` for scope and limitations.
+- Enterprise Identity is an external Maven dependency (`com.documentplatform.identity`, version `0.2.0`) maintained in the separate `enterprise-identity-parent` project.
+- Current Liquibase master includes migrations through `034-enterprise-identity-activation.xml` (**76 changeSets** in this source snapshot).
 
-See `TENANT_LICENSING_R1_ITERATION1_VERIFIED_README.md` for the accepted evidence and `TENANT_LICENSING_R1_ITERATION1_CANDIDATE_README.md` for the original candidate scope/test plan.
+## Start here
 
-Iteration 2 adds the Platform Operations `Licensing` tab, tenant status/expiration visibility, signed-license install/update, entitlement/limit details and immutable history UX. FIX1 is now VERIFIED / FROZEN after focused local validation of malformed-token handling, entitlement-blocked state, near-expiry attention, minute-level countdown, automatic expiry transition without manual refresh, history preservation across verification-key changes, restored normal-license state, and continued raw-token secrecy. Active/current authorization remains fail-closed under the currently configured key. Optional connected validation remains unconfigured until a remote licensing-service contract exists. See `TENANT_LICENSING_R1_ITERATION2_FIX1_VERIFIED_README.md`.
+Read these before making changes:
 
-This source starts from the accepted/frozen LexaVault V1 + Processing Storage baseline. Final master/derived delivery behavior is intentionally unchanged.
+1. `docs/continuity/CURRENT_STATE.md`
+2. `docs/continuity/DEVELOPMENT_WORKING_AGREEMENT.md`
+3. `docs/design/LEXAVAULT_MARKET_READY_VISUAL_DESIGN_R1_PLAN.md` for the accepted visual-design contract
+4. `docs/design/SECUREDOCS_UI_FRAMEWORK.md` for the frozen UI framework contract
+5. the relevant current file under `docs/product`, `docs/architecture`, `docs/security`, `docs/operations`, or `docs/api`
 
-UI/UX Modernization R1 treats `LexaVault` as a development codename/default brand rather than an immutable market name. Effective UI branding now resolves from built-in defaults to deployment overrides to tenant overrides. Customer-facing name/logo/accent changes are presentation-only and do not alter immutable tenant/licensing identity or backend business semantics. See `UI_UX_MODERNIZATION_R1_VERIFIED_README.md`, `UI_UX_MODERNIZATION_R1_CANDIDATE_README.md` and `UI_UX_MODERNIZATION_R1_FIX1_CANDIDATE_README.md`.
+Historical visual candidate notes and superseded implementation handoffs are intentionally excluded from the clean source tree. Current source and canonical documentation are authoritative.
 
+## Build
 
-## UI/UX Modernization R2–R5 — VERIFIED / FROZEN
-
-The combined R2–R5 release is accepted as one frozen baseline with the original hard checkpoints preserved:
-
-- **Checkpoint A — Core operator workflows:** Dashboard foundation retained; Upload and Scan expose explicit workflow progress; Package Details is a modern intake workspace with contextual actions, responsive summary, documents, delivery/retention and derived-routing tabs.
-- **Checkpoint B — Human review:** Manual Review uses the shared responsive page foundation while preserving the proven review/redaction workflow and automatic processing continuation.
-- **Checkpoint C — Administration:** Business Administration is section-based and summary-first; Integrations is purpose-grouped and editor-on-demand; frozen Processing Storage, Licensing and Branding behavior remains unchanged.
-- **Checkpoint D — Reports, Support & Audit:** Reporting, Support Incidents and Audit use the same modern responsive shell, progressive disclosure and privacy-safe presentation without changing underlying semantics.
-- **Checkpoint E — Regression:** desktop/laptop, 1180×820 landscape and 820×1180 portrait layouts, role boundaries, upload/scan/package/review flows, reporting/support/audit and final Integrations group isolation were exercised in user runtime validation.
-
-Validation-driven FIX1–FIX4 are included in the frozen baseline. Business Administration uses compact collapsible configuration rows; Support Incidents uses primary triage controls plus Advanced Filters; routine zero-discovery scheduled watched-folder audit events are hidden by default but remain available; Package Details no longer exposes an undefined document count; Integrations separates Intake Sources, Master Delivery, Derived Delivery and All Connections, locks Purpose in purpose-specific groups, constrains provider choices, and closes/resets open editors when groups change.
-
-User-reported backend and frontend builds passed for the combined release. Final browser validation confirmed the last FIX4 state-isolation defect is resolved. Assistant checks for the final Integrations change included TypeScript/TSX syntax transpile PASS and frontend authorization tests **8/8 PASS**. No backend business logic, API contract, tenant isolation, authorization, licensing, processing-storage, scanner-bridge, retention or delivery semantics were intentionally changed. No new Liquibase migration was added; the frozen post-V1 schema baseline remains **71 changeSets** through `030-ui-branding.xml`. See `UI_UX_MODERNIZATION_R2_R5_VERIFIED_README.md` for the accepted evidence and the candidate/FIX readmes for the implementation history.
-
-## Frozen product baseline
-
-- High Availability / Multi-Node Intake: VERIFIED / FROZEN.
-- Scanner Intake software: VERIFIED / FROZEN; real target hardware certification pending.
-- Production AI Inference Tier: VERIFIED / FROZEN.
-- Business / Operational Reporting: VERIFIED / FROZEN.
-- Production Performance R3 FIX4: VERIFIED / FROZEN.
-- LOCAL reference AI profile: `qwen3.5:4b`, parallelism 2, page batch 4, 14,000-character cap.
-- Frozen V1 Liquibase baseline: 64 changeSets through `027-package-processing-ha.xml`.
-- Current post-V1 **frozen** schema baseline: 71 changeSets through `030-ui-branding.xml`.
-
-## Validation / startup checks
-
-Run:
+Prerequisites: Java 21, Maven, Node.js/npm, and Enterprise Identity `0.2.0` available to Maven.
 
 ```powershell
-.\scripts\Invoke-LexaVault-FinalReleasePreflight.ps1
+.\Build-LexaVault-All.ps1
 ```
 
-If that passes, start the current verified baseline:
+The normal build includes the frontend SecureDocs UI Framework contract.
+
+Standalone UI framework verification:
 
 ```powershell
-.\start-local.cmd -LoggingFormat Json -EnableRollingFileLog -LogLevel INFO
+.\Test-LexaVault-UiFramework.ps1
 ```
 
-Then run:
+## Local runtime
+
+LOCAL/demo mode:
 
 ```powershell
-.\scripts\Invoke-LexaVault-FinalReleasePreflight.ps1 -SkipBuild -RequireLocalRuntime
+.\Start-LexaVault-Local.ps1 -ScannerMode SIMULATOR
 ```
 
-See `FINAL_V1_RELEASE_READINESS_README.md` and `docs/testing/FINAL_V1_RELEASE_READINESS.md` for evidence reuse, blockers and the distinction between software release-candidate approval and customer production-deployment readiness.
+OIDC/demo mode:
+
+```powershell
+.\Start-LexaVault-OIDC.ps1 `
+  -IssuerUri "http://localhost:8181/realms/document-platform-local" `
+  -Audience "lexavault-api"
+```
+
+See `docs/operations/LOCAL_RUN.md`, `docs/security/IDENTITY_AND_TENANCY.md`, and `scripts/README.md` for operational details.
+
+## Repository layout
+
+- `backend/` — Maven multi-module backend, scanner bridge, AI/redaction/application/infrastructure/API/test-support modules.
+- `frontend/securedoc-ui/` — React/TypeScript application and framework contract tests.
+- `docker/` — local supporting infrastructure.
+- `scripts/` — reusable build/performance/testing helpers.
+- `test-data/` and `test-tools/` — reusable acceptance fixtures and test tooling.
+- `docs/` — current product, architecture, security, operations, testing, training, continuity, and design documentation.
+- `.kiro/` + `aidlc-docs/` — retained intentionally because the repository's Kiro/AIDLC workflow depends on them.
+
+## Clean-source policy
+
+Generated outputs and local state must not be committed or packaged: `.git`, `.idea`, `.vscode`, `.run`, `target`, `node_modules`, `dist`, `.runtime`, logs, coverage, Playwright output, local processing storage, watched-intake data, performance/release evidence directories, generated helper `.class` files, and non-example `.env*` files are excluded by `.gitignore`.

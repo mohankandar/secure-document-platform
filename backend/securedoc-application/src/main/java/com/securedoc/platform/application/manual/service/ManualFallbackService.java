@@ -317,7 +317,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
     private boolean manualFallbackStarted(PackageId packageId, TenantId tenantId) {
         return !auditQueryPort.findByFilter(new AuditRecordFilter(
                 tenantId, AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED.name(), null,
-                "DocumentPackage", packageId.toString(), null, null, null, null, 10)).isEmpty();
+                "DocumentPackage", packageId.toString(), null, null, null, null, 10, true)).isEmpty();
     }
 
     private boolean hasAvailableOriginal(DocumentId documentId, TenantId tenantId) {

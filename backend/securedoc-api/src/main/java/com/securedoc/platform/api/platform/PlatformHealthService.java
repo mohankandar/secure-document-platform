@@ -138,7 +138,7 @@ public class PlatformHealthService {
 
         auditQueryPort.findByFilter(new AuditRecordFilter(tenantId,
                         AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED.name(), null, "DocumentPackage", null,
-                        null, null, null, null, 100)).stream()
+                        null, null, null, null, 100, true)).stream()
                 .map(record -> record.resourceId())
                 .filter(resourceId -> resourceId != null && !resourceId.isBlank())
                 .distinct()
@@ -171,7 +171,7 @@ public class PlatformHealthService {
                 .flatMap(lifecycle -> lifecycle.technicalHoldUntil()).orElse(null);
         Instant failedAt = auditQueryPort.findByFilter(new AuditRecordFilter(tenantId,
                         AuditAction.DOCUMENT_PROCESSING_FAILED.name(), null, "DocumentPackage", pkg.id().toString(),
-                        null, null, null, null, 20)).stream()
+                        null, null, null, null, 20, true)).stream()
                 .map(record -> record.occurredAt())
                 .max(Instant::compareTo)
                 .orElse(pkg.updatedAt());

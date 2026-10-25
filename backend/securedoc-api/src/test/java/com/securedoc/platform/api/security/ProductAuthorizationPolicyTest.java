@@ -69,6 +69,7 @@ class ProductAuthorizationPolicyTest {
         assertTrue(caps.contains(UserCapability.REPORT_OPERATIONAL_VIEW));
         assertTrue(caps.contains(UserCapability.REPORT_EXPORT));
         assertTrue(caps.contains(UserCapability.TENANT_INTEGRATION_MANAGE));
+        assertTrue(caps.contains(UserCapability.TENANT_AUTH_MANAGE));
         assertTrue(caps.contains(UserCapability.TECHNICAL_EXCEPTION_VIEW));
         assertTrue(caps.contains(UserCapability.TECHNICAL_RETRY));
         assertTrue(caps.contains(UserCapability.TECHNICAL_HOLD_MANAGE));
@@ -92,6 +93,7 @@ class ProductAuthorizationPolicyTest {
         assertFalse(caps.contains(UserCapability.MANUAL_REVIEW));
         assertFalse(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
         assertFalse(caps.contains(UserCapability.TENANT_POLICY_MANAGE));
+        assertFalse(caps.contains(UserCapability.TENANT_AUTH_MANAGE));
     }
 
     @Test

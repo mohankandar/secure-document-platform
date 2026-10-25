@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { SupportIncidentDetail } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
 import StatusBadge from '../components/ui/StatusBadge';
 import { hasCurrentCapability } from '../api/config';
 
@@ -45,20 +44,17 @@ export default function SupportIncidentDetailPage() {
     }
   };
 
-  if (error) return <div><Breadcrumbs items={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident' }]} /><div className="error-message">{error}</div></div>;
-  if (!data) return <div><Breadcrumbs items={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident' }]} /><p>Loading incident…</p></div>;
+  if (error) return <PageScaffold breadcrumbs={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident' }]} title="Incident Details"><div className="ui-alert tone-danger">{error}</div></PageScaffold>;
+  if (!data) return <PageScaffold breadcrumbs={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident' }]} title="Incident Details"><div className="ui-loading-state">Loading incident…</div></PageScaffold>;
 
   const businessCompleteTechnicalOpen = data.businessOutcome === 'COMPLETED' && data.status !== 'RESOLVED';
 
   return (
-    <div>
-      <Breadcrumbs items={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident Details' }]} />
-      <PageHeader
-        eyebrow="Support case"
-        title={data.primaryIdentifierValue || data.incidentId}
-        description={`${data.primaryIdentifierLabel || 'Incident ID'} · ${data.incidentId}`}
-        actions={!tenantId ? <Link className="ui-button secondary" to={`/packages/${data.packageId}`}>Open intake</Link> : undefined}
-      />
+    <PageScaffold breadcrumbs={[{ label: 'Support Incidents', to: supportListPath }, { label: 'Incident Details' }]}
+      eyebrow="Support case"
+      title={data.primaryIdentifierValue || data.incidentId}
+      description={`${data.primaryIdentifierLabel || 'Incident ID'} · ${data.incidentId}`}
+      actions={!tenantId ? <Link className="ui-button secondary" to={`/packages/${data.packageId}`}>Open intake</Link> : undefined}>
 
       <div className="support-case-summary-strip">
         <div><span>Incident</span><StatusBadge value={data.status} /></div>
@@ -68,26 +64,26 @@ export default function SupportIncidentDetailPage() {
       </div>
 
       {businessCompleteTechnicalOpen && (
-        <div className="support-banner">
+        <div className="ui-alert tone-warning support-banner-layout">
           <strong>Business completed using continuity.</strong>
           <span>The technical incident is still unresolved and remains available for investigation.</span>
         </div>
       )}
       {data.businessImpact === 'BLOCKED' && (
-        <div className="support-banner blocked">
+        <div className="ui-alert tone-danger support-banner-layout">
           <strong>Business processing is currently blocked.</strong>
           <span>Prioritize safe recovery or escalation according to the reason code and retry policy.</span>
         </div>
       )}
       {data.artifactAvailability === 'PURGED' && (
-        <div className="support-banner">
+        <div className="ui-alert tone-warning support-banner-layout">
           <strong>Processing artifacts are no longer available.</strong>
           <span>The retention lifecycle purged temporary processing content; the package outcome, incident timeline, audit and reporting history remain available.</span>
         </div>
       )}
 
       <div className="support-detail-grid">
-        <section className="card">
+        <section className="ui-card">
           <h2>Summary</h2>
           <dl className="platform-definition-list">
             <div><dt>Incident status</dt><dd>{data.status.replace(/_/g, ' ')}</dd></div>
@@ -107,7 +103,7 @@ export default function SupportIncidentDetailPage() {
           </dl>
         </section>
 
-        <section className="card">
+        <section className="ui-card">
           <h2>Failure details</h2>
           <dl className="platform-definition-list">
             <div><dt>Stage</dt><dd>{data.stage.replace(/_/g, ' ')}</dd></div>
@@ -123,27 +119,27 @@ export default function SupportIncidentDetailPage() {
       </div>
 
       {hasCurrentCapability('TECHNICAL_HOLD_MANAGE') && data.packageStatus === 'FAILED' && !['RESOLVED', 'AUTO_CLOSED'].includes(data.status) && (
-        <section className="card">
+        <section className="ui-card">
           <h2>Exceptional IT actions</h2>
           <p>Normal business continuity is automatic. Use these controls only when Tenant IT is investigating an exceptional failure.</p>
           {actionMessage && <div className="success-message">{actionMessage}</div>}
           <div className="integration-card-actions">
             {hasCurrentCapability('TECHNICAL_RETRY') && (
-              <button className="primary" disabled={actionBusy} onClick={() => void runAction('REPROCESS')}>Reprocess after fix</button>
+              <button className="ui-button primary" disabled={actionBusy} onClick={() => void runAction('REPROCESS')}>Reprocess after fix</button>
             )}
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 7)}>Preserve 7 days</button>
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 14)}>Preserve 14 days</button>
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 30)}>Preserve 30 days</button>
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('RELEASE_HOLD')}>Release hold</button>
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('RESOLVE_NO_REPROCESS')}>Resolve — no reprocess</button>
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('SUPERSEDED')}>Mark superseded</button>
-            <button className="secondary" disabled={actionBusy} onClick={() => void runAction('DUPLICATE')}>Mark duplicate</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 7)}>Preserve 7 days</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 14)}>Preserve 14 days</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('PRESERVE_FOR_INVESTIGATION', 30)}>Preserve 30 days</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('RELEASE_HOLD')}>Release hold</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('RESOLVE_NO_REPROCESS')}>Resolve — no reprocess</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('SUPERSEDED')}>Mark superseded</button>
+            <button className="ui-button secondary" disabled={actionBusy} onClick={() => void runAction('DUPLICATE')}>Mark duplicate</button>
           </div>
           <p className="support-subtle">Actions preserve the failed package outcome, incident timeline, audit and reporting history. Retention controls processing-artifact availability only.</p>
         </section>
       )}
 
-      <section className="card">
+      <section className="ui-card">
         <h2>Processing fingerprint</h2>
         {Object.keys(data.processingFingerprint).length === 0 ? <p>No fingerprint fields were captured.</p> : (
           <dl className="platform-definition-list">
@@ -152,7 +148,7 @@ export default function SupportIncidentDetailPage() {
         )}
       </section>
 
-      <section className="card">
+      <section className="ui-card">
         <h2>Safe diagnostic metadata</h2>
         {Object.keys(data.safeMetadata).length === 0 ? <p>No additional safe diagnostic metadata was captured.</p> : (
           <dl className="platform-definition-list">
@@ -161,7 +157,7 @@ export default function SupportIncidentDetailPage() {
         )}
       </section>
 
-      <section className="card">
+      <section className="ui-card">
         <h2>Incident timeline</h2>
         {data.events.length === 0 ? <p>No durable incident events recorded.</p> : (
           <div className="support-timeline">
@@ -192,6 +188,6 @@ export default function SupportIncidentDetailPage() {
       <p className="support-privacy-note">
         Support diagnostics intentionally exclude document text, OCR body, protected values, raw prompts and raw provider responses.
       </p>
-    </div>
+    </PageScaffold>
   );
 }

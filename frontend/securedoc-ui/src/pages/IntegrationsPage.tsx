@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import type {
   IntegrationAcknowledgementMode,
@@ -12,8 +12,9 @@ import type {
   PollingConnectionStatus,
   DerivedDelivery,
 } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
+import HorizontalTabs from '../components/ui/HorizontalTabs';
+import StatusBadge from '../components/ui/StatusBadge';
 
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
 type IntegrationView = IntegrationPurpose | 'ALL';
@@ -77,10 +78,6 @@ function human(value: string) {
   return value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function statusClass(status: string) {
-  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `platform-status platform-status-${normalized}`;
-}
 
 function toDraft(connection: IntegrationConnection): Draft {
   return {
@@ -112,7 +109,7 @@ function toDraft(connection: IntegrationConnection): Draft {
   };
 }
 
-export default function IntegrationsPage() {
+export default function IntegrationsPage({ administrationTabs }: { administrationTabs?: ReactNode }) {
   const [connections, setConnections] = useState<IntegrationConnection[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [loading, setLoading] = useState(true);
@@ -354,25 +351,25 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <div className="platform-admin-page">
-      <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Integrations' }]} />
-      <PageHeader
-        eyebrow="Tenant technical administration"
-        title="Integrations"
-        description="Manage trusted ingestion sources and delivery destinations while credential values remain protected."
-        actions={<button className="ui-button secondary" onClick={() => void load()}>Refresh</button>}
-      />
-
+    <PageScaffold
+      className="platform-admin-page"
+      breadcrumbs={[{ label: 'Administration' }, { label: 'Integrations' }]}
+      title="Integrations"
+      eyebrow="Connected systems"
+      description="Manage tenant-scoped delivery, polling, and external system connections from one operational view."
+      actions={<button className="ui-button secondary" onClick={() => void load()}>Refresh</button>}
+      primaryNavigation={administrationTabs}
+    >
       <div className="integration-summary-grid">
         <div><span>Configured</span><strong>{connections.length}</strong></div>
         <div><span>Enabled</span><strong>{connections.filter((connection) => connection.enabled).length}</strong></div>
         <div className={derivedAttention.length ? 'needs-attention' : ''}><span>Derived attention</span><strong>{derivedAttention.length}</strong></div>
       </div>
 
-      {error && <div className="platform-error">{error}</div>}
-      {message && <div className="integration-success">{message}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {message && <div className="ui-alert tone-success">{message}</div>}
 
-      <nav className="integration-group-nav" aria-label="Integration connection groups">
+      <HorizontalTabs ariaLabel="Integration connection groups" className="integration-group-nav">
         {integrationViews.map((view) => (
           <button
             type="button"
@@ -385,10 +382,10 @@ export default function IntegrationsPage() {
             <strong>{viewCounts[view.id]}</strong>
           </button>
         ))}
-      </nav>
+      </HorizontalTabs>
 
       <div className={`integration-layout${editorOpen ? ' editor-open' : ''}`}>
-        <section className="platform-section">
+        <section className="ui-card platform-section-layout">
           <div className="platform-section-heading integration-section-heading">
             <div><h2>{activeViewConfig.label}</h2><p>{activeViewConfig.description} Disabled connections remain auditable.</p></div>
             <div className="integration-heading-actions">
@@ -397,7 +394,7 @@ export default function IntegrationsPage() {
             </div>
           </div>
           {loading ? <p>Loading integrations…</p> : visibleConnections.length === 0 ? (
-            <div className="platform-empty integration-empty">
+            <div className="ui-empty-state integration-empty">
               <strong>{activeViewConfig.empty}</strong>
               <span>Create a connection here when this tenant needs one.</span>
             </div>
@@ -407,7 +404,7 @@ export default function IntegrationsPage() {
                 <details className="platform-provider-card integration-disclosure" key={connection.connectionId}>
                   <summary className="integration-connection-summary">
                     <div><div className="platform-provider-category">{human(connection.purpose)}</div><h3>{connection.name}</h3><span>{human(connection.providerType)} · {human(connection.direction)}</span></div>
-                    <span className={statusClass(connection.enabled ? connection.healthStatus : 'DISABLED')}>{human(connection.enabled ? connection.healthStatus : 'DISABLED')}</span>
+                    <StatusBadge value={connection.enabled ? connection.healthStatus : 'DISABLED'} label={human(connection.enabled ? connection.healthStatus : 'DISABLED')} />
                   </summary>
                   <dl className="platform-definition-list">
                     <div><dt>Provider</dt><dd>{human(connection.providerType)}</dd></div>
@@ -418,11 +415,11 @@ export default function IntegrationsPage() {
                     {connection.purpose === 'INGESTION_SOURCE' && connection.providerType === 'HTTP_API' && <div><dt>Next poll</dt><dd>{pollingStatus[connection.connectionId]?.nextScheduledAt ? new Date(pollingStatus[connection.connectionId].nextScheduledAt!).toLocaleString() : 'Not scheduled'}</dd></div>}
                   </dl>
                   <div className="integration-card-actions">
-                    <button className="secondary" onClick={() => { setDraft(toDraft(connection)); setEditorOpen(true); }}>Edit</button>
-                    {connection.purpose === 'INGESTION_SOURCE' && connection.providerType === 'HTTP_API' && <button className="secondary" disabled={!connection.enabled} onClick={() => void runNow(connection)}>Run now</button>}
-                    {connection.purpose === 'SDV_DELIVERY' && connection.providerType === 'HTTP_API' && <button className="secondary" disabled={!connection.enabled} onClick={() => void testSdv(connection)}>Test connection</button>}
-                    {connection.purpose === 'DERIVED_DOCUMENT_DELIVERY' && <button className="secondary" disabled={!connection.enabled} onClick={() => void testDerived(connection)}>Test connection</button>}
-                    <button className="secondary" onClick={() => void toggle(connection)}>{connection.enabled ? 'Disable' : 'Enable'}</button>
+                    <button className="ui-button secondary" onClick={() => { setDraft(toDraft(connection)); setEditorOpen(true); }}>Edit</button>
+                    {connection.purpose === 'INGESTION_SOURCE' && connection.providerType === 'HTTP_API' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void runNow(connection)}>Run now</button>}
+                    {connection.purpose === 'SDV_DELIVERY' && connection.providerType === 'HTTP_API' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void testSdv(connection)}>Test connection</button>}
+                    {connection.purpose === 'DERIVED_DOCUMENT_DELIVERY' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void testDerived(connection)}>Test connection</button>}
+                    <button className="ui-button secondary" onClick={() => void toggle(connection)}>{connection.enabled ? 'Disable' : 'Enable'}</button>
                   </div>
                 </details>
               ))}
@@ -430,10 +427,10 @@ export default function IntegrationsPage() {
           )}
         </section>
 
-        {editorOpen ? <section className="platform-section integration-editor">
+        {editorOpen ? <section className="ui-card platform-section-layout integration-editor">
           <div className="platform-section-heading compact">
             <div><h2>{editing ? 'Edit connection' : 'New connection'}</h2><p>Technical configuration is tenant scoped and provider validated.</p></div>
-            <button className="secondary" onClick={() => { setDraft(emptyDraft()); setEditorOpen(false); }}>Close</button>
+            <button className="ui-button secondary" onClick={() => { setDraft(emptyDraft()); setEditorOpen(false); }}>Close</button>
           </div>
 
           <div className="integration-form-grid">
@@ -468,21 +465,21 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="integration-form-actions">
-            <button className="primary" disabled={saving || !draft.name.trim()} onClick={() => void save()}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create connection'}</button>
-            <button className="secondary" disabled={saving} onClick={resetEditor}>Reset</button>
+            <button className="ui-button primary" disabled={saving || !draft.name.trim()} onClick={() => void save()}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create connection'}</button>
+            <button className="ui-button secondary" disabled={saving} onClick={resetEditor}>Reset</button>
           </div>
           <p className="platform-boundary-note">Credential values are not displayed or returned by this screen. Provider-specific execution and safe health checks are available when the corresponding provider is implemented; test actions never send a customer PDF.</p>
         </section> : null}
 
-        {showDerivedAttention && <section className="platform-section integration-attention">
+        {showDerivedAttention && <section className="ui-card platform-section-layout integration-attention">
           <div className="platform-section-heading compact"><div><h2>Derived delivery attention</h2><p>Technical destination failures are independent of the completed master SDV export.</p></div><span className="platform-count">{derivedAttention.length}</span></div>
           <div className="integration-list">{derivedAttention.map((d) => <div className="platform-provider-card" key={d.derivedDeliveryId}>
-            <div className="platform-provider-top"><div><div className="platform-provider-category">{d.destinationLabel || 'Routing attention'}</div><h3>{d.failureCategory || d.status}</h3></div><span className={statusClass(d.status)}>{human(d.status)}</span></div>
+            <div className="platform-provider-top"><div><div className="platform-provider-category">{d.destinationLabel || 'Routing attention'}</div><h3>{d.failureCategory || d.status}</h3></div><StatusBadge value={d.status} label={human(d.status)} /></div>
             <dl className="platform-definition-list"><div><dt>Package</dt><dd>{d.packageId}</dd></div><div><dt>Pages</dt><dd>{d.pageNumbers.length ? d.pageNumbers.join(', ') : '—'}</dd></div><div><dt>Attempts</dt><dd>{d.attemptCount}</dd></div></dl>
-            {d.destinationLabel && <div className="integration-card-actions"><button className="secondary" onClick={() => void retryDerived(d)}>Technical retry</button></div>}
+            {d.destinationLabel && <div className="integration-card-actions"><button className="ui-button secondary" onClick={() => void retryDerived(d)}>Technical retry</button></div>}
           </div>)}</div>
         </section>}
       </div>
-    </div>
+    </PageScaffold>
   );
 }

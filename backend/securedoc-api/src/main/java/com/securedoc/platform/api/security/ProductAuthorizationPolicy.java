@@ -54,6 +54,7 @@ public class ProductAuthorizationPolicy {
                     capabilities.addAll(REPORT_READ_CAPABILITIES);
                     capabilities.add(UserCapability.REPORT_EXPORT);
                     capabilities.add(UserCapability.TENANT_INTEGRATION_MANAGE);
+                    capabilities.add(UserCapability.TENANT_AUTH_MANAGE);
                     capabilities.add(UserCapability.TECHNICAL_EXCEPTION_VIEW);
                     capabilities.add(UserCapability.TECHNICAL_ADMIN_VIEW);
                     capabilities.add(UserCapability.TECHNICAL_RETRY);

@@ -7,7 +7,6 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackendDir = Join-Path $ProjectRoot "backend"
-$SharedIdentityDir = Join-Path $ProjectRoot "shared\enterprise-identity"
 $FrontendDir = Join-Path $ProjectRoot "frontend\securedoc-ui"
 
 function Require-Command {
@@ -68,17 +67,11 @@ Write-Host ""
 Write-Host "Node: $(& node --version)"
 Write-Host "npm:  $(& npm --version)"
 
-$overallStart = Get-Date
+Write-Host ""
+Write-Host "Enterprise identity: external Maven dependency com.documentplatform.identity:*:0.2.0" -ForegroundColor DarkGray
+Write-Host "This build does not build enterprise-identity-parent; Maven resolves it from the configured/local artifact repository." -ForegroundColor DarkGray
 
-Push-Location $SharedIdentityDir
-try {
-    Run-Step "SHARED IDENTITY - Maven install" {
-        & mvn clean install -DskipTests
-    }
-}
-finally {
-    Pop-Location
-}
+$overallStart = Get-Date
 
 Push-Location $BackendDir
 try {
@@ -112,6 +105,10 @@ try {
 
     Run-Step "FRONTEND - TypeScript check" {
         & npx tsc --noEmit
+    }
+
+    Run-Step "FRONTEND - UI framework contract" {
+        & npm run test:ui-framework
     }
 
     Run-Step "FRONTEND - Vite production build" {

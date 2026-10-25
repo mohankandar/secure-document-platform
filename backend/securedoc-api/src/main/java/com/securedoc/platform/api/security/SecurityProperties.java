@@ -21,6 +21,8 @@ public class SecurityProperties {
     public static class Oidc {
         private String issuerUri = "";
         private String audience = "";
+        private String browserClientId = "";
+        private boolean persistentConnectionEnabled = true;
         private String tenantId = "";
         private String tenantClaim = "tenant_id";
         private String usernameClaim = "preferred_username";
@@ -34,6 +36,10 @@ public class SecurityProperties {
         public void setIssuerUri(String issuerUri) { this.issuerUri = safe(issuerUri); }
         public String getAudience() { return audience; }
         public void setAudience(String audience) { this.audience = safe(audience); }
+        public String getBrowserClientId() { return browserClientId; }
+        public void setBrowserClientId(String browserClientId) { this.browserClientId = safe(browserClientId); }
+        public boolean isPersistentConnectionEnabled() { return persistentConnectionEnabled; }
+        public void setPersistentConnectionEnabled(boolean persistentConnectionEnabled) { this.persistentConnectionEnabled = persistentConnectionEnabled; }
         public String getTenantId() { return tenantId; }
         public void setTenantId(String tenantId) { this.tenantId = safe(tenantId); }
         public String getTenantClaim() { return tenantClaim; }

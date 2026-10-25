@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
-import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode } from './api/auth';
+import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode, OIDC_SESSION_EXPIRED_EVENT } from './api/auth';
 import type { CurrentUser } from './types';
 import DashboardPage from './pages/DashboardPage';
 import CreatePackagePage from './pages/CreatePackagePage';
@@ -13,6 +13,7 @@ import AuditPage from './pages/AuditPage';
 import BusinessAdminPage from './pages/BusinessAdminPage';
 import ReportsPage from './pages/ReportsPage';
 import PlatformAdminPage from './pages/PlatformAdminPage';
+import AuthenticationAdminPage from './pages/AuthenticationAdminPage';
 import TechnicalIssueDetailPage from './pages/TechnicalIssueDetailPage';
 import SupportIncidentsPage from './pages/SupportIncidentsPage';
 import SupportIncidentDetailPage from './pages/SupportIncidentDetailPage';
@@ -23,12 +24,14 @@ import { ROLE_OPTIONS } from './security/uiAuthorization';
 import Icon, { type IconName } from './components/ui/Icon';
 import { BrandingProvider, useBranding } from './branding/BrandingContext';
 import useMediaQuery from './components/ui/useMediaQuery';
+import AdministrationTabs from './components/AdministrationTabs';
+import Button from './components/ui/Button';
 
 function PermissionDenied() {
   return (
     <div>
       <Breadcrumbs items={[{ label: 'Permission required' }]} />
-      <div className="card ui-state-card">
+      <div className="ui-card ui-state-card">
         <h1>Permission required</h1>
         <p>Your current role does not allow this operation.</p>
       </div>
@@ -36,7 +39,7 @@ function PermissionDenied() {
   );
 }
 
-type NavEntry = { to: string; label: string; icon: IconName; show: boolean; end?: boolean };
+type NavEntry = { to: string; label: string; icon: IconName; show: boolean; end?: boolean; activeWhen?: string[] };
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   const { branding } = useBranding();
@@ -51,12 +54,16 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 
 function NavigationGroup({ title, entries, onNavigate }: { title: string; entries: NavEntry[]; onNavigate: () => void }) {
   const visible = entries.filter((entry) => entry.show);
+  const location = useLocation();
   if (!visible.length) return null;
   return (
     <div className="app-nav-group">
       <div className="app-nav-group-title">{title}</div>
       {visible.map((entry) => (
-        <NavLink key={entry.to} to={entry.to} end={entry.end} onClick={onNavigate} className={({ isActive }) => `app-nav-link ${isActive ? 'active' : ''}`}>
+        <NavLink key={entry.to} to={entry.to} end={entry.end} onClick={onNavigate} className={({ isActive }) => {
+          const groupedActive = entry.activeWhen?.some((prefix) => location.pathname.startsWith(prefix)) ?? false;
+          return `app-nav-link ${isActive || groupedActive ? 'active' : ''}`;
+        }}>
           <Icon name={entry.icon} />
           <span className="app-nav-label">{entry.label}</span>
         </NavLink>
@@ -92,6 +99,15 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
   }, []);
 
   useEffect(() => {
+    if (!drawerOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [drawerOpen]);
+
+  useEffect(() => {
     if (!tabletLandscape) setTabletExpanded(false);
   }, [tabletLandscape]);
 
@@ -116,11 +132,28 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
   const reports: NavEntry[] = [
     { to: '/reports', label: 'Reports', icon: 'reports', show: hasCapability('REPORT_EXECUTIVE_VIEW') },
   ];
+  const canViewAnyAdministration = hasCapability('TENANT_POLICY_MANAGE') || hasCapability('TENANT_INTEGRATION_MANAGE')
+    || hasCapability('TENANT_AUTH_MANAGE') || hasCapability('TECHNICAL_ADMIN_VIEW');
   const admin: NavEntry[] = [
-    { to: '/business-admin', label: 'Business Administration', icon: 'admin', show: hasCapability('TENANT_POLICY_MANAGE') },
-    { to: '/integrations', label: 'Integrations', icon: 'integrations', show: hasCapability('TENANT_INTEGRATION_MANAGE') },
-    { to: '/platform-admin', label: hasRole('PLATFORM_OPERATIONS_ADMIN') ? 'Technical Administration' : 'Tenant IT Administration', icon: 'admin', show: hasCapability('TECHNICAL_ADMIN_VIEW') },
+    {
+      to: '/administration',
+      label: 'Administration',
+      icon: 'admin',
+      show: canViewAnyAdministration,
+      activeWhen: ['/business-admin', '/integrations', '/authentication-admin', '/platform-admin'],
+    },
   ];
+  const defaultAdministrationPath = hasCapability('TENANT_POLICY_MANAGE') ? '/business-admin'
+    : hasCapability('TENANT_INTEGRATION_MANAGE') ? '/integrations'
+      : hasCapability('TENANT_AUTH_MANAGE') ? '/authentication-admin'
+        : hasCapability('TECHNICAL_ADMIN_VIEW') ? '/platform-admin' : '/';
+  const administrationTabs = <AdministrationTabs
+    business={hasCapability('TENANT_POLICY_MANAGE')}
+    integrations={hasCapability('TENANT_INTEGRATION_MANAGE')}
+    authentication={hasCapability('TENANT_AUTH_MANAGE')}
+    technical={hasCapability('TECHNICAL_ADMIN_VIEW')}
+    technicalLabel={hasRole('PLATFORM_OPERATIONS_ADMIN') ? 'Technical' : 'Tenant IT'}
+  />;
   const support: NavEntry[] = [
     { to: '/support/incidents', label: 'Support Incidents', icon: 'support', show: hasCapability('TECHNICAL_EXCEPTION_VIEW') },
     { to: '/audit', label: 'Audit', icon: 'audit', show: hasCapability('AUDIT_VIEW') },
@@ -130,14 +163,15 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
 
   return (
     <div className={`modern-app-shell ${effectiveCollapsed ? 'sidebar-collapsed' : ''}`} data-ui-design-system="1">
+      <a className="ui-skip-link" href="#main-content">Skip to main content</a>
       <header className="mobile-app-bar">
-        <button className="shell-icon-button" type="button" onClick={() => setDrawerOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
+        <Button className="mobile-nav-trigger" variant="secondary" iconOnly type="button" onClick={() => setDrawerOpen(true)} aria-label="Open navigation" aria-expanded={drawerOpen} aria-controls="primary-navigation-drawer"><span className="mobile-menu-glyph" aria-hidden="true"><span /><span /><span /></span></Button>
         <div className="mobile-brand"><BrandMark compact /><strong>{branding.shortName || branding.applicationName}</strong></div>
         <div className="mobile-user-avatar" title={currentUser?.username || 'User'}>{initials}</div>
       </header>
 
       {drawerOpen && <button className="nav-drawer-backdrop" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} />}
-      <aside className={`modern-sidebar ${drawerOpen ? 'drawer-open' : ''}`}>
+      <aside id="primary-navigation-drawer" className={`modern-sidebar ${drawerOpen ? 'drawer-open' : ''}`}>
         <div className="sidebar-brand-row">
           <div className={`sidebar-brand ${hasPrimaryLogo && !sidebarCompact ? 'primary-logo-only' : ''}`} title={`${branding.applicationName}${branding.organizationName ? ` · ${branding.organizationName}` : ''}`}>
             <BrandMark compact={sidebarCompact} />
@@ -169,7 +203,7 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
               </select>
             </label>
           ) : (
-            <button className="sidebar-signout-modern" onClick={onSignOut}>Sign out</button>
+            <button className="sidebar-signout-modern" onClick={onSignOut} aria-label="Sign out" title={sidebarCompact ? 'Sign out' : undefined}><Icon name="logout" /><span className="sidebar-signout-label">Sign out</span></button>
           )}
           <div className="sidebar-identity">
             <div className="sidebar-avatar">{initials}</div>
@@ -181,7 +215,7 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
         </div>
       </aside>
 
-      <main className="modern-main-content">
+      <main id="main-content" className="modern-main-content" tabIndex={-1}>
         <Routes>
           <Route path="/" element={hasCapability('DASHBOARD_ACCESS') ? <DashboardPage /> : hasCapability('REPORT_EXECUTIVE_VIEW') ? <Navigate to="/reports" replace /> : <PermissionDenied />} />
           <Route path="/packages/new" element={hasCapability('DOCUMENT_INTAKE') ? <CreatePackagePage /> : <PermissionDenied />} />
@@ -193,9 +227,11 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
             ? <ReportsPage canViewOperations={hasCapability('REPORT_OPERATIONAL_VIEW')} canViewBusiness={hasCapability('TENANT_IDENTIFIER_MANAGE')} canExport={hasCapability('REPORT_EXPORT')} canDrillDown={hasCapability('DASHBOARD_ACCESS')} />
             : <PermissionDenied />} />
           <Route path="/audit" element={hasCapability('AUDIT_VIEW') ? <AuditPage /> : <PermissionDenied />} />
-          <Route path="/business-admin" element={hasCapability('TENANT_POLICY_MANAGE') ? <BusinessAdminPage /> : <PermissionDenied />} />
-          <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage canManagePlatformOperations={hasCapability('PLATFORM_OPERATIONS')} /> : <PermissionDenied />} />
-          <Route path="/integrations" element={hasCapability('TENANT_INTEGRATION_MANAGE') ? <IntegrationsPage /> : <PermissionDenied />} />
+          <Route path="/administration" element={canViewAnyAdministration ? <Navigate to={defaultAdministrationPath} replace /> : <PermissionDenied />} />
+          <Route path="/business-admin" element={hasCapability('TENANT_POLICY_MANAGE') ? <BusinessAdminPage administrationTabs={administrationTabs} /> : <PermissionDenied />} />
+          <Route path="/platform-admin" element={hasCapability('TECHNICAL_ADMIN_VIEW') ? <PlatformAdminPage administrationTabs={administrationTabs} canManagePlatformOperations={hasCapability('PLATFORM_OPERATIONS')} /> : <PermissionDenied />} />
+          <Route path="/authentication-admin" element={hasCapability('TENANT_AUTH_MANAGE') ? <AuthenticationAdminPage administrationTabs={administrationTabs} /> : <PermissionDenied />} />
+          <Route path="/integrations" element={hasCapability('TENANT_INTEGRATION_MANAGE') ? <IntegrationsPage administrationTabs={administrationTabs} /> : <PermissionDenied />} />
           <Route path="/technical-exceptions/:packageId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <TechnicalIssueDetailPage /> : <PermissionDenied />} />
           <Route path="/support/incidents" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentsPage /> : <PermissionDenied />} />
           <Route path="/support/incidents/:incidentId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentDetailPage /> : <PermissionDenied />} />
@@ -211,23 +247,50 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authLoading, setAuthLoading] = useState(!localMode);
   const [authError, setAuthError] = useState('');
+  const [authDenied, setAuthDenied] = useState(false);
+
+  useEffect(() => {
+    if (localMode) return;
+    const onSessionExpired = () => {
+      setCurrentCapabilities([]);
+      setCurrentRoles('DOCUMENT_PROCESSOR');
+      setCurrentUser(null);
+      setAuthDenied(false);
+      setAuthError('Your organization session has expired. Sign in again to continue.');
+    };
+    window.addEventListener(OIDC_SESSION_EXPIRED_EVENT, onSessionExpired);
+    return () => window.removeEventListener(OIDC_SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [localMode]);
 
   useEffect(() => {
     if (localMode) return;
     let active = true;
     const load = async () => {
       try {
+        console.info('[LexaVault OIDC] Starting production-session verification.');
         await handleOidcCallback();
-        if (!getAccessToken()) { if (active) setAuthLoading(false); return; }
+        if (!getAccessToken()) {
+          console.info('[LexaVault OIDC] No access token is available after callback processing.');
+          if (active) setAuthLoading(false);
+          return;
+        }
+        console.info('[LexaVault OIDC] Access token is present; validating it with /api/v1/me. Token value is intentionally not logged.');
         const user = await apiClient.getCurrentUser();
+        console.info('[LexaVault OIDC] Production session verified.', { roles: user.roles, capabilityCount: (user.capabilities || []).length });
         if (active) {
           setCurrentUser(user);
           setCurrentRoles(user.roles.join(','));
           setCurrentCapabilities(user.capabilities || []);
         }
-      } catch {
-        clearOidcSession();
-        if (active) setAuthError('Your production session could not be verified. Please sign in again.');
+      } catch (error) {
+        console.error('[LexaVault OIDC] Production-session verification failed.', error);
+        const status = typeof error === 'object' && error !== null && 'httpStatus' in error ? Number((error as { httpStatus?: number }).httpStatus) : undefined;
+        if (status === 403) {
+          if (active) { setAuthDenied(true); setAuthError('You are signed in, but this account does not have access to LexaVault. Contact your administrator if you believe you should have access.'); }
+        } else {
+          clearOidcSession();
+          if (active) { setAuthDenied(false); setAuthError(status === 401 ? 'Your organization session has expired or could not be verified. Please sign in again.' : 'Sign-in could not be completed. Please try again.'); }
+        }
       } finally { if (active) setAuthLoading(false); }
     };
     void load();
@@ -266,8 +329,8 @@ export default function App() {
   if (!localMode && !currentUser) {
     return (
       <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p>Sign in with your organization identity to continue.</p>
-        {authError && <div className="error-message">{authError}</div>}
-        <button className="primary-button" onClick={() => void beginOidcLogin()}>Sign in</button>
+        {authError && <div className="ui-alert tone-danger">{authError}</div>}
+        <button className="ui-button primary" onClick={() => void beginOidcLogin(authDenied)}>{authDenied ? 'Sign in with a different account' : 'Sign in'}</button>
       </div></div>
     );
   }

@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { ApiError, IdentifierDefinition } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
 import './CreatePackagePage.css';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
 import WorkflowStepper from '../components/ui/WorkflowStepper';
 
 type DraftStatus = 'READY' | 'UPLOADING' | 'UPLOADED' | 'FAILED';
@@ -228,9 +227,8 @@ export default function CreatePackagePage() {
   };
 
   return (
-    <div className="intake-page">
-      <Breadcrumbs items={[{ label: 'Upload Documents' }]} />
-      <PageHeader eyebrow="Manual intake" title="Upload Documents" description="Create one intake, add every PDF that belongs together, then submit once for processing." />
+    <PageScaffold className="intake-page" breadcrumbs={[{ label: 'Upload Documents' }]} title="Upload Documents"
+      eyebrow="Document intake" description="Create a controlled intake, attach PDFs, and start processing when the package is ready.">
 
       <WorkflowStepper
         ariaLabel="Manual intake progress"
@@ -241,11 +239,11 @@ export default function CreatePackagePage() {
         ]}
       />
 
-      {error && <div className="error-msg" role="alert">{error}</div>}
+      {error && <div className="ui-alert tone-danger" role="alert">{error}</div>}
       {selectionMessage && <div className="intake-selection-message" role="status">{selectionMessage}</div>}
 
       <div className="intake-workspace">
-        <section className="card intake-section" aria-labelledby="business-identifiers-heading">
+        <section className="ui-card intake-section" aria-labelledby="business-identifiers-heading">
           <div className="intake-section-heading">
             <span>1</span>
             <div>
@@ -299,7 +297,7 @@ export default function CreatePackagePage() {
           )}
         </section>
 
-        <section className="card intake-section" aria-labelledby="documents-heading">
+        <section className="ui-card intake-section" aria-labelledby="documents-heading">
           <div className="intake-section-heading">
             <span>2</span>
             <div>
@@ -323,7 +321,7 @@ export default function CreatePackagePage() {
             <div className="intake-source-actions">
               <button
                 type="button"
-                className="primary"
+                className="ui-button primary"
                 onClick={() => browseInputRef.current?.click()}
                 disabled={documentSelectionLocked}
               >
@@ -347,7 +345,7 @@ export default function CreatePackagePage() {
           </div>
 
           {documents.length === 0 ? (
-            <div className="intake-empty-queue">No documents added yet.</div>
+            <div className="ui-empty-state intake-empty-queue-layout">No documents added yet.</div>
           ) : (
             <ul className="intake-document-queue">
               {documents.map((document) => (
@@ -376,7 +374,7 @@ export default function CreatePackagePage() {
           )}
         </section>
 
-        <section className="card intake-submit-panel" aria-labelledby="submit-documents-heading">
+        <section className="ui-card intake-submit-panel" aria-labelledby="submit-documents-heading">
           <div>
             <h2 id="submit-documents-heading">Submit Documents</h2>
             <p>{readinessMessage}</p>
@@ -384,11 +382,11 @@ export default function CreatePackagePage() {
               <Link to={`/packages/${draftPackageId}`}>Open incomplete intake details</Link>
             )}
           </div>
-          <button className="primary intake-submit-button" onClick={() => void handleSubmit()} disabled={!canSubmit}>
+          <button className="ui-button primary intake-submit-button" onClick={() => void handleSubmit()} disabled={!canSubmit}>
             {submitting ? 'Submitting…' : hasFailedDocuments ? 'Retry Uploads & Submit' : 'Submit Documents'}
           </button>
         </section>
       </div>
-    </div>
+    </PageScaffold>
   );
 }

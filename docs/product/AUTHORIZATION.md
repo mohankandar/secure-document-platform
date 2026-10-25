@@ -33,6 +33,7 @@
 | Business policy | N | N | Y | N | N | N | Y |
 | Identifier/column configuration | N | N | Y | N | N | N | Y |
 | Tenant integrations/watched folder | N | N | N | N | Y | Y | Y |
+| Tenant authentication configuration | N | N | N | N | Y | N | Y |
 | Technical issue details | N | N | N | N | Y | Y | Y |
 | Technical retry | N | N | N | N | Y | Y | Y |
 | Technical holds | N | N | N | N | Y | Y | Y |
@@ -60,6 +61,7 @@ Important separate capabilities include:
 - business-policy management;
 - identifier/column management;
 - integration management;
+- tenant authentication management (`TENANT_AUTH_MANAGE`);
 - technical issue viewing;
 - technical administration view (`TECHNICAL_ADMIN_VIEW`) for safe tenant/platform operational administration surfaces;
 - technical retry;

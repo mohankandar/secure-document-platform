@@ -20,6 +20,15 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Keep the Jackson family aligned on one patched line. This import must precede
+                 Spring Boot's BOM because Maven uses the first imported BOM on version conflicts. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -57,7 +66,7 @@
         <dependency>
             <groupId>com.documentplatform.identity</groupId>
             <artifactId>enterprise-identity-spring</artifactId>
-            <version>0.1.0</version>
+            <version>${enterprise.identity.version}</version>
         </dependency>
 
         <!-- Spring Boot Web -->
