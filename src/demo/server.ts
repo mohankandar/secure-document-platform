@@ -933,3 +933,7 @@ export function installDemoServer() {
 export function storedDemoRole(): string | null {
   return localStorage.getItem(ROLE_STORAGE_KEY);
 }
+
+export function storeDemoRole(role: string) {
+  localStorage.setItem(ROLE_STORAGE_KEY, role);
+}

@@ -20,3 +20,8 @@
 .demo-controls-actions button { min-height: 34px; border: 1px solid var(--ui-border-strong); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font-size: var(--type-xs, 12px); font-weight: 700; cursor: pointer; }
 .demo-controls-actions button:first-child { border-color: var(--brand-accent); background: var(--brand-accent); color: var(--ui-inverse); }
 @media print { .demo-controls { display: none; } }
+.demo-controls-role { display: flex; flex-direction: column; gap: 6px; }
+.demo-controls-role label { color: var(--ui-text-muted); font-size: var(--type-2xs, 11px); font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.demo-controls-role select { min-height: 44px; width: 100%; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text); font: inherit; font-size: var(--type-body, 14px); cursor: pointer; }
+.demo-controls-role select:focus-visible { outline: 2px solid var(--ui-focus, var(--ui-text)); outline-offset: 2px; }
+.demo-controls-role small { color: var(--ui-text-muted); font-size: var(--type-xs, 12px); line-height: 1.45; }

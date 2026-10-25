@@ -1,7 +1,26 @@
 import { useState } from 'react';
 import { resetState } from './state';
 import { getDemoSettings, setDemoSettings, type DemoLatency } from './settings';
+import { getCurrentRoles } from '../api/config';
+import { ROLE_CAPABILITIES } from './roles';
+import { storeDemoRole } from './server';
 import './DemoControls.css';
+
+const DEMO_ROLES: { value: string; label: string }[] = [
+  { value: 'DOCUMENT_PROCESSOR', label: 'Document Processor' },
+  { value: 'DOCUMENT_SUPERVISOR', label: 'Document Supervisor' },
+  { value: 'BUSINESS_ADMIN', label: 'Business Administrator' },
+  { value: 'REPORT_VIEWER', label: 'Report Viewer' },
+  { value: 'TENANT_IT_ADMIN', label: 'Tenant IT Administrator' },
+  { value: 'PLATFORM_OPERATIONS_ADMIN', label: 'Platform Operations Administrator' },
+  { value: 'ADMIN', label: 'System Administrator' },
+].filter((role) => ROLE_CAPABILITIES[role.value]);
+
+function switchRole(role: string) {
+  if (role === getCurrentRoles()) return;
+  storeDemoRole(role);
+  reload();
+}
 
 function reload() {
   window.location.assign(window.location.pathname === '/' ? '/' : window.location.pathname);
@@ -29,6 +48,21 @@ export default function DemoControls() {
             <strong>Prototype demo</strong>
             <span>Synthetic data stored in this browser. No backend required.</span>
           </header>
+
+          <div className="demo-controls-role">
+            <label htmlFor="demo-role-select">Demo role</label>
+            <select
+              id="demo-role-select"
+              value={getCurrentRoles()}
+              onChange={(event) => switchRole(event.target.value)}
+              aria-describedby="demo-role-hint"
+            >
+              {DEMO_ROLES.map((role) => (
+                <option key={role.value} value={role.value}>{role.label}</option>
+              ))}
+            </select>
+            <small id="demo-role-hint">Reloads with this role. Demo data is kept.</small>
+          </div>
 
           <fieldset>
             <legend>Network latency</legend>
