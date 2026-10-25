@@ -5,6 +5,8 @@ import type { ApiError, DashboardStage, OperationalReports } from '../types';
 import PageScaffold from '../components/ui/PageScaffold';
 import HorizontalTabs from '../components/ui/HorizontalTabs';
 import Icon, { type IconName } from '../components/ui/Icon';
+import Skeleton from '../components/ui/Skeleton';
+import EmptyState from '../components/ui/EmptyState';
 import './ReportsPage.css';
 
 type ReportView = 'executive' | 'business' | 'usage' | 'operations';
@@ -97,7 +99,11 @@ function Delta({ current, previous, inverse = false }: { current: number; previo
   const value = delta(current, previous);
   if (value === null) return <span className="report-delta neutral">First comparable period</span>;
   const positive = inverse ? value <= 0 : value >= 0;
-  return <span className={`report-delta ${positive ? 'good' : 'bad'}`}>{value >= 0 ? '↑' : '↓'} {Math.abs(value).toFixed(1)}% vs prior</span>;
+  return <span className={`report-delta ${positive ? 'good' : 'bad'}`}><Icon name={value >= 0 ? 'arrowUp' : 'arrowDown'} className="report-delta-icon" />{Math.abs(value).toFixed(1)}% vs prior</span>;
+}
+
+function SectionHead({ id, title, description }: { id: string; title: string; description: string }) {
+  return <header className="rp-section-head"><h2 id={id}>{title}</h2><p>{description}</p></header>;
 }
 
 function Kpi({ label, value, detail, current, previous, tone = 'blue', onClick }:
@@ -158,13 +164,17 @@ function IntakeProgress({ report }: { report: OperationalReports }) {
   const delivered = safeNumber(report.executive.periodIntakeDelivered);
   const deliveryRate = safeNumber(report.executive.periodIntakeDeliveryRate);
   const remaining = Math.max(0, received - delivered);
-  return <div className="intake-progress">
-    <div className="intake-progress-stats">
-      <div><span>Received in selected period</span><strong>{formatSafeNumber(received)}</strong><small>{formatSafeNumber(report.executive.documents)} documents · {formatSafeNumber(report.executive.pages)} pages</small></div>
-      <div><span>Delivered by period end</span><strong>{formatSafeNumber(delivered)}</strong><small>{pct(deliveryRate)} of selected-period intake</small></div>
-      <div><span>Not yet delivered by period end</span><strong>{formatSafeNumber(remaining)}</strong><small>Includes work still processing, in review, rejected, or otherwise unresolved</small></div>
+  const deliveredWidth = Math.min(100, Math.max(0, deliveryRate));
+  return <div className="rp-funnel">
+    <div className="rp-funnel-track" role="img" aria-label={`${pct(deliveryRate)} of selected-period intake delivered by period end`}>
+      <i className="delivered" style={{ width: `${deliveredWidth}%` }} />
+      <i className="remaining" style={{ width: `${100 - deliveredWidth}%` }} />
     </div>
-    <div className="intake-progress-track" aria-label={`${pct(deliveryRate)} of selected-period intake delivered by period end`}><i style={{ width: `${Math.min(100, Math.max(0, deliveryRate))}%` }} /></div>
+    <dl className="rp-funnel-stats">
+      <div><dt>Received</dt><dd>{formatSafeNumber(received)}</dd><small>{formatSafeNumber(report.executive.documents)} documents · {formatSafeNumber(report.executive.pages)} pages</small></div>
+      <div className="delivered"><dt><i aria-hidden="true" />Delivered by period end</dt><dd>{formatSafeNumber(delivered)}</dd><small>{pct(deliveryRate)} of selected-period intake</small></div>
+      <div className="remaining"><dt><i aria-hidden="true" />Not yet delivered</dt><dd>{formatSafeNumber(remaining)}</dd><small>Processing, in review, rejected, or unresolved</small></div>
+    </dl>
   </div>;
 }
 
@@ -305,13 +315,13 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
   const outcomeLabel = outcomeOptions.find(([key]) => key === outcome)?.[1] || outcome;
   const activeFilters = [source !== 'ALL' ? sourceLabel : null, outcome !== 'ALL' ? outcomeLabel : null].filter(Boolean);
 
-  return <PageScaffold className="reports-page-v3" breadcrumbs={[{ label: 'Reports' }]} title="Reporting"
+  return <PageScaffold className={`reports-page-v3${loading && report ? ' is-refreshing' : ''}`} breadcrumbs={[{ label: 'Reports' }]} title="Reporting"
     actions={<div className="report-actions"><button className="ui-button secondary" onClick={() => void load()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>{canExport && <button className="ui-button primary" onClick={exportCsv}>Export</button>}</div>}
     primaryNavigation={<HorizontalTabs ariaLabel="Reporting views" className="report-experience-tabs">
       {tabs.map((tab) => <button type="button" key={tab.key} className={view === tab.key ? 'active' : ''} onClick={() => setView(tab.key)}><Icon name={tab.icon} className="report-tab-icon" /><strong>{tab.label}</strong></button>)}
     </HorizontalTabs>}>
 
-    <section className="report-toolbar" aria-label="Report controls" ref={toolbarRef}>
+    <section className="rp-controls" aria-label="Report controls" ref={toolbarRef}>
       <div className="report-filter-rail">
         <FilterPopover label="Period" valueLabel={period.label} open={openFilter === 'period'} onToggle={() => setOpenFilter(openFilter === 'period' ? null : 'period')}>
           <PeriodPicker period={period} onClose={() => setOpenFilter(null)} onApply={(next) => { setPeriod(next); setOpenFilter(null); }} />
@@ -325,50 +335,91 @@ export default function ReportsPage({ canViewOperations, canViewBusiness, canExp
           <ChoiceList options={outcomeOptions} value={outcome} onChoose={(value) => { setOutcome(value); setOpenFilter(null); }} />
         </FilterPopover>
       </div>
-      <div className="report-toolbar-meta"><span>{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>{activeFilters.length > 0 && <button type="button" onClick={() => { setSource('ALL'); setOutcome('ALL'); }}>Clear filters</button>}</div>
+      <div className="rp-controls-meta">
+        {activeFilters.length > 0 && <div className="rp-chips" aria-label="Active filters">
+          {source !== 'ALL' && <button type="button" onClick={() => setSource('ALL')} aria-label={`Remove ${sourceLabel} filter`}>{sourceLabel}<Icon name="close" /></button>}
+          {outcome !== 'ALL' && <button type="button" onClick={() => setOutcome('ALL')} aria-label={`Remove ${outcomeLabel} filter`}>{outcomeLabel}<Icon name="close" /></button>}
+          <button type="button" className="rp-clear" onClick={() => { setSource('ALL'); setOutcome('ALL'); }}>Clear all</button>
+        </div>}
+        <span className="rp-context">
+          {report ? `${new Date(report.period.from).toLocaleDateString()} – ${new Date(new Date(report.period.to).getTime() - 1).toLocaleDateString()}` : period.label}
+          {' · vs prior equal period · '}{Intl.DateTimeFormat().resolvedOptions().timeZone}
+        </span>
+        {report && <span className="rp-updated" aria-live="polite">{loading ? 'Refreshing…' : `Updated ${new Date(report.generatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}</span>}
+      </div>
     </section>
 
-    {activeFilters.length > 0 && <div className="report-filter-chips">{source !== 'ALL' && <button type="button" onClick={() => setSource('ALL')}>{sourceLabel} ×</button>}{outcome !== 'ALL' && <button type="button" onClick={() => setOutcome('ALL')}>{outcomeLabel} ×</button>}</div>}
+    {error && <div className="ui-alert tone-danger rp-error" role="alert">
+      <div><strong>{report ? 'Showing the last loaded report' : 'Reports could not be loaded'}</strong><span>{error}</span></div>
+      <button type="button" className="ui-button secondary" onClick={() => void load()} disabled={loading}>Retry</button>
+    </div>}
 
-    {error && <div className="ui-alert tone-danger">{error}</div>}
-    {!report && loading && <div className="ui-loading-state">Loading reporting data…</div>}
+    {!report && loading && <div className="rp-loading" aria-busy="true">
+      <span className="sr-only">Loading reporting data</span>
+      <div className="rp-kpi-grid">{[0, 1, 2, 3].map((index) => <Skeleton key={index} className="rp-skeleton-kpi" />)}</div>
+      <div className="rp-exec-grid"><Skeleton className="rp-skeleton-panel" /><Skeleton className="rp-skeleton-panel" /></div>
+    </div>}
 
-    {report && <div className="report-context"><span>{new Date(report.period.from).toLocaleDateString()} – {new Date(new Date(report.period.to).getTime() - 1).toLocaleDateString()}</span><span>Compared with the immediately preceding equal period</span><span>Updated {new Date(report.generatedAt).toLocaleString()}</span></div>}
-
-    {report && view === 'executive' && <>
-      <section className="report-section-intro executive-section-intro"><div><p className="eyebrow">Period performance</p><h2>{period.label}</h2></div></section>
-      <section className="report-kpis four">
-        <Kpi label="Packages received" value={formatNumber.format(report.executive.batches)} detail={`${formatNumber.format(report.executive.documents)} documents · ${formatNumber.format(report.executive.pages)} pages`} current={report.executive.batches} previous={report.executive.previousBatches} />
-        <Kpi label="Selected intake delivered" value={formatSafeNumber(report.executive.periodIntakeDelivered)} detail={`${pct(report.executive.periodIntakeDeliveryRate)} delivered by period end`} current={safeNumber(report.executive.periodIntakeDelivered)} previous={safeNumber(report.executive.previousPeriodIntakeDelivered)} tone="green" />
-        <Kpi label="Straight-through delivery" value={pct(report.executive.straightThroughRate)} detail={`${formatNumber.format(report.usage.straightThroughPackages)} of ${formatNumber.format(report.executive.delivered)} deliveries this period had no recorded review`} tone="purple" />
-        <Kpi label="Median turnaround" value={sampledHours(report.timing.medianTurnaroundHours, report.timing.turnaroundSamples)} detail={report.timing.turnaroundSamples ? `P95 ${sampledHours(report.timing.p95TurnaroundHours, report.timing.turnaroundSamples)} · ${pct(report.serviceLevel.deliveryWithinTargetRate)} within ${report.serviceLevel.deliveryTargetMinutes}m target` : 'No delivered sample in this period'} tone="teal" />
-      </section>
-
-      <section className="report-grid executive-grid period-grid">
-        <article className="ui-card report-panel-layout journey-panel"><PanelHeader eyebrow="Selected intake progress" title="What happened to work received in this period" /><IntakeProgress report={report} /></article>
-        <article className="ui-card report-panel-layout source-panel"><PanelHeader eyebrow="Channel mix" title="How work enters the platform" /><SourceMix intake={report.intake} /></article>
-        <article className="ui-card report-panel-layout trend-panel"><PanelHeader eyebrow="Activity trend" title="Received vs delivered activity" aside="Daily volume" /><Trend points={report.executive.trend} /><p className="report-definition">Delivered activity can include packages received before the selected period. Intake conversion above tracks only packages received in this period.</p></article>
-      </section>
-
-      <section className="report-section-intro current-risk-intro"><div><p className="eyebrow">Current operational risk</p><h2>Right now</h2></div></section>
-      <section className="risk-hero">
-        <div><span>Open now</span><strong>{formatNumber.format(report.executive.currentBacklog)}</strong><small>all currently open packages</small></div>
-        <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('TECHNICAL_ATTENTION')}><span>Needs action now</span><strong>{formatNumber.format(report.executive.currentAttention)}</strong><small>technical, review, or approval attention</small></button>
-        <div><span>Oldest open work</span><strong>{hours(report.backlog.oldestHours)}</strong><small>age of the oldest current package</small></div>
-      </section>
-      <section className="report-grid current-risk-grid">
-        <article className="ui-card report-panel-layout attention-panel"><PanelHeader eyebrow="Leadership focus" title="Where action is needed" />
-          <div className="attention-list">
-            <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('TECHNICAL_ATTENTION')}><span><i className="danger-dot" />Technical attention</span><strong>{report.processing.technicalAttention}</strong><small>Processing or delivery issue</small></button>
-            <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_REVIEW')}><span><i className="warning-dot" />Manual review</span><strong>{report.processing.needsReview}</strong><small>Current business review queue</small></button>
-            <button type="button" disabled={!canDrillDown} onClick={() => navigateStage('NEEDS_APPROVAL')}><span><i className="info-dot" />Approval</span><strong>{report.processing.needsApproval}</strong><small>Ready for release decision</small></button>
+    {report && view === 'executive' && <div className="rp-executive">
+      <section className="rp-section" aria-labelledby="rp-period-heading">
+        <SectionHead id="rp-period-heading" title="Period performance" description={`${period.label}${activeFilters.length ? ` · ${activeFilters.join(' · ')}` : ''}, compared with the preceding equal period.`} />
+        {report.executive.batches === 0 && report.executive.delivered === 0 ? (
+          <EmptyState className="rp-empty">
+            <Icon name="inbox" />
+            <strong>No packages in this period</strong>
+            <span>Nothing was received or delivered for the selected period and filters. Current risk below still reflects live queues.</span>
+            <div className="rp-empty-actions">
+              {activeFilters.length > 0 && <button type="button" className="ui-button secondary" onClick={() => { setSource('ALL'); setOutcome('ALL'); }}>Clear filters</button>}
+              {period.preset !== '30D' && <button type="button" className="ui-button secondary" onClick={() => setPeriod(presetPeriod('30D'))}>View last 30 days</button>}
+            </div>
+          </EmptyState>
+        ) : <>
+          <div className="rp-kpi-grid">
+            <Kpi label="Packages received" value={formatNumber.format(report.executive.batches)} detail={`${formatNumber.format(report.executive.documents)} documents · ${formatNumber.format(report.executive.pages)} pages`} current={report.executive.batches} previous={report.executive.previousBatches} />
+            <Kpi label="Selected intake delivered" value={formatSafeNumber(report.executive.periodIntakeDelivered)} detail={`${pct(report.executive.periodIntakeDeliveryRate)} delivered by period end`} current={safeNumber(report.executive.periodIntakeDelivered)} previous={safeNumber(report.executive.previousPeriodIntakeDelivered)} tone="green" />
+            <Kpi label="Straight-through delivery" value={pct(report.executive.straightThroughRate)} detail={`${formatNumber.format(report.usage.straightThroughPackages)} of ${formatNumber.format(report.executive.delivered)} deliveries had no recorded review`} tone="purple" />
+            <Kpi label="Median turnaround" value={sampledHours(report.timing.medianTurnaroundHours, report.timing.turnaroundSamples)} detail={report.timing.turnaroundSamples ? `P95 ${sampledHours(report.timing.p95TurnaroundHours, report.timing.turnaroundSamples)} · ${pct(report.serviceLevel.deliveryWithinTargetRate)} within ${report.serviceLevel.deliveryTargetMinutes}m target` : 'No delivered sample in this period'} tone="teal" />
           </div>
-          <p className="report-definition">Straight-through above describes deliveries in the selected period. Manual review here is the current queue, so both can be true at the same time.</p>
-          {!canDrillDown && <p className="report-definition">Executive access is aggregate-only. Authorized workflow owners can investigate individual packages.</p>}
-        </article>
-        <article className="ui-card report-panel-layout backlog-panel"><PanelHeader eyebrow="Backlog risk" title="Age of open work" aside={`Oldest ${hours(report.backlog.oldestHours)}`} /><BacklogAging backlog={report.backlog} /></article>
+          <div className="rp-exec-grid">
+            <article className="ui-card rp-panel"><PanelHeader eyebrow="Activity trend" title="Received vs delivered" aside="Daily volume" /><Trend points={report.executive.trend} /><p className="report-definition">Delivered activity can include packages received before the selected period.</p></article>
+            <article className="ui-card rp-panel"><PanelHeader eyebrow="Channel mix" title="How work enters the platform" /><SourceMix intake={report.intake} /></article>
+          </div>
+          <article className="ui-card rp-panel"><PanelHeader eyebrow="Selected intake progress" title="What happened to work received in this period" /><IntakeProgress report={report} /></article>
+        </>}
       </section>
-    </>}
+
+      <section className="rp-section" aria-labelledby="rp-risk-heading">
+        <SectionHead id="rp-risk-heading" title="Current operational risk" description="Live queue state right now, independent of the selected period." />
+        <div className="rp-risk-grid">
+          <article className="ui-card rp-panel rp-action-panel">
+            <div className="rp-risk-summary">
+              <div><span>Open now</span><strong>{formatNumber.format(report.executive.currentBacklog)}</strong><small>All open packages</small></div>
+              <div className={report.executive.currentAttention > 0 ? 'is-alert' : ''}><span>Needs action</span><strong>{formatNumber.format(report.executive.currentAttention)}</strong><small>Technical, review, or approval</small></div>
+              <div><span>Oldest open</span><strong>{hours(report.backlog.oldestHours)}</strong><small>Age of oldest package</small></div>
+            </div>
+            <ul className="rp-action-list" aria-label="Where action is needed">
+              {([
+                ['TECHNICAL_ATTENTION', 'Technical attention', 'Processing or delivery issue', report.processing.technicalAttention, 'danger'],
+                ['NEEDS_REVIEW', 'Manual review', 'Current business review queue', report.processing.needsReview, 'warning'],
+                ['NEEDS_APPROVAL', 'Approval', 'Ready for release decision', report.processing.needsApproval, 'info'],
+              ] as Array<[DashboardStage, string, string, number, string]>).map(([stage, label, detail, count, tone]) => (
+                <li key={stage}>
+                  <button type="button" className={`rp-action-row tone-${tone}`} disabled={!canDrillDown} onClick={() => navigateStage(stage)}
+                    aria-label={canDrillDown ? `${label}: ${count}. Open on Dashboard` : `${label}: ${count}`}>
+                    <i aria-hidden="true" />
+                    <span><strong>{label}</strong><small>{detail}</small></span>
+                    <b>{formatNumber.format(count)}</b>
+                    {canDrillDown && <Icon name="chevronRight" className="rp-action-chevron" />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="report-definition">{canDrillDown ? 'Straight-through describes the selected period; manual review is the live queue, so both can be true at once.' : 'Executive access is aggregate-only. Authorized workflow owners can investigate individual packages.'}</p>
+          </article>
+          <article className="ui-card rp-panel"><PanelHeader eyebrow="Backlog risk" title="Age of open work" aside={`Oldest ${hours(report.backlog.oldestHours)}`} /><BacklogAging backlog={report.backlog} /></article>
+        </div>
+      </section>
+    </div>}
 
     {report && view === 'business' && canViewBusiness && <>
       <section className="report-section-intro"><div><p className="eyebrow">Business Admin</p><h2>Workflow performance and business value</h2></div><p>Understand automation, human effort, turnaround, intake quality, delivery, and backlog without exposing document contents.</p></section>
