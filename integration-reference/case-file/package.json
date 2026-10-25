@@ -1,0 +1,30 @@
+{
+  "name": "securedoc-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node node_modules/typescript/lib/tsc.js --noEmit && vite build",
+    "preview": "vite preview",
+    "test:auth": "node --experimental-strip-types --test src/security/uiAuthorization.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.30.6",
+    "swr": "^2.5.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.3",
+    "vite": "^6.4.3"
+  }
+}
