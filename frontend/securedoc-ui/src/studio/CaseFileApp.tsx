@@ -3,8 +3,9 @@ import { Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom';
 import { Moon, Search, Sun } from 'lucide-react';
 import { useTheme } from './theme';
 import type { CurrentUser } from '../types';
-import { ADMIN_CAPS, CAP, needsYou, useMe, usePackages, useReviewQueue } from './data';
-import { Kbd, Notice, Spinner } from './atoms';
+import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
+import { useBranding } from '../branding/BrandingContext';
+import { Kbd } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
 import Desk from './Desk';
@@ -36,37 +37,22 @@ function ThemeToggle() {
   );
 }
 
-export default function CaseFileApp() {
-  const { data: me, error } = useMe();
-
-  if (error) {
-    return (
-      <div className="cf cf-boot">
-        <Notice tone="danger">We couldn&apos;t load your session. Refresh the page to try again.</Notice>
-      </div>
-    );
-  }
-  if (!me) {
-    return (
-      <div className="cf cf-boot">
-        <Spinner label="Loading your workspace" />
-      </div>
-    );
-  }
-
-  const caps = me.capabilities;
+export default function CaseFileApp({ me, onSignOut }: { me: CurrentUser; onSignOut: () => void }) {
+  // The production App owns OIDC validation, session expiry and principal capabilities.
+  const caps = me.capabilities ?? [];
   if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
 
   return (
     <div className="cf">
       <ToastProvider>
-        <Workspace me={me} caps={caps} />
+        <Workspace me={me} caps={caps} onSignOut={onSignOut} />
       </ToastProvider>
     </div>
   );
 }
 
-function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
+function Workspace({ me, caps, onSignOut }: { me: CurrentUser; caps: string[]; onSignOut: () => void }) {
+  const { branding } = useBranding();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const canDesk = caps.includes(CAP.desk);
   const canIntake = caps.includes(CAP.intake);
@@ -97,9 +83,11 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
     <div className="cf-shell">
       <a className="cf-skip" href="#cf-main">Skip to content</a>
       <header className="cf-top">
-        <NavLink to={home} className="cf-brand" aria-label="LexaVault home">
-          <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>
-          <span className="cf-brand-word">LexaVault</span>
+        <NavLink to={home} className="cf-brand" aria-label={`${branding.applicationName} home`}>
+          {branding.compactLogoDataUrl || branding.primaryLogoDataUrl
+            ? <img src={branding.compactLogoDataUrl || branding.primaryLogoDataUrl || ''} alt="" className="cf-brand-image" style={{ maxHeight: 30, maxWidth: 110, objectFit: 'contain' }} />
+            : <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>}
+          <span className="cf-brand-word">{branding.shortName || branding.applicationName}</span>
         </NavLink>
 
         <nav className="cf-nav" aria-label="Workspace">
@@ -142,9 +130,10 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
           <span className="cf-me-avatar" aria-hidden="true">{initials(me.username)}</span>
           <span className="cf-me-text">
             <span className="cf-me-name">{displayName(me.username)}</span>
-            <span className="cf-me-org">{me.tenantName}</span>
+            <span className="cf-me-org">{branding.organizationName || me.tenantName}</span>
           </span>
         </div>
+        <button type="button" className="cf-theme-toggle" onClick={onSignOut} aria-label="Sign out" title="Sign out">Sign out</button>
       </header>
 
       <main className="cf-main" id="cf-main">
