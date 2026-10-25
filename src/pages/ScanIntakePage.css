@@ -1,68 +1,132 @@
-.scan-intake-page { width: min(1180px, 100%); margin: 0 auto; }
-.scan-intake-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
-.scan-intake-header h1 { margin: 0.15rem 0 0.25rem; }
-.scan-intake-header p, .scan-intake-help { color: var(--ui-text-muted); font-size: var(--type-body); }
-.scan-intake-eyebrow { color: var(--ui-info); font-size: var(--type-sm); font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
-.scan-bridge-state { padding: 0.35rem 0.65rem; border-radius: 999px; font-size: var(--type-sm); font-weight: 700; white-space: nowrap; }
-.scan-bridge-state.is-online { background: var(--ui-success-bg); color: var(--ui-success); }
-.scan-bridge-state.is-offline { background: var(--ui-danger-bg); color: var(--ui-danger); }
-.scan-intake-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr); gap: 1rem; align-items: start; }
-.scan-intake-card { margin: 0; }
-.scan-intake-card h2, .scan-boundary-card h2 { margin-bottom: 0.25rem; font-size: var(--type-body-lg); color: var(--ui-text-strong); }
-.scan-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; margin-top: 1rem; }
-.scan-device-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; margin: 1rem 0; }
-.scan-device-summary > div, .scan-technical-grid > div { padding: 0.65rem; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface-subtle); min-width: 0; }
-.scan-device-summary span, .scan-technical-grid span { display: block; margin-bottom: 0.15rem; color: var(--ui-text-muted); font-size: var(--type-xs); text-transform: uppercase; letter-spacing: 0.04em; }
-.scan-device-summary strong { display: block; overflow-wrap: anywhere; font-size: var(--type-sm); color: var(--ui-text-secondary); }
-.scan-action-panel, .scan-waiting-panel, .scan-ready-panel { margin-top: 1rem; padding: 1rem; border-radius: 10px; }
-.scan-action-panel { border: 1px solid var(--ui-border-strong); background: var(--ui-inverse); }
-.scan-action-panel p { margin-bottom: 0.75rem; color: var(--ui-text-muted); font-size: var(--type-body-sm); }
-.scan-waiting-panel { border: 1px solid var(--ui-sidebar-text); background: var(--ui-info-bg); text-align: center; }
-.scan-waiting-panel h3 { margin: 0.25rem 0; color: var(--ui-info); }
-.scan-waiting-panel p { color: var(--ui-text-secondary); font-size: var(--type-body-sm); overflow-wrap: anywhere; }
-.scan-waiting-panel.is-disconnected { border-color: var(--ui-border); background: var(--ui-danger-bg); }
-.scan-waiting-panel.is-disconnected h3 { color: var(--ui-danger); }
-.scan-pulse, .scan-disconnected-indicator { width: 14px; height: 14px; margin: 0 auto 0.4rem; border-radius: 999px; }
-.scan-pulse { background: var(--brand-accent); box-shadow: 0 0 0 6px rgba(46, 144, 250, 0.12); }
-.scan-disconnected-indicator { background: var(--ui-danger); box-shadow: 0 0 0 6px rgba(240, 68, 56, 0.12); }
-.scan-session-reference { margin: 0.7rem 0; color: var(--ui-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--type-xs); overflow-wrap: anywhere; }
-.scan-ready-panel { border: 1px solid var(--ui-sidebar-text); background: var(--ui-success-bg); }
-.scan-ready-panel h3 { margin: 0.4rem 0 0.75rem; color: var(--ui-success); }
-.scan-ready-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 999px; background: var(--ui-border); color: var(--ui-success); font-size: var(--type-xs); font-weight: 800; }
-.scan-technical-grid { display: grid; gap: 0.5rem; }
-.scan-technical-grid code { display: block; color: var(--ui-text-secondary); font-size: var(--type-xs); white-space: normal; overflow-wrap: anywhere; }
-.scan-ready-panel .scan-intake-help { margin: 0.8rem 0; }
-.scan-boundary-card { margin-top: 1rem; }
-.scan-boundary-card > p { color: var(--ui-text-muted); font-size: var(--type-body-sm); }
-.scan-prohibited-list { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
-.scan-prohibited-list span { padding: 0.3rem 0.55rem; border-radius: 999px; background: var(--ui-surface-subtle); color: var(--ui-text-secondary); font-size: var(--type-xs); font-weight: 650; }
+.scan-intake-page { width: min(1240px, 100%); margin: 0 auto; }
 
-@media (max-width: 900px) {
-  .scan-intake-grid { grid-template-columns: 1fr; }
+.scan-bridge-state { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: 999px; background: var(--ui-surface); color: var(--ui-text-secondary); font-size: var(--type-sm); font-weight: 650; white-space: nowrap; }
+.scan-bridge-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--ui-text-disabled); }
+.scan-bridge-state.is-online .scan-bridge-dot { background: var(--ui-success); box-shadow: 0 0 0 3px var(--ui-success-bg); }
+.scan-bridge-state.is-offline { color: var(--ui-danger); }
+.scan-bridge-state.is-offline .scan-bridge-dot { background: var(--ui-danger); box-shadow: 0 0 0 3px var(--ui-danger-bg); }
+
+.scan-alerts { display: flex; flex-direction: column; gap: 8px; }
+.scan-alerts:empty { display: none; }
+.scan-capability-note { padding: 10px 14px; border: 1px dashed var(--ui-border-strong); border-radius: var(--ui-radius-md, 8px); color: var(--ui-text-muted); font-size: var(--type-sm); line-height: 1.5; }
+
+.scan-station { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: stretch; margin-top: 16px; }
+.scan-station > .ui-card { margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: var(--radius-surface-lg); }
+
+/* Package identity */
+.scan-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 22px 4px; }
+.scan-panel-head h2, .scan-deck-head h2 { margin: 0; color: var(--ui-text-strong); font-size: var(--type-body-lg); font-weight: 700; letter-spacing: -0.01em; }
+.scan-panel-head p { margin: 4px 0 0; color: var(--ui-text-muted); font-size: var(--type-sm); line-height: 1.5; }
+.scan-readiness { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: var(--ui-surface-sunken); color: var(--ui-text-secondary); font-size: var(--type-xs); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scan-readiness.is-ready { background: var(--ui-success-bg); color: var(--ui-success); }
+
+.scan-field-list { display: flex; flex-direction: column; gap: 18px; padding: 18px 22px 22px; }
+.scan-field label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: var(--ui-text-strong); font-size: var(--type-sm); font-weight: 650; }
+.scan-required, .scan-optional { color: var(--ui-text-muted); font-size: var(--type-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.scan-required { color: var(--ui-text-secondary); }
+.scan-field-control { position: relative; }
+.scan-field-control input, .scan-field-control select { width: 100%; height: 44px; padding: 0 40px 0 12px; border: 1px solid var(--ui-border-strong); border-radius: 8px; background: var(--ui-surface); color: var(--ui-text-strong); font-size: var(--type-body); transition: border-color var(--motion-fast), box-shadow var(--motion-fast); }
+.scan-field-control input.is-primary-identifier { height: 52px; font-family: var(--font-mono); font-size: var(--type-body-lg); letter-spacing: 0.02em; }
+.scan-field-control input:focus, .scan-field-control select:focus { outline: none; border-color: var(--brand-accent); box-shadow: 0 0 0 3px var(--ui-focus-ring); }
+.scan-field-control input:disabled, .scan-field-control select:disabled { background: var(--ui-surface-sunken); color: var(--ui-text-secondary); cursor: not-allowed; }
+.scan-field.has-error input, .scan-field.has-error select { border-color: var(--ui-danger); }
+.scan-field-check { position: absolute; top: 50%; right: 12px; transform: translateY(-50%); color: var(--ui-success); pointer-events: none; }
+.scan-field select + .scan-field-check { right: 34px; }
+.scan-field .field-error { display: block; margin-top: 6px; color: var(--ui-danger); font-size: var(--type-xs); }
+.scan-field-skeleton { display: flex; flex-direction: column; gap: 18px; padding: 18px 22px 22px; }
+.scan-field-skeleton span { height: 44px; border-radius: 8px; background: var(--ui-surface-sunken); animation: scan-shimmer 1.4s ease-in-out infinite; }
+.scan-locked-note { display: flex; align-items: center; gap: 6px; margin: auto 0 0; padding: 12px 22px; border-top: 1px solid var(--ui-border-soft); background: var(--ui-surface-subtle); color: var(--ui-text-muted); font-size: var(--type-xs); }
+
+/* Scanner deck */
+.scan-deck-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--ui-border-soft); }
+.scan-device { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.scan-device-icon { display: grid; place-items: center; flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; background: var(--ui-ink); color: var(--ui-ink-text); }
+.scan-device-state { display: flex; align-items: center; gap: 6px; margin: 2px 0 0; color: var(--ui-text-secondary); font-size: var(--type-sm); }
+.scan-device-meta { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--ui-border); color: var(--ui-text-muted); font-family: var(--font-mono); font-size: var(--type-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 999px; }
+.scan-dot.is-on { background: var(--ui-success); }
+.scan-dot.is-off { background: var(--ui-danger); }
+.scan-mode-chip { flex: 0 0 auto; padding: 3px 9px; border: 1px solid var(--ui-border); border-radius: 6px; color: var(--ui-text-secondary); font-family: var(--font-mono); font-size: var(--type-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.scan-lifecycle { display: flex; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--ui-border-soft); }
+.scan-lifecycle li { position: relative; display: flex; flex: 1 1 0; align-items: center; gap: 10px; min-width: 0; padding: 14px 16px; color: var(--ui-text-muted); }
+.scan-lifecycle li + li { border-left: 1px solid var(--ui-border-soft); }
+.scan-lifecycle li::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent; }
+.scan-lifecycle li.is-current::after { background: var(--brand-accent); }
+.scan-lifecycle li.is-attention::after { background: var(--ui-warning); }
+.scan-lifecycle-mark { display: grid; place-items: center; flex: 0 0 auto; width: 22px; height: 22px; border: 1px solid var(--ui-border-strong); border-radius: 999px; font-size: var(--type-2xs); font-weight: 700; font-variant-numeric: tabular-nums; }
+.scan-lifecycle li.is-complete .scan-lifecycle-mark { border-color: var(--ui-success); background: var(--ui-success); color: var(--ui-surface); }
+.scan-lifecycle li.is-current .scan-lifecycle-mark { border-color: var(--brand-accent); background: var(--brand-accent); color: var(--ui-surface); }
+.scan-lifecycle li.is-attention .scan-lifecycle-mark { border-color: var(--ui-warning); background: var(--ui-warning); color: var(--ui-surface); }
+.scan-lifecycle-text { display: flex; flex-direction: column; min-width: 0; }
+.scan-lifecycle-text strong { color: inherit; font-size: var(--type-sm); font-weight: 650; }
+.scan-lifecycle li.is-current .scan-lifecycle-text strong, .scan-lifecycle li.is-complete .scan-lifecycle-text strong, .scan-lifecycle li.is-attention .scan-lifecycle-text strong { color: var(--ui-text-strong); }
+.scan-lifecycle-text small { overflow: hidden; color: var(--ui-text-muted); font-size: var(--type-xs); text-overflow: ellipsis; white-space: nowrap; }
+
+.scan-stage { display: flex; flex: 1 1 auto; align-items: center; gap: 28px; padding: 28px 28px 30px; background: var(--ui-surface-subtle); }
+.scan-stage-body { display: flex; flex: 1 1 auto; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.scan-stage-body h3 { margin: 0; color: var(--ui-text-strong); font-size: var(--type-title-md, 1.25rem); font-weight: 700; letter-spacing: -0.015em; line-height: 1.25; overflow-wrap: anywhere; text-wrap: balance; }
+.scan-stage-body p { margin: 0; max-width: 52ch; color: var(--ui-text-secondary); font-size: var(--type-body-sm); line-height: 1.55; overflow-wrap: anywhere; }
+.scan-stage-hint { color: var(--ui-warning) !important; }
+.scan-stage-tag { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--brand-accent); font-family: var(--font-mono); font-size: var(--type-2xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.scan-stage-tag::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.scan-stage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.scan-stage-actions .ui-button { display: inline-flex; align-items: center; gap: 8px; }
+.scan-start { min-width: 148px; justify-content: center; }
+.scan-blocker { color: var(--ui-text-muted); font-size: var(--type-xs); }
+.scan-hidden-file { display: none; }
+.scan-safe-code { font-family: var(--font-mono); font-size: var(--type-xs) !important; color: var(--ui-text-muted) !important; }
+
+.scan-file { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.scan-file-icon { display: grid; place-items: center; flex: 0 0 auto; width: 44px; height: 54px; border: 1px solid var(--ui-border-strong); border-radius: 6px; background: var(--ui-surface); color: var(--ui-danger); font-family: var(--font-mono); font-size: var(--type-2xs); font-weight: 700; }
+.scan-file h3 { font-family: var(--font-mono); font-size: var(--type-body-lg); letter-spacing: 0; }
+
+.scan-tech, .scan-device-details { width: 100%; margin-top: 14px; }
+.scan-tech summary, .scan-device-details summary { cursor: pointer; color: var(--ui-text-secondary); font-size: var(--type-xs); font-weight: 650; }
+.scan-tech dl, .scan-device-details dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; margin: 10px 0 0; }
+.scan-tech dt, .scan-device-details dt { color: var(--ui-text-muted); font-size: var(--type-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.scan-tech dd, .scan-device-details dd { margin: 2px 0 0; color: var(--ui-text-secondary); font-size: var(--type-xs); overflow-wrap: anywhere; }
+.scan-tech code, .scan-device-details code { font-family: var(--font-mono); font-size: var(--type-xs); white-space: normal; overflow-wrap: anywhere; }
+
+/* Feed tray: the signature visual. Sheets sit in the tray; the beam sweeps while scanning. */
+.scan-tray { position: relative; flex: 0 0 auto; width: 128px; height: 156px; }
+.scan-sheet { position: absolute; left: 14px; width: 100px; height: 128px; border: 1px solid var(--ui-border-strong); border-radius: 4px; background: var(--ui-surface); background-image: repeating-linear-gradient(to bottom, transparent 0 18px, var(--ui-border-soft) 18px 20px); background-clip: content-box; padding: 18px 14px; transition: transform var(--motion-base), opacity var(--motion-base); }
+.scan-sheet:nth-child(1) { top: 20px; transform: rotate(-4deg) translateX(-6px); opacity: .55; }
+.scan-sheet:nth-child(2) { top: 14px; transform: rotate(2deg) translateX(4px); opacity: .8; }
+.scan-sheet:nth-child(3) { top: 8px; box-shadow: var(--shadow-surface); }
+.scan-beam { position: absolute; left: 6px; right: 6px; top: 8px; height: 2px; border-radius: 2px; background: var(--brand-accent); box-shadow: 0 0 12px 2px var(--ui-focus-ring); opacity: 0; }
+.scan-deck.is-scanning .scan-beam { opacity: 1; animation: scan-sweep 1.8s cubic-bezier(.45, 0, .55, 1) infinite alternate; }
+.scan-deck.is-ready .scan-sheet:nth-child(-n+2), .scan-deck.is-queued .scan-sheet:nth-child(-n+2), .scan-deck.is-done .scan-sheet:nth-child(-n+2) { transform: none; opacity: 0; }
+.scan-deck.is-ready .scan-sheet:nth-child(3) { border-color: var(--brand-accent); }
+.scan-deck.is-queued .scan-sheet:nth-child(3) { transform: translateY(-6px); border-color: var(--ui-info); }
+.scan-deck.is-done .scan-sheet:nth-child(3) { border-color: var(--ui-success); }
+.scan-deck.is-attention .scan-stage-tag { color: var(--ui-warning); }
+.scan-deck.is-attention .scan-sheet:nth-child(3) { border-color: var(--ui-warning); }
+.scan-deck.is-disconnected .scan-stage-tag { color: var(--ui-danger); }
+.scan-deck.is-done .scan-stage-tag { color: var(--ui-success); }
+.scan-deck.is-idle .scan-stage-tag { color: var(--ui-text-muted); }
+
+.scan-deck-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; padding: 12px 22px; border-top: 1px solid var(--ui-border-soft); }
+.scan-queue { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ui-text-muted); font-size: var(--type-xs); }
+.scan-queue strong { margin-right: 4px; color: var(--ui-text-strong); font-variant-numeric: tabular-nums; }
+.scan-queue .is-attention, .scan-queue .is-attention strong { color: var(--ui-warning); }
+.scan-deck-foot .scan-device-details { width: auto; margin: 0; }
+.scan-deck-foot .scan-device-details[open] { flex-basis: 100%; }
+
+@keyframes scan-sweep { from { top: 10px; } to { top: 132px; } }
+@keyframes scan-shimmer { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) {
+  .scan-deck.is-scanning .scan-beam, .scan-field-skeleton span { animation: none; }
+}
+
+@media (max-width: 1024px) {
+  .scan-station { grid-template-columns: minmax(0, 1fr); }
+  .scan-lifecycle-text small { display: none; }
 }
 @media (max-width: 640px) {
-  .scan-intake-header { flex-direction: column; }
-  .scan-field-grid, .scan-device-summary { grid-template-columns: 1fr; }
+  .scan-stage { flex-direction: column; align-items: flex-start; gap: 18px; padding: 22px; }
+  .scan-tray { width: 112px; height: 120px; }
+  .scan-sheet { height: 100px; width: 86px; }
+  .scan-lifecycle li { padding: 12px 8px; justify-content: center; }
+  .scan-lifecycle-text { display: none; }
 }
-
-
-.scan-queue-summary { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; color: var(--ui-text-secondary); font-size: var(--type-sm); }
-.scan-queue-summary span { padding: 0.3rem 0.55rem; border-radius: 999px; background: var(--ui-surface-subtle); }
-.scan-queue-summary .is-attention { background: var(--ui-warning-bg); color: var(--ui-warning); }
-.scan-connected-row { display: flex; align-items: center; gap: 0.45rem; margin: 0.9rem 0; color: var(--ui-text-secondary); }
-.scan-connected-dot, .scan-offline-dot { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
-.scan-connected-dot { background: var(--ui-chart-teal); }
-.scan-offline-dot { background: var(--ui-danger); }
-.scan-device-details, .scan-technical-details { margin: 0.75rem 0; }
-.scan-device-details summary, .scan-technical-details summary { cursor: pointer; color: var(--ui-text-secondary); font-size: var(--type-sm); font-weight: 650; }
-.scan-hidden-file { display: none; }
-.scan-cancel-button { margin-left: 0.45rem; }
-.scan-primary-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin-top: 0.85rem; }
-.scan-queued-panel, .scan-attention-panel { margin-top: 1rem; padding: 1rem; border-radius: 10px; }
-.scan-queued-panel { border: 1px solid var(--ui-sidebar-text); background: var(--ui-info-bg); }
-.scan-queued-panel h3 { margin: 0.45rem 0; color: var(--ui-info); }
-.scan-queued-panel p, .scan-attention-panel p { color: var(--ui-text-secondary); font-size: var(--type-body-sm); }
-.scan-attention-panel { border: 1px solid var(--ui-border-strong); background: var(--ui-warning-bg); }
-.scan-attention-panel h3 { margin: 0.45rem 0; color: var(--ui-warning); }
-.scan-attention-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 999px; background: var(--ui-warning-bg); color: var(--ui-warning); font-size: var(--type-xs); font-weight: 800; }
-.scan-safe-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

@@ -6,12 +6,13 @@ import type { ApiError, IdentifierDefinition } from '../types';
 import './ScanIntakePage.css';
 import { useBranding } from '../branding/BrandingContext';
 import PageScaffold from '../components/ui/PageScaffold';
-import WorkflowStepper from '../components/ui/WorkflowStepper';
+import Icon from '../components/ui/Icon';
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 };
 
 const canonicalIdentifierValue = (definition: IdentifierDefinition, raw: string) => {
@@ -42,6 +43,27 @@ const validateIdentifierValue = (definition: IdentifierDefinition, raw: string):
 const isBridgeUnavailableError = (error: ScanBridgeError) => error.source === 'scanBridge' && !error.errorCode;
 const LOST_SESSION_MESSAGE = 'The previous scan session is no longer active. Start a new scan.';
 
+type LifecycleState = 'complete' | 'current' | 'upcoming' | 'attention';
+const LIFECYCLE = [
+  { key: 'identify', label: 'Identify', detail: 'Business fields' },
+  { key: 'capture', label: 'Capture', detail: 'One consolidated PDF' },
+  { key: 'verify', label: 'Verify', detail: 'Stable file check' },
+  { key: 'queue', label: 'Hand off', detail: 'Durable delivery' },
+] as const;
+
+const lifecycleIndexFor = (session: ScanSession | null) => {
+  if (!session) return 0;
+  switch (session.status) {
+    case 'WAITING_FOR_SCAN': return 1;
+    case 'READY': return 2;
+    case 'QUEUED':
+    case 'SUBMITTING':
+    case 'ATTENTION_REQUIRED': return 3;
+    case 'SUBMITTED': return 4;
+    default: return 1;
+  }
+};
+
 export default function ScanIntakePage() {
   const { branding } = useBranding();
   const [definitions, setDefinitions] = useState<IdentifierDefinition[]>([]);
@@ -49,6 +71,7 @@ export default function ScanIntakePage() {
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus | null>(null);
   const [bridgeAvailable, setBridgeAvailable] = useState<boolean | null>(null);
   const [identifierValues, setIdentifierValues] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [session, setSession] = useState<ScanSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -195,6 +218,9 @@ export default function ScanIntakePage() {
   const canStart = !loading && bridgeAvailable === true && !!bridgeConfig?.enabled && acquisitionAvailable && storageHealthy
     && scannerStatus?.busy !== true && definitions.length > 0 && !Object.values(identifierErrors).some(Boolean) && !session && !starting;
 
+  const requiredDefinitions = definitions.filter((definition) => definition.required);
+  const requiredComplete = requiredDefinitions.filter((definition) => !identifierErrors[definition.key]).length;
+
   const startSession = async () => {
     if (!canStart) return;
     setStarting(true); setError(null); setNotice(null);
@@ -258,192 +284,302 @@ export default function ScanIntakePage() {
   const startNext = () => {
     setSession(null);
     setIdentifierValues({});
+    setTouched({});
     setError(null);
     setNotice(null);
   };
 
   const bridgeState = bridgeConfig && !bridgeConfig.enabled
-    ? { className: 'is-offline', label: 'Bridge disabled' }
+    ? { tone: 'is-offline', label: 'Bridge disabled' }
     : bridgeAvailable === false
-      ? { className: 'is-offline', label: 'Bridge unavailable' }
+      ? { tone: 'is-offline', label: 'Bridge unavailable' }
       : bridgeConfig && bridgeAvailable === true
-        ? { className: 'is-online', label: 'Bridge ready' }
+        ? { tone: 'is-online', label: 'Bridge ready' }
         : null;
 
-  const scannerLabel = bridgeConfig?.captureMode === 'SIMULATOR' ? 'Test simulator' : 'Scanner';
+  const isSimulator = bridgeConfig?.captureMode === 'SIMULATOR';
+  const scannerLabel = isSimulator ? 'Test simulator' : 'Scanner';
+  const lifecycleIndex = lifecycleIndexFor(session);
+  const attention = session?.status === 'ATTENTION_REQUIRED';
+  const lifecycleState = (index: number): LifecycleState => {
+    if (index === 0 && !session) return identifiersReady ? 'complete' : 'current';
+    if (index < lifecycleIndex) return 'complete';
+    if (index === lifecycleIndex) return attention ? 'attention' : 'current';
+    return 'upcoming';
+  };
+
+  const startBlocker = !session && !canStart && !loading
+    ? bridgeAvailable !== true ? 'Scanner Bridge is not reachable from this workstation.'
+      : bridgeConfig && !bridgeConfig.enabled ? 'Scanner Bridge is disabled for this site.'
+        : !acquisitionAvailable ? 'No scanner is available for acquisition.'
+          : !storageHealthy ? 'Workstation storage needs attention.'
+            : scannerStatus?.busy ? 'The scanner is busy with another job.'
+              : !identifiersReady ? `Complete ${requiredDefinitions.length - requiredComplete} required field${requiredDefinitions.length - requiredComplete === 1 ? '' : 's'} to start.`
+                : null
+    : null;
+
+  const deckTone = attention ? 'is-attention'
+    : session?.status === 'SUBMITTED' ? 'is-done'
+      : session?.status === 'READY' ? 'is-ready'
+        : session?.status === 'WAITING_FOR_SCAN' ? (bridgeAvailable === false ? 'is-disconnected' : 'is-scanning')
+          : session ? 'is-queued' : 'is-idle';
 
   return (
     <PageScaffold className="scan-intake-page" breadcrumbs={[{ label: 'Scanner Intake' }]} title="Scan Documents"
       eyebrow="Scanner intake"
-      description="Identify the package, capture one consolidated PDF, and hand it off durably for processing."
-      actions={bridgeState ? <div className={`scan-bridge-state ${bridgeState.className}`}>{bridgeState.label}</div> : undefined}>
-
-      <WorkflowStepper
-        ariaLabel="Scanner intake progress"
-        steps={[
-          { label: 'Identify package', description: 'Business fields', state: session || identifiersReady ? 'complete' : 'current' },
-          { label: 'Capture document', description: 'One consolidated PDF', state: !session ? 'upcoming' : session.status === 'WAITING_FOR_SCAN' ? 'current' : 'complete' },
-          { label: 'Queue & continue', description: 'Durable handoff', state: session?.status === 'READY' ? 'current' : session && ['QUEUED', 'SUBMITTING', 'SUBMITTED', 'ATTENTION_REQUIRED'].includes(session.status) ? 'complete' : 'upcoming' },
-        ]}
-      />
-
-      {bridgeError && <div className="ui-alert tone-danger">{bridgeError}</div>}
-      {bridgeAvailable === false && <div className="scan-device-capability-note">Physical scanner acquisition runs on a workstation with the Scanner Bridge. Tablet and iPad users can still view package status and continue other browser workflows.</div>}
-      {scannerStatus && !scannerStatus.storageHealthy && (
-        <div className="ui-alert tone-danger">Scanner workstation storage needs attention before a new package can be scanned.</div>
-      )}
-      {error && <div className="ui-alert tone-danger">{error}</div>}
-      {notice && <div className="ui-alert tone-info">{notice}</div>}
-      {scannerStatus && (scannerStatus.queuedCount > 0 || scannerStatus.attentionRequiredCount > 0) && (
-        <div className="scan-queue-summary">
-          {scannerStatus.queuedCount > 0 && <span>{scannerStatus.queuedCount} scanner package{scannerStatus.queuedCount === 1 ? '' : 's'} delivering</span>}
-          {scannerStatus.attentionRequiredCount > 0 && <span className="is-attention">{scannerStatus.attentionRequiredCount} need technical attention</span>}
+      description="Identify the physical package, capture it as one consolidated PDF, and hand it off durably."
+      actions={bridgeState ? (
+        <div className={`scan-bridge-state ${bridgeState.tone}`} role="status">
+          <span className="scan-bridge-dot" aria-hidden="true" />{bridgeState.label}
         </div>
-      )}
+      ) : undefined}>
 
-      <div className="scan-intake-grid">
-        <section className="ui-card scan-intake-card">
-          <h2>1. Business information</h2>
-          <p className="scan-intake-help">Fields are controlled by this tenant's Business Admin configuration and are validated again by {branding.applicationName} on submission.</p>
-          {loading ? <p>Loading tenant intake requirements…</p> : definitions.length === 0 ? (
+      <div className="scan-alerts" aria-live="polite">
+        {bridgeError && <div className="ui-alert tone-danger">{bridgeError}</div>}
+        {bridgeAvailable === false && <div className="scan-capability-note">Physical scanner acquisition runs on a workstation with the Scanner Bridge. Tablet and iPad users can still view package status and continue other browser workflows.</div>}
+        {scannerStatus && !scannerStatus.storageHealthy && (
+          <div className="ui-alert tone-danger">Scanner workstation storage needs attention before a new package can be scanned.</div>
+        )}
+        {error && <div className="ui-alert tone-danger">{error}</div>}
+        {notice && <div className="ui-alert tone-info">{notice}</div>}
+      </div>
+
+      <div className="scan-station">
+        <section className="ui-card scan-manifest" aria-labelledby="scan-manifest-title">
+          <header className="scan-panel-head">
+            <div>
+              <h2 id="scan-manifest-title">Package identity</h2>
+              <p>Defined by your Business Admin and re-validated by {branding.applicationName} on submission.</p>
+            </div>
+            {definitions.length > 0 && (
+              <span className={`scan-readiness ${identifiersReady ? 'is-ready' : ''}`}>
+                {identifiersReady ? <><Icon name="check" width={14} height={14} />Ready</> : `${requiredComplete} of ${requiredDefinitions.length} required`}
+              </span>
+            )}
+          </header>
+
+          {loading ? (
+            <div className="scan-field-skeleton" aria-busy="true" aria-label="Loading intake requirements">
+              <span /><span /><span />
+            </div>
+          ) : definitions.length === 0 ? (
             <div className="ui-alert tone-danger">No business identifier definitions are configured for this tenant.</div>
           ) : (
-            <div className="scan-field-grid">
-              {definitions.map((definition) => (
-                <div className="form-group" key={definition.key}>
-                  <label htmlFor={`scan-id-${definition.key}`}>{definition.label}{definition.required ? ' *' : ''}</label>
-                  {definition.allowedValues.length > 0 ? (
-                    <select id={`scan-id-${definition.key}`} value={identifierValues[definition.key] || ''} disabled={!!session}
-                      onChange={(event) => setIdentifierValues((current) => ({ ...current, [definition.key]: event.target.value }))}>
-                      <option value="">Select…</option>
-                      {definition.allowedValues.map((value) => <option key={value} value={value}>{value}</option>)}
-                    </select>
-                  ) : (
-                    <input id={`scan-id-${definition.key}`} value={identifierValues[definition.key] || ''} disabled={!!session}
-                      onChange={(event) => setIdentifierValues((current) => ({ ...current, [definition.key]: event.target.value }))} />
-                  )}
-                  {identifierErrors[definition.key] && <span className="field-error">{identifierErrors[definition.key]}</span>}
-                </div>
-              ))}
+            <div className="scan-field-list">
+              {definitions.map((definition, index) => {
+                const fieldId = `scan-id-${definition.key}`;
+                const fieldError = identifierErrors[definition.key];
+                const showError = !!fieldError && (touched[definition.key] || !!identifierValues[definition.key]);
+                const valid = !fieldError && !!identifierValues[definition.key];
+                return (
+                  <div className={`scan-field ${showError ? 'has-error' : ''} ${valid ? 'is-valid' : ''}`} key={definition.key}>
+                    <label htmlFor={fieldId}>
+                      {definition.label}
+                      {definition.required ? <span className="scan-required" aria-hidden="true">Required</span> : <span className="scan-optional">Optional</span>}
+                    </label>
+                    <div className="scan-field-control">
+                      {definition.allowedValues.length > 0 ? (
+                        <select id={fieldId} value={identifierValues[definition.key] || ''} disabled={!!session}
+                          aria-invalid={showError} aria-describedby={showError ? `${fieldId}-error` : undefined}
+                          onBlur={() => setTouched((current) => ({ ...current, [definition.key]: true }))}
+                          onChange={(event) => setIdentifierValues((current) => ({ ...current, [definition.key]: event.target.value }))}>
+                          <option value="">Select…</option>
+                          {definition.allowedValues.map((value) => <option key={value} value={value}>{value}</option>)}
+                        </select>
+                      ) : (
+                        <input id={fieldId} value={identifierValues[definition.key] || ''} disabled={!!session}
+                          autoFocus={index === 0 && !session} autoComplete="off" spellCheck={false}
+                          className={index === 0 ? 'is-primary-identifier' : undefined}
+                          aria-invalid={showError} aria-describedby={showError ? `${fieldId}-error` : undefined}
+                          onBlur={() => setTouched((current) => ({ ...current, [definition.key]: true }))}
+                          onChange={(event) => setIdentifierValues((current) => ({ ...current, [definition.key]: event.target.value }))} />
+                      )}
+                      {valid && <Icon name="check" className="scan-field-check" width={16} height={16} />}
+                    </div>
+                    {showError && <span className="field-error" id={`${fieldId}-error`}>{fieldError}</span>}
+                  </div>
+                );
+              })}
             </div>
+          )}
+
+          {session && (
+            <p className="scan-locked-note"><Icon name="shield" width={14} height={14} />Identity is locked to this scan session.</p>
           )}
         </section>
 
-        <section className="ui-card scan-intake-card">
-          <h2>2. Scanner</h2>
-          {bridgeConfig ? (
-            <>
-              <div className="scan-connected-row">
-                <span className={acquisitionAvailable ? 'scan-connected-dot' : 'scan-offline-dot'} />
-                <strong>{scannerLabel}: {acquisitionAvailable ? 'Connected' : 'Unavailable'}</strong>
+        <section className={`ui-card scan-deck ${deckTone}`} aria-labelledby="scan-deck-title">
+          <header className="scan-deck-head">
+            <div className="scan-device">
+              <span className="scan-device-icon" aria-hidden="true"><Icon name="scan" width={18} height={18} /></span>
+              <div>
+                <h2 id="scan-deck-title">{scannerLabel}</h2>
+                <p className="scan-device-state">
+                  <span className={acquisitionAvailable ? 'scan-dot is-on' : 'scan-dot is-off'} aria-hidden="true" />
+                  {bridgeConfig ? (acquisitionAvailable ? 'Connected' : 'Unavailable') : loading ? 'Connecting…' : 'Not configured'}
+                  {bridgeConfig && <span className="scan-device-meta">{bridgeConfig.scannerId}</span>}
+                </p>
               </div>
-              <details className="scan-device-details">
-                <summary>Scanner details</summary>
-                <div className="scan-device-summary">
-                  <div><span>Mode</span><strong>{bridgeConfig.captureMode}</strong></div>
-                  <div><span>Site</span><strong>{bridgeConfig.siteId}</strong></div>
-                  <div><span>Scanner</span><strong>{bridgeConfig.scannerId}</strong></div>
-                  <div><span>Bridge</span><strong>{bridgeConfig.bridgeId}</strong></div>
-                  <div><span>Bridge version</span><strong>{bridgeConfig.bridgeVersion}</strong></div>
-                  <div><span>Bridge instance</span><code>{bridgeConfig.bridgeInstanceId.slice(0, 8)}</code></div>
-                  {scannerStatus?.usableSpaceBytes != null && scannerStatus.usableSpaceBytes >= 0 && (
-                    <div><span>Local storage available</span><strong>{formatBytes(scannerStatus.usableSpaceBytes)}</strong></div>
-                  )}
-                  <div><span>Maximum scan PDF</span><strong>{formatBytes(bridgeConfig.maxScanPdfSizeBytes)}</strong></div>
-                </div>
-              </details>
-            </>
-          ) : !loading && <p>Scanner Bridge configuration is unavailable.</p>}
-
-          {!session && (
-            <div className="scan-action-panel">
-              <p>{bridgeConfig?.captureMode === 'SIMULATOR'
-                ? 'Simulator mode: click Start Scan first, then select the test PDF. Do not place a PDF in the simulator inbox before starting the session.'
-                : 'Load the complete paper package into the scanner. One scan job creates one consolidated PDF.'}</p>
-              {bridgeConfig?.captureMode === 'PHYSICAL' && !acquisitionAvailable && (
-                <p className="scan-intake-help">No compatible Windows WIA scanner is currently available. Check the scanner power, Windows driver, and connection.</p>
-              )}
-              <button className="ui-button primary" disabled={!canStart} onClick={() => void startSession()}>{starting ? 'Starting…' : 'Start Scan'}</button>
             </div>
-          )}
+            {bridgeConfig && <span className="scan-mode-chip">{isSimulator ? 'Simulator' : 'Physical'}</span>}
+          </header>
 
-          {session?.status === 'WAITING_FOR_SCAN' && (
-            <div className={`scan-waiting-panel${bridgeAvailable === false ? ' is-disconnected' : ''}`} role="status" aria-live="polite">
-              <div className={bridgeAvailable === false ? 'scan-disconnected-indicator' : 'scan-pulse'} aria-hidden="true" />
-              <h3>{bridgeAvailable === false ? 'Scanner Bridge disconnected' : 'Waiting for scan'}</h3>
-              {bridgeAvailable === false ? (
-                <p>The scan session is durably retained. Restart the local Scanner Bridge and this page will reconnect automatically.</p>
-              ) : bridgeConfig?.captureMode === 'SIMULATOR' ? (
-                <>
-                  <p>No scanner hardware is required in test mode. Select a PDF to simulate one completed physical scan.</p>
-                  <input ref={testPdfInput} className="scan-hidden-file" type="file" accept="application/pdf,.pdf"
-                    onChange={(event) => void stageTestPdf(event.target.files?.[0])} />
-                  <button className="ui-button secondary" disabled={staging} onClick={() => testPdfInput.current?.click()}>
-                    {staging ? 'Receiving Test PDF…' : 'Select Test PDF'}
+          <ol className="scan-lifecycle" aria-label="Scanner intake progress">
+            {LIFECYCLE.map((step, index) => {
+              const state = lifecycleState(index);
+              return (
+                <li key={step.key} className={`is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+                  <span className="scan-lifecycle-mark" aria-hidden="true">
+                    {state === 'complete' ? <Icon name="check" width={12} height={12} /> : index + 1}
+                  </span>
+                  <span className="scan-lifecycle-text">
+                    <strong>{step.label}</strong>
+                    <small>{step.detail}</small>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="scan-stage" role="status" aria-live="polite">
+            <div className="scan-tray" aria-hidden="true">
+              <span className="scan-sheet" /><span className="scan-sheet" /><span className="scan-sheet" />
+              <span className="scan-beam" />
+            </div>
+
+            {!session && (
+              <div className="scan-stage-body">
+                <h3>{canStart ? 'Ready when you are' : 'Load the package'}</h3>
+                <p>{isSimulator
+                  ? 'Simulator mode: start the scan first, then select the test PDF. Do not place a PDF in the simulator inbox before starting.'
+                  : 'Place the complete paper package in the feeder. One scan job creates one consolidated PDF.'}</p>
+                {bridgeConfig?.captureMode === 'PHYSICAL' && !acquisitionAvailable && (
+                  <p className="scan-stage-hint">No compatible Windows WIA scanner is available. Check power, driver, and connection.</p>
+                )}
+                <div className="scan-stage-actions">
+                  <button className="ui-button primary scan-start" disabled={!canStart} onClick={() => void startSession()}>
+                    <Icon name="scan" width={16} height={16} />{starting ? 'Starting…' : 'Start scan'}
                   </button>
-                </>
-              ) : (
-                <p>Scan the complete package using the connected document feeder. {branding.applicationName} will wait for the scanner to finish the consolidated PDF.</p>
-              )}
-              <button className="ui-button secondary scan-cancel-button" disabled={bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
-            </div>
-          )}
-
-          {session?.status === 'READY' && session.preparedScan && (
-            <div className="scan-ready-panel">
-              <div className="scan-ready-badge">DOCUMENT RECEIVED</div>
-              <h3>{session.preparedScan.fileName}</h3>
-              <p><strong>{formatBytes(session.preparedScan.sizeBytes)}</strong> · Ready to submit to {branding.applicationName}</p>
-              <div className="scan-primary-actions">
-                <button className="ui-button primary" disabled={submitting || bridgeAvailable !== true} onClick={() => void submitScan()}>
-                  {submitting ? 'Queueing…' : 'Submit'}
-                </button>
-                <button className="ui-button secondary" disabled={submitting || bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
-              </div>
-              <details className="scan-technical-details">
-                <summary>Technical details</summary>
-                <div className="scan-technical-grid">
-                  <div><span>Submission ID</span><code>{session.submissionId}</code></div>
-                  <div><span>Source Document ID</span><code>{session.preparedScan.sourceDocumentId}</code></div>
-                  <div><span>SHA-256</span><code>{session.preparedScan.sha256}</code></div>
+                  {startBlocker && <span className="scan-blocker">{startBlocker}</span>}
                 </div>
+              </div>
+            )}
+
+            {session?.status === 'WAITING_FOR_SCAN' && (
+              <div className="scan-stage-body">
+                <span className="scan-stage-tag">{bridgeAvailable === false ? 'Disconnected' : 'Scanning'}</span>
+                <h3>{bridgeAvailable === false ? 'Scanner Bridge disconnected' : 'Waiting for the feeder'}</h3>
+                {bridgeAvailable === false ? (
+                  <p>The scan session is durably retained. Restart the local Scanner Bridge and this page will reconnect automatically.</p>
+                ) : isSimulator ? (
+                  <p>No hardware is needed in test mode. Select a PDF to simulate one completed physical scan.</p>
+                ) : (
+                  <p>Scan the complete package with the document feeder. {branding.applicationName} waits for the scanner to finish the consolidated PDF.</p>
+                )}
+                <div className="scan-stage-actions">
+                  {isSimulator && bridgeAvailable !== false && (
+                    <>
+                      <input ref={testPdfInput} className="scan-hidden-file" type="file" accept="application/pdf,.pdf"
+                        onChange={(event) => void stageTestPdf(event.target.files?.[0])} />
+                      <button className="ui-button primary" disabled={staging} onClick={() => testPdfInput.current?.click()}>
+                        <Icon name="upload" width={16} height={16} />{staging ? 'Receiving test PDF…' : 'Select test PDF'}
+                      </button>
+                    </>
+                  )}
+                  <button className="ui-button secondary" disabled={bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel scan</button>
+                </div>
+              </div>
+            )}
+
+            {session?.status === 'READY' && session.preparedScan && (
+              <div className="scan-stage-body">
+                <span className="scan-stage-tag">Document received</span>
+                <div className="scan-file">
+                  <span className="scan-file-icon" aria-hidden="true">PDF</span>
+                  <div>
+                    <h3>{session.preparedScan.fileName}</h3>
+                    <p>{formatBytes(session.preparedScan.sizeBytes)} · Integrity verified · Ready for {branding.applicationName}</p>
+                  </div>
+                </div>
+                <div className="scan-stage-actions">
+                  <button className="ui-button primary" disabled={submitting || bridgeAvailable !== true} onClick={() => void submitScan()}>
+                    {submitting ? 'Queueing…' : 'Submit package'}
+                  </button>
+                  <button className="ui-button secondary" disabled={submitting || bridgeAvailable !== true} onClick={() => void cancelSession()}>Discard</button>
+                </div>
+                <details className="scan-tech">
+                  <summary>Technical details</summary>
+                  <dl>
+                    <div><dt>Submission ID</dt><dd><code>{session.submissionId}</code></dd></div>
+                    <div><dt>Source document ID</dt><dd><code>{session.preparedScan.sourceDocumentId}</code></dd></div>
+                    <div><dt>SHA-256</dt><dd><code>{session.preparedScan.sha256}</code></dd></div>
+                  </dl>
+                </details>
+              </div>
+            )}
+
+            {(session?.status === 'QUEUED' || session?.status === 'SUBMITTING') && (
+              <div className="scan-stage-body">
+                <span className="scan-stage-tag">Safely queued</span>
+                <h3>{session.status === 'SUBMITTING' ? `Sending to ${branding.applicationName}…` : 'Package queued for delivery'}</h3>
+                <p>The local bridge owns this package durably. Start the next package without waiting for OCR, redaction, review, or export.</p>
+                <div className="scan-stage-actions">
+                  <button className="ui-button primary" onClick={startNext}>Start next package</button>
+                  {session.lexavaultPackageId && <Link className="ui-button secondary" to={`/packages/${session.lexavaultPackageId}`}>View package</Link>}
+                </div>
+              </div>
+            )}
+
+            {session?.status === 'SUBMITTED' && (
+              <div className="scan-stage-body">
+                <span className="scan-stage-tag">Accepted</span>
+                <h3>Package submitted</h3>
+                <p>Processing continues through the normal {branding.applicationName} workflow. Any required review appears in Manual Review.</p>
+                <div className="scan-stage-actions">
+                  <button className="ui-button primary" onClick={startNext}>Start next package</button>
+                  {session.lexavaultPackageId && <Link className="ui-button secondary" to={`/packages/${session.lexavaultPackageId}`}>View package</Link>}
+                </div>
+              </div>
+            )}
+
+            {attention && (
+              <div className="scan-stage-body">
+                <span className="scan-stage-tag">Delivery needs attention</span>
+                <h3>Your scanned PDF is safely retained locally</h3>
+                <p>Technical support can resolve the delivery issue. You may continue with the next physical package.</p>
+                {session.lastDeliveryErrorCode && <p className="scan-safe-code">Reference {session.lastDeliveryErrorCode}</p>}
+                <div className="scan-stage-actions">
+                  <button className="ui-button primary" onClick={startNext}>Start next package</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <footer className="scan-deck-foot">
+            <div className="scan-queue">
+              <span><strong>{scannerStatus?.queuedCount ?? 0}</strong> delivering</span>
+              <span className={scannerStatus && scannerStatus.attentionRequiredCount > 0 ? 'is-attention' : ''}>
+                <strong>{scannerStatus?.attentionRequiredCount ?? 0}</strong> need attention
+              </span>
+              {scannerStatus?.usableSpaceBytes != null && scannerStatus.usableSpaceBytes >= 0 && (
+                <span><strong>{formatBytes(scannerStatus.usableSpaceBytes)}</strong> free</span>
+              )}
+            </div>
+            {bridgeConfig && (
+              <details className="scan-device-details">
+                <summary>Device details</summary>
+                <dl>
+                  <div><dt>Mode</dt><dd>{bridgeConfig.captureMode}</dd></div>
+                  <div><dt>Site</dt><dd>{bridgeConfig.siteId}</dd></div>
+                  <div><dt>Scanner</dt><dd>{bridgeConfig.scannerId}</dd></div>
+                  <div><dt>Bridge</dt><dd>{bridgeConfig.bridgeId}</dd></div>
+                  <div><dt>Version</dt><dd>{bridgeConfig.bridgeVersion}</dd></div>
+                  <div><dt>Instance</dt><dd><code>{bridgeConfig.bridgeInstanceId.slice(0, 8)}</code></dd></div>
+                  <div><dt>Max scan PDF</dt><dd>{formatBytes(bridgeConfig.maxScanPdfSizeBytes)}</dd></div>
+                </dl>
               </details>
-            </div>
-          )}
-
-          {(session?.status === 'QUEUED' || session?.status === 'SUBMITTING') && (
-            <div className="scan-queued-panel">
-              <div className="scan-ready-badge">SAFELY QUEUED</div>
-              <h3>{session.status === 'SUBMITTING' ? `Sending to ${branding.applicationName}…` : 'Package queued for delivery'}</h3>
-              <p>The local bridge owns this package durably. You can start the next package without waiting for OCR, redaction, review, or export.</p>
-              <div className="scan-primary-actions">
-                <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
-                {session.lexavaultPackageId && <Link className="ui-button secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}
-              </div>
-            </div>
-          )}
-
-          {session?.status === 'SUBMITTED' && (
-            <div className="scan-ready-panel">
-              <div className="scan-ready-badge">ACCEPTED BY LEXAVAULT</div>
-              <h3>Package submitted successfully</h3>
-              <p>Processing continues through the normal {branding.applicationName} workflow. Any required review will appear in the existing Manual Review flow.</p>
-              <div className="scan-primary-actions">
-                <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
-                {session.lexavaultPackageId && <Link className="ui-button secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}
-              </div>
-            </div>
-          )}
-
-          {session?.status === 'ATTENTION_REQUIRED' && (
-            <div className="scan-attention-panel">
-              <div className="scan-attention-badge">DELIVERY NEEDS ATTENTION</div>
-              <h3>Your scanned PDF is still safely retained locally</h3>
-              <p>Technical support can resolve the delivery issue. You may continue with the next physical package.</p>
-              {session.lastDeliveryErrorCode && <p className="scan-safe-code">Reference: {session.lastDeliveryErrorCode}</p>}
-              <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
-            </div>
-          )}
+            )}
+          </footer>
         </section>
       </div>
     </PageScaffold>

@@ -119,6 +119,13 @@
   --ui-chart-purple: #6d5ae6;
   --ui-chart-teal: #138a8a;
   --ui-chart-amber: #d98a1c;
+
+  /* Redaction ink — the signature surface: solid bars that stand in for removed content. */
+  --ui-ink: #141a24;
+  --ui-ink-raised: #232b38;
+  --ui-ink-line: #3a4352;
+  --ui-ink-text: #e7eaf0;
+  --ui-ink-muted: #98a2b3;
 }
 
 /* Responsive breakpoint contract.

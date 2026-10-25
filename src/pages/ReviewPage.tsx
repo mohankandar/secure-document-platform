@@ -12,6 +12,7 @@ import type {
   ReviewBoundingBox,
   ReviewResolutionResult,
 } from '../types';
+import './ReviewPage.css';
 
 type Interaction =
   | { kind: 'draw'; startX: number; startY: number }
@@ -25,11 +26,17 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+const ENTITY_ACRONYMS = new Set(['SSN', 'EIN', 'ITIN', 'DOB', 'ID', 'IBAN', 'VIN', 'NPI']);
+
 function entityLabel(value: string) {
   return value
-    .toLowerCase()
     .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((part) => {
+      const upper = part.toUpperCase();
+      if (ENTITY_ACRONYMS.has(upper)) return upper;
+      const lower = part.toLowerCase();
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
     .join(' ');
 }
 
@@ -42,11 +49,41 @@ function reasonLabel(value: string) {
   }
 }
 
+function reasonTone(value: string) {
+  switch (value) {
+    case 'LOCATION_UNCERTAIN': return 'info';
+    case 'POLICY_REVIEW': return 'violet';
+    default: return 'warning';
+  }
+}
+
+function reasonExplanation(value: string) {
+  switch (value) {
+    case 'LOCATION_UNCERTAIN':
+      return 'The sensitive content was identified, but its exact location needs your confirmation.';
+    case 'LOW_CONFIDENCE':
+      return 'AI found potentially sensitive content, but confidence is below the automatic-redaction threshold.';
+    default:
+      return 'Tenant policy requires a human decision for this finding.';
+  }
+}
+
+function confidenceBand(confidence: number) {
+  if (confidence < 0.6) return { label: 'Weak signal', tone: 'danger' };
+  if (confidence < 0.75) return { label: 'Moderate signal', tone: 'warning' };
+  return { label: 'Strong signal', tone: 'success' };
+}
+
 function boxChanged(a: ReviewBoundingBox | null, b: ReviewBoundingBox | null) {
   if (!a || !b) return a !== b;
   return ['left', 'top', 'width', 'height'].some((key) =>
     Math.abs(a[key as keyof ReviewBoundingBox] - b[key as keyof ReviewBoundingBox]) > 0.0005
   );
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
 export default function ReviewPage() {
@@ -68,10 +105,15 @@ export default function ReviewPage() {
   const [editing, setEditing] = useState(false);
   const [confirmDismiss, setConfirmDismiss] = useState(false);
   const [interaction, setInteraction] = useState<Interaction>(null);
+  const [resolvedThisSession, setResolvedThisSession] = useState(0);
   const previewRef = useRef<HTMLDivElement>(null);
 
   const selected = useMemo(
     () => items.find((item) => item.findingId === selectedId) || null,
+    [items, selectedId]
+  );
+  const selectedIndex = useMemo(
+    () => items.findIndex((item) => item.findingId === selectedId),
     [items, selectedId]
   );
 
@@ -103,6 +145,12 @@ export default function ReviewPage() {
       group.items.push(item);
     }
     return groups;
+  }, [items]);
+
+  const reasonCounts = useMemo(() => {
+    const counts = { LOW_CONFIDENCE: 0, LOCATION_UNCERTAIN: 0, POLICY_REVIEW: 0 } as Record<string, number>;
+    for (const item of items) counts[item.reason] = (counts[item.reason] || 0) + 1;
+    return counts;
   }, [items]);
 
   const loadQueue = useCallback(async (preferredId?: string | null) => {
@@ -282,6 +330,7 @@ export default function ReviewPage() {
       } else {
         result = await apiClient.dismissReviewItem(selected.findingId);
       }
+      setResolvedThisSession((count) => count + 1);
       setSuccess(result.processingResumed
         ? 'Review complete. Processing has resumed in the background.'
         : resolution === 'confirm'
@@ -296,238 +345,329 @@ export default function ReviewPage() {
     }
   };
 
+  const step = (direction: 1 | -1) => {
+    if (items.length === 0) return;
+    const next = clamp((selectedIndex < 0 ? 0 : selectedIndex) + direction, 0, items.length - 1);
+    setSelectedId(items[next].findingId);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
+      if (resolving || !selected) return;
+      const key = event.key.toLowerCase();
+      if (key === 'j' || key === 'arrowdown') { event.preventDefault(); step(1); }
+      else if (key === 'k' || key === 'arrowup') { event.preventDefault(); step(-1); }
+      else if (key === 'e') {
+        event.preventDefault();
+        if (!editing) setEditing(true);
+        else if (box) setEditing(false);
+      }
+      else if (key === 'c' && box) { event.preventDefault(); void resolve('confirm'); }
+      else if (key === 'n') { event.preventDefault(); setConfirmDismiss(true); }
+      else if (key === 'escape') {
+        if (confirmDismiss) setConfirmDismiss(false);
+        else if (editing && box) setEditing(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   if (loading) {
     return (
-      <PageScaffold className="review-page" breadcrumbs={breadcrumbItems} title="Manual Review">
+      <PageScaffold className="review-page rw-page" breadcrumbs={breadcrumbItems} title="Manual Review">
         <div className="ui-loading-state">Loading Manual Review…</div>
       </PageScaffold>
     );
   }
 
+  const sessionTotal = resolvedThisSession + totalItems;
+  const sessionPercent = sessionTotal === 0 ? 100 : Math.round((resolvedThisSession / sessionTotal) * 100);
+  const band = selected ? confidenceBand(selected.confidence) : null;
+
   return (
-    <PageScaffold className="review-page" breadcrumbs={breadcrumbItems} eyebrow="Human review" title="Manual Review"
+    <PageScaffold className="review-page rw-page" breadcrumbs={breadcrumbItems} eyebrow="Human review" title="Manual Review"
       description={packageId
         ? `Resolve only the findings that need a human decision for this intake${scopedIdentifier ? ` · ${scopedIdentifier.label} ${scopedIdentifier.value}` : ''}.`
         : 'Resolve only findings that currently need a human decision; high-confidence findings continue automatically.'}
       actions={
-        <div className="review-header-actions">
-          <span className="review-count">{totalItems} need attention</span>
+        <div className="rw-header-actions">
           {packageId && <Link className="ui-button secondary" to="/review">View all reviews</Link>}
-          <button className="ui-button tertiary review-refresh" onClick={() => loadQueue(selectedId)}>Refresh</button>
+          <button className="ui-button secondary icon rw-glyph" onClick={() => loadQueue(selectedId)} aria-label="Refresh review queue">
+            <Icon name="refresh" />
+          </button>
         </div>
       }>
 
       {error && <div className="ui-alert tone-danger">{error}</div>}
-      {success && <div className="ui-alert tone-success">{success}</div>}
+      {success && <div className="ui-alert tone-success" role="status">{success}</div>}
 
       {items.length === 0 ? (
-        <div className="ui-card ui-empty-state review-empty-layout">
-          <div className="review-empty-icon"><Icon name="check" /></div>
-          <h2>You're all caught up</h2>
+        <div className="ui-card rw-empty">
+          <div className="rw-empty-mark"><Icon name="check" /></div>
+          <h2>{"You're all caught up"}</h2>
           <p>{packageId
             ? 'This intake has no findings currently waiting for Manual Review.'
             : 'There are no findings currently waiting for Manual Review.'}</p>
+          {resolvedThisSession > 0 && (
+            <p className="rw-empty-session">{resolvedThisSession} {resolvedThisSession === 1 ? 'decision' : 'decisions'} recorded this session.</p>
+          )}
           {packageId && <Link className="ui-button secondary" to={`/packages/${packageId}`}>Back to Intake Details</Link>}
         </div>
       ) : (
-        <div className="review-workbench-grid">
-          <aside className="review-queue card">
-            <div className="review-section-title">Needs attention</div>
-            {totalItems > items.length && (
-              <div className="review-queue-limit">Showing first {items.length} of {totalItems}</div>
-            )}
-            <div className="review-queue-list">
-              {reviewGroups.map((group) => (
-                <div className="review-page-group" key={group.key}>
-                  <div className="review-page-group-heading">
-                    <span>{group.fileName}</span>
-                    <strong>Page {group.pageNumber}</strong>
-                  </div>
-                  {group.items.map((item) => (
-                    <button
-                      key={item.findingId}
-                      className={`review-queue-item ${item.findingId === selectedId ? 'active' : ''}`}
-                      onClick={() => setSelectedId(item.findingId)}
-                    >
-                      <div className="review-queue-type">{entityLabel(item.entityType)}</div>
-                      <div className="review-queue-meta">
-                        <span>{reasonLabel(item.reason)}</span>
-                        <span>{Math.round(item.confidence * 100)}%</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ))}
+        <>
+          <section className="rw-session" aria-label="Review session">
+            <div className="rw-session-count">
+              <strong>{totalItems}</strong>
+              <span>need a decision</span>
             </div>
-          </aside>
-
-          <section className="review-preview card">
-            {selected && (
-              <>
-                <div className="review-preview-heading">
-                  <div>
-                    <strong>{selected.fileName}</strong>
-                    <span>Page {selected.pageNumber}</span>
-                  </div>
-                  <span className={`review-reason review-reason-${selected.reason.toLowerCase()}`}>
-                    {reasonLabel(selected.reason)}
-                  </span>
-                </div>
-
-                <div className={`review-page-frame ${editing ? 'editing' : ''}`}>
-                  {previewLoading && <div className="review-preview-loading">Rendering page…</div>}
-                  {!previewLoading && previewError && (
-                    <div className="review-preview-loading review-preview-error">
-                      <strong>Unable to render page {selected.pageNumber}.</strong>
-                      <span>{previewError}</span>
-                      <button className="ui-button secondary" onClick={() => loadQueue(selected.findingId)}>Refresh review item</button>
-                    </div>
-                  )}
-                  {previewUrl && (
-                    <div
-                      className="review-page-canvas"
-                      ref={previewRef}
-                      onPointerDown={handleCanvasPointerDown}
-                      onPointerMove={handlePointerMove}
-                      onPointerUp={stopInteraction}
-                      onPointerCancel={stopInteraction}
-                    >
-                      <img src={previewUrl} alt={`Page ${selected.pageNumber} of ${selected.fileName}`} draggable={false} />
-                      {box && (
-                        <div
-                          className={`review-bounding-box ${editing ? 'editable' : ''}`}
-                          style={{
-                            left: `${box.left * 100}%`,
-                            top: `${box.top * 100}%`,
-                            width: `${box.width * 100}%`,
-                            height: `${box.height * 100}%`,
-                          }}
-                          onPointerDown={handleBoxPointerDown}
-                          onPointerMove={handlePointerMove}
-                          onPointerUp={stopInteraction}
-                          onPointerCancel={stopInteraction}
-                        >
-                          {editing && (
-                            <button
-                              type="button"
-                              className="review-resize-handle"
-                              aria-label="Resize sensitive area"
-                              onPointerDown={handleResizePointerDown}
-                              onPointerMove={handlePointerMove}
-                              onPointerUp={stopInteraction}
-                              onPointerCancel={stopInteraction}
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="review-preview-toolbar">
-                  <span>
-                    {box
-                      ? editing ? 'Drag the box to move it. Use the corner handle to resize.' : 'Highlighted area proposed for redaction.'
-                      : 'Draw a box around the sensitive value.'}
-                  </span>
-                  {box && !editing && (
-                    <button className="ui-button tertiary small" onClick={() => setEditing(true)}>Adjust area</button>
-                  )}
-                  {editing && (
-                    <div className="review-toolbar-actions">
-                      {originalBox && boxChanged(box, originalBox) && (
-                        <button className="ui-button tertiary small" onClick={() => setBox(originalBox)}>Reset</button>
-                      )}
-                      {!originalBox && box && (
-                        <button className="ui-button tertiary small" onClick={() => setBox(null)}>Clear</button>
-                      )}
-                      <button className="ui-button tertiary small" onClick={() => box && setEditing(false)} disabled={!box}>Done</button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="rw-session-meter">
+              <div className="rw-session-meter-label">
+                <span>This session</span>
+                <span className="rw-mono">{resolvedThisSession} resolved · {sessionPercent}%</span>
+              </div>
+              <div className="rw-session-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={sessionPercent} aria-label="Session progress">
+                <div style={{ width: `${sessionPercent}%` }} />
+              </div>
+            </div>
+            <ul className="rw-session-reasons" aria-label="Queue composition">
+              <li data-tone="warning"><span className="rw-dot" />{reasonCounts.LOW_CONFIDENCE || 0} low confidence</li>
+              <li data-tone="info"><span className="rw-dot" />{reasonCounts.LOCATION_UNCERTAIN || 0} location</li>
+              <li data-tone="violet"><span className="rw-dot" />{reasonCounts.POLICY_REVIEW || 0} policy</li>
+            </ul>
+            <div className="rw-keys" aria-label="Keyboard shortcuts">
+              <span><kbd>J</kbd><kbd>K</kbd> move</span>
+              <span><kbd>E</kbd> adjust</span>
+              <span><kbd>C</kbd> confirm</span>
+              <span><kbd>N</kbd> not sensitive</span>
+            </div>
           </section>
 
-          <aside className="review-decision card">
-            {selected && (
-              <>
-                <div className="review-section-title">Review finding</div>
-                <div className="review-entity-name">{entityLabel(selected.entityType)}</div>
-                <div className="review-confidence-row">
-                  <span>AI confidence</span>
-                  <strong>{Math.round(selected.confidence * 100)}%</strong>
-                </div>
-                <div className="review-confidence-track">
-                  <div style={{ width: `${clamp(selected.confidence, 0, 1) * 100}%` }} />
-                </div>
+          <div className="rw-desk">
+            <aside className="rw-queue" aria-label="Review queue">
+              <div className="rw-queue-head">
+                <span>Queue</span>
+                <span className="rw-mono">{selectedIndex + 1} / {items.length}</span>
+              </div>
+              {totalItems > items.length && (
+                <div className="rw-queue-limit">Showing first {items.length} of {totalItems}</div>
+              )}
+              <div className="rw-queue-list">
+                {reviewGroups.map((group) => (
+                  <div className="rw-group" key={group.key}>
+                    <div className="rw-group-head">
+                      <span className="rw-group-file">{group.fileName}</span>
+                      <span className="rw-group-page rw-mono">p.{group.pageNumber}</span>
+                    </div>
+                    {group.items.map((item) => {
+                      const active = item.findingId === selectedId;
+                      return (
+                        <button
+                          key={item.findingId}
+                          type="button"
+                          className={`rw-item ${active ? 'is-active' : ''}`}
+                          data-tone={reasonTone(item.reason)}
+                          aria-current={active ? 'true' : undefined}
+                          onClick={() => setSelectedId(item.findingId)}
+                        >
+                          <span className="rw-item-main">
+                            <span className="rw-item-type">{entityLabel(item.entityType)}</span>
+                            <span className="rw-item-reason">{reasonLabel(item.reason)}</span>
+                          </span>
+                          <span className="rw-item-confidence rw-mono">{Math.round(item.confidence * 100)}%</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </aside>
 
-                <div className="review-info-box">
-                  {selected.reason === 'LOCATION_UNCERTAIN'
-                    ? 'The sensitive content was identified, but its exact location needs your confirmation.'
-                    : selected.reason === 'LOW_CONFIDENCE'
-                      ? 'AI found potentially sensitive content, but confidence is below the automatic-redaction threshold.'
-                      : 'Tenant policy requires a human decision for this finding.'}
-                </div>
-
-                <div className="review-context-list">
-                  <div><span>Document</span><strong>{selected.fileName}</strong></div>
-                  <div><span>Page</span><strong>{selected.pageNumber}</strong></div>
-                  <div><span>Location</span><strong>{box ? 'Selected' : 'Needs selection'}</strong></div>
-                </div>
-
-                <div className="review-decision-actions">
-                  <button
-                    className="ui-button primary review-confirm"
-                    disabled={resolving || !box}
-                    onClick={() => resolve('confirm')}
-                  >
-                    {resolving ? 'Saving…' : 'Confirm & Submit'}
-                  </button>
-                  {!confirmDismiss ? (
-                    <button
-                      className="ui-button secondary review-dismiss"
-                      disabled={resolving}
-                      onClick={() => setConfirmDismiss(true)}
-                    >
-                      Not Sensitive
-                    </button>
-                  ) : (
-                    <div className="review-dismiss-confirm">
-                      <span>Mark this item as not sensitive?</span>
+            <section className="rw-stage" aria-label="Page preview">
+              {selected && (
+                <>
+                  <div className="rw-stage-head">
+                    <div className="rw-stage-title">
+                      <span className="rw-file-badge">PDF</span>
                       <div>
-                        <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
-                        <button className="ui-button secondary review-dismiss-final" disabled={resolving} onClick={() => resolve('dismiss')}>Yes, not sensitive</button>
+                        <strong>{selected.fileName}</strong>
+                        <span>Page {selected.pageNumber}</span>
                       </div>
                     </div>
-                  )}
-                </div>
+                    <div className="rw-stage-nav">
+                      <button type="button" className="ui-button secondary icon rw-glyph" onClick={() => step(-1)} disabled={selectedIndex <= 0} aria-label="Previous finding">
+                        <Icon name="chevronUp" />
+                      </button>
+                      <button type="button" className="ui-button secondary icon rw-glyph" onClick={() => step(1)} disabled={selectedIndex >= items.length - 1} aria-label="Next finding">
+                        <Icon name="chevronDown" />
+                      </button>
+                    </div>
+                  </div>
 
-                <p className="review-auto-note">
-                  When the last review item is resolved, processing resumes automatically in the background.
-                </p>
-              </>
-            )}
-          </aside>
-        </div>
+                  <div className={`rw-frame ${editing ? 'is-editing' : ''}`}>
+                    {previewLoading && <div className="rw-frame-state">Rendering page…</div>}
+                    {!previewLoading && previewError && (
+                      <div className="rw-frame-state is-error">
+                        <strong>Unable to render page {selected.pageNumber}.</strong>
+                        <span>{previewError}</span>
+                        <button className="ui-button secondary" onClick={() => loadQueue(selected.findingId)}>Refresh review item</button>
+                      </div>
+                    )}
+                    {previewUrl && (
+                      <div
+                        className="rw-canvas"
+                        ref={previewRef}
+                        onPointerDown={handleCanvasPointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={stopInteraction}
+                        onPointerCancel={stopInteraction}
+                      >
+                        <img src={previewUrl} alt={`Page ${selected.pageNumber} of ${selected.fileName}`} draggable={false} />
+                        {box && (
+                          <div
+                            className={`rw-box ${editing ? 'is-editable' : ''}`}
+                            style={{
+                              left: `${box.left * 100}%`,
+                              top: `${box.top * 100}%`,
+                              width: `${box.width * 100}%`,
+                              height: `${box.height * 100}%`,
+                            }}
+                            onPointerDown={handleBoxPointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={stopInteraction}
+                            onPointerCancel={stopInteraction}
+                          >
+                            <span className="rw-box-tag">{entityLabel(selected.entityType)}</span>
+                            {editing && (
+                              <button
+                                type="button"
+                                className="rw-box-handle"
+                                aria-label="Resize sensitive area"
+                                onPointerDown={handleResizePointerDown}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={stopInteraction}
+                                onPointerCancel={stopInteraction}
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`rw-toolbar ${editing ? 'is-editing' : ''}`}>
+                    <span className="rw-toolbar-hint">
+                      <span className="rw-dot" />
+                      {box
+                        ? editing ? 'Drag the box to move it. Use the corner handle to resize.' : 'Highlighted area proposed for redaction.'
+                        : 'Draw a box around the sensitive value.'}
+                    </span>
+                    {box && !editing && (
+                      <button className="ui-button secondary small" onClick={() => setEditing(true)}>Adjust area</button>
+                    )}
+                    {editing && (
+                      <div className="rw-toolbar-actions">
+                        {originalBox && boxChanged(box, originalBox) && (
+                          <button className="ui-button tertiary small" onClick={() => setBox(originalBox)}>Reset</button>
+                        )}
+                        {!originalBox && box && (
+                          <button className="ui-button tertiary small" onClick={() => setBox(null)}>Clear</button>
+                        )}
+                        <button className="ui-button secondary small" onClick={() => box && setEditing(false)} disabled={!box}>Done</button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+
+            <aside className="rw-decision" aria-label="Decision">
+              {selected && band && (
+                <>
+                  <div className="rw-decision-head">
+                    <span className="rw-reason" data-tone={reasonTone(selected.reason)}>{reasonLabel(selected.reason)}</span>
+                    <h2>{entityLabel(selected.entityType)}</h2>
+                  </div>
+
+                  <div className="rw-confidence" data-tone={band.tone}>
+                    <div className="rw-confidence-row">
+                      <span>AI confidence</span>
+                      <strong className="rw-mono">{Math.round(selected.confidence * 100)}%</strong>
+                    </div>
+                    <div className="rw-confidence-track">
+                      <div style={{ width: `${clamp(selected.confidence, 0, 1) * 100}%` }} />
+                    </div>
+                    <span className="rw-confidence-band">{band.label}</span>
+                  </div>
+
+                  <p className="rw-explain">{reasonExplanation(selected.reason)}</p>
+
+                  <dl className="rw-facts">
+                    <div><dt>Document</dt><dd title={selected.fileName}>{selected.fileName}</dd></div>
+                    <div><dt>Page</dt><dd className="rw-mono">{selected.pageNumber}</dd></div>
+                    <div>
+                      <dt>Location</dt>
+                      <dd className={box ? 'is-ok' : 'is-missing'}>{box ? 'Selected' : 'Needs selection'}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="rw-actions">
+                    <button
+                      className="ui-button primary rw-confirm"
+                      disabled={resolving || !box}
+                      onClick={() => resolve('confirm')}
+                    >
+                      <Icon name="shield" />
+                      {resolving ? 'Saving…' : 'Confirm & Submit'}
+                      <kbd>C</kbd>
+                    </button>
+                    {!confirmDismiss ? (
+                      <button
+                        className="ui-button secondary rw-dismiss"
+                        disabled={resolving}
+                        onClick={() => setConfirmDismiss(true)}
+                      >
+                        Not Sensitive
+                        <kbd>N</kbd>
+                      </button>
+                    ) : (
+                      <div className="rw-dismiss-confirm" role="alertdialog" aria-label="Confirm not sensitive">
+                        <span>Mark this item as not sensitive? It will not be redacted.</span>
+                        <div>
+                          <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
+                          <button className="ui-button secondary rw-dismiss-final" disabled={resolving} onClick={() => resolve('dismiss')}>Yes, not sensitive</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="rw-note">
+                    When the last review item is resolved, processing resumes automatically in the background.
+                  </p>
+                </>
+              )}
+            </aside>
+          </div>
+        </>
       )}
 
       {items.length > 0 && selected && (
-        <div className="review-mobile-action-bar" aria-label="Review decision actions">
-          <div className="review-mobile-action-copy">
+        <div className="rw-mobile-bar" aria-label="Review decision actions">
+          <div className="rw-mobile-copy">
             <strong>{entityLabel(selected.entityType)}</strong>
             <span>{reasonLabel(selected.reason)} · {Math.round(selected.confidence * 100)}%</span>
           </div>
           {!confirmDismiss ? (
-            <div className="review-mobile-action-buttons">
+            <div className="rw-mobile-buttons">
               <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(true)}>Not Sensitive</button>
               <button className="ui-button primary" disabled={resolving || !box} onClick={() => void resolve('confirm')}>{resolving ? 'Saving…' : 'Confirm'}</button>
             </div>
           ) : (
-            <div className="review-mobile-dismiss-confirm">
+            <div className="rw-mobile-buttons">
               <span>Mark as not sensitive?</span>
               <button className="ui-button secondary" disabled={resolving} onClick={() => setConfirmDismiss(false)}>Cancel</button>
-              <button className="ui-button secondary review-dismiss-final" disabled={resolving} onClick={() => void resolve('dismiss')}>Yes</button>
+              <button className="ui-button secondary rw-dismiss-final" disabled={resolving} onClick={() => void resolve('dismiss')}>Yes</button>
             </div>
           )}
         </div>
