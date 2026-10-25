@@ -104,7 +104,8 @@ const BORROWERS = ['Alvarez', 'Chen', 'Okafor', 'Lindqvist', 'Patel', 'Moreau', 
 const BRANCHES = ['Seattle', 'Portland', 'Boise', 'Spokane', 'Tacoma'];
 const SOURCES = ['MANUAL_UPLOAD', 'SCANNER_INTAKE', 'FOLDER_INTAKE', 'API_SUBMISSION', 'MANUAL_UPLOAD', 'API_SUBMISSION'];
 const DOC_NAMES = ['Loan_Application.pdf', 'Paystub_March.pdf', 'Bank_Statement_Q1.pdf', 'Drivers_License.pdf', 'W2_2025.pdf', 'Purchase_Agreement.pdf', 'Title_Report.pdf', 'Appraisal.pdf', 'Tax_Return_2025.pdf', 'Insurance_Binder.pdf'];
-const ENTITY_TYPES = ['SSN', 'ACCOUNT_NUMBER', 'DATE_OF_BIRTH', 'DRIVERS_LICENSE', 'PHONE_NUMBER', 'EMAIL_ADDRESS', 'ADDRESS', 'PERSON_NAME'];
+// Matches the production policy catalog: the only types the detection engine acts on.
+const ENTITY_TYPES = ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'];
 const REASONS = ['LOW_CONFIDENCE', 'LOCATION_UNCERTAIN', 'POLICY_REVIEW'];
 
 export const STATUS_STAGE: Record<string, DashboardStage> = {
@@ -323,7 +324,7 @@ function buildBusinessAdmin(): BusinessAdminConfiguration {
       { key: 'updated', label: 'Updated', kind: 'SYSTEM', primary: false, allowed: true, defaultVisible: true, displayOrder: 9 },
       { key: 'retention', label: 'Retention', kind: 'SYSTEM', primary: false, allowed: true, defaultVisible: false, displayOrder: 10 },
     ],
-    sensitiveDataPolicy: { enabledEntityTypes: ENTITY_TYPES.slice(0, 7), autoRedactThreshold: 0.9, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true },
+    sensitiveDataPolicy: { enabledEntityTypes: [...ENTITY_TYPES], autoRedactThreshold: 0.9, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true },
     lifecyclePolicy: { originalRetentionHours: 720, redactedCacheHours: 336, neverExportedHoldHours: 168, finalApprovalRequired: true, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 720 },
     documentIntelligence: {
       mode: 'OBSERVE', activeBundleVersion: 'nw-2026.09', lastKnownGoodBundleVersion: 'nw-2026.06', configurationVersion: 7, baselineDiscoveryRequired: false,

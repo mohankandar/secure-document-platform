@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { apiClient } from '../../api/client';
 import type { BusinessAdminConfiguration } from '../../types';
@@ -105,6 +105,114 @@ export function NumberField({ label, value, onChange, min, max, step = 1, suffix
       </label>
       <input type="number" inputMode="decimal" value={Number.isNaN(value) ? '' : value} min={min} max={max} step={step} onChange={(e) => onChange(e.target.valueAsNumber)} aria-invalid={invalid || undefined} />
       <span className="cf-field-hint">{invalid ? `Enter a value${min !== undefined ? ` from ${min}` : ''}${max !== undefined ? ` to ${max}` : ''}.` : hint}</span>
+    </div>
+  );
+}
+
+/** Side sheet built on the native modal <dialog>, so focus trapping and Escape come from the platform. */
+export function Sheet({ open, title, description, onClose, children, footer, wide }: {
+  open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+  return (
+    <dialog ref={ref} className="cf-ad-sheet" data-wide={wide || undefined} aria-labelledby={titleId} onCancel={(e) => { e.preventDefault(); onClose(); }}>
+      {open && (
+        <div className="cf-ad-sheet-inner">
+          <header className="cf-ad-sheet-head">
+            <div>
+              <h2 id={titleId}>{title}</h2>
+              {description && <p>{description}</p>}
+            </div>
+            <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={onClose} aria-label="Close">Close</button>
+          </header>
+          <div className="cf-ad-sheet-body">{children}</div>
+          {footer && <footer className="cf-ad-sheet-foot">{footer}</footer>}
+        </div>
+      )}
+    </dialog>
+  );
+}
+
+/**
+ * Deliberate confirmation for high-impact operations. Shows the exact target facts and the
+ * consequence; when `acknowledge` is set the confirm button stays disabled until it is ticked.
+ */
+export function ConfirmDialog({ open, title, facts, consequence, confirmLabel, danger, acknowledge, busy, error, onConfirm, onCancel }: {
+  open: boolean; title: string; facts: [string, ReactNode][]; consequence: ReactNode; confirmLabel: string; danger?: boolean;
+  acknowledge?: string; busy?: boolean; error?: string | null; onConfirm: () => void; onCancel: () => void;
+}) {
+  const [ack, setAck] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) { setWasOpen(open); if (open) setAck(false); }
+  return (
+    <Sheet open={open} title={title} onClose={onCancel}
+      footer={<>
+        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button type="button" className="cf-btn" data-variant={danger ? 'danger' : 'solid'} data-size="sm" disabled={busy || (!!acknowledge && !ack)} onClick={onConfirm}>
+          {busy && <Spinner label="Working" />}{confirmLabel}
+        </button>
+      </>}
+    >
+      <dl className="cf-ad-facts">
+        {facts.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+      </dl>
+      <div className="cf-ad-consequence">{consequence}</div>
+      {acknowledge && (
+        <label className="cf-ad-ack"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> {acknowledge}</label>
+      )}
+      {error && <Notice tone="danger">{error}</Notice>}
+    </Sheet>
+  );
+}
+
+export function TextField({ label, value, onChange, hint, placeholder, required, maxLength, type = 'text', disabled, invalid, mono }: {
+  label: string; value: string; onChange: (v: string) => void; hint?: ReactNode; placeholder?: string; required?: boolean;
+  maxLength?: number; type?: string; disabled?: boolean; invalid?: boolean; mono?: boolean;
+}) {
+  const id = useId();
+  return (
+    <div className="cf-field" data-invalid={invalid || undefined}>
+      <label htmlFor={id}><span>{label}</span>{!required && <span className="cf-field-opt">Optional</span>}</label>
+      <input id={id} type={type} value={value} placeholder={placeholder} maxLength={maxLength} disabled={disabled} aria-invalid={invalid || undefined}
+        className={mono ? 'cf-ad-mono' : undefined} onChange={(e) => onChange(e.target.value)} />
+      {hint && <span className="cf-field-hint">{hint}</span>}
+    </div>
+  );
+}
+
+export function SelectField<T extends string>({ label, value, options, onChange, hint, disabled }: {
+  label: string; value: T; options: readonly (T | [T, string])[]; onChange: (v: T) => void; hint?: ReactNode; disabled?: boolean;
+}) {
+  const id = useId();
+  return (
+    <div className="cf-field">
+      <label htmlFor={id}><span>{label}</span></label>
+      <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, humanize(o)]; return <option key={v} value={v}>{l}</option>; })}
+      </select>
+      {hint && <span className="cf-field-hint">{hint}</span>}
+    </div>
+  );
+}
+
+/** Optional integer input: empty string means "not set" (null), matching the production request models. */
+export function OptionalInt({ label, value, onChange, min, max, disabled, hint }: {
+  label: string; value: number | null | undefined; onChange: (v: number | null) => void; min?: number; max?: number; disabled?: boolean; hint?: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="cf-field">
+      <label htmlFor={id}><span>{label}</span><span className="cf-field-opt">Optional</span></label>
+      <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value ?? ''}
+        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
+      {hint && <span className="cf-field-hint">{hint}</span>}
     </div>
   );
 }
