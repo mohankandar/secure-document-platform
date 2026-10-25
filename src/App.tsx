@@ -234,7 +234,7 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
         </div>
         <div className="app-page">
         <Routes>
-          <Route path="/" element={hasCapability('DASHBOARD_ACCESS') ? <DashboardPage /> : hasCapability('REPORT_EXECUTIVE_VIEW') ? <Navigate to="/reports" replace /> : <PermissionDenied />} />
+          <Route path="/" element={hasCapability('DASHBOARD_ACCESS') ? <DashboardPage /> : hasCapability('REPORT_EXECUTIVE_VIEW') ? <Navigate to="/reports" replace /> : canViewAnyAdministration ? <Navigate to={defaultAdministrationPath} replace /> : <PermissionDenied />} />
           <Route path="/packages/new" element={hasCapability('DOCUMENT_INTAKE') ? <CreatePackagePage /> : <PermissionDenied />} />
           <Route path="/scanner-intake" element={hasCapability('DOCUMENT_INTAKE') ? <ScanIntakePage /> : <PermissionDenied />} />
           <Route path="/packages/:packageId" element={hasCapability('DASHBOARD_ACCESS') ? <PackageDetailPage /> : <PermissionDenied />} />
