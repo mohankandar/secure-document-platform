@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
 import AttentionLink from '../components/ui/AttentionLink';
+import Icon from '../components/ui/Icon';
 
 const OVERVIEW_KEY = 'securedoc.dashboard.overviewCollapsed.v1';
 const STAGE_KEY = 'securedoc.dashboard.stage.v1';
@@ -21,22 +22,26 @@ const COLUMNS_KEY = 'securedoc.dashboard.columns.v1';
 const TABLET_COLUMNS_KEY = 'securedoc.dashboard.tabletColumns.v1';
 const SORT_KEY = 'securedoc.dashboard.sort.v1';
 
-const STAGES: Array<{ key: DashboardStage; label: string; countKey: keyof OperationsDashboard['overview'] }> = [
-  { key: 'ALL', label: 'All', countKey: 'total' },
-  { key: 'PROCESSING', label: 'Processing', countKey: 'processing' },
-  { key: 'NEEDS_REVIEW', label: 'Needs Review', countKey: 'needsReview' },
-  { key: 'NEEDS_APPROVAL', label: 'Needs Approval', countKey: 'needsApproval' },
-  { key: 'EXPORTED', label: 'Exported', countKey: 'exported' },
-  { key: 'TECHNICAL_ATTENTION', label: 'Technical Attention', countKey: 'technicalAttention' },
-  { key: 'REJECTED', label: 'Rejected', countKey: 'rejected' },
+type StageDefinition = {
+  key: DashboardStage;
+  label: string;
+  countKey: keyof OperationsDashboard['overview'];
+  tone: 'neutral' | 'info' | 'warning' | 'violet' | 'success' | 'danger' | 'muted';
+  help: string;
+};
+
+const STAGES: StageDefinition[] = [
+  { key: 'ALL', label: 'All', countKey: 'total', tone: 'neutral', help: 'Every visible intake' },
+  { key: 'PROCESSING', label: 'Processing', countKey: 'processing', tone: 'info', help: 'Moving through redaction' },
+  { key: 'NEEDS_REVIEW', label: 'Needs Review', countKey: 'needsReview', tone: 'warning', help: 'Awaiting a business decision' },
+  { key: 'NEEDS_APPROVAL', label: 'Needs Approval', countKey: 'needsApproval', tone: 'violet', help: 'Awaiting final approval' },
+  { key: 'EXPORTED', label: 'Exported', countKey: 'exported', tone: 'success', help: 'Delivered downstream' },
+  { key: 'TECHNICAL_ATTENTION', label: 'Technical Attention', countKey: 'technicalAttention', tone: 'danger', help: 'Processing or delivery issues' },
+  { key: 'REJECTED', label: 'Rejected', countKey: 'rejected', tone: 'muted', help: 'Closed without delivery' },
 ];
 
-const KPI_CARDS: Array<{ stage: DashboardStage; title: string; countKey: keyof OperationsDashboard['overview']; tone: string; help: string }> = [
-  { stage: 'PROCESSING', title: 'Processing', countKey: 'processing', tone: 'blue', help: 'Intakes moving through the redaction pipeline' },
-  { stage: 'NEEDS_REVIEW', title: 'Needs Review', countKey: 'needsReview', tone: 'amber', help: 'Only items that need a business decision' },
-  { stage: 'NEEDS_APPROVAL', title: 'Needs Approval', countKey: 'needsApproval', tone: 'violet', help: 'Packages waiting for final business approval' },
-  { stage: 'TECHNICAL_ATTENTION', title: 'Technical Attention', countKey: 'technicalAttention', tone: 'red', help: 'Processing or delivery issues for operations' },
-];
+const PIPELINE_FLOW: DashboardStage[] = ['PROCESSING', 'NEEDS_REVIEW', 'NEEDS_APPROVAL', 'EXPORTED'];
+const PIPELINE_EXCEPTIONS: DashboardStage[] = ['TECHNICAL_ATTENTION', 'REJECTED'];
 
 function safeStoredStage(): DashboardStage {
   const requested = new URLSearchParams(window.location.search).get('stage') as DashboardStage | null;
@@ -322,6 +327,24 @@ export default function DashboardPage() {
     setConfirmHidePackageId(packageId);
   };
 
+  const renderStageTab = (key: DashboardStage) => {
+    const definition = STAGES.find((item) => item.key === key)!;
+    const selected = stage === key;
+    return (
+      <button
+        type="button"
+        role="tab"
+        aria-selected={selected}
+        className={`lv-stage tone-${definition.tone} ${selected ? 'active' : ''}`}
+        onClick={() => selectStage(key)}
+      >
+        <span className="lv-stage-label"><span className="lv-stage-dot" aria-hidden="true" />{definition.label}</span>
+        <strong className="lv-stage-count">{data?.overview[definition.countKey] ?? 0}</strong>
+        <small className="lv-stage-help">{definition.help}</small>
+      </button>
+    );
+  };
+
   const renderPackageAction = (item: DashboardItem) => {
     const menuOpen = openActionPackageId === item.packageId;
     const canRemove = item.status === 'COMPLETED' && canRemoveFromDashboard;
@@ -335,7 +358,7 @@ export default function DashboardPage() {
           aria-expanded={menuOpen}
           onClick={() => setOpenActionPackageId((current) => current === item.packageId ? null : item.packageId)}
         >
-          ⋮
+          <Icon name="more" />
         </button>
         {menuOpen && (
           <div className="dashboard-action-menu" role="menu">
@@ -397,70 +420,57 @@ export default function DashboardPage() {
         {hasCurrentCapability('REPORT_EXECUTIVE_VIEW') && <Link to="/reports" className="ui-button secondary">View reports</Link>}
         {hasCurrentCapability('DOCUMENT_INTAKE') && <Link to="/packages/new" className="ui-button primary">Upload documents</Link>}
       </>}>
-      <p className="dashboard-refresh-status modern">
-        Auto-refresh {hasActiveProcessing ? 'every 5 seconds while processing' : 'every 30 seconds while idle'}
-        {lastRefreshedAt ? ` · Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}
-      </p>
-
       {error && <div className="ui-alert tone-danger">{error}</div>}
       {notice && <div className="ui-alert tone-success">{notice}</div>}
 
-      <section className={`ui-card overview-panel-layout ${overviewCollapsed ? 'collapsed' : ''}`}>
-        <div className="overview-title-row">
-          <div>
-            <h2>Overview</h2>
-            <span>{data?.overview.total ?? 0} intake batches</span>
+      <section className={`ui-card lv-pipeline ${overviewCollapsed ? 'is-compact' : ''}`} aria-labelledby="pipeline-title">
+        <header className="lv-pipeline-header">
+          <div className="lv-pipeline-heading">
+            <h2 id="pipeline-title">Intake pipeline</h2>
+            <span className="lv-live-status">
+              <span className={`lv-live-dot ${hasActiveProcessing ? 'is-active' : ''}`} aria-hidden="true" />
+              {hasActiveProcessing ? 'Live · refreshing every 5s' : 'Idle · refreshing every 30s'}
+              {lastRefreshedAt ? ` · Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}
+            </span>
           </div>
-          <div className="dashboard-overview-actions">
-            {overviewCollapsed && (
-              <div className="dashboard-overview-glance" aria-label="Operational summary">
-                <span><strong>{data?.overview.processing ?? 0}</strong> Processing</span>
-                <span><strong>{data?.overview.needsReview ?? 0}</strong> Review</span>
-                <span><strong>{data?.overview.technicalAttention ?? 0}</strong> Technical</span>
-                <span><strong>{data?.overview.exported ?? 0}</strong> Exported</span>
+          <button className="ui-button tertiary small" onClick={toggleOverview} aria-expanded={!overviewCollapsed}>
+            {overviewCollapsed ? 'Expand' : 'Compact'}
+            <Icon name={overviewCollapsed ? 'chevronDown' : 'chevronUp'} />
+          </button>
+        </header>
+        <div className="lv-pipeline-track" role="tablist" aria-label="Filter by stage">
+          {renderStageTab('ALL')}
+          <div className="lv-pipeline-flow">
+            {PIPELINE_FLOW.map((key, index) => (
+              <div className="lv-pipeline-step" key={key}>
+                {index > 0 && <Icon className="lv-pipeline-arrow" name="chevronRight" />}
+                {renderStageTab(key)}
               </div>
-            )}
-            <button className="ui-button tertiary small" onClick={toggleOverview} aria-expanded={!overviewCollapsed}>
-              {overviewCollapsed ? 'Show detail' : 'Collapse'}
-              <span aria-hidden="true">{overviewCollapsed ? '⌄' : '⌃'}</span>
-            </button>
-          </div>
-        </div>
-        {!overviewCollapsed && (
-          <div className="kpi-grid">
-            {KPI_CARDS.map((card) => (
-              <button key={card.stage} className={`kpi-card tone-${card.tone} ${stage === card.stage ? 'active' : ''}`} onClick={() => selectStage(card.stage)}>
-                <span className="kpi-dot" />
-                <span className="kpi-label">{card.title}</span>
-                <strong>{data?.overview[card.countKey] ?? 0}</strong>
-                <small>{card.help}</small>
-              </button>
             ))}
           </div>
-        )}
+          <div className="lv-pipeline-exceptions" aria-label="Exceptions">
+            {PIPELINE_EXCEPTIONS.map((key) => <div className="lv-pipeline-step" key={key}>{renderStageTab(key)}</div>)}
+          </div>
+        </div>
       </section>
 
       <section className="ui-card dashboard-list-card">
         <div className="dashboard-toolbar">
-          <div className="stage-chips" role="tablist" aria-label="Filter by stage">
-            {STAGES.map((item) => (
-              <button key={item.key} className={`stage-chip ${stage === item.key ? 'active' : ''}`} onClick={() => selectStage(item.key)}>
-                {item.label}
-                <span>{data?.overview[item.countKey] ?? 0}</span>
-              </button>
-            ))}
+          <div className="lv-list-heading">
+            <h2>{stage === 'ALL' ? 'All intakes' : stageLabel(stage)}</h2>
+            <span>{data ? `${data.totalItems} ${data.totalItems === 1 ? 'intake' : 'intakes'}` : '—'}{search ? ` matching “${search}”` : ''}</span>
           </div>
 
           <div className="dashboard-tools-row">
             <div className="dashboard-search-wrap">
-              <span className="search-icon" aria-hidden="true">⌕</span>
+              <Icon className="search-icon" name="search" />
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder={searchableLabels.length ? `Search ${searchableLabels.slice(0, 2).join(' or ')}…` : 'Search configured identifiers…'}
                 aria-label="Search configured business identifiers"
               />
-              {searchInput && <button className="search-clear" onClick={() => setSearchInput('')} aria-label="Clear search">×</button>}
+              {searchInput && <button className="search-clear" onClick={() => setSearchInput('')} aria-label="Clear search"><Icon name="close" /></button>}
             </div>
 
             <select className="compact-select" value={sort} onChange={(event) => {
@@ -473,7 +483,7 @@ export default function DashboardPage() {
             </select>
 
             <div className="columns-menu-wrap">
-              <button className="ui-button secondary small" onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen}>Columns</button>
+              <button className="ui-button secondary small" onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen}><Icon name="columns" />Columns</button>
               {columnsOpen && (
                 <div className="columns-menu">
                   <div className="columns-menu-heading">
@@ -492,8 +502,8 @@ export default function DashboardPage() {
                         </label>
                         {checked && (
                           <div className="column-order-buttons">
-                            <button onClick={() => moveColumn(column.key, -1)} disabled={visibleIndex === 0} aria-label={`Move ${column.label} left`}>↑</button>
-                            <button onClick={() => moveColumn(column.key, 1)} disabled={visibleIndex === effectiveColumnOrder.length - 1} aria-label={`Move ${column.label} right`}>↓</button>
+                            <button onClick={() => moveColumn(column.key, -1)} disabled={visibleIndex === 0} aria-label={`Move ${column.label} left`}><Icon name="arrowUp" /></button>
+                            <button onClick={() => moveColumn(column.key, 1)} disabled={visibleIndex === effectiveColumnOrder.length - 1} aria-label={`Move ${column.label} right`}><Icon name="arrowDown" /></button>
                           </div>
                         )}
                       </div>
@@ -503,7 +513,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <button className="ui-button secondary small" onClick={() => void loadDashboard()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+            <button className="ui-button secondary small" onClick={() => void loadDashboard()} disabled={loading}><Icon name="refresh" />{loading ? 'Refreshing…' : 'Refresh'}</button>
           </div>
         </div>
 
@@ -512,7 +522,7 @@ export default function DashboardPage() {
             <div className="ui-empty-state dashboard-empty-layout"><div className="skeleton-line" /><div className="skeleton-line short" /><p>Loading operations…</p></div>
           ) : !data || data.items.length === 0 ? (
             <div className="ui-empty-state dashboard-empty-layout">
-              <div className="empty-icon">✓</div>
+              <div className="empty-icon"><Icon name="inbox" /></div>
               <h3>{search || stage !== 'ALL' ? 'No matching intakes' : 'No intakes yet'}</h3>
               <p>{search || stage !== 'ALL' ? 'Try a different stage or search value.' : 'Upload documents to start the first intake.'}</p>
               {!search && stage === 'ALL' && <Link to="/packages/new" className="ui-button primary">Upload Documents</Link>}

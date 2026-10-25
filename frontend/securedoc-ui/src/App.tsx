@@ -159,6 +159,10 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
     { to: '/audit', label: 'Audit', icon: 'audit', show: hasCapability('AUDIT_VIEW') },
   ];
 
+  const humanizeRole = (role: string) => role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const roleLabel = localMode
+    ? ROLE_OPTIONS.find((role) => role.value === selectedRole)?.label || humanizeRole(roles[0] || 'User')
+    : roles.length ? roles.map(humanizeRole).join(', ') : 'Signed in';
   const initials = (currentUser?.username || 'User').split(/[.@\s_-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'U';
 
   return (
@@ -216,6 +220,19 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
       </aside>
 
       <main id="main-content" className="modern-main-content" tabIndex={-1}>
+        <div className="app-topbar" role="region" aria-label="Workspace context">
+          <div className="app-topbar-context">
+            <span className="app-topbar-tenant"><Icon name="building" />{currentUser?.tenantName || branding.organizationName || 'Local Demo Tenant'}</span>
+            <span className={`app-topbar-env ${localMode ? 'is-demo' : 'is-secure'}`}>
+              <Icon name="shield" />{localMode ? 'Local / Demo mode' : 'Organization SSO'}
+            </span>
+          </div>
+          <div className="app-topbar-user">
+            <span className="app-topbar-role-label">Acting as</span>
+            <span className="app-topbar-role">{roleLabel}</span>
+          </div>
+        </div>
+        <div className="app-page">
         <Routes>
           <Route path="/" element={hasCapability('DASHBOARD_ACCESS') ? <DashboardPage /> : hasCapability('REPORT_EXECUTIVE_VIEW') ? <Navigate to="/reports" replace /> : <PermissionDenied />} />
           <Route path="/packages/new" element={hasCapability('DOCUMENT_INTAKE') ? <CreatePackagePage /> : <PermissionDenied />} />
@@ -236,6 +253,7 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
           <Route path="/support/incidents" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentsPage /> : <PermissionDenied />} />
           <Route path="/support/incidents/:incidentId" element={hasCapability('TECHNICAL_EXCEPTION_VIEW') ? <SupportIncidentDetailPage /> : <PermissionDenied />} />
         </Routes>
+        </div>
       </main>
     </div>
   );
