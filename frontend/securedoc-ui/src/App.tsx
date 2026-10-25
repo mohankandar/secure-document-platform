@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
@@ -26,7 +26,7 @@ import { BrandingProvider, useBranding } from './branding/BrandingContext';
 import useMediaQuery from './components/ui/useMediaQuery';
 import AdministrationTabs from './components/AdministrationTabs';
 import Button from './components/ui/Button';
-import CaseFileApp from './studio/CaseFileApp';
+const CaseFileApp = lazy(() => import('./studio/CaseFileApp'));
 
 function PermissionDenied() {
   return (
@@ -350,7 +350,7 @@ export default function App() {
   return (
     <BrandingProvider>
       {caseFilePreviewEnabled && currentUser
-        ? <CaseFileApp me={currentUser} onSignOut={signOut} />
+        ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} /></Suspense>
         : <AuthenticatedApplication localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
             hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} />}
     </BrandingProvider>
