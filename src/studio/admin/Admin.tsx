@@ -18,7 +18,7 @@ const AREAS: { key: AreaKey; label: string; short: string; hint: string; allowed
   { key: 'fields', label: 'Case fields', short: 'Fields', hint: 'Identifiers captured at intake and the columns shown on the Desk.', allowed: (c) => c.includes(CAP.identifiers) || c.includes(CAP.policy) },
   { key: 'integrations', label: 'Integrations', short: 'Integrations', hint: 'Intake sources and delivery destinations, with polling, testing and routing.', allowed: (c) => c.includes(CAP.integrations) },
   { key: 'identity', label: 'Sign-in', short: 'Sign-in', hint: 'Enterprise identity provider: draft, test, activate and roll back.', allowed: (c) => c.includes(CAP.auth) },
-  { key: 'health', label: 'System health', short: 'Health', hint: 'Processing and storage dependencies.', allowed: (c) => c.includes(CAP.technicalAdmin) },
+  { key: 'health', label: 'Platform operations', short: 'Platform', hint: 'Runtime health, intake, processing storage, licensing, branding and telemetry.', allowed: (c) => c.includes(CAP.technicalAdmin) },
   { key: 'audit', label: 'Audit trail', short: 'Audit', hint: 'Who changed what, and when.', allowed: (c) => c.includes(CAP.audit) },
 ];
 
@@ -58,7 +58,7 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
         {current.key === 'fields' && <FieldsArea canIdentifiers={caps.includes(CAP.identifiers)} canColumns={caps.includes(CAP.policy)} />}
         {current.key === 'integrations' && <IntegrationsArea />}
         {current.key === 'identity' && <IdentityArea />}
-        {current.key === 'health' && <HealthArea />}
+        {current.key === 'health' && <HealthArea canOperate={caps.includes(CAP.platformOps)} />}
         {current.key === 'audit' && <AuditArea />}
       </section>
     </div>
