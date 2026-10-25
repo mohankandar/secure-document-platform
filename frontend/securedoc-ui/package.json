@@ -13,9 +13,11 @@
     "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts"
   },
   "dependencies": {
+    "lucide-react": "^0.460.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "6.30.6"
+    "react-router-dom": "6.30.6",
+    "swr": "^2.5.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
