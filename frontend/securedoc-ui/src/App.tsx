@@ -350,7 +350,7 @@ export default function App() {
   return (
     <BrandingProvider>
       {caseFilePreviewEnabled && currentUser
-        ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} /></Suspense>
+        ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={handleRoleChange} /></Suspense>
         : <AuthenticatedApplication localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
             hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} />}
     </BrandingProvider>
