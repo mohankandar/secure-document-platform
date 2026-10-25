@@ -26,6 +26,7 @@ import { BrandingProvider, useBranding } from './branding/BrandingContext';
 import useMediaQuery from './components/ui/useMediaQuery';
 import AdministrationTabs from './components/AdministrationTabs';
 import Button from './components/ui/Button';
+import CaseFileApp from './studio/CaseFileApp';
 
 function PermissionDenied() {
   return (
@@ -343,10 +344,15 @@ export default function App() {
     void endOidcSession();
   };
 
+  // Explicit preview flag only. Legacy production routes remain the default until parity is verified.
+  const caseFilePreviewEnabled = import.meta.env.VITE_CASE_FILE_UI_ENABLED === 'true';
+
   return (
     <BrandingProvider>
-      <AuthenticatedApplication localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
-        hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} />
+      {caseFilePreviewEnabled && currentUser
+        ? <CaseFileApp me={currentUser} onSignOut={signOut} />
+        : <AuthenticatedApplication localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
+            hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} />}
     </BrandingProvider>
   );
 }
