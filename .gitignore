@@ -41,3 +41,23 @@ securedoc-storage/
 .vscode/
 **/target/
 
+# Frontend test/build reports
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Machine-specific environment overrides
+.env.*.local
+.env.production
+.env.production.*
+.env.staging
+.env.staging.*
+!.env.example
+!.env.*.example
+
+# Temporary artifacts
+*.tmp
+*.bak
+*.orig
+*.rej
