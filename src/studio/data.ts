@@ -67,7 +67,20 @@ export const CAP = {
   reprocess: 'PACKAGE_REPROCESS',
   technicalView: 'TECHNICAL_EXCEPTION_VIEW',
   technicalRetry: 'TECHNICAL_RETRY',
+  reportExecutive: 'REPORT_EXECUTIVE_VIEW',
+  reportOperational: 'REPORT_OPERATIONAL_VIEW',
+  reportExport: 'REPORT_EXPORT',
+  policy: 'TENANT_POLICY_MANAGE',
+  identifiers: 'TENANT_IDENTIFIER_MANAGE',
+  integrations: 'TENANT_INTEGRATION_MANAGE',
+  auth: 'TENANT_AUTH_MANAGE',
+  technicalAdmin: 'TECHNICAL_ADMIN_VIEW',
+  platformOps: 'PLATFORM_OPERATIONS',
+  audit: 'AUDIT_VIEW',
 } as const;
+
+/** Capabilities that grant at least one Admin area. Each area re-checks its own capability. */
+export const ADMIN_CAPS: string[] = [CAP.policy, CAP.identifiers, CAP.integrations, CAP.auth, CAP.technicalAdmin, CAP.audit];
 
 /** A case needs the current user when they hold the capability to move it forward. */
 export function needsYou(pkg: PackageSummary, caps: string[]): boolean {

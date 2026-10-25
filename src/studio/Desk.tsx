@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Search, X } from 'lucide-react';
 import type { PackageSummary } from '../types';
 import {
@@ -17,7 +17,11 @@ export default function Desk({ caps }: { caps: string[] }) {
   const { caseId } = useParams();
   const navigate = useNavigate();
   const searchRef = useRef<HTMLInputElement>(null);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState<Filter>(() => {
+    const requested = searchParams.get('stage');
+    return requested && (requested === 'you' || STAGES.some((s) => s.key === requested)) ? (requested as Filter) : 'all';
+  });
   const [query, setQuery] = useState('');
 
   const { data: packages, error, isLoading } = usePackages(true);

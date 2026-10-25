@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import type { CurrentUser } from '../types';
-import { CAP, needsYou, useMe, usePackages, useReviewQueue } from './data';
+import { ADMIN_CAPS, CAP, needsYou, useMe, usePackages, useReviewQueue } from './data';
 import { Kbd, Notice, Spinner } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
 import Desk from './Desk';
 import Intake from './Intake';
 import Review from './Review';
+import Reports from './reports/Reports';
+import Admin from './admin/Admin';
 import './studio.css';
 
 const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -32,7 +34,7 @@ export default function CaseFileApp() {
   }
 
   const caps = me.capabilities;
-  if (![CAP.desk, CAP.intake, CAP.review].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
+  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
 
   return (
     <div className="cf">
@@ -48,6 +50,8 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
   const canDesk = caps.includes(CAP.desk);
   const canIntake = caps.includes(CAP.intake);
   const canReview = caps.includes(CAP.review);
+  const canReports = caps.includes(CAP.reportExecutive);
+  const canAdmin = ADMIN_CAPS.some((c) => caps.includes(c));
 
   const { data: packages } = usePackages(canDesk);
   const { data: queue } = useReviewQueue(canReview);
@@ -65,7 +69,7 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const home = canDesk ? '/' : canReview ? '/review' : '/intake';
+  const home = canDesk ? '/' : canReview ? '/review' : canIntake ? '/intake' : canReports ? '/reports' : '/admin';
 
   return (
     <div className="cf-shell">
@@ -92,6 +96,13 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
               {openFindings > 0 && <span className="cf-nav-count" aria-label={`${openFindings} open findings`}>{openFindings}</span>}
             </NavLink>
           )}
+          {(canReports || canAdmin) && (canDesk || canIntake || canReview) && <span className="cf-nav-sep" aria-hidden="true" />}
+          {canReports && (
+            <NavLink to="/reports" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Reports</NavLink>
+          )}
+          {canAdmin && (
+            <NavLink to="/admin" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Admin</NavLink>
+          )}
         </nav>
 
         <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)}>
@@ -115,6 +126,9 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
           <Route path="/case/:caseId" element={canDesk ? <Desk caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/intake" element={canIntake ? <Intake /> : <Navigate to={home} replace />} />
           <Route path="/review" element={canReview ? <Review caps={caps} /> : <Navigate to={home} replace />} />
+          <Route path="/reports" element={canReports ? <Reports caps={caps} /> : <Navigate to={home} replace />} />
+          <Route path="/admin" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
+          <Route path="/admin/:area" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
           <Route path="/packages/new" element={<Navigate to="/intake?via=upload" replace />} />
           <Route path="/scanner-intake" element={<Navigate to="/intake?via=scan" replace />} />
           <Route path="/packages/:caseId" element={<LegacyCaseRedirect />} />
@@ -137,10 +151,10 @@ function OutOfScope({ me }: { me: CurrentUser }) {
     <div className="cf cf-boot">
       <div className="cf-scope">
         <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>
-        <h1>This workspace is for case operations</h1>
+        <h1>Nothing here is assigned to this role</h1>
         <p>
-          {displayName(me.username)} is signed in as {me.roles.join(', ').replace(/_/g, ' ').toLowerCase()}. The Case File prototype covers
-          intake, review and delivery. Switch to a Processor or Supervisor role in Demo controls to explore it.
+          {displayName(me.username)} is signed in as {me.roles.join(', ').replace(/_/g, ' ').toLowerCase()}, which holds no case, reporting or
+          administration capability. Switch roles in Demo controls to explore the workspace.
         </p>
       </div>
     </div>

@@ -207,8 +207,12 @@ const SOURCE_FILTER: Record<string, string[]> = { MANUAL: ['MANUAL_UPLOAD'], API
 function reports(state: DemoState, ctx: Ctx) {
   require(ctx, 'REPORT_EXECUTIVE_VIEW', 'REPORT_OPERATIONAL_VIEW');
   const now = Date.now();
-  const to = ctx.query.get('to') ? new Date(`${ctx.query.get('to')}T23:59:59`).getTime() : now;
-  const from = ctx.query.get('from') ? new Date(`${ctx.query.get('from')}T00:00:00`).getTime() : to - 30 * DAY;
+  // The production client sends ISO instants (exclusive `to`); older callers sent bare dates.
+  const instant = (raw: string | null, suffix: string) => (raw ? new Date(raw.includes('T') ? raw : `${raw}${suffix}`).getTime() : NaN);
+  const toParsed = instant(ctx.query.get('to'), 'T23:59:59');
+  const to = Number.isFinite(toParsed) ? toParsed : now;
+  const fromParsed = instant(ctx.query.get('from'), 'T00:00:00');
+  const from = Number.isFinite(fromParsed) ? fromParsed : to - 30 * DAY;
   const span = Math.max(DAY, to - from);
   const source = ctx.query.get('source') || 'ALL';
   const outcome = ctx.query.get('outcome') || 'ALL';
