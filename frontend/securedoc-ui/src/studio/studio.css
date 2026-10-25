@@ -142,6 +142,8 @@
 .cf-theme-toggle svg { flex: none; }
 .cf-theme-toggle:hover { color: var(--cf-ink); background: var(--cf-raised); border-color: var(--cf-line); }
 .cf-theme-toggle:focus-visible { outline: 2px solid var(--cf-mark); outline-offset: 2px; }
+.cf-local-role { display: inline-flex; align-items: center; flex: none; max-width: 190px; }
+.cf-local-role select { width: 100%; max-width: 190px; height: 34px; padding: 0 26px 0 10px; border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); background: var(--cf-surface); color: var(--cf-ink); font: inherit; font-size: 12px; cursor: pointer; }
 .cf-me { display: flex; align-items: center; gap: 10px; }
 .cf-me-avatar {
   width: 30px; height: 30px; border-radius: 50%;
