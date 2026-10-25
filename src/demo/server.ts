@@ -634,8 +634,8 @@ on('GET', '/integrations', (s, ctx) => { require(ctx, 'TENANT_INTEGRATION_MANAGE
 on('POST', '/integrations', (s, ctx) => {
   require(ctx, 'TENANT_INTEGRATION_MANAGE');
   const now = iso(Date.now());
-  const { secret, ...rest } = ctx.body || {};
-  const created = { ...s.integrations[0], ...rest, connectionId: demoId('int'), secretConfigured: !!secret, configurationVersion: 1, healthStatus: 'UNKNOWN', lastSuccessAt: null, lastFailureAt: null, lastFailureCategory: null, createdAt: now, updatedAt: now };
+  const { secret, secretReference, ...rest } = ctx.body || {};
+  const created = { ...s.integrations[0], ...rest, connectionId: demoId('int'), secretConfigured: !!(secret || secretReference), configurationVersion: 1, healthStatus: 'UNKNOWN', lastSuccessAt: null, lastFailureAt: null, lastFailureCategory: null, createdAt: now, updatedAt: now };
   s.integrations.push(created);
   audit(s, ctx, 'INTEGRATION_CREATED', 'INTEGRATION', created.connectionId, created.name);
   return created;
@@ -643,9 +643,9 @@ on('POST', '/integrations', (s, ctx) => {
 on('PUT', '/integrations/:id', (s, ctx, [id]) => {
   require(ctx, 'TENANT_INTEGRATION_MANAGE');
   const i = findIntegration(s, id);
-  const { secret, expectedConfigurationVersion, ...rest } = ctx.body || {};
+  const { secret, secretReference, expectedConfigurationVersion, ...rest } = ctx.body || {};
   if (expectedConfigurationVersion !== undefined && expectedConfigurationVersion !== i.configurationVersion) throw new HttpError(409, 'This connection was changed by someone else. Reload and try again.', 'CONFLICT');
-  Object.assign(i, rest, { secretConfigured: secret ? true : i.secretConfigured, configurationVersion: i.configurationVersion + 1, updatedAt: iso(Date.now()) });
+  Object.assign(i, rest, { secretConfigured: secret || secretReference ? true : i.secretConfigured, configurationVersion: i.configurationVersion + 1, updatedAt: iso(Date.now()) });
   audit(s, ctx, 'INTEGRATION_UPDATED', 'INTEGRATION', id, i.name);
   return i;
 });

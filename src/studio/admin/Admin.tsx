@@ -8,6 +8,7 @@ import IntegrationsArea from './IntegrationsArea';
 import IdentityArea from './IdentityArea';
 import AuditArea from './AuditArea';
 import HealthArea from './HealthArea';
+import RoutingRules from './RoutingRules';
 import './admin.css';
 
 type AreaKey = 'policy' | 'fields' | 'integrations' | 'identity' | 'health' | 'audit';
@@ -53,7 +54,7 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
       <section className="cf-ad-content" aria-labelledby="cf-ad-area-title">
         <h2 id="cf-ad-area-title" className="sr-only">{current.label}</h2>
         <p className="cf-ad-context">{current.hint}</p>
-        {current.key === 'policy' && <PolicyArea />}
+        {current.key === 'policy' && (caps.includes(CAP.integrations) ? <PolicyArea /> : <div className="cf-ad-stack"><PolicyArea /><RoutingRules /></div>)}
         {current.key === 'fields' && <FieldsArea canIdentifiers={caps.includes(CAP.identifiers)} canColumns={caps.includes(CAP.policy)} />}
         {current.key === 'integrations' && <IntegrationsArea />}
         {current.key === 'identity' && <IdentityArea />}
