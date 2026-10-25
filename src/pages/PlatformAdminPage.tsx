@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import type { PlatformAdminOverview, PlatformHealthItem } from '../types';
-import Breadcrumbs from '../components/Breadcrumbs';
+import PageScaffold from '../components/ui/PageScaffold';
 import ProcessingStoragePanel from './ProcessingStoragePanel';
 import LicensingPanel from './LicensingPanel';
 import BrandingPanel from './BrandingPanel';
 import ProductTelemetryPanel from './ProductTelemetryPanel';
-import PageHeader from '../components/ui/PageHeader';
+import HorizontalTabs from '../components/ui/HorizontalTabs';
+import StatusBadge from '../components/ui/StatusBadge';
 
-function statusClass(status: string) {
-  const normalized = status.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `platform-status platform-status-${normalized}`;
-}
 
 function ProviderCard({ item }: { item: PlatformHealthItem }) {
   return (
@@ -22,7 +19,7 @@ function ProviderCard({ item }: { item: PlatformHealthItem }) {
           <div className="platform-provider-category">{item.category}</div>
           <h3>{item.label}</h3>
         </div>
-        <span className={statusClass(item.status)}>{item.status.replace(/_/g, ' ')}</span>
+        <StatusBadge value={item.status} />
       </div>
       <div className="platform-provider-meta">
         <span>Provider</span><strong>{item.provider || 'Not selected'}</strong>
@@ -32,7 +29,7 @@ function ProviderCard({ item }: { item: PlatformHealthItem }) {
   );
 }
 
-export default function PlatformAdminPage({ canManagePlatformOperations = false }: { canManagePlatformOperations?: boolean }) {
+export default function PlatformAdminPage({ canManagePlatformOperations = false, administrationTabs }: { canManagePlatformOperations?: boolean; administrationTabs?: ReactNode }) {
   const [data, setData] = useState<PlatformAdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [runningHealth, setRunningHealth] = useState(false);
@@ -80,29 +77,28 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
 
   if (loading) {
     return (
-      <div className="platform-admin-page">
-        <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Technical Administration' }]} />
+      <PageScaffold className="platform-admin-page" breadcrumbs={[{ label: 'Administration' }, { label: 'Technical Administration' }]} title="Technical Administration" eyebrow="Platform operations" description="Review platform health, processing readiness, storage, resilience, and technical exceptions." primaryNavigation={administrationTabs}>
         <p>Loading IT / Platform Admin…</p>
-      </div>
+      </PageScaffold>
     );
   }
 
   return (
-    <div className="platform-admin-page">
-      <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Technical Administration' }]} />
-      <PageHeader
-        eyebrow="Administration"
-        title="Technical Administration"
-        description="Platform health, processing infrastructure, licensing and customer-facing branding."
-        actions={activeTab === 'overview' ? (<>
-          <button className="ui-button secondary" onClick={() => void load()}>Refresh</button>
-          <button className="ui-button primary" disabled={runningHealth} onClick={() => void runHealth()}>
-            {runningHealth ? 'Checking…' : 'Run health checks'}
-          </button>
-        </>) : undefined}
-      />
-
-      <div className="platform-tabs" role="tablist" aria-label="Platform Operations sections">
+    <PageScaffold
+      className="platform-admin-page"
+      breadcrumbs={[{ label: 'Administration' }, { label: 'Technical Administration' }]}
+      title="Technical Administration"
+      eyebrow="Platform operations"
+      description="Review platform health, processing readiness, storage, resilience, and technical exceptions."
+      actions={activeTab === 'overview' ? (<>
+        <button className="ui-button secondary" onClick={() => void load()}>Refresh</button>
+        <button className="ui-button primary" disabled={runningHealth} onClick={() => void runHealth()}>
+          {runningHealth ? 'Checking…' : 'Run health checks'}
+        </button>
+      </>) : undefined}
+      primaryNavigation={administrationTabs}
+    >
+      <HorizontalTabs ariaLabel="Platform Operations sections" >
         <button className={activeTab === 'overview' ? 'active' : ''} onClick={() => setActiveTab('overview')} role="tab" aria-selected={activeTab === 'overview'}>Overview</button>
         {canManagePlatformOperations && (
           <>
@@ -112,7 +108,7 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
             <button className={activeTab === 'telemetry' ? 'active' : ''} onClick={() => setActiveTab('telemetry')} role="tab" aria-selected={activeTab === 'telemetry'}>Product Telemetry</button>
           </>
         )}
-      </div>
+      </HorizontalTabs>
 
       {activeTab === 'storage' && canManagePlatformOperations ? (
         <ProcessingStoragePanel />
@@ -124,11 +120,11 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
         <ProductTelemetryPanel />
       ) : (
         <>
-      {error && <div className="platform-error">{error}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
 
       {data && (
         <>
-          <section className="platform-section">
+          <section className="ui-card platform-section-layout">
             <div className="platform-section-heading">
               <div><h2>Runtime health</h2><p>Connection status without exposing credentials, tokens or document content.</p></div>
               <span className="platform-generated">Updated {new Date(data.generatedAt).toLocaleString()}</span>
@@ -139,10 +135,10 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
           </section>
 
           <div className="platform-two-column">
-            <section className="platform-section platform-panel">
+            <section className="ui-card platform-section-layout platform-panel">
               <div className="platform-section-heading compact">
                 <div><h2>Watched-folder intake</h2><p>Unit 20 intake semantics with Unit 24 operational scheduling.</p></div>
-                <button className="secondary" disabled={scanning || !data.watchedFolder.enabled} onClick={() => void scan()}>
+                <button className="ui-button secondary" disabled={scanning || !data.watchedFolder.enabled} onClick={() => void scan()}>
                   {scanning ? 'Scanning…' : 'Scan now'}
                 </button>
               </div>
@@ -171,7 +167,7 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
               )}
             </section>
 
-            <section className="platform-section platform-panel">
+            <section className="ui-card platform-section-layout platform-panel">
               <div className="platform-section-heading compact"><div><h2>Resilience & integrations</h2><p>Active deployment policy and safe configuration state.</p></div></div>
               <dl className="platform-definition-list">
                 <div><dt>Transient operation attempts</dt><dd>{data.resilience.maxAttempts}</dd></div>
@@ -188,14 +184,14 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
             </section>
           </div>
 
-          <section className="platform-section">
+          <section className="ui-card platform-section-layout">
             <div className="platform-section-heading">
               <div><h2>Technical Incidents</h2><p>Recorded technical failures remain available for investigation even when business continues manually.</p></div>
-              <Link className="button-link secondary" to="/support/incidents">Search all incidents</Link>
+              <Link className="ui-button secondary" to="/support/incidents">Search all incidents</Link>
               <span className="platform-count">{data.technicalExceptions.length}</span>
             </div>
             {data.technicalExceptions.length === 0 ? (
-              <div className="platform-empty">No recorded technical incidents for this tenant.</div>
+              <div className="ui-empty-state">No recorded technical incidents for this tenant.</div>
             ) : (
               <div className="platform-exception-list">
                 {data.technicalExceptions.map((item) => (
@@ -206,7 +202,7 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
                       {item.technicalHoldUntil && <div className="platform-exception-meta">Technical hold until {new Date(item.technicalHoldUntil).toLocaleString()}</div>}
                     </div>
                     <div className="platform-exception-actions">
-                      <span className="platform-status platform-status-unhealthy">Attention</span>
+                      <StatusBadge value="UNHEALTHY" label="Attention" />
                       <Link to={`/technical-exceptions/${item.packageId}`}>View issue details</Link>
                       <Link to={`/packages/${item.packageId}`}>Open intake</Link>
                     </div>
@@ -219,6 +215,6 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false 
       )}
         </>
       )}
-    </div>
+    </PageScaffold>
   );
 }

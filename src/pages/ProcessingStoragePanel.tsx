@@ -6,6 +6,7 @@ import type {
   ProcessingStorageProvider,
   ProcessingStorageTenant,
 } from '../types';
+import StatusBadge from '../components/ui/StatusBadge';
 
 function messageFrom(error: unknown, fallback: string) {
   const maybe = error as { message?: string; errorCode?: string };
@@ -131,8 +132,8 @@ export default function ProcessingStoragePanel() {
     void run(`tenant:${overrideTenantId}`, () => apiClient.activateProcessingStorageTenant(overrideProviderId, overrideTenantId), `Tenant override activated: ${label}.`);
   };
 
-  if (loading) return <div className="platform-section"><p>Loading processing storage…</p></div>;
-  if (!overview) return <div className="platform-error">{error || 'Processing storage is unavailable.'}</div>;
+  if (loading) return <div className="ui-card platform-section-layout"><p>Loading processing storage…</p></div>;
+  if (!overview) return <div className="ui-alert tone-danger">{error || 'Processing storage is unavailable.'}</div>;
 
   const defaultProvider = providerFor(overview, overview.deploymentDefault?.providerId);
   const activeProviderIds = new Set([
@@ -144,8 +145,8 @@ export default function ProcessingStoragePanel() {
 
   return (
     <div className="processing-storage-page">
-      {error && <div className="platform-error">{error}</div>}
-      {notice && <div className="platform-success">{notice}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {notice && <div className="ui-alert tone-success">{notice}</div>}
 
       <section className={`processing-storage-readiness ${overview.ready ? 'is-ready' : 'needs-config'}`}>
         <div>
@@ -160,15 +161,13 @@ export default function ProcessingStoragePanel() {
           </p>
         </div>
         <div className="processing-storage-readiness-meta">
-          <span className={overview.ready ? 'platform-status platform-status-healthy' : 'platform-status platform-status-unhealthy'}>
-            {overview.ready ? 'READY' : 'NOT READY'}
-          </span>
+          <StatusBadge value={overview.ready ? 'READY' : 'UNHEALTHY'} label={overview.ready ? 'READY' : 'NOT READY'} />
           <strong>{overview.activeNodeCount} active node{overview.activeNodeCount === 1 ? '' : 's'}</strong>
-          <button className="secondary" disabled={busyKey !== ''} onClick={() => void load()}>Refresh</button>
+          <button className="ui-button secondary" disabled={busyKey !== ''} onClick={() => void load()}>Refresh</button>
         </div>
       </section>
 
-      <section className="platform-section">
+      <section className="ui-card platform-section-layout">
         <div className="platform-section-heading">
           <div>
             <h2>Deployment default</h2>
@@ -183,19 +182,19 @@ export default function ProcessingStoragePanel() {
               <code>{defaultProvider.rootPath}</code>
             </div>
             <div className="processing-storage-validation-summary">
-              <span className="platform-status platform-status-healthy">{defaultProvider.status}</span>
+              <StatusBadge value={defaultProvider.status} />
               <strong>{healthyNodeCount(defaultProvider.id)} / {overview.activeNodeCount} nodes healthy</strong>
             </div>
           </div>
         ) : (
-          <div className="platform-empty processing-storage-setup-required">
+          <div className="ui-empty-state processing-storage-setup-required">
             <strong>Configuration required</strong>
             <span>Create a provider, test it from all active nodes, then activate it as the deployment default.</span>
           </div>
         )}
       </section>
 
-      <section className="platform-section">
+      <section className="ui-card platform-section-layout">
         <div className="platform-section-heading">
           <div>
             <h2>Create processing storage</h2>
@@ -218,12 +217,12 @@ export default function ProcessingStoragePanel() {
             <span>Filesystem path</span>
             <input value={rootPath} onChange={(event) => setRootPath(event.target.value)} placeholder={providerType === 'SHARED_FILESYSTEM' ? '\\\\NAS01\\DocumentPlatform\\Processing or /mnt/document-platform/processing' : 'C:\\ProgramData\\DocumentPlatform\\Processing'} />
           </label>
-          <button className="primary" type="submit" disabled={busyKey !== ''}>{busyKey === 'create' ? 'Creating…' : 'Create candidate'}</button>
+          <button className="ui-button primary" type="submit" disabled={busyKey !== ''}>{busyKey === 'create' ? 'Creating…' : 'Create candidate'}</button>
         </form>
         <p className="platform-boundary-note">For multi-node deployments, use <strong>SHARED_FILESYSTEM</strong>. LOCAL_FILESYSTEM cannot be activated while more than one application node is active.</p>
       </section>
 
-      <section className="platform-section">
+      <section className="ui-card platform-section-layout">
         <div className="platform-section-heading">
           <div>
             <h2>Providers & cluster validation</h2>
@@ -232,7 +231,7 @@ export default function ProcessingStoragePanel() {
           <span className="platform-count">{overview.providers.length}</span>
         </div>
         {overview.providers.length === 0 ? (
-          <div className="platform-empty">No processing-storage providers have been created.</div>
+          <div className="ui-empty-state">No processing-storage providers have been created.</div>
         ) : (
           <div className="processing-storage-provider-list">
             {overview.providers.map((provider) => {
@@ -251,7 +250,7 @@ export default function ProcessingStoragePanel() {
                       </div>
                       <div className="processing-storage-provider-subtitle">{displayStatus(provider.providerType)} · v{provider.configurationVersion}</div>
                     </div>
-                    <span className={`platform-status platform-status-${provider.status.toLowerCase()}`}>{displayStatus(provider.status)}</span>
+                    <StatusBadge value={provider.status} label={displayStatus(provider.status)} />
                   </div>
                   <code className="processing-storage-root">{provider.rootPath}</code>
                   <div className="processing-storage-provider-health">
@@ -269,12 +268,12 @@ export default function ProcessingStoragePanel() {
                   </div>
                   <div className="processing-storage-provider-actions">
                     {provider.status !== 'RETIRED' && (
-                      <button className="secondary" disabled={busyKey !== ''} onClick={() => void run(`test:${provider.id}`, () => apiClient.testProcessingStorageProvider(provider.id), `${provider.name} validation requested.`)}>
+                      <button className="ui-button secondary" disabled={busyKey !== ''} onClick={() => void run(`test:${provider.id}`, () => apiClient.testProcessingStorageProvider(provider.id), `${provider.name} validation requested.`)}>
                         {busyKey === `test:${provider.id}` ? 'Testing…' : 'Test connection'}
                       </button>
                     )}
                     {!isDefault && provider.status !== 'RETIRED' && (
-                      <button className="primary" disabled={busyKey !== '' || !fullyValidated} title={!fullyValidated ? 'Every active node must validate healthy first' : undefined} onClick={() => activateDefault(provider)}>
+                      <button className="ui-button primary" disabled={busyKey !== '' || !fullyValidated} title={!fullyValidated ? 'Every active node must validate healthy first' : undefined} onClick={() => activateDefault(provider)}>
                         {busyKey === `default:${provider.id}` ? 'Activating…' : 'Activate default'}
                       </button>
                     )}
@@ -291,7 +290,7 @@ export default function ProcessingStoragePanel() {
         )}
       </section>
 
-      <section className="platform-section">
+      <section className="ui-card platform-section-layout">
         <div className="platform-section-heading">
           <div>
             <h2>Tenant overrides</h2>
@@ -317,11 +316,11 @@ export default function ProcessingStoragePanel() {
               ))}
             </select>
           </label>
-          <button className="primary" disabled={busyKey !== '' || !overrideTenantId || !overrideProviderId || !providerValidated(overrideProviderId)} onClick={applyTenantOverride}>Apply override</button>
+          <button className="ui-button primary" disabled={busyKey !== '' || !overrideTenantId || !overrideProviderId || !providerValidated(overrideProviderId)} onClick={applyTenantOverride}>Apply override</button>
         </div>
 
         {overview.tenants.length === 0 ? (
-          <div className="platform-empty">No provisioned tenants are available for storage assignment.</div>
+          <div className="ui-empty-state">No provisioned tenants are available for storage assignment.</div>
         ) : (
           <div className="processing-storage-tenant-table">
             <div className="processing-storage-tenant-row processing-storage-tenant-header"><span>Tenant</span><span>Effective provider</span><span>Source</span><span /></div>
@@ -333,7 +332,7 @@ export default function ProcessingStoragePanel() {
                   <span><strong>{tenant.name}</strong><small>{tenant.slug} · {displayStatus(tenant.status)}</small></span>
                   <span>{effective?.name || 'Not configured'}</span>
                   <span>{override ? 'Tenant override' : 'Deployment default'}</span>
-                  <span>{override && <button className="secondary small" disabled={busyKey !== ''} onClick={() => void run(`clear:${tenant.tenantId}`, () => apiClient.clearProcessingStorageTenantOverride(tenant.tenantId), `${tenant.name} now inherits the deployment default.`)}>Use default</button>}</span>
+                  <span>{override && <button className="ui-button secondary small" disabled={busyKey !== ''} onClick={() => void run(`clear:${tenant.tenantId}`, () => apiClient.clearProcessingStorageTenantOverride(tenant.tenantId), `${tenant.name} now inherits the deployment default.`)}>Use default</button>}</span>
                 </div>
               );
             })}

@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { apiClient } from '../api/client';
 import type { LicenseHistoryItem, LicensingOverview, TenantLicenseStatus } from '../types';
+import StatusBadge from '../components/ui/StatusBadge';
 
 function messageFrom(error: unknown, fallback: string) {
   const maybe = error as { message?: string; errorCode?: string };
@@ -11,10 +12,6 @@ function displayStatus(value?: string | null) {
   return (value || 'UNKNOWN').replace(/_/g, ' ');
 }
 
-function statusClass(status?: string | null) {
-  const normalized = (status || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  return `platform-status platform-status-${normalized}`;
-}
 
 function expirationInfo(expiresAt?: string | null, nowMs = Date.now()) {
   if (!expiresAt) return { label: 'No expiration', tone: 'neutral' as const, remainingMs: null as number | null };
@@ -72,7 +69,7 @@ function TenantRow({ tenant, selected, onSelect, nowMs }: { tenant: TenantLicens
         <strong>{tenant.tenantName}</strong>
         <small>{tenant.tenantSlug}</small>
       </span>
-      <span><span className={statusClass(tenant.status)}>{displayStatus(tenant.status)}</span></span>
+      <span><StatusBadge value={tenant.status || 'UNKNOWN'} label={displayStatus(tenant.status)} /></span>
       <span className={tenant.processingAllowed ? 'licensing-allowed' : 'licensing-denied'}>{tenant.processingAllowed ? 'Allowed' : 'Blocked'}</span>
       <span>{tenant.claims?.edition || '—'}</span>
       <span className={`licensing-expiry licensing-expiry-${expiry.tone}`}>{expiry.label}</span>
@@ -167,15 +164,15 @@ export default function LicensingPanel() {
     }
   };
 
-  if (loading) return <div className="platform-section"><p>Loading tenant licensing…</p></div>;
-  if (!overview) return <div className="platform-error">{error || 'Tenant licensing is unavailable.'}</div>;
+  if (loading) return <div className="ui-card platform-section-layout"><p>Loading tenant licensing…</p></div>;
+  if (!overview) return <div className="ui-alert tone-danger">{error || 'Tenant licensing is unavailable.'}</div>;
 
   const selectedExpiry = expirationInfo(selectedTenant?.claims?.expiresAt, nowMs);
 
   return (
     <div className="licensing-page">
-      {error && <div className="platform-error">{error}</div>}
-      {notice && <div className="platform-success">{notice}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {notice && <div className="ui-alert tone-success">{notice}</div>}
 
       <section className={`licensing-readiness ${overview.enforcementEnabled ? 'enforced' : 'not-enforced'}`}>
         <div>
@@ -188,13 +185,11 @@ export default function LicensingPanel() {
           </p>
         </div>
         <div className="licensing-readiness-meta">
-          <span className={overview.enforcementEnabled ? 'platform-status platform-status-healthy' : 'platform-status platform-status-disabled'}>
-            {overview.enforcementEnabled ? 'ENFORCED' : 'NOT ENFORCED'}
-          </span>
+          <StatusBadge value={overview.enforcementEnabled ? 'ENFORCED' : 'DISABLED'} label={overview.enforcementEnabled ? 'ENFORCED' : 'NOT ENFORCED'} />
           <span className={overview.verificationKeyConfigured ? 'licensing-key-ok' : 'licensing-key-bad'}>
             Verification key {overview.verificationKeyConfigured ? 'configured' : 'missing'}
           </span>
-          <button className="secondary" disabled={busy} onClick={() => void loadOverview()}>Refresh</button>
+          <button className="ui-button secondary" disabled={busy} onClick={() => void loadOverview()}>Refresh</button>
         </div>
       </section>
 
@@ -205,13 +200,13 @@ export default function LicensingPanel() {
         <div className={summary.attention > 0 ? 'needs-attention' : ''}><span>Needs attention</span><strong>{summary.attention}</strong></div>
       </div>
 
-      <section className="platform-section">
+      <section className="ui-card platform-section-layout">
         <div className="platform-section-heading">
           <div><h2>Tenant license status</h2><p>Select a tenant to install/update its license, review entitlements and inspect immutable history.</p></div>
           <span className="platform-count">{overview.tenants.length}</span>
         </div>
         {overview.tenants.length === 0 ? (
-          <div className="platform-empty">No provisioned tenants are available for licensing.</div>
+          <div className="ui-empty-state">No provisioned tenants are available for licensing.</div>
         ) : (
           <div className="licensing-tenant-table">
             <div className="licensing-tenant-header"><span>Tenant</span><span>Status</span><span>Processing</span><span>Edition</span><span>Expiration</span></div>
@@ -224,10 +219,10 @@ export default function LicensingPanel() {
 
       {selectedTenant && (
         <div className="licensing-two-column">
-          <section className="platform-section licensing-detail-card">
+          <section className="ui-card platform-section-layout licensing-detail-card">
             <div className="platform-section-heading compact">
               <div><h2>{selectedTenant.tenantName}</h2><p>{selectedTenant.tenantSlug} · {selectedTenant.tenantId}</p></div>
-              <span className={statusClass(selectedTenant.status)}>{displayStatus(selectedTenant.status)}</span>
+              <StatusBadge value={selectedTenant.status || 'UNKNOWN'} label={displayStatus(selectedTenant.status)} />
             </div>
 
             <div className={`licensing-processing-banner ${selectedTenant.processingAllowed ? 'allowed' : 'blocked'}`}>
@@ -265,11 +260,11 @@ export default function LicensingPanel() {
                 </div>
               </>
             ) : (
-              <div className="platform-empty licensing-no-license"><strong>No active license claims</strong><span>Install a signed tenant license for this tenant.</span></div>
+              <div className="ui-empty-state licensing-no-license"><strong>No active license claims</strong><span>Install a signed tenant license for this tenant.</span></div>
             )}
           </section>
 
-          <section className="platform-section licensing-install-card">
+          <section className="ui-card platform-section-layout licensing-install-card">
             <div className="platform-section-heading compact">
               <div><h2>Install / update license</h2><p>Paste the complete vendor-signed <code>LV1...</code> token.</p></div>
             </div>
@@ -288,7 +283,7 @@ export default function LicensingPanel() {
               <div className="licensing-security-note">
                 The signed token is sent only to the licensing API for verification/storage. Platform overview and history never return the raw token.
               </div>
-              <button className="primary" type="submit" disabled={busy || !licenseToken.trim()}>{busy ? 'Verifying…' : 'Verify & install'}</button>
+              <button className="ui-button primary" type="submit" disabled={busy || !licenseToken.trim()}>{busy ? 'Verifying…' : 'Verify & install'}</button>
             </form>
 
             <div className="licensing-connected-validation">
@@ -301,15 +296,15 @@ export default function LicensingPanel() {
       )}
 
       {selectedTenant && (
-        <section className="platform-section">
+        <section className="ui-card platform-section-layout">
           <div className="platform-section-heading">
             <div><h2>License history</h2><p>Prior records remain visible for auditability. Raw signed tokens are never shown.</p></div>
-            <button className="secondary" disabled={historyLoading} onClick={() => void loadHistory(selectedTenant.tenantId)}>{historyLoading ? 'Loading…' : 'Refresh history'}</button>
+            <button className="ui-button secondary" disabled={historyLoading} onClick={() => void loadHistory(selectedTenant.tenantId)}>{historyLoading ? 'Loading…' : 'Refresh history'}</button>
           </div>
           {historyLoading ? (
-            <div className="platform-empty">Loading license history…</div>
+            <div className="ui-empty-state">Loading license history…</div>
           ) : history.length === 0 ? (
-            <div className="platform-empty">No license history exists for this tenant.</div>
+            <div className="ui-empty-state">No license history exists for this tenant.</div>
           ) : (
             <div className="licensing-history-list">
               {history.map((item) => {
@@ -321,7 +316,7 @@ export default function LicensingPanel() {
                         <strong>{item.claims?.edition || 'Unknown edition'}</strong>
                         {item.active && <span className="processing-storage-chip">Current</span>}
                         {item.verificationEvidence === 'VERIFIED_AT_INSTALL' && <span className="licensing-history-evidence">Verified at install</span>}
-                        <span className={statusClass(item.status)}>{displayStatus(item.status)}</span>
+                        <StatusBadge value={item.status || 'UNKNOWN'} label={displayStatus(item.status)} />
                       </div>
                       <span>Installed {new Date(item.installedAt).toLocaleString()}</span>
                       <code>{item.licenseId}</code>

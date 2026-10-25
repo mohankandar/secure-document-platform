@@ -20,6 +20,8 @@ export function intakeBreadcrumbLabel(identifier?: BusinessIdentifier | null) {
 }
 
 export default function Breadcrumbs({ items }: BreadcrumbsProps) {
+  if (items.length === 0) return null;
+
   const trail: BreadcrumbItem[] = [{ label: 'Dashboard', to: '/' }, ...items];
 
   return (

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
-import Breadcrumbs from '../components/Breadcrumbs';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
+import HorizontalTabs from '../components/ui/HorizontalTabs';
 import type {
   ApiError,
   BusinessAdminConfiguration,
@@ -27,7 +27,7 @@ const SENSITIVE_TYPES = [
   { key: 'CREDIT_SCORE', label: 'Credit Score' },
 ] as const;
 
-export default function BusinessAdminPage() {
+export default function BusinessAdminPage({ administrationTabs }: { administrationTabs?: ReactNode }) {
   const [activeSection, setActiveSection] = useState<'identifiers' | 'reporting' | 'dashboard' | 'sensitive' | 'intelligence' | 'routing' | 'retention'>('identifiers');
   const [configuration, setConfiguration] = useState<BusinessAdminConfiguration | null>(null);
   const [identifiers, setIdentifiers] = useState<BusinessAdminIdentifierDraft[]>([]);
@@ -439,27 +439,26 @@ export default function BusinessAdminPage() {
 
   if (loading) {
     return (
-      <div className="business-admin-page">
-        <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Business Admin' }]} />
-        <div className="card">Loading Business Admin configuration...</div>
-      </div>
+      <PageScaffold className="business-admin-page" breadcrumbs={[{ label: 'Administration' }, { label: 'Business Admin' }]} title="Business Administration" primaryNavigation={administrationTabs}>
+        <div className="ui-card">Loading Business Admin configuration...</div>
+      </PageScaffold>
     );
   }
 
   return (
-    <div className="business-admin-page">
-      <Breadcrumbs items={[{ label: 'Administration' }, { label: 'Business Admin' }]} />
-      <PageHeader
-        eyebrow="Business administration"
-        title="Business Administration"
-        description="Configure tenant-owned terminology, review policy, routing, reporting targets and lifecycle rules without changing technical platform settings."
-        actions={<button className="ui-button secondary" onClick={() => void load()}>Refresh</button>}
-      />
+    <PageScaffold
+      className="business-admin-page"
+      breadcrumbs={[{ label: 'Administration' }, { label: 'Business Admin' }]}
+      title="Business Administration"
+      eyebrow="Tenant policy"
+      description="Configure business identifiers, processing policy, reporting, routing, and retention for this tenant."
+      actions={<button className="ui-button secondary" onClick={() => void load()}>Refresh</button>}
+      primaryNavigation={administrationTabs}
+    >
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {success && <div className="ui-alert tone-success">{success}</div>}
 
-      {error && <div className="error-msg">{error}</div>}
-      {success && <div className="success-msg">{success}</div>}
-
-      <nav className="admin-section-nav" aria-label="Business administration sections">
+      <HorizontalTabs ariaLabel="Business administration sections" className="admin-section-nav">
         {([
           ['identifiers', 'Identifiers'],
           ['reporting', 'Reporting'],
@@ -471,15 +470,15 @@ export default function BusinessAdminPage() {
         ] as const).map(([key, label]) => (
           <button key={key} type="button" className={activeSection === key ? 'active' : ''} onClick={() => setActiveSection(key)}>{label}</button>
         ))}
-      </nav>
+      </HorizontalTabs>
 
-      {activeSection === 'identifiers' && <section id="business-identifiers" className="card admin-section-card admin-anchor-section">
+      {activeSection === 'identifiers' && <section id="business-identifiers" className="ui-card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Business Identifiers</h2>
             <p>These fields identify the long-lived business record and appear throughout intake and search.</p>
           </div>
-          <button className="secondary" onClick={addIdentifier}>+ Add Identifier</button>
+          <button className="ui-button secondary" onClick={addIdentifier}>+ Add Identifier</button>
         </div>
 
         <div className="identifier-admin-list">
@@ -500,8 +499,8 @@ export default function BusinessAdminPage() {
               <div className="identifier-editor-body">
               <div className="identifier-admin-row">
                 <div className="identifier-order-controls" aria-label="Reorder identifier">
-                  <button className="icon-button" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up">↑</button>
-                  <button className="icon-button" onClick={() => moveIdentifier(index, 1)} disabled={index === identifiers.length - 1} title="Move down">↓</button>
+                  <button className="ui-button icon" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up">↑</button>
+                  <button className="ui-button icon" onClick={() => moveIdentifier(index, 1)} disabled={index === identifiers.length - 1} title="Move down">↓</button>
                 </div>
 
                 <div className="identifier-main-field">
@@ -605,7 +604,7 @@ export default function BusinessAdminPage() {
           {identifierValidation && <strong>{identifierValidation}</strong>}
         </div>
         <div className="admin-save-row">
-          <button className="primary" disabled={savingIdentifiers || !!identifierValidation} onClick={() => void saveIdentifiers()}>
+          <button className="ui-button primary" disabled={savingIdentifiers || !!identifierValidation} onClick={() => void saveIdentifiers()}>
             {savingIdentifiers ? 'Saving...' : 'Save Identifiers'}
           </button>
         </div>
@@ -613,7 +612,7 @@ export default function BusinessAdminPage() {
 
 
       {activeSection === 'reporting' && reportingConfiguration && (
-        <section id="reporting-targets" className="card admin-section-card admin-anchor-section">
+        <section id="reporting-targets" className="ui-card admin-section-card admin-anchor-section">
           <div className="admin-section-heading">
             <div>
               <h2>Reporting & Business Targets</h2>
@@ -622,22 +621,22 @@ export default function BusinessAdminPage() {
           </div>
 
           <div className="policy-controls-grid">
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label>Delivery time target</label>
               <div className="threshold-row"><input type="number" min="1" max="10080" value={reportingConfiguration.deliveryTargetMinutes} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, deliveryTargetMinutes: Number(e.target.value) })} /><strong>{reportingConfiguration.deliveryTargetMinutes}m</strong></div>
               <p>Measured from intake to first successful delivery.</p>
             </div>
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label>Delivery SLA target</label>
               <div className="threshold-row"><input type="number" min="1" max="100" step="0.1" value={reportingConfiguration.deliveryTargetPercent} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, deliveryTargetPercent: Number(e.target.value) })} /><strong>{reportingConfiguration.deliveryTargetPercent.toFixed(1)}%</strong></div>
               <p>Target share of eligible packages delivered within the configured time.</p>
             </div>
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label>Straight-through target</label>
               <div className="threshold-row"><input type="number" min="0" max="100" step="0.1" value={reportingConfiguration.straightThroughTargetPercent} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, straightThroughTargetPercent: Number(e.target.value) })} /><strong>{reportingConfiguration.straightThroughTargetPercent.toFixed(1)}%</strong></div>
               <p>Target share of delivered packages with no recorded review workflow.</p>
             </div>
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label>Review wait target</label>
               <div className="threshold-row"><input type="number" min="1" max="10080" value={reportingConfiguration.reviewWaitTargetMinutes} onChange={(e) => setReportingConfiguration({ ...reportingConfiguration, reviewWaitTargetMinutes: Number(e.target.value) })} /><strong>{reportingConfiguration.reviewWaitTargetMinutes}m</strong></div>
               <p>Target time from review creation until a reviewer starts work.</p>
@@ -660,11 +659,11 @@ export default function BusinessAdminPage() {
               </button>
             ))}
           </div>
-          <div className="admin-save-row"><button className="primary" disabled={savingReporting} onClick={() => void saveReportingConfiguration()}>{savingReporting ? 'Saving...' : 'Save Reporting Targets'}</button></div>
+          <div className="admin-save-row"><button className="ui-button primary" disabled={savingReporting} onClick={() => void saveReportingConfiguration()}>{savingReporting ? 'Saving...' : 'Save Reporting Targets'}</button></div>
         </section>
       )}
 
-      {activeSection === 'dashboard' && <section id="dashboard-columns" className="card admin-section-card admin-anchor-section">
+      {activeSection === 'dashboard' && <section id="dashboard-columns" className="ui-card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Dashboard Columns</h2>
@@ -676,8 +675,8 @@ export default function BusinessAdminPage() {
           {dashboardColumns.map((column, index) => (
             <div className="dashboard-admin-row" key={column.key}>
               <div className="identifier-order-controls" aria-label={`Reorder ${column.label}`}>
-                <button className="icon-button" onClick={() => moveDashboardColumn(index, -1)} disabled={index === 0} title="Move up">↑</button>
-                <button className="icon-button" onClick={() => moveDashboardColumn(index, 1)} disabled={index === dashboardColumns.length - 1} title="Move down">↓</button>
+                <button className="ui-button icon" onClick={() => moveDashboardColumn(index, -1)} disabled={index === 0} title="Move up">↑</button>
+                <button className="ui-button icon" onClick={() => moveDashboardColumn(index, 1)} disabled={index === dashboardColumns.length - 1} title="Move down">↓</button>
               </div>
               <div className="dashboard-admin-column-name">
                 <strong>{column.label}</strong>
@@ -711,13 +710,13 @@ export default function BusinessAdminPage() {
           <span>The Primary business identifier always remains Allowed and Default so the Dashboard never falls back to an internal UUID.</span>
         </div>
         <div className="admin-save-row">
-          <button className="primary" disabled={savingDashboardColumns} onClick={() => void saveDashboardColumns()}>
+          <button className="ui-button primary" disabled={savingDashboardColumns} onClick={() => void saveDashboardColumns()}>
             {savingDashboardColumns ? 'Saving...' : 'Save Dashboard Columns'}
           </button>
         </div>
       </section>}
 
-      {activeSection === 'sensitive' && <section id="sensitive-policy" className="card admin-section-card admin-anchor-section">
+      {activeSection === 'sensitive' && <section id="sensitive-policy" className="ui-card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Sensitive Data Policy</h2>
@@ -747,7 +746,7 @@ export default function BusinessAdminPage() {
             </div>
 
             <div className="policy-controls-grid">
-              <div className="policy-control-card">
+              <div className="ui-card subtle policy-control-card">
                 <label htmlFor="confidenceThreshold">Automatic redaction threshold</label>
                 <div className="threshold-row">
                   <input
@@ -764,7 +763,7 @@ export default function BusinessAdminPage() {
                 <p>Findings below this threshold require review instead of irreversible automatic redaction.</p>
               </div>
 
-              <div className="policy-control-card">
+              <div className="ui-card subtle policy-control-card">
                 <span className="policy-control-label">SSN exposure handling</span>
                 <label className={`review-mode-option ${policy.maskSsnLastFour ? 'selected' : ''}`}>
                   <input
@@ -780,7 +779,7 @@ export default function BusinessAdminPage() {
                 </label>
               </div>
 
-              <div className="policy-control-card">
+              <div className="ui-card subtle policy-control-card">
                 <span className="policy-control-label">Review behavior</span>
                 <label className={`review-mode-option ${policy.reviewMode === 'UNCERTAIN_ONLY' ? 'selected' : ''}`}>
                   <input type="radio" checked={policy.reviewMode === 'UNCERTAIN_ONLY'} onChange={() => setReviewMode('UNCERTAIN_ONLY')} />
@@ -800,7 +799,7 @@ export default function BusinessAdminPage() {
             </div>
 
             <div className="admin-save-row">
-              <button className="primary" disabled={savingPolicy || policy.enabledEntityTypes.length === 0} onClick={() => void savePolicy()}>
+              <button className="ui-button primary" disabled={savingPolicy || policy.enabledEntityTypes.length === 0} onClick={() => void savePolicy()}>
                 {savingPolicy ? 'Saving...' : 'Save Sensitive Data Policy'}
               </button>
             </div>
@@ -809,7 +808,7 @@ export default function BusinessAdminPage() {
       </section>}
 
       {activeSection === 'intelligence' && documentIntelligence && (
-        <section id="document-intelligence" className="card admin-section-card admin-anchor-section">
+        <section id="document-intelligence" className="ui-card admin-section-card admin-anchor-section">
           <div className="admin-section-heading">
             <div>
               <h2>Document Intelligence</h2>
@@ -818,7 +817,7 @@ export default function BusinessAdminPage() {
           </div>
 
           <div className="policy-controls-grid">
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <span className="policy-control-label">Activation mode</span>
               <label className={`review-mode-option ${documentIntelligence.mode === 'DISABLED' ? 'selected' : ''}`}>
                 <input type="radio" checked={documentIntelligence.mode === 'DISABLED'} onChange={() => setDocumentIntelligenceMode('DISABLED')} />
@@ -843,7 +842,7 @@ export default function BusinessAdminPage() {
               </label>
             </div>
 
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label htmlFor="documentIntelligenceBundle">Pinned intelligence bundle</label>
               <select
                 id="documentIntelligenceBundle"
@@ -870,7 +869,7 @@ export default function BusinessAdminPage() {
               </dl>
             </div>
 
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <span className="policy-control-label">Safety boundary</span>
               <p><strong>Baseline discovery is always on.</strong> Document Intelligence cannot suppress the existing R11/general-AI, OCR, deterministic, review, or export-safety paths.</p>
               <p>Changing this setting affects only new processing cycles. Existing package cycles keep the version snapshot captured when they started.</p>
@@ -879,18 +878,18 @@ export default function BusinessAdminPage() {
           </div>
 
           <div className="admin-save-row">
-            <button className="primary" disabled={savingIntelligence} onClick={() => void saveDocumentIntelligence()}>
+            <button className="ui-button primary" disabled={savingIntelligence} onClick={() => void saveDocumentIntelligence()}>
               {savingIntelligence ? 'Saving...' : 'Save Document Intelligence'}
             </button>
             <button
-              className="secondary"
+              className="ui-button secondary"
               disabled={savingIntelligence || intelligenceDirty || documentIntelligence.activeBundleVersion === documentIntelligence.lastKnownGoodBundleVersion}
               onClick={() => void rollbackDocumentIntelligence()}
             >
               Roll back to Last Known Good
             </button>
             <button
-              className="secondary"
+              className="ui-button secondary"
               disabled={savingIntelligence || intelligenceDirty || documentIntelligence.activeBundleVersion === documentIntelligence.lastKnownGoodBundleVersion}
               onClick={() => void markDocumentIntelligenceLastKnownGood()}
             >
@@ -900,39 +899,39 @@ export default function BusinessAdminPage() {
         </section>
       )}
 
-      {activeSection === 'routing' && <section id="derived-routing" className="card admin-section-card admin-anchor-section">
+      {activeSection === 'routing' && <section id="derived-routing" className="ui-card admin-section-card admin-anchor-section">
         <div className="admin-section-heading">
           <div>
             <h2>Derived Document Routing</h2>
             <p>Map deterministic markers to destinations configured by Tenant IT. The full redacted master remains intact and exports independently.</p>
           </div>
-          <button className="secondary" type="button" onClick={() => { resetRoutingDraft(); setRoutingEditorOpen(true); }}>+ Add Routing Rule</button>
+          <button className="ui-button secondary" type="button" onClick={() => { resetRoutingDraft(); setRoutingEditorOpen(true); }}>+ Add Routing Rule</button>
         </div>
 
         {routingEditorOpen && <div className="admin-inline-editor">
         <div className="policy-controls-grid">
-          <div className="policy-control-card">
+          <div className="ui-card subtle policy-control-card">
             <label>Destination label</label>
             <input value={routingDraft.destinationLabel} onChange={(e) => setRoutingDraft({ ...routingDraft, destinationLabel: e.target.value })} placeholder="South Carolina" />
           </div>
-          <div className="policy-control-card">
+          <div className="ui-card subtle policy-control-card">
             <label>Marker type</label>
             <select value={routingDraft.markerType} onChange={(e) => setRoutingDraft({ ...routingDraft, markerType: e.target.value as RoutingMarkerType })}>
               <option value="TEXT_PATTERN">Text pattern</option><option value="BARCODE">Barcode</option><option value="QR_CODE">QR code</option>
             </select>
           </div>
-          <div className="policy-control-card">
+          <div className="ui-card subtle policy-control-card">
             <label>Marker value</label>
             <input value={routingDraft.markerValue} onChange={(e) => setRoutingDraft({ ...routingDraft, markerValue: e.target.value })} placeholder="77777777" />
             <p>Text markers are normalized, so decorative bars/spaces do not need to match exactly.</p>
           </div>
-          <div className="policy-control-card">
+          <div className="ui-card subtle policy-control-card">
             <label>Fixed scan region</label>
             <select value={routingDraft.scanRegion} onChange={(e) => setRoutingDraft({ ...routingDraft, scanRegion: e.target.value as RoutingScanRegion })}>
               <option value="TOP_RIGHT">Top right</option><option value="BOTTOM_LEFT">Bottom left</option><option value="BOTH">Both</option>
             </select>
           </div>
-          <div className="policy-control-card">
+          <div className="ui-card subtle policy-control-card">
             <label>Approved destination</label>
             <select value={routingDraft.destinationConnectionId} onChange={(e) => setRoutingDraft({ ...routingDraft, destinationConnectionId: e.target.value })}>
               <option value="">Select destination…</option>
@@ -940,7 +939,7 @@ export default function BusinessAdminPage() {
             </select>
             <p>Technical endpoint/authentication settings stay under IT Admin → Integrations.</p>
           </div>
-          <div className="policy-control-card">
+          <div className="ui-card subtle policy-control-card">
             <span className="policy-control-label">Rule status</span>
             <label className={`review-mode-option ${routingDraft.enabled ? 'selected' : ''}`}>
               <input type="checkbox" checked={routingDraft.enabled} onChange={(e) => setRoutingDraft({ ...routingDraft, enabled: e.target.checked })} />
@@ -949,8 +948,8 @@ export default function BusinessAdminPage() {
           </div>
         </div>
         <div className="admin-save-row">
-          <button className="primary" disabled={savingRouting} onClick={() => void saveRoutingRule()}>{savingRouting ? 'Saving…' : routingDraft.ruleId ? 'Update Routing Rule' : 'Add Routing Rule'}</button>
-          <button className="secondary" onClick={resetRoutingDraft}>Cancel</button>
+          <button className="ui-button primary" disabled={savingRouting} onClick={() => void saveRoutingRule()}>{savingRouting ? 'Saving…' : routingDraft.ruleId ? 'Update Routing Rule' : 'Add Routing Rule'}</button>
+          <button className="ui-button secondary" onClick={resetRoutingDraft}>Cancel</button>
         </div>
         </div>}
 
@@ -963,8 +962,8 @@ export default function BusinessAdminPage() {
                   <div className="admin-summary-meta"><span>{rule.scanRegion.replace(/_/g, ' ')}</span><span className={rule.enabled ? 'is-enabled' : ''}>{rule.enabled ? 'Enabled' : 'Disabled'}</span></div>
                 </summary>
                 <div className="admin-summary-actions">
-                  <button className="secondary" onClick={() => editRoutingRule(rule)}>Edit rule</button>
-                  <button className="secondary" onClick={() => void deleteRoutingRule(rule.ruleId)}>Remove</button>
+                  <button className="ui-button secondary" onClick={() => editRoutingRule(rule)}>Edit rule</button>
+                  <button className="ui-button secondary" onClick={() => void deleteRoutingRule(rule.ruleId)}>Remove</button>
                 </div>
               </details>
             ))}
@@ -973,7 +972,7 @@ export default function BusinessAdminPage() {
       </section>}
 
       {activeSection === 'retention' && lifecyclePolicy && (
-        <section id="retention-delivery" className="card admin-section-card admin-anchor-section">
+        <section id="retention-delivery" className="ui-card admin-section-card admin-anchor-section">
           <div className="admin-section-heading">
             <div>
               <h2>Retention & Delivery Approval</h2>
@@ -982,7 +981,7 @@ export default function BusinessAdminPage() {
           </div>
 
           <div className="policy-controls-grid">
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label htmlFor="originalRetentionHours">Original retention after successful export</label>
               <div className="threshold-row">
                 <input
@@ -997,7 +996,7 @@ export default function BusinessAdminPage() {
               <p>The original is temporary recovery/reprocessing material. The clock starts only after a successful export.</p>
             </div>
 
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label htmlFor="redactedCacheHours">Internal redacted-copy cache</label>
               <div className="threshold-row">
                 <input
@@ -1013,7 +1012,7 @@ export default function BusinessAdminPage() {
               <p>Hard maximum {lifecyclePolicy.maximumRedactedCacheHours} hours. The durable redacted document lives at the customer destination.</p>
             </div>
 
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <label htmlFor="technicalHoldHours">Technical Attention retention</label>
               <div className="threshold-row">
                 <input
@@ -1029,7 +1028,7 @@ export default function BusinessAdminPage() {
               <p>Failed packages that never exported remain actionable on the Dashboard for this period, then processing artifacts are purged and the item leaves the operational Dashboard. Support/audit history remains.</p>
             </div>
 
-            <div className="policy-control-card">
+            <div className="ui-card subtle policy-control-card">
               <span className="policy-control-label">Final delivery approval</span>
               <label className={`review-mode-option ${lifecyclePolicy.finalApprovalRequired ? 'selected' : ''}`}>
                 <input
@@ -1047,18 +1046,13 @@ export default function BusinessAdminPage() {
           </div>
 
           <div className="admin-save-row">
-            <button className="primary" disabled={savingLifecycle} onClick={() => void saveLifecyclePolicy()}>
+            <button className="ui-button primary" disabled={savingLifecycle} onClick={() => void saveLifecyclePolicy()}>
               {savingLifecycle ? 'Saving...' : 'Save Lifecycle Policy'}
             </button>
           </div>
         </section>
       )}
 
-      {configuration && (
-        <p className="admin-footer-note">
-          Delivery-provider connections, watched-folder connections, AI/OCR providers and authentication remain IT / Platform Admin configuration. Document Intelligence activation and version pinning are Business Admin policy.
-        </p>
-      )}
-    </div>
+    </PageScaffold>
   );
 }

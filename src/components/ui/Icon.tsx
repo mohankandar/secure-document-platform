@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from 'react';
 
-export type IconName = 'dashboard' | 'upload' | 'scan' | 'review' | 'reports' | 'admin' | 'integrations' | 'support' | 'audit' | 'menu' | 'chevronLeft' | 'chevronRight' | 'user' | 'refresh' | 'palette';
+export type IconName = 'dashboard' | 'upload' | 'scan' | 'review' | 'reports' | 'admin' | 'integrations' | 'support' | 'audit' | 'menu' | 'chevronLeft' | 'chevronRight' | 'user' | 'refresh' | 'palette' | 'logout';
 
 const paths: Record<IconName, ReactNode> = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -17,6 +17,7 @@ const paths: Record<IconName, ReactNode> = {
   chevronRight: <path d="m9 18 6-6-6-6"/>,
   user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
   refresh: <><path d="M20 6v5h-5"/><path d="M19 11a7 7 0 1 0 1 4"/></>,
+  logout: <><path d="M10 5H5v14h5"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9"/></>,
   palette: <><path d="M12 3a9 9 0 0 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h5a4 4 0 0 0 4-4 6 6 0 0 0-2-4.4A10 10 0 0 0 12 3z"/><circle cx="7.5" cy="10" r=".7"/><circle cx="9.5" cy="6.8" r=".7"/><circle cx="14" cy="6.5" r=".7"/></>,
 };
 

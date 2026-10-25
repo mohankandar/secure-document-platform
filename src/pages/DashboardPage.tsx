@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { hasCurrentCapability } from '../api/config';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
 import useMediaQuery from '../components/ui/useMediaQuery';
 import type {
   ApiError,
@@ -11,6 +11,8 @@ import type {
   DashboardStage,
   OperationsDashboard,
 } from '../types';
+import StatusBadge from '../components/ui/StatusBadge';
+import AttentionLink from '../components/ui/AttentionLink';
 
 const OVERVIEW_KEY = 'securedoc.dashboard.overviewCollapsed.v1';
 const STAGE_KEY = 'securedoc.dashboard.stage.v1';
@@ -371,20 +373,14 @@ export default function DashboardPage() {
     }
     switch (column.key) {
       case 'received': return formatDate(item.createdAt);
-      case 'stage': return <span className={`stage-pill stage-${item.stage.toLowerCase()}`}>{stageLabel(item.stage)}</span>;
+      case 'stage': return <StatusBadge value={item.stage} label={stageLabel(item.stage)} />;
       case 'documents': return item.documentCount;
       case 'attention': {
-        if (item.attention === 'REVIEW') return canReview
-          ? <Link className="attention-link attention-review" to={`/review?packageId=${item.packageId}`}>Review</Link>
-          : <span className="attention-link attention-review">Needs review</span>;
-        if (item.attention === 'APPROVAL') return canApprove
-          ? <Link className="attention-link attention-approval" to={`/packages/${item.packageId}`}>Approval</Link>
-          : <span className="attention-link attention-approval">Needs approval</span>;
-        if (item.attention === 'TECHNICAL') return canViewTechnicalIssue
-          ? <Link className="attention-link attention-technical" to={`/technical-exceptions/${item.packageId}`}>Technical</Link>
-          : <span className="attention-link attention-technical">Technical attention</span>;
-        if (item.attention === 'REJECTED') return <span className="attention-muted">Rejected</span>;
-        return <span className="attention-none">—</span>;
+        if (item.attention === 'REVIEW') return <AttentionLink value="REVIEW" to={canReview ? `/review?packageId=${item.packageId}` : undefined} label={canReview ? 'Review' : 'Needs review'} />;
+        if (item.attention === 'APPROVAL') return <AttentionLink value="APPROVAL" to={canApprove ? `/packages/${item.packageId}` : undefined} label={canApprove ? 'Approval' : 'Needs approval'} />;
+        if (item.attention === 'TECHNICAL') return <AttentionLink value="TECHNICAL" to={canViewTechnicalIssue ? `/technical-exceptions/${item.packageId}` : undefined} label={canViewTechnicalIssue ? 'Technical' : 'Technical attention'} />;
+        if (item.attention === 'REJECTED') return <AttentionLink value="REJECTED" />;
+        return <AttentionLink value="NONE" />;
       }
       case 'intakeSource': return sourceLabel(item.packageType);
       case 'exportStatus': return item.stage === 'EXPORTED' ? `Exported · Cycle ${item.successfulExportCycles}` : item.stage === 'NEEDS_APPROVAL' ? 'Awaiting approval' : 'Not exported';
@@ -395,34 +391,40 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="dashboard-page">
-      <PageHeader
-        eyebrow="Work"
-        title="Dashboard"
-        description="Track intake, review, delivery and technical attention across document packages."
-        actions={<>
-          {hasCurrentCapability('REPORT_EXECUTIVE_VIEW') && <Link to="/reports" className="ui-button secondary">View reports</Link>}
-          {hasCurrentCapability('DOCUMENT_INTAKE') && <Link to="/packages/new" className="ui-button primary">Upload documents</Link>}
-        </>}
-      />
+    <PageScaffold className="dashboard-page" breadcrumbs={[]} title="Dashboard" eyebrow="Operations"
+      description="Monitor document intake, processing, review, approvals, and delivery from one operational view."
+      actions={<>
+        {hasCurrentCapability('REPORT_EXECUTIVE_VIEW') && <Link to="/reports" className="ui-button secondary">View reports</Link>}
+        {hasCurrentCapability('DOCUMENT_INTAKE') && <Link to="/packages/new" className="ui-button primary">Upload documents</Link>}
+      </>}>
       <p className="dashboard-refresh-status modern">
         Auto-refresh {hasActiveProcessing ? 'every 5 seconds while processing' : 'every 30 seconds while idle'}
         {lastRefreshedAt ? ` · Updated ${lastRefreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : ''}
       </p>
 
-      {error && <div className="error-msg">{error}</div>}
-      {notice && <div className="success-msg">{notice}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {notice && <div className="ui-alert tone-success">{notice}</div>}
 
-      <section className={`overview-panel ${overviewCollapsed ? 'collapsed' : ''}`}>
+      <section className={`ui-card overview-panel-layout ${overviewCollapsed ? 'collapsed' : ''}`}>
         <div className="overview-title-row">
           <div>
             <h2>Overview</h2>
             <span>{data?.overview.total ?? 0} intake batches</span>
           </div>
-          <button className="icon-text-button" onClick={toggleOverview} aria-expanded={!overviewCollapsed}>
-            {overviewCollapsed ? 'Show overview' : 'Collapse overview'}
-            <span aria-hidden="true">{overviewCollapsed ? '⌄' : '⌃'}</span>
-          </button>
+          <div className="dashboard-overview-actions">
+            {overviewCollapsed && (
+              <div className="dashboard-overview-glance" aria-label="Operational summary">
+                <span><strong>{data?.overview.processing ?? 0}</strong> Processing</span>
+                <span><strong>{data?.overview.needsReview ?? 0}</strong> Review</span>
+                <span><strong>{data?.overview.technicalAttention ?? 0}</strong> Technical</span>
+                <span><strong>{data?.overview.exported ?? 0}</strong> Exported</span>
+              </div>
+            )}
+            <button className="ui-button tertiary small" onClick={toggleOverview} aria-expanded={!overviewCollapsed}>
+              {overviewCollapsed ? 'Show detail' : 'Collapse'}
+              <span aria-hidden="true">{overviewCollapsed ? '⌄' : '⌃'}</span>
+            </button>
+          </div>
         </div>
         {!overviewCollapsed && (
           <div className="kpi-grid">
@@ -438,7 +440,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <section className="dashboard-list-card">
+      <section className="ui-card dashboard-list-card">
         <div className="dashboard-toolbar">
           <div className="stage-chips" role="tablist" aria-label="Filter by stage">
             {STAGES.map((item) => (
@@ -471,7 +473,7 @@ export default function DashboardPage() {
             </select>
 
             <div className="columns-menu-wrap">
-              <button className="toolbar-button" onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen}>Columns</button>
+              <button className="ui-button secondary small" onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen}>Columns</button>
               {columnsOpen && (
                 <div className="columns-menu">
                   <div className="columns-menu-heading">
@@ -501,19 +503,19 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <button className="toolbar-button" onClick={() => void loadDashboard()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+            <button className="ui-button secondary small" onClick={() => void loadDashboard()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
           </div>
         </div>
 
         <div className="dashboard-table-wrap">
           {loading && !data ? (
-            <div className="dashboard-empty"><div className="skeleton-line" /><div className="skeleton-line short" /><p>Loading operations…</p></div>
+            <div className="ui-empty-state dashboard-empty-layout"><div className="skeleton-line" /><div className="skeleton-line short" /><p>Loading operations…</p></div>
           ) : !data || data.items.length === 0 ? (
-            <div className="dashboard-empty">
+            <div className="ui-empty-state dashboard-empty-layout">
               <div className="empty-icon">✓</div>
               <h3>{search || stage !== 'ALL' ? 'No matching intakes' : 'No intakes yet'}</h3>
               <p>{search || stage !== 'ALL' ? 'Try a different stage or search value.' : 'Upload documents to start the first intake.'}</p>
-              {!search && stage === 'ALL' && <Link to="/packages/new" className="button-link primary">Upload Documents</Link>}
+              {!search && stage === 'ALL' && <Link to="/packages/new" className="ui-button primary">Upload Documents</Link>}
             </div>
           ) : (
             <>
@@ -522,11 +524,21 @@ export default function DashboardPage() {
                 const primaryValue = primaryIdentifierColumn?.key.startsWith('identifier:')
                   ? getIdentifier(item, primaryIdentifierColumn.key.slice('identifier:'.length))
                   : item.packageId.slice(0, 8);
+                const attentionAction = item.attention === 'REVIEW' && canReview
+                  ? { to: `/review?packageId=${item.packageId}`, value: 'REVIEW', label: 'Open review →' }
+                  : item.attention === 'APPROVAL' && canApprove
+                    ? { to: `/packages/${item.packageId}`, value: 'APPROVAL', label: 'Open approval →' }
+                    : item.attention === 'TECHNICAL' && canViewTechnicalIssue
+                      ? { to: `/technical-exceptions/${item.packageId}`, value: 'TECHNICAL', label: 'Open technical issue →' }
+                      : null;
                 return (
-                  <Link className="dashboard-mobile-card" key={item.packageId} to={`/packages/${item.packageId}`}>
+                  <article className="dashboard-mobile-card" key={item.packageId}>
                     <div className="dashboard-mobile-card-top">
-                      <div><span className="dashboard-mobile-label">{primaryIdentifierColumn?.label || 'Package'}</span><strong>{primaryValue}</strong></div>
-                      <span className={`stage-pill stage-${item.stage.toLowerCase()}`}>{stageLabel(item.stage)}</span>
+                      <div>
+                        <span className="dashboard-mobile-label">{primaryIdentifierColumn?.label || 'Package'}</span>
+                        <Link className="dashboard-mobile-primary-link" to={`/packages/${item.packageId}`}>{primaryValue}</Link>
+                      </div>
+                      <StatusBadge value={item.stage} label={stageLabel(item.stage)} />
                     </div>
                     <div className="dashboard-mobile-meta">
                       <span><small>Documents</small><strong>{item.documentCount}</strong></span>
@@ -534,24 +546,25 @@ export default function DashboardPage() {
                       <span><small>Updated</small><strong>{formatDate(item.updatedAt, true)}</strong></span>
                     </div>
                     <div className="dashboard-mobile-card-footer">
-                      <span className={`mobile-attention attention-${item.attention.toLowerCase()}`}>{item.attention === 'NONE' ? 'No attention required' : item.attention.replace(/_/g, ' ')}</span>
-                      <span aria-hidden="true">›</span>
+                      {attentionAction
+                        ? <AttentionLink className="mobile-attention" value={attentionAction.value} to={attentionAction.to} label={attentionAction.label} />
+                        : <Link className="dashboard-mobile-details-link" to={`/packages/${item.packageId}`}>View details →</Link>}
                     </div>
-                  </Link>
+                  </article>
                 );
               })}
             </div>
             <table className="operations-table">
               <thead>
                 <tr>
-                  {visibleColumns.map((column) => <th key={column.key}>{column.label}</th>)}
+                  {visibleColumns.map((column) => <th key={column.key} data-column-key={column.key} data-column-kind={column.kind} data-primary={column.primary ? 'true' : undefined}>{column.label}</th>)}
                   {canApprove && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {data.items.map((item) => (
                   <tr key={item.packageId}>
-                    {visibleColumns.map((column) => <td key={column.key}>{renderCell(item, column)}</td>)}
+                    {visibleColumns.map((column) => <td key={column.key} data-column-key={column.key} data-column-kind={column.kind} data-primary={column.primary ? 'true' : undefined}>{renderCell(item, column)}</td>)}
                     {canApprove && <td className="dashboard-actions-cell">{renderPackageAction(item)}</td>}
                   </tr>
                 ))}
@@ -571,9 +584,9 @@ export default function DashboardPage() {
             </select>
           </div>
           <div className="page-buttons">
-            <button className="toolbar-button" disabled={currentPage <= 1 || loading} onClick={() => setOffset(Math.max(0, offset - limit))}>Previous</button>
+            <button className="ui-button secondary small" disabled={currentPage <= 1 || loading} onClick={() => setOffset(Math.max(0, offset - limit))}>Previous</button>
             <span>Page {currentPage} of {totalPages}</span>
-            <button className="toolbar-button" disabled={currentPage >= totalPages || loading} onClick={() => setOffset(offset + limit)}>Next</button>
+            <button className="ui-button secondary small" disabled={currentPage >= totalPages || loading} onClick={() => setOffset(offset + limit)}>Next</button>
           </div>
         </footer>
       </section>
@@ -601,7 +614,7 @@ export default function DashboardPage() {
             </p>
             <div className="dashboard-confirm-actions">
               <button
-                className="dashboard-confirm-cancel"
+                className="ui-button secondary dashboard-confirm-cancel"
                 type="button"
                 disabled={Boolean(hidingPackageId)}
                 onClick={() => setConfirmHidePackageId(null)}
@@ -609,7 +622,7 @@ export default function DashboardPage() {
                 Cancel
               </button>
               <button
-                className="dashboard-confirm-remove"
+                className="ui-button danger dashboard-confirm-remove"
                 type="button"
                 disabled={Boolean(hidingPackageId)}
                 onClick={() => void hideCompletedPackage(confirmHidePackageId)}
@@ -620,6 +633,6 @@ export default function DashboardPage() {
           </section>
         </div>
       )}
-    </div>
+    </PageScaffold>
   );
 }

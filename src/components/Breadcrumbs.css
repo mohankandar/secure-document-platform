@@ -1,7 +1,7 @@
 .breadcrumbs {
   margin: 0 0 1rem;
-  color: #667085;
-  font-size: 0.82rem;
+  color: var(--ui-text-muted);
+  font-size: var(--type-body-sm);
 }
 
 .breadcrumbs ol {
@@ -31,14 +31,14 @@
 }
 
 .breadcrumbs a {
-  color: #175cd3;
+  color: var(--ui-info);
   font-weight: 650;
   text-decoration: none;
   text-underline-offset: 0.18em;
 }
 
 .breadcrumbs a:hover {
-  background: #eff6ff;
+  background: var(--ui-info-bg);
   text-decoration: underline;
 }
 
@@ -50,7 +50,7 @@
 .breadcrumb-current {
   max-width: min(34rem, 60vw);
   overflow: hidden;
-  color: #344054;
+  color: var(--ui-text-secondary);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -58,8 +58,8 @@
 
 .breadcrumb-separator {
   padding: 0 0.05rem;
-  color: #98a2b3;
-  font-size: 1rem;
+  color: var(--ui-text-disabled);
+  font-size: var(--type-body-lg);
 }
 
 @media (max-width: 640px), (pointer: coarse) {

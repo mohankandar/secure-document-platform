@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Breadcrumbs from '../components/Breadcrumbs';
 import { apiClient } from '../api/client';
 import { scanBridgeClient, type ScanBridgeConfiguration, type ScanBridgeError, type ScanSession, type ScannerStatus } from '../api/scanBridgeClient';
 import type { ApiError, IdentifierDefinition } from '../types';
 import './ScanIntakePage.css';
 import { useBranding } from '../branding/BrandingContext';
-import PageHeader from '../components/ui/PageHeader';
+import PageScaffold from '../components/ui/PageScaffold';
 import WorkflowStepper from '../components/ui/WorkflowStepper';
 
 const formatBytes = (bytes: number) => {
@@ -274,11 +273,10 @@ export default function ScanIntakePage() {
   const scannerLabel = bridgeConfig?.captureMode === 'SIMULATOR' ? 'Test simulator' : 'Scanner';
 
   return (
-    <div className="scan-intake-page">
-      <Breadcrumbs items={[{ label: 'Scanner Intake' }]} />
-      <PageHeader eyebrow="Scanner intake" title="Scan Documents"
-        description={`Prepare the business identifiers, capture one complete paper package, then queue it safely to ${branding.applicationName}.`}
-        actions={bridgeState ? <div className={`scan-bridge-state ${bridgeState.className}`}>{bridgeState.label}</div> : undefined} />
+    <PageScaffold className="scan-intake-page" breadcrumbs={[{ label: 'Scanner Intake' }]} title="Scan Documents"
+      eyebrow="Scanner intake"
+      description="Identify the package, capture one consolidated PDF, and hand it off durably for processing."
+      actions={bridgeState ? <div className={`scan-bridge-state ${bridgeState.className}`}>{bridgeState.label}</div> : undefined}>
 
       <WorkflowStepper
         ariaLabel="Scanner intake progress"
@@ -289,13 +287,13 @@ export default function ScanIntakePage() {
         ]}
       />
 
-      {bridgeError && <div className="error-msg">{bridgeError}</div>}
+      {bridgeError && <div className="ui-alert tone-danger">{bridgeError}</div>}
       {bridgeAvailable === false && <div className="scan-device-capability-note">Physical scanner acquisition runs on a workstation with the Scanner Bridge. Tablet and iPad users can still view package status and continue other browser workflows.</div>}
       {scannerStatus && !scannerStatus.storageHealthy && (
-        <div className="error-msg">Scanner workstation storage needs attention before a new package can be scanned.</div>
+        <div className="ui-alert tone-danger">Scanner workstation storage needs attention before a new package can be scanned.</div>
       )}
-      {error && <div className="error-msg">{error}</div>}
-      {notice && <div className="scan-notice">{notice}</div>}
+      {error && <div className="ui-alert tone-danger">{error}</div>}
+      {notice && <div className="ui-alert tone-info">{notice}</div>}
       {scannerStatus && (scannerStatus.queuedCount > 0 || scannerStatus.attentionRequiredCount > 0) && (
         <div className="scan-queue-summary">
           {scannerStatus.queuedCount > 0 && <span>{scannerStatus.queuedCount} scanner package{scannerStatus.queuedCount === 1 ? '' : 's'} delivering</span>}
@@ -304,11 +302,11 @@ export default function ScanIntakePage() {
       )}
 
       <div className="scan-intake-grid">
-        <section className="card scan-intake-card">
+        <section className="ui-card scan-intake-card">
           <h2>1. Business information</h2>
           <p className="scan-intake-help">Fields are controlled by this tenant's Business Admin configuration and are validated again by {branding.applicationName} on submission.</p>
           {loading ? <p>Loading tenant intake requirements…</p> : definitions.length === 0 ? (
-            <div className="error-msg">No business identifier definitions are configured for this tenant.</div>
+            <div className="ui-alert tone-danger">No business identifier definitions are configured for this tenant.</div>
           ) : (
             <div className="scan-field-grid">
               {definitions.map((definition) => (
@@ -331,7 +329,7 @@ export default function ScanIntakePage() {
           )}
         </section>
 
-        <section className="card scan-intake-card">
+        <section className="ui-card scan-intake-card">
           <h2>2. Scanner</h2>
           {bridgeConfig ? (
             <>
@@ -365,7 +363,7 @@ export default function ScanIntakePage() {
               {bridgeConfig?.captureMode === 'PHYSICAL' && !acquisitionAvailable && (
                 <p className="scan-intake-help">No compatible Windows WIA scanner is currently available. Check the scanner power, Windows driver, and connection.</p>
               )}
-              <button className="primary" disabled={!canStart} onClick={() => void startSession()}>{starting ? 'Starting…' : 'Start Scan'}</button>
+              <button className="ui-button primary" disabled={!canStart} onClick={() => void startSession()}>{starting ? 'Starting…' : 'Start Scan'}</button>
             </div>
           )}
 
@@ -380,14 +378,14 @@ export default function ScanIntakePage() {
                   <p>No scanner hardware is required in test mode. Select a PDF to simulate one completed physical scan.</p>
                   <input ref={testPdfInput} className="scan-hidden-file" type="file" accept="application/pdf,.pdf"
                     onChange={(event) => void stageTestPdf(event.target.files?.[0])} />
-                  <button className="secondary" disabled={staging} onClick={() => testPdfInput.current?.click()}>
+                  <button className="ui-button secondary" disabled={staging} onClick={() => testPdfInput.current?.click()}>
                     {staging ? 'Receiving Test PDF…' : 'Select Test PDF'}
                   </button>
                 </>
               ) : (
                 <p>Scan the complete package using the connected document feeder. {branding.applicationName} will wait for the scanner to finish the consolidated PDF.</p>
               )}
-              <button className="secondary scan-cancel-button" disabled={bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
+              <button className="ui-button secondary scan-cancel-button" disabled={bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
             </div>
           )}
 
@@ -397,10 +395,10 @@ export default function ScanIntakePage() {
               <h3>{session.preparedScan.fileName}</h3>
               <p><strong>{formatBytes(session.preparedScan.sizeBytes)}</strong> · Ready to submit to {branding.applicationName}</p>
               <div className="scan-primary-actions">
-                <button className="primary" disabled={submitting || bridgeAvailable !== true} onClick={() => void submitScan()}>
+                <button className="ui-button primary" disabled={submitting || bridgeAvailable !== true} onClick={() => void submitScan()}>
                   {submitting ? 'Queueing…' : 'Submit'}
                 </button>
-                <button className="secondary" disabled={submitting || bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
+                <button className="ui-button secondary" disabled={submitting || bridgeAvailable !== true} onClick={() => void cancelSession()}>Cancel</button>
               </div>
               <details className="scan-technical-details">
                 <summary>Technical details</summary>
@@ -419,8 +417,8 @@ export default function ScanIntakePage() {
               <h3>{session.status === 'SUBMITTING' ? `Sending to ${branding.applicationName}…` : 'Package queued for delivery'}</h3>
               <p>The local bridge owns this package durably. You can start the next package without waiting for OCR, redaction, review, or export.</p>
               <div className="scan-primary-actions">
-                <button className="primary" onClick={startNext}>Start Next Package</button>
-                {session.lexavaultPackageId && <Link className="button-link secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}
+                <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
+                {session.lexavaultPackageId && <Link className="ui-button secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}
               </div>
             </div>
           )}
@@ -431,8 +429,8 @@ export default function ScanIntakePage() {
               <h3>Package submitted successfully</h3>
               <p>Processing continues through the normal {branding.applicationName} workflow. Any required review will appear in the existing Manual Review flow.</p>
               <div className="scan-primary-actions">
-                <button className="primary" onClick={startNext}>Start Next Package</button>
-                {session.lexavaultPackageId && <Link className="button-link secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}
+                <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
+                {session.lexavaultPackageId && <Link className="ui-button secondary" to={`/packages/${session.lexavaultPackageId}`}>View Package</Link>}
               </div>
             </div>
           )}
@@ -443,11 +441,11 @@ export default function ScanIntakePage() {
               <h3>Your scanned PDF is still safely retained locally</h3>
               <p>Technical support can resolve the delivery issue. You may continue with the next physical package.</p>
               {session.lastDeliveryErrorCode && <p className="scan-safe-code">Reference: {session.lastDeliveryErrorCode}</p>}
-              <button className="primary" onClick={startNext}>Start Next Package</button>
+              <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
             </div>
           )}
         </section>
       </div>
-    </div>
+    </PageScaffold>
   );
 }

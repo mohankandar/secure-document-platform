@@ -9,12 +9,13 @@
     "preview": "vite preview",
     "test:auth": "node --experimental-strip-types --test src/security/uiAuthorization.test.ts",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts"
   },
   "dependencies": {
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "6.26.2"
+    "react-router-dom": "6.30.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
@@ -22,6 +23,6 @@
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.4",
     "typescript": "5.6.3",
-    "vite": "6.0.3"
+    "vite": "^6.4.3"
   }
 }
