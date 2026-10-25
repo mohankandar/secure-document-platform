@@ -5,6 +5,9 @@ import type { ApiError, IdentifierDefinition } from '../types';
 import './CreatePackagePage.css';
 import PageScaffold from '../components/ui/PageScaffold';
 import WorkflowStepper from '../components/ui/WorkflowStepper';
+import Skeleton from '../components/ui/Skeleton';
+import EmptyState from '../components/ui/EmptyState';
+import Icon from '../components/ui/Icon';
 
 type DraftStatus = 'READY' | 'UPLOADING' | 'UPLOADED' | 'FAILED';
 
@@ -226,6 +229,41 @@ export default function CreatePackagePage() {
     }
   };
 
+  const totalBytes = documents.reduce((sum, document) => sum + document.file.size, 0);
+  const uploadedCount = documents.filter((document) => document.status === 'UPLOADED').length;
+  const failedCount = documents.filter((document) => document.status === 'FAILED').length;
+  const removableCount = documents.filter((document) => document.status === 'READY' || document.status === 'FAILED').length;
+  const requiredCount = definitions.filter((definition) => definition.required).length;
+  const completedRequired = definitions.filter((definition) => definition.required && (values[definition.key] || '').trim() && !identifierErrors[definition.key]).length;
+
+  const clearRemovable = () => {
+    setDocuments((current) => current.filter((document) => document.status === 'UPLOADING' || document.status === 'UPLOADED'));
+    setSelectionMessage(null);
+  };
+
+  const statusLabel: Record<DraftStatus, string> = { READY: 'Ready', UPLOADING: 'Uploading…', UPLOADED: 'Uploaded', FAILED: 'Failed' };
+
+  const checklist = [
+    {
+      label: 'Business identifiers',
+      detail: loadingConfig ? 'Loading requirements…' : !configurationAvailable ? 'Not configured for tenant' : `${completedRequired} of ${requiredCount} required complete`,
+      done: identifiersReady,
+      problem: !loadingConfig && (!configurationAvailable || (hasIdentifierErrors && touchedIdentifiers.size > 0)),
+    },
+    {
+      label: 'Documents',
+      detail: documents.length === 0 ? 'No PDFs added' : `${documents.length} PDF${documents.length === 1 ? '' : 's'} · ${formatBytes(totalBytes)}`,
+      done: documents.length > 0,
+      problem: false,
+    },
+    {
+      label: 'Uploads',
+      detail: hasFailedDocuments ? `${failedCount} failed — retry or remove` : hasUploadInProgress ? `Uploading ${uploadedCount + 1} of ${documents.length}` : uploadedCount > 0 ? `${uploadedCount} of ${documents.length} uploaded` : 'Uploaded on submit',
+      done: documents.length > 0 && !hasFailedDocuments && !hasUploadInProgress,
+      problem: hasFailedDocuments,
+    },
+  ];
+
   return (
     <PageScaffold className="intake-page" breadcrumbs={[{ label: 'Upload Documents' }]} title="Upload Documents"
       eyebrow="Document intake" description="Create a controlled intake, attach PDFs, and start processing when the package is ready.">
@@ -240,152 +278,182 @@ export default function CreatePackagePage() {
       />
 
       {error && <div className="ui-alert tone-danger" role="alert">{error}</div>}
-      {selectionMessage && <div className="intake-selection-message" role="status">{selectionMessage}</div>}
 
-      <div className="intake-workspace">
-        <section className="ui-card intake-section" aria-labelledby="business-identifiers-heading">
-          <div className="intake-section-heading">
-            <span>1</span>
-            <div>
-              <h2 id="business-identifiers-heading">Business identifiers</h2>
-              <p>Required fields are defined by your organization.</p>
-            </div>
-          </div>
+      <div className="intake-layout">
+        <div className="intake-main">
+          <section className="ui-card intake-section" aria-labelledby="business-identifiers-heading">
+            <header className="intake-section-heading">
+              <span className={`intake-step-badge${identifiersReady ? ' is-done' : ''}`} aria-hidden="true">{identifiersReady ? <Icon name="check" /> : 1}</span>
+              <div>
+                <h2 id="business-identifiers-heading">Business identifiers</h2>
+                <p>Required fields are defined by your organization{fieldsLocked && draftPackageId ? ' · locked after intake was created' : ''}.</p>
+              </div>
+            </header>
 
-          {loadingConfig ? (
-            <p>Loading intake fields…</p>
-          ) : definitions.length === 0 ? (
-            <p>No business identifier fields are configured for this tenant.</p>
-          ) : (
-            <div className="intake-identifier-grid">
-              {definitions.map((definition) => {
-                const visibleError = touchedIdentifiers.has(definition.key) ? identifierErrors[definition.key] : null;
-                return (
-                <div className="form-group" key={definition.key}>
-                  <label htmlFor={`identifier-${definition.key}`}>
-                    {definition.label}
-                    {definition.required && <span aria-label="required"> *</span>}
-                    {definition.primary && <span className="intake-primary-label">Primary</span>}
-                  </label>
-                  <input
-                    id={`identifier-${definition.key}`}
-                    value={values[definition.key] || ''}
-                    onChange={(event) => setValues((current) => ({
-                      ...current,
-                      [definition.key]: event.target.value,
-                    }))}
-                    onBlur={() => setTouchedIdentifiers((current) => {
-                      const next = new Set(current);
-                      next.add(definition.key);
-                      return next;
-                    })}
-                    required={definition.required}
-                    disabled={fieldsLocked}
-                    autoComplete="off"
-                    inputMode={definition.validationType === 'NUMERIC' ? 'numeric' : undefined}
-                    maxLength={definition.stripSeparators ? 512 : (definition.exactLength ?? definition.maxLength ?? 512)}
-                    aria-invalid={!!visibleError}
-                    aria-describedby={visibleError ? `identifier-${definition.key}-error` : undefined}
-                  />
-                  {visibleError && (
-                    <small id={`identifier-${definition.key}-error`} className="field-error">{visibleError}</small>
-                  )}
-                </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+            {loadingConfig ? (
+              <div className="intake-identifier-grid" aria-busy="true">
+                {[0, 1, 2].map((index) => <Skeleton key={index} className="intake-field-skeleton" />)}
+              </div>
+            ) : definitions.length === 0 ? (
+              <EmptyState className="intake-config-empty">
+                <Icon name="admin" />
+                <strong>No business identifier fields are configured</strong>
+                <span>A tenant administrator must define intake identifiers before documents can be submitted.</span>
+              </EmptyState>
+            ) : (
+              <div className="intake-identifier-grid">
+                {definitions.map((definition) => {
+                  const visibleError = touchedIdentifiers.has(definition.key) ? identifierErrors[definition.key] : null;
+                  const hint = definition.exactLength != null ? `${definition.exactLength} characters`
+                    : definition.validationType === 'NUMERIC' ? 'Digits only'
+                      : definition.allowedValues.length > 0 ? `One of: ${definition.allowedValues.join(', ')}` : null;
+                  return (
+                  <div className={`form-group${definition.primary ? ' is-primary' : ''}`} key={definition.key}>
+                    <label htmlFor={`identifier-${definition.key}`}>
+                      {definition.label}
+                      {definition.required && <span className="intake-required" aria-label="required"> *</span>}
+                      {definition.primary && <span className="intake-primary-label">Primary</span>}
+                    </label>
+                    <input
+                      id={`identifier-${definition.key}`}
+                      value={values[definition.key] || ''}
+                      onChange={(event) => setValues((current) => ({
+                        ...current,
+                        [definition.key]: event.target.value,
+                      }))}
+                      onBlur={() => setTouchedIdentifiers((current) => {
+                        const next = new Set(current);
+                        next.add(definition.key);
+                        return next;
+                      })}
+                      required={definition.required}
+                      disabled={fieldsLocked}
+                      autoComplete="off"
+                      inputMode={definition.validationType === 'NUMERIC' ? 'numeric' : undefined}
+                      maxLength={definition.stripSeparators ? 512 : (definition.exactLength ?? definition.maxLength ?? 512)}
+                      aria-invalid={!!visibleError}
+                      aria-describedby={visibleError ? `identifier-${definition.key}-error` : hint ? `identifier-${definition.key}-hint` : undefined}
+                    />
+                    {visibleError
+                      ? <small id={`identifier-${definition.key}-error`} className="field-error">{visibleError}</small>
+                      : hint && <small id={`identifier-${definition.key}-hint`} className="intake-field-hint">{hint}</small>}
+                  </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
-        <section className="ui-card intake-section" aria-labelledby="documents-heading">
-          <div className="intake-section-heading">
-            <span>2</span>
-            <div>
-              <h2 id="documents-heading">Documents</h2>
-              <p>Every PDF remains a separate document with its original filename.</p>
-            </div>
-          </div>
+          <section className="ui-card intake-section" aria-labelledby="documents-heading">
+            <header className="intake-section-heading">
+              <span className={`intake-step-badge${documentsReady ? ' is-done' : ''}`} aria-hidden="true">{documentsReady ? <Icon name="check" /> : 2}</span>
+              <div>
+                <h2 id="documents-heading">Documents</h2>
+                <p>Every PDF remains a separate document with its original filename.</p>
+              </div>
+            </header>
 
-          <div
-            className={`intake-drop-zone${dragActive ? ' is-dragging' : ''}${documentSelectionLocked ? ' is-disabled' : ''}`}
-            onDragEnter={(event) => { event.preventDefault(); if (!documentSelectionLocked) setDragActive(true); }}
-            onDragOver={(event) => event.preventDefault()}
-            onDragLeave={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false);
-            }}
-            onDrop={handleDrop}
-          >
-            <div className="intake-drop-icon" aria-hidden="true">PDF</div>
-            <strong>Drag and drop PDFs here</strong>
-            <p>Or browse for PDFs. Multiple PDFs can be added to the same intake.</p>
-            <div className="intake-source-actions">
+            <div
+              className={`intake-drop-zone${dragActive ? ' is-dragging' : ''}${documentSelectionLocked ? ' is-disabled' : ''}${documents.length > 0 ? ' is-compact' : ''}`}
+              onDragEnter={(event) => { event.preventDefault(); if (!documentSelectionLocked) setDragActive(true); }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false);
+              }}
+              onDrop={handleDrop}
+            >
+              <span className="intake-drop-icon" aria-hidden="true"><Icon name="upload" /></span>
+              <div className="intake-drop-copy">
+                <strong>{dragActive ? 'Release to add PDFs' : documents.length > 0 ? 'Add more PDFs' : 'Drag and drop PDFs here'}</strong>
+                <p>PDF only · duplicates are skipped automatically</p>
+              </div>
               <button
                 type="button"
-                className="ui-button primary"
+                className="ui-button secondary"
                 onClick={() => browseInputRef.current?.click()}
                 disabled={documentSelectionLocked}
               >
                 Browse Files
               </button>
+              <input
+                ref={browseInputRef}
+                className="intake-hidden-input"
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                aria-label="Choose PDF documents"
+                onChange={(event) => handleFileSelection(event.target.files)}
+                tabIndex={-1}
+              />
             </div>
-            <input
-              ref={browseInputRef}
-              className="intake-hidden-input"
-              type="file"
-              accept="application/pdf,.pdf"
-              multiple
-              onChange={(event) => handleFileSelection(event.target.files)}
-              tabIndex={-1}
-            />
-          </div>
 
-          <div className="intake-queue-heading">
-            <h3>Document queue</h3>
-            <span>{documents.length} PDF{documents.length === 1 ? '' : 's'}</span>
-          </div>
+            <div className="intake-selection-message" role="status" aria-live="polite">{selectionMessage}</div>
 
-          {documents.length === 0 ? (
-            <div className="ui-empty-state intake-empty-queue-layout">No documents added yet.</div>
-          ) : (
-            <ul className="intake-document-queue">
-              {documents.map((document) => (
-                <li key={document.id}>
-                  <div className="intake-document-icon" aria-hidden="true">PDF</div>
-                  <div className="intake-document-summary">
-                    <strong title={document.file.name}>{document.file.name}</strong>
-                    <span>{formatBytes(document.file.size)} · Browse / Drop</span>
-                    {document.error && <span className="intake-document-error">{document.error}</span>}
-                  </div>
-                  <span className={`intake-upload-status status-${document.status.toLowerCase()}`}>
-                    {document.status === 'READY' ? 'Ready' : document.status === 'UPLOADING' ? 'Uploading…' : document.status === 'UPLOADED' ? 'Uploaded' : 'Failed'}
-                  </span>
-                  <button
-                    type="button"
-                    className="intake-remove-document"
-                    onClick={() => removeDocument(document.id)}
-                    disabled={document.status === 'UPLOADING' || document.status === 'UPLOADED' || submitting}
-                    aria-label={`Remove ${document.file.name}`}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="ui-card intake-submit-panel" aria-labelledby="submit-documents-heading">
-          <div>
-            <h2 id="submit-documents-heading">Submit Documents</h2>
-            <p>{readinessMessage}</p>
-            {draftPackageId && error && (
-              <Link to={`/packages/${draftPackageId}`}>Open incomplete intake details</Link>
+            {documents.length > 0 && (
+              <div className="intake-queue">
+                <div className="intake-queue-heading">
+                  <h3>Document queue <span>{documents.length}</span></h3>
+                  {removableCount > 1 && !submitting && (
+                    <button type="button" className="ui-button tertiary" onClick={clearRemovable}>Remove all pending</button>
+                  )}
+                </div>
+                <ul className="intake-document-queue">
+                  {documents.map((document) => (
+                    <li key={document.id} className={`is-${document.status.toLowerCase()}`}>
+                      <span className="intake-document-icon" aria-hidden="true">PDF</span>
+                      <div className="intake-document-summary">
+                        <strong title={document.file.name}>{document.file.name}</strong>
+                        {document.error ? <span className="intake-document-error">{document.error}</span> : <span>{formatBytes(document.file.size)}</span>}
+                      </div>
+                      <span className={`intake-upload-status status-${document.status.toLowerCase()}`}>
+                        {document.status === 'UPLOADED' && <Icon name="check" />}
+                        {statusLabel[document.status]}
+                      </span>
+                      <button
+                        type="button"
+                        className="intake-remove-document"
+                        onClick={() => removeDocument(document.id)}
+                        disabled={document.status === 'UPLOADING' || document.status === 'UPLOADED' || submitting}
+                        aria-label={`Remove ${document.file.name}`}
+                        title="Remove"
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-          </div>
-          <button className="ui-button primary intake-submit-button" onClick={() => void handleSubmit()} disabled={!canSubmit}>
+          </section>
+        </div>
+
+        <aside className="ui-card intake-submit-panel" aria-labelledby="submit-documents-heading">
+          <h2 id="submit-documents-heading">Submit Documents</h2>
+          <ul className="intake-checklist">
+            {checklist.map((item) => (
+              <li key={item.label} className={item.done ? 'is-done' : item.problem ? 'is-problem' : ''}>
+                <span className="intake-check-mark" aria-hidden="true">{item.done && <Icon name="check" />}</span>
+                <div>
+                  <strong>{item.label}<span className="sr-only">{item.done ? ' — complete' : ' — incomplete'}</span></strong>
+                  <small>{item.detail}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {submitting && documents.length > 0 && (
+            <div className="intake-upload-progress" role="progressbar" aria-label="Upload progress" aria-valuemin={0} aria-valuemax={documents.length} aria-valuenow={uploadedCount}>
+              <i style={{ width: `${(uploadedCount / documents.length) * 100}%` }} />
+            </div>
+          )}
+          <p className="intake-readiness">{readinessMessage}</p>
+          <button className="ui-button primary intake-submit-button" type="button" onClick={() => void handleSubmit()} disabled={!canSubmit}>
             {submitting ? 'Submitting…' : hasFailedDocuments ? 'Retry Uploads & Submit' : 'Submit Documents'}
           </button>
-        </section>
+          {draftPackageId && error && (
+            <Link className="intake-draft-link" to={`/packages/${draftPackageId}`}>Open incomplete intake details</Link>
+          )}
+          <p className="intake-footnote">Processing begins only after submission. Identifiers lock once the intake is created.</p>
+        </aside>
       </div>
     </PageScaffold>
   );

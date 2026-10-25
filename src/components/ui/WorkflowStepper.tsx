@@ -1,3 +1,4 @@
+import Icon from './Icon';
 export type WorkflowStep = {
   label: string;
   description?: string;
@@ -11,7 +12,7 @@ export default function WorkflowStepper({ steps, ariaLabel = 'Workflow progress'
         const state = step.state || 'upcoming';
         return (
           <li key={`${index}-${step.label}`} className={`workflow-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
-            <span className="workflow-step-number" aria-hidden="true">{state === 'complete' ? '✓' : index + 1}</span>
+            <span className="workflow-step-number" aria-hidden="true">{state === 'complete' ? <Icon name="check" /> : index + 1}</span>
             <span className="workflow-step-copy">
               <strong>{step.label}</strong>
               {step.description && <small>{step.description}</small>}

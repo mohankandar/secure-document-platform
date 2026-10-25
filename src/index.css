@@ -3462,39 +3462,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dashboard-page .dashboard-primary-link:hover { color: var(--brand-accent); }
 .dashboard-page .dashboard-pagination { padding: 10px 14px; background: var(--ui-surface); }
 
-/* Upload Documents: one controlled intake workspace with restrained sections. */
-.intake-page { width: min(1080px, 100%); }
-.intake-page .workflow-stepper { margin-bottom: 14px; gap: 0; border: 1px solid var(--ui-border); border-radius: var(--radius-surface); overflow: hidden; background: var(--ui-surface); }
-.intake-page .workflow-step { min-height: 58px; padding: 9px 13px; border: 0; border-right: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-surface); }
-.intake-page .workflow-step:last-child { border-right: 0; }
-.intake-page .workflow-step.is-current { background: var(--ui-selected); box-shadow: inset 0 -2px var(--brand-accent); }
-.intake-page .workflow-step.is-complete { border-color: var(--ui-border); }
-.intake-page .workflow-step-number { width: 26px; height: 26px; flex-basis: 26px; border-radius: 6px; font-size: var(--type-xs); }
-.intake-page .workflow-step-copy strong { font-size: var(--type-sm); }
-.intake-page .workflow-step-copy small { font-size: var(--type-2xs); }
-.intake-page .intake-workspace { gap: 0; overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--radius-surface); background: var(--ui-surface); }
-.intake-page .intake-section { margin: 0; padding: 20px 22px; border: 0; border-bottom: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-surface); box-shadow: none; }
-.intake-page .intake-section-heading { gap: 11px; margin-bottom: 16px; }
-.intake-page .intake-section-heading > span { width: 26px; height: 26px; flex-basis: 26px; border-radius: 6px; background: var(--ui-selected); color: var(--brand-accent); font-size: var(--type-xs); }
-.intake-page .intake-section-heading h2, .intake-page .intake-submit-panel h2 { font-size: var(--type-body-lg); font-weight: var(--weight-semibold); }
-.intake-page .intake-section-heading p, .intake-page .intake-submit-panel p { font-size: var(--type-body-sm); }
-.intake-page .form-group label { color: var(--ui-text-secondary); font-size: var(--type-sm); font-weight: var(--weight-semibold); }
-.intake-page .form-group input { min-height: 40px; padding: 8px 10px; border-radius: 7px; background: var(--ui-surface); }
-.intake-page .intake-primary-label { margin-left: 6px; color: var(--ui-text-muted); font-size: var(--type-2xs); text-transform: uppercase; letter-spacing: .06em; }
-.intake-page .intake-drop-zone { min-height: 176px; padding: 20px; border: 1px dashed var(--ui-border-strong); border-radius: 8px; background: var(--ui-surface-subtle); }
-.intake-page .intake-drop-zone:hover:not(.is-disabled) { border-color: color-mix(in srgb, var(--brand-accent) 52%, var(--ui-border-strong)); background: color-mix(in srgb, var(--brand-accent) 2.5%, var(--ui-surface-subtle)); }
-.intake-page .intake-drop-icon { width: 40px; height: 40px; margin-bottom: 8px; border-radius: 7px; }
-.intake-page .intake-drop-zone > strong { font-size: var(--type-body); font-weight: var(--weight-semibold); }
-.intake-page .intake-drop-zone > p { margin: 4px 0 10px; font-size: var(--type-sm); }
-.intake-page .intake-queue-heading { margin: 16px 0 8px; }
-.intake-page .intake-document-queue { gap: 0; border: 1px solid var(--ui-border); border-radius: 8px; overflow: auto; }
-.intake-page .intake-document-queue li { gap: 10px; padding: 9px 11px; border: 0; border-bottom: 1px solid var(--ui-border); border-radius: 0; }
-.intake-page .intake-document-queue li:last-child { border-bottom: 0; }
-.intake-page .intake-document-icon { width: 32px; height: 32px; flex-basis: 32px; border-radius: 6px; }
-.intake-page .intake-upload-status { border-radius: 6px; }
-.intake-page .intake-remove-document { min-height: 34px; padding: 6px 9px; border-radius: 6px; font-size: var(--type-sm); }
-.intake-page .intake-submit-panel { margin: 0; padding: 15px 18px; border: 0; border-radius: 0; background: var(--ui-surface-subtle); box-shadow: none; }
-.intake-page .intake-submit-button { min-width: 168px; min-height: 40px; }
 
 /* Package Details: identity and lifecycle first; nested-card treatment reduced. */
 .package-detail-page { max-width: 1320px; margin: 0 auto; }
@@ -3542,11 +3509,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .dashboard-page .kpi-grid { grid-template-columns: 1fr 1fr; }
   .dashboard-page .kpi-card { min-height: 88px; padding: 11px 12px; }
   .dashboard-page .kpi-card small { display: none; }
-  .intake-page .workflow-stepper { grid-template-columns: 1fr; }
-  .intake-page .workflow-step { border-right: 0; border-bottom: 1px solid var(--ui-border); }
-  .intake-page .workflow-step:last-child { border-bottom: 0; }
-  .intake-page .intake-section { padding: 17px 15px; }
-  .intake-page .intake-submit-panel { padding: 14px 15px; }
   .package-detail-page .package-summary-copy { grid-template-columns: 1fr; }
   .package-detail-page .package-identifier-chips { width: 100%; border-top: 1px solid var(--ui-border); }
   .package-detail-page .package-identifier-chips > span { flex: 1 1 140px; padding: 8px 10px; border-right: 0; }
@@ -3600,17 +3562,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dashboard-page .operations-table tbody tr:hover { background: color-mix(in srgb, var(--brand-accent) 2.5%, var(--ui-hover)); }
 
 /* Upload: keep the workflow obvious but reduce the amount of framed real estate. */
-.intake-page .workflow-stepper { border-color: var(--ui-border-strong); }
-.intake-page .workflow-step { min-height: 54px; padding: 8px 12px; }
-.intake-page .intake-workspace { border-color: var(--ui-border-strong); }
-.intake-page .intake-section { padding: 17px 20px; }
-.intake-page .intake-section-heading { margin-bottom: 13px; }
-.intake-page .intake-drop-zone { min-height: 138px; padding: 15px 18px; background: color-mix(in srgb, var(--ui-surface-subtle) 70%, var(--ui-surface)); }
-.intake-page .intake-drop-icon { width: 34px; height: 34px; margin-bottom: 6px; }
-.intake-page .intake-drop-zone > p { margin: 3px 0 8px; }
-.intake-page .intake-queue-heading { margin-top: 13px; }
-.intake-page .intake-empty-queue-layout { min-height: 54px; padding: 15px; border: 1px solid var(--ui-border); border-radius: 7px; background: var(--ui-surface); }
-.intake-page .intake-submit-panel { padding: 13px 17px; border-top: 1px solid var(--ui-border); }
 
 /* Package Details: turn the top region into one authoritative record identity,
    compress completed-state messaging, and eliminate the unfinished empty-grid area. */
@@ -3676,18 +3627,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .dashboard-page .operations-table td:last-child { padding-right: 10px; }
 }
 
-/* Upload: finish as part of the controlled workspace rather than a detached footer. */
-.intake-page .intake-submit-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  background: var(--ui-surface);
-  border-top: 1px solid var(--ui-border-strong);
-}
-.intake-page .intake-submit-panel > div { min-width: 0; display: grid; gap: 2px; }
-.intake-page .intake-submit-panel h2 { margin: 0; }
-.intake-page .intake-submit-panel p { margin: 0; color: var(--ui-text-muted); }
 
 /* Package Details: replace the native browser file control and clarify draft actions. */
 .package-detail-page .package-action-card.tone-info { background: var(--ui-surface); border-color: var(--ui-border) var(--ui-border) var(--ui-border) var(--brand-accent); }
@@ -3734,8 +3673,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 640px) {
-  .intake-page .intake-submit-panel { align-items: stretch; flex-direction: column; }
-  .intake-page .intake-submit-button { width: 100%; }
   .package-detail-page .package-upload-picker { align-items: stretch; flex-direction: column; }
   .package-detail-page .package-upload-picker .ui-button,
   .package-detail-page .package-upload-actions { width: 100%; }
