@@ -1,20 +1,55 @@
-.cf-admin { display: flex; flex-direction: column; }
-.cf-ad-layout { display: flex; gap: 28px; align-items: flex-start; }
-.cf-ad-rail { position: sticky; top: 76px; flex: none; width: 196px; display: flex; flex-direction: column; gap: 2px; }
-.cf-ad-rail-link {
-  display: flex; align-items: center; height: 34px; padding: 0 12px; border-radius: var(--cf-radius);
-  color: var(--cf-muted); font-size: 14px; font-weight: 500; white-space: nowrap;
-}
-.cf-ad-rail-link:hover { color: var(--cf-ink); background: var(--cf-raised); }
-.cf-ad-rail-link.is-active { color: var(--cf-ink); background: var(--cf-surface); box-shadow: inset 2px 0 0 var(--cf-mark), inset 0 0 0 1px var(--cf-line); }
-.cf-ad-rail-link:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; }
-.cf-ad-content { flex: 1; min-width: 0; }
-.cf-ad-stack { display: flex; flex-direction: column; gap: 16px; }
+.cf-admin { display: flex; flex-direction: column; min-width: 0; }
+.cf-ad-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 18px; }
 
-@media (max-width: 860px) {
-  .cf-ad-layout { flex-direction: column; gap: 16px; }
-  .cf-ad-rail { position: static; width: 100%; flex-direction: row; overflow-x: auto; padding-bottom: 4px; border-bottom: 1px solid var(--cf-line); }
-  .cf-ad-rail-link.is-active { box-shadow: inset 0 -2px 0 var(--cf-mark); background: transparent; border-radius: 0; }
+.cf-ad-tabs {
+  position: sticky; top: 56px; z-index: 10;
+  display: flex; flex-wrap: nowrap; gap: 4px; min-width: 0;
+  margin: 0 -24px; padding: 0 24px;
+  overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-width: none;
+  background: color-mix(in srgb, var(--cf-bg) 92%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--cf-line);
+}
+.cf-ad-tabs::-webkit-scrollbar { display: none; }
+.cf-ad-tab {
+  position: relative; flex: none;
+  display: inline-flex; align-items: center; height: 44px; padding: 0 12px;
+  color: var(--cf-muted); font-size: 14px; font-weight: 500; white-space: nowrap;
+  transition: color 120ms;
+}
+.cf-ad-tab::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+  border-radius: 2px 2px 0 0; background: transparent; transition: background 120ms;
+}
+.cf-ad-tab:hover { color: var(--cf-ink); }
+.cf-ad-tab:hover::after { background: var(--cf-line-strong); }
+.cf-ad-tab.is-active { color: var(--cf-ink); font-weight: 600; }
+.cf-ad-tab.is-active::after { background: var(--cf-mark); }
+.cf-ad-tab:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: -4px; border-radius: var(--cf-radius); }
+.cf-ad-tab-short { display: none; }
+
+.cf-ad-content { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding-top: 18px; }
+.cf-ad-context { font-size: 14px; color: var(--cf-muted); text-wrap: pretty; }
+.cf-ad-stack { display: flex; flex-direction: column; gap: 16px; }
+.cf-ad-pair { display: flex; flex-direction: column; gap: 16px; }
+
+@media (min-width: 1200px) {
+  .cf-ad-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+
+@media (max-width: 900px) {
+  .cf-ad-head { margin-bottom: 12px; }
+  .cf-ad-tab { padding: 0 10px; }
+  .cf-ad-tab::after { left: 10px; right: 10px; }
+}
+
+@media (max-width: 768px) {
+  .cf-ad-tabs { margin: 0 -16px; padding: 0 16px; }
+}
+
+@media (max-width: 640px) {
+  .cf-ad-tab-full { display: none; }
+  .cf-ad-tab-short { display: inline; }
 }
 
 .cf-ad-card { display: flex; flex-direction: column; gap: 16px; padding: 20px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 10px; min-width: 0; }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Moon, Search, Sun } from 'lucide-react';
+import { useTheme } from './theme';
 import type { CurrentUser } from '../types';
 import { ADMIN_CAPS, CAP, needsYou, useMe, usePackages, useReviewQueue } from './data';
 import { Kbd, Notice, Spinner } from './atoms';
@@ -14,6 +15,22 @@ import Admin from './admin/Admin';
 import './studio.css';
 
 const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme();
+  const next = theme === 'dark' ? 'light' : 'dark';
+  return (
+    <button
+      type="button"
+      className="cf-theme-toggle"
+      onClick={() => setTheme(next)}
+      aria-label={`Switch to ${next} theme`}
+      title={`Switch to ${next} theme`}
+    >
+      {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+    </button>
+  );
+}
 
 export default function CaseFileApp() {
   const { data: me, error } = useMe();
@@ -110,6 +127,8 @@ function Workspace({ me, caps }: { me: CurrentUser; caps: string[] }) {
           <span className="cf-find-label">Find a case or action</span>
           <span className="cf-find-keys" aria-hidden="true"><Kbd>{MOD_KEY}</Kbd><Kbd>K</Kbd></span>
         </button>
+
+        <ThemeToggle />
 
         <div className="cf-me">
           <span className="cf-me-avatar" aria-hidden="true">{initials(me.username)}</span>

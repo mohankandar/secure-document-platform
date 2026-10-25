@@ -56,6 +56,7 @@ export default function PolicyArea() {
         )}
       </SettingsCard>
 
+      <div className="cf-ad-pair">
       <SettingsCard
         title="Retention and approval"
         description={`Originals are purged on schedule. Redacted copies can be kept up to ${lc.maximumRedactedCacheHours} hours.`}
@@ -103,6 +104,7 @@ export default function PolicyArea() {
           </>
         )}
       </SettingsCard>
+      </div>
     </div>
   );
 }
