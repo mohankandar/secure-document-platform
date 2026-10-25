@@ -5,6 +5,7 @@ import { useTheme } from './theme';
 import type { CurrentUser } from '../types';
 import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
 import { useBranding } from '../branding/BrandingContext';
+import { ROLE_OPTIONS } from '../security/uiAuthorization';
 import { Kbd } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
@@ -37,7 +38,7 @@ function ThemeToggle() {
   );
 }
 
-export default function CaseFileApp({ me, onSignOut }: { me: CurrentUser; onSignOut: () => void }) {
+export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, onRoleChange }: { me: CurrentUser; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void }) {
   // The production App owns OIDC validation, session expiry and principal capabilities.
   const caps = me.capabilities ?? [];
   if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
@@ -45,13 +46,13 @@ export default function CaseFileApp({ me, onSignOut }: { me: CurrentUser; onSign
   return (
     <div className="cf">
       <ToastProvider>
-        <Workspace me={me} caps={caps} onSignOut={onSignOut} />
+        <Workspace me={me} caps={caps} onSignOut={onSignOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={onRoleChange} />
       </ToastProvider>
     </div>
   );
 }
 
-function Workspace({ me, caps, onSignOut }: { me: CurrentUser; caps: string[]; onSignOut: () => void }) {
+function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange }: { me: CurrentUser; caps: string[]; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void }) {
   const { branding } = useBranding();
   const location = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -126,6 +127,15 @@ function Workspace({ me, caps, onSignOut }: { me: CurrentUser; caps: string[]; o
         </button>
 
         <ThemeToggle />
+
+        {localMode && (
+          <label className="cf-local-role">
+            <span className="cf-sr">Local test role</span>
+            <select aria-label="Local test role" value={selectedRole} onChange={(event) => onRoleChange(event.target.value)}>
+              {ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </select>
+          </label>
+        )}
 
         <div className="cf-me">
           <span className="cf-me-avatar" aria-hidden="true">{initials(me.username)}</span>
