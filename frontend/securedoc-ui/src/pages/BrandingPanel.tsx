@@ -133,7 +133,7 @@ function Preview({ value, inherited }: { value: EditableBranding; inherited?: Br
   const compactLogo = value.compactLogoDataUrl || inherited?.compactLogoDataUrl || primaryLogo;
   return (
     <div className="branding-preview" style={{ '--preview-accent': accent } as CSSProperties}>
-      <div className="branding-preview-toolbar"><span className="preview-menu-lines">☰</span><div className="preview-brand-mark">{compactLogo ? <img src={compactLogo} alt="" /> : appName.slice(0, 1).toUpperCase()}</div><strong>{shortName}</strong><span className="preview-avatar">U</span></div>
+      <div className="branding-preview-toolbar"><Icon name="menu" className="preview-menu-lines" /><div className="preview-brand-mark">{compactLogo ? <img src={compactLogo} alt="" /> : appName.slice(0, 1).toUpperCase()}</div><strong>{shortName}</strong><span className="preview-avatar">U</span></div>
       <div className="branding-preview-body"><aside>
         {primaryLogo ? <img className="preview-primary-logo" src={primaryLogo} alt="" /> : <div className="preview-inline-brand"><div className="preview-brand-mark large">{compactLogo ? <img src={compactLogo} alt="" /> : appName.slice(0, 1).toUpperCase()}</div><strong>{appName}</strong></div>}
         <small>{org}</small><span className="preview-nav active">Dashboard</span><span className="preview-nav">Upload</span><span className="preview-nav">Reports</span></aside><main><span className="preview-eyebrow">WORK</span><h3>Dashboard</h3><p>Operational overview</p><div className="preview-metrics"><span/><span/><span/></div><div className="preview-table-line"/><div className="preview-table-line short"/></main></div>

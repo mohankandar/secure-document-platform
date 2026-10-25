@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import PageScaffold from '../components/ui/PageScaffold';
 import HorizontalTabs from '../components/ui/HorizontalTabs';
+import Icon from '../components/ui/Icon';
 import type {
   ApiError,
   BusinessAdminConfiguration,
@@ -499,8 +500,8 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
               <div className="identifier-editor-body">
               <div className="identifier-admin-row">
                 <div className="identifier-order-controls" aria-label="Reorder identifier">
-                  <button className="ui-button icon" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up">↑</button>
-                  <button className="ui-button icon" onClick={() => moveIdentifier(index, 1)} disabled={index === identifiers.length - 1} title="Move down">↓</button>
+                  <button className="ui-button icon" onClick={() => moveIdentifier(index, -1)} disabled={index === 0} title="Move up" aria-label="Move up"><Icon name="arrowUp" /></button>
+                  <button className="ui-button icon" onClick={() => moveIdentifier(index, 1)} disabled={index === identifiers.length - 1} title="Move down" aria-label="Move down"><Icon name="arrowDown" /></button>
                 </div>
 
                 <div className="identifier-main-field">
@@ -675,8 +676,8 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
           {dashboardColumns.map((column, index) => (
             <div className="dashboard-admin-row" key={column.key}>
               <div className="identifier-order-controls" aria-label={`Reorder ${column.label}`}>
-                <button className="ui-button icon" onClick={() => moveDashboardColumn(index, -1)} disabled={index === 0} title="Move up">↑</button>
-                <button className="ui-button icon" onClick={() => moveDashboardColumn(index, 1)} disabled={index === dashboardColumns.length - 1} title="Move down">↓</button>
+                <button className="ui-button icon" onClick={() => moveDashboardColumn(index, -1)} disabled={index === 0} title="Move up" aria-label="Move up"><Icon name="arrowUp" /></button>
+                <button className="ui-button icon" onClick={() => moveDashboardColumn(index, 1)} disabled={index === dashboardColumns.length - 1} title="Move down" aria-label="Move down"><Icon name="arrowDown" /></button>
               </div>
               <div className="dashboard-admin-column-name">
                 <strong>{column.label}</strong>

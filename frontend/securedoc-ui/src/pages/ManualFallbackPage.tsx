@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 import type { ApiError, ManualFallbackDetail, PackageDetail, ReviewBoundingBox } from '../types';
 import PageScaffold from '../components/ui/PageScaffold';
 import HorizontalTabs from '../components/ui/HorizontalTabs';
+import Icon from '../components/ui/Icon';
 
 const MIN_BOX_SIZE = 0.008;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -448,7 +449,7 @@ export default function ManualFallbackPage() {
                 aria-label="Expand page previews"
                 title="Expand page previews"
               >
-                <span aria-hidden="true">◀</span>
+                <Icon name="chevronLeft" />
                 <span>Pages</span>
               </button>
             ) : (
@@ -482,7 +483,7 @@ export default function ManualFallbackPage() {
                     aria-label="Collapse page previews"
                     title="Collapse page previews"
                   >
-                    Pages <span aria-hidden="true">▶</span>
+                    Pages <Icon name="chevronRight" />
                   </button>
                 </div>
                 {detail.documents.length > 1 && (

@@ -171,14 +171,14 @@ function IntakeProgress({ report }: { report: OperationalReports }) {
 function FilterPopover({ label, valueLabel, open, onToggle, children }: { label: string; valueLabel: string; open: boolean; onToggle: () => void; children: ReactNode }) {
   return <div className="report-filter-wrap">
     <button type="button" className={`report-filter-button ${open ? 'open' : ''}`} onClick={onToggle} aria-expanded={open}>
-      <span>{label}</span><strong>{valueLabel}</strong><i>⌄</i>
+      <span>{label}</span><strong>{valueLabel}</strong><Icon name="chevronDown" className="report-filter-chevron" />
     </button>
     {open && <div className="report-filter-popover">{children}</div>}
   </div>;
 }
 
 function ChoiceList({ options, value, onChoose }: { options: readonly (readonly [string, string])[]; value: string; onChoose: (value: string) => void }) {
-  return <div className="report-choice-list">{options.map(([key, label]) => <button type="button" key={key} className={value === key ? 'selected' : ''} onClick={() => onChoose(key)}><span>{label}</span>{value === key && <b>✓</b>}</button>)}</div>;
+  return <div className="report-choice-list">{options.map(([key, label]) => <button type="button" key={key} className={value === key ? 'selected' : ''} onClick={() => onChoose(key)}><span>{label}</span>{value === key && <Icon name="check" className="report-choice-check" />}</button>)}</div>;
 }
 
 function PeriodPicker({ period, onApply, onClose }: { period: PeriodSelection; onApply: (period: PeriodSelection) => void; onClose: () => void }) {
@@ -220,10 +220,10 @@ function PeriodPicker({ period, onApply, onClose }: { period: PeriodSelection; o
   };
 
   return <div className="period-picker">
-    <div className="popover-title"><div><span>Reporting period</span><strong>Choose a useful business window</strong></div><button type="button" onClick={onClose} aria-label="Close period selector">×</button></div>
+    <div className="popover-title"><div><span>Reporting period</span><strong>Choose a useful business window</strong></div><button type="button" onClick={onClose} aria-label="Close period selector"><Icon name="close" /></button></div>
     {!showOther ? <>
       <div className="period-quick-grid">{quick.map(([key, label]) => <button type="button" key={key} className={period.preset === key ? 'selected' : ''} onClick={() => onApply(presetPeriod(key))}>{label}</button>)}</div>
-      <button type="button" className="period-other" onClick={() => setShowOther(true)}><span>Other</span><small>Custom dates, month, quarter, or year</small><b>→</b></button>
+      <button type="button" className="period-other" onClick={() => setShowOther(true)}><span>Other</span><small>Custom dates, month, quarter, or year</small><Icon name="chevronRight" className="period-other-arrow" /></button>
     </> : <>
       <button type="button" className="period-back" onClick={() => setShowOther(false)}>← Presets</button>
       <div className="custom-mode-tabs">{([['DATES', 'Date range'], ['MONTH', 'Month'], ['QUARTER', 'Quarter'], ['YEAR', 'Year']] as Array<[CustomMode, string]>).map(([key, label]) => <button type="button" key={key} className={customMode === key ? 'active' : ''} onClick={() => setCustomMode(key)}>{label}</button>)}</div>
