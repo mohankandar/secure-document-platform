@@ -695,7 +695,11 @@ on('POST', '/admin/enterprise-identity/draft/test', (s, ctx) => {
 on('POST', '/admin/enterprise-identity/draft/activate', (s, ctx) => {
   require(ctx, 'TENANT_AUTH_MANAGE');
   const staged = s.identity.staged;
-  if (!staged || staged.lastTestStatus !== 'PASSED') throw new HttpError(409, 'The draft must pass a connection test before activation.', 'CONFLICT');
+  if (ctx.body?.confirmation !== 'ACTIVATE') throw new HttpError(400, 'Activation requires explicit confirmation.', 'BAD_REQUEST');
+  if (!staged || staged.connectionId !== ctx.body?.connectionId) throw new HttpError(409, 'The staged draft changed. Reload and review it before activating.', 'CONFLICT');
+  if (staged.configurationVersion !== ctx.body?.expectedConfigurationVersion) throw new HttpError(409, `Version ${ctx.body?.expectedConfigurationVersion} is no longer the staged version. Reload and review it before activating.`, 'CONFLICT');
+  if (staged.status !== 'VALIDATED' || staged.lastTestStatus !== 'PASSED') throw new HttpError(409, 'Only a VALIDATED draft with a passing connection test can be activated.', 'CONFLICT');
+  if (!staged.lastTestedAt || Date.now() - new Date(staged.lastTestedAt).getTime() > s.identity.activationMaxTestAgeSeconds * 1000) throw new HttpError(409, 'The last passing connection test is too old. Test again before activating.', 'CONFLICT');
   if (s.identity.active) s.identity.rollbackCandidates = [{ ...s.identity.active, status: 'DISABLED' as const }, ...s.identity.rollbackCandidates].slice(0, 3);
   s.identity.active = { ...staged, status: 'ACTIVE', updatedAt: iso(Date.now()) };
   s.identity.staged = null;
@@ -705,7 +709,9 @@ on('POST', '/admin/enterprise-identity/draft/activate', (s, ctx) => {
 on('POST', '/admin/enterprise-identity/rollback', (s, ctx) => {
   require(ctx, 'TENANT_AUTH_MANAGE');
   const target = s.identity.rollbackCandidates.find((c) => c.connectionId === ctx.body?.connectionId);
+  if (ctx.body?.confirmation !== 'ROLLBACK') throw new HttpError(400, 'Rollback requires explicit confirmation.', 'BAD_REQUEST');
   if (!target) throw new HttpError(404, 'Rollback target not found.', 'NOT_FOUND');
+  if (target.configurationVersion !== ctx.body?.expectedConfigurationVersion) throw new HttpError(409, 'The rollback target changed. Reload and review it before rolling back.', 'CONFLICT');
   s.identity.rollbackCandidates = [{ ...(s.identity.active as Json), status: 'DISABLED' }, ...s.identity.rollbackCandidates.filter((c) => c !== target)];
   s.identity.active = { ...target, status: 'ACTIVE', updatedAt: iso(Date.now()) };
   audit(s, ctx, 'IDENTITY_PROVIDER_ROLLED_BACK', 'IDENTITY_PROVIDER', target.connectionId);
