@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, NavLink, Route, Routes, useParams } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Moon, Search, Sun } from 'lucide-react';
 import { useTheme } from './theme';
 import type { CurrentUser } from '../types';
@@ -53,6 +53,7 @@ export default function CaseFileApp({ me, onSignOut }: { me: CurrentUser; onSign
 
 function Workspace({ me, caps, onSignOut }: { me: CurrentUser; caps: string[]; onSignOut: () => void }) {
   const { branding } = useBranding();
+  const location = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const canDesk = caps.includes(CAP.desk);
   const canIntake = caps.includes(CAP.intake);
@@ -145,6 +146,12 @@ function Workspace({ me, caps, onSignOut }: { me: CurrentUser; caps: string[]; o
           <Route path="/reports" element={canReports ? <Reports caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/admin" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
           <Route path="/admin/:area" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
+          <Route path="/administration" element={<Navigate to={canAdmin ? '/admin' : home} replace />} />
+          <Route path="/business-admin" element={<Navigate to={caps.includes(CAP.policy) ? '/admin/policy' : caps.includes(CAP.identifiers) ? '/admin/fields' : home} replace />} />
+          <Route path="/integrations" element={<Navigate to={caps.includes(CAP.integrations) ? '/admin/integrations' : home} replace />} />
+          <Route path="/authentication-admin" element={<Navigate to={caps.includes(CAP.auth) ? '/admin/identity' : home} replace />} />
+          <Route path="/platform-admin" element={<Navigate to={caps.includes(CAP.technicalAdmin) ? '/admin/health' : home} replace />} />
+          <Route path="/audit" element={<Navigate to={caps.includes(CAP.audit) ? '/admin/audit' : home} replace />} />
           <Route path="/support/incidents" element={canSupport ? <SupportIncidentsPage /> : <Navigate to={home} replace />} />
           <Route path="/support/incidents/:incidentId" element={canSupport ? <SupportIncidentDetailPage /> : <Navigate to={home} replace />} />
           <Route path="/technical-exceptions/:packageId" element={canSupport ? <TechnicalIssueDetailPage /> : <Navigate to={home} replace />} />
