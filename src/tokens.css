@@ -1,33 +1,45 @@
-/* SecureDocs UI Framework 1.0 candidate — single visual token source.
-   Raw color values belong here; application/page CSS must consume semantic tokens. */
+/* LexaVault Design System 2.0 — single visual token source.
+   Raw color values belong here; application/page CSS must consume semantic tokens.
+   Tenant branding overrides --brand-accent / --brand-accent-rgb / --brand-secondary at runtime. */
 :root {
-  --brand-accent: #3157C8;
-  --brand-accent-rgb: 49 87 200;
-  --brand-secondary: #5E5BB3;
-  --ui-bg: #f4f6f8;
+  --brand-accent: #315CF4;
+  --brand-accent-rgb: 49 92 244;
+  --brand-secondary: #6D5AE6;
+
+  /* Typography families: one UI sans, one mono for identifiers, hashes and IDs. */
+  --font-sans: 'Inter', 'Inter Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Neutral foundation — cool graphite. */
+  --ui-bg: #f6f7f9;
   --ui-surface: #ffffff;
-  --ui-surface-subtle: #f7f9fb;
-  --ui-text: #182230;
-  --ui-text-muted: #667085;
-  --ui-border: #dfe4ea;
-  --ui-border-strong: #cbd3dc;
-  --ui-sidebar: #101828;
-  --ui-sidebar-muted: #98a2b3;
-  --ui-success: #067647;
-  --ui-success-bg: #ecfdf3;
-  --ui-warning: #b54708;
-  --ui-warning-bg: #fffaeb;
-  --ui-danger: #b42318;
-  --ui-danger-bg: #fef3f2;
-  --ui-info: #175cd3;
-  --ui-info-bg: #eff8ff;
-  --ui-sidebar-width: 252px;
-  --ui-sidebar-collapsed-width: 72px;
+  --ui-surface-subtle: #f9fafb;
+  --ui-surface-sunken: #f1f3f6;
+  --ui-text: #1a2230;
+  --ui-text-muted: #687385;
+  --ui-border: #e4e7ec;
+  --ui-border-strong: #d0d5dd;
+  --ui-sidebar: #fbfbfc;
+  --ui-sidebar-muted: #8a94a6;
+
+  /* Status semantics. */
+  --ui-success: #0a7a4f;
+  --ui-success-bg: #ecf8f2;
+  --ui-warning: #a8590b;
+  --ui-warning-bg: #fdf6e9;
+  --ui-danger: #c0362c;
+  --ui-danger-bg: #fdf1f0;
+  --ui-info: #2453c7;
+  --ui-info-bg: #eef3fd;
+  --ui-violet: #5b4bc4;
+  --ui-violet-bg: #f2f0fc;
+
+  --ui-sidebar-width: 248px;
+  --ui-sidebar-collapsed-width: 68px;
+  --ui-topbar-height: 52px;
+  --ui-content-max: 1480px;
   --ui-touch: 44px;
 
-  /* Design System R2 — visual foundation.
-     Shared pages/components consume these semantic tokens instead of inventing
-     spacing, surface, radius, control and interaction values. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -37,78 +49,76 @@
   --space-7: 40px;
   --space-8: 48px;
 
-  --control-height-sm: 36px;
-  --control-height: 40px;
+  --control-height-sm: 32px;
+  --control-height: 36px;
   --control-height-lg: 44px;
   --icon-size-sm: 16px;
   --icon-size: 18px;
   --icon-size-lg: 20px;
 
-  --radius-control: 7px;
-  --radius-surface: 9px;
-  --radius-surface-lg: 12px;
+  --radius-control: 6px;
+  --radius-surface: 10px;
+  --radius-surface-lg: 14px;
   --radius-pill: 999px;
 
-  --ui-text-strong: #0f1728;
-  --ui-text-secondary: #475467;
-  --ui-text-disabled: #98a2b3;
-  --ui-border-soft: #edf0f3;
-  --ui-hover: #f8fafc;
+  --ui-text-strong: #0d1421;
+  --ui-text-secondary: #485467;
+  --ui-text-disabled: #a3acba;
+  --ui-border-soft: #eef0f3;
+  --ui-hover: #f3f5f8;
   --ui-selected: color-mix(in srgb, var(--brand-accent) 8%, #fff);
   --ui-selected-strong: color-mix(in srgb, var(--brand-accent) 14%, #fff);
-  --ui-focus-ring: rgba(var(--brand-accent-rgb), .22);
+  --ui-focus-ring: rgba(var(--brand-accent-rgb), .28);
+  --ui-scrim: rgba(13, 20, 33, .42);
 
-  /* Compatibility aliases for older feature CSS while it migrates to R2 semantics. */
+  /* Compatibility aliases for older feature CSS. */
   --ui-muted: var(--ui-text-muted);
   --text-muted: var(--ui-text-muted);
   --text-secondary: var(--ui-text-secondary);
   --border-color: var(--ui-border);
   --ui-radius-md: var(--radius-surface);
 
-  --shadow-surface: 0 1px 2px rgba(16, 24, 40, .04);
-  --shadow-raised: 0 6px 18px rgba(16, 24, 40, .08);
-  --shadow-overlay: 0 18px 42px rgba(16, 24, 40, .16);
-  --motion-fast: 120ms ease;
+  --shadow-surface: 0 1px 2px rgba(13, 20, 33, .04);
+  --shadow-raised: 0 1px 2px rgba(13, 20, 33, .04), 0 8px 24px rgba(13, 20, 33, .07);
+  --shadow-overlay: 0 2px 6px rgba(13, 20, 33, .06), 0 24px 48px rgba(13, 20, 33, .16);
+  --motion-fast: 120ms cubic-bezier(.2, .7, .3, 1);
+  --motion-base: 200ms cubic-bezier(.2, .7, .3, 1);
 
-  /* Backward-compatible aliases used by the frozen R1/R2-R5 UI work. */
   --ui-radius-sm: var(--radius-control);
   --ui-radius: var(--radius-surface);
   --ui-radius-lg: var(--radius-surface-lg);
   --ui-shadow-sm: var(--shadow-surface);
 
-  /* Typography R1 — one shared scale for every LexaVault screen. */
-  --type-2xs: 0.625rem;       /* 10px: chart microcopy only */
-  --type-xs: 0.6875rem;       /* 11px: compact metadata */
-  --type-sm: 0.75rem;         /* 12px: labels, captions, table headers */
-  --type-body-sm: 0.8125rem;  /* 13px: dense tables, tabs, secondary copy */
-  --type-body: 0.875rem;      /* 14px: default body and controls */
-  --type-body-lg: 1rem;       /* 16px: emphasized body */
-  --type-card-title: 1.125rem; /* 18px */
-  --type-section-title: 1.25rem; /* 20px */
-  --type-title-sm: 1.375rem;   /* 22px */
-  --type-page-title: 1.625rem; /* 26px */
-  --type-display: 1.875rem;    /* 30px */
-  --type-kpi: 2rem;            /* 32px */
+  --type-2xs: 0.625rem;
+  --type-xs: 0.6875rem;
+  --type-sm: 0.75rem;
+  --type-body-sm: 0.8125rem;
+  --type-body: 0.875rem;
+  --type-body-lg: 1rem;
+  --type-card-title: 1rem;
+  --type-section-title: 1.125rem;
+  --type-title-sm: 1.25rem;
+  --type-page-title: 1.5rem;
+  --type-display: 1.75rem;
+  --type-kpi: 1.75rem;
 
   --weight-regular: 400;
-  --weight-medium: 550;
-  --weight-semibold: 650;
-  --weight-bold: 750;
-  --leading-tight: 1.18;
-  --leading-body: 1.45;
-  --leading-relaxed: 1.55;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --leading-tight: 1.2;
+  --leading-body: 1.5;
+  --leading-relaxed: 1.6;
 
-
-  /* R3-R5 consolidation: shared inverse/sidebar/data-visualization colors. */
   --ui-inverse: #ffffff;
-  --ui-sidebar-surface: #182230;
-  --ui-sidebar-border: #344054;
-  --ui-sidebar-text: #c5ced9;
-  --ui-chart-blue: #2f6fbb;
-  --ui-chart-navy: #173f6e;
-  --ui-chart-purple: #7c6ee6;
-  --ui-chart-teal: #1e9aa1;
-  --ui-chart-amber: #e09a29;
+  --ui-sidebar-surface: #f1f3f6;
+  --ui-sidebar-border: #e4e7ec;
+  --ui-sidebar-text: #3c4757;
+  --ui-chart-blue: #315cf4;
+  --ui-chart-navy: #1b2c5c;
+  --ui-chart-purple: #6d5ae6;
+  --ui-chart-teal: #138a8a;
+  --ui-chart-amber: #d98a1c;
 }
 
 /* Responsive breakpoint contract.
