@@ -28,6 +28,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const iso = (ms: number) => new Date(ms).toISOString();
 const ROLE_STORAGE_KEY = 'lexavault.demo.role';
+const transientFailures = new Set<string>();
 
 const json = (data: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(data === undefined ? null : JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -310,6 +311,9 @@ function resolveFinding(state: DemoState, ctx: Ctx, findingId: string, confirmed
   const finding = state.findings.find((f) => f.findingId === findingId);
   if (!finding) throw new HttpError(404, 'Review item not found.', 'NOT_FOUND');
   if (finding.status !== 'OPEN') throw new HttpError(409, 'This item was already resolved by another reviewer.', 'CONFLICT');
+  const owner = findPackage(state, finding.packageId);
+  if (owner.status !== 'PENDING_REVIEW' && owner.status !== 'IN_REVIEW') throw new HttpError(409, 'This case is no longer waiting for review.', 'CONFLICT');
+  if (confirmed && !finding.boundingBox && !ctx.body?.boundingBox) throw new HttpError(400, 'Place the redaction on the page before confirming.', 'VALIDATION_FAILED');
   if (confirmed && ctx.body?.boundingBox) finding.boundingBox = ctx.body.boundingBox;
   finding.status = confirmed ? 'CONFIRMED' : 'DISMISSED';
   const pkg = findPackage(state, finding.packageId);
@@ -428,6 +432,14 @@ on('POST', '/packages/:id/documents', (s, ctx, [id]) => {
   const pkg = findPackage(s, id);
   const file = ctx.form?.get('file');
   if (!(file instanceof File)) throw new HttpError(400, 'A PDF file is required.', 'VALIDATION_FAILED');
+  if (pkg.status !== 'DRAFT' && pkg.status !== 'CREATED') throw new HttpError(409, 'Documents can only be added before the package is submitted.', 'INVALID_STATE');
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) throw new HttpError(415, `${file.name} is not a PDF.`, 'UNSUPPORTED_MEDIA_TYPE');
+  // Demo scenario: a file whose name contains "interrupted" fails once per package, then succeeds on retry.
+  const transientKey = `${id}:${file.name}`;
+  if (/interrupted/i.test(file.name) && !transientFailures.has(transientKey)) {
+    transientFailures.add(transientKey);
+    throw new HttpError(503, `Upload of ${file.name} was interrupted. Retry to continue.`, 'SERVICE_UNAVAILABLE');
+  }
   if (pkg.documents.some((d) => d.fileName === file.name && d.sizeBytes === file.size)) throw new HttpError(409, `${file.name} is already attached to this package.`, 'DUPLICATE_DOCUMENT');
   const documentId = demoId();
   pkg.documents.push({ documentId, fileName: file.name, mimeType: file.type || 'application/pdf', sizeBytes: file.size, documentType: 'PDF', status: 'UPLOADED', pageCount: Math.max(1, Math.min(40, Math.round(file.size / 90_000))) });
@@ -439,6 +451,7 @@ on('POST', '/packages/:id/submit', (s, ctx, [id]) => {
   require(ctx, 'DOCUMENT_INTAKE');
   const pkg = findPackage(s, id);
   if (!pkg.documents.length) throw new HttpError(400, 'Add at least one document before submitting.', 'VALIDATION_FAILED');
+  if (pkg.status !== 'DRAFT' && pkg.status !== 'CREATED') return { packageId: id, status: pkg.status };
   touch(pkg, 'SUBMITTED');
   audit(s, ctx, 'PACKAGE_SUBMITTED', 'PACKAGE', id);
   return { packageId: id, status: pkg.status };
@@ -810,8 +823,10 @@ const bridgeBase = { bridgeId: 'bridge-sea-01', siteId: 'seattle', scannerId: 'f
 const requireSession = (s: DemoState, id: string) => { if (!s.scannerSession || s.scannerSession.sessionId !== id) throw new HttpError(404, 'Scan session not found.', 'SESSION_NOT_FOUND'); return s.scannerSession; };
 
 onBridge('GET', '/configuration', () => ({ ...bridgeBase, enabled: true, tenantId: DEMO_TENANT_ID, simulatorInboxPath: 'C:\\LexaVault\\simulator-inbox', stableWindowMs: 1500, maxScanPdfSizeBytes: 100 * 1024 * 1024, minimumUsableSpaceBytes: 2 * 1024 ** 3, prohibitedCapabilities: ['ORIGINAL_DOWNLOAD'], browserRequestToken: 'demo-bridge-token' }));
-onBridge('GET', '/scanner-status', (s) => ({ ...bridgeBase, enabled: true, acquisitionAvailable: true, storageHealthy: true, usableSpaceBytes: 48 * 1024 ** 3, minimumUsableSpaceBytes: 2 * 1024 ** 3, maxScanPdfSizeBytes: 100 * 1024 * 1024, busy: !!s.scannerSession && !['SUBMITTED', 'CANCELLED'].includes(s.scannerSession.status), activeSessionId: s.scannerSession?.sessionId ?? null, queuedCount: s.scannerDeliveries.filter((d) => d.status === 'QUEUED').length, attentionRequiredCount: s.scannerDeliveries.filter((d) => d.status === 'ATTENTION_REQUIRED').length, checkedAt: iso(Date.now()) }));
+onBridge('GET', '/scanner-status', (s) => ({ ...bridgeBase, enabled: true, acquisitionAvailable: !getDemoSettings().scannerOffline, storageHealthy: true, usableSpaceBytes: 48 * 1024 ** 3, minimumUsableSpaceBytes: 2 * 1024 ** 3, maxScanPdfSizeBytes: 100 * 1024 * 1024, busy: !!s.scannerSession && !['SUBMITTED', 'CANCELLED'].includes(s.scannerSession.status), activeSessionId: s.scannerSession?.sessionId ?? null, queuedCount: s.scannerDeliveries.filter((d) => d.status === 'QUEUED').length, attentionRequiredCount: s.scannerDeliveries.filter((d) => d.status === 'ATTENTION_REQUIRED').length, checkedAt: iso(Date.now()) }));
 onBridge('POST', '/scan-sessions', (s, ctx) => {
+  if (getDemoSettings().scannerOffline) throw new HttpError(503, 'The scanner is not reachable. Check that it is powered on and connected.', 'SCANNER_UNAVAILABLE');
+  if (s.scannerSession && !['SUBMITTED', 'CANCELLED'].includes(s.scannerSession.status)) throw new HttpError(409, 'A scan session is already active on this scanner.', 'SESSION_ACTIVE');
   const now = iso(Date.now());
   s.scannerSession = { ...bridgeBase, captureMode: 'SIMULATOR', sessionId: demoId('scan'), submissionId: demoId('sub'), tenantId: DEMO_TENANT_ID, status: 'WAITING_FOR_SCAN', businessIdentifiers: ctx.body?.businessIdentifiers || {}, createdAt: now, updatedAt: now, preparedScan: null, lexavaultPackageId: null, deliveryAttemptCount: 0 };
   return s.scannerSession;

@@ -278,8 +278,30 @@
 .cf-next-heading { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
 .cf-next-body { color: var(--cf-muted); text-wrap: pretty; }
 .cf-next[data-tone='mark'] .cf-next-body { color: var(--cf-ink); opacity: 0.75; }
-.cf-next-action { display: flex; }
+.cf-next-action { display: flex; flex-wrap: wrap; gap: 8px; }
 .cf-next-action .cf-btn { flex: 1; }
+
+.cf-confirm { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--cf-line); }
+.cf-confirm-title { font-weight: 600; }
+.cf-confirm-body { color: var(--cf-muted); font-size: 13px; text-wrap: pretty; }
+.cf-confirm .cf-next-action { padding-top: 6px; }
+
+.cf-disclosure { border-top: 1px solid var(--cf-line); padding-top: 12px; }
+.cf-disclosure > summary {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; cursor: pointer; list-style: none;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cf-muted);
+}
+.cf-disclosure > summary::-webkit-details-marker { display: none; }
+.cf-disclosure > summary::before { content: '+'; font-family: var(--cf-font-mono); width: 10px; color: var(--cf-faint); }
+.cf-disclosure[open] > summary::before { content: '−'; }
+.cf-disclosure > summary:focus-visible { outline: 2px solid var(--cf-mark); outline-offset: 3px; border-radius: 2px; }
+.cf-disclosure[open] > summary { margin-bottom: 10px; }
+.cf-disclosure-lead { font-size: 13px; text-wrap: pretty; margin-bottom: 8px; }
+.cf-count[data-tone='danger'] { color: var(--cf-danger); text-transform: none; letter-spacing: 0; }
+.cf-count[data-tone='mark'] { color: var(--cf-ink); background: var(--cf-mark-soft); padding: 0 6px; border-radius: 3px; text-transform: none; letter-spacing: 0; }
+.cf-small { font-size: 12px; margin-top: 8px; }
+.cf-stage[data-stage='unknown'] { color: var(--cf-muted); }
+.cf-stage[data-stage='unknown'] .cf-stage-dot { background: transparent; border: 1px dashed var(--cf-muted); }
 .cf-next-pulse { display: block; width: 100%; height: 3px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--cf-ink), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: cf-sweep 1.6s ease-in-out infinite; }
 @keyframes cf-sweep { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 

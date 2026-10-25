@@ -196,6 +196,13 @@ function buildPackages(now: number, rand: () => number) {
       }
     }
   }
+  // Scenario: delivered case whose internal redacted copy expires within hours.
+  const expiring = packages[5];
+  Object.assign(expiring, { createdAt: iso(now - 333 * HOUR), lastExportedAt: iso(now - 331 * HOUR), updatedAt: iso(now - 331 * HOUR) });
+  // Scenario: a status this client does not know about must render a safe fallback with no actions.
+  const unknown = packages[6];
+  Object.assign(unknown, { status: 'LEGAL_HOLD', successfulExportCycles: 0, lastExportedAt: null, finalApprovalGranted: false, reviewed: false, reprocessed: false });
+  unknown.documents.forEach((d) => { d.status = 'PROCESSED'; });
   return { packages, findings };
 }
 

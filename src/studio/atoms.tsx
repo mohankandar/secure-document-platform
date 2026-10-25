@@ -5,8 +5,8 @@ export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="cf-kbd">{children}</kbd>;
 }
 
-export function StageChip({ stage, status }: { stage: StageKey; status?: string }) {
-  const label = status === 'REJECTED' ? 'Rejected' : status === 'FAILED' ? 'Failed' : stageLabel(stage);
+export function StageChip({ stage, status, label: override }: { stage: StageKey; status?: string; label?: string }) {
+  const label = override ?? (status === 'REJECTED' ? 'Rejected' : status === 'FAILED' ? 'Needs attention' : stage === 'unknown' ? 'Unrecognized' : stageLabel(stage));
   return (
     <span className="cf-stage" data-stage={stage}>
       <span className="cf-stage-dot" aria-hidden="true" />

@@ -1,53 +1,65 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
-import { ArrowRight, Check, Download, FileText, RotateCcw, X } from 'lucide-react';
+import { ArrowRight, Check, Download, FileText, RotateCcw, Wrench, X } from 'lucide-react';
 import { apiClient } from '../api/client';
-import type { FocusedReviewItem } from '../types';
-import { CAP, LIFECYCLE, SOURCE_LABEL, caseTitle, errorMessage, formatBytes, humanize, relativeTime, stageLabel, stageOf, usePackage, type StageKey } from './data';
+import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary } from '../types';
+import {
+  CAP, LIFECYCLE, SOURCE_LABEL, caseActions, caseTitle, errorMessage, formatBytes, humanize, isReprocessing,
+  redactedArtifactAvailable, relativeTime, stageLabel, stageOf, statusInfo, useDerivedDeliveries, usePackage,
+  usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
+} from './data';
 import { Notice, Spinner, StageChip } from './atoms';
 import { useToast } from './toast';
+
+const CONFIRM_COPY: Partial<Record<CaseActionKind, { title: string; body: string }>> = {
+  approve: { title: 'Release redacted documents?', body: 'Delivery starts immediately and cannot be recalled from the destination.' },
+  reprocess: { title: 'Start a new export cycle?', body: 'The retained original is redacted again and redelivered. This uses one of the allowed export cycles.' },
+  'technical-retry': { title: 'Retry automatic processing?', body: 'LexaVault reruns the failed stage on the retained original.' },
+  'manual-fallback': { title: 'Continue this case manually?', body: 'You will place redactions yourself instead of waiting for automatic processing.' },
+};
 
 export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   packageId: string; caps: string[]; openFindings: FocusedReviewItem[]; onClose: () => void;
 }) {
   const { data: pkg, error, mutate } = usePackage(packageId);
+  const canDesk = caps.includes(CAP.desk);
+  const { data: life, mutate: mutateLife } = usePackageLifecycle(packageId, canDesk);
   const { mutate: mutateGlobal } = useSWRConfig();
+  const navigate = useNavigate();
   const toast = useToast();
-  const [busy, setBusy] = useState<'approve' | 'reprocess' | null>(null);
+  const [busy, setBusy] = useState<CaseActionKind | null>(null);
+  const [confirming, setConfirming] = useState<CaseActionKind | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const run = async (kind: 'approve' | 'reprocess') => {
+  const run = async (kind: CaseActionKind) => {
+    if (kind === 'review') { navigate(`/review?case=${packageId}`); return; }
     setBusy(kind);
     setActionError(null);
     try {
       if (kind === 'approve') await apiClient.approvePackageDelivery(packageId);
-      else await apiClient.reprocessPackage(packageId);
-      await Promise.all([mutate(), mutateGlobal('packages')]);
-      toast(kind === 'approve' ? 'Delivery approved. Redacted documents are on their way.' : 'Reprocessing started.', 'mark');
+      else if (kind === 'reprocess') await apiClient.reprocessPackage(packageId);
+      else if (kind === 'technical-retry') await apiClient.retryTechnicalException(packageId);
+      else if (kind === 'manual-fallback') await apiClient.startManualFallback(packageId);
+      await Promise.all([mutate(), mutateLife(), mutateGlobal('packages'), mutateGlobal('review-queue')]);
+      setConfirming(null);
+      const done: Partial<Record<CaseActionKind, string>> = {
+        approve: 'Delivery approved.', reprocess: 'Reprocessing started.', 'technical-retry': 'Retry started.', 'manual-fallback': 'Manual review opened.',
+      };
+      toast(done[kind] ?? 'Done.', 'mark');
+      if (kind === 'manual-fallback') navigate(`/review?case=${packageId}`);
     } catch (err) {
-      setActionError(errorMessage(err, 'That action could not be completed.'));
+      setActionError(errorMessage(err, 'That action could not be completed. Nothing was changed.'));
+      await mutate();
     } finally {
       setBusy(null);
     }
   };
 
-  const download = async (documentId: string, fileName?: string) => {
-    try {
-      const blob = await apiClient.downloadRedactedArtifact(documentId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `redacted-${fileName || 'document.pdf'}`;
-      a.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      toast(errorMessage(err, 'Download failed.'), 'danger');
-    }
-  };
-
   const title = pkg ? caseTitle(pkg.businessIdentifiers) : null;
-  const stage = pkg ? stageOf(pkg.status) : null;
+  const reprocessing = pkg ? isReprocessing(pkg.status, life) : false;
+  const stage: StageKey | null = pkg ? (reprocessing ? 'redacting' : stageOf(pkg.status)) : null;
+  const actions = pkg ? caseActions(pkg.status, caps, life, reprocessing, openFindings.length) : [];
 
   return (
     <aside className="cf-drawer" aria-label="Case details">
@@ -62,27 +74,39 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
         </button>
       </div>
 
-      {error && <Notice tone="danger">This case could not be loaded.</Notice>}
+      {error && <Notice tone="danger">This case could not be loaded. It may have been removed or you may no longer have access.</Notice>}
       {!pkg && !error && <div className="cf-center"><Spinner label="Opening case" /></div>}
 
       {pkg && stage && (
         <div className="cf-drawer-body">
-          <Timeline stage={stage} status={pkg.status} />
+          {stage !== 'unknown' && <Timeline stage={stage} status={pkg.status} />}
 
           <NextStep
             stage={stage}
             status={pkg.status}
+            reprocessing={reprocessing}
             caps={caps}
             packageId={packageId}
             openFindings={openFindings.length}
+            actions={actions}
             busy={busy}
-            onApprove={() => run('approve')}
-            onReprocess={() => run('reprocess')}
+            confirming={confirming}
+            onAction={(a) => (CONFIRM_COPY[a.kind] ? setConfirming(a.kind) : run(a.kind))}
+            onConfirm={() => confirming && run(confirming)}
+            onCancel={() => setConfirming(null)}
           />
           {actionError && <Notice tone="danger">{actionError}</Notice>}
 
-          <section className="cf-drawer-section" aria-labelledby="cf-ids">
-            <h3 id="cf-ids">Identity</h3>
+          {pkg.status === 'FAILED' && caps.includes(CAP.technicalView) && <TechnicalDetail packageId={packageId} />}
+
+          <DocumentsSection pkg={pkg} life={life} openFindings={openFindings} />
+
+          {caps.includes(CAP.approve) && life && life.successfulExportCycles > 0 && <DeliveriesSection packageId={packageId} />}
+
+          {life && <RetentionSection life={life} />}
+
+          <details className="cf-disclosure">
+            <summary>Identity and source</summary>
             <dl className="cf-facts">
               {pkg.businessIdentifiers.map((id) => (
                 <div key={id.key}>
@@ -93,39 +117,9 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
               <div><dt>Source</dt><dd>{SOURCE_LABEL[pkg.packageType] ?? humanize(pkg.packageType)}</dd></div>
               <div><dt>Opened</dt><dd><time dateTime={pkg.createdAt}>{relativeTime(pkg.createdAt)}</time></dd></div>
               <div><dt>Last activity</dt><dd><time dateTime={pkg.updatedAt}>{relativeTime(pkg.updatedAt)}</time></dd></div>
+              <div><dt>Status code</dt><dd className="cf-mono">{pkg.status}</dd></div>
             </dl>
-          </section>
-
-          <section className="cf-drawer-section" aria-labelledby="cf-docs">
-            <h3 id="cf-docs">Documents <span className="cf-count">{pkg.documents.length}</span></h3>
-            {pkg.documents.length === 0 ? (
-              <p className="cf-muted">No documents yet.</p>
-            ) : (
-              <ul className="cf-docs">
-                {pkg.documents.map((doc) => {
-                  const findings = openFindings.filter((f) => f.documentId === doc.documentId).length;
-                  const canDownload = stage === 'delivered' || stage === 'approval';
-                  return (
-                    <li key={doc.documentId} className="cf-doc">
-                      <FileText size={16} aria-hidden="true" className="cf-doc-icon" />
-                      <span className="cf-doc-name">
-                        <span>{doc.fileName || 'Untitled document'}</span>
-                        <span className="cf-doc-meta">
-                          {formatBytes(doc.sizeBytes)}
-                          {findings > 0 && <> · <mark className="cf-mark-text">{findings} to review</mark></>}
-                        </span>
-                      </span>
-                      {canDownload && (
-                        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => download(doc.documentId, doc.fileName)}>
-                          <Download size={14} aria-hidden="true" /> Redacted
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          </details>
         </div>
       )}
     </aside>
@@ -142,7 +136,7 @@ function Timeline({ stage, status }: { stage: StageKey; status: string }) {
         return (
           <li key={key} data-state={state} aria-current={index === currentIndex ? 'step' : undefined}>
             <span className="cf-timeline-dot" aria-hidden="true">{state === 'done' && <Check size={11} strokeWidth={3} />}</span>
-            <span className="cf-timeline-label">{index === currentIndex && stopped ? humanize(status) : stageLabel(key)}</span>
+            <span className="cf-timeline-label">{index === currentIndex && stopped ? statusInfo(status).label : stageLabel(key)}</span>
           </li>
         );
       })}
@@ -150,70 +144,223 @@ function Timeline({ stage, status }: { stage: StageKey; status: string }) {
   );
 }
 
-function NextStep({ stage, status, caps, packageId, openFindings, busy, onApprove, onReprocess }: {
-  stage: StageKey; status: string; caps: string[]; packageId: string; openFindings: number;
-  busy: 'approve' | 'reprocess' | null; onApprove: () => void; onReprocess: () => void;
+function NextStep({ stage, status, reprocessing, caps, packageId, openFindings, actions, busy, confirming, onAction, onConfirm, onCancel }: {
+  stage: StageKey; status: string; reprocessing: boolean; caps: string[]; packageId: string; openFindings: number;
+  actions: CaseAction[]; busy: CaseActionKind | null; confirming: CaseActionKind | null;
+  onAction: (a: CaseAction) => void; onConfirm: () => void; onCancel: () => void;
 }) {
-  let tone: 'mark' | 'neutral' | 'danger' = 'neutral';
-  let heading = '';
-  let body = '';
-  let action: JSX.Element | null = null;
-
-  if (stage === 'intake') {
-    heading = 'Waiting for documents';
-    body = 'This case opens for processing once its documents are submitted.';
-  } else if (stage === 'redacting') {
-    heading = 'LexaVault is redacting';
-    body = 'Sensitive data is being detected and removed. Anything uncertain will come to review.';
-    action = <span className="cf-next-pulse" aria-hidden="true" />;
-  } else if (stage === 'review') {
-    const canReview = caps.includes(CAP.review);
-    tone = canReview ? 'mark' : 'neutral';
-    heading = openFindings > 0 ? `${openFindings} ${openFindings === 1 ? 'finding needs' : 'findings need'} a decision` : 'In review';
-    body = canReview ? 'Confirm what to redact and what to keep. Processing resumes automatically.' : 'A reviewer is working through the uncertain findings.';
-    if (canReview) {
-      action = (
-        <Link to={`/review?case=${packageId}`} className="cf-btn" data-variant="mark">
-          Review findings <ArrowRight size={16} aria-hidden="true" />
-        </Link>
-      );
-    }
-  } else if (stage === 'approval') {
-    const canApprove = caps.includes(CAP.approve);
-    tone = canApprove ? 'mark' : 'neutral';
-    heading = 'Redacted output is ready';
-    body = canApprove ? 'Check the redacted documents, then release them for delivery.' : 'Waiting for a supervisor to approve delivery.';
-    if (canApprove) {
-      action = (
-        <button type="button" className="cf-btn" data-variant="mark" onClick={onApprove} disabled={busy !== null}>
-          {busy === 'approve' ? <Spinner label="Approving" /> : <Check size={16} aria-hidden="true" />} Approve delivery
-        </button>
-      );
-    }
-  } else if (stage === 'delivered') {
-    heading = 'Delivered';
-    body = 'Redacted documents reached their destination. Originals never leave the vault.';
-  } else {
-    tone = 'danger';
-    heading = status === 'REJECTED' ? 'Rejected at intake' : 'Processing failed';
-    body = status === 'REJECTED' ? 'The submission did not meet intake rules and was not processed.' : 'Something interrupted processing. Reprocessing starts a fresh cycle.';
-    if (status === 'FAILED' && caps.includes(CAP.reprocess)) {
-      action = (
-        <button type="button" className="cf-btn" data-variant="solid" onClick={onReprocess} disabled={busy !== null}>
-          {busy === 'reprocess' ? <Spinner label="Starting" /> : <RotateCcw size={16} aria-hidden="true" />} Reprocess
-        </button>
-      );
-    }
-  }
+  const info = statusInfo(status, reprocessing);
+  const actionable = actions.some((a) => a.primary);
+  const tone: 'mark' | 'neutral' | 'danger' = stage === 'stopped' ? 'danger' : actionable ? 'mark' : 'neutral';
+  const heading = headingFor(stage, status, openFindings, actionable, reprocessing);
+  const waitingOn = !actionable ? waitingCopy(stage, status, caps) : null;
+  const confirmCopy = confirming ? CONFIRM_COPY[confirming] : null;
 
   return (
     <section className="cf-next" data-tone={tone} aria-label="Next step">
       <div className="cf-next-text">
-        <span className="cf-eyebrow">Next step · <StageChip stage={stage} status={status} /></span>
+        <span className="cf-eyebrow">Next step · <StageChip stage={stage} status={status} label={info.label} /></span>
         <p className="cf-next-heading">{heading}</p>
-        <p className="cf-next-body">{body}</p>
+        <p className="cf-next-body">{info.detail}{waitingOn ? ` ${waitingOn}` : ''}</p>
       </div>
-      {action && <div className="cf-next-action">{action}</div>}
+
+      {stage === 'redacting' && <span className="cf-next-pulse" aria-hidden="true" />}
+
+      {confirmCopy ? (
+        <div className="cf-confirm" role="group" aria-label={confirmCopy.title}>
+          <p className="cf-confirm-title">{confirmCopy.title}</p>
+          <p className="cf-confirm-body">{confirmCopy.body}</p>
+          <div className="cf-next-action">
+            <button type="button" className="cf-btn" data-variant="mark" onClick={onConfirm} disabled={busy !== null} autoFocus>
+              {busy ? <Spinner label="Working" /> : <Check size={16} aria-hidden="true" />} Confirm
+            </button>
+            <button type="button" className="cf-btn" data-variant="ghost" onClick={onCancel} disabled={busy !== null}>Cancel</button>
+          </div>
+        </div>
+      ) : actions.length > 0 && (
+        <div className="cf-next-action">
+          {actions.map((a) => a.kind === 'review' ? (
+            <Link key={a.kind} to={`/review?case=${packageId}`} className="cf-btn" data-variant="mark">
+              {a.label} <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          ) : (
+            <button key={a.kind} type="button" className="cf-btn" data-variant={a.primary ? 'mark' : 'ghost'} onClick={() => onAction(a)} disabled={busy !== null}>
+              {a.kind === 'reprocess' || a.kind === 'technical-retry' ? <RotateCcw size={16} aria-hidden="true" /> : a.kind === 'manual-fallback' ? <Wrench size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
+}
+
+function headingFor(stage: StageKey, status: string, openFindings: number, actionable: boolean, reprocessing: boolean): string {
+  if (reprocessing) return 'Reprocessing the retained original';
+  switch (stage) {
+    case 'intake': return 'Waiting for documents';
+    case 'redacting': return 'LexaVault is redacting';
+    case 'review':
+      if (openFindings > 0) return `${openFindings} ${openFindings === 1 ? 'finding needs' : 'findings need'} a decision`;
+      return 'Review decisions recorded';
+    case 'approval': return actionable ? 'Ready for your sign-off' : 'Waiting for sign-off';
+    case 'delivered': return 'Delivered';
+    case 'stopped': return status === 'REJECTED' ? 'Rejected at intake' : 'Processing stopped';
+    default: return 'Status not recognised';
+  }
+}
+
+function waitingCopy(stage: StageKey, status: string, caps: string[]): string | null {
+  if (stage === 'review' && !caps.includes(CAP.review)) return 'A reviewer will pick this up.';
+  if (stage === 'approval' && !caps.includes(CAP.approve)) return 'A supervisor needs to approve delivery.';
+  if (status === 'FAILED' && !caps.includes(CAP.technicalRetry) && !caps.includes(CAP.review)) return 'Technical support has been notified.';
+  return null;
+}
+
+function TechnicalDetail({ packageId }: { packageId: string }) {
+  const { data, error, isLoading } = useTechnicalException(packageId, true);
+  return (
+    <details className="cf-disclosure">
+      <summary>What went wrong</summary>
+      {isLoading && <Spinner label="Loading details" />}
+      {error && <p className="cf-muted">Technical details are not available right now.</p>}
+      {data && (
+        <>
+          <p className="cf-disclosure-lead">{data.explanation}</p>
+          <dl className="cf-facts">
+            <div><dt>Stage</dt><dd>{humanize(data.failedStage)}</dd></div>
+            <div><dt>Category</dt><dd>{humanize(data.failureCategory)}</dd></div>
+            <div><dt>Retry possible</dt><dd>{data.retryable ? 'Yes' : 'No'}</dd></div>
+            <div><dt>Failed</dt><dd><time dateTime={data.failedAt}>{relativeTime(data.failedAt)}</time></dd></div>
+            {data.originalRetainedUntil && <div><dt>Original kept until</dt><dd><time dateTime={data.originalRetainedUntil}>{formatDate(data.originalRetainedUntil)}</time></dd></div>}
+            {data.correlationId && <div><dt>Reference</dt><dd className="cf-mono">{data.correlationId}</dd></div>}
+          </dl>
+        </>
+      )}
+    </details>
+  );
+}
+
+function DocumentsSection({ pkg, life, openFindings }: { pkg: PackageDetail; life: PackageLifecycleSummary | undefined; openFindings: FocusedReviewItem[] }) {
+  const toast = useToast();
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  const download = async (documentId: string, fileName?: string) => {
+    setDownloading(documentId);
+    try {
+      const blob = await apiClient.downloadRedactedArtifact(documentId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `redacted-${fileName || 'document.pdf'}`;
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      toast(errorMessage(err, 'The redacted copy could not be downloaded.'), 'danger');
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <details className="cf-disclosure" open={openFindings.length > 0 || pkg.documents.length <= 3}>
+      <summary>Documents <span className="cf-count">{pkg.documents.length}</span></summary>
+      {pkg.documents.length === 0 ? (
+        <p className="cf-muted">No documents yet.</p>
+      ) : (
+        <ul className="cf-docs">
+          {pkg.documents.map((doc) => {
+            const findings = openFindings.filter((f) => f.documentId === doc.documentId).length;
+            const available = redactedArtifactAvailable(pkg.status, life, doc.status);
+            return (
+              <li key={doc.documentId} className="cf-doc">
+                <FileText size={16} aria-hidden="true" className="cf-doc-icon" />
+                <span className="cf-doc-name">
+                  <span>{doc.fileName || 'Untitled document'}</span>
+                  <span className="cf-doc-meta">
+                    {formatBytes(doc.sizeBytes)}
+                    {doc.status === 'FAILED' && <> · Failed</>}
+                    {findings > 0 && <> · <mark className="cf-mark-text">{findings} to review</mark></>}
+                  </span>
+                </span>
+                {available && (
+                  <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => download(doc.documentId, doc.fileName)} disabled={downloading === doc.documentId} aria-label={`Download redacted copy of ${doc.fileName || 'document'}`}>
+                    {downloading === doc.documentId ? <Spinner label="Downloading" /> : <Download size={14} aria-hidden="true" />} Redacted
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="cf-muted cf-small">Originals are never downloadable. Redacted copies appear here while LexaVault still holds them.</p>
+    </details>
+  );
+}
+
+function DeliveriesSection({ packageId }: { packageId: string }) {
+  const { data, error } = useDerivedDeliveries(packageId, true);
+  if (error || !data || data.length === 0) return null;
+  const attention = data.filter((d) => d.status === 'ATTENTION_REQUIRED').length;
+  return (
+    <details className="cf-disclosure" open={attention > 0}>
+      <summary>Deliveries <span className="cf-count">{data.length}</span>{attention > 0 && <span className="cf-count" data-tone="danger">{attention} need attention</span>}</summary>
+      <ul className="cf-docs">
+        {data.map((d) => (
+          <li key={d.derivedDeliveryId} className="cf-doc">
+            <span className="cf-doc-name">
+              <span>{d.destinationLabel || d.fileName || 'Destination'}</span>
+              <span className="cf-doc-meta">
+                {humanize(d.status)} · cycle {d.exportCycle}
+                {d.deliveredAt && <> · <time dateTime={d.deliveredAt}>{relativeTime(d.deliveredAt)}</time></>}
+                {d.failureCategory && <> · {humanize(d.failureCategory)}</>}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function RetentionSection({ life }: { life: PackageLifecycleSummary }) {
+  const now = Date.now();
+  const redactedMs = life.redactedDeleteAt ? new Date(life.redactedDeleteAt).getTime() - now : null;
+  const soon = redactedMs !== null && redactedMs > 0 && redactedMs < 24 * 3_600_000 && !life.redactedPurgedAt;
+  return (
+    <details className="cf-disclosure" open={soon}>
+      <summary>
+        Retention
+        {soon && <span className="cf-count" data-tone="mark">Redacted copy expires {relativeFuture(life.redactedDeleteAt as string)}</span>}
+      </summary>
+      <dl className="cf-facts">
+        <div><dt>Export cycles</dt><dd>{life.successfulExportCycles} of {life.maximumExportCycles}</dd></div>
+        <div><dt>Final approval</dt><dd>{!life.finalApprovalRequired ? 'Not required' : life.finalApprovalGranted ? 'Granted' : 'Required'}</dd></div>
+        <RetentionRow label="Redacted copy" deleteAt={life.redactedDeleteAt} purgedAt={life.redactedPurgedAt} />
+        <RetentionRow label="Retained original" deleteAt={life.originalDeleteAt} purgedAt={life.originalPurgedAt ?? life.purgedAt} />
+        {life.technicalHoldUntil && <div><dt>Technical hold</dt><dd>Until <time dateTime={life.technicalHoldUntil}>{formatDate(life.technicalHoldUntil)}</time></dd></div>}
+      </dl>
+    </details>
+  );
+}
+
+function RetentionRow({ label, deleteAt, purgedAt }: { label: string; deleteAt?: string | null; purgedAt?: string | null }) {
+  let value: JSX.Element | string = 'No deletion scheduled';
+  if (purgedAt) value = <>Deleted <time dateTime={purgedAt}>{relativeTime(purgedAt)}</time></>;
+  else if (deleteAt) value = new Date(deleteAt).getTime() <= Date.now()
+    ? 'Deletion pending'
+    : <>Deleted <time dateTime={deleteAt}>{relativeFuture(deleteAt)}</time></>;
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function relativeFuture(value: string) {
+  const ms = new Date(value).getTime() - Date.now();
+  const hours = Math.round(ms / 3_600_000);
+  if (hours < 1) return 'within the hour';
+  if (hours < 48) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
+  return `in ${Math.round(hours / 24)} days`;
 }

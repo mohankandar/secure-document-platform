@@ -21,6 +21,7 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
   );
   const [busy, setBusy] = useState<'start' | 'stage' | 'submit' | 'cancel' | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const busyRef = useRef(false);
 
   const sessionId = session?.sessionId;
   useEffect(() => {
@@ -30,9 +31,19 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
   }, [sessionId, onLock]);
 
   const act = async (kind: NonNullable<typeof busy>, work: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(kind);
     setFailure(null);
-    try { await work(); } catch (err) { setFailure(errorMessage(err)); } finally { setBusy(null); }
+    try {
+      await work();
+    } catch (err) {
+      setFailure(errorMessage(err, 'The scanner did not respond. Nothing was submitted.'));
+      await mutate();
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
   };
 
   const start = () => act('start', async () => {
@@ -73,12 +84,22 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
         <div className="cf-scanner-text">
           <span className="cf-scanner-name">{scanner ? `${scanner.scannerId.toUpperCase()} · ${scanner.siteId}` : 'Scanner'}</span>
           <span className="cf-doc-meta">
-            {scannerError ? 'Bridge unreachable' : !scanner ? 'Checking…' : ready ? `Ready · ${formatBytes(scanner.usableSpaceBytes)} free` : 'Not available'}
+            {scannerError ? 'Bridge unreachable' : !scanner ? 'Checking…' : ready ? `Ready · ${formatBytes(scanner.usableSpaceBytes)} free` : !scanner.acquisitionAvailable ? 'Offline' : 'Storage unavailable'}
             {simulator && ' · Simulator'}
           </span>
         </div>
         <span className="cf-scanner-dot" aria-hidden="true" />
       </div>
+
+      {!session && (scannerError || (scanner && !ready)) && (
+        <Notice tone="danger">
+          {scannerError
+            ? 'The scan bridge on this workstation is not responding. Use Upload instead, or ask IT to restart the bridge.'
+            : !scanner?.acquisitionAvailable
+              ? 'The scanner is not reachable. Check that it is powered on and connected, then it will reappear here. You can upload PDFs instead.'
+              : 'The bridge cannot store scans right now. Use Upload instead.'}
+        </Notice>
+      )}
 
       {!session && (
         <div className="cf-feeder">

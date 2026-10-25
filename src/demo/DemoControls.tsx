@@ -49,6 +49,14 @@ export default function DemoControls() {
             </span>
           </label>
 
+          <label className="demo-controls-toggle">
+            <input type="checkbox" checked={settings.scannerOffline} onChange={(event) => update({ scannerOffline: event.target.checked })} />
+            <span>
+              <strong>Scanner offline</strong>
+              <small>The bridge responds, but the device cannot acquire pages.</small>
+            </span>
+          </label>
+
           <div className="demo-controls-actions">
             <button type="button" onClick={() => reset(false)}>Reset demo</button>
             <button type="button" onClick={() => reset(true)}>Load empty workspace</button>

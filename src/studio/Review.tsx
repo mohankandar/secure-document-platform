@@ -69,7 +69,17 @@ export default function Review({ caps }: { caps: string[] }) {
       }
       if (next) { setSelectedId(next.findingId); setDraft(null); }
     } catch (err) {
-      setFailure(errorMessage(err, 'The decision could not be saved.'));
+      const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
+      if (code === 'CONFLICT') {
+        await mutate(
+          (current) => current && { items: current.items.filter((i) => i.findingId !== selected.findingId), totalItems: Math.max(0, current.totalItems - 1) },
+          { revalidate: true },
+        );
+        toast(`${errorMessage(err, 'This finding was already resolved.')} Moved to the next one.`);
+        if (next) { setSelectedId(next.findingId); setDraft(null); }
+      } else {
+        setFailure(errorMessage(err, 'The decision could not be saved. Nothing was changed — try again.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -77,7 +87,7 @@ export default function Review({ caps }: { caps: string[] }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
       if ((event.target as HTMLElement).closest('input, textarea, select, [role="dialog"]')) return;
       const key = event.key.toLowerCase();
       if (key === 'r') { event.preventDefault(); decide('redact'); }
@@ -186,6 +196,9 @@ export default function Review({ caps }: { caps: string[] }) {
 
             {needsMark && (
               <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> Location unknown. Drag across the page to mark it before redacting.</p>
+            )}
+            {draft && (
+              <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> Your mark will be redacted instead of the detected area. <Kbd>Esc</Kbd> clears it.</p>
             )}
             {failure && <Notice tone="danger">{failure}</Notice>}
 
