@@ -374,16 +374,30 @@ function effectiveBranding(state: DemoState) {
   };
 }
 
+const ROUTINE_AUDIT_ACTIONS = new Set(['WATCHED_FOLDER_SCAN_TRIGGERED']);
+const AUDIT_CATEGORY: Record<string, (r: { action: string; outcome: string; actorId: string }) => boolean> = {
+  MEANINGFUL: () => true,
+  SECURITY: (r) => /IDENTITY|AUTH|LOGIN|SESSION/.test(r.action),
+  ADMINISTRATION: (r) => /INTEGRATION|ROUTING|POLICY|IDENTIFIER|BRANDING|LICENSE|STORAGE|TELEMETRY|INTELLIGENCE|RETENTION|IDENTITY/.test(r.action),
+  DOCUMENTS: (r) => /DOCUMENT|PACKAGE|FINDING|REVIEW|MANUAL_FALLBACK|PROCESSING/.test(r.action),
+  EXPORTS: (r) => /EXPORT|DOWNLOAD|DELIVER/.test(r.action),
+  FAILURES_DENIED: (r) => r.outcome !== 'SUCCESS',
+  SYSTEM: (r) => r.actorId === 'system' || /HEALTH_CHECK|WATCHED_FOLDER|TECHNICAL/.test(r.action),
+};
+const EXACT_AUDIT_KEYS = new Set(['action', 'outcome', 'resourceType', 'resourceId', 'actorId', 'correlationId']);
+
 function filterAudit(state: DemoState, query: URLSearchParams) {
+  const category = query.get('category') || 'MEANINGFUL';
+  const includeRoutine = query.get('includeRoutineActivity') === 'true' || ROUTINE_AUDIT_ACTIONS.has(query.get('action') || '');
+  const inCategory = AUDIT_CATEGORY[category] || AUDIT_CATEGORY.MEANINGFUL;
   return state.audit.filter((record) => {
+    if (!includeRoutine && ROUTINE_AUDIT_ACTIONS.has(record.action)) return false;
+    if (!inCategory(record)) return false;
     for (const [key, raw] of query.entries()) {
-      const value = raw.toLowerCase();
-      if (!value || key === 'format' || key === 'limit') continue;
+      if (!raw) continue;
       if (key === 'from' && record.occurredAt < raw) return false;
-      if (key === 'to' && record.occurredAt.slice(0, 10) > raw.slice(0, 10)) return false;
-      if (key === 'from' || key === 'to') continue;
-      const field = (record as Json)[key];
-      if (field !== undefined && !String(field).toLowerCase().includes(value)) return false;
+      if (key === 'to' && record.occurredAt > raw) return false;
+      if (EXACT_AUDIT_KEYS.has(key) && String((record as Json)[key] ?? '').toLowerCase() !== raw.toLowerCase()) return false;
     }
     return true;
   });
