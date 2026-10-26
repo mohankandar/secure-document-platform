@@ -51,7 +51,6 @@ export default function HealthArea({ canOperate }: { canOperate: boolean }) {
 function Overview({ canOperate }: { canOperate: boolean }) {
   const toast = useToast();
   const [checking, setChecking] = useState(false);
-  const [scanning, setScanning] = useState(false);
   const { data, error, mutate, isValidating } = useSWR<PlatformAdminOverview>('platform-overview', () => apiClient.getPlatformAdminOverview(), { revalidateOnFocus: false });
 
   async function check() {
@@ -63,19 +62,6 @@ function Overview({ canOperate }: { canOperate: boolean }) {
       toast(errorMessage(e, 'Health checks failed.'), 'danger');
     } finally {
       setChecking(false);
-    }
-  }
-
-  async function scan() {
-    setScanning(true);
-    try {
-      const r = await apiClient.scanPlatformWatchedFolder();
-      await mutate();
-      toast(`Scan finished: ${r.accepted} accepted, ${r.rejected} rejected, ${r.duplicates} duplicates.`);
-    } catch (e) {
-      toast(errorMessage(e, 'Watched-folder scan failed.'), 'danger');
-    } finally {
-      setScanning(false);
     }
   }
 
@@ -115,10 +101,10 @@ function Overview({ canOperate }: { canOperate: boolean }) {
         <section className="cf-ad-card" aria-labelledby="cf-pl-wf">
           <header className="cf-ad-card-head">
             <div>
-              <h2 id="cf-pl-wf">Watched-folder intake</h2>
-              <p>Folder scanning, trigger files and multi-node lease coordination.</p>
+              <h2 id="cf-pl-wf">Multi-node intake coordination</h2>
+              <p>Read-only lease, fencing and failover diagnostics. Manual intake scans belong under IT Integrations.</p>
             </div>
-            {canOperate && <button type="button" className="cf-btn" data-size="sm" onClick={scan} disabled={scanning || !wf.enabled}>{scanning && <Spinner label="Scanning" />}Scan now</button>}
+
           </header>
           <dl className="cf-ad-defs">
             <div><dt>Connection</dt><dd>{wf.enabled ? 'Enabled' : 'Disabled'}</dd></div>
