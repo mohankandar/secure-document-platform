@@ -126,3 +126,15 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 - **Next gate:** repo-wide controller `@RequireRole` and `@RequireCapability` inventory, LOCAL/OIDC configuration and bootstrap assignments, user-management feasibility, migration plan for existing role holders, negative tenant tests, and actual runtime validation. This is a first-pass source inspection, not completed global search.
 
 **Proposed sequence:** freeze desired authorization matrix; explicitly scope IT vs Platform responsibilities; inventory every `ADMIN` bypass and role mapping; implement capability-safe navigation/backend changes in small review checkpoints; migrate assignments; remove interactive `ADMIN` exposure only after negative-path regression. No automatic transfer of `ADMIN` rights to IT Admin.
+
+
+## Phase 1 Checkpoint A — partial backend policy implementation (2026-10-26)
+
+**Source changes only; Maven tests and LOCAL/OIDC browser validation NOT RUN. Do not mark LV-ADM-01, 02, 12 complete.**
+
+- Commit `8ee8c9a`: ProductAuthorizationPolicy now grants BUSINESS_ADMIN policy/identifier configuration plus report read/export, **not** inherited document processor/supervisor capabilities; DOCUMENT_PROCESSOR retains Desk/Intake/Review but no longer holds PACKAGE_APPROVE_DELIVERY; DOCUMENT_SUPERVISOR gains approval and retains processor capabilities plus existing reprocess/remove abilities.
+- Commit `1ac5538`: ProductAuthorizationPolicyTest updated for least-privilege separation and additive BUSINESS_ADMIN+DOCUMENT_PROCESSOR/SUPERVISOR combined roles.
+- Commit `129612d`: docs/product/AUTHORIZATION.md capability table and semantics updated.
+- UI navigation is currently gated by backend-supplied capabilities, so BUSINESS_ADMIN-only should no longer be offered Desk/Intake/Review after a successful backend restart, but **unverified**. Other role-specific controllers may use `@RequireRole`; audit before declaring effective permission boundaries.
+- **Known remaining gaps:** no DOCUMENT_VIEWER backend role/capabilities/workspace; no IT role-grant UI or privileged-role safeguards; no System Administrator migration; no frontend label rename; legacy role mappings and production runtime acceptance outstanding.
+- **Verification:** run focused `ProductAuthorizationPolicyTest`, other authorization contract tests, frontend auth tests and live LOCAL role matrix, then OIDC multi-role and endpoint-denial tests. Test existing supervisor approval end-to-end. Keep this checkpoint OPEN until verified.
