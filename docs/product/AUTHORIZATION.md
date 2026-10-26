@@ -18,15 +18,15 @@
 
 | Capability | Processor | Supervisor | Business Admin | Report Viewer | IT Admin | Platform Ops | ADMIN |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| Dashboard | Y | Y | Y | N | Y | Y | Y |
-| Document intake/upload | Y | Y | Y | N | N | N | Y |
-| Manual review | Y | Y | Y | N | N | N | Y |
-| Finding decisions | Y | Y | Y | N | N | N | Y |
-| Redaction adjustment | Y | Y | Y | N | N | N | Y |
-| Review submission | Y | Y | Y | N | N | N | Y |
-| Final delivery approval | Y | Y | Y | N | N | N | Y |
-| Reprocess retained original | N | Y | Y | N | N | N | Y |
-| Remove from Dashboard | N | Y | Y | N | N | N | Y |
+| Dashboard | Y | Y | N | N | Y | Y | Y |
+| Document intake/upload | Y | Y | N | N | N | N | Y |
+| Manual review | Y | Y | N | N | N | N | Y |
+| Finding decisions | Y | Y | N | N | N | N | Y |
+| Redaction adjustment | Y | Y | N | N | N | N | Y |
+| Review submission | Y | Y | N | N | N | N | Y |
+| Final delivery approval | N | Y | N | N | N | N | Y |
+| Reprocess retained original | N | Y | N | N | N | N | Y |
+| Remove from Dashboard | N | Y | N | N | N | N | Y |
 | Executive Reports | N | N | Y | Y | Y | Y | Y |
 | Operational Reports | N | N | Y | Y | Y | Y | Y |
 | Report CSV export | N | N | Y | N | Y | Y | Y |
@@ -70,7 +70,7 @@ Important separate capabilities include:
 - platform diagnostics;
 - internal platform-operations capability (`PLATFORM_OPERATIONS`) for Platform Operations / explicit `ADMIN` support surfaces.
 
-Manual Review and final delivery approval remain distinct capabilities even though Processor and Supervisor currently both receive them. That preserves a future policy option to separate duties without rewriting the authorization architecture.
+Manual Review and final delivery approval are separate capabilities: Document Processor can review and submit, while Document Supervisor can approve delivery. Business Administrator has business policy and reporting permissions, not document operations, unless separately assigned an operational role.
 
 ## Identity transition aliases
 
@@ -106,4 +106,5 @@ Removal path: migrate IdP assignments to canonical groups, confirm no legacy ass
 - No user role manually performs physical original deletion; retention lifecycle owns purge.
 - `Reprocess from Retained Original` is a business rerun and is separate from classified transient technical retry.
 - `REPORT_VIEWER` is executive/aggregate reporting only. It can view Executive and Usage/Adoption reporting, cannot export, cannot access Operational Details by role alone, and cannot drill into protected package/document/technical payloads.
-- `BUSINESS_ADMIN` means approved business functionality, not system/technical administration.
+- `BUSINESS_ADMIN` means business configuration and reporting only. Desk, intake, review, approval and technical administration require separately assigned roles.
+- Multiple product roles combine their authorized capabilities; a Business Administrator who also holds an operational role retains that operational role's permissions.
