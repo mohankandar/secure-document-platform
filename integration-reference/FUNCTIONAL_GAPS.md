@@ -238,3 +238,17 @@ R2 attached screen recording (~67.6 seconds) independently confirms IT Admin nav
 **UX follow-up:** Step 2 Master/Derived option buttons are densely packed on one horizontal row; consider responsive stacked selection cards with descriptions and clear selected/focus affordances. Top navigation still includes Reports and Support for IT Admin in R2 recording; role policy currently grants report and technical issue access, but the agreed target scope did not explicitly settle those top-level entries. Review before removing permissions; do not silently change. Platform Health transient spinner seen during navigation; no evidence of sustained loading failure.
 
 **Open regression scope carried forward:** watched folder, real HTTP polling Run Now, isolated outbound, logs, field enforcement, cross-role/OIDC and alternate file-response security paths. No claim of completed end-to-end validation.
+
+
+## Platform Operations R1 — read-only separation (2026-10-26)
+
+**Source changes on review branch; NOT yet build or LOCAL verified.**
+
+- `6154bb8`: IT Admin health overview is refresh/read-only; active health-check and watched-folder scan buttons are hidden from the Platform Health surface unless PLATFORM_OPERATIONS is held. Only Platform Admin sees infrastructure sections. "Processing storage" is clarified as **Temporary processing infrastructure**, not an end-user repository.
+- `3521290`: `POST /api/v1/platform-admin/health-check` now requires PLATFORM_OPERATIONS rather than TECHNICAL_ADMIN_VIEW. `GET /overview` remains readable with TECHNICAL_ADMIN_VIEW. API-boundary test added in `0b25f6b`.
+- `82a1568`: remove "Open case" navigation from technical-incident entries in Platform Health; IT/Platform administrators do not gain document review access merely through admin roles.
+- Watched-folder manual scan API remains TENANT_INTEGRATION_MANAGE, intentionally under IT integration authority, but removed from the read-only Health view for IT. Determine proper IT Integrations scan-control placement in future step before relocating UI.
+- **Unresolved structural alignment:** backend and platform admin still have temporary processing-storage configuration whose production-vs-LOCAL lifecycle must be audited; do not delete it without safe delivery/retry cleanup review. Reports/Support IT role visibility and System Administrator retirement remain separately pending.
+- **Acceptance next:** backend clean build / platform-health contract test, frontend TypeScript/build, IT Admin health only refresh/no operations/no case link, direct POST health-check forbidden for IT Admin, Platform Admin active health-check and infrastructure sections available, no document access, IT integration setup/polling unaffected.
+
+Do not close Platform Operations checkpoint until these tests pass.
