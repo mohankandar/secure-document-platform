@@ -227,3 +227,14 @@ The wizard uses existing `draftForPurpose` / `applyProvider` / `toPayload` paths
 **User reported 23/23 PASS**, covering 4 build/startup checks, 6 IT Admin access/redirect checks, 5 Receive wizard checks, 5 Send wizard checks and 3 existing-connection checks; no issues noted. Submitted video `IT_admin_R2.mp4` (~68 sec) was sampled for visual review: IT Admin Integrations list, New Connection create panels, Master/Derived destination groups, Sign-in and Platform Operations screens are visible. This is **user acceptance of the targeted Batch 2 correction**, not confirmation of successful creation/delivery or exhaustive security review.
 
 **Status:** Batch 2 targeted scope USER ACCEPTED. Previously untested backend identifier enforcement, actual end-to-end polling/delivery, watched folder runtime regression, no-download API regression in other routes, System Administrator retirement, full role-assignment redesign and Platform Operations architecture alignment remain separately OPEN. Do not assume a checked wizard option was saved or exercised against a real destination. No main merge approved.
+
+
+## Batch 2 R2 targeted acceptance + recorded UX observations (2026-10-26)
+
+User reports **23/23 PASS** for targeted R2 checks: backend/frontend TypeScript/production builds and LOCAL startup; IT Admin restricted navigation (no Desk, Intake, Review; direct URL redirects; integration/sign-in/health access); guided Receive selection, four intake methods, conditional push/polling fields and Back/Reset/Cancel; guided Send Master/Derived selection with proper configurations; existing integrations visible/editable/preserved. No user-reported failures.
+
+R2 attached screen recording (~67.6 seconds) independently confirms IT Admin nav has no Desk/Intake/Review, Step 1 Receive/Send, Step 2 Master vs Derived, and existing connection list; it **does not** establish successful saved creation, outbound delivery, API security denial, permission enforcement of Platform Health read-only controls, or all 23 individual checks. Mark targeted Batch 2 R2 **USER ACCEPTED**, keep wider end-to-end and permission tests open.
+
+**UX follow-up:** Step 2 Master/Derived option buttons are densely packed on one horizontal row; consider responsive stacked selection cards with descriptions and clear selected/focus affordances. Top navigation still includes Reports and Support for IT Admin in R2 recording; role policy currently grants report and technical issue access, but the agreed target scope did not explicitly settle those top-level entries. Review before removing permissions; do not silently change. Platform Health transient spinner seen during navigation; no evidence of sustained loading failure.
+
+**Open regression scope carried forward:** watched folder, real HTTP polling Run Now, isolated outbound, logs, field enforcement, cross-role/OIDC and alternate file-response security paths. No claim of completed end-to-end validation.
