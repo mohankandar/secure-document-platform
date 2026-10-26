@@ -17,10 +17,10 @@ public class ProductAuthorizationPolicy {
             UserCapability.MANUAL_REVIEW,
             UserCapability.FINDING_DECISION,
             UserCapability.REDACTION_ADJUST,
-            UserCapability.REVIEW_SUBMIT,
-            UserCapability.PACKAGE_APPROVE_DELIVERY);
+            UserCapability.REVIEW_SUBMIT);
 
     private static final EnumSet<UserCapability> DOCUMENT_SUPERVISOR_CAPABILITIES = EnumSet.of(
+            UserCapability.PACKAGE_APPROVE_DELIVERY,
             UserCapability.PACKAGE_REPROCESS,
             UserCapability.PACKAGE_REMOVE_FROM_DASHBOARD);
 
@@ -41,8 +41,6 @@ public class ProductAuthorizationPolicy {
                     capabilities.addAll(DOCUMENT_SUPERVISOR_CAPABILITIES);
                 }
                 case "BUSINESS_ADMIN" -> {
-                    capabilities.addAll(DOCUMENT_PROCESSOR_CAPABILITIES);
-                    capabilities.addAll(DOCUMENT_SUPERVISOR_CAPABILITIES);
                     capabilities.addAll(REPORT_READ_CAPABILITIES);
                     capabilities.add(UserCapability.REPORT_EXPORT);
                     capabilities.add(UserCapability.TENANT_POLICY_MANAGE);
