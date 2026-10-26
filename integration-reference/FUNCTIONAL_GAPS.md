@@ -149,3 +149,18 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 **Build distinction:** focused ProductAuthorizationPolicyTest 10/10 PASS; a broader build previously failed on a stale capability interceptor test and was fixed by commit `6277b37`. No subsequent full-build PASS output is present in this conversation; **do not claim full-suite PASS** or extensive OIDC/tenant isolation verification. The user's runtime approval tests do not substitute for those security regressions.
 
 **Next checkpoint B:** implement a distinct strictly read-only Document Viewer role, scoped search/view APIs, viewer-only workspace, backend denial on mutation/download/export, tenant/business isolation, and tests. Preserve REPORT_VIEWER as separate until explicitly retired. No broad DB changes or permanent document storage feature.
+
+
+## User correction — NO general Document Viewer (2026-10-26)
+
+**Supersedes the proposed Document Viewer direction in LV-ADM-10, LV-ADM-11 and Checkpoint B. These entries are superseded, not implementation-authorized.**
+
+- LexaVault is a **redaction-only processor**, not a document repository or business document viewing product.
+- **Do not create a DOCUMENT_VIEWER role, a general read-only Documents workspace, a generic search/open-PDF experience, or IT-managed assignments of such a role.**
+- Document processing personnel may see **only the restricted pages/previews necessary for their authorized redaction/review tasks**. Exact visibility rules for unredacted regions and page-level scope require a security review. Do not broaden current visibility or infer that whole originals are readable.
+- Document Supervisor inherits only appropriate processing/review previews where necessary; Business, IT and Platform administrators do not gain document viewing by administrative role alone.
+- After authorized redaction/review, deliver through configured outbound integration, subject to policy; temporary working copies must follow lifecycle/cleanup controls.
+- **Full build status:** User confirmed the build was successful after the interceptor test correction; no log was provided in this turn. Record as **USER-REPORTED FULL BUILD PASS** (not independently inspected).
+- **Next recommended Checkpoint B:** audit and harden existing page-scoped review/preview and download API permissions, then proceed with IT Admin redesign; do not implement a generic document viewer. Review whether current frontend actually exposes unrestricted case PDFs or downloads.
+
+**Backlog disposition:** LV-ADM-10 (general Document Viewer) is CANCELLED/SUPERSEDED; document preview restrictions remain a security requirement. LV-ADM-11's Document Viewer assignment portion is CANCELLED/SUPERSEDED; future role assignment for existing operational roles requires separate approval.
