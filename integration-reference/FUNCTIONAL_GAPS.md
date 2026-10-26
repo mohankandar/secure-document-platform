@@ -278,15 +278,3 @@ Do not close Platform Operations checkpoint until these tests pass.
 - Move in reviewed checkpoints with one consolidated user acceptance round. Do not change `main`, previous integration branch, OIDC semantics, or role grants without explicit scoped review.
 
 **Status: APPROVED DESIGN / OPEN IMPLEMENTATION**. Acceptance must explicitly exercise 2+ nodes, lease takeover/fencing, duplicate avoidance and manual scan coordination where a safe test environment is available; mark those tests PENDING otherwise, never PASS by inference.
-
-
-## Multi-node Intake / Platform Ops redesign — Checkpoint A source candidate (2026-10-26)
-
-**Implementation committed on review branch, NOT yet built or user-accepted.**
-- `29fd0db`: IT Admin Integrations > Intake sources shows watched-folder operations summary, automatic scan settings, single/multi-node coordination indicator, last outcome and discovered/accepted/rejected/duplicate counts. "Scan now" calls existing `scanPlatformWatchedFolder` API and existing `WatchedFolderScheduler.scanManual`; no new scan path, fencing mechanism or coordination logic introduced. IT integration-management capability remains required by backend.
-- `c41d3c3`: Platform Health watches *read-only* multi-node intake coordination, including node, lease owner, fencing generation, expiry, takeovers, scan observations. Removed duplicated Scan now action. Lease/fencing is not hidden or removed.
-- `9de0a9c`: Remove unwanted `DASHBOARD_ACCESS` from standalone `PLATFORM_OPERATIONS_ADMIN`, enforcing no Desk via role policy; `6ec683e` adds policy regression assertion. Additive capabilities still apply to legitimately mixed-role principals; `ADMIN` recovery stays unchanged.
-
-**Acceptance still required:** full build frontend and backend; IT manual scan from LOCAL safe test folder, disabled state and no duplicate Scan Now from Platform Health; review Platform Admin nav absence of Desk, Intake, Review, direct package endpoint denied; inspect node ownership/fencing display and ensure coordination still uses scheduler. **Multi-node 2+ node lease/fencing/failover/duplicate test remains explicitly PENDING** until run on appropriately configured cluster; source changes do not claim that test passed.
-
-**Remaining approved redesign items OPEN:** PA health-status semantics (configured vs reachable vs ready), LOCAL-only delivery labelling, Runtime & Recovery redesign (remove blended resilience/integrations card), Temporary Processing Infrastructure readiness/cleanup redesign, permissions review for Platform integrations/reports/support, safe lifecycle audit.
