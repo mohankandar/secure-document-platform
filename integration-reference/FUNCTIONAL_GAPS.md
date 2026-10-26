@@ -189,3 +189,12 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 - Saved connection list now labels "Documents in" / "Documents out" rather than naked INBOUND/OUTBOUND.
 - This is a **minimal guided-choice foundation**, not the approved multi-step wizard. Full guided wizard, field mappings, role management and platform restructuring remain OPEN.
 - Batch acceptance: full frontend TypeScript/build, focused API download-denial test and Maven full build; LOCAL IT Admin verify Push API and HTTP Polling create/edit defaults and schedule, plus Master/Derived delivery, failure handling and no regressions to outbound workflow; processor verify no "Redacted" download button and direct artifact request denied. No real external connection should be enabled merely for testing.
+
+
+## Batch 1 combined LOCAL acceptance — user report (2026-10-26)
+
+**User-reported 26 PASS, 0 FAIL, 3 N/A.** Build: frontend TypeScript PASS, frontend production build PASS, backend clean install PASS, startup PASS. Document Processor: navigation, no download button, restricted preview and normal intake/processing PASS. Supervisor: navigation, conditional final approval, no download PASS. Business Administrator: Admin/Reports-only, policy/fields, no IT/platform controls and final approval policy PASS. IT Integrations: screen, transfer-method language, API push, polling, master delivery, derived delivery, connections retained and sign-in/health visibility PASS. Security: direct artifact-download denial, unauthorized redirects and authorized review preview PASS.
+
+**Not tested (N/A, not PASS):** watched-folder runtime regression, outbound delivery runtime regression, and browser/server error-log inspection. Retain these as targeted later acceptance tests. No defects were reported in this batch.
+
+**Status:** Batch 1 **USER ACCEPTED for tested scope**; no claim of complete end-to-end regression or exhaustive API/content-path security audit. Next planned batch is guided IT Integration configuration and Platform Operations scope alignment; System Administrator retirement and user role-grant flows remain security-gated.
