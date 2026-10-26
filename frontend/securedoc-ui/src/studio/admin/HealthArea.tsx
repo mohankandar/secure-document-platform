@@ -15,7 +15,7 @@ import TelemetrySection from './TelemetrySection';
 type Section = 'overview' | 'storage' | 'licensing' | 'branding' | 'telemetry';
 const SECTIONS: [Section, string][] = [
   ['overview', 'Overview'],
-  ['storage', 'Processing storage'],
+  ['storage', 'Temporary processing infrastructure'],
   ['licensing', 'Licensing'],
   ['branding', 'Branding'],
   ['telemetry', 'Product telemetry'],
@@ -39,7 +39,7 @@ export default function HealthArea({ canOperate }: { canOperate: boolean }) {
           </div>
         </div>
       )}
-      {section === 'overview' && <Overview />}
+      {section === 'overview' && <Overview canOperate={canOperate} />}
       {section === 'storage' && <StorageSection />}
       {section === 'licensing' && <LicensingSection />}
       {section === 'branding' && <BrandingSection />}
@@ -48,7 +48,7 @@ export default function HealthArea({ canOperate }: { canOperate: boolean }) {
   );
 }
 
-function Overview() {
+function Overview({ canOperate }: { canOperate: boolean }) {
   const toast = useToast();
   const [checking, setChecking] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -90,11 +90,11 @@ function Overview() {
         <header className="cf-ad-card-head">
           <div>
             <h2 id="cf-pl-runtime">{down.length ? `${down.length} ${down.length === 1 ? 'dependency needs' : 'dependencies need'} attention` : 'All dependencies responding'}</h2>
-            <p>Connection status without exposing credentials, tokens or document content. Updated {when(data.generatedAt)}.</p>
+            <p>Read-only runtime status without credentials, tokens or document content. Updated {when(data.generatedAt)}.</p>
           </div>
           <div className="cf-ad-inline-actions">
             <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => mutate()} disabled={isValidating || checking}>Refresh</button>
-            <button type="button" className="cf-btn" data-size="sm" onClick={check} disabled={checking}>{checking && <Spinner label="Checking" />}Run health checks</button>
+            {canOperate && <button type="button" className="cf-btn" data-size="sm" onClick={check} disabled={checking}>{checking && <Spinner label="Checking" />}Run health checks</button>}
           </div>
         </header>
         <ul className="cf-ad-conns">
@@ -118,7 +118,7 @@ function Overview() {
               <h2 id="cf-pl-wf">Watched-folder intake</h2>
               <p>Folder scanning, trigger files and multi-node lease coordination.</p>
             </div>
-            <button type="button" className="cf-btn" data-size="sm" onClick={scan} disabled={scanning || !wf.enabled}>{scanning && <Spinner label="Scanning" />}Scan now</button>
+            {canOperate && <button type="button" className="cf-btn" data-size="sm" onClick={scan} disabled={scanning || !wf.enabled}>{scanning && <Spinner label="Scanning" />}Scan now</button>}
           </header>
           <dl className="cf-ad-defs">
             <div><dt>Connection</dt><dd>{wf.enabled ? 'Enabled' : 'Disabled'}</dd></div>
