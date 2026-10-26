@@ -278,3 +278,38 @@ Do not close Platform Operations checkpoint until these tests pass.
 - Move in reviewed checkpoints with one consolidated user acceptance round. Do not change `main`, previous integration branch, OIDC semantics, or role grants without explicit scoped review.
 
 **Status: APPROVED DESIGN / OPEN IMPLEMENTATION**. Acceptance must explicitly exercise 2+ nodes, lease takeover/fencing, duplicate avoidance and manual scan coordination where a safe test environment is available; mark those tests PENDING otherwise, never PASS by inference.
+
+
+## Approved admin responsibility matrix audit + System Administrator retirement (2026-10-26)
+
+**Status: audit complete for central role mapping and admin navigation; implementation pending. User explicitly approved retirement of ordinary System Administrator, NOT deletion of guarded recovery mechanisms.**
+
+| Matrix requirement | Current code | Disposition |
+| --- | --- | --- |
+| Business Admin business policy / identifiers and business reports | `BUSINESS_ADMIN` scoped grants | KEEP, recheck runtime |
+| IT integrations, OIDC, technical monitoring | `TENANT_IT_ADMIN` grants integration, identity, diagnostics and audit | KEEP |
+| IT user/access management | No approved privilege-safe tenant role-grant architecture established | OPEN SECURITY DESIGN; self-elevation/role-ceiling/two-party approval decisions |
+| IT not business reporting by default | IT currently inherits `REPORT_READ_CAPABILITIES` and `REPORT_EXPORT` | OPEN role cleanup, audit callers and report routes |
+| Platform not business reporting by default | Platform currently inherits report view/export | OPEN role cleanup |
+| Platform not manage tenant integrations by default | Platform currently receives `TENANT_INTEGRATION_MANAGE` | OPEN role cleanup; identify endpoint dependencies before removal |
+| Platform controls vs IT monitoring | `PLATFORM_OPERATIONS` platform controls, `TECHNICAL_ADMIN_VIEW` shared read; backend active health-check corrected | PARTIAL PASS, runtime recheck |
+| Platform no Desk | standalone Platform role `DASHBOARD_ACCESS` removed at `9de0a9c` | SOURCE FIX, runtime pending |
+| Intake/scan multi-node split | IT manual scan relocated, Platform lease/fencing diagnostics retained | SOURCE FIX, 2+ node verification pending |
+| Support and technical retry/hold | Both IT and Platform have technical retry/hold; Support navigation remains | OPEN differentiated scope and endpoint review |
+| No document downloads | Legacy artifact-download URL denied; role preview constrained | PARTIAL; alternate content endpoints still require audit |
+| System Administrator user-facing retirement | `uiAuthorization.ROLE_OPTIONS` includes `ADMIN` | OPEN remove after safety checks |
+| System Administrator unrestricted capability grant | `ProductAuthorizationPolicy` ADMIN gets EnumSet.allOf(UserCapability.class) | BLOCKING security cleanup |
+| System Administrator `@RequireRole` bypass | `RoleAuthorizationInterceptor` ADMIN bypass | BLOCKING security cleanup |
+| OIDC external ADMIN mapping | `ProductRole.ADMIN` is recognized by `OidcRoleMapper` through `SecurityProperties.oidc.roleMappings` | BLOCKING migration; discover actual config/tenant assignments |
+| Local test/admin bootstrap and guarded known-good recovery | LOCAL X-Actor-Roles and recovery paths may rely on ADMIN | BLOCKING audit; preserve break-glass, lockout avoidance and operational rollback |
+| Additive roles | Policy unions roles | KEEP with tests; no automatic role inference |
+| Report Viewer | remains distinct | KEEP unless separately retired |
+
+**Retirement safety sequence**
+1. Inventory `ADMIN` occurrences across config, identity mappings, bootstrap/recovery, `@RequireRole` routes, tests/docs/LOCAL launchers; enumerate live OIDC mappings and affected principals before rollout. Never remap ADMIN blindly to IT or Platform.
+2. Establish dedicated least-privilege role grants for each previously ADMIN-only operation and negative tests for IT, Platform, Business, processors and unknown roles. Separate emergency identity recovery from ordinary product-role grants.
+3. Migrate external role mappings and LOCAL defaults; verify working IT and Platform administration and recovery with a non-ADMIN principal.
+4. Remove ADMIN from user-facing role selection and ordinary OIDC role acceptance, delete unrestricted capability grant and interceptor bypass after dependency migration; deny stale ADMIN tokens/roles fail-closed.
+5. Run full tests and runtime OIDC/LOCAL regression including role unions, identity activation/rollback, bootstrap/known-good recovery, integrations, watched-folder multi-node and platform maintenance. No production merge or rollout until checkpoint accepted.
+
+**Do not treat removal from dropdown as security retirement.** No implementation changes yet in this audit.
