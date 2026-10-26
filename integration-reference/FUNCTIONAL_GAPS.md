@@ -164,3 +164,18 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 - **Next recommended Checkpoint B:** audit and harden existing page-scoped review/preview and download API permissions, then proceed with IT Admin redesign; do not implement a generic document viewer. Review whether current frontend actually exposes unrestricted case PDFs or downloads.
 
 **Backlog disposition:** LV-ADM-10 (general Document Viewer) is CANCELLED/SUPERSEDED; document preview restrictions remain a security requirement. LV-ADM-11's Document Viewer assignment portion is CANCELLED/SUPERSEDED; future role assignment for existing operational roles requires separate approval.
+
+
+## No manual document downloads — inspection and partial fix (2026-10-26)
+
+**User requirement: No LexaVault user may download original or redacted documents. Authorized processor/supervisor preview remains page-scoped for review. System-to-system outbound delivery is separate and must continue to work.**
+
+**Confirmed issue:** `ArtifactDownloadController.GET /api/v1/documents/{documentId}/artifacts/redacted/content` previously allowed any `DASHBOARD_ACCESS` user and returned PDF bytes with Content-Disposition attachment. Case File `CaseDrawer.tsx` also showed a "Redacted" download button calling this API.
+
+**Source fixes on review branch:**
+- `1dd6715`, `5257abe`: remove the Case File drawer redacted download button/handler and obsolete import.
+- `e73e369`: retain legacy URL only as explicit AccessDeniedException, with no artifact fetching, to fail closed even for direct requests.
+- `9bc0080`: targeted unit regression expects denial and unchanged legacy route.
+- Review preview endpoint `GET /api/v1/review-items/{findingId}/page-preview` returns PNG of one relevant page, gated by MANUAL_REVIEW and no-store. This is a distinct preview path, not a full-PDF download, but page-content sensitivity and any other preview/full-content APIs still need broader review.
+
+**Status: PARTIAL FIX / UNVERIFIED.** Run build and targeted test; inspect all legacy UI pages, standalone download APIs, browser preview/save affordances, and alternate artifact endpoints. Do not claim repository-wide no-download security acceptance yet. No storage, reporting exports, or automated integration deliveries were intentionally changed by this patch.
