@@ -99,7 +99,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 
           {pkg.status === 'FAILED' && caps.includes(CAP.technicalView) && <TechnicalDetail packageId={packageId} />}
 
-          <DocumentsSection pkg={pkg} life={life} openFindings={openFindings} />
+          <DocumentsSection pkg={pkg} openFindings={openFindings} />
 
           {caps.includes(CAP.approve) && life && life.successfulExportCycles > 0 && <DeliveriesSection packageId={packageId} />}
 
@@ -241,7 +241,7 @@ function TechnicalDetail({ packageId }: { packageId: string }) {
   );
 }
 
-function DocumentsSection({ pkg, life, openFindings }: { pkg: PackageDetail; life: PackageLifecycleSummary | undefined; openFindings: FocusedReviewItem[] }) {
+function DocumentsSection({ pkg, openFindings }: { pkg: PackageDetail; openFindings: FocusedReviewItem[] }) {
   return (
     <details className="cf-disclosure" open={openFindings.length > 0 || pkg.documents.length <= 3}>
       <summary>Documents <span className="cf-count">{pkg.documents.length}</span></summary>
