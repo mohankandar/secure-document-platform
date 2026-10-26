@@ -36,7 +36,7 @@ public class PlatformAdminController {
     }
 
     @PostMapping("/health-check")
-    @RequireCapability(UserCapability.TECHNICAL_ADMIN_VIEW)
+    @RequireCapability(UserCapability.PLATFORM_OPERATIONS)
     public ResponseEntity<PlatformAdminOverviewResponse> healthCheck(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         var correlationId = contextResolver.resolveCorrelationId(request);
