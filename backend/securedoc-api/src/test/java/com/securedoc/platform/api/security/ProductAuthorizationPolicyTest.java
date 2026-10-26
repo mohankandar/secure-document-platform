@@ -89,9 +89,9 @@ class ProductAuthorizationPolicyTest {
     void tenantItAdminGetsTechnicalOperationsButNoOperationalDeskOrBusinessWorkflow() {
         var caps = policy.capabilitiesFor(Set.of("TENANT_IT_ADMIN"));
         assertFalse(caps.contains(UserCapability.DASHBOARD_ACCESS));
-        assertTrue(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
-        assertTrue(caps.contains(UserCapability.REPORT_OPERATIONAL_VIEW));
-        assertTrue(caps.contains(UserCapability.REPORT_EXPORT));
+        assertFalse(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
+        assertFalse(caps.contains(UserCapability.REPORT_OPERATIONAL_VIEW));
+        assertFalse(caps.contains(UserCapability.REPORT_EXPORT));
         assertTrue(caps.contains(UserCapability.TENANT_INTEGRATION_MANAGE));
         assertTrue(caps.contains(UserCapability.TENANT_AUTH_MANAGE));
         assertTrue(caps.contains(UserCapability.TECHNICAL_EXCEPTION_VIEW));
@@ -113,7 +113,10 @@ class ProductAuthorizationPolicyTest {
         assertTrue(caps.contains(UserCapability.PLATFORM_DIAGNOSTICS));
         assertTrue(caps.contains(UserCapability.PLATFORM_OPERATIONS));
         assertTrue(caps.contains(UserCapability.TECHNICAL_ADMIN_VIEW));
-        assertTrue(caps.contains(UserCapability.REPORT_EXPORT));
+        assertFalse(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
+        assertFalse(caps.contains(UserCapability.REPORT_OPERATIONAL_VIEW));
+        assertFalse(caps.contains(UserCapability.REPORT_EXPORT));
+        assertFalse(caps.contains(UserCapability.TENANT_INTEGRATION_MANAGE));
         assertFalse(caps.contains(UserCapability.DOCUMENT_INTAKE));
         assertFalse(caps.contains(UserCapability.MANUAL_REVIEW));
         assertFalse(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
