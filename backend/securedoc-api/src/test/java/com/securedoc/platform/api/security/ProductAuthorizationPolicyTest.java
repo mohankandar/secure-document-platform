@@ -109,6 +109,7 @@ class ProductAuthorizationPolicyTest {
     @Test
     void platformOperationsAddsDeepDiagnosticsWithoutBusinessWorkflow() {
         var caps = policy.capabilitiesFor(Set.of("PLATFORM_OPERATIONS_ADMIN"));
+        assertFalse(caps.contains(UserCapability.DASHBOARD_ACCESS));
         assertTrue(caps.contains(UserCapability.PLATFORM_DIAGNOSTICS));
         assertTrue(caps.contains(UserCapability.PLATFORM_OPERATIONS));
         assertTrue(caps.contains(UserCapability.TECHNICAL_ADMIN_VIEW));
