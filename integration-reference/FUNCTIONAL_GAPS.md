@@ -110,3 +110,19 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 - Before implementation, audit runtime staging/transient persistence, encryption, cleanup, retries, durable destination acknowledgements and failure recovery. Necessary temporary processing persistence must not become a permanent repository; do not delete documents based on unverified delivery.
 - Review master-delivery terminology and descriptions that imply permanent vault storage.
 - **LV-ADM-13 OPEN:** align administration and operational screens / deployment profiles with redaction-and-forward architecture, without breaking in-flight processing or audit guarantees.
+
+
+## System Administrator source inspection — first-pass findings (2026-10-26)
+
+**Review only; no executable code changed.** Verified against ProductRole.java, ProductAuthorizationPolicy.java, RoleAuthorizationInterceptor.java, OidcRoleMapper.java, OidcKnownGoodRecovery.java, uiAuthorization.ts, AUTHORIZATION.md and ProductAuthorizationPolicyTest.java.
+
+- `ADMIN` is a canonical role and returns `EnumSet.allOf(UserCapability.class)`; it is **not** equivalent to IT Administrator. `RoleAuthorizationInterceptor` separately short-circuits `@RequireRole` for `ADMIN`. Do not map `ADMIN` to `TENANT_IT_ADMIN` or delete its checks without endpoint inventory and permission tests.
+- `TENANT_IT_ADMIN` grants integration/authentication administration, technical retries and holds, audit, dashboard and reporting, but **not** document intake or approvals; `PLATFORM_OPERATIONS_ADMIN` grants platform operations/diagnostics, technical retry/hold and currently integration management, but not tenant sign-in management. Realignment is needed for new ownership boundaries.
+- `BUSINESS_ADMIN` **currently inherits all processor+supervisor document capabilities**. This contradicts approved Admin+Reports-only behavior.
+- `DOCUMENT_PROCESSOR` **currently has `PACKAGE_APPROVE_DELIVERY`**; approved target distinguishes Supervisor approval. Existing tests expressly assert current behavior, so change tests and implementation together.
+- `REPORT_VIEWER` is an existing role distinct from requested document-only `DOCUMENT_VIEWER`. Preserve intentionally until a decision on report-viewer need.
+- `ADMIN` appears in frontend LOCAL role selector as System Administrator (Internal), in canonical backend enum and documented OIDC-role mapping. Identity role mapping may grant it only from configured external claims; audit actual deployments before removal.
+- OIDC emergency known-good recovery is a guarded, disabled-by-default startup operation using explicit IDs/version/replay prevention, not evidence that an interactive System Administrator must remain. Preserve recovery path separately.
+- **Next gate:** repo-wide controller `@RequireRole` and `@RequireCapability` inventory, LOCAL/OIDC configuration and bootstrap assignments, user-management feasibility, migration plan for existing role holders, negative tenant tests, and actual runtime validation. This is a first-pass source inspection, not completed global search.
+
+**Proposed sequence:** freeze desired authorization matrix; explicitly scope IT vs Platform responsibilities; inventory every `ADMIN` bypass and role mapping; implement capability-safe navigation/backend changes in small review checkpoints; migrate assignments; remove interactive `ADMIN` exposure only after negative-path regression. No automatic transfer of `ADMIN` rights to IT Admin.
