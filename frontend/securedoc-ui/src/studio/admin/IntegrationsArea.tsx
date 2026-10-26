@@ -40,6 +40,15 @@ const AUTH: IntegrationAuthenticationType[] = ['NONE', 'BASIC', 'API_KEY', 'JWT'
 const ACK: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SDV_SUBMISSION_ACK'];
 const MB = 1048576;
 
+/** Business document flow is separate from the direction of the HTTP request. */
+const connectionFlow = (d: Pick<IntegrationConnection, 'purpose' | 'providerType'>) => {
+  if (d.purpose !== 'INGESTION_SOURCE') return 'Send processed documents to an external destination';
+  if (d.providerType === 'HTTP_API') return 'Receive documents — LexaVault retrieves them from an external HTTP source';
+  if (d.providerType === 'PUSH_API') return 'Receive documents — the external system sends them to LexaVault';
+  if (d.providerType === 'WATCHED_FOLDER') return 'Receive documents — LexaVault monitors a source folder';
+  return 'Receive documents — a scanner supplies the intake package';
+};
+
 const isPollingConnection = (c: Pick<IntegrationConnection, 'purpose' | 'providerType' | 'direction'>) =>
   c.purpose === 'INGESTION_SOURCE' && c.providerType === 'HTTP_API' && c.direction === 'OUTBOUND';
 
@@ -241,7 +250,7 @@ function Connection({ c, showPurpose, onChanged, onEdit, onToggle }: {
           {c.name}
           {showPurpose && <span className="cf-ad-tag">{humanize(c.purpose)}</span>}
           <span className="cf-ad-tag">{humanize(c.providerType)}</span>
-          <span className="cf-ad-tag">{humanize(c.direction)}</span>
+          <span className="cf-ad-tag">{c.purpose === "INGESTION_SOURCE" ? "Documents in" : "Documents out"}</span>
           {!c.enabled && <span className="cf-ad-tag">Disabled</span>}
         </div>
         <div className="cf-ad-conn-meta">
@@ -400,7 +409,7 @@ function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, o
 
   return (
     <Sheet open wide title={editing ? 'Edit connection' : 'New connection'}
-      description="Technical configuration is tenant scoped and validated by the provider."
+      description="Choose how documents enter or leave LexaVault. Only the configuration relevant to that method is shown."
       onClose={() => { if (!saving) onClose(); }}
       footer={<>
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={reset}>Reset</button>
@@ -418,8 +427,8 @@ function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, o
             <TextField label="Name" required value={d.name} invalid={nameMissing} onChange={(v) => set('name', v)} hint={nameMissing ? 'Required.' : undefined} />
             <SelectField label="Purpose" value={d.purpose} options={PURPOSES} disabled={purposeLocked} onChange={(v) => onChange(applyPurpose(d, v))}
               hint={purposeLocked ? 'Locked to the current group. Use All to choose a different purpose.' : undefined} />
-            <SelectField label="Provider" value={d.providerType} options={providers} onChange={(v) => onChange(applyProvider(d, v))} />
-            <SelectField<IntegrationDirection> label="Direction" value={d.direction} options={[['INBOUND', 'Inbound'], ['OUTBOUND', 'Outbound']]} onChange={(v) => set('direction', v)} />
+            <SelectField label="Transfer method" value={d.providerType} options={providers.map((provider) => [provider, provider === 'PUSH_API' ? 'External system sends (API push)' : provider === 'HTTP_API' && d.purpose === 'INGESTION_SOURCE' ? 'LexaVault retrieves (HTTP polling)' : provider === 'HTTP_API' ? 'Send to HTTP API' : provider === 'WATCHED_FOLDER' ? 'Watched folder' : provider === 'SCANNER' ? 'Scanner' : 'File share'] as [IntegrationProviderType, string])} onChange={(v) => onChange(applyProvider(d, v))} />
+            <div className="cf-ad-span"><p className="cf-ad-context">{connectionFlow(d)}. Connection initiated: {d.direction === 'OUTBOUND' ? 'by LexaVault' : 'by the external source'}.</p></div>
           </div>
         </fieldset>
 
