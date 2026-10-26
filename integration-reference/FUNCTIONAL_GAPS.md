@@ -83,3 +83,16 @@ These are **approved requirements, not implemented changes**. Implement one item
 | LV-ADM-09 | P2 | Admin navigation and audit semantics | Audit visibility requires AUDIT_VIEW independently; no permission granted just for prototype visual parity. Confirm Business Admin, IT Admin, and Platform Admin tabs/routes follow actual capabilities. | OPEN |
 
 **Agreed sequencing:** start with LV-ADM-01 and LV-ADM-02 (business admin least privilege and multi-role coexistence); then LV-ADM-03/04 authorization model; then LV-ADM-05/06 wizard and identifier mapping; then LV-ADM-07/08 intake operations; then LV-ADM-09 regression. Each item needs targeted regression evidence and explicit review before closure. No changes to roles, backend, or UI were made by this backlog-only commit.
+
+
+## Role model follow-up — Document Viewer and IT-managed access (2026-10-26)
+
+**Approved product direction; backlog only, not implemented.**
+
+| ID | Priority | Requirement | Acceptance criteria | Status |
+|---|---|---|---|---|
+| LV-ADM-10 | P0 | Read-only Document Viewer role | Document Viewer can search, open and view **authorized** documents, document metadata, and permitted read-only activity in a focused Documents workspace. No Desk operational queues, Intake, Review, Admin or Reports by this role alone; no upload, download, export, redaction, approval, reject, reprocess, delete, or any other document-changing actions. Verify UI, API authorization and tenant/business scope. Log access consistent with audit policy. | OPEN |
+| LV-ADM-11 | P0 | IT Administrator role assignment and removal | IT Admin can grant/revoke the predefined Document Viewer role to eligible users, subject to identity, tenant, authorization, non-escalation and audit safeguards. Broader assignment of Document Specialist/Supervisor and privileged admin roles **requires explicit policy design/review**; do not assume IT Admin may grant itself or others all roles. Preserve existing OIDC/bootstrap and role-to-capability semantics until reviewed. | OPEN |
+| LV-ADM-12 | P0 | Explicit operations role boundary and navigation | Rename Document Processor to **Document Specialist** in user-facing language (pending compatibility review). Document Specialist: Desk, Intake, Review; not Admin/Reports. Document Supervisor: same primary navigation with additional final-approval capability (and any existing authorized supervisor operations), not Admin/Reports. Business Admin: Admin and Reports, not operational screens. Users with multiple roles get the union of *authorized* permissions. Confirm existing backend capability mapping before changing it. | OPEN |
+
+**IT Admin scope discussion:** Integration/connection setup (push, HTTP pull/polling, watched folder, scanner), master and derived destinations, mapped identifiers as defined by Business Admin, identity/sign-in, scoped user role assignments, health/diagnostics read-only, monitoring and operational troubleshooting, integration-specific audit/configuration history. Platform-only controls remain Platform Admin. This scope is **for user review**, not permission approval or implementation authorization.
