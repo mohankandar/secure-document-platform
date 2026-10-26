@@ -221,3 +221,9 @@ User reports backend clean install, frontend TypeScript/build and LOCAL startup 
 The wizard uses existing `draftForPurpose` / `applyProvider` / `toPayload` paths; does not modify backend integration APIs, stored connections or actual delivery processing. Existing connection-group filter does not prevent creating a Send connection from Intake group; saved result moves to its destination group.
 
 **Pending:** frontend TypeScript/build, browser wizard flow and edit/regression, backend IT Desk denial from `85aa63e`, and the already listed PENDING Batch 2 checks. Do not mark Batch 2 PASS before tests.
+
+## Batch 2 targeted retest and R2 recording — accepted (2026-10-26)
+
+**User reported 23/23 PASS**, covering 4 build/startup checks, 6 IT Admin access/redirect checks, 5 Receive wizard checks, 5 Send wizard checks and 3 existing-connection checks; no issues noted. Submitted video `IT_admin_R2.mp4` (~68 sec) was sampled for visual review: IT Admin Integrations list, New Connection create panels, Master/Derived destination groups, Sign-in and Platform Operations screens are visible. This is **user acceptance of the targeted Batch 2 correction**, not confirmation of successful creation/delivery or exhaustive security review.
+
+**Status:** Batch 2 targeted scope USER ACCEPTED. Previously untested backend identifier enforcement, actual end-to-end polling/delivery, watched folder runtime regression, no-download API regression in other routes, System Administrator retirement, full role-assignment redesign and Platform Operations architecture alignment remain separately OPEN. Do not assume a checked wizard option was saved or exercised against a real destination. No main merge approved.
