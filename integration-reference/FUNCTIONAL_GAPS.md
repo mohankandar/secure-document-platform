@@ -138,3 +138,14 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 - UI navigation is currently gated by backend-supplied capabilities, so BUSINESS_ADMIN-only should no longer be offered Desk/Intake/Review after a successful backend restart, but **unverified**. Other role-specific controllers may use `@RequireRole`; audit before declaring effective permission boundaries.
 - **Known remaining gaps:** no DOCUMENT_VIEWER backend role/capabilities/workspace; no IT role-grant UI or privileged-role safeguards; no System Administrator migration; no frontend label rename; legacy role mappings and production runtime acceptance outstanding.
 - **Verification:** run focused `ProductAuthorizationPolicyTest`, other authorization contract tests, frontend auth tests and live LOCAL role matrix, then OIDC multi-role and endpoint-denial tests. Test existing supervisor approval end-to-end. Keep this checkpoint OPEN until verified.
+
+
+## Phase 1 Checkpoint A — user LOCAL acceptance (2026-10-26)
+
+**User reports PASS for all target browser checks**, including Business Administrator (Admin/Reports only; no Desk, Intake, Review, IT or Platform controls), Document Processor (Desk/Intake/Review, no Admin/Reports), Document Supervisor (Desk/Intake/Review, no Admin/Reports), and BOTH final-delivery approval cases (Processor denied; Supervisor allowed when business approval policy was enabled). User explicitly approved closing this checkpoint and proceeding.
+
+**Status:** Checkpoint A **USER-ACCEPTED / CLOSED** for the tested LOCAL role/navigation/approval scenarios. `LV-ADM-01` and the relevant Processor/Supervisor portions of `LV-ADM-12` pass reported LOCAL acceptance; other scope under those IDs and `LV-ADM-02` combined-role OIDC/API-negative-path testing remain separately open where not evidenced.
+
+**Build distinction:** focused ProductAuthorizationPolicyTest 10/10 PASS; a broader build previously failed on a stale capability interceptor test and was fixed by commit `6277b37`. No subsequent full-build PASS output is present in this conversation; **do not claim full-suite PASS** or extensive OIDC/tenant isolation verification. The user's runtime approval tests do not substitute for those security regressions.
+
+**Next checkpoint B:** implement a distinct strictly read-only Document Viewer role, scoped search/view APIs, viewer-only workspace, backend denial on mutation/download/export, tenant/business isolation, and tests. Preserve REPORT_VIEWER as separate until explicitly retired. No broad DB changes or permanent document storage feature.
