@@ -19,8 +19,8 @@ class ProductAuthorizationPolicyTest {
                 UserCapability.MANUAL_REVIEW,
                 UserCapability.FINDING_DECISION,
                 UserCapability.REDACTION_ADJUST,
-                UserCapability.REVIEW_SUBMIT,
-                UserCapability.PACKAGE_APPROVE_DELIVERY), caps);
+                UserCapability.REVIEW_SUBMIT), caps);
+        assertFalse(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
         assertFalse(caps.contains(UserCapability.PACKAGE_REPROCESS));
         assertFalse(caps.contains(UserCapability.PACKAGE_REMOVE_FROM_DASHBOARD));
     }
@@ -29,6 +29,7 @@ class ProductAuthorizationPolicyTest {
     void documentSupervisorAddsOnlyLifecycleSupervisionCapabilities() {
         var caps = policy.capabilitiesFor(Set.of("DOCUMENT_SUPERVISOR"));
         assertTrue(caps.containsAll(policy.capabilitiesFor(Set.of("DOCUMENT_PROCESSOR"))));
+        assertTrue(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
         assertTrue(caps.contains(UserCapability.PACKAGE_REPROCESS));
         assertTrue(caps.contains(UserCapability.PACKAGE_REMOVE_FROM_DASHBOARD));
         assertFalse(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
@@ -36,9 +37,14 @@ class ProductAuthorizationPolicyTest {
     }
 
     @Test
-    void businessAdminInheritsSupervisorBusinessFunctionsPlusBusinessConfigurationAndReports() {
+    void businessAdminHasBusinessConfigurationAndReportsWithoutDocumentOperations() {
         var caps = policy.capabilitiesFor(Set.of("BUSINESS_ADMIN"));
-        assertTrue(caps.containsAll(policy.capabilitiesFor(Set.of("DOCUMENT_SUPERVISOR"))));
+        assertFalse(caps.contains(UserCapability.DASHBOARD_ACCESS));
+        assertFalse(caps.contains(UserCapability.DOCUMENT_INTAKE));
+        assertFalse(caps.contains(UserCapability.MANUAL_REVIEW));
+        assertFalse(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
+        assertFalse(caps.contains(UserCapability.PACKAGE_REPROCESS));
+        assertFalse(caps.contains(UserCapability.PACKAGE_REMOVE_FROM_DASHBOARD));
         assertTrue(caps.contains(UserCapability.TENANT_POLICY_MANAGE));
         assertTrue(caps.contains(UserCapability.TENANT_IDENTIFIER_MANAGE));
         assertTrue(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
@@ -49,6 +55,24 @@ class ProductAuthorizationPolicyTest {
         assertFalse(caps.contains(UserCapability.TECHNICAL_RETRY));
         assertFalse(caps.contains(UserCapability.AUDIT_VIEW));
         assertFalse(caps.contains(UserCapability.PLATFORM_DIAGNOSTICS));
+    }
+
+    @Test
+    void combinedBusinessAdminAndProcessorPreservesAdditiveCapabilitiesWithoutApproval() {
+        var caps = policy.capabilitiesFor(Set.of("BUSINESS_ADMIN", "DOCUMENT_PROCESSOR"));
+        assertTrue(caps.contains(UserCapability.TENANT_POLICY_MANAGE));
+        assertTrue(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
+        assertTrue(caps.contains(UserCapability.DOCUMENT_INTAKE));
+        assertTrue(caps.contains(UserCapability.MANUAL_REVIEW));
+        assertFalse(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
+    }
+
+    @Test
+    void combinedBusinessAdminAndSupervisorPreservesApproval() {
+        var caps = policy.capabilitiesFor(Set.of("BUSINESS_ADMIN", "DOCUMENT_SUPERVISOR"));
+        assertTrue(caps.contains(UserCapability.TENANT_POLICY_MANAGE));
+        assertTrue(caps.contains(UserCapability.DOCUMENT_INTAKE));
+        assertTrue(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
     }
 
     @Test
