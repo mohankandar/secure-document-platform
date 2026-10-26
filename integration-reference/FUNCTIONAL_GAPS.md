@@ -96,3 +96,17 @@ These are **approved requirements, not implemented changes**. Implement one item
 | LV-ADM-12 | P0 | Explicit operations role boundary and navigation | Rename Document Processor to **Document Specialist** in user-facing language (pending compatibility review). Document Specialist: Desk, Intake, Review; not Admin/Reports. Document Supervisor: same primary navigation with additional final-approval capability (and any existing authorized supervisor operations), not Admin/Reports. Business Admin: Admin and Reports, not operational screens. Users with multiple roles get the union of *authorized* permissions. Confirm existing backend capability mapping before changing it. | OPEN |
 
 **IT Admin scope discussion:** Integration/connection setup (push, HTTP pull/polling, watched folder, scanner), master and derived destinations, mapped identifiers as defined by Business Admin, identity/sign-in, scoped user role assignments, health/diagnostics read-only, monitoring and operational troubleshooting, integration-specific audit/configuration history. Platform-only controls remain Platform Admin. This scope is **for user review**, not permission approval or implementation authorization.
+
+
+## Architecture clarification — redaction processor, not document repository (2026-10-26)
+
+**User-confirmed product intent; design requirement, NOT a claim that current runtime already conforms.**
+
+LexaVault's primary job is to **ingest documents, analyze/redact, run authorized review/approval as needed, and deliver completed output via IT-configured outbound integration**. LexaVault is **not** the system of record, permanent document vault or final repository.
+
+- IT Administrator owns intake source connections (API push/listener, HTTP polling/pull, watched folder, scanner), authentication, schedules, field mapping, outbound/master/derived delivery configurations.
+- Filesystem/local document storage for tests is **LOCAL-profile only**; do not position this as a production document-repository feature.
+- Remove Storage Management as a normal Platform Operations user-facing section. Platform Admin owns runtime health, workers/queues, diagnostics and controlled infrastructure recovery; IT owns integration endpoints.
+- Before implementation, audit runtime staging/transient persistence, encryption, cleanup, retries, durable destination acknowledgements and failure recovery. Necessary temporary processing persistence must not become a permanent repository; do not delete documents based on unverified delivery.
+- Review master-delivery terminology and descriptions that imply permanent vault storage.
+- **LV-ADM-13 OPEN:** align administration and operational screens / deployment profiles with redaction-and-forward architecture, without breaking in-flight processing or audit guarantees.
