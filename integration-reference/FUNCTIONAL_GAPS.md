@@ -313,3 +313,12 @@ Do not close Platform Operations checkpoint until these tests pass.
 5. Run full tests and runtime OIDC/LOCAL regression including role unions, identity activation/rollback, bootstrap/known-good recovery, integrations, watched-folder multi-node and platform maintenance. No production merge or rollout until checkpoint accepted.
 
 **Do not treat removal from dropdown as security retirement.** No implementation changes yet in this audit.
+
+
+## R1 scoped grants implemented; R2 retirement prerequisites (2026-10-26)
+
+- `b91315a`: remove default business report view/export from standalone `TENANT_IT_ADMIN` and `PLATFORM_OPERATIONS_ADMIN`; remove tenant integration-management capability from standalone Platform Admin. Business Admin and Report Viewer reporting unaffected, and legitimately combined roles remain additive.
+- `13b604f`: update central authorization tests with negative checks for reporting and Platform integration administration.
+- **Pending local build/test and runtime validation.** Expected IT Admin: Integrations, Sign-in, Audit, Support, read-only Platform Overview; no Reports. Expected Platform Admin: Platform Operations, technical incidents/Audit/Support; no Reports or tenant Integrations. Scan Now remains IT-owned under TENANT_INTEGRATION_MANAGE. Existing Platform watched-folder lease and fencing remains read-only.
+- **R2 inventory started:** Ordinary `ADMIN` is still recognized by ProductRole, OIDC Role Mapper and LOCAL role selector; gives all UserCapability enum values and bypasses @RequireRole via RoleAuthorizationInterceptor. Must inspect deployment roleMappings, ADMIN-only @RequireRole actions, bootstrap + OIDC known-good recovery before removing. **Not retired**, do not revoke existing production assignments until a tested migration exists. No silent ADMIN-to-IT or ADMIN-to-Platform remap.
+- **Do not prematurely close:** Technical retry/hold API ownership, IT users-and-access privilege ceilings, System Administrator migration, and multi-node cluster tests remain OPEN.
