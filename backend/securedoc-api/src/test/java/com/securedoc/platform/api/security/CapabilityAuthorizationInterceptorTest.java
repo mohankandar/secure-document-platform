@@ -43,9 +43,18 @@ class CapabilityAuthorizationInterceptorTest {
     }
 
     @Test
-    void supervisorCanReprocessAndProcessorCanApproveDelivery() throws Exception {
+    void onlySupervisorCanApproveDeliveryAndReprocess() throws Exception {
         assertAllowed("DOCUMENT_SUPERVISOR", "reprocess");
-        assertAllowed("DOCUMENT_PROCESSOR", "approveDelivery");
+        assertAllowed("DOCUMENT_SUPERVISOR", "approveDelivery");
+        assertDenied("DOCUMENT_PROCESSOR", "approveDelivery");
+    }
+
+    @Test
+    void businessAdminDirectApiCannotProcessOrApproveDocuments() throws Exception {
+        assertDenied("BUSINESS_ADMIN", "dashboard");
+        assertDenied("BUSINESS_ADMIN", "review");
+        assertDenied("BUSINESS_ADMIN", "approveDelivery");
+        assertDenied("BUSINESS_ADMIN", "reprocess");
     }
 
     private void assertDenied(String role, String method) throws Exception {
