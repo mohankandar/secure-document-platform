@@ -373,8 +373,10 @@ function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, o
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState<'flow' | 'type' | 'configure'>('flow');
+  const [wizardFlow, setWizardFlow] = useState<'receive' | 'send'>('receive');
   const key = draft ? draft.connectionId ?? 'new' : null;
-  if (key !== openKey) { setOpenKey(key); setError(null); }
+  if (key !== openKey) { setOpenKey(key); setError(null); setWizardStep(draft?.connectionId ? 'configure' : 'flow'); setWizardFlow(draft?.purpose === 'INGESTION_SOURCE' ? 'receive' : 'send'); }
 
   if (!draft) return <Sheet open={false} title="" onClose={onClose}>{null}</Sheet>;
   const d = draft;
@@ -382,10 +384,11 @@ function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, o
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => onChange({ ...d, [k]: v });
   const polling = isPollingConnection(d);
   const scanner = d.providerType === 'SCANNER';
-  const providers = purposeLocked ? PROVIDERS_BY_PURPOSE[d.purpose] : PROVIDERS;
+  const providers = editing ? (purposeLocked ? PROVIDERS_BY_PURPOSE[d.purpose] : PROVIDERS) : PROVIDERS_BY_PURPOSE[d.purpose];
   const nameMissing = !d.name.trim();
 
   function reset() {
+    if (!editing) setWizardStep('flow');
     setError(null);
     onChange(original ? toDraft(original) : draftForPurpose(d.purpose));
   }
@@ -411,20 +414,50 @@ function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, o
       description="Choose how documents enter or leave LexaVault. Only the configuration relevant to that method is shown."
       onClose={() => { if (!saving) onClose(); }}
       footer={<>
+        {!editing && wizardStep !== 'flow' && <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={() => setWizardStep(wizardStep === 'configure' ? 'type' : 'flow')}>Back</button>}
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={reset}>Reset</button>
         <span className="cf-ad-spacer" />
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={onClose}>Cancel</button>
-        <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={saving || nameMissing} onClick={save}>
+        {(editing || wizardStep === 'configure') && <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={saving || nameMissing} onClick={save}>
           {saving && <Spinner label="Saving" />}{editing ? 'Save changes' : 'Create connection'}
-        </button>
+        </button>}
       </>}
     >
       <div className="cf-ad-form">
+        {!editing && wizardStep === 'flow' && (
+          <fieldset className="cf-ad-fieldset">
+            <legend>Step 1 — What should LexaVault do?</legend>
+            <p className="cf-ad-context">Choose the direction the documents travel, not the direction of the HTTP request.</p>
+            <div className="cf-ad-grid">
+              <button type="button" className="cf-btn" data-variant="solid" onClick={() => { setWizardFlow('receive'); onChange(draftForPurpose('INGESTION_SOURCE')); setWizardStep('type'); }}>Receive documents</button>
+              <button type="button" className="cf-btn" data-variant="solid" onClick={() => { setWizardFlow('send'); onChange(draftForPurpose('SDV_DELIVERY')); setWizardStep('type'); }}>Send documents</button>
+            </div>
+          </fieldset>
+        )}
+        {!editing && wizardStep === 'type' && (
+          <fieldset className="cf-ad-fieldset">
+            <legend>Step 2 — {wizardFlow === 'receive' ? 'How will documents arrive?' : 'Where should processed documents go?'}</legend>
+            <div className="cf-ad-grid">
+              {wizardFlow === 'receive' ? (
+                <>
+                  {([['PUSH_API', 'External system sends (API push)'], ['HTTP_API', 'LexaVault retrieves (HTTP polling)'], ['WATCHED_FOLDER', 'Watched folder'], ['SCANNER', 'Scanner']] as [IntegrationProviderType, string][]).map(([provider, label]) =>
+                    <button key={provider} type="button" className="cf-btn" onClick={() => { onChange(applyProvider(draftForPurpose('INGESTION_SOURCE'), provider)); setWizardStep('configure'); }}>{label}</button>)}
+                </>
+              ) : (
+                <>
+                  <button type="button" className="cf-btn" onClick={() => { onChange(draftForPurpose('SDV_DELIVERY')); setWizardStep('configure'); }}>Master Delivery — completed redacted package</button>
+                  <button type="button" className="cf-btn" onClick={() => { onChange(draftForPurpose('DERIVED_DOCUMENT_DELIVERY')); setWizardStep('configure'); }}>Derived Delivery — routed outputs</button>
+                </>
+              )}
+            </div>
+          </fieldset>
+        )}
+        {(editing || wizardStep === 'configure') && <>
         <fieldset className="cf-ad-fieldset">
-          <legend>Connection</legend>
+          <legend>{editing ? 'Connection' : 'Step 3 — Configure connection'}</legend>
           <div className="cf-ad-grid">
             <TextField label="Name" required value={d.name} invalid={nameMissing} onChange={(v) => set('name', v)} hint={nameMissing ? 'Required.' : undefined} />
-            <SelectField label="Purpose" value={d.purpose} options={PURPOSES} disabled={purposeLocked} onChange={(v) => onChange(applyPurpose(d, v))}
+            <SelectField label="Purpose" value={d.purpose} options={PURPOSES} disabled={!editing || purposeLocked} onChange={(v) => onChange(applyPurpose(d, v))}
               hint={purposeLocked ? 'Locked to the current group. Use All to choose a different purpose.' : undefined} />
             <SelectField label="Transfer method" value={d.providerType} options={providers.map((provider) => [provider, provider === 'PUSH_API' ? 'External system sends (API push)' : provider === 'HTTP_API' && d.purpose === 'INGESTION_SOURCE' ? 'LexaVault retrieves (HTTP polling)' : provider === 'HTTP_API' ? 'Send to HTTP API' : provider === 'WATCHED_FOLDER' ? 'Watched folder' : provider === 'SCANNER' ? 'Scanner' : 'File share'] as [IntegrationProviderType, string])} onChange={(v) => onChange(applyProvider(d, v))} />
             <div className="cf-ad-span"><p className="cf-ad-context">{connectionFlow(d)}. Connection initiated: {d.direction === 'OUTBOUND' ? 'by LexaVault' : 'by the external source'}.</p></div>
@@ -495,6 +528,7 @@ function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, o
         {!editing && <Toggle label="Enable immediately after creation" checked={Boolean(d.enabled)} onChange={(v) => set('enabled', v)} />}
         <p className="cf-ad-hint">Test actions never send a customer PDF.</p>
         {error && <Notice tone="danger">{error}</Notice>}
+        </>}
       </div>
     </Sheet>
   );
