@@ -252,3 +252,29 @@ R2 attached screen recording (~67.6 seconds) independently confirms IT Admin nav
 - **Acceptance next:** backend clean build / platform-health contract test, frontend TypeScript/build, IT Admin health only refresh/no operations/no case link, direct POST health-check forbidden for IT Admin, Platform Admin active health-check and infrastructure sections available, no document access, IT integration setup/polling unaffected.
 
 Do not close Platform Operations checkpoint until these tests pass.
+
+
+## User-approved IT Intake / Platform Operations redesign requirements — 2026-10-26
+
+**Approved design direction; implementation pending. Preserve multi-node intake guarantees throughout.**
+
+### Multi-node watched-folder intake — MUST PRESERVE
+- Watched-folder connection ownership, configuration, operational scan and outcomes belong under **IT Administration → Integrations → Intake Sources**; retain dedicated source status, errors and scan controls.
+- **Do not simplify watched-folder intake into a single-node watcher.** Preserve lease ownership, node identity/role, coordinated scheduled/manual scans, fencing token/generation, lease expiry, takeover/failover handling, idempotent triggers and duplicate prevention, per-node health, safety during failover and existing audit behavior. The current multi-node coordination logic/contracts must be inspected before changing controls, routing or scheduling.
+- Platform Administrator owns **cross-node operational health and distributed coordination diagnostics** (lease/fencing/takeover/worker readiness) without taking over business source connection configuration.
+- Avoid two independently competing "Scan now" actions on separate admin screens. Correctly enforce execution authority server-side; no duplicate or uncoordinated scan path.
+- Respect LOCAL vs multi-node production safety, including storage/provider validation and fail-closed behavior.
+
+### Three explicit findings from PA_R1 recording — MUST FIX/TRACK
+1. **Platform Admin operational Desk access:** `PLATFORM_OPERATIONS_ADMIN` currently receives `DASHBOARD_ACCESS`; audit and remove unintended Desk and document access at the backend, with frontend navigation and endpoint regression tests. No generic viewer or downloads.
+2. **Health status ambiguity:** overview counts dependencies requiring attention while individual lines can say "Configured"/"Healthy." Distinguish configured, reachable, operational readiness and degraded/down states with accurate labels; don't camouflage failures or invent health.
+3. **Storage/delivery terminology and model:** remove repository/archive implication; explain LOCAL filesystem delivery as LOCAL/demo-only where relevant and production processing storage as secure *temporary* lifecycle infrastructure; preserve underlying retries, acknowledgements, cleanup, multi-node validation and routing semantics.
+
+### Approved information architecture
+- **IT Admin:** Integrations (Intake sources incl. watched folder/scanner/push/polling; master/derived destinations; routing; monitoring/manual actions), Sign-in, user/access design later, technical troubleshooting, read-only health.
+- **Platform Admin:** System Overview, Runtime & Recovery (backoff/retries/AI failover), Processing Infrastructure (readiness, validation, node checks, safe provider activation, cleanup visibility), Licensing, Branding, Product Telemetry, Advanced Diagnostics.
+- Relocate watched-folder operational summary out of generic Platform Overview while keeping **multi-node coordination diagnostics** under Platform; eliminate generic "Resilience and integrations" overview card by moving runtime policies to Runtime & Recovery, delivery to IT Integrations and identity state to Sign-in.
+- Redesign temporary processing-storage UI progressively; preserve all existing provider/tenant override/test/activate/retire guardrails and avoid functional regressions. Audit lifecycle cleanup before introducing controls or removing backend infrastructure.
+- Move in reviewed checkpoints with one consolidated user acceptance round. Do not change `main`, previous integration branch, OIDC semantics, or role grants without explicit scoped review.
+
+**Status: APPROVED DESIGN / OPEN IMPLEMENTATION**. Acceptance must explicitly exercise 2+ nodes, lease takeover/fencing, duplicate avoidance and manual scan coordination where a safe test environment is available; mark those tests PENDING otherwise, never PASS by inference.
