@@ -179,3 +179,13 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 - Review preview endpoint `GET /api/v1/review-items/{findingId}/page-preview` returns PNG of one relevant page, gated by MANUAL_REVIEW and no-store. This is a distinct preview path, not a full-PDF download, but page-content sensitivity and any other preview/full-content APIs still need broader review.
 
 **Status: PARTIAL FIX / UNVERIFIED.** Run build and targeted test; inspect all legacy UI pages, standalone download APIs, browser preview/save affordances, and alternate artifact endpoints. Do not claim repository-wide no-download security acceptance yet. No storage, reporting exports, or automated integration deliveries were intentionally changed by this patch.
+
+
+## Batched IT Administration UX candidate (2026-10-26)
+
+**Code changes source-committed on review branch, NOT built/runtime-verified.** User requested batching tests instead of pausing after each small correction.
+
+- `295f27e`, `b08c763`: integration editor now explains **business document direction** ("Receive documents" versus "Send processed documents") and identifies which side initiates communication; provider dropdown says **Transfer method**, with business-oriented options ("External system sends (API push)", "LexaVault retrieves (HTTP polling)", watched folder, scanner, outbound HTTP, file share). The ambiguous editable technical Direction dropdown is removed. Provider-selection logic still sets technical INBOUND/OUTBOUND and acknowledgement/polling values in existing backend request shape.
+- Saved connection list now labels "Documents in" / "Documents out" rather than naked INBOUND/OUTBOUND.
+- This is a **minimal guided-choice foundation**, not the approved multi-step wizard. Full guided wizard, field mappings, role management and platform restructuring remain OPEN.
+- Batch acceptance: full frontend TypeScript/build, focused API download-denial test and Maven full build; LOCAL IT Admin verify Push API and HTTP Polling create/edit defaults and schedule, plus Master/Derived delivery, failure handling and no regressions to outbound workflow; processor verify no "Redacted" download button and direct artifact request denied. No real external connection should be enabled merely for testing.
