@@ -59,7 +59,6 @@ public class ProductAuthorizationPolicy {
                     capabilities.add(UserCapability.AUDIT_VIEW);
                 }
                 case "PLATFORM_OPERATIONS_ADMIN" -> {
-                    capabilities.add(UserCapability.DASHBOARD_ACCESS);
                     capabilities.addAll(REPORT_READ_CAPABILITIES);
                     capabilities.add(UserCapability.REPORT_EXPORT);
                     capabilities.add(UserCapability.TENANT_INTEGRATION_MANAGE);
