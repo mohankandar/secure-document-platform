@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { apiClient } from '../../api/client';
 import type { PlatformAdminOverview } from '../../types';
@@ -189,7 +189,7 @@ function Overview({ canOperate }: { canOperate: boolean }) {
                     {item.technicalHoldUntil && <span>Technical hold until {when(item.technicalHoldUntil)}</span>}
                   </div>
                 </div>
-                <Link className="cf-btn" data-variant="ghost" data-size="sm" to={`/case/${item.packageId}`}>Open case</Link>
+                <span className="cf-ad-tag">Technical monitoring only</span>
               </li>
             ))}
           </ul>
