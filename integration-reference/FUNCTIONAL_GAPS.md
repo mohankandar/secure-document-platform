@@ -209,3 +209,15 @@ User reports backend clean install, frontend TypeScript/build and LOCAL startup 
 **Remaining defect:** guided New Connection flow is still a single form scoped to an existing group, rather than Receive/Send followed by Master/Derived selection. This is an **OPEN implementation gap**, not a completed wizard. Preserve old configuration options and backend enum semantics when implementing. Require actual branch code and browser acceptance before closing.
 
 **Next combined test round:** build after current edits, confirm IT Admin Desk/direct package API denied without damaging management access, and validate completed Send wizard once implemented. Preserve all earlier PENDING/N/A regressions.
+
+
+## Batch 2 guided Integration wizard implementation candidate (2026-10-26)
+
+**Commit `6c73b51` — SOURCE IMPLEMENTED, NOT BUILD/RUNTIME VERIFIED.** New-connection creation in Case File IT Integrations now proceeds:
+1. Choose **Receive documents** or **Send documents** (business document direction, not HTTP-request direction).
+2. Receive: API Push, HTTP Polling, Watched Folder, Scanner. Send: **Master Delivery** or **Derived Delivery**, distinguished explicitly.
+3. Configure source/destination-specific fields and save. Back, Reset, and Cancel are available; existing connection edit remains direct.
+
+The wizard uses existing `draftForPurpose` / `applyProvider` / `toPayload` paths; does not modify backend integration APIs, stored connections or actual delivery processing. Existing connection-group filter does not prevent creating a Send connection from Intake group; saved result moves to its destination group.
+
+**Pending:** frontend TypeScript/build, browser wizard flow and edit/regression, backend IT Desk denial from `85aa63e`, and the already listed PENDING Batch 2 checks. Do not mark Batch 2 PASS before tests.
