@@ -7,7 +7,6 @@ import type {
   IntegrationAuthenticationType,
   IntegrationConnection,
   IntegrationConnectionRequest,
-  IntegrationDirection,
   IntegrationPollingScheduleType,
   IntegrationProviderType,
   IntegrationPurpose,
