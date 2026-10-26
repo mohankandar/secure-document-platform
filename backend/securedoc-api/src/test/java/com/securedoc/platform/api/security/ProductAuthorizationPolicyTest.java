@@ -86,9 +86,9 @@ class ProductAuthorizationPolicyTest {
     }
 
     @Test
-    void tenantItAdminGetsTechnicalOperationsReportsAndDashboardButNoBusinessWorkflow() {
+    void tenantItAdminGetsTechnicalOperationsButNoOperationalDeskOrBusinessWorkflow() {
         var caps = policy.capabilitiesFor(Set.of("TENANT_IT_ADMIN"));
-        assertTrue(caps.contains(UserCapability.DASHBOARD_ACCESS));
+        assertFalse(caps.contains(UserCapability.DASHBOARD_ACCESS));
         assertTrue(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
         assertTrue(caps.contains(UserCapability.REPORT_OPERATIONAL_VIEW));
         assertTrue(caps.contains(UserCapability.REPORT_EXPORT));
