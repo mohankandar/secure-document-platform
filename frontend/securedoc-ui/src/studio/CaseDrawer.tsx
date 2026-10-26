@@ -6,7 +6,7 @@ import { apiClient } from '../api/client';
 import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary } from '../types';
 import {
   CAP, LIFECYCLE, SOURCE_LABEL, caseActions, caseTitle, errorMessage, formatBytes, humanize, isReprocessing,
-  redactedArtifactAvailable, relativeTime, stageLabel, stageOf, statusInfo, useDerivedDeliveries, usePackage,
+  relativeTime, stageLabel, stageOf, statusInfo, useDerivedDeliveries, usePackage,
   usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
 } from './data';
 import { Notice, Spinner, StageChip } from './atoms';
