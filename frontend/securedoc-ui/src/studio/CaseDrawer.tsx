@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
-import { ArrowRight, Check, Download, FileText, RotateCcw, Wrench, X } from 'lucide-react';
+import { ArrowRight, Check, FileText, RotateCcw, Wrench, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary } from '../types';
 import {
@@ -242,26 +242,6 @@ function TechnicalDetail({ packageId }: { packageId: string }) {
 }
 
 function DocumentsSection({ pkg, life, openFindings }: { pkg: PackageDetail; life: PackageLifecycleSummary | undefined; openFindings: FocusedReviewItem[] }) {
-  const toast = useToast();
-  const [downloading, setDownloading] = useState<string | null>(null);
-
-  const download = async (documentId: string, fileName?: string) => {
-    setDownloading(documentId);
-    try {
-      const blob = await apiClient.downloadRedactedArtifact(documentId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `redacted-${fileName || 'document.pdf'}`;
-      a.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      toast(errorMessage(err, 'The redacted copy could not be downloaded.'), 'danger');
-    } finally {
-      setDownloading(null);
-    }
-  };
-
   return (
     <details className="cf-disclosure" open={openFindings.length > 0 || pkg.documents.length <= 3}>
       <summary>Documents <span className="cf-count">{pkg.documents.length}</span></summary>
@@ -271,7 +251,6 @@ function DocumentsSection({ pkg, life, openFindings }: { pkg: PackageDetail; lif
         <ul className="cf-docs">
           {pkg.documents.map((doc) => {
             const findings = openFindings.filter((f) => f.documentId === doc.documentId).length;
-            const available = redactedArtifactAvailable(pkg.status, life, doc.status);
             return (
               <li key={doc.documentId} className="cf-doc">
                 <FileText size={16} aria-hidden="true" className="cf-doc-icon" />
@@ -283,17 +262,12 @@ function DocumentsSection({ pkg, life, openFindings }: { pkg: PackageDetail; lif
                     {findings > 0 && <> · <mark className="cf-mark-text">{findings} to review</mark></>}
                   </span>
                 </span>
-                {available && (
-                  <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => download(doc.documentId, doc.fileName)} disabled={downloading === doc.documentId} aria-label={`Download redacted copy of ${doc.fileName || 'document'}`}>
-                    {downloading === doc.documentId ? <Spinner label="Downloading" /> : <Download size={14} aria-hidden="true" />} Redacted
-                  </button>
-                )}
               </li>
             );
           })}
         </ul>
       )}
-      <p className="cf-muted cf-small">Originals are never downloadable. Redacted copies appear here while LexaVault still holds them.</p>
+      <p className="cf-muted cf-small">Documents are processed and delivered through configured integrations; files cannot be downloaded here.</p>
     </details>
   );
 }
