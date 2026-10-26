@@ -11,6 +11,7 @@ import type {
   IntegrationProviderType,
   IntegrationPurpose,
   PollingConnectionStatus,
+  PlatformAdminOverview,
 } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
@@ -150,9 +151,12 @@ function toPayload(d: Draft): IntegrationConnectionRequest {
 
 export default function IntegrationsArea() {
   const { mutate: globalMutate } = useSWRConfig();
+  const toast = useToast();
   const conns = useSWR<IntegrationConnection[]>('integrations', () => apiClient.listIntegrationConnections(), { revalidateOnFocus: false });
-  const attention = useSWR<DerivedDelivery[]>('derived-attention', () => apiClient.listDerivedDeliveryAttention().catch(() => []), { revalidateOnFocus: false });
   const [view, setView] = useState<View>('INGESTION_SOURCE');
+  const watched = useSWR<PlatformAdminOverview>(view === 'INGESTION_SOURCE' ? 'platform-overview' : null, () => apiClient.getPlatformAdminOverview(), { revalidateOnFocus: false });
+  const [scanningFolder, setScanningFolder] = useState(false);
+  const attention = useSWR<DerivedDelivery[]>('derived-attention', () => apiClient.listDerivedDeliveryAttention().catch(() => []), { revalidateOnFocus: false });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [toggling, setToggling] = useState<IntegrationConnection | null>(null);
 
@@ -163,6 +167,19 @@ export default function IntegrationsArea() {
   const viewCfg = VIEWS.find((v) => v.id === view)!;
   const derivedAttention = attention.data ?? [];
   const showAttention = derivedAttention.length > 0 && (view === 'DERIVED_DOCUMENT_DELIVERY' || view === 'ALL');
+
+  const scanWatchedFolder = async () => {
+    setScanningFolder(true);
+    try {
+      const result = await apiClient.scanPlatformWatchedFolder();
+      await watched.mutate();
+      toast(`Scan finished: ${result.accepted} accepted, ${result.rejected} rejected, ${result.duplicates} duplicates.`);
+    } catch (error) {
+      toast(errorMessage(error, 'Watched-folder scan failed.'), 'danger');
+    } finally {
+      setScanningFolder(false);
+    }
+  };
 
   const refresh = async () => {
     await Promise.all([conns.mutate(), attention.mutate(), globalMutate('routing-destinations'), globalMutate((k) => Array.isArray(k) && k[0] === 'polling')]);
@@ -197,6 +214,34 @@ export default function IntegrationsArea() {
         )}
       </section>
 
+      {view === 'INGESTION_SOURCE' && watched.data?.watchedFolder && (
+        <section className="cf-ad-card" aria-label="Watched-folder intake operations">
+          <header className="cf-ad-card-head">
+            <div>
+              <h2>Watched-folder intake operations</h2>
+              <p>Scan status for the configured folder intake. Manual scans use the existing coordinated multi-node scheduler.</p>
+            </div>
+            <button type="button" className="cf-btn" data-size="sm" disabled={!watched.data.watchedFolder.enabled || scanningFolder}
+              onClick={() => void scanWatchedFolder()}>{scanningFolder && <Spinner label="Scanning" />}Scan now</button>
+          </header>
+          <dl className="cf-ad-defs">
+            <div><dt>Connection</dt><dd>{watched.data.watchedFolder.enabled ? 'Enabled' : 'Disabled'}</dd></div>
+            <div><dt>Automatic scan</dt><dd>{watched.data.watchedFolder.schedulingEnabled ? `Every ${Math.round(watched.data.watchedFolder.scanIntervalMs / 1000)}s` : 'Disabled'}</dd></div>
+            <div><dt>Coordination</dt><dd>{watched.data.watchedFolder.coordinationEnabled ? 'Multi-node' : 'Single-node'}</dd></div>
+            <div><dt>Last scan</dt><dd>{watched.data.watchedFolder.lastScanAt ? when(watched.data.watchedFolder.lastScanAt) : 'Not run in this process'}</dd></div>
+            <div><dt>Outcome</dt><dd>{humanize(watched.data.watchedFolder.lastScanOutcome)}</dd></div>
+          </dl>
+          {watched.data.watchedFolder.lastScanResult && (
+            <ul className="cf-ad-tally" aria-label="Last scan result">
+              <li><strong>{watched.data.watchedFolder.lastScanResult.discovered}</strong> discovered</li>
+              <li><strong>{watched.data.watchedFolder.lastScanResult.accepted}</strong> accepted</li>
+              <li><strong>{watched.data.watchedFolder.lastScanResult.rejected}</strong> rejected</li>
+              <li><strong>{watched.data.watchedFolder.lastScanResult.duplicates}</strong> duplicates</li>
+            </ul>
+          )}
+          <p className="cf-ad-hint">Lease ownership, fencing generation and takeover diagnostics are monitored by Platform Operations.</p>
+        </section>
+      )}
       {showAttention && <AttentionList items={derivedAttention} onChanged={refresh} />}
 
       {(view === 'DERIVED_DOCUMENT_DELIVERY' || view === 'ALL') && <RoutingRules />}
