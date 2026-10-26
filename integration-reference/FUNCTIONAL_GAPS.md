@@ -198,3 +198,14 @@ LexaVault's primary job is to **ingest documents, analyze/redact, run authorized
 **Not tested (N/A, not PASS):** watched-folder runtime regression, outbound delivery runtime regression, and browser/server error-log inspection. Retain these as targeted later acceptance tests. No defects were reported in this batch.
 
 **Status:** Batch 1 **USER ACCEPTED for tested scope**; no claim of complete end-to-end regression or exhaustive API/content-path security audit. Next planned batch is guided IT Integration configuration and Platform Operations scope alignment; System Administrator retirement and user role-grant flows remain security-gated.
+
+
+## Batch 2 results and triage — 2026-10-26
+
+User reports backend clean install, frontend TypeScript/build and LOCAL startup PASS. IT Admin navigation (except operational Desk restriction) PASS. API push, HTTP polling, watched-folder and scanner configuration fields PASS. **Two FAIL:** (1) IT Admin unexpectedly has Desk/operational document-access capability; (2) create wizard does not explicitly distinguish Master Delivery from Derived Delivery after choosing Send. Other checks covering outbound delivery, field validation, roles, monitoring, download security and watched folder are PENDING, not accepted.
+
+**Remediation:** commits `85aa63e`, `96c9db4` remove `DASHBOARD_ACCESS` from `TENANT_IT_ADMIN` and update focused policy regression. **Not yet build/runtime verified.** Confirm IT Admin can still access Integrations, Sign-in, Platform Health and technical incident views; role-specific API calls should deny Desk/package listing.
+
+**Remaining defect:** guided New Connection flow is still a single form scoped to an existing group, rather than Receive/Send followed by Master/Derived selection. This is an **OPEN implementation gap**, not a completed wizard. Preserve old configuration options and backend enum semantics when implementing. Require actual branch code and browser acceptance before closing.
+
+**Next combined test round:** build after current edits, confirm IT Admin Desk/direct package API denied without damaging management access, and validate completed Send wizard once implemented. Preserve all earlier PENDING/N/A regressions.
