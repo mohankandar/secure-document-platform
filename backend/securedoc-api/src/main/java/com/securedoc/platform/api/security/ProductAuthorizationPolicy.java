@@ -48,8 +48,6 @@ public class ProductAuthorizationPolicy {
                 }
                 case "REPORT_VIEWER" -> capabilities.add(UserCapability.REPORT_EXECUTIVE_VIEW);
                 case "TENANT_IT_ADMIN" -> {
-                    capabilities.addAll(REPORT_READ_CAPABILITIES);
-                    capabilities.add(UserCapability.REPORT_EXPORT);
                     capabilities.add(UserCapability.TENANT_INTEGRATION_MANAGE);
                     capabilities.add(UserCapability.TENANT_AUTH_MANAGE);
                     capabilities.add(UserCapability.TECHNICAL_EXCEPTION_VIEW);
@@ -59,9 +57,6 @@ public class ProductAuthorizationPolicy {
                     capabilities.add(UserCapability.AUDIT_VIEW);
                 }
                 case "PLATFORM_OPERATIONS_ADMIN" -> {
-                    capabilities.addAll(REPORT_READ_CAPABILITIES);
-                    capabilities.add(UserCapability.REPORT_EXPORT);
-                    capabilities.add(UserCapability.TENANT_INTEGRATION_MANAGE);
                     capabilities.add(UserCapability.TECHNICAL_EXCEPTION_VIEW);
                     capabilities.add(UserCapability.TECHNICAL_ADMIN_VIEW);
                     capabilities.add(UserCapability.TECHNICAL_RETRY);
