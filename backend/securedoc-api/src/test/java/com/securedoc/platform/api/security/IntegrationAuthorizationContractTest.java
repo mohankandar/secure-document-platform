@@ -27,11 +27,11 @@ class IntegrationAuthorizationContractTest {
     }
 
     @Test
-    void onlyTechnicalAdminRolesReceiveIntegrationManagementCapability() {
+    void onlyTenantItAdminReceivesIntegrationManagementCapability() {
         ProductAuthorizationPolicy policy = new ProductAuthorizationPolicy();
         assertTrue(policy.capabilitiesFor(java.util.Set.of("TENANT_IT_ADMIN")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
-        assertTrue(policy.capabilitiesFor(java.util.Set.of("PLATFORM_OPERATIONS_ADMIN")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
-        assertTrue(policy.capabilitiesFor(java.util.Set.of("ADMIN")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
+        assertFalse(policy.capabilitiesFor(java.util.Set.of("PLATFORM_OPERATIONS_ADMIN")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
+        assertFalse(policy.capabilitiesFor(java.util.Set.of("ADMIN")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
         assertFalse(policy.capabilitiesFor(java.util.Set.of("BUSINESS_ADMIN")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
         assertFalse(policy.capabilitiesFor(java.util.Set.of("DOCUMENT_PROCESSOR")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
     }
