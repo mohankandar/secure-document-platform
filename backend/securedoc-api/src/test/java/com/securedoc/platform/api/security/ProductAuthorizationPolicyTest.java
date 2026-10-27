@@ -125,8 +125,9 @@ class ProductAuthorizationPolicyTest {
     }
 
     @Test
-    void adminIsExplicitAndReceivesAllCapabilities() {
-        assertEquals(EnumSet.allOf(UserCapability.class), policy.capabilitiesFor(Set.of("ADMIN")));
+    void retiredAdminCannotGrantAnyCapabilities() {
+        assertTrue(policy.capabilitiesFor(Set.of("ADMIN")).isEmpty());
+        assertEquals(policy.capabilitiesFor(Set.of("TENANT_IT_ADMIN")), policy.capabilitiesFor(Set.of("ADMIN", "TENANT_IT_ADMIN")));
         assertTrue(policy.capabilitiesFor(Set.of()).isEmpty());
         assertTrue(policy.capabilitiesFor(Set.of("UNKNOWN")).isEmpty());
     }
