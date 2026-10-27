@@ -36,6 +36,11 @@ public class RoleAuthorizationInterceptor implements HandlerInterceptor {
 
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
 
+        // Retired legacy role must never satisfy a role gate, even if a stale endpoint names it.
+        if (principal.hasRole("ADMIN")) {
+            throw new AccessDeniedException("Retired administrator role is not permitted");
+        }
+
         // Check if actor has at least one of the required roles
         for (String requiredRole : annotation.value()) {
             if (principal.hasRole(requiredRole.toUpperCase())) {
