@@ -401,3 +401,9 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - **Residual LOCAL concern:** `ArtifactAccessRequestController` has local-only request/list/detail methods without capability annotations; this is not a production OIDC attack path because the controller is conditional, but local simulation is intentionally not a production trust boundary. Do not expose LOCAL mode publicly.
 - Distributed P2 behaviors (multi-node failover, fencing, retry, cleanup/retention and storage outage) still require real local or staging infrastructure for meaningful acceptance. Source-level policy tests alone cannot close those checks.
 - No additional database migrations or application runtime testing this checkpoint. Current candidate remains unverified until user runs build.
+
+
+## P1 security fix — derived routing ownership (2026-10-26)
+- Previous routing rule endpoints incorrectly required `TENANT_POLICY_MANAGE`, permitting Business Admin to administer delivery mappings while Tenant IT could be blocked. Review branch now uses `TENANT_INTEGRATION_MANAGE` across all list/read/create/update/delete and destinations endpoints. Existing route URLs are unchanged for client compatibility.
+- Removed the Business Admin policy page's fallback rendering of RoutingRules. Tenant IT Integrations remains the sole navigation location. Updated the authorization contract test and negative Business/Platform coverage. Commits `73f90f8`, `a6279b8`, `1e87355`, `40734ce`, `5a7318b`.
+- Build, endpoint authorization, UI and LOCAL acceptance remain pending. No migration or main merge.
