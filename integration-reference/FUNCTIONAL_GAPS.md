@@ -393,3 +393,11 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - `6b33e46`: P2 status wording now makes technical failure retention conditional on incident state and temporary-retention policy rather than claiming the original is retained indefinitely.
 - P2 distributed acceptance remains OPEN: multi-node lease fencing and takeover, processor claim recovery, transient technical retry sequencing, processing storage provider activation/fallback, retention cleanup timing, multi-node observability and concurrent operation; requires local infrastructure/runtime tests. Existing code is not evidence those scenarios passed.
 - P1 remaining: inventory other legacy access routes (particularly LOCAL-only artifact access request endpoints), test effective action/permission gates and role-specific frontend navigation, and inspect tenant/provider metadata for accidental leakage. No deployment or production merge before local build and runtime checks.
+
+
+## Follow-up P1/P2 source boundary checkpoint (2026-10-26)
+- `894f3cb` adds reflection/permission regression tests for document lifecycle actions: processor Desk-only visibility; supervisor approval/reprocess; IT hold; platform purge. Negative assertions cover standalone Business, IT, Platform, Report Viewer and retired ADMIN roles.
+- Legacy `ArtifactAccessRequestController` and `VaultEntryController` are conditional on LOCAL mode, and the legacy redacted download endpoint throws access denied. Production OIDC does not register LOCAL artifact access controllers. No attempt to restore document downloads.
+- **Residual LOCAL concern:** `ArtifactAccessRequestController` has local-only request/list/detail methods without capability annotations; this is not a production OIDC attack path because the controller is conditional, but local simulation is intentionally not a production trust boundary. Do not expose LOCAL mode publicly.
+- Distributed P2 behaviors (multi-node failover, fencing, retry, cleanup/retention and storage outage) still require real local or staging infrastructure for meaningful acceptance. Source-level policy tests alone cannot close those checks.
+- No additional database migrations or application runtime testing this checkpoint. Current candidate remains unverified until user runs build.
