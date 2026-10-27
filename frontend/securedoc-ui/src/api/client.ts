@@ -571,6 +571,10 @@ class ApiClient {
 
   // --- Business continuity manual fallback ---
 
+  async getManualFallbackEligibility(packageId: string): Promise<{ eligible: boolean; reason: string }> {
+    return this.request(`/packages/${packageId}/manual-fallback/eligibility`);
+  }
+
   async startManualFallback(packageId: string): Promise<ManualFallbackDetail> {
     return this.request(`/packages/${packageId}/manual-fallback/start`, { method: 'POST' });
   }
