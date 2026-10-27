@@ -88,6 +88,24 @@ class SupportIncidentControllerAuthorizationTest {
         assertNotNull(constructor.getAnnotation(org.springframework.beans.factory.annotation.Autowired.class));
     }
 
+    @Test
+    void combinedPlatformAndTenantItCannotMutateAnotherTenantIncident() {
+        TenantId ownTenant = TenantId.of(UUID.randomUUID());
+        UUID otherTenant = UUID.randomUUID();
+        var principal = AuthenticatedPrincipal.of(
+                ActorId.generate(), ownTenant, "dual-role", Set.of("TENANT_IT_ADMIN", "PLATFORM_OPERATIONS_ADMIN"));
+        RequestContextResolver resolver = mock(RequestContextResolver.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(resolver.resolvePrincipal(request)).thenReturn(principal);
+        var controller = new SupportIncidentController(
+                new SupportIncidentQueryService(noopSearchRepository(), ProcessingIncidentRepository.none()),
+                resolver, new ProductAuthorizationPolicy());
+
+        var action = new SupportIncidentController.IncidentActionRequest("PRESERVE_FOR_INVESTIGATION", 7, null);
+        assertThrows(AccessDeniedException.class,
+                () -> controller.action(UUID.randomUUID(), otherTenant, action, request));
+    }
+
     private static SupportIncidentSearchRepository noopSearchRepository() {
         return new SupportIncidentSearchRepository() {
             @Override public SupportIncidentSearchPage search(SupportIncidentSearchCriteria criteria) {
