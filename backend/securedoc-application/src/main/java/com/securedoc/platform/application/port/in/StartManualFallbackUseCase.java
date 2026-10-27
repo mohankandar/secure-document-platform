@@ -5,4 +5,7 @@ import com.securedoc.platform.application.manual.result.ManualFallbackDetail;
 
 public interface StartManualFallbackUseCase {
     ManualFallbackDetail execute(ManualFallbackCommand command);
+
+    /** Read-only eligibility check; the start command revalidates before changing state. */
+    void validateEligibility(ManualFallbackCommand command);
 }
