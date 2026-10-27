@@ -99,6 +99,39 @@ class PackageProcessingRecoverySchedulerTest {
         verify(dispatcher).dispatch(argThat(command -> command.packageId().equals(second.id()) && command.recovery()));
     }
 
+    @Test
+    void failedExpiredLeaseDispatchDoesNotBlockNextExpiredLease() {
+        TenantId tenant = TenantId.generate();
+        DocumentPackage first = processingPackage(tenant);
+        DocumentPackage second = processingPackage(tenant);
+        PackageRepository packages = mock(PackageRepository.class);
+        PackageProcessingLeasePort leases = mock(PackageProcessingLeasePort.class);
+        PackageProcessingDispatcher dispatcher = mock(PackageProcessingDispatcher.class);
+        Instant past = Instant.now().minusSeconds(60);
+
+        when(leases.currentTime()).thenReturn(Instant.now());
+        when(packages.findByStatus(eq(PackageStatus.SUBMITTED), anyInt())).thenReturn(List.of());
+        when(leases.findProcessingWithoutLease(any(Duration.class), anyInt())).thenReturn(List.of());
+        when(leases.findExpired(anyInt())).thenReturn(List.of(
+                new PackageProcessingLeasePort.LeaseSnapshot(first.id(), tenant, "failed-node", 1, 1,
+                        past.minusSeconds(30), past.minusSeconds(20), past),
+                new PackageProcessingLeasePort.LeaseSnapshot(second.id(), tenant, "failed-node", 2, 1,
+                        past.minusSeconds(30), past.minusSeconds(20), past)));
+        when(packages.findByIdAndTenantId(first.id(), tenant)).thenReturn(Optional.of(first));
+        when(packages.findByIdAndTenantId(second.id(), tenant)).thenReturn(Optional.of(second));
+        doAnswer(invocation -> {
+            TriggerPackageProcessingCommand command = invocation.getArgument(0);
+            if (command.packageId().equals(first.id())) throw new IllegalStateException("temporary dispatch outage");
+            return null;
+        }).when(dispatcher).dispatch(any(TriggerPackageProcessingCommand.class));
+
+        new PackageProcessingRecoveryScheduler(packages, leases, dispatcher, null,
+                true, 100, 3, 60_000, 30_000, "APP-01").recoverOrphanedWork();
+
+        verify(dispatcher, times(2)).dispatch(any(TriggerPackageProcessingCommand.class));
+        verify(dispatcher).dispatch(argThat(command -> command.packageId().equals(second.id()) && command.recovery()));
+    }
+
     private static DocumentPackage processingPackage(TenantId tenantId) {
         ActorId actorId = ActorId.generate();
         DocumentPackage pkg = DocumentPackage.create(tenantId, PackageType.MANUAL_UPLOAD, actorId, PackageMetadata.empty());
