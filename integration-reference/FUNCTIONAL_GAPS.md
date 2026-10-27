@@ -437,3 +437,9 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - Runtime PASS (provisioned Tenant B IT principal): direct GET Tenant A incident `e9021b0f-294d-48bb-9274-4048fff4ba42` returned 404; Tenant B query with `tenantId=...0001` returned 403.
 - Runtime PASS (Tenant B Platform Operations principal): explicit `tenantId=...0001` returned Tenant A sanitized incident detail and search results; POST cross-tenant `REPROCESS` returned 403. Five targeted endpoint checks PASS.
 - Evidence scope: incident detail/search and one cross-tenant mutation attempt only, under LOCAL header-based identity. Pending: actual Tenant B incident reverse-direction, protected document isolation, own-tenant Platform Operations mutation denial if not separately accepted, OIDC multi-tenant acceptance. Don't mistake these five tests for all cross-tenant security acceptance.
+
+## G6 cross-tenant package, review and PDF-preview LOCAL acceptance (2026-10-27)
+- Two provisioned LOCAL tenants: Tenant A `...0001` and disposable Tenant B `...0002`. Both identities tested as DOCUMENT_PROCESSOR for direct package/review isolation.
+- Runtime PASS: Tenant A GET package `d9a5952a-538d-4489-8824-79d8872d887b` -> 200; Tenant B same package -> 404; Platform Operations Tenant B same package -> 403; Tenant B review queue filtered to Tenant A package -> 404.
+- Runtime PASS: Tenant A GET `/api/v1/review-items/c464f62c-ae79-48ea-8fc7-f7d47dba818c/page-preview` -> 200 `image/png`, 115802 bytes; Tenant B same endpoint -> 404; Platform Operations Tenant B -> 403. These requests were authorized per-request via explicit LOCAL tenant/role headers, not just browser UI.
+- **G6 status: VERIFIED for tested LOCAL package, review-queue and page-preview APIs.** No unauthorized PDF preview bytes returned in negative tests. Full production OIDC/multi-tenant, other document endpoints, and reverse direction with actual Tenant B documents remain separate release/security coverage.
