@@ -7,7 +7,6 @@ export const ROLE_OPTIONS: RoleOption[] = [
   { value: 'REPORT_VIEWER', label: 'Report Viewer' },
   { value: 'TENANT_IT_ADMIN', label: 'IT Administrator' },
   { value: 'PLATFORM_OPERATIONS_ADMIN', label: 'Platform Operations Administrator' },
-  { value: 'ADMIN', label: 'System Administrator (Internal)' },
 ];
 
 export function hasCapability(capabilities: string[], capability: string): boolean {
