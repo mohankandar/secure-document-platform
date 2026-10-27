@@ -36,6 +36,25 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ManualFallbackServiceTest {
     @Test
+    void eligibilityCheckDoesNotMutateAnEligiblePackage() {
+        Fixture f = new Fixture("AI_ANALYSIS");
+        f.service.validateEligibility(new ManualFallbackCommand(
+                f.pkg.id(), f.tenantId, f.actorId, f.correlationId));
+        assertEquals(PackageStatus.FAILED, f.pkg.status());
+        assertEquals(DocumentStatus.FAILED, f.document.status());
+        assertTrue(f.audit.records.isEmpty(), "read-only eligibility must not produce activity");
+    }
+
+    @Test
+    void eligibilityRejectsFailuresOutsideAiAnalysisWithoutChangingState() {
+        Fixture f = new Fixture("REDACTION");
+        assertThrows(ValidationException.class, () -> f.service.validateEligibility(
+                new ManualFallbackCommand(f.pkg.id(), f.tenantId, f.actorId, f.correlationId)));
+        assertEquals(PackageStatus.FAILED, f.pkg.status());
+        assertEquals(DocumentStatus.FAILED, f.document.status());
+    }
+
+    @Test
     void startsAiFailureFallbackWithoutDiscardingPagesAndCreatesConfirmedManualRegion() {
         Fixture f = new Fixture("AI_ANALYSIS");
         var detail = f.service.execute(new ManualFallbackCommand(f.pkg.id(), f.tenantId, f.actorId, f.correlationId));
