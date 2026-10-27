@@ -363,3 +363,15 @@ Do not close Platform Operations checkpoint until these tests pass.
 - `b1bf7ee`: unit tests for basic delegation, tenant isolation, self-grants, privileged-role denial, and null parameters.
 - **Architecture decision still needed:** tenant role source of truth. Existing product OIDC identity is derived from verified IdP groups; no authoritative user-role CRUD/provisioning implementation was found. Prior to user-facing assignment: agree on delegated IdP API vs versioned application role bindings (with authoritative intersection/override, lifecycle, revocation, tenant identity subject, audit), and specify privileged grant approval. Do not present role management as working until provision and read-back are real.
 - Build not run after these commits; batch testing by user preference. No main merge.
+
+
+## P1 LOCAL-first Users & Access simulation candidate (2026-10-26)
+
+**SOURCE IMPLEMENTED, NOT BUILT OR RUNTIME VERIFIED.**
+- `035-local-demo-users.xml`: tenant+actor-keyed persisted LOCAL demo identities, one low-privilege role each; migration included in master; do not confuse with enterprise identity store.
+- `LocalDemoUserStore` and `LocalUsersController`: wired only when `securedoc.security.mode=LOCAL`; IT-authenticated LIST and scoped PUT; validates against `DelegatedRoleGrantPolicy` (no self-grants, no privileged grants), records `CAPABILITY_CHANGED` audit, update transaction. API not exposed in OIDC.
+- `RequestContextResolver`: LOCAL only, reads persisted role for matching demo actor; if assigned, this takes precedence over `X-Actor-Roles`. OIDC resolution and service integration principals unchanged. Existing LOCAL role-header fallback remains for developer/legacy demo actors not registered in the simulated store. Thus LOCAL is a simulated test environment, not a production-grade security boundary.
+- Frontend: `/admin/users` LOCAL-only IT area; create/list low-privilege simulated users, switch actor via session-scoped selected UUID, and exit back to default demo actor via topbar control. Role selector hidden for selected persisted demo actors; API header actor ID switches while backend remains authority for assigned roles.
+- Added test in `RequestContextResolverSecurityTest` that persisted LOCAL roles override caller-supplied higher privileges; existing `DelegatedRoleGrantPolicyTest` validates tenant/self/role restrictions.
+- **IMPORTANT REMAINING:** run full compilation, Liquibase migration, LOCAL list/assign/switch/exit runtime tests, audit verification, and OIDC negative route check. Verify exact frontend JSX/TS types and backend JdbcTemplate + AuditService transaction wiring. Production Users & Access design and IdP authoritative assignment/revocation remain OPEN. This demo implementation must not be marketed as production role administration.
+- Do not merge or deploy until checked. `main` untouched.
