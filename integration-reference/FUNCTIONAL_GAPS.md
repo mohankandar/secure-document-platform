@@ -427,3 +427,7 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - **P2 remaining release-readiness:** eligible incident reprocessing/recovery, live multi-node leasing/fencing/takeover, provider outage, retention/purge/temporary artifact cleanup and dedup/restart delivery. Keep these distinctly NOT TESTED until verified.
 - **P2-01 manual fallback eligibility:** user reported full build/start PASS and targeted tests PASS (zero-page, malformed PDF, valid AI-analysis fallback); mark runtime verified. Generic technical failure classification remains separate diagnostic backlog item.
 - Neither backlog entry authorizes changes to `main`; work only on approved review branch unless explicitly directed otherwise.
+
+## Support incident UI backlog — Open intake navigation (2026-10-27)
+- On Support Incident Detail, the upper-right action is labeled **Open intake** even though the operator is examining an existing FAILED package. Review the actual destination and permissions; prefer a context-accurate label such as **View case** / **Open case** when it opens an existing package. If it genuinely starts intake, distinguish that from navigating to the affected case and verify this shortcut belongs in the Tenant IT support workflow.
+- Test navigation preserves incident/case context and that Platform Operations cross-tenant read-only support does not expose unauthorized tenant business case/intake access. **Backlog only — no implementation authorized yet.**
