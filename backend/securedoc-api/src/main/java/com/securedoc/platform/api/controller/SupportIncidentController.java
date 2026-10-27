@@ -98,7 +98,7 @@ public class SupportIncidentController {
             throw new IllegalArgumentException("Support incident action is required");
         }
         var principal = contextResolver.resolvePrincipal(request);
-        TenantId effectiveTenant = resolveTenant(principal.tenantId(), tenantId, principal);
+        TenantId effectiveTenant = resolveTenantForMutation(principal.tenantId(), tenantId);
         if ("REPROCESS".equalsIgnoreCase(body.action())
                 && !authorizationPolicy.has(principal, UserCapability.TECHNICAL_RETRY)) {
             throw new AccessDeniedException("Reprocess requires Technical Retry capability");
@@ -112,6 +112,11 @@ public class SupportIncidentController {
     }
 
     public record IncidentActionRequest(String action, Integer holdDays, String resolutionCode) {}
+
+    private TenantId resolveTenantForMutation(TenantId principalTenant, UUID requestedTenant) {
+        if (requestedTenant == null || requestedTenant.equals(principalTenant.value())) return principalTenant;
+        throw new AccessDeniedException("Cross-tenant support incident actions are not permitted");
+    }
 
     private TenantId resolveTenant(TenantId principalTenant,
                                    UUID requestedTenant,
