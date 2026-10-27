@@ -20,7 +20,7 @@ class EnterpriseIdentityAuthorizationContractTest {
     @Test void tenantItOwnsTenantAuthenticationAndPlatformOpsDoesNot(){
         ProductAuthorizationPolicy policy=new ProductAuthorizationPolicy();
         assertTrue(policy.capabilitiesFor(Set.of("TENANT_IT_ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
-        assertTrue(policy.capabilitiesFor(Set.of("ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
+        assertFalse(policy.capabilitiesFor(Set.of("ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
         assertFalse(policy.capabilitiesFor(Set.of("PLATFORM_OPERATIONS_ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
         assertFalse(policy.capabilitiesFor(Set.of("BUSINESS_ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
     }
