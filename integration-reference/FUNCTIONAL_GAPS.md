@@ -386,3 +386,10 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - Added Platform-only denial tests for retry, hold, release and resolve. No schema changes in this checkpoint; OIDC and LOCAL role behavior unchanged.
 - Existing HealthArea distinguishes tenant IT read-only operational overview from Platform operations changes; IntegrationsArea remains tenant IT-only through capabilities.
 - Source commits `9d96a0c` and `6e78bb6`. **Pending local build and runtime acceptance**; do not merge into main until checked.
+
+
+## P1/P2 follow-on checkpoint (2026-10-26)
+- `01815c5`: contract tests assert IT-only manual watched-folder scan capability, platform-only health check and temporary processing storage actions, and permanent denial by legacy redacted-document download route. These are source contract tests, not distributed-runtime validations.
+- `6b33e46`: P2 status wording now makes technical failure retention conditional on incident state and temporary-retention policy rather than claiming the original is retained indefinitely.
+- P2 distributed acceptance remains OPEN: multi-node lease fencing and takeover, processor claim recovery, transient technical retry sequencing, processing storage provider activation/fallback, retention cleanup timing, multi-node observability and concurrent operation; requires local infrastructure/runtime tests. Existing code is not evidence those scenarios passed.
+- P1 remaining: inventory other legacy access routes (particularly LOCAL-only artifact access request endpoints), test effective action/permission gates and role-specific frontend navigation, and inspect tenant/provider metadata for accidental leakage. No deployment or production merge before local build and runtime checks.
