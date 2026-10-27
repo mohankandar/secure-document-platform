@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { apiClient } from '../../api/client';
+import { setLocalDemoActorId } from '../../api/config';
 import { Notice } from '../atoms';
 
 type DemoUser = { actorId: string; displayName: string; roleName: string };
@@ -65,6 +66,7 @@ export default function LocalUsersArea() {
             <strong>{user.displayName}</strong>
             <p>{ROLES.find((item) => item.value === user.roleName)?.label ?? user.roleName}</p>
             <code>{user.actorId}</code>
+            <button className="cf-btn" type="button" onClick={() => { setLocalDemoActorId(user.actorId); window.location.assign("/"); }}>Switch to this simulated user</button>
           </div>
         ))}
       </div>
