@@ -58,8 +58,6 @@ public class ProductAuthorizationPolicy {
                 case "PLATFORM_OPERATIONS_ADMIN" -> {
                     capabilities.add(UserCapability.TECHNICAL_EXCEPTION_VIEW);
                     capabilities.add(UserCapability.TECHNICAL_ADMIN_VIEW);
-                    capabilities.add(UserCapability.TECHNICAL_RETRY);
-                    capabilities.add(UserCapability.TECHNICAL_HOLD_MANAGE);
                     capabilities.add(UserCapability.AUDIT_VIEW);
                     capabilities.add(UserCapability.PLATFORM_DIAGNOSTICS);
                     capabilities.add(UserCapability.PLATFORM_OPERATIONS);
