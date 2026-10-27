@@ -85,6 +85,21 @@ class RequestContextResolverSecurityTest {
     }
 
     @Test
+    void retiredAdminFailsClosedForLocalAndOidcAuthentication() {
+        SecurityProperties local = new SecurityProperties();
+        local.setMode(SecurityMode.LOCAL);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader("X-Actor-Roles")).thenReturn("ADMIN");
+        assertThrows(SecurityContextException.class, () -> resolver(local).resolvePrincipal(request));
+
+        SecurityProperties oidc = oidcProperties();
+        SecurityContextHolder.getContext().setAuthentication(authenticated(
+                jwt("00000000-0000-0000-0000-000000000001", List.of("securedoc-admin"))));
+        assertThrows(SecurityContextException.class,
+                () -> resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)));
+    }
+
+    @Test
     void legacyAdminIsNotAValidProductIdentityRole() {
         assertTrue(ProductRole.fromIdentityName("ADMIN").isEmpty());
         assertTrue(ProductRole.fromIdentityName("admin").isEmpty());
