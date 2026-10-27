@@ -379,3 +379,10 @@ Do not close Platform Operations checkpoint until these tests pass.
 
 ## V1 scope decision: Users & Access removed (2026-10-26)
 Prior Users & Access entries above are historical, superseded. The new UI, simulated-user backend endpoints, database migration, role-grant policy, and tests were removed. Enterprise IdP remains the authority for users and groups. LOCAL developer role selector is retained. P0 and incident authorization changes remain. Rebuild and verify after pulling; if migration 035 was ever applied locally, inspect migration history before starting an upgraded instance.
+
+
+## P1 authorization checkpoint after Users & Access removal (2026-10-26)
+- Incident action endpoint now uses technical-incident view as an entry gate and explicitly checks the action-specific capability: REPROCESS requires TECHNICAL_RETRY; holds, releases and resolution actions require TECHNICAL_HOLD_MANAGE. This avoids requiring hold permission merely to retry. Existing same-tenant mutation guard remains.
+- Added Platform-only denial tests for retry, hold, release and resolve. No schema changes in this checkpoint; OIDC and LOCAL role behavior unchanged.
+- Existing HealthArea distinguishes tenant IT read-only operational overview from Platform operations changes; IntegrationsArea remains tenant IT-only through capabilities.
+- Source commits `9d96a0c` and `6e78bb6`. **Pending local build and runtime acceptance**; do not merge into main until checked.
