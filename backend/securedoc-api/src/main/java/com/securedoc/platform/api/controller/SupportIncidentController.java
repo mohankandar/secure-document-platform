@@ -88,7 +88,7 @@ public class SupportIncidentController {
     }
 
     @PostMapping("/{incidentId}/actions")
-    @RequireCapability(UserCapability.TECHNICAL_HOLD_MANAGE)
+    @RequireCapability(UserCapability.TECHNICAL_EXCEPTION_VIEW)
     public ResponseEntity<SupportIncidentActionService.ActionResult> action(
             @PathVariable UUID incidentId,
             @RequestParam(required = false) UUID tenantId,
@@ -99,9 +99,10 @@ public class SupportIncidentController {
         }
         var principal = contextResolver.resolvePrincipal(request);
         TenantId effectiveTenant = resolveTenantForMutation(principal.tenantId(), tenantId);
-        if ("REPROCESS".equalsIgnoreCase(body.action())
-                && !authorizationPolicy.has(principal, UserCapability.TECHNICAL_RETRY)) {
-            throw new AccessDeniedException("Reprocess requires Technical Retry capability");
+        UserCapability actionCapability = "REPROCESS".equalsIgnoreCase(body.action().trim())
+                ? UserCapability.TECHNICAL_RETRY : UserCapability.TECHNICAL_HOLD_MANAGE;
+        if (!authorizationPolicy.has(principal, actionCapability)) {
+            throw new AccessDeniedException("Insufficient permissions for this support incident action");
         }
         if (actionService == null) {
             throw new IllegalStateException("Support incident actions are not configured");
