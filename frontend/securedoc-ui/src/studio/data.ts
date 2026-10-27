@@ -23,7 +23,7 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
   COMPLETED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
   EXPORTED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
   DELIVERED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
-  FAILED: { stage: 'stopped', label: 'Technical attention', detail: 'Automatic processing stopped. The original is retained.' },
+  FAILED: { stage: 'stopped', label: 'Technical attention', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
   REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'The source was rejected and will not be processed.' },
 };
 
