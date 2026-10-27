@@ -5,7 +5,6 @@ import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.SecurityProperties;
 import com.securedoc.platform.api.security.ProductRole;
-import com.securedoc.platform.api.security.LocalDemoUserStore;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
@@ -39,13 +38,6 @@ public class RequestContextResolver {
     private static final String HEADER_ACTOR_ROLES = "X-Actor-Roles";
     private static final String HEADER_INTEGRATION_CLIENT = "X-Integration-Client";
 
-
-    private LocalDemoUserStore localDemoUserStore;
-
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    public void setLocalDemoUserStore(LocalDemoUserStore localDemoUserStore) {
-        this.localDemoUserStore = localDemoUserStore;
-    }
 
     private final UUID demoTenantId;
     private final UUID demoActorId;
@@ -123,13 +115,9 @@ public class RequestContextResolver {
     private AuthenticatedPrincipal resolveLocalPrincipal(HttpServletRequest request) {
         UUID tenantId = resolveLocalUuid(request, HEADER_TENANT_ID, demoTenantId);
         UUID actorId = resolveLocalUuid(request, HEADER_ACTOR_ID, demoActorId);
-        // Persisted LOCAL demo identities supersede caller-supplied role headers.
-        var assigned = localDemoUserStore == null ? java.util.Optional.<LocalDemoUserStore.DemoUser>empty()
-                : localDemoUserStore.find(tenantId, actorId);
-        Set<String> roles = assigned.isPresent() ? Set.of(assigned.get().roleName()) : resolveLocalRoles(request);
-        String name = assigned.map(LocalDemoUserStore.DemoUser::displayName).orElse("demo-user");
+        Set<String> roles = resolveLocalRoles(request);
         return AuthenticatedPrincipal.of(
-                ActorId.of(actorId), TenantId.of(tenantId), name, roles);
+                ActorId.of(actorId), TenantId.of(tenantId), "demo-user", roles);
     }
 
     private AuthenticatedPrincipal resolveLocalIntegrationPrincipal(HttpServletRequest request) {
