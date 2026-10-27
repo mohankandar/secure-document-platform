@@ -15,7 +15,7 @@ const REGIONS: [RoutingScanRegion, string][] = [['TOP_RIGHT', 'Top right'], ['BO
 const emptyDraft = (): Draft => ({ destinationLabel: '', markerType: 'TEXT_PATTERN', markerValue: '', scanRegion: 'TOP_RIGHT', destinationConnectionId: '', enabled: true });
 
 /**
- * Derived-document routing rules. Mirrors Business Admin → Routing in production:
+ * Derived-document routing rules under Tenant IT → Integrations:
  * deterministic markers map pages to an approved derived-delivery destination.
  */
 export default function RoutingRules() {
