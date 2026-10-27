@@ -448,3 +448,10 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - Platform Operations principal for provisioned Tenant A read own OPEN/FAILED incident `e9021b0f-294d-48bb-9274-4048fff4ba42` successfully (200).
 - Same principal POST `PRESERVE_FOR_INVESTIGATION` with `holdDays=7` returned 403. Follow-up GET confirmed unchanged OPEN/FAILED status and technicalAttentionRetainedUntil `2026-10-30T02:46:53.320463Z`; only `FAILURE_RECORDED` appeared in incident events. **E5 VERIFIED for this LOCAL read/denied-mutation scenario.**
 - Full OIDC enforcement and additional mutations remain separate from this targeted runtime acceptance.
+
+## Priority UI / retention follow-up backlog (2026-10-27)
+1. **Case Drawer traceability:** Add read-only, full Package UUID in **Identity and Source** for all statuses, with one-click copy. Must be tied to currently selected package; no stale cross-contract value; retain responsive drawer layout. Frontend-only candidate, not implemented.
+2. **Reported Desk visibility after purge:** User saw a completed case in the drawer with original/redacted artifacts displayed as deleted while SQL showed package `da599287-5969-49c7-8661-214f4851435b` fully purged and dashboard_hidden_at set. Other packages share the same Contract/Member Number. Reconcile exact package UUID in fresh Desk API/UI after hard refresh; distinguish stale drawer/client caching from actual backend failure. Do not call a confirmed defect without matching UUID and fresh response. No code change yet.
+3. **Previously approved Review navigation issue (P2-03):** browser Back/Forward preview object-URL lifecycle; context-aware Back to Desk; reset transient state only; preserve persisted review work. Not implemented.
+4. **Support incident Open intake:** confirm destination, change label/behavior if appropriate. Backlog only.
+- Current priority remains finishing P2 retention/audit/idempotency acceptance before UI implementation. No merges to main.
