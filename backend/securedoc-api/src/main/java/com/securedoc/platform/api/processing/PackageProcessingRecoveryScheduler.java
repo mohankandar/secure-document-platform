@@ -118,9 +118,9 @@ public class PackageProcessingRecoveryScheduler {
     }
 
     private void recoverProcessingWithoutLease() {
-        try {
-            for (var orphan : leasePort.findProcessingWithoutLease(
-                    Duration.ofMillis(orphanWithoutLeaseGraceMs), batchSize)) {
+        final var orphans = findOrphans();
+        for (var orphan : orphans) {
+            try {
                 var pkg = packageRepository.findByIdAndTenantId(orphan.packageId(), orphan.tenantId()).orElse(null);
                 if (pkg == null || pkg.status() != PackageStatus.PROCESSING) continue;
 
@@ -128,16 +128,35 @@ public class PackageProcessingRecoveryScheduler {
                         pkg.id(), pkg.tenantId(), SYSTEM_ACTOR, CorrelationId.generate()));
                 log.info("PACKAGE_PROCESSING_LEGACY_ORPHAN_DISPATCHED package={} tenant={} status={} nodeId={} recovery=true reasonCode=PROCESSING_WITHOUT_LEASE",
                         pkg.id(), pkg.tenantId(), pkg.status(), nodeId);
+            } catch (RuntimeException candidateFailure) {
+                log.warn("PACKAGE_PROCESSING_LEGACY_ORPHAN_CANDIDATE_FAILED package={} tenant={} nodeId={} reasonCode={}",
+                        orphan.packageId(), orphan.tenantId(), nodeId, candidateFailure.getClass().getSimpleName());
             }
+        }
+    }
+
+    private List<PackageProcessingLeasePort.OrphanedProcessingSnapshot> findOrphans() {
+        try {
+            return leasePort.findProcessingWithoutLease(
+                    Duration.ofMillis(orphanWithoutLeaseGraceMs), batchSize);
         } catch (RuntimeException unavailable) {
             log.warn("PACKAGE_PROCESSING_NO_LEASE_SCAN_FAILED nodeId={} reasonCode={}",
                     nodeId, unavailable.getClass().getSimpleName());
+            return List.of();
         }
     }
 
     private void recoverExpiredProcessingLeases() {
+        final List<PackageProcessingLeasePort.LeaseSnapshot> expiredLeases;
         try {
-            for (var expired : leasePort.findExpired(batchSize)) {
+            expiredLeases = leasePort.findExpired(batchSize);
+        } catch (RuntimeException unavailable) {
+            log.warn("PACKAGE_PROCESSING_RECOVERY_EXPIRED_SCAN_FAILED nodeId={} reasonCode={}",
+                    nodeId, unavailable.getClass().getSimpleName());
+            return;
+        }
+        for (var expired : expiredLeases) {
+            try {
                 var pkg = packageRepository.findByIdAndTenantId(expired.packageId(), expired.tenantId()).orElse(null);
                 if (pkg == null || pkg.status() != PackageStatus.PROCESSING) continue;
 
@@ -174,10 +193,10 @@ public class PackageProcessingRecoveryScheduler {
                 log.info("PACKAGE_PROCESSING_RECOVERY_DISPATCHED package={} tenant={} status={} nodeId={} recovery=true priorFencingToken={} priorAttempt={} nextAttempt={} maxAttempts={}",
                         pkg.id(), pkg.tenantId(), pkg.status(), nodeId, expired.fencingToken(),
                         expired.attemptCount(), expired.attemptCount() + 1, maxProcessingAttempts);
+            } catch (RuntimeException candidateFailure) {
+                log.warn("PACKAGE_PROCESSING_EXPIRED_CANDIDATE_FAILED package={} tenant={} nodeId={} reasonCode={}",
+                        expired.packageId(), expired.tenantId(), nodeId, candidateFailure.getClass().getSimpleName());
             }
-        } catch (RuntimeException unavailable) {
-            log.warn("PACKAGE_PROCESSING_RECOVERY_EXPIRED_SCAN_FAILED nodeId={} reasonCode={}",
-                    nodeId, unavailable.getClass().getSimpleName());
         }
     }
 }
