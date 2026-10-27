@@ -11,7 +11,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
  * Interceptor that enforces role-based access control on endpoints annotated with @RequireRole.
- * ADMIN role always passes. Other roles must match at least one required role.
+ * Every role must match an explicitly required role; no administrator bypass.
  */
 @Component
 public class RoleAuthorizationInterceptor implements HandlerInterceptor {
@@ -35,11 +35,6 @@ public class RoleAuthorizationInterceptor implements HandlerInterceptor {
         }
 
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
-
-        // ADMIN always has access
-        if (principal.hasRole("ADMIN")) {
-            return true;
-        }
 
         // Check if actor has at least one of the required roles
         for (String requiredRole : annotation.value()) {
