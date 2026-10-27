@@ -85,6 +85,27 @@ class RequestContextResolverSecurityTest {
     }
 
     @Test
+    void persistedLocalDemoUserOverridesCallerSuppliedRoles() {
+        SecurityProperties properties = new SecurityProperties();
+        properties.setMode(SecurityMode.LOCAL);
+        RequestContextResolver resolver = resolver(properties);
+        LocalDemoUserStore store = mock(LocalDemoUserStore.class);
+        UUID actor = UUID.randomUUID();
+        UUID tenant = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        when(store.find(tenant, actor)).thenReturn(Optional.of(
+                new LocalDemoUserStore.DemoUser(actor, "Simulated analyst", "REPORT_VIEWER")));
+        resolver.setLocalDemoUserStore(store);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader("X-Actor-Id")).thenReturn(actor.toString());
+        when(request.getHeader("X-Actor-Roles")).thenReturn("TENANT_IT_ADMIN");
+
+        var principal = resolver.resolvePrincipal(request);
+        assertEquals(java.util.Set.of("REPORT_VIEWER"), principal.roles());
+        assertFalse(principal.hasRole("TENANT_IT_ADMIN"));
+        assertEquals("Simulated analyst", principal.username());
+    }
+
+    @Test
     void retiredAdminFailsClosedForLocalAndOidcAuthentication() {
         SecurityProperties local = new SecurityProperties();
         local.setMode(SecurityMode.LOCAL);
