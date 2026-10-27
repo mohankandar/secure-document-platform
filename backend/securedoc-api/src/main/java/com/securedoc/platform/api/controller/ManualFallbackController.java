@@ -64,6 +64,21 @@ public class ManualFallbackController {
         this.contextResolver = contextResolver;
     }
 
+    @GetMapping("/eligibility")
+    @RequireCapability(UserCapability.MANUAL_REVIEW)
+    public ResponseEntity<Map<String, Object>> eligibility(@PathVariable String packageId,
+                                                            HttpServletRequest request) {
+        var principal = contextResolver.resolvePrincipal(request);
+        try {
+            startUseCase.validateEligibility(new ManualFallbackCommand(
+                    packageId(packageId), principal.tenantId(), principal.actorId(),
+                    contextResolver.resolveCorrelationId(request)));
+            return ResponseEntity.ok(Map.of("eligible", true, "reason", ""));
+        } catch (com.securedoc.platform.application.exception.ValidationException notEligible) {
+            return ResponseEntity.ok(Map.of("eligible", false, "reason", notEligible.getMessage()));
+        }
+    }
+
     @PostMapping("/start")
     @RequireCapability(UserCapability.MANUAL_REVIEW)
     public ResponseEntity<ManualFallbackResponse> start(@PathVariable String packageId,
