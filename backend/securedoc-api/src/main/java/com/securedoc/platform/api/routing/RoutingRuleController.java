@@ -21,15 +21,15 @@ import java.util.*;
 public class RoutingRuleController {
     private final RoutingRuleService service; private final IntegrationConnectionRepository connections; private final RequestContextResolver context;
     public RoutingRuleController(RoutingRuleService service,IntegrationConnectionRepository connections,RequestContextResolver context){this.service=service;this.connections=connections;this.context=context;}
-    @GetMapping @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @GetMapping @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public List<RuleResponse> list(HttpServletRequest request){var p=context.resolvePrincipal(request);return service.list(p.tenantId()).stream().map(RuleResponse::of).toList();}
-    @GetMapping("/destinations") @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @GetMapping("/destinations") @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public List<DestinationResponse> destinations(HttpServletRequest request){var p=context.resolvePrincipal(request);return connections.findByTenantId(p.tenantId()).stream().filter(c->c.purpose()== IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY).map(c->new DestinationResponse(c.id().toString(),c.name(),c.providerType().name(),c.enabled(),c.healthStatus().name())).toList();}
-    @PostMapping @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @PostMapping @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<RuleResponse> create(@RequestBody RuleRequest body,HttpServletRequest request){var p=context.resolvePrincipal(request);return ResponseEntity.ok(RuleResponse.of(service.create(p.tenantId(),p.actorId(),context.resolveCorrelationId(request),input(body))));}
-    @PutMapping("/{ruleId}") @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @PutMapping("/{ruleId}") @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<RuleResponse> update(@PathVariable String ruleId,@RequestBody RuleRequest body,HttpServletRequest request){var p=context.resolvePrincipal(request);return ResponseEntity.ok(RuleResponse.of(service.update(p.tenantId(),uuid(ruleId),p.actorId(),context.resolveCorrelationId(request),input(body))));}
-    @DeleteMapping("/{ruleId}") @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
+    @DeleteMapping("/{ruleId}") @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<Void> delete(@PathVariable String ruleId,HttpServletRequest request){var p=context.resolvePrincipal(request);service.delete(p.tenantId(),uuid(ruleId),p.actorId(),context.resolveCorrelationId(request));return ResponseEntity.noContent().build();}
     private RoutingRuleInput input(RuleRequest b){if(b==null)throw new ValidationException("Routing rule request is required");try{return new RoutingRuleInput(b.destinationLabel(),RoutingMarkerType.valueOf(req(b.markerType(),"marker type")),b.markerValue(),RoutingScanRegion.valueOf(req(b.scanRegion(),"scan region")),IntegrationConnectionId.fromString(req(b.destinationConnectionId(),"destination connection")),Boolean.TRUE.equals(b.enabled()));}catch(IllegalArgumentException e){throw new ValidationException("Invalid routing rule configuration");}}
     private String req(String v,String label){if(v==null||v.isBlank())throw new ValidationException("Routing "+label+" is required");return v.trim().toUpperCase(Locale.ROOT);}private UUID uuid(String v){try{return UUID.fromString(v);}catch(Exception e){throw new ValidationException("Invalid routing rule id");}}
