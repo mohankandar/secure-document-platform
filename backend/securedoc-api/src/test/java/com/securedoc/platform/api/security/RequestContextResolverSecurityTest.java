@@ -85,6 +85,12 @@ class RequestContextResolverSecurityTest {
     }
 
     @Test
+    void legacyAdminIsNotAValidProductIdentityRole() {
+        assertTrue(ProductRole.fromIdentityName("ADMIN").isEmpty());
+        assertTrue(ProductRole.fromIdentityName("admin").isEmpty());
+    }
+
+    @Test
     void reportViewerIsRecognizedAtLocalAndOidcTrustBoundaries() {
         SecurityProperties local = new SecurityProperties();
         local.setMode(SecurityMode.LOCAL);
