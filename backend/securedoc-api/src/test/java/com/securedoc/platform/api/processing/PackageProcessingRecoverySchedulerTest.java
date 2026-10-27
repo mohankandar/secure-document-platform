@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
 
 class PackageProcessingRecoverySchedulerTest {
 
@@ -65,6 +67,36 @@ class PackageProcessingRecoverySchedulerTest {
 
         assertTrue(dispatcher.commands.isEmpty(), "attempt 3 must not create an automatic attempt 4");
         assertEquals(1, leases.exhaustionClaims, "scheduler should attempt the atomic terminal fencing claim");
+    }
+
+    @Test
+    void failedOrphanDispatchDoesNotBlockNextPackage() {
+        TenantId tenant = TenantId.generate();
+        DocumentPackage first = processingPackage(tenant);
+        DocumentPackage second = processingPackage(tenant);
+        PackageRepository packages = mock(PackageRepository.class);
+        PackageProcessingLeasePort leases = mock(PackageProcessingLeasePort.class);
+        PackageProcessingDispatcher dispatcher = mock(PackageProcessingDispatcher.class);
+
+        when(leases.currentTime()).thenReturn(Instant.now());
+        when(packages.findByStatus(eq(PackageStatus.SUBMITTED), anyInt())).thenReturn(List.of());
+        when(leases.findProcessingWithoutLease(any(Duration.class), anyInt())).thenReturn(List.of(
+                new PackageProcessingLeasePort.OrphanedProcessingSnapshot(first.id(), tenant, Instant.now().minusSeconds(3600)),
+                new PackageProcessingLeasePort.OrphanedProcessingSnapshot(second.id(), tenant, Instant.now().minusSeconds(3600))));
+        when(packages.findByIdAndTenantId(first.id(), tenant)).thenReturn(Optional.of(first));
+        when(packages.findByIdAndTenantId(second.id(), tenant)).thenReturn(Optional.of(second));
+        when(leases.findExpired(anyInt())).thenReturn(List.of());
+        doAnswer(invocation -> {
+            TriggerPackageProcessingCommand command = invocation.getArgument(0);
+            if (command.packageId().equals(first.id())) throw new IllegalStateException("temporary dispatch outage");
+            return null;
+        }).when(dispatcher).dispatch(any(TriggerPackageProcessingCommand.class));
+
+        new PackageProcessingRecoveryScheduler(packages, leases, dispatcher, null,
+                true, 100, 3, 60_000, 30_000, "APP-01").recoverOrphanedWork();
+
+        verify(dispatcher, times(2)).dispatch(any(TriggerPackageProcessingCommand.class));
+        verify(dispatcher).dispatch(argThat(command -> command.packageId().equals(second.id()) && command.recovery()));
     }
 
     private static DocumentPackage processingPackage(TenantId tenantId) {
