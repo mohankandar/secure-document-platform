@@ -375,3 +375,7 @@ Do not close Platform Operations checkpoint until these tests pass.
 - Added test in `RequestContextResolverSecurityTest` that persisted LOCAL roles override caller-supplied higher privileges; existing `DelegatedRoleGrantPolicyTest` validates tenant/self/role restrictions.
 - **IMPORTANT REMAINING:** run full compilation, Liquibase migration, LOCAL list/assign/switch/exit runtime tests, audit verification, and OIDC negative route check. Verify exact frontend JSX/TS types and backend JdbcTemplate + AuditService transaction wiring. Production Users & Access design and IdP authoritative assignment/revocation remain OPEN. This demo implementation must not be marketed as production role administration.
 - Do not merge or deploy until checked. `main` untouched.
+
+
+## V1 scope decision: Users & Access removed (2026-10-26)
+Prior Users & Access entries above are historical, superseded. The new UI, simulated-user backend endpoints, database migration, role-grant policy, and tests were removed. Enterprise IdP remains the authority for users and groups. LOCAL developer role selector is retained. P0 and incident authorization changes remain. Rebuild and verify after pulling; if migration 035 was ever applied locally, inspect migration history before starting an upgraded instance.
