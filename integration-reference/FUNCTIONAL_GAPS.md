@@ -407,3 +407,9 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - Previous routing rule endpoints incorrectly required `TENANT_POLICY_MANAGE`, permitting Business Admin to administer delivery mappings while Tenant IT could be blocked. Review branch now uses `TENANT_INTEGRATION_MANAGE` across all list/read/create/update/delete and destinations endpoints. Existing route URLs are unchanged for client compatibility.
 - Removed the Business Admin policy page's fallback rendering of RoutingRules. Tenant IT Integrations remains the sole navigation location. Updated the authorization contract test and negative Business/Platform coverage. Commits `73f90f8`, `a6279b8`, `1e87355`, `40734ce`, `5a7318b`.
 - Build, endpoint authorization, UI and LOCAL acceptance remain pending. No migration or main merge.
+
+
+## P2 source correction: recovery batch fault isolation (2026-10-26)
+- `06cc9c6`: orphaned PROCESSING-without-lease and expired-lease recovery scans catch failures per candidate, instead of aborting the whole recovery batch on a single repository/dispatch/claim exception. Enumeration failure still fails that scan safely; recovery of other categories remains independent. Original fencing, lease claims, attempt budget and tenant identity preserved.
+- `2f34408`, `baded95`: regression tests exercise a failed dispatch followed by another viable orphan/expired-lease package; expected second dispatch proceeds. Tests are source-only and not yet run.
+- Remaining P2 acceptance: execute unit tests and full build, verify live multi-node fencing/takeover, retention and temporary storage cleanup, provider outages, and repeated startup idempotency before declaring resilience complete. No migration or main merge.
