@@ -66,7 +66,7 @@ class IntegrationAuthorizationContractTest {
         for (String methodName : new String[]{"list", "destinations", "create", "update", "delete"}) {
             Method method = Arrays.stream(RoutingRuleController.class.getDeclaredMethods())
                     .filter(candidate -> candidate.getName().equals(methodName)).findFirst().orElseThrow();
-            assertTrue(Arrays.asList(method.getAnnotation(RequireCapability.class).value()).contains(UserCapability.TENANT_POLICY_MANAGE), methodName);
+            assertTrue(Arrays.asList(method.getAnnotation(RequireCapability.class).value()).contains(UserCapability.TENANT_INTEGRATION_MANAGE), methodName);
         }
 
         Method send = Arrays.stream(DerivedDeliveryController.class.getDeclaredMethods())
