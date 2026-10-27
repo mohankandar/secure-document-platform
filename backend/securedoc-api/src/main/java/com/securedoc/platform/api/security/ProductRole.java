@@ -10,8 +10,7 @@ public enum ProductRole {
     BUSINESS_ADMIN,
     REPORT_VIEWER,
     TENANT_IT_ADMIN,
-    PLATFORM_OPERATIONS_ADMIN,
-    ADMIN;
+    PLATFORM_OPERATIONS_ADMIN;
 
     public static Optional<ProductRole> fromIdentityName(String raw) {
         if (raw == null || raw.isBlank()) return Optional.empty();
