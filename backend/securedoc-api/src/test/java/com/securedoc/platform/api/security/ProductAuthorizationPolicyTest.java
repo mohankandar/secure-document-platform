@@ -113,6 +113,8 @@ class ProductAuthorizationPolicyTest {
         assertTrue(caps.contains(UserCapability.PLATFORM_DIAGNOSTICS));
         assertTrue(caps.contains(UserCapability.PLATFORM_OPERATIONS));
         assertTrue(caps.contains(UserCapability.TECHNICAL_ADMIN_VIEW));
+        assertFalse(caps.contains(UserCapability.TECHNICAL_RETRY));
+        assertFalse(caps.contains(UserCapability.TECHNICAL_HOLD_MANAGE));
         assertFalse(caps.contains(UserCapability.REPORT_EXECUTIVE_VIEW));
         assertFalse(caps.contains(UserCapability.REPORT_OPERATIONAL_VIEW));
         assertFalse(caps.contains(UserCapability.REPORT_EXPORT));
