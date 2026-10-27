@@ -413,3 +413,10 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - `06cc9c6`: orphaned PROCESSING-without-lease and expired-lease recovery scans catch failures per candidate, instead of aborting the whole recovery batch on a single repository/dispatch/claim exception. Enumeration failure still fails that scan safely; recovery of other categories remains independent. Original fencing, lease claims, attempt budget and tenant identity preserved.
 - `2f34408`, `baded95`: regression tests exercise a failed dispatch followed by another viable orphan/expired-lease package; expected second dispatch proceeds. Tests are source-only and not yet run.
 - Remaining P2 acceptance: execute unit tests and full build, verify live multi-node fencing/takeover, retention and temporary storage cleanup, provider outages, and repeated startup idempotency before declaring resilience complete. No migration or main merge.
+
+
+## P2 manual fallback eligibility (2026-10-26)
+- Read-only GET `/api/v1/packages/{packageId}/manual-fallback/eligibility` now delegates to the same service-level eligibility validator as POST `/start`; the latter rechecks eligibility before mutations. Requires MANUAL_REVIEW capability. Ineligible replies have `eligible=false` and sanitized validation reason. Unexpected/server errors are not converted to `eligible=true`.
+- Case drawer only offers manual continuation upon an explicit eligible response. On ineligibility it shows the reason; on lookup error it fails closed. Existing backend checks still cover AI_ANALYSIS stage, failed-document states, page count greater than zero, available retained originals, and unresolved findings.
+- Added read-only and invalid-stage unit tests. Candidate not yet locally compiled or runtime tested after this change; verify especially zero-page PDF, safe AI-only failure, expired original, and OIDC role denial.
+- Generic UNKNOWN_TECHNICAL_FAILURE incident classification for malformed/zero-page PDFs is separate P2 diagnostic issue, not changed in this checkpoint. Prefer safe deterministic classification only after tracing stage-specific root cause without leaking PDF content.
