@@ -106,6 +106,25 @@ class SupportIncidentControllerAuthorizationTest {
                 () -> controller.action(UUID.randomUUID(), otherTenant, action, request));
     }
 
+    @Test
+    void platformOperationsCannotRetryOrManageTenantIncidentHold() {
+        TenantId tenant = TenantId.of(UUID.randomUUID());
+        var principal = AuthenticatedPrincipal.of(
+                ActorId.generate(), tenant, "platform-ops", Set.of("PLATFORM_OPERATIONS_ADMIN"));
+        RequestContextResolver resolver = mock(RequestContextResolver.class);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(resolver.resolvePrincipal(request)).thenReturn(principal);
+        var controller = new SupportIncidentController(
+                new SupportIncidentQueryService(noopSearchRepository(), ProcessingIncidentRepository.none()),
+                resolver, new ProductAuthorizationPolicy());
+
+        for (String action : List.of("REPROCESS", "PRESERVE_FOR_INVESTIGATION", "RELEASE_HOLD", "RESOLVE_NO_REPROCESS")) {
+            var body = new SupportIncidentController.IncidentActionRequest(action, 7, null);
+            assertThrows(AccessDeniedException.class,
+                    () -> controller.action(UUID.randomUUID(), null, body, request), action);
+        }
+    }
+
     private static SupportIncidentSearchRepository noopSearchRepository() {
         return new SupportIncidentSearchRepository() {
             @Override public SupportIncidentSearchPage search(SupportIncidentSearchCriteria criteria) {
