@@ -34,7 +34,6 @@ public class ProductAuthorizationPolicy {
         for (String role : roles) {
             if (role == null) continue;
             switch (role.trim().toUpperCase()) {
-                case "ADMIN" -> capabilities.addAll(EnumSet.allOf(UserCapability.class));
                 case "DOCUMENT_PROCESSOR" -> capabilities.addAll(DOCUMENT_PROCESSOR_CAPABILITIES);
                 case "DOCUMENT_SUPERVISOR" -> {
                     capabilities.addAll(DOCUMENT_PROCESSOR_CAPABILITIES);
