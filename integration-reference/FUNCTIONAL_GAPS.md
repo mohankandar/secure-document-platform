@@ -431,3 +431,9 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 ## Support incident UI backlog — Open intake navigation (2026-10-27)
 - On Support Incident Detail, the upper-right action is labeled **Open intake** even though the operator is examining an existing FAILED package. Review the actual destination and permissions; prefer a context-accurate label such as **View case** / **Open case** when it opens an existing package. If it genuinely starts intake, distinguish that from navigating to the affected case and verify this shortcut belongs in the Tenant IT support workflow.
 - Test navigation preserves incident/case context and that Platform Operations cross-tenant read-only support does not expose unauthorized tenant business case/intake access. **Backlog only — no implementation authorized yet.**
+
+## Cross-tenant LOCAL incident API acceptance (2026-10-27)
+- User provisioned a disposable ACTIVE tenant `00000000-0000-0000-0000-000000000002` alongside existing ACTIVE `...0001` in LOCAL PostgreSQL.
+- Runtime PASS (provisioned Tenant B IT principal): direct GET Tenant A incident `e9021b0f-294d-48bb-9274-4048fff4ba42` returned 404; Tenant B query with `tenantId=...0001` returned 403.
+- Runtime PASS (Tenant B Platform Operations principal): explicit `tenantId=...0001` returned Tenant A sanitized incident detail and search results; POST cross-tenant `REPROCESS` returned 403. Five targeted endpoint checks PASS.
+- Evidence scope: incident detail/search and one cross-tenant mutation attempt only, under LOCAL header-based identity. Pending: actual Tenant B incident reverse-direction, protected document isolation, own-tenant Platform Operations mutation denial if not separately accepted, OIDC multi-tenant acceptance. Don't mistake these five tests for all cross-tenant security acceptance.
