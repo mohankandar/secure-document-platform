@@ -110,6 +110,29 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
     @Override
     public ManualFallbackDetail execute(ManualFallbackCommand command) {
         Objects.requireNonNull(command);
+        validateEligibility(command);
+        DocumentPackage pkg = loadPackage(command.packageId(), command.tenantId());
+        List<Document> documents = documentRepository.findByPackageIdAndTenantId(command.packageId(), command.tenantId());
+        List<Document> failed = documents.stream().filter(d -> d.status() == DocumentStatus.FAILED).toList();
+        for (Document document : failed) {
+            document.prepareForManualFallback();
+            documentRepository.save(document);
+        }
+        pkg.prepareForManualFallback();
+        packageRepository.save(pkg);
+        processingIncidentService.markBusinessContinuityStarted(command.packageId(), command.tenantId(), command.correlationId());
+
+        auditService.recordSuccess(command.tenantId(), command.actorId(),
+                AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED, "DocumentPackage", pkg.id().toString(),
+                command.correlationId(),
+                "Business manual fallback started: failedStage=AI_ANALYSIS, documents=" + failed.size()
+                        + ", reviewScope=FULL_DOCUMENT");
+        return buildDetail(pkg, command.tenantId());
+    }
+
+    @Override
+    public void validateEligibility(ManualFallbackCommand command) {
+        Objects.requireNonNull(command);
         DocumentPackage pkg = loadPackage(command.packageId(), command.tenantId());
         if (pkg.status() != PackageStatus.FAILED) {
             throw new ValidationException("Manual processing can start only after automatic processing has failed");
@@ -144,20 +167,6 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
             }
         }
 
-        for (Document document : failed) {
-            document.prepareForManualFallback();
-            documentRepository.save(document);
-        }
-        pkg.prepareForManualFallback();
-        packageRepository.save(pkg);
-        processingIncidentService.markBusinessContinuityStarted(command.packageId(), command.tenantId(), command.correlationId());
-
-        auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.BUSINESS_MANUAL_FALLBACK_STARTED, "DocumentPackage", pkg.id().toString(),
-                command.correlationId(),
-                "Business manual fallback started: failedStage=AI_ANALYSIS, documents=" + failed.size()
-                        + ", reviewScope=FULL_DOCUMENT");
-        return buildDetail(pkg, command.tenantId());
     }
 
     @Override
