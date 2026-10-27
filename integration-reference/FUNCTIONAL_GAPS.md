@@ -337,3 +337,13 @@ Do not close Platform Operations checkpoint until these tests pass.
 - **Guarded break-glass remains:** `OidcKnownGoodRecovery` uses separate disabled-by-default startup recovery with tenant/connection/version/request-id exact inputs and DB known-good recovery, not product ADMIN role. Must verify preserved behavior in full tests.
 - **No runtime testing or production migration done**. Do not claim complete retirement until LOCAL/OIDC negative tests, ordinary IT/Platform/Business positive paths, identity recovery, and live deployment migration reviewed. Do not merge to main without explicit approval.
 - R4 Users & Access with privilege ceilings and audit remains OPEN.
+
+
+## P0 security retirement handoff (2026-10-26)
+
+- Source authority changes committed: `ADMIN` no longer receives capabilities; no unrestricted interceptor bypass; deleted from canonical identity enum and UI role selector; OIDC `ADMIN` mapping deleted from shipped application.yml. A legacy `ADMIN` group presented *alone* fails identity mapping; alongside a legitimate mapped group it conveys no additional grants.
+- Added `f8b9c50` OIDC regression cases for all three administrator roles and legacy `ADMIN` group combined with legitimate IT admin. Existing tests cover LOCAL rejection, legacy OIDC-only rejection, absent default admin, and additive capability checks.
+- Disabled-by-default `OidcKnownGoodRecovery` is an independent one-shot startup hook backed by `recoverKnownGood`, not `ProductRole.ADMIN`; no changes made to it.
+- **Verification still required before declaring P0 COMPLETE:** run `git grep -n -E 'ProductRole[.]ADMIN|hasRole\\("ADMIN"\\)|@RequireRole|SECUREDOC_SECURITY_ROLE_ADMIN|System Administrator' -- '*.java' '*.yml' '*.yaml' '*.tsx' '*.ps1'`, inspect each live use. Run full `Build-LexaVault-All.ps1` and targeted security/identity tests. The repository cannot be locally compiled from connected GitHub reads in this session.
+- **Deployment-specific rollout gate (cannot be answered from source code):** enumerate existing user/group memberships and deployment overrides for retired ADMIN, assign explicitly authorized business/IT/platform roles in the IdP, ensure OIDC bootstrap/known-good recovery can be invoked independently, and verify at least one nonlegacy privileged operator in each required scope *before* enabling candidate in a real tenant. No automatic conversion of old ADMIN group. Remove obsolete `SECUREDOC_SECURITY_ROLE_ADMIN` deployment secret/env entry.
+- **Do not merge/deploy** without verifying retired-role denial and identity known-good rollback against configured OIDC. R4 Users & Access remains separate.
