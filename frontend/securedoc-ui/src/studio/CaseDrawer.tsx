@@ -102,10 +102,10 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
           />
           {actionError && <Notice tone="danger">{actionError}</Notice>}
           {pkg.status === 'FAILED' && caps.includes(CAP.review) && manualEligibility.data?.eligible === false && (
-            <Notice tone="info">Manual processing unavailable: {manualEligibility.data.reason}</Notice>
+            <Notice tone="neutral">Manual processing unavailable: {manualEligibility.data.reason}</Notice>
           )}
           {pkg.status === 'FAILED' && caps.includes(CAP.review) && manualEligibility.error && (
-            <Notice tone="info">Manual processing eligibility could not be verified. Automatic support recovery remains available.</Notice>
+            <Notice tone="neutral">Manual processing eligibility could not be verified. Automatic support recovery remains available.</Notice>
           )}
 
           {pkg.status === 'FAILED' && caps.includes(CAP.technicalView) && <TechnicalDetail packageId={packageId} />}
