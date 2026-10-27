@@ -100,6 +100,33 @@ class RequestContextResolverSecurityTest {
     }
 
     @Test
+    void eachSupportedAdministratorRoleAuthenticatesWithoutLegacyAdmin() {
+        SecurityProperties oidc = oidcProperties();
+        for (String role : List.of("BUSINESS_ADMIN", "TENANT_IT_ADMIN", "PLATFORM_OPERATIONS_ADMIN")) {
+            SecurityContextHolder.clearContext();
+            String external = switch (role) {
+                case "BUSINESS_ADMIN" -> "securedoc-business-admin";
+                case "TENANT_IT_ADMIN" -> "securedoc-tenant-it-admin";
+                default -> "securedoc-platform-operations-admin";
+            };
+            SecurityContextHolder.getContext().setAuthentication(authenticated(
+                    jwt("00000000-0000-0000-0000-000000000001", List.of(external))));
+            assertEquals(java.util.Set.of(role),
+                    resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
+        }
+    }
+
+    @Test
+    void retiredAdminCannotElevateAnOtherwiseAuthorizedOidcIdentity() {
+        SecurityProperties oidc = oidcProperties();
+        SecurityContextHolder.getContext().setAuthentication(authenticated(
+                jwt("00000000-0000-0000-0000-000000000001",
+                        List.of("securedoc-admin", "securedoc-tenant-it-admin"))));
+        assertEquals(java.util.Set.of("TENANT_IT_ADMIN"),
+                resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
+    }
+
+    @Test
     void legacyAdminIsNotAValidProductIdentityRole() {
         assertTrue(ProductRole.fromIdentityName("ADMIN").isEmpty());
         assertTrue(ProductRole.fromIdentityName("admin").isEmpty());
