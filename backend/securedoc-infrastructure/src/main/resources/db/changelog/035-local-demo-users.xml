@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+  <changeSet id="035-local-demo-users" author="openai">
+    <sql>
+      create table local_demo_users (
+        tenant_id uuid not null,
+        actor_id uuid not null,
+        display_name varchar(120) not null,
+        role_name varchar(64) not null,
+        updated_at timestamptz not null default now(),
+        updated_by uuid not null,
+        primary key (tenant_id, actor_id),
+        constraint ck_local_demo_user_role check (role_name in ('DOCUMENT_PROCESSOR','REPORT_VIEWER'))
+      );
+    </sql>
+  </changeSet>
+</databaseChangeLog>
