@@ -93,16 +93,6 @@ class ApiClient {
     return response as unknown as T;
   }
 
-  async getLocalDemoUsers(): Promise<{ actorId: string; displayName: string; roleName: string }[]> {
-    return this.request('/admin/local-users');
-  }
-
-  async assignLocalDemoUser(actorId: string, displayName: string, roleName: string): Promise<{ actorId: string; displayName: string; roleName: string }> {
-    return this.request(`/admin/local-users/${encodeURIComponent(actorId)}`, {
-      method: 'PUT', body: JSON.stringify({ displayName, roleName }),
-    });
-  }
-
   async getCurrentUser(): Promise<CurrentUser> {
     return this.request('/me');
   }
