@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSWRConfig } from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { ArrowRight, Check, FileText, RotateCcw, Wrench, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary } from '../types';
@@ -24,6 +24,10 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 }) {
   const { data: pkg, error, mutate } = usePackage(packageId);
   const canDesk = caps.includes(CAP.desk);
+  const manualEligibility = useSWR(pkg?.status === 'FAILED' && caps.includes(CAP.review)
+    ? ['manual-fallback-eligibility', packageId] : null,
+    () => apiClient.getManualFallbackEligibility(packageId),
+    { revalidateOnFocus: false, shouldRetryOnError: false });
   const { data: life, mutate: mutateLife } = usePackageLifecycle(packageId, canDesk);
   const { mutate: mutateGlobal } = useSWRConfig();
   const navigate = useNavigate();
@@ -59,7 +63,8 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   const title = pkg ? caseTitle(pkg.businessIdentifiers) : null;
   const reprocessing = pkg ? isReprocessing(pkg.status, life) : false;
   const stage: StageKey | null = pkg ? (reprocessing ? 'redacting' : stageOf(pkg.status)) : null;
-  const actions = pkg ? caseActions(pkg.status, caps, life, reprocessing, openFindings.length) : [];
+  const actions = pkg ? caseActions(pkg.status, caps, life, reprocessing, openFindings.length)
+    .filter(action => action.kind !== 'manual-fallback' || manualEligibility.data?.eligible === true) : [];
 
   return (
     <aside className="cf-drawer" aria-label="Case details">
@@ -96,6 +101,12 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
             onCancel={() => setConfirming(null)}
           />
           {actionError && <Notice tone="danger">{actionError}</Notice>}
+          {pkg.status === 'FAILED' && caps.includes(CAP.review) && manualEligibility.data?.eligible === false && (
+            <Notice tone="info">Manual processing unavailable: {manualEligibility.data.reason}</Notice>
+          )}
+          {pkg.status === 'FAILED' && caps.includes(CAP.review) && manualEligibility.error && (
+            <Notice tone="info">Manual processing eligibility could not be verified. Automatic support recovery remains available.</Notice>
+          )}
 
           {pkg.status === 'FAILED' && caps.includes(CAP.technicalView) && <TechnicalDetail packageId={packageId} />}
 
