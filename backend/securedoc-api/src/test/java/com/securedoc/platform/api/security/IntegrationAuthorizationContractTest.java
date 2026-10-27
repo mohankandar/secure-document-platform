@@ -36,6 +36,17 @@ class IntegrationAuthorizationContractTest {
         assertFalse(policy.capabilitiesFor(java.util.Set.of("DOCUMENT_PROCESSOR")).contains(UserCapability.TENANT_INTEGRATION_MANAGE));
     }
     @Test
+    void derivedRoutingIsTenantItOwnedNotBusinessOrPlatformOwned() {
+        ProductAuthorizationPolicy policy = new ProductAuthorizationPolicy();
+        assertTrue(policy.capabilitiesFor(java.util.Set.of("TENANT_IT_ADMIN"))
+                .contains(UserCapability.TENANT_INTEGRATION_MANAGE));
+        assertFalse(policy.capabilitiesFor(java.util.Set.of("BUSINESS_ADMIN"))
+                .contains(UserCapability.TENANT_INTEGRATION_MANAGE));
+        assertFalse(policy.capabilitiesFor(java.util.Set.of("PLATFORM_OPERATIONS_ADMIN"))
+                .contains(UserCapability.TENANT_INTEGRATION_MANAGE));
+    }
+
+    @Test
     void pollingRunNowAndStatusRequireTenantIntegrationCapability() {
         for (String methodName : new String[]{"status", "runNow", "testConnection"}) {
             Method method = Arrays.stream(PollingIntegrationController.class.getDeclaredMethods())
