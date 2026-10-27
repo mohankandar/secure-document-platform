@@ -6,6 +6,7 @@ import type { CurrentUser } from '../types';
 import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
 import { useBranding } from '../branding/BrandingContext';
 import { ROLE_OPTIONS } from '../security/uiAuthorization';
+import { getLocalDemoActorId, setLocalDemoActorId } from '../api/config';
 import { Kbd } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
@@ -128,7 +129,11 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange 
 
         <ThemeToggle />
 
-        {localMode && (
+        {localMode && getLocalDemoActorId() && (
+          <button className="cf-btn" type="button" onClick={() => { setLocalDemoActorId(null); window.location.assign("/"); }}>Exit simulated user</button>
+        )}
+
+        {localMode && !getLocalDemoActorId() && (
           <label className="cf-local-role">
             <span className="cf-sr">Local test role</span>
             <select aria-label="Local test role" value={selectedRole} onChange={(event) => onRoleChange(event.target.value)}>
