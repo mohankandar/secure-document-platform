@@ -40,5 +40,4 @@
     <include file="db/changelog/032-enterprise-identity-connection.xml"/>
     <include file="db/changelog/033-enterprise-identity-admin.xml"/>
     <include file="db/changelog/034-enterprise-identity-activation.xml"/>
-    <include file="db/changelog/035-local-demo-users.xml"/>
 </databaseChangeLog>
