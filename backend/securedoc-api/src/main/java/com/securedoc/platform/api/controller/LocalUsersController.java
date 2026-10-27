@@ -7,6 +7,8 @@ import com.securedoc.platform.api.security.ProductAuthorizationPolicy;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.exception.AccessDeniedException;
+import com.securedoc.platform.application.service.AuditService;
+import com.securedoc.platform.domain.audit.AuditAction;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
@@ -22,12 +24,14 @@ import java.util.UUID;
 public class LocalUsersController {
     private final RequestContextResolver context;
     private final LocalDemoUserStore store;
+    private final AuditService audit;
     private final ProductAuthorizationPolicy authorization = new ProductAuthorizationPolicy();
     private final DelegatedRoleGrantPolicy grant = new DelegatedRoleGrantPolicy();
 
-    public LocalUsersController(RequestContextResolver context, LocalDemoUserStore store) {
+    public LocalUsersController(RequestContextResolver context, LocalDemoUserStore store, AuditService audit) {
         this.context = context;
         this.store = store;
+        this.audit = audit;
     }
 
     @GetMapping
@@ -39,6 +43,7 @@ public class LocalUsersController {
         return ResponseEntity.ok(store.list(principal.tenantId().value()));
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PutMapping("/{actorId}")
     public ResponseEntity<LocalDemoUserStore.DemoUser> assign(
             @PathVariable UUID actorId, @RequestBody Assignment body, HttpServletRequest request) {
@@ -51,6 +56,9 @@ public class LocalUsersController {
             throw new AccessDeniedException("Simulated role assignment is not permitted");
         }
         store.upsert(tenantId, actorId, body.displayName().trim(), body.roleName(), principal.actorId().value());
+        audit.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.CAPABILITY_CHANGED,
+                "LocalDemoUser", actorId.toString(), context.resolveCorrelationId(request),
+                "LOCAL simulated role assigned: role=" + body.roleName());
         return ResponseEntity.ok(store.find(tenantId, actorId).orElseThrow());
     }
 
