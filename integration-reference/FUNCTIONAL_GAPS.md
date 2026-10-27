@@ -322,3 +322,18 @@ Do not close Platform Operations checkpoint until these tests pass.
 - **Pending local build/test and runtime validation.** Expected IT Admin: Integrations, Sign-in, Audit, Support, read-only Platform Overview; no Reports. Expected Platform Admin: Platform Operations, technical incidents/Audit/Support; no Reports or tenant Integrations. Scan Now remains IT-owned under TENANT_INTEGRATION_MANAGE. Existing Platform watched-folder lease and fencing remains read-only.
 - **R2 inventory started:** Ordinary `ADMIN` is still recognized by ProductRole, OIDC Role Mapper and LOCAL role selector; gives all UserCapability enum values and bypasses @RequireRole via RoleAuthorizationInterceptor. Must inspect deployment roleMappings, ADMIN-only @RequireRole actions, bootstrap + OIDC known-good recovery before removing. **Not retired**, do not revoke existing production assignments until a tested migration exists. No silent ADMIN-to-IT or ADMIN-to-Platform remap.
 - **Do not prematurely close:** Technical retry/hold API ownership, IT users-and-access privilege ceilings, System Administrator migration, and multi-node cluster tests remain OPEN.
+
+
+## R3 ordinary System Administrator retirement — code candidate (2026-10-26)
+
+**Review branch source only; UNBUILT/UNVERIFIED. User requested batching tests until meaningful checkpoint.**
+- `2bf085e`: eliminated unrestricted `ADMIN` capability grant from `ProductAuthorizationPolicy`.
+- `3718f42` / `432538c`: removed automatic @RequireRole ADMIN bypass and fail-closed for a stale `ADMIN` principal even if endpoint annotation accidentally names it.
+- `ffe6c85`: retired `ADMIN` enum value from `ProductRole`, so `OidcRoleMapper` no longer maps external ADMIN claims and LOCAL parser rejects X-Actor-Roles ADMIN.
+- `495f2ac`: removed user-facing LOCAL System Administrator selector.
+- `41342ca`, `038fc74`, `1b5a941`: negative unit/security tests for retired role and LOCAL/OIDC trust-boundary rejection.
+- `e597842`: removed obsolete `ADMIN` OIDC property from application.yml.
+- **Important compatibility gate:** inspect all compile references to `ProductRole.ADMIN`, all `@RequireRole` annotations naming ADMIN, generated configs and legacy launch scripts; determine migration of deployed admin-only OIDC groups to explicit approved functional roles. Avoid remapping retired ADMIN group implicitly to one or many privileged roles.
+- **Guarded break-glass remains:** `OidcKnownGoodRecovery` uses separate disabled-by-default startup recovery with tenant/connection/version/request-id exact inputs and DB known-good recovery, not product ADMIN role. Must verify preserved behavior in full tests.
+- **No runtime testing or production migration done**. Do not claim complete retirement until LOCAL/OIDC negative tests, ordinary IT/Platform/Business positive paths, identity recovery, and live deployment migration reviewed. Do not merge to main without explicit approval.
+- R4 Users & Access with privilege ceilings and audit remains OPEN.
