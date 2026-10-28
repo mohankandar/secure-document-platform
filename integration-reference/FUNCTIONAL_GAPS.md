@@ -455,3 +455,8 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 3. **Previously approved Review navigation issue (P2-03):** browser Back/Forward preview object-URL lifecycle; context-aware Back to Desk; reset transient state only; preserve persisted review work. Not implemented.
 4. **Support incident Open intake:** confirm destination, change label/behavior if appropriate. Backlog only.
 - Current priority remains finishing P2 retention/audit/idempotency acceptance before UI implementation. No merges to main.
+
+## Desk All count / pagination mismatch — reported 2026-10-27 (OPEN, unimplemented)
+- Three-node randomized watched-folder feeder created five new packages (member numbers `00202100000`–`00202100004`, all initially owned by APP-03, token=1, attempt=1). User screenshot shows Desk `All 20` although user observes more eligible cases; possible loaded-page size being presented instead of total matching case count. Confirm exact DB-visible count and API pagination response before root-cause classification.
+- Expected: `All` reports total accessible non-hidden cases for chosen scope (not just 20 loaded rows); every case reachable through pagination/load-more; status tiles, Needs You count, and filters retain correct distinct semantics. Test >20, exact 20, <=20, search/filter, purged/hidden packages, and role/tenant isolation. Keep UI layout unchanged and avoid backend contract changes without need.
+- Backlog only: no code change authorized. Preserve prior Package UUID copy and post-purge Desk visibility investigations.
