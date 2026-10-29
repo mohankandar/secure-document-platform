@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.security.oidc;
 
 import com.securedoc.platform.api.context.SecurityContextException;
+import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.domain.identity.TenantId;
 import java.util.Collection;
 import java.util.Map;
@@ -34,7 +35,16 @@ public final class TenantGroupAuthorization {
         Set<String> authorized = new LinkedHashSet<>();
         for (String group : external) {
             Set<String> roles = grants.get(group);
-            if (roles != null) authorized.addAll(roles);
+            if (roles != null) {
+                for (String role : roles) {
+                    ProductRole canonical = ProductRole.fromIdentityName(role)
+                            .orElseThrow(() -> new SecurityContextException("Invalid tenant role configuration"));
+                    if (canonical == ProductRole.PLATFORM_OPERATIONS_ADMIN) {
+                        throw new SecurityContextException("Platform Operations cannot be granted through tenant IdP groups");
+                    }
+                    authorized.add(canonical.name());
+                }
+            }
         }
         if (authorized.isEmpty()) {
             throw new SecurityContextException("Authenticated identity has no tenant-authorized role");
