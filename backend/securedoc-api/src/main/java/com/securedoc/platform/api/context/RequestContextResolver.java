@@ -25,6 +25,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -93,6 +94,22 @@ public class RequestContextResolver {
         StructuredLogContext.put("tenantId", principal.tenantId());
         StructuredLogContext.put("actorId", principal.actorId());
         return principal;
+    }
+
+    /**
+     * Bootstrap tenant choices before a selected tenant exists.
+     * Only available in explicitly enabled OIDC shared-issuer mode.
+     * Does not create a business principal or assign any tenant context.
+     */
+    public Map<TenantId, Set<String>> resolveAvailableOidcTenants() {
+        if (securityProperties.getMode() != SecurityMode.OIDC
+                || !securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()
+                || !securityProperties.getOidc().isPersistentConnectionEnabled()) {
+            throw new SecurityContextException("OIDC tenant discovery is not enabled");
+        }
+        var jwt = requireOidcToken().getToken();
+        AuthenticatedIdentity identity = normalizeIdentity(jwt);
+        return oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
     }
 
     public SecurityMode securityMode() {
