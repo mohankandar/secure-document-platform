@@ -14,6 +14,20 @@ import java.util.LinkedHashSet;
  * All mappings are supplied by the server-side configuration store, never by the request.
  */
 public final class TenantGroupAuthorization {
+    /** No matching groups is ordinary non-membership; invalid policy is never suppressed. */
+    public boolean hasMatchingGroup(Object signedGroups, Map<String, Set<String>> grants) {
+        if (!(signedGroups instanceof Collection<?> groups)) {
+            throw new SecurityContextException("Trusted IdP group collection is required");
+        }
+        if (grants == null || grants.isEmpty()) {
+            throw new SecurityContextException("Tenant has no trusted group admission policy");
+        }
+        for (Object candidate : groups) {
+            if (candidate instanceof String group && grants.containsKey(group.trim())) return true;
+        }
+        return false;
+    }
+
     public Set<String> authorizedRoles(TenantId requestedTenant, Object signedGroups,
                                        Map<TenantId, Map<String, Set<String>>> mappings) {
         Objects.requireNonNull(requestedTenant, "requestedTenant");
