@@ -1,4 +1,5 @@
 import { getValidAccessToken, isLocalSecurityMode } from './auth';
+import { selectedOidcTenant } from './tenantContext';
 
 export const API_BASE_URL = '/api/v1';
 export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -32,7 +33,10 @@ async function identityHeaders(): Promise<Record<string, string>> {
     };
   }
   const token = await getValidAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (!token) return {};
+  const selectedTenant = selectedOidcTenant();
+  return selectedTenant ? { Authorization: `Bearer ${token}`, 'X-Selected-Tenant-Id': selectedTenant }
+    : { Authorization: `Bearer ${token}` };
 }
 
 export async function defaultHeaders(): Promise<Record<string, string>> {
