@@ -113,6 +113,15 @@ class OidcTenantMembershipResolverTest {
         assertEquals(B, resolver.select(B, memberships));
     }
 
+    @Test void missingPersistenceResultFailsClosed() {
+        TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
+        ActiveOidcTenantCandidates candidates = mock(ActiveOidcTenantCandidates.class);
+        SecurityProperties properties = new SecurityProperties();
+        properties.getOidc().setAudience("lexavault-api");
+        var resolver = new OidcTenantMembershipResolver(repository, candidates, properties);
+        assertThrows(SecurityContextException.class, () -> resolver.authorizedTenants(jwt(), Set.of("tenant-a")));
+    }
+
     @Test void noGroupsCannotAuthorizeAnyTenant() {
         TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
         when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
