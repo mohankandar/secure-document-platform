@@ -159,6 +159,7 @@ public class JdbcOidcConnectionBindingRepository implements OidcConnectionBindin
             return new ActivationResult(current.get(),null);
         }
         if(!"DISABLED".equals(candidate.status())) throw new IllegalStateException("Recovery target must be a disabled previously ACTIVE identity configuration.");
+        requireCompatibleIssuerBinding(tenantId, candidate);
         Instant now=Instant.now(); ConnectionAdminView previous=current.orElse(null);
         if(previous!=null){
             int retired=jdbc.update("update enterprise_identity_connections set status='DISABLED',updated_at=? where connection_id=? and tenant_id=? and status='ACTIVE'",Timestamp.from(now),previous.connectionId(),tenantId);
