@@ -20,5 +20,7 @@ class OidcMachineTenantAdmissionTest {
         assertThrows(SecurityContextException.class, () -> admission.requireUnique(null));
         assertThrows(SecurityContextException.class, () -> admission.requireUnique(Set.of()));
         assertThrows(SecurityContextException.class, () -> admission.requireUnique(Set.of(A, B)));
+        assertThrows(SecurityContextException.class, () -> admission.requireUnique(
+                new java.util.HashSet<>(java.util.Collections.singletonList(null))));
     }
 }
