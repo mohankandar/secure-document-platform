@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
+import { selectedOidcTenant, setSelectedOidcTenant } from './api/tenantContext';
 import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode, OIDC_SESSION_EXPIRED_EVENT } from './api/auth';
 import type { CurrentUser } from './types';
 import DashboardPage from './pages/DashboardPage';
@@ -249,6 +250,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(!localMode);
   const [authError, setAuthError] = useState('');
   const [authDenied, setAuthDenied] = useState(false);
+  const [tenantChoices, setTenantChoices] = useState<Array<{ tenantId: string; roles: string[] }>>([]);
 
   useEffect(() => {
     if (localMode) return;
@@ -256,6 +258,7 @@ export default function App() {
       setCurrentCapabilities([]);
       setCurrentRoles('DOCUMENT_PROCESSOR');
       setCurrentUser(null);
+      setTenantChoices([]);
       setAuthDenied(false);
       setAuthError('Your organization session has expired. Sign in again to continue.');
     };
@@ -276,8 +279,26 @@ export default function App() {
           return;
         }
         console.info('[LexaVault OIDC] Access token is present; validating it with /api/v1/me. Token value is intentionally not logged.');
+        // Discovery can run before tenant selection. Older single-tenant servers
+        // reject this optional endpoint, in which case existing /me behavior remains.
+        try {
+          const choices = await apiClient.getAvailableOidcTenants();
+          if (choices.length > 0) {
+            const currentSelection = selectedOidcTenant();
+            if (currentSelection && !choices.some((choice) => choice.tenantId === currentSelection)) {
+              setSelectedOidcTenant(null);
+            }
+            if (choices.length === 1) setSelectedOidcTenant(choices[0].tenantId);
+            else if (!selectedOidcTenant()) {
+              if (active) setTenantChoices(choices);
+              return;
+            }
+          }
+        } catch {
+          // Compatibility: the discovery endpoint is unavailable in legacy OIDC mode.
+        }
         const user = await apiClient.getCurrentUser();
-        console.info('[LexaVault OIDC] Production session verified.', { roles: user.roles, capabilityCount: (user.capabilities || []).length });
+        console.info('[LexaVault OIDC] Production session verified., { roles: user.roles, capabilityCount: (user.capabilities || []).length });
         if (active) {
           setCurrentUser(user);
           setCurrentRoles(user.roles.join(','));
@@ -327,6 +348,39 @@ export default function App() {
     return <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p>Verifying your session…</p></div></div>;
   }
 
+  if (!localMode && !currentUser && tenantChoices.length > 1 && getAccessToken()) {
+    const chooseTenant = async (tenantId: string) => {
+      setAuthLoading(true);
+      setAuthError('');
+      try {
+        setSelectedOidcTenant(tenantId);
+        const user = await apiClient.getCurrentUser();
+        setCurrentUser(user);
+        setCurrentRoles(user.roles.join(','));
+        setCurrentCapabilities(user.capabilities || []);
+        setTenantChoices([]);
+      } catch {
+        setSelectedOidcTenant(null);
+        setAuthError('Unable to enter that tenant. Contact your administrator.');
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    return (
+      <div className="auth-shell"><div className="auth-card">
+        <h1>Select organization</h1>
+        <p>Select an organization that your identity is authorized to access.</p>
+        {authError && <div className="ui-alert tone-danger">{authError}</div>}
+        {tenantChoices.map((choice) => (
+          <button className="ui-button secondary" key={choice.tenantId} type="button"
+            onClick={() => void chooseTenant(choice.tenantId)}>
+            {choice.tenantId}
+          </button>
+        ))}
+      </div></div>
+    );
+  }
+
   if (!localMode && !currentUser) {
     return (
       <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p>Sign in with your organization identity to continue.</p>
@@ -351,7 +405,7 @@ export default function App() {
     <BrandingProvider>
       {caseFilePreviewEnabled && currentUser
         ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={handleRoleChange} /></Suspense>
-        : <AuthenticatedApplication localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
+        : <AuthenticatedApplication key={localMode ? 'local' : selectedOidcTenant() || 'oidc-default'} localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
             hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} />}
     </BrandingProvider>
   );
