@@ -7,6 +7,7 @@ import com.securedoc.platform.api.security.SecurityProperties;
 import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
+import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.observability.StructuredLogContext;
@@ -44,6 +45,7 @@ public class RequestContextResolver {
     private final SecurityProperties securityProperties;
     private final OidcRoleMapper oidcRoleMapper;
     private final OidcTenantResolver oidcTenantResolver;
+    private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
 
@@ -53,6 +55,7 @@ public class RequestContextResolver {
             SecurityProperties securityProperties,
             OidcRoleMapper oidcRoleMapper,
             OidcTenantResolver oidcTenantResolver,
+            OidcTenantMembershipResolver oidcTenantMembershipResolver,
             TrustedActorResolver trustedActorResolver,
             OidcJwtIdentityNormalizer oidcIdentityNormalizer) {
         this.demoTenantId = UUID.fromString(demoTenantId);
@@ -60,6 +63,7 @@ public class RequestContextResolver {
         this.securityProperties = securityProperties;
         this.oidcRoleMapper = oidcRoleMapper;
         this.oidcTenantResolver = oidcTenantResolver;
+        this.oidcTenantMembershipResolver = oidcTenantMembershipResolver;
         this.trustedActorResolver = trustedActorResolver;
         this.oidcIdentityNormalizer = oidcIdentityNormalizer;
     }
@@ -67,7 +71,7 @@ public class RequestContextResolver {
     public AuthenticatedPrincipal resolvePrincipal(HttpServletRequest request) {
         AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
                 ? resolveLocalPrincipal(request)
-                : resolveOidcPrincipal();
+                : resolveOidcPrincipal(request);
         StructuredLogContext.put("tenantId", principal.tenantId());
         StructuredLogContext.put("actorId", principal.actorId());
         return principal;
@@ -137,12 +141,33 @@ public class RequestContextResolver {
         return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), Set.of());
     }
 
-    private AuthenticatedPrincipal resolveOidcPrincipal() {
+    private AuthenticatedPrincipal resolveOidcPrincipal(HttpServletRequest request) {
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
-        TenantId tenantId = oidcTenantResolver.resolve(jwt);
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
-        Set<String> roles = oidcRoleMapper.map(identity.groups());
+        TenantId tenantId;
+        Set<String> roles;
+        if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
+            if (!securityProperties.getOidc().isPersistentConnectionEnabled()) {
+                throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections");
+            }
+            var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
+            String choice = request.getHeader("X-Selected-Tenant-Id");
+            if (choice == null || choice.isBlank()) {
+                tenantId = oidcTenantMembershipResolver.selectOnlyIfUnambiguous(authorized);
+            } else {
+                try {
+                    tenantId = oidcTenantMembershipResolver.select(
+                            TenantId.of(UUID.fromString(choice.trim())), authorized);
+                } catch (IllegalArgumentException ex) {
+                    throw new SecurityContextException("Invalid selected tenant identifier");
+                }
+            }
+            roles = authorized.get(tenantId);
+        } else {
+            tenantId = oidcTenantResolver.resolve(jwt);
+            roles = oidcRoleMapper.map(identity.groups());
+        }
         ActorId actorId = trustedActorResolver.resolve(jwt);
         return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
     }
