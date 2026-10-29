@@ -185,3 +185,8 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Added tests verifying that group grants from an unrelated issuer are not accepted, signed IdP groups alone do not override absence of an ACTIVE tenant binding, and tenant A roles do not inherit tenant B grants when a verified principal belongs to both organizations.
 - Strengthened OidcTenantMembershipResolver to fail closed if the underlying grant repository or ACTIVE candidate resolver unexpectedly returns null instead of a collection, with a corresponding negative test.
 - These tests are committed but have not been executed on the newest HEAD. Runtime multi-tenant admission, migration 037 PostgreSQL exercise, and end-to-end machine integration principal matching remain outstanding. Migration 037 remains unregistered, shared-issuer mode off by default, and main/P2 unchanged.
+
+## B21 migration 037 PostgreSQL syntax correction and static check
+- Fixed malformed PostgreSQL dollar-quote delimiters in BOTH forward and rollback DO blocks (`do $$ ... end $$;`). This was a real migration execution blocker not detectable through the earlier Maven compilation.
+- Added `SharedIssuerMigration037ContractTest` to assert the staged changelog has the expected two DO delimiter pairs, preserves per-tenant uniqueness requirement, and retains rollback collision refusal. This is a static source contract, not a substitute for applying and rolling back the migration against an isolated PostgreSQL database.
+- Latest test source has not been executed. Migration 037 remains excluded from the master changelog; shared-issuer flag remains disabled. main/P2 unchanged.
