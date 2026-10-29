@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.identity;
 
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -13,13 +14,14 @@ import java.util.*;
  * Does not create users, credentials, or memberships in a LexaVault user directory.
  */
 @Repository
-public class JdbcTenantOidcGroupGrantRepository {
+public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantRepository {
     private final JdbcTemplate jdbc;
 
     public JdbcTenantOidcGroupGrantRepository(JdbcTemplate jdbc) {
         this.jdbc = Objects.requireNonNull(jdbc);
     }
 
+    @Override
     public Map<TenantId, Map<String, Set<String>>> activeGrants(
             String providerId, URI issuer, String audience) {
         Objects.requireNonNull(issuer, "issuer");
