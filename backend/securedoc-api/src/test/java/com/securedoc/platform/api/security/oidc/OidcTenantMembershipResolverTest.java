@@ -21,7 +21,7 @@ class OidcTenantMembershipResolverTest {
 
     private Jwt jwt() {
         return Jwt.withTokenValue("test-token").header("alg", "RS256")
-                .issuer(ISSUER).subject("subject-1")
+                .issuer(ISSUER.toString()).subject("subject-1")
                 .issuedAt(Instant.parse("2026-01-01T00:00:00Z"))
                 .expiresAt(Instant.parse("2028-01-01T00:00:00Z")).build();
     }
