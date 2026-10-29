@@ -25,4 +25,17 @@ class SharedIssuerMigration037ContractTest {
             assertTrue(xml.contains("splitStatements=\"false\""));
         }
     }
+    @Test
+    void migrationIsNotAutomaticallyEnabledBeforeRuntimeAcceptance() throws Exception {
+        try (var stream = getClass().getClassLoader().getResourceAsStream(
+                "db/changelog/db.changelog-master.xml")) {
+            assertNotNull(stream, "Master changelog must be available");
+            String master = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            assertFalse(master.contains("037-r1b-shared-issuer-active-bindings.xml"),
+                    "R1B schema widening must remain a separately approved rollout");
+            assertTrue(master.contains("034-enterprise-identity-activation.xml"),
+                    "The required per-tenant ACTIVE uniqueness migration must remain registered");
+        }
+    }
+
 }
