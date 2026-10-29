@@ -172,7 +172,7 @@ public class RequestContextResolver {
             // Preserve existing integration client-principal matching semantics.
             // This candidate lookup never trusts human tenant-selection headers.
             var candidates = machineTenantBindings.findEnabledPushTenants(
-                    securityProperties.getOidc().getProviderId(), jwt.getIssuer(),
+                    securityProperties.getOidc().getProviderId(), java.net.URI.create(jwt.getIssuer().toString()),
                     securityProperties.getOidc().getAudience(), identity.username());
             tenantId = machineAdmission.requireUnique(candidates);
         } else {
