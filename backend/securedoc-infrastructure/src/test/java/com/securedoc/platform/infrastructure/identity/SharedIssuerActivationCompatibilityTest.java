@@ -6,17 +6,26 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 class SharedIssuerActivationCompatibilityTest {
+    private static final class CollisionJdbcTemplate extends JdbcTemplate {
+        private Object[] arguments;
+        private String statement;
+
+        @Override
+        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
+            this.statement = sql;
+            this.arguments = args.clone();
+            return requiredType.cast(Integer.valueOf(1));
+        }
+    }
+
     @Test void legacyModeRejectsActiveBindingOwnedByAnotherTenant() throws Exception {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(Integer.class), any(), any(), any(), any()))
-                .thenReturn(1);
+        CollisionJdbcTemplate jdbc = new CollisionJdbcTemplate();
         var repository = new JdbcOidcConnectionBindingRepository(jdbc);
         Method check = JdbcOidcConnectionBindingRepository.class.getDeclaredMethod(
                 "requireCompatibleIssuerBinding", UUID.class,
@@ -30,7 +39,10 @@ class SharedIssuerActivationCompatibilityTest {
         InvocationTargetException error = assertThrows(InvocationTargetException.class,
                 () -> check.invoke(repository, tenant, target));
         assertInstanceOf(IllegalStateException.class, error.getCause());
-        verify(jdbc).queryForObject(anyString(), eq(Integer.class),
-                eq(tenant), eq("customer-oidc"), eq("https://id.example.test"), eq("lexavault-api"));
+        assertNotNull(jdbc.statement);
+        assertTrue(jdbc.statement.contains("tenant_id<>?"));
+        assertTrue(Arrays.equals(new Object[] {
+                tenant, "customer-oidc", "https://id.example.test", "lexavault-api"
+        }, jdbc.arguments));
     }
 }
