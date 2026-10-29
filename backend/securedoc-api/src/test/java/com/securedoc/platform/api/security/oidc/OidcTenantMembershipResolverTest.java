@@ -119,7 +119,20 @@ class OidcTenantMembershipResolverTest {
         SecurityProperties properties = new SecurityProperties();
         properties.getOidc().setAudience("lexavault-api");
         var resolver = new OidcTenantMembershipResolver(repository, candidates, properties);
-        assertThrows(SecurityContextException.class, () -> resolver.authorizedTenants(jwt(), Set.of("tenant-a")));
+
+        // Mockito returns empty collections for unstubbed collection methods.
+        // Explicit null responses represent the unavailable persistence result
+        // that the production guard is intended to reject.
+        when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api")).thenReturn(null);
+        when(candidates.findCandidates("customer-oidc", ISSUER, "lexavault-api")).thenReturn(Set.of(A));
+        assertThrows(SecurityContextException.class,
+                () -> resolver.authorizedTenants(jwt(), Set.of("tenant-a")));
+
+        when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
+                .thenReturn(Map.of(A, Map.of("tenant-a", Set.of("DOCUMENT_PROCESSOR"))));
+        when(candidates.findCandidates("customer-oidc", ISSUER, "lexavault-api")).thenReturn(null);
+        assertThrows(SecurityContextException.class,
+                () -> resolver.authorizedTenants(jwt(), Set.of("tenant-a")));
     }
 
     @Test void noGroupsCannotAuthorizeAnyTenant() {
