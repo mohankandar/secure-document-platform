@@ -91,9 +91,8 @@ class ApiClient {
       }
       if (import.meta.env.DEV && path === '/me') {
         console.error('[LexaVault OIDC] GET /api/v1/me rejected.', { status: response.status, statusText: response.statusText, error });
-        throw { ...error, httpStatus: response.status, httpStatusText: response.statusText };
       }
-      throw error;
+      throw { ...error, httpStatus: response.status, httpStatusText: response.statusText };
     }
 
     const contentType = response.headers.get('content-type');
