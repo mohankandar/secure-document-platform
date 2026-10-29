@@ -9,6 +9,10 @@ import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.context.SecurityContextException;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
+import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
+import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
+import com.securedoc.platform.application.port.out.ActiveOidcTenantCandidates;
+import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -184,6 +188,9 @@ class RequestContextResolverSecurityTest {
                 properties,
                 new OidcRoleMapper(properties),
                 new OidcTenantResolver(properties, persistedConnectionResolver(properties)),
+                new OidcTenantMembershipResolver(mock(TenantOidcGroupGrantRepository.class),
+                        mock(ActiveOidcTenantCandidates.class), properties),
+                mock(ActiveOidcMachineTenantBindings.class),
                 new TrustedActorResolver(),
                 new OidcJwtIdentityNormalizer(
                         properties.getOidc().getProviderId(),
