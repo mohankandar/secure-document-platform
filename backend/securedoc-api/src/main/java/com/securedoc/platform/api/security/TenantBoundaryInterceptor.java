@@ -18,6 +18,11 @@ public class TenantBoundaryInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        // Tenant discovery is the sole pre-selection route. It still requires a valid OIDC JWT
+        // and explicitly enabled trusted membership resolution in its controller.
+        if ("GET".equals(request.getMethod()) && "/api/v1/me/tenants".equals(request.getServletPath())) {
+            return true;
+        }
         tenantBoundaryGuard.requireProvisionedTenant(contextResolver.resolvePrincipal(request));
         return true;
     }
