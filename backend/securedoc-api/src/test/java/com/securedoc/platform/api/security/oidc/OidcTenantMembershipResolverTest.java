@@ -43,6 +43,17 @@ class OidcTenantMembershipResolverTest {
         assertEquals(Set.of("TENANT_IT_ADMIN"), both.get(B));
     }
 
+    @Test void invalidGrantPolicyIsNotSilentlyTreatedAsNonMembership() {
+        TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
+        when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
+                .thenReturn(Map.of(A, Map.of("tenant-a", Set.of("PLATFORM_OPERATIONS_ADMIN"))));
+        SecurityProperties properties = new SecurityProperties();
+        properties.getOidc().setAudience("lexavault-api");
+        var resolver = new OidcTenantMembershipResolver(repository, properties);
+        assertThrows(SecurityContextException.class,
+                () -> resolver.authorizedTenants(jwt(), Set.of("tenant-a")));
+    }
+
     @Test void noGroupsCannotAuthorizeAnyTenant() {
         TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
         when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
