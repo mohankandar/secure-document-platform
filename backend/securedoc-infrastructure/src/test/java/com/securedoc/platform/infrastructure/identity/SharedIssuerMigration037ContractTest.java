@@ -19,7 +19,7 @@ class SharedIssuerMigration037ContractTest {
             assertEquals(2, xml.split("end \\$r1b\\$;", -1).length - 1,
                     "Both DO blocks must be properly closed");
             assertTrue(xml.contains("uq_eic_active_per_tenant"));
-            assertTrue(xml.contains("end $r1b$;\\n      </sql>\\n      <sql>\\n        create unique index uq_eic_active_binding"),
+            assertTrue(xml.contains("end $r1b$;\n      </sql>\n      <sql>\n        create unique index uq_eic_active_binding"),
                     "Rollback must recreate the index in a separate SQL statement");
             assertTrue(xml.contains("raise exception 'Cannot restore legacy ACTIVE binding uniqueness"));
             assertTrue(xml.contains("splitStatements=\"false\""));
