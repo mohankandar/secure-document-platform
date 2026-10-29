@@ -112,3 +112,9 @@ No build, database migration execution, or authenticated runtime validation was 
 
 ## B8 gated principal integration
 The shared-issuer-tenant-selection-enabled option defaults false. When enabled, human OIDC principal resolution uses tenant ACTIVE candidates intersected with verified group grants. An optional X-Selected-Tenant-Id request hint selects only an authorized tenant; ambiguous membership without a selection fails closed. Existing integration principals remain unchanged. Migration 037 is not registered; do not enable this mode in deployments until shared-issuer activation, tenant selector and release tests are completed. This commit is not yet built or runtime validated.
+
+## B9 tenant-selection regression hardening
+- Extracted request-scoped tenant selection into OidcTenantSelection and wired the gated human OIDC principal path to it. Unauthorized IDs, malformed IDs, empty memberships and ambiguous implicit selection fail closed.
+- Added OidcTenantSelectionTest covering authorized single-tenant default, explicit multi-tenant selection, forged tenant choice and invalid IDs.
+- Shared issuer migration 037 remains staged and unregistered. Shared-issuer rollout and admin activation/rollback remain incomplete; frontend selector and verified OIDC runtime acceptance are still pending.
+- Latest changes are source committed only; no new build has been run and prior PASS does not apply to this HEAD.
