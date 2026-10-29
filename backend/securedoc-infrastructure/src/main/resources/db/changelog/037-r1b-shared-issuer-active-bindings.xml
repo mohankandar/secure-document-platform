@@ -12,7 +12,7 @@
   -->
   <changeSet id="037-r1b-shared-issuer-active-bindings" author="lexavault">
     <sql splitStatements="false">
-      do $$
+      do $r1b$
       begin
         -- Do not remove legacy uniqueness unless the replacement tenant
         -- uniqueness guarantee is installed and the expected index exists.
@@ -31,11 +31,11 @@
           raise exception 'Multiple ACTIVE connections per tenant block R1B migration';
         end if;
         drop index uq_eic_active_binding;
-      end $$;
+      end $r1b$;
     </sql>
     <rollback>
       <sql splitStatements="false">
-        do $$
+        do $r1b$
         begin
           if exists (
             select 1 from enterprise_identity_connections
@@ -45,7 +45,7 @@
           ) then
             raise exception 'Cannot restore legacy ACTIVE binding uniqueness while shared-issuer bindings exist';
           end if;
-        end $;
+        end $r1b$;
       </sql>
       <sql>
         create unique index uq_eic_active_binding
