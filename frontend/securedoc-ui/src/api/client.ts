@@ -93,7 +93,7 @@ class ApiClient {
     return response as unknown as T;
   }
 
-  async getAvailableOidcTenants(): Promise<Array<{ tenantId: string; roles: string[] }>> {
+  async getAvailableOidcTenants(): Promise<Array<{ tenantId: string; name: string; slug: string; roles: string[] }>> {
     return this.request('/me/tenants');
   }
 
