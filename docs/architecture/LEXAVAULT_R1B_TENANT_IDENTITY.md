@@ -103,3 +103,9 @@ No build, database migration execution, or authenticated runtime validation was 
 - Added negative regression coverage: matching Tenant B group grants do not admit Tenant B when only Tenant A is an ACTIVE candidate.
 - The live `RequestContextResolver` is intentionally unchanged: this is **not production-enabled**, and the old issuer uniqueness invariant remains.
 - The last externally reported full-build PASS predates this change. Compile, migration, tests and OIDC runtime acceptance for B6 are **not yet verified**. No customer-facing validation required.
+
+## B7 staged shared-issuer migration (not activated)
+- Added `037-r1b-shared-issuer-active-bindings.xml` as a **staged, unregistered** migration. It drops only the cross-tenant unique ACTIVE issuer binding, while retaining the migration 034 one-ACTIVE-per-tenant constraint. Rollback refuses when conflicting shared bindings still exist.
+- Updated the grant repository to allow grant lookup across multiple ACTIVE connections; admission still requires intersecting ACTIVE candidate discovery and tenant-specific trusted IdP group policy.
+- **DO NOT register migration 037 or enable shared issuer in a running deployment yet.** Old `OidcTenantResolver.findActive` must remain operational, and currently throws on ambiguous bindings. Its replacement, explicit selection mechanism, integration identity separation, identity activation/rollback validation, and tested rollout gate are not complete.
+- No migration or runtime test executed. The last successful build predates this code. The branch must not be considered releasable.
