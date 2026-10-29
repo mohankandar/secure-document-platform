@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
-import { selectedOidcTenant, setSelectedOidcTenant } from './api/tenantContext';
+import { selectedOidcTenant, setSelectedOidcTenant, TENANT_CONTEXT_CHANGED_EVENT } from './api/tenantContext';
 import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode, OIDC_SESSION_EXPIRED_EVENT } from './api/auth';
 import type { CurrentUser } from './types';
 import DashboardPage from './pages/DashboardPage';
@@ -251,6 +251,17 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authDenied, setAuthDenied] = useState(false);
   const [tenantChoices, setTenantChoices] = useState<Array<{ tenantId: string; name: string; slug: string; roles: string[] }>>([]);
+
+  useEffect(() => {
+    if (localMode) return;
+    const onTenantChange = () => {
+      setCurrentUser(null);
+      setCurrentCapabilities([]);
+      setCurrentRoles('DOCUMENT_PROCESSOR');
+    };
+    window.addEventListener(TENANT_CONTEXT_CHANGED_EVENT, onTenantChange);
+    return () => window.removeEventListener(TENANT_CONTEXT_CHANGED_EVENT, onTenantChange);
+  }, [localMode]);
 
   useEffect(() => {
     if (localMode) return;
