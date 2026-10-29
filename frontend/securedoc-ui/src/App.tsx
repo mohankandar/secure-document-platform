@@ -74,7 +74,7 @@ function NavigationGroup({ title, entries, onNavigate }: { title: string; entrie
   );
 }
 
-function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles, hasRole, hasCapability, onRoleChange, onSignOut }: {
+function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles, hasRole, hasCapability, onRoleChange, onSignOut, onSwitchTenant }: {
   localMode: boolean;
   selectedRole: string;
   currentUser: CurrentUser | null;
@@ -83,8 +83,11 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
   hasCapability: (capability: string) => boolean;
   onRoleChange: (value: string) => void;
   onSignOut: () => void;
+  onSwitchTenant: () => Promise<boolean>;
 }) {
   const { branding } = useBranding();
+  const [tenantSwitchError, setTenantSwitchError] = useState(false);
+  const [switchingTenant, setSwitchingTenant] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('lexavault.ui.sidebarCollapsed') === 'true');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -197,6 +200,21 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
         </nav>
 
         <div className="sidebar-footer">
+          {!localMode && selectedOidcTenant() && (
+            <div>
+              <button className="sidebar-signout-modern" type="button" disabled={switchingTenant}
+                onClick={() => {
+                  setTenantSwitchError(false);
+                  setSwitchingTenant(true);
+                  void onSwitchTenant().then((ok) => {
+                    if (!ok) setTenantSwitchError(true);
+                  }).finally(() => setSwitchingTenant(false));
+                }}>
+                <span>{switchingTenant ? 'Checking organizations…' : 'Switch organization'}</span>
+              </button>
+              {tenantSwitchError && <p role="alert">Could not load your organizations. Please try again.</p>}
+            </div>
+          )}
           {localMode ? (
             <label className="demo-role-control">
               <span>Demo role</span>
@@ -401,6 +419,20 @@ export default function App() {
     );
   }
 
+  const switchTenant = async (): Promise<boolean> => {
+    try {
+      const choices = await apiClient.getAvailableOidcTenants();
+      if (choices.length < 2 || !choices.some((choice) => choice.tenantId === selectedOidcTenant())) return false;
+      setTenantChoices(choices);
+      setAuthError('');
+      setSelectedOidcTenant(null);
+      // Changing the tenant also clears the principal/capabilities via TENANT_CONTEXT_CHANGED_EVENT.
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const signOut = () => {
     setCurrentCapabilities([]);
     setCurrentRoles('DOCUMENT_PROCESSOR');
@@ -417,7 +449,7 @@ export default function App() {
       {caseFilePreviewEnabled && currentUser
         ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={handleRoleChange} /></Suspense>
         : <AuthenticatedApplication key={localMode ? 'local' : selectedOidcTenant() || 'oidc-default'} localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
-            hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} />}
+            hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} onSwitchTenant={switchTenant} />}
     </BrandingProvider>
   );
 }
