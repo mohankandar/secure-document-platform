@@ -12,6 +12,7 @@ import com.securedoc.platform.api.security.oidc.OidcTenantSelection;
 import com.securedoc.platform.api.security.oidc.SharedIssuerActivationPreflight;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
+import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
 import com.securedoc.platform.application.observability.StructuredLogContext;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -49,6 +50,7 @@ public class RequestContextResolver {
     private final OidcRoleMapper oidcRoleMapper;
     private final OidcTenantResolver oidcTenantResolver;
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
+    private final ActiveOidcMachineTenantBindings machineTenantBindings;
     private final OidcTenantSelection tenantSelection = new OidcTenantSelection();
     private final SharedIssuerActivationPreflight sharedIssuerPreflight = new SharedIssuerActivationPreflight();
     private final TrustedActorResolver trustedActorResolver;
@@ -61,6 +63,7 @@ public class RequestContextResolver {
             OidcRoleMapper oidcRoleMapper,
             OidcTenantResolver oidcTenantResolver,
             OidcTenantMembershipResolver oidcTenantMembershipResolver,
+            ActiveOidcMachineTenantBindings machineTenantBindings,
             TrustedActorResolver trustedActorResolver,
             OidcJwtIdentityNormalizer oidcIdentityNormalizer) {
         this.demoTenantId = UUID.fromString(demoTenantId);
@@ -69,6 +72,7 @@ public class RequestContextResolver {
         this.oidcRoleMapper = oidcRoleMapper;
         this.oidcTenantResolver = oidcTenantResolver;
         this.oidcTenantMembershipResolver = oidcTenantMembershipResolver;
+        this.machineTenantBindings = machineTenantBindings;
         this.trustedActorResolver = trustedActorResolver;
         this.oidcIdentityNormalizer = oidcIdentityNormalizer;
     }
@@ -154,18 +158,28 @@ public class RequestContextResolver {
     }
 
     private AuthenticatedPrincipal resolveOidcIntegrationPrincipal() {
-        // Machine credentials must never inherit an ambiguous human tenant selection.
-        // A dedicated tenant-bound machine identity flow is required before shared
-        // issuer mode can be enabled for integration traffic.
-        if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
-            throw new SecurityContextException(
-                    "Machine integration identity is not supported in shared-issuer mode");
-        }
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
-        TenantId tenantId = oidcTenantResolver.resolve(jwt);
-        ActorId actorId = trustedActorResolver.resolve(jwt);
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
+        TenantId tenantId;
+        if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
+            if (!securityProperties.getOidc().isPersistentConnectionEnabled()
+                    || jwt.getIssuer() == null || securityProperties.getOidc().getAudience().isBlank()) {
+                throw new SecurityContextException("Shared-issuer machine identity configuration is incomplete");
+            }
+            // Preserve existing integration client-principal matching semantics.
+            // This candidate lookup never trusts human tenant-selection headers.
+            var candidates = machineTenantBindings.findEnabledPushTenants(
+                    securityProperties.getOidc().getProviderId(), jwt.getIssuer(),
+                    securityProperties.getOidc().getAudience(), identity.username());
+            if (candidates.size() != 1) {
+                throw new SecurityContextException("Machine identity has no unique ACTIVE tenant integration binding");
+            }
+            tenantId = candidates.iterator().next();
+        } else {
+            tenantId = oidcTenantResolver.resolve(jwt);
+        }
+        ActorId actorId = trustedActorResolver.resolve(jwt);
         return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), Set.of());
     }
 
