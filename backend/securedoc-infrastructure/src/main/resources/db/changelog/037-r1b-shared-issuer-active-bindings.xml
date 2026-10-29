@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+  <!--
+    Shared-issuer membership support: retain one ACTIVE connection per tenant
+    (migration 034), but permit distinct tenants to bind the same provider,
+    issuer and audience. Legacy single-binding findActive fails closed on
+    ambiguity; multi-tenant admission must use group-verified candidate lookup.
+    Keep the application in its default legacy mode until the complete
+    shared-issuer principal flow is enabled and verified.
+  -->
+  <changeSet id="037-r1b-shared-issuer-active-bindings" author="lexavault">
+    <sql>drop index if exists uq_eic_active_binding;</sql>
+    <rollback>
+      <sql>
+        do $$
+        begin
+          if exists (
+            select 1 from enterprise_identity_connections
+            where status='ACTIVE'
+            group by provider_id, issuer_uri, api_audience
+            having count(*) &gt; 1
+          ) then
+            raise exception 'Cannot restore legacy ACTIVE binding uniqueness while shared-issuer bindings exist';
+          end if;
+        end $$;
+        create unique index uq_eic_active_binding
+        on enterprise_identity_connections(provider_id, issuer_uri, api_audience)
+        where status='ACTIVE';
+      </sql>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>
