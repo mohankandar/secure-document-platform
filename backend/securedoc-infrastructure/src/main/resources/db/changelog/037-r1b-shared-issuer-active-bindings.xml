@@ -11,10 +11,31 @@
     shared-issuer principal flow is enabled and verified.
   -->
   <changeSet id="037-r1b-shared-issuer-active-bindings" author="lexavault">
-    <sql>drop index if exists uq_eic_active_binding;</sql>
+    <sql splitStatements="false">
+      do $
+      begin
+        -- Do not remove legacy uniqueness unless the replacement tenant
+        -- uniqueness guarantee is installed and the expected index exists.
+        if to_regclass('uq_eic_active_per_tenant') is null then
+          raise exception 'R1B migration requires uq_eic_active_per_tenant (034)';
+        end if;
+        if to_regclass('uq_eic_active_binding') is null then
+          raise exception 'Expected legacy ACTIVE issuer index is missing';
+        end if;
+        if exists (
+          select 1 from enterprise_identity_connections
+          where status='ACTIVE'
+          group by tenant_id
+          having count(*) &gt; 1
+        ) then
+          raise exception 'Multiple ACTIVE connections per tenant block R1B migration';
+        end if;
+        drop index uq_eic_active_binding;
+      end $;
+    </sql>
     <rollback>
-      <sql>
-        do $$
+      <sql splitStatements="false">
+        do $
         begin
           if exists (
             select 1 from enterprise_identity_connections
