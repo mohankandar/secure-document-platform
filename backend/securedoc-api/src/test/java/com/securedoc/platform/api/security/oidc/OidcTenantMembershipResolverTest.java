@@ -74,6 +74,45 @@ class OidcTenantMembershipResolverTest {
         assertTrue(resolver.authorizedTenants(jwt(), Set.of("tenant-b")).isEmpty());
     }
 
+    @Test void tenantGrantsFromDifferentIssuerCannotAuthorizeThisToken() {
+        TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
+        when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
+                .thenReturn(Map.of());
+        SecurityProperties properties = new SecurityProperties();
+        properties.getOidc().setAudience("lexavault-api");
+        var resolver = new OidcTenantMembershipResolver(repository, activeCandidates(), properties);
+        assertTrue(resolver.authorizedTenants(jwt(), Set.of("tenant-a", "tenant-b")).isEmpty());
+        verify(repository).activeGrants("customer-oidc", ISSUER, "lexavault-api");
+    }
+
+    @Test void noActiveBindingIsNotEnoughEvenWithSignedGroup() {
+        TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
+        when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
+                .thenReturn(Map.of(A, Map.of("tenant-a", Set.of("DOCUMENT_PROCESSOR"))));
+        ActiveOidcTenantCandidates candidates = mock(ActiveOidcTenantCandidates.class);
+        when(candidates.findCandidates("customer-oidc", ISSUER, "lexavault-api"))
+                .thenReturn(Set.of());
+        SecurityProperties properties = new SecurityProperties();
+        properties.getOidc().setAudience("lexavault-api");
+        var resolver = new OidcTenantMembershipResolver(repository, candidates, properties);
+        assertTrue(resolver.authorizedTenants(jwt(), Set.of("tenant-a")).isEmpty());
+    }
+
+    @Test void authenticatedGroupForAnotherTenantNeverElevatesSelectedTenant() {
+        TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
+        when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
+                .thenReturn(Map.of(A, Map.of("tenant-a", Set.of("DOCUMENT_PROCESSOR")),
+                        B, Map.of("tenant-b", Set.of("TENANT_IT_ADMIN"))));
+        SecurityProperties properties = new SecurityProperties();
+        properties.getOidc().setAudience("lexavault-api");
+        var resolver = new OidcTenantMembershipResolver(repository, activeCandidates(), properties);
+        var memberships = resolver.authorizedTenants(jwt(), Set.of("tenant-a", "tenant-b"));
+        assertEquals(Set.of("DOCUMENT_PROCESSOR"), memberships.get(A));
+        assertEquals(Set.of("TENANT_IT_ADMIN"), memberships.get(B));
+        assertEquals(A, resolver.select(A, memberships));
+        assertEquals(B, resolver.select(B, memberships));
+    }
+
     @Test void noGroupsCannotAuthorizeAnyTenant() {
         TenantOidcGroupGrantRepository repository = mock(TenantOidcGroupGrantRepository.class);
         when(repository.activeGrants("customer-oidc", ISSUER, "lexavault-api"))
