@@ -154,6 +154,13 @@ public class RequestContextResolver {
     }
 
     private AuthenticatedPrincipal resolveOidcIntegrationPrincipal() {
+        // Machine credentials must never inherit an ambiguous human tenant selection.
+        // A dedicated tenant-bound machine identity flow is required before shared
+        // issuer mode can be enabled for integration traffic.
+        if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
+            throw new SecurityContextException(
+                    "Machine integration identity is not supported in shared-issuer mode");
+        }
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
         TenantId tenantId = oidcTenantResolver.resolve(jwt);
