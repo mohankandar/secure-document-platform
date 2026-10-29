@@ -3,6 +3,8 @@ package com.securedoc.platform.api.controller;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.application.port.out.TenantRepository;
 import com.securedoc.platform.domain.tenant.TenantStatus;
+import com.securedoc.platform.api.security.SecurityMode;
+import com.securedoc.platform.api.context.SecurityContextException;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +33,9 @@ public class OidcTenantDiscoveryController {
 
     @GetMapping
     public ResponseEntity<List<TenantChoice>> list() {
+        if (context.securityMode() != SecurityMode.OIDC) {
+            throw new SecurityContextException("Tenant discovery requires OIDC authentication");
+        }
         var memberships = context.resolveAvailableOidcTenants();
         List<TenantChoice> choices = memberships.entrySet().stream()
                 .map(e -> tenantRepository.findById(e.getKey())
