@@ -150,3 +150,8 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Revision detection also rejects A-to-B-to-A switching during one request, where tenant ID comparison alone would miss an intervening selection. A legacy single-tenant session remains unaffected unless tenant selection changes.
 - This reduces stale response exposure but does not cancel already-dispatched server-side writes. Server-side tenant admission and transactional authorization remain mandatory. File uploads, streaming paths, third-party clients, page-local caches and auth state need separate verification.
 - The R1B HEAD is not newly built or tested. Migration 037 remains unregistered; shared-issuer flag defaults off. No change to P2 or main.
+
+## B15 machine-integration shared issuer guard
+- In the opt-in shared-issuer mode, the machine/integration principal now explicitly fails closed instead of calling the legacy one-binding OIDC resolver. This prevents ambiguous tenant binding or silent fallback to a human selected-tenant header.
+- This is a temporary deny control, NOT finished machine integration compatibility. The shared-issuer mode must not be enabled for real integration workflows until a trusted tenant-bound machine-credential mapping is implemented and acceptance-tested.
+- Migration 037 stays unregistered and the feature flag remains disabled. Latest code is not yet built or runtime verified; main/P2 unchanged.
