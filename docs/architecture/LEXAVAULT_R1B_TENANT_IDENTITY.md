@@ -54,3 +54,12 @@ B6. Run multi-node OIDC tests for Tenant A/B and then P2, with full build and ru
 - Retention cleanup, storage outage, in-flight recovery, deployment-hardening tests remain open until evidenced.
 
 Do not claim build/test PASS for this document-only checkpoint. No product code changes in this commit.
+
+## R1B B1 security primitives (committed 2026-10-28)
+- TrustedTenantAdmission: denies a requested tenant not in a server-verified membership set and rejects ambiguous implicit selection.
+- TenantGroupAuthorization: computes roles from only the *selected tenant's* trusted IdP group mapping; no cross-tenant role inheritance; rejects missing policies/claim collections.
+- TenantGroupAuthorization rejects granting PLATFORM_OPERATIONS_ADMIN from tenant-specific group mappings. Platform Operations requires a distinct platform trust boundary.
+- Unit tests were committed for cross-tenant denial, ambiguity, missing group membership, and forbidden platform-role assignment.
+- **Not integrated into RequestContextResolver/OidcTenantResolver yet. No database migration or frontend tenant switch. Not runtime-accepted.** This isolation is intentional until a trustworthy membership source is implemented.
+- **No build executed by assistant.** First useful development gate: `cd backend && mvn -pl securedoc-api -am -Dtest=TrustedTenantAdmissionTest,TenantGroupAuthorizationTest -Dsurefire.failIfNoSpecifiedTests=false test` (adjust multi-module artifact coordinates if build differs).
+- Do not publish production SaaS claims until tested secure OIDC identity admission and cross-tenant integration path.
