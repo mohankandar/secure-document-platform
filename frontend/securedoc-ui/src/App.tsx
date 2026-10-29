@@ -312,19 +312,25 @@ export default function App() {
         // reject this optional endpoint, in which case existing /me behavior remains.
         try {
           const choices = await apiClient.getAvailableOidcTenants();
-          if (choices.length > 0) {
-            const currentSelection = selectedOidcTenant();
-            if (currentSelection && !choices.some((choice) => choice.tenantId === currentSelection)) {
-              setSelectedOidcTenant(null);
-            }
-            if (choices.length === 1) setSelectedOidcTenant(choices[0].tenantId);
-            else if (!selectedOidcTenant()) {
-              if (active) setTenantChoices(choices);
-              return;
-            }
+          if (choices.length === 0) {
+            throw new Error('No authorized ACTIVE organization is available for this account.');
           }
-        } catch {
-          // Compatibility: the discovery endpoint is unavailable in legacy OIDC mode.
+          const currentSelection = selectedOidcTenant();
+          if (currentSelection && !choices.some((choice) => choice.tenantId === currentSelection)) {
+            setSelectedOidcTenant(null);
+          }
+          if (choices.length === 1) setSelectedOidcTenant(choices[0].tenantId);
+          else if (!selectedOidcTenant()) {
+            if (active) setTenantChoices(choices);
+            return;
+          }
+        } catch (discoveryError) {
+          // Only an unsupported discovery route can fall back to the legacy /me flow.
+          // Network failures, invalid responses and authorization failures must not
+          // silently enter a workspace with an unverified tenant selection.
+          const status = typeof discoveryError === 'object' && discoveryError !== null && 'httpStatus' in discoveryError
+            ? Number((discoveryError as { httpStatus?: number }).httpStatus) : undefined;
+          if (status !== 403 && status !== 404) throw discoveryError;
         }
         const user = await apiClient.getCurrentUser();
         console.info('[LexaVault OIDC] Production session verified.', { roles: user.roles, capabilityCount: (user.capabilities || []).length });
