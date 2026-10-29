@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
-import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.application.port.out.TenantRepository;
+import com.securedoc.platform.domain.tenant.TenantStatus;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,20 +22,26 @@ import java.util.Set;
 @RequestMapping("/api/v1/me/tenants")
 public class OidcTenantDiscoveryController {
     private final RequestContextResolver context;
+    private final TenantRepository tenantRepository;
 
-    public OidcTenantDiscoveryController(RequestContextResolver context) {
+    public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository) {
         this.context = context;
+        this.tenantRepository = tenantRepository;
     }
 
     @GetMapping
     public ResponseEntity<List<TenantChoice>> list() {
         var memberships = context.resolveAvailableOidcTenants();
         List<TenantChoice> choices = memberships.entrySet().stream()
-                .map(e -> new TenantChoice(e.getKey().value().toString(), e.getValue()))
+                .map(e -> tenantRepository.findById(e.getKey())
+                        .filter(t -> t.status() == TenantStatus.ACTIVE)
+                        .map(t -> new TenantChoice(t.id().value().toString(), t.name(), t.slug(), e.getValue()))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
                 .sorted(Comparator.comparing(TenantChoice::tenantId))
                 .toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(choices);
     }
 
-    public record TenantChoice(String tenantId, Set<String> roles) {}
+    public record TenantChoice(String tenantId, String name, String slug, Set<String> roles) {}
 }
