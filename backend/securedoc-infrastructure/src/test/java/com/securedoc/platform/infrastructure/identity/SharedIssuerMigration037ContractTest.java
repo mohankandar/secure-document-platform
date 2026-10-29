@@ -19,6 +19,8 @@ class SharedIssuerMigration037ContractTest {
             assertEquals(2, xml.split("end \\$\\$;", -1).length - 1,
                     "Both DO blocks must have valid closing delimiters");
             assertTrue(xml.contains("uq_eic_active_per_tenant"));
+            assertTrue(xml.contains("end $;\n      </sql>\n      <sql>\n        create unique index uq_eic_active_binding"),
+                    "Rollback must use a distinct statement to rebuild the legacy index");
             assertTrue(xml.contains("raise exception 'Cannot restore legacy ACTIVE binding uniqueness"));
             assertTrue(xml.contains("splitStatements=\"false\""));
         }
