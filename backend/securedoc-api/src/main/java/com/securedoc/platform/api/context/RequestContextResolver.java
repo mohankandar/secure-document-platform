@@ -9,6 +9,7 @@ import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantSelection;
+import com.securedoc.platform.api.security.oidc.OidcMachineTenantAdmission;
 import com.securedoc.platform.api.security.oidc.SharedIssuerActivationPreflight;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
@@ -52,6 +53,7 @@ public class RequestContextResolver {
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
     private final ActiveOidcMachineTenantBindings machineTenantBindings;
     private final OidcTenantSelection tenantSelection = new OidcTenantSelection();
+    private final OidcMachineTenantAdmission machineAdmission = new OidcMachineTenantAdmission();
     private final SharedIssuerActivationPreflight sharedIssuerPreflight = new SharedIssuerActivationPreflight();
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
@@ -172,10 +174,7 @@ public class RequestContextResolver {
             var candidates = machineTenantBindings.findEnabledPushTenants(
                     securityProperties.getOidc().getProviderId(), jwt.getIssuer(),
                     securityProperties.getOidc().getAudience(), identity.username());
-            if (candidates.size() != 1) {
-                throw new SecurityContextException("Machine identity has no unique ACTIVE tenant integration binding");
-            }
-            tenantId = candidates.iterator().next();
+            tenantId = machineAdmission.requireUnique(candidates);
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
         }
