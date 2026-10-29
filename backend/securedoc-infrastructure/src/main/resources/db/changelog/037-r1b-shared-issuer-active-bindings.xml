@@ -45,7 +45,9 @@
           ) then
             raise exception 'Cannot restore legacy ACTIVE binding uniqueness while shared-issuer bindings exist';
           end if;
-        end $$;
+        end $;
+      </sql>
+      <sql>
         create unique index uq_eic_active_binding
         on enterprise_identity_connections(provider_id, issuer_uri, api_audience)
         where status='ACTIVE';
