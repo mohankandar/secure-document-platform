@@ -78,3 +78,15 @@ Do not claim build/test PASS for this document-only checkpoint. No product code 
 - This is **not yet wired into the live OIDC request principal or frontend**. The legacy single-tenant connection continues unchanged.
 - Existing unique ACTIVE identity binding per (provider, issuer, audience) still prevents multiple shared-issuer active tenants. Do not drop it until the new request tenant-selection contract and activation/rollback paths are ready and tested together.
 - Test files are committed but **no Maven build, Liquibase migration execution or runtime OIDC acceptance has been performed** in this environment. No business validation requested.
+
+## B4 compatibility gate — shared issuer activation (2026-10-28)
+Existing migration 032 imposes a unique ACTIVE binding on `(provider_id, issuer_uri, api_audience)`; migration 034 separately enforces one ACTIVE connection per tenant. Existing `findActive()` expects at most one matching connection and returns its tenant. Activation/rollback code assumes that invariant. **Do not drop the index independently**: doing so could make existing OIDC authentication ambiguous before membership selection is enforced.
+The new `JdbcTenantOidcGroupGrantRepository` explicitly fails closed on multiple matching ACTIVE connection IDs, rather than silently aggregating unrelated tenants. Thus B3 provides read-only admission primitives and tests, but **shared-issuer multi-tenant admission is not yet operational**.
+Recommended next cohesive change:
+1. Preserve old resolver for single-tenant installations.
+2. Version the shared-issuer identity binding policy, scoped by tenant and matched by a verified issuer/audience and IdP group admission rule.
+3. Introduce a full server-verified tenant-selection contract, including explicit choice when >1 tenant is available; no arbitrary header grants authorization.
+4. Make draft test, activation, rollback and all cache invalidation paths aware of the new policy; alter uniqueness only in the same migration/release gate that implements fail-closed selection.
+5. Regression-test same issuer for two tenants, same human in both, wrong-tenant denial, identity activation/rollback, delayed cache refresh, and OIDC machine intake.
+6. Keep legacy production authentication paths unchanged until full compilation and integration tests pass.
+No build, database migration execution, or authenticated runtime validation was performed in this checkpoint.
