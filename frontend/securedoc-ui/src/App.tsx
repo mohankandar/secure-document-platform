@@ -250,7 +250,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(!localMode);
   const [authError, setAuthError] = useState('');
   const [authDenied, setAuthDenied] = useState(false);
-  const [tenantChoices, setTenantChoices] = useState<Array<{ tenantId: string; roles: string[] }>>([]);
+  const [tenantChoices, setTenantChoices] = useState<Array<{ tenantId: string; name: string; slug: string; roles: string[] }>>([]);
 
   useEffect(() => {
     if (localMode) return;
@@ -374,7 +374,7 @@ export default function App() {
         {tenantChoices.map((choice) => (
           <button className="ui-button secondary" key={choice.tenantId} type="button"
             onClick={() => void chooseTenant(choice.tenantId)}>
-            {choice.tenantId}
+            {choice.name}
           </button>
         ))}
       </div></div>
