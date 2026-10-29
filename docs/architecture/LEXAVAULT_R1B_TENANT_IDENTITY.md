@@ -190,3 +190,9 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Fixed malformed PostgreSQL dollar-quote delimiters in BOTH forward and rollback DO blocks (`do $$ ... end $$;`). This was a real migration execution blocker not detectable through the earlier Maven compilation.
 - Added `SharedIssuerMigration037ContractTest` to assert the staged changelog has the expected two DO delimiter pairs, preserves per-tenant uniqueness requirement, and retains rollback collision refusal. This is a static source contract, not a substitute for applying and rolling back the migration against an isolated PostgreSQL database.
 - Latest test source has not been executed. Migration 037 remains excluded from the master changelog; shared-issuer flag remains disabled. main/P2 unchanged.
+
+## B22 staged migration gate and machine authentication binding hardening
+- Added an infrastructure test preventing accidental registration of migration 037 in the master changelog before its separate acceptance and rollout. Migration 034 must remain registered.
+- Tightened the shared-issuer machine tenant candidate query: enabled PUSH_API sources must also use JWT or OAUTH2_CLIENT_CREDENTIALS authentication. An API_KEY, BASIC, NONE or MTLS-only connection is not sufficient evidence for binding a bearer-token machine principal. Existing downstream intake authorization still applies.
+- Added a dependency-free JDBC query-contract test checking identity criteria and rejecting blank client principals without querying. Latest tests are not yet run; PostgreSQL migration exercise and real machine-token principal mapping still require runtime verification.
+- No changes to main or P2; shared-issuer mode remains disabled and migration 037 unregistered.
