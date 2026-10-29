@@ -131,3 +131,11 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - OIDC logout/expiry cleanup now also clears selected tenant, preventing cross-login tenant selection persistence.
 - This is NOT a finished tenant selector UI. Tenant metadata API, membership display, tenant-specific cache invalidation and multi-tenant UX are still pending. The opt-in server feature remains disabled by default and migration 037 is still unregistered.
 - No new full build or UI runtime acceptance was executed for these changes. Do not ask for business validation yet.
+
+## B12 pre-selection OIDC tenant discovery and frontend choice screen
+- Added GET /api/v1/me/tenants. The exact GET path bypasses the tenant-principal interceptor because a valid user may have multiple memberships before making a selection. It still requires authenticated OIDC security and the feature flag, and returns only tenants admitted by verified IDP groups plus ACTIVE connections. The endpoint explicitly disables caching.
+- Discovery supplies the authorized tenant display name, slug and scoped roles (tenant names are looked up from provisioned ACTIVE tenants; no global tenant directory is exposed).
+- Frontend first attempts discovery after OIDC callback; when available, it auto-selects one tenant or displays a named organization choice screen for multiple authorized tenants. In legacy environments it falls back to the prior /me flow. Selection is a request hint and is revalidated by backend membership rules.
+- The workspace is keyed to selected tenant context, and OIDC session cleanup clears the selection. This is initial login selection, **not** an in-workspace tenant-switch UI. Tenant-specific cache and background request cancellation still need end-to-end review.
+- Committed a narrow interceptor negative test for the preselection exception. Build and runtime verification have NOT yet been run for this checkpoint.
+- Shared-issuer migration 037 remains unregistered; the new mode stays disabled by default. Identity activation/rollback and machine principal migration are not ready for production.
