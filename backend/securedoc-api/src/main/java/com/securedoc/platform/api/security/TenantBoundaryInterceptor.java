@@ -23,6 +23,11 @@ public class TenantBoundaryInterceptor implements HandlerInterceptor {
         if ("GET".equals(request.getMethod()) && "/api/v1/me/tenants".equals(request.getServletPath())) {
             return true;
         }
+        if (request.getServletPath().equals("/api/v1/external-intakes")
+                || request.getServletPath().startsWith("/api/v1/external-intakes/")) {
+            tenantBoundaryGuard.requireProvisionedTenant(contextResolver.resolveIntegrationPrincipal(request));
+            return true;
+        }
         tenantBoundaryGuard.requireProvisionedTenant(contextResolver.resolvePrincipal(request));
         return true;
     }
