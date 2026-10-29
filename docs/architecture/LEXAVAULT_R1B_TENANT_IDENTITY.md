@@ -124,3 +124,10 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Added SharedIssuerActivationPreflight and targeted denial tests; gated human OIDC request resolution now fails when no valid ACTIVE authorized tenant exists or tenant-scope roles are invalid. Legacy OIDC remains default and unchanged.
 - This is request-path preflight, not authorization to activate a staged IdP connection or proof that the database migration is applied. Migration 037 remains unregistered; shared-issuer rollout is still blocked, and machine integration path still uses the legacy resolver.
 - Source changes are committed, not newly compiled or runtime-verified. No business validation requested.
+
+## B11 frontend tenant-context transport (2026-10-28)
+- Added session-scoped selection helper in frontend API, with UUID validation and tenant-context change event. It is a transport hint only, not admission authority.
+- Authenticated API requests send X-Selected-Tenant-Id only when an OIDC selection exists. LOCAL continues using its existing demo headers.
+- OIDC logout/expiry cleanup now also clears selected tenant, preventing cross-login tenant selection persistence.
+- This is NOT a finished tenant selector UI. Tenant metadata API, membership display, tenant-specific cache invalidation and multi-tenant UX are still pending. The opt-in server feature remains disabled by default and migration 037 is still unregistered.
+- No new full build or UI runtime acceptance was executed for these changes. Do not ask for business validation yet.
