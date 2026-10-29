@@ -118,3 +118,9 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Added OidcTenantSelectionTest covering authorized single-tenant default, explicit multi-tenant selection, forged tenant choice and invalid IDs.
 - Shared issuer migration 037 remains staged and unregistered. Shared-issuer rollout and admin activation/rollback remain incomplete; frontend selector and verified OIDC runtime acceptance are still pending.
 - Latest changes are source committed only; no new build has been run and prior PASS does not apply to this HEAD.
+
+## B10 gated shared-issuer preflight (2026-10-28)
+- Read existing activateValidated and rollbackToKnownGood paths: exact configuration version, recently PASSED test (activation), known-good-only rollback, and per-tenant transactional ACTIVE replacement remain unmodified.
+- Added SharedIssuerActivationPreflight and targeted denial tests; gated human OIDC request resolution now fails when no valid ACTIVE authorized tenant exists or tenant-scope roles are invalid. Legacy OIDC remains default and unchanged.
+- This is request-path preflight, not authorization to activate a staged IdP connection or proof that the database migration is applied. Migration 037 remains unregistered; shared-issuer rollout is still blocked, and machine integration path still uses the legacy resolver.
+- Source changes are committed, not newly compiled or runtime-verified. No business validation requested.
