@@ -42,10 +42,9 @@ public class OidcTenantMembershipResolver {
                 grants.activeGrants(providerId, URI.create(verifiedJwt.getIssuer().toString()), audience);
         Map<TenantId, Set<String>> authorized = new LinkedHashMap<>();
         for (TenantId tenant : policies.keySet()) {
-            try {
+            // Absence of a matching group means no membership. Invalid policy is a hard failure.
+            if (authorization.hasMatchingGroup(authenticatedGroups, policies.get(tenant))) {
                 authorized.put(tenant, authorization.authorizedRoles(tenant, authenticatedGroups, policies));
-            } catch (SecurityContextException deniedForTenant) {
-                // A user need not belong to every tenant exposed by the identity provider.
             }
         }
         return Map.copyOf(authorized);
