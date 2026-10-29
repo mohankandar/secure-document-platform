@@ -9,6 +9,7 @@ import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantSelection;
+import com.securedoc.platform.api.security.oidc.SharedIssuerActivationPreflight;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.observability.StructuredLogContext;
@@ -48,6 +49,7 @@ public class RequestContextResolver {
     private final OidcTenantResolver oidcTenantResolver;
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
     private final OidcTenantSelection tenantSelection = new OidcTenantSelection();
+    private final SharedIssuerActivationPreflight sharedIssuerPreflight = new SharedIssuerActivationPreflight();
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
 
@@ -154,6 +156,9 @@ public class RequestContextResolver {
                 throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections");
             }
             var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
+            sharedIssuerPreflight.requireReady(true,
+                    securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled(),
+                    authorized.keySet(), authorized);
             tenantId = tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), authorized);
             roles = authorized.get(tenantId);
         } else {
