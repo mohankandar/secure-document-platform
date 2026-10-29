@@ -29,7 +29,7 @@ public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantR
             return Map.of();
         }
         String sql = """
-                select c.connection_id, g.tenant_id, g.external_group, g.product_role
+                select g.tenant_id, g.external_group, g.product_role
                 from tenant_oidc_group_grants g
                 join enterprise_identity_connections c
                   on c.tenant_id = g.tenant_id and c.issuer_uri = g.issuer_uri
@@ -38,10 +38,7 @@ public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantR
                   and c.status = 'ACTIVE' and t.status = 'ACTIVE'
                 """;
         Map<TenantId, Map<String, Set<String>>> groups = new LinkedHashMap<>();
-        Set<UUID> activeConnectionIds = new HashSet<>();
         jdbc.query(sql, rs -> {
-            UUID connectionId = rs.getObject("connection_id", UUID.class);
-            activeConnectionIds.add(connectionId);
             TenantId tenant = TenantId.of(rs.getObject("tenant_id", UUID.class));
             String externalGroup = rs.getString("external_group");
             String rawRole = rs.getString("product_role");
@@ -52,11 +49,6 @@ public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantR
             groups.computeIfAbsent(tenant, k -> new LinkedHashMap<>())
                     .computeIfAbsent(externalGroup, k -> new LinkedHashSet<>()).add(rawRole);
         }, providerId.trim(), issuer.toString(), audience.trim());
-        // Existing schema guarantees one active binding per provider/issuer/audience.
-        // Fail closed if unexpected duplicate connections are encountered.
-        if (activeConnectionIds.size() > 1) {
-            throw new IllegalStateException("Ambiguous ACTIVE OIDC identity connections");
-        }
         Map<TenantId, Map<String, Set<String>>> immutable = new LinkedHashMap<>();
         groups.forEach((tenant, mapping) -> {
             Map<String, Set<String>> perTenant = new LinkedHashMap<>();
