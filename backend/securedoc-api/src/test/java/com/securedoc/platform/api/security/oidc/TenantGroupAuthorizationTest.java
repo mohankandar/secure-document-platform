@@ -25,6 +25,12 @@ class TenantGroupAuthorizationTest {
                 () -> policy.authorizedRoles(B, Set.of("tenant-a-processors"), mappings));
     }
 
+    @Test void tenantGroupCannotGrantPlatformOperations() {
+        var mappings = Map.of(A, Map.of("operations-group", Set.of("PLATFORM_OPERATIONS_ADMIN")));
+        assertThrows(SecurityContextException.class,
+                () -> policy.authorizedRoles(A, Set.of("operations-group"), mappings));
+    }
+
     @Test void rejectsMissingTenantPolicyAndAbsentGroups() {
         var mappings = Map.of(A, Map.of("a-group", Set.of("DOCUMENT_PROCESSOR")));
         assertThrows(SecurityContextException.class, () -> policy.authorizedRoles(B, Set.of("a-group"), mappings));
