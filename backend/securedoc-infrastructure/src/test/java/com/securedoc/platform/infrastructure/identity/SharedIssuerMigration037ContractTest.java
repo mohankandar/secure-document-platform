@@ -14,13 +14,13 @@ class SharedIssuerMigration037ContractTest {
                 "db/changelog/037-r1b-shared-issuer-active-bindings.xml")) {
             assertNotNull(stream, "R1B staged migration must be present");
             String xml = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-            assertEquals(2, xml.split("do \\$\\$", -1).length - 1,
-                    "Forward and rollback must each use PostgreSQL dollar-quoted DO blocks");
-            assertEquals(2, xml.split("end \\$\\$;", -1).length - 1,
-                    "Both DO blocks must have valid closing delimiters");
+            assertEquals(2, xml.split("do \\$r1b\\$", -1).length - 1,
+                    "Both DO blocks must use named PostgreSQL dollar-quote delimiters");
+            assertEquals(2, xml.split("end \\$r1b\\$;", -1).length - 1,
+                    "Both DO blocks must be properly closed");
             assertTrue(xml.contains("uq_eic_active_per_tenant"));
-            assertTrue(xml.contains("end $;\n      </sql>\n      <sql>\n        create unique index uq_eic_active_binding"),
-                    "Rollback must use a distinct statement to rebuild the legacy index");
+            assertTrue(xml.contains("end $r1b$;\\n      </sql>\\n      <sql>\\n        create unique index uq_eic_active_binding"),
+                    "Rollback must recreate the index in a separate SQL statement");
             assertTrue(xml.contains("raise exception 'Cannot restore legacy ACTIVE binding uniqueness"));
             assertTrue(xml.contains("splitStatements=\"false\""));
         }
