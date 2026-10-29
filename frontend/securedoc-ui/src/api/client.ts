@@ -93,6 +93,10 @@ class ApiClient {
     return response as unknown as T;
   }
 
+  async getAvailableOidcTenants(): Promise<Array<{ tenantId: string; roles: string[] }>> {
+    return this.request('/me/tenants');
+  }
+
   async getCurrentUser(): Promise<CurrentUser> {
     return this.request('/me');
   }
