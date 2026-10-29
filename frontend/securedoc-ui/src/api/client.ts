@@ -1,5 +1,6 @@
 import { API_BASE_URL, defaultHeaders, baseHeaders } from './config';
 import { expireOidcSession, isOidcSecurityMode } from './auth';
+import { selectedOidcTenant } from './tenantContext';
 import type {
   PackageSummary,
   PackageDetail,
@@ -63,10 +64,18 @@ class ApiClient {
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const startingTenant = selectedOidcTenant();
     const headers = { ...(await defaultHeaders()), ...options.headers };
+    // A tenant change during asynchronous token refresh must never send stale context.
+    if (isOidcSecurityMode() && startingTenant !== selectedOidcTenant()) {
+      throw new Error('Tenant context changed before the request was sent');
+    }
 
     if (import.meta.env.DEV && path === '/me') console.info('[LexaVault OIDC] Calling authenticated GET /api/v1/me. Bearer token value is intentionally not logged.');
     const response = await fetch(url, { ...options, headers });
+    if (isOidcSecurityMode() && startingTenant !== selectedOidcTenant()) {
+      throw new Error('Tenant context changed while the request was in progress');
+    }
     if (import.meta.env.DEV && path === '/me') console.info('[LexaVault OIDC] GET /api/v1/me response.', { status: response.status, statusText: response.statusText });
 
     if (!response.ok) {
@@ -88,7 +97,11 @@ class ApiClient {
 
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
-      return response.json();
+      const result = await response.json();
+      if (isOidcSecurityMode() && startingTenant !== selectedOidcTenant()) {
+        throw new Error('Tenant context changed while the response was being read');
+      }
+      return result;
     }
     return response as unknown as T;
   }
