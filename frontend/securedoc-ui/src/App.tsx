@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
 import { selectedOidcTenant, setSelectedOidcTenant, TENANT_CONTEXT_CHANGED_EVENT } from './api/tenantContext';
@@ -262,6 +262,7 @@ function AuthenticatedApplication({ localMode, selectedRole, currentUser, roles,
 }
 
 export default function App() {
+  const navigate = useNavigate();
   const localMode = isLocalSecurityMode();
   const [selectedRole, setSelectedRole] = useState(getCurrentRoles());
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -394,6 +395,7 @@ export default function App() {
         setCurrentRoles(user.roles.join(','));
         setCurrentCapabilities(user.capabilities || []);
         setTenantChoices([]);
+        navigate('/', { replace: true });
       } catch {
         setSelectedOidcTenant(null);
         setAuthError('Unable to enter that tenant. Contact your administrator.');
@@ -431,6 +433,7 @@ export default function App() {
       if (choices.length < 2 || !choices.some((choice) => choice.tenantId === selectedOidcTenant())) return false;
       setTenantChoices(choices);
       setAuthError('');
+      navigate('/', { replace: true });
       setSelectedOidcTenant(null);
       // Changing the tenant also clears the principal/capabilities via TENANT_CONTEXT_CHANGED_EVENT.
       return true;
@@ -451,7 +454,7 @@ export default function App() {
   const caseFilePreviewEnabled = import.meta.env.VITE_CASE_FILE_UI_ENABLED === 'true';
 
   return (
-    <BrandingProvider>
+    <BrandingProvider key={localMode ? 'local' : selectedOidcTenant() || 'oidc-unselected'}>
       {caseFilePreviewEnabled && currentUser
         ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={handleRoleChange} /></Suspense>
         : <AuthenticatedApplication key={localMode ? 'local' : selectedOidcTenant() || 'oidc-default'} localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
