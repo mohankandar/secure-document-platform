@@ -139,3 +139,8 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - The workspace is keyed to selected tenant context, and OIDC session cleanup clears the selection. This is initial login selection, **not** an in-workspace tenant-switch UI. Tenant-specific cache and background request cancellation still need end-to-end review.
 - Committed a narrow interceptor negative test for the preselection exception. Build and runtime verification have NOT yet been run for this checkpoint.
 - Shared-issuer migration 037 remains unregistered; the new mode stays disabled by default. Identity activation/rollback and machine principal migration are not ready for production.
+
+## B13 tenant-discovery and session-state hardening
+- The tenant-discovery controller explicitly denies LOCAL-mode access, in addition to the shared-issuer membership resolver requiring verified OIDC. Added negative controller test.
+- Frontend now clears current user, role and capability state when the selected tenant changes, preventing prior tenant privileges from remaining visible while the new selection is verified. Broader page-specific caches, cancellation, and tenant switch navigation remain pending.
+- Shared issuer migration 037 remains unregistered and feature mode disabled by default. A full build and runtime acceptance are not yet verified for these commits; the previous full build applies only to its earlier SHA.
