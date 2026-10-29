@@ -8,6 +8,17 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class TenantDiscoveryBoundaryTest {
+    @Test void externalIntakeUsesMachinePrincipalInsteadOfHumanPrincipal() {
+        RequestContextResolver resolver = mock(RequestContextResolver.class);
+        TenantBoundaryGuard guard = mock(TenantBoundaryGuard.class);
+        TenantBoundaryInterceptor interceptor = new TenantBoundaryInterceptor(resolver, guard);
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getServletPath()).thenReturn("/api/v1/external-intakes/123");
+        assertTrue(interceptor.preHandle(request, mock(HttpServletResponse.class), new Object()));
+        verify(resolver).resolveIntegrationPrincipal(request);
+        verify(resolver, never()).resolvePrincipal(request);
+    }
+
     @Test void onlyExactGetTenantDiscoveryCanBypassSelectedTenantBoundary() {
         RequestContextResolver resolver = mock(RequestContextResolver.class);
         TenantBoundaryGuard guard = mock(TenantBoundaryGuard.class);
