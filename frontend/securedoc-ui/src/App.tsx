@@ -309,7 +309,7 @@ export default function App() {
           // Compatibility: the discovery endpoint is unavailable in legacy OIDC mode.
         }
         const user = await apiClient.getCurrentUser();
-        console.info('[LexaVault OIDC] Production session verified., { roles: user.roles, capabilityCount: (user.capabilities || []).length });
+        console.info('[LexaVault OIDC] Production session verified.', { roles: user.roles, capabilityCount: (user.capabilities || []).length });
         if (active) {
           setCurrentUser(user);
           setCurrentRoles(user.roles.join(','));
