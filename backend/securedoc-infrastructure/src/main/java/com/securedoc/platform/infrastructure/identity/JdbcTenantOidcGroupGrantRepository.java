@@ -1,6 +1,5 @@
 package com.securedoc.platform.infrastructure.identity;
 
-import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.domain.identity.TenantId;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -41,13 +40,12 @@ public class JdbcTenantOidcGroupGrantRepository {
             TenantId tenant = TenantId.of(rs.getObject("tenant_id", UUID.class));
             String externalGroup = rs.getString("external_group");
             String rawRole = rs.getString("product_role");
-            ProductRole role = ProductRole.fromIdentityName(rawRole)
-                    .orElseThrow(() -> new IllegalStateException("Invalid tenant group role configuration"));
-            if (role == ProductRole.PLATFORM_OPERATIONS_ADMIN) {
-                throw new IllegalStateException("Platform Operations cannot be assigned by tenant groups");
+            if (rawRole == null || !Set.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR",
+                    "BUSINESS_ADMIN", "REPORT_VIEWER", "TENANT_IT_ADMIN").contains(rawRole)) {
+                throw new IllegalStateException("Invalid or platform-level tenant group role configuration");
             }
             groups.computeIfAbsent(tenant, k -> new LinkedHashMap<>())
-                    .computeIfAbsent(externalGroup, k -> new LinkedHashSet<>()).add(role.name());
+                    .computeIfAbsent(externalGroup, k -> new LinkedHashSet<>()).add(rawRole);
         }, providerId.trim(), issuer.toString(), audience.trim());
         Map<TenantId, Map<String, Set<String>>> immutable = new LinkedHashMap<>();
         groups.forEach((tenant, mapping) -> {
