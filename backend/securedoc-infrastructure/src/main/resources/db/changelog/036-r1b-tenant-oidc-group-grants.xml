@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+  <!-- R1B: independent tenant-specific membership policy; does not modify frozen ACTIVE OIDC bindings. -->
+  <changeSet id="036-r1b-tenant-oidc-group-grants" author="lexavault">
+    <createTable tableName="tenant_oidc_group_grants">
+      <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+      <column name="issuer_uri" type="VARCHAR(1000)"><constraints nullable="false"/></column>
+      <column name="external_group" type="VARCHAR(300)"><constraints nullable="false"/></column>
+      <column name="product_role" type="VARCHAR(80)"><constraints nullable="false"/></column>
+    </createTable>
+    <addPrimaryKey tableName="tenant_oidc_group_grants" columnNames="tenant_id,issuer_uri,external_group,product_role" constraintName="pk_tenant_oidc_group_grants"/>
+    <addForeignKeyConstraint baseTableName="tenant_oidc_group_grants" baseColumnNames="tenant_id" referencedTableName="tenants" referencedColumnNames="id" constraintName="fk_tenant_oidc_group_grants_tenant"/>
+    <createIndex tableName="tenant_oidc_group_grants" indexName="idx_tenant_oidc_group_grants_issuer">
+      <column name="issuer_uri"/>
+      <column name="external_group"/>
+    </createIndex>
+  </changeSet>
+</databaseChangeLog>
