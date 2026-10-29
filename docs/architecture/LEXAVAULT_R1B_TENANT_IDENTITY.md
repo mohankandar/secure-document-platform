@@ -168,3 +168,9 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Existing transactional retire/activate behavior, exact-version checks, 15-minute test freshness, and known-good rollback requirements are retained.
 - Added a focused JDBC-mock regression test for collision rejection. The test code has been committed but NOT run.
 - Shared-issuer mode still requires coordinated migration 037 rollout, verified duplicate issuer handling across users and machine integrations, and operational acceptance. Migration 037 remains unregistered. The application has NOT been compiled or runtime tested at this new HEAD.
+
+## B18 organization switching, discovery and cache isolation
+- Frontend now retains HTTP error status in production request errors (not just development logging). Discovery rejects an empty authorized-tenant set; only the expected legacy unsupported-response statuses 403/404 may fall back to legacy /me. Unexpected service errors and missing responses fail closed.
+- The workspace switch resets navigation to the root, clears selected tenant/user capabilities, and revalidates /me for the newly selected organization. The BrandingProvider is now keyed by tenant selection so branding data is not retained across organizational boundaries.
+- The API request revision guard from B14 remains in place, and the route and workspace component are remounted on tenant change. This does not by itself prove isolation for all streaming/background requests or browser-side caches; validate during technical acceptance.
+- No change to main/P2. Migration 037 is intentionally unregistered and shared-issuer mode remains off by default. New frontend changes have not been locally built or browser-tested.
