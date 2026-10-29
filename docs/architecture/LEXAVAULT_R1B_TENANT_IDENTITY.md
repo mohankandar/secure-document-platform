@@ -70,3 +70,11 @@ Do not claim build/test PASS for this document-only checkpoint. No product code 
 - **Important limitation:** the existing unique ACTIVE identity binding `(provider_id, issuer_uri, api_audience)` means at most one tenant is selectable per shared issuer/audience today. A follow-up migration/identity activation design is essential to allow multiple ACTIVE tenants on the same identity provider safely. This repository alone does not deliver multi-tenant SaaS membership.
 - **Build, Liquibase migration, and runtime integration tests are NOT executed.** The next gate is automated migration validation, source-controlled fixture setup, and integration with the resolver only after ambiguity handling is implemented and independently exercised.
 - A previously retired migration numbered 035 is not reused; migration 036 is new and additive.
+
+## B3 read-only OIDC admission pipeline (2026-10-28)
+- Added application port `TenantOidcGroupGrantRepository`, implemented by the existing JDBC ACTIVE-grants adapter. Dependency direction is API -> application port <- infrastructure.
+- Added `OidcTenantMembershipResolver` to map a *verified JWT plus normalized IdP group claims* to a map of tenant-authorized product roles. A user with only Tenant A's group cannot select B. A user with both must explicitly select one. No direct trust of browser tenant headers.
+- New unit tests cover shared-issuer tenant isolation, role separation, ambiguous membership, missing group access, and denied selection.
+- This is **not yet wired into the live OIDC request principal or frontend**. The legacy single-tenant connection continues unchanged.
+- Existing unique ACTIVE identity binding per (provider, issuer, audience) still prevents multiple shared-issuer active tenants. Do not drop it until the new request tenant-selection contract and activation/rollback paths are ready and tested together.
+- Test files are committed but **no Maven build, Liquibase migration execution or runtime OIDC acceptance has been performed** in this environment. No business validation requested.
