@@ -38,7 +38,7 @@ public class JdbcActiveOidcTenantCandidates implements ActiveOidcTenantCandidate
                   and c.status = 'ACTIVE' and t.status = 'ACTIVE'
                 """;
         Set<TenantId> candidates = new LinkedHashSet<>();
-        jdbc.query(sql, rs -> candidates.add(
+        jdbc.query(sql, (org.springframework.jdbc.core.RowCallbackHandler) rs -> candidates.add(
                 TenantId.of(rs.getObject("tenant_id", UUID.class))),
                 providerId.trim(), issuer.toString(), audience.trim());
         return Set.copyOf(candidates);
