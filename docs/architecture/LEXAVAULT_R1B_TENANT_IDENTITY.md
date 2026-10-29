@@ -97,3 +97,9 @@ No build, database migration execution, or authenticated runtime validation was 
 - The existing `OidcTenantResolver`, production principal and integration-identity path remain unchanged; this is a preparatory additive commit.
 - Migration that relaxes unique ACTIVE provider/issuer/audience remains blocked until the replacement principal resolution and Enterprise Identity activation/rollback tests are complete.
 - The previously reported `Build-LexaVault-All.ps1` PASS at 2026-10-28 21:20 EDT applies to the earlier branch HEAD, not these new B5 commits. The current HEAD has no new build evidence.
+
+## B6 — ACTIVE-candidate intersection enforced (2026-10-28)
+- The read-only OIDC membership resolver now requires BOTH a current ACTIVE tenant candidate and a tenant-scoped external group policy match. A grant for an inactive/absent candidate alone is never sufficient.
+- Added negative regression coverage: matching Tenant B group grants do not admit Tenant B when only Tenant A is an ACTIVE candidate.
+- The live `RequestContextResolver` is intentionally unchanged: this is **not production-enabled**, and the old issuer uniqueness invariant remains.
+- The last externally reported full-build PASS predates this change. Compile, migration, tests and OIDC runtime acceptance for B6 are **not yet verified**. No customer-facing validation required.
