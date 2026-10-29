@@ -465,3 +465,19 @@ Prior Users & Access entries above are historical, superseded. The new UI, simul
 - **P2 release-readiness defect; OPEN / not implemented.** Source review confirmed `PackageController.listPackages` defaults to `offset=0, limit=20`; `ListPackagesQueryService` clamps limit to 100; frontend `apiClient.listPackages()` invokes `/packages` with no pagination; `studio/Desk.tsx` sets `total = all.length` and derives stage/Needs You counts from only that returned page. Therefore `All 20`, `Redacting 0`, `Delivered 15`, `Stopped 5` can omit additional active packages known to exist in DB. This is not fixed by UI refresh or raising page size to 100.
 - **Required remediation (approval pending):** backend total-count and aggregate per-stage counts for tenant/role-visible non-hidden packages; explicit pagination/search/filter contract; frontend accurate totals and navigation/load-more across pages. Honor tenant/capability isolation, hidden/purged exclusion and status semantics. Tests for >20, 20, <20, filters/search, live updates and counts after retention hiding.
 - Do not implement or merge without approval; continue P2 testing independently.
+
+
+## Tenant Architecture R1B — trusted identity and commercial-release backlog (2026-10-28)
+
+**Status: DESIGN CONTRACT COMMITTED / IMPLEMENTATION NOT STARTED / TESTS NOT RUN.**
+See `docs/architecture/LEXAVAULT_R1B_TENANT_IDENTITY.md`. Preserve existing frozen Enterprise Identity activation, exact versioning, rollback, and Tenant A/B P2 acceptance evidence.
+
+- **P0 R1B-IDENTITY-01 OPEN:** Shared-issuer OIDC tenant binding: current unique ACTIVE (provider_id, issuer_uri, api_audience) only resolves one tenant. Design and implement backward-compatible tenant-specific trusted admission.
+- **P0 R1B-IDENTITY-02 OPEN:** Bind authenticated subject/group authorization to selected tenant on server, preventing role inheritance and forged tenant selection; preserve IdP-owned users/groups. Do not restore V1 Users & Access.
+- **P0 R1B-IDENTITY-03 OPEN:** Authenticated tenant context API and frontend tenant-aware session/cache isolation, without trusting LOCAL headers in production.
+- **P0 R1B-IDENTITY-04 OPEN:** Separate human OIDC tenant context from machine/integration identities. Review globally scoped platform reads and scheduled recovery/delivery/retention.
+- **P0 R1B-LICENSE-01 OPEN:** Top banner at 60/30 days before expiry; automatic 30-calendar-day post-expiry grace with uninterrupted licensed operations; safe restricted mode afterward; signed temporary extension for negotiations; offline renewal and multi-node consistency.
+- **P1 R1B-PAGINATION-01 OPEN:** Follow existing Desk 20-item pagination/count defect; also fix adapter offset-to-page truncation for non-page-aligned offsets with total-count contract and tests.
+- **P0 R1B-ACCEPTANCE-01 OPEN:** Production-mode OIDC Tenant A/B identity and negative isolation tests; no build/runtime acceptance claimed by document-only checkpoint.
+
+No code behavior, database, or LOCAL P2 runtime state changed at this checkpoint.
