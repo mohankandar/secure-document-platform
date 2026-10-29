@@ -3,6 +3,7 @@ package com.securedoc.platform.infrastructure.identity;
 import com.documentplatform.identity.OidcConnectionBinding;
 import com.documentplatform.identity.OidcConnectionBindingResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,8 @@ import java.util.UUID;
 public class JdbcOidcConnectionBindingRepository implements OidcConnectionBindingResolver {
     private static final Duration ACTIVATION_TEST_MAX_AGE = Duration.ofMinutes(15);
     private final JdbcTemplate jdbc;
+    @Value("${securedoc.security.oidc.shared-issuer-tenant-selection-enabled:false}")
+    private boolean sharedIssuerEnabled;
     public JdbcOidcConnectionBindingRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
 
     @Override public Optional<OidcConnectionBinding> findActive(String providerId, URI issuer, String audience) {
@@ -74,6 +77,26 @@ public class JdbcOidcConnectionBindingRepository implements OidcConnectionBindin
         return findById(tenantId,connectionId).orElseThrow();
     }
 
+    /**
+     * A second ACTIVE binding for the same issuer would make the legacy
+     * single-binding resolver ambiguous. Permit this only during explicit
+     * shared-issuer rollout; the schema's unique index remains an additional
+     * transactional safeguard until the staged migration is executed.
+     */
+    private void requireCompatibleIssuerBinding(UUID tenantId, ConnectionAdminView target) {
+        if (sharedIssuerEnabled) return;
+        Integer collisions = jdbc.queryForObject("""
+                select count(*) from enterprise_identity_connections
+                where status='ACTIVE' and tenant_id<>? and provider_id=?
+                  and issuer_uri=? and api_audience=?
+                """, Integer.class, tenantId, target.providerId(),
+                target.issuerUri(), target.apiAudience());
+        if (collisions != null && collisions > 0) {
+            throw new IllegalStateException(
+                    "Another tenant uses this ACTIVE OIDC binding; shared-issuer mode is not enabled.");
+        }
+    }
+
     @Transactional public ActivationResult activateValidated(UUID tenantId, UUID connectionId, long expectedConfigurationVersion, String actor) {
         ConnectionAdminView staged=findById(tenantId,connectionId).orElseThrow(() -> new IllegalArgumentException("Validated identity configuration was not found."));
         if(!"VALIDATED".equals(staged.status()) || staged.configurationVersion()!=expectedConfigurationVersion)
@@ -83,6 +106,7 @@ public class JdbcOidcConnectionBindingRepository implements OidcConnectionBindin
             throw new IllegalStateException("Activation requires a successful connection test from the last 15 minutes. Test the current draft again.");
         ConnectionAdminView active=findActiveForTenant(tenantId).orElseThrow(() -> new IllegalStateException("No ACTIVE identity connection exists. Use the controlled recovery procedure instead of activation."));
         if(active.connectionId().equals(staged.connectionId())) throw new IllegalStateException("The selected identity connection is already ACTIVE.");
+        requireCompatibleIssuerBinding(tenantId, staged);
 
         int retired=jdbc.update("update enterprise_identity_connections set status='DISABLED',updated_at=? where connection_id=? and tenant_id=? and status='ACTIVE'",
                 Timestamp.from(now),active.connectionId(),tenantId);
@@ -104,6 +128,7 @@ public class JdbcOidcConnectionBindingRepository implements OidcConnectionBindin
         Integer knownGood=jdbc.queryForObject("select count(*) from enterprise_identity_connection_history where tenant_id=? and connection_id=? and change_type in ('BOOTSTRAP','ACTIVATED','ROLLBACK_ACTIVATED')",Integer.class,tenantId,connectionId);
         if(knownGood==null || knownGood==0) throw new IllegalStateException("Rollback target is not a previously ACTIVE known-good identity configuration.");
         ConnectionAdminView active=findActiveForTenant(tenantId).orElseThrow(() -> new IllegalStateException("No ACTIVE identity connection exists. Use the controlled recovery procedure instead of rollback."));
+        requireCompatibleIssuerBinding(tenantId, candidate);
         Instant now=Instant.now();
         int retired=jdbc.update("update enterprise_identity_connections set status='DISABLED',updated_at=? where connection_id=? and tenant_id=? and status='ACTIVE'",
                 Timestamp.from(now),active.connectionId(),tenantId);
