@@ -23,6 +23,7 @@ public class SecurityProperties {
         private String audience = "";
         private String browserClientId = "";
         private boolean persistentConnectionEnabled = true;
+        private boolean sharedIssuerTenantSelectionEnabled = false;
         private String tenantId = "";
         private String tenantClaim = "tenant_id";
         private String usernameClaim = "preferred_username";
@@ -39,6 +40,8 @@ public class SecurityProperties {
         public String getBrowserClientId() { return browserClientId; }
         public void setBrowserClientId(String browserClientId) { this.browserClientId = safe(browserClientId); }
         public boolean isPersistentConnectionEnabled() { return persistentConnectionEnabled; }
+        public boolean isSharedIssuerTenantSelectionEnabled() { return sharedIssuerTenantSelectionEnabled; }
+        public void setSharedIssuerTenantSelectionEnabled(boolean value) { sharedIssuerTenantSelectionEnabled = value; }
         public void setPersistentConnectionEnabled(boolean persistentConnectionEnabled) { this.persistentConnectionEnabled = persistentConnectionEnabled; }
         public String getTenantId() { return tenantId; }
         public void setTenantId(String tenantId) { this.tenantId = safe(tenantId); }
