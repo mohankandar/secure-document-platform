@@ -38,7 +38,7 @@ public class JdbcActiveOidcMachineTenantBindings implements ActiveOidcMachineTen
                   and i.provider_type = 'PUSH_API' and i.client_principal = ?
                 """;
         Set<TenantId> results = new LinkedHashSet<>();
-        jdbc.query(sql, rs -> results.add(TenantId.of(rs.getObject("tenant_id", UUID.class))),
+        jdbc.query(sql, (org.springframework.jdbc.core.RowCallbackHandler) rs -> results.add(TenantId.of(rs.getObject("tenant_id", UUID.class))),
                 providerId.trim(), issuer.toString(), audience.trim(), clientPrincipal.trim());
         return Set.copyOf(results);
     }
