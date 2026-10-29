@@ -90,3 +90,10 @@ Recommended next cohesive change:
 5. Regression-test same issuer for two tenants, same human in both, wrong-tenant denial, identity activation/rollback, delayed cache refresh, and OIDC machine intake.
 6. Keep legacy production authentication paths unchanged until full compilation and integration tests pass.
 No build, database migration execution, or authenticated runtime validation was performed in this checkpoint.
+
+## B5 — distinct ACTIVE candidate discovery contract
+- Added `ActiveOidcTenantCandidates` application port and `JdbcActiveOidcTenantCandidates` infrastructure adapter. The adapter looks up all ACTIVE tenant connections matching verified provider/issuer/audience and filters inactive tenants.
+- **Security invariant:** This yields candidates, *not authorized memberships*. Never use its output directly to select a tenant or assign roles. Combine with cryptographically verified IdP group membership, explicit tenant choice if necessary, and tenant-scoped role grants.
+- The existing `OidcTenantResolver`, production principal and integration-identity path remain unchanged; this is a preparatory additive commit.
+- Migration that relaxes unique ACTIVE provider/issuer/audience remains blocked until the replacement principal resolution and Enterprise Identity activation/rollback tests are complete.
+- The previously reported `Build-LexaVault-All.ps1` PASS at 2026-10-28 21:20 EDT applies to the earlier branch HEAD, not these new B5 commits. The current HEAD has no new build evidence.
