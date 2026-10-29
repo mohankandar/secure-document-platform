@@ -144,3 +144,9 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - The tenant-discovery controller explicitly denies LOCAL-mode access, in addition to the shared-issuer membership resolver requiring verified OIDC. Added negative controller test.
 - Frontend now clears current user, role and capability state when the selected tenant changes, preventing prior tenant privileges from remaining visible while the new selection is verified. Broader page-specific caches, cancellation, and tenant switch navigation remain pending.
 - Shared issuer migration 037 remains unregistered and feature mode disabled by default. A full build and runtime acceptance are not yet verified for these commits; the previous full build applies only to its earlier SHA.
+
+## B14 tenant-context request/response race guard
+- Frontend API requests snapshot selected OIDC tenant and a monotonically increasing tenant-context revision. If selection changes before dispatch, after the network response, or after parsing JSON, the response is discarded rather than applied by API consumers.
+- Revision detection also rejects A-to-B-to-A switching during one request, where tenant ID comparison alone would miss an intervening selection. A legacy single-tenant session remains unaffected unless tenant selection changes.
+- This reduces stale response exposure but does not cancel already-dispatched server-side writes. Server-side tenant admission and transactional authorization remain mandatory. File uploads, streaming paths, third-party clients, page-local caches and auth state need separate verification.
+- The R1B HEAD is not newly built or tested. Migration 037 remains unregistered; shared-issuer flag defaults off. No change to P2 or main.
