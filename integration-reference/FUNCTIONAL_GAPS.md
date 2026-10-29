@@ -481,3 +481,8 @@ See `docs/architecture/LEXAVAULT_R1B_TENANT_IDENTITY.md`. Preserve existing froz
 - **P0 R1B-ACCEPTANCE-01 OPEN:** Production-mode OIDC Tenant A/B identity and negative isolation tests; no build/runtime acceptance claimed by document-only checkpoint.
 
 No code behavior, database, or LOCAL P2 runtime state changed at this checkpoint.
+
+## R1B tenant membership resolver fail-closed hardening (2026-10-28)
+- **SOURCE CHANGE / NOT TEST-EXECUTED:** `04e799e3` added explicit matching-group detection; `ca6d883f` stopped treating all `SecurityContextException` results as ordinary non-membership; `de981ab9` added negative regression coverage for invalid platform-role grant configuration.
+- Shared-issuer ACTIVE identity activation, tenant switch and actual OIDC principal binding are **still OPEN**. No claim of SaaS tenant-isolation runtime PASS. Legacy OIDC behavior unchanged.
+- Build/runtime verification remains an engineering responsibility, not a business-acceptance step. No product or database changes applied to running P2 nodes.
