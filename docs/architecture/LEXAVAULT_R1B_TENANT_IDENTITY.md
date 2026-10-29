@@ -196,3 +196,9 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - Tightened the shared-issuer machine tenant candidate query: enabled PUSH_API sources must also use JWT or OAUTH2_CLIENT_CREDENTIALS authentication. An API_KEY, BASIC, NONE or MTLS-only connection is not sufficient evidence for binding a bearer-token machine principal. Existing downstream intake authorization still applies.
 - Added a dependency-free JDBC query-contract test checking identity criteria and rejecting blank client principals without querying. Latest tests are not yet run; PostgreSQL migration exercise and real machine-token principal mapping still require runtime verification.
 - No changes to main or P2; shared-issuer mode remains disabled and migration 037 unregistered.
+
+## B23 migration structural verification checkpoint
+- Replaced whitespace-sensitive string checks with secure JDK XML parsing of the actual Liquibase changeset. This inspects the forward SQL, two distinct rollback SQL nodes, their ordering, named dollar quote pairs, collision guard, and index creation.
+- The migration's source SQL has also been independently inspected for matching dollar-quote pairs (one each per DO block) and two rollback statements. This is NOT a PostgreSQL execution or a Maven test run.
+- For the next isolated PostgreSQL runtime gate: confirm `uq_eic_active_per_tenant` and `uq_eic_active_binding` on the target schema; execute the forward migration against a disposable copy; verify two distinct ACTIVE tenant rows can share provider/issuer/audience while a second ACTIVE row for the same tenant is rejected; verify rollback refuses duplicates; resolve the duplicate rows in the disposable copy and confirm the rollback restores `uq_eic_active_binding`. Never run these destructive steps on P2.
+- Continue to keep 037 out of the master changelog until the gated deployment is separately approved. Do not treat a successful static contract test as runtime acceptance.
