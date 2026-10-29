@@ -162,3 +162,9 @@ The shared-issuer-tenant-selection-enabled option defaults false. When enabled, 
 - External-intakes tenant boundary now resolves a machine integration principal, not a human principal; subsequent ExternalIntakeService integration connection authorization remains intact. Added negative unit tests for the admission rule and machine interceptor route.
 - Important limitations: machine principal string is based on the existing normalized username contract; credential subject/client identity mapping and uniqueness must be tested with real tokens. A single client principal enabled for multiple tenants is intentionally refused; there is no tenant selection override for machines.
 - Shared issuer migration 037 still unregistered and default disabled; latest commits are NOT compiled, tested or runtime accepted. Review SecurityConfig, actual external intake requests and all machine routes during acceptance. main and P2 untouched.
+
+## B17 shared-issuer activation/rollback compatibility safeguard
+- Before activating a VALIDATED connection, rolling back to known-good, or restoring a disabled known-good recovery connection, the repository rejects any target issuer/provider/audience that is already ACTIVE for another tenant when shared-issuer selection is disabled. This preserves the default legacy one-binding resolver assumption even if the staged unique-index migration is later applied.
+- Existing transactional retire/activate behavior, exact-version checks, 15-minute test freshness, and known-good rollback requirements are retained.
+- Added a focused JDBC-mock regression test for collision rejection. The test code has been committed but NOT run.
+- Shared-issuer mode still requires coordinated migration 037 rollout, verified duplicate issuer handling across users and machine integrations, and operational acceptance. Migration 037 remains unregistered. The application has NOT been compiled or runtime tested at this new HEAD.
