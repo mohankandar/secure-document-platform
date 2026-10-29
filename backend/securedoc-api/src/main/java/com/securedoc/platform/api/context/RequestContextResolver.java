@@ -8,6 +8,7 @@ import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
+import com.securedoc.platform.api.security.oidc.OidcTenantSelection;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.observability.StructuredLogContext;
@@ -46,6 +47,7 @@ public class RequestContextResolver {
     private final OidcRoleMapper oidcRoleMapper;
     private final OidcTenantResolver oidcTenantResolver;
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
+    private final OidcTenantSelection tenantSelection = new OidcTenantSelection();
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
 
@@ -152,17 +154,7 @@ public class RequestContextResolver {
                 throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections");
             }
             var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
-            String choice = request.getHeader("X-Selected-Tenant-Id");
-            if (choice == null || choice.isBlank()) {
-                tenantId = oidcTenantMembershipResolver.selectOnlyIfUnambiguous(authorized);
-            } else {
-                try {
-                    tenantId = oidcTenantMembershipResolver.select(
-                            TenantId.of(UUID.fromString(choice.trim())), authorized);
-                } catch (IllegalArgumentException ex) {
-                    throw new SecurityContextException("Invalid selected tenant identifier");
-                }
-            }
+            tenantId = tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), authorized);
             roles = authorized.get(tenantId);
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
