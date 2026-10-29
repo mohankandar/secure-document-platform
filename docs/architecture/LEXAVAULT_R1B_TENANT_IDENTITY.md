@@ -63,3 +63,10 @@ Do not claim build/test PASS for this document-only checkpoint. No product code 
 - **Not integrated into RequestContextResolver/OidcTenantResolver yet. No database migration or frontend tenant switch. Not runtime-accepted.** This isolation is intentional until a trustworthy membership source is implemented.
 - **No build executed by assistant.** First useful development gate: `cd backend && mvn -pl securedoc-api -am -Dtest=TrustedTenantAdmissionTest,TenantGroupAuthorizationTest -Dsurefire.failIfNoSpecifiedTests=false test` (adjust multi-module artifact coordinates if build differs).
 - Do not publish production SaaS claims until tested secure OIDC identity admission and cross-tenant integration path.
+
+## B2 additive persistence foundation — 2026-10-28
+- Added Liquibase `036-r1b-tenant-oidc-group-grants.xml` and master include; it adds `tenant_oidc_group_grants` without modifying enterprise identity activation tables/indexes or earlier migrations.
+- Added `JdbcTenantOidcGroupGrantRepository.activeGrants(providerId, issuer, audience)`: grant discovery is filtered by ACTIVE identity connection and ACTIVE tenant; rejects unexpected and platform-level role names. This is a read-only adapter, not a customer-facing membership administration API.
+- **Important limitation:** the existing unique ACTIVE identity binding `(provider_id, issuer_uri, api_audience)` means at most one tenant is selectable per shared issuer/audience today. A follow-up migration/identity activation design is essential to allow multiple ACTIVE tenants on the same identity provider safely. This repository alone does not deliver multi-tenant SaaS membership.
+- **Build, Liquibase migration, and runtime integration tests are NOT executed.** The next gate is automated migration validation, source-controlled fixture setup, and integration with the resolver only after ambiguity handling is implemented and independently exercised.
+- A previously retired migration numbered 035 is not reused; migration 036 is new and additive.
