@@ -44,7 +44,7 @@ public class OidcTenantMembershipResolver {
         }
         Map<TenantId, Map<String, Set<String>>> policies =
                 grants.activeGrants(providerId, URI.create(verifiedJwt.getIssuer().toString()), audience);
-        Set<TenantId> activeCandidates = candidates.findCandidates(providerId, verifiedJwt.getIssuer(), audience);
+        Set<TenantId> activeCandidates = candidates.findCandidates(providerId, URI.create(verifiedJwt.getIssuer().toString()), audience);
         // Only a tenant backed by both an ACTIVE connection and a matching verified group is admissible.
         Map<TenantId, Set<String>> authorized = new LinkedHashMap<>();
         for (TenantId tenant : policies.keySet()) {
