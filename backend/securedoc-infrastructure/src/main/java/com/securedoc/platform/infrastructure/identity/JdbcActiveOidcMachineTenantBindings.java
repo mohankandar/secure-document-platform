@@ -35,7 +35,9 @@ public class JdbcActiveOidcMachineTenantBindings implements ActiveOidcMachineTen
                 where c.provider_id = ? and c.issuer_uri = ? and c.api_audience = ?
                   and c.status = 'ACTIVE' and t.status = 'ACTIVE'
                   and i.enabled = true and i.purpose = 'INGESTION_SOURCE'
-                  and i.provider_type = 'PUSH_API' and i.client_principal = ?
+                  and i.provider_type = 'PUSH_API'
+                  and i.authentication_type in ('JWT', 'OAUTH2_CLIENT_CREDENTIALS')
+                  and i.client_principal = ?
                 """;
         Set<TenantId> results = new LinkedHashSet<>();
         jdbc.query(sql, (org.springframework.jdbc.core.RowCallbackHandler) rs -> results.add(TenantId.of(rs.getObject("tenant_id", UUID.class))),
