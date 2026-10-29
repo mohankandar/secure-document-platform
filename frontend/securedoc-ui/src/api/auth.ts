@@ -4,6 +4,7 @@ const ID_TOKEN_KEY = 'securedoc.oidc.id-token';
 const REFRESH_TOKEN_KEY = 'securedoc.oidc.refresh-token';
 const ACCESS_TOKEN_EXPIRES_AT_KEY = 'securedoc.oidc.access-token-expires-at';
 const STATE_KEY = 'securedoc.oidc.state';
+const SELECTED_TENANT_KEY = 'lexavault.oidc.selected-tenant';
 const VERIFIER_KEY = 'securedoc.oidc.pkce-verifier';
 const REFRESH_SKEW_MS = 60_000;
 
@@ -34,6 +35,7 @@ export function clearOidcSession(): void {
   sessionStorage.removeItem(ACCESS_TOKEN_EXPIRES_AT_KEY);
   sessionStorage.removeItem(STATE_KEY);
   sessionStorage.removeItem(VERIFIER_KEY);
+  sessionStorage.removeItem(SELECTED_TENANT_KEY);
 }
 
 export const OIDC_SESSION_EXPIRED_EVENT = 'lexavault:oidc-session-expired';
