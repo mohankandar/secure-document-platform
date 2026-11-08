@@ -4,7 +4,11 @@ set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")" && pwd -P)"
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend/securedoc-ui"
-RUN="$ROOT/.run/ubuntu"
+STATE_ROOT="${LEXAVAULT_LOCAL_STATE_DIR:-$ROOT/../runtime}"
+RUN="$STATE_ROOT/run"
+LOG_ROOT="${LEXAVAULT_LOCAL_LOG_DIR:-$ROOT/../logs}"
+BACKEND_LOG_DIR="$LOG_ROOT/backend"
+FRONTEND_LOG_DIR="$LOG_ROOT/frontend"
 MODEL="qwen3.5:9b"
 BACK=true
 FRONT=true
@@ -50,18 +54,18 @@ launch() {
   (
     cd -- "$workdir"
     exec setsid "$@"
-  ) >"$RUN/$name.log" 2>&1 </dev/null &
+  ) >/dev/null 2>&1 </dev/null &
   local pid=$!
   sleep 0.2
   if [[ ! -r "/proc/$pid/stat" ]]; then
-    echo "$name exited immediately. Check $RUN/$name.log" >&2
+    echo "$name exited immediately. Check $BACKEND_LOG_DIR/securedoc-platform.json or $FRONTEND_LOG_DIR/frontend.log" >&2
     return 1
   fi
   printf '%s %s\n' "$pid" "$(start_tick "$pid")" >"$RUN/$name.pid"
   local deadline=$((SECONDS + 120))
   while ((SECONDS < deadline)); do
     if ! kill -0 "$pid" 2>/dev/null; then
-      echo "$name exited. Check $RUN/$name.log" >&2
+      echo "$name exited. Check $BACKEND_LOG_DIR/securedoc-platform.json or $FRONTEND_LOG_DIR/frontend.log" >&2
       return 1
     fi
     if port_ready "$port"; then
@@ -70,11 +74,11 @@ launch() {
     fi
     sleep 1
   done
-  echo "$name did not become available. Check $RUN/$name.log" >&2
+  echo "$name did not become available. Check $BACKEND_LOG_DIR/securedoc-platform.json or $FRONTEND_LOG_DIR/frontend.log" >&2
   return 1
 }
 
-mkdir -p -- "$RUN"
+mkdir -p -- "$RUN" "$BACKEND_LOG_DIR" "$FRONTEND_LOG_DIR" "$STATE_ROOT/storage"
 echo "=== LexaVault Ubuntu LOCAL startup ==="
 echo "Only LexaVault processes are launched. PostgreSQL, Ollama, Docker and Keycloak are managed manually."
 if "$BACK"; then
@@ -93,9 +97,14 @@ if "$BACK"; then
   export SECUREDOC_AI_MODEL="$MODEL"
   export SECUREDOC_AI_PROVIDER=ollama
   export SECUREDOC_AI_OLLAMA_BASE_URL="http://localhost:11434"
-  export SECUREDOC_LOGGING_CONFIG="classpath:logback-json.xml"
+  export SECUREDOC_LOGGING_CONFIG="classpath:logback-json-rolling.xml"
+  export SECUREDOC_LOG_DIR="$BACKEND_LOG_DIR"
+  export SECUREDOC_LOG_MAX_FILE_SIZE="${SECUREDOC_LOG_MAX_FILE_SIZE:-25MB}"
+  export SECUREDOC_LOG_MAX_HISTORY="${SECUREDOC_LOG_MAX_HISTORY:-14}"
+  export SECUREDOC_LOG_TOTAL_SIZE_CAP="${SECUREDOC_LOG_TOTAL_SIZE_CAP:-1GB}"
+  export SECUREDOC_STORAGE_LOCAL_ROOT_PATH="$STATE_ROOT/storage"
   if "$WATCH"; then
-    WATCH_ROOT="$BACKEND/watched-intake"
+    WATCH_ROOT="${SECUREDOC_WATCHED_FOLDER_ROOT_PATH:-$STATE_ROOT/watched-intake}"
     [[ -d "$WATCH_ROOT" && -r "$WATCH_ROOT" ]] || { echo "Watched folder missing/unreadable: $WATCH_ROOT" >&2; exit 1; }
     export SECUREDOC_WATCHED_FOLDER_ROOT_PATH="$WATCH_ROOT"
     export SECUREDOC_WATCHED_FOLDER_ENABLED=true
@@ -107,11 +116,11 @@ if "$BACK"; then
   launch backend 8080 "$BACKEND" java -jar "$JAR" --spring.profiles.active=local --spring.main.banner-mode=off
 fi
 if "$FRONT"; then
-  for tool in node npm setsid; do require "$tool"; done
+  for tool in node npm python3 setsid; do require "$tool"; done
   [[ -d "$FRONTEND/node_modules" ]] || { echo "Frontend dependencies missing. Run npm ci in frontend/securedoc-ui." >&2; exit 1; }
   export VITE_SECURITY_MODE=LOCAL
-  launch frontend 5173 "$FRONTEND" npm run dev -- --host 0.0.0.0 --port 5173 --strictPort
+  launch frontend 5173 "$FRONTEND" python3 "$ROOT/scripts/lexavault-rolling-runner.py" "$FRONTEND_LOG_DIR/frontend.log" npm run dev -- --host 0.0.0.0 --port 5173 --strictPort
 fi
-echo "Startup checks complete. Logs: $RUN"
+echo "Startup checks complete. Logs: $LOG_ROOT; process records: $RUN"
 echo "UI: http://localhost:5173  API: http://localhost:8080"
 echo "Stop: bash Stop-LexaVault-Local.sh"
