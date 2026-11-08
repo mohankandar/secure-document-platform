@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "$0")" && pwd -P)"
-RUN="$ROOT/.run/ubuntu"
+STATE_ROOT="${LEXAVAULT_LOCAL_STATE_DIR:-$ROOT/../runtime}"
+RUN="$STATE_ROOT/run"
 start_tick() { awk '{print $22}' "/proc/$1/stat"; }
 
 stop_owned() {
