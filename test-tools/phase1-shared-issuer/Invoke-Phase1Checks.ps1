@@ -196,6 +196,111 @@ $tOtherAud = Get-Token $Phase1.Realm $Phase1.OtherAudClientId 'alice.a'
 Check-Status 'R-15' 'token with an aud claim that is not the LexaVault API' '/api/v1/me' $tOtherAud @{} @(401)
 $tOtherAud = $null
 
+# ---------------------------------------------------------------- Point 3: different redaction rules per entity
+# A redacts SSN only; B redacts SSN, card number and date of birth. REVIEW_ALL keeps every enabled finding
+# in the review list, so the result can be read through the API (there is no document download).
+$policyA = @('SSN')
+$policyB = @('CREDIT_CARD_NUMBER', 'DATE_OF_BIRTH', 'SSN')
+$samplesRoot = Join-Path $Phase1.RepoRoot 'test-data\golden-path-watched-intake-template'
+$samplePdfs = @(
+    (Join-Path $samplesRoot '04-approval\04_approval_flow.pdf'),
+    (Join-Path $samplesRoot '05-reprocess\05_reprocess_cycle.pdf'),
+    (Join-Path $samplesRoot '07-export\07_export_delivery.pdf')
+)
+
+function Set-EntityPolicy([string]$Token, [string[]]$Types) {
+    $body = @{ enabledEntityTypes = $Types; autoRedactThreshold = 0.8; reviewMode = 'REVIEW_ALL'; maskSsnLastFour = $true }
+    return Invoke-Api -Method 'PUT' -Path '/api/v1/business-admin/sensitive-data-policy' -Token $Token -Body $body
+}
+function Get-PolicyTypes($resp) {
+    if ($resp.Status -ne 200) { return "HTTP $($resp.Status)" }
+    return 'HTTP 200 ' + ((@($resp.Json.sensitiveDataPolicy.enabledEntityTypes) | Sort-Object) -join ',') + " $($resp.Json.sensitiveDataPolicy.reviewMode)"
+}
+function Send-Pdf([string]$Token, [string]$PackageId, [string]$Path) {
+    $req = New-Object System.Net.Http.HttpRequestMessage ([System.Net.Http.HttpMethod]::Post), ($Phase1.BackendUrl + "/api/v1/packages/$PackageId/documents")
+    $req.Headers.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue 'Bearer', $Token
+    $form = New-Object System.Net.Http.MultipartFormDataContent
+    $file = New-Object System.Net.Http.ByteArrayContent (, [System.IO.File]::ReadAllBytes($Path))
+    $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/pdf')
+    $form.Add($file, 'file', [System.IO.Path]::GetFileName($Path))
+    $req.Content = $form
+    $resp = $http.SendAsync($req).GetAwaiter().GetResult()
+    $status = [int]$resp.StatusCode
+    $req.Dispose(); $resp.Dispose()
+    return $status
+}
+function Invoke-EntityRun([string]$Token, [string]$Label) {
+    $contract = '8' + (Get-Date -Format 'MMddHHmmss') + $(if ($Label -eq 'A') { '1' } else { '2' })
+    $pkg = Invoke-Api -Method 'POST' -Path '/api/v1/packages' -Token $Token -Body @{
+        packageType = 'MANUAL_UPLOAD'; businessIdentifiers = @{ contract_number = $contract; member_number = '10000000003'; service_entity = '001' }
+        metadata = @{ phase1 = "point3-$Label" } }
+    if ($pkg.Status -ne 201) { throw "create package for $Label returned HTTP $($pkg.Status)" }
+    $id = $pkg.Json.packageId
+    foreach ($pdf in $samplePdfs) {
+        $s = Send-Pdf $Token $id $pdf
+        if ($s -lt 200 -or $s -gt 299) { throw "upload $([System.IO.Path]::GetFileName($pdf)) for $Label returned HTTP $s" }
+    }
+    $sub = Invoke-Api -Method 'POST' -Path "/api/v1/packages/$id/submit" -Token $Token
+    if ($sub.Status -lt 200 -or $sub.Status -gt 299) { throw "submit for $Label returned HTTP $($sub.Status)" }
+    $deadline = (Get-Date).AddSeconds(240); $status = ''
+    while ((Get-Date) -lt $deadline) {
+        $d = Invoke-Api -Path "/api/v1/packages/$id" -Token $Token
+        $status = [string]$d.Json.status
+        if ($status -and $status -notin @('CREATED', 'SUBMITTED', 'PROCESSING')) { break }
+        Start-Sleep -Seconds 3
+    }
+    $items = Invoke-Api -Path "/api/v1/review-items?packageId=$id&limit=200" -Token $Token
+    $types = @()
+    if ($items.Status -eq 200) { $types = @(@($items.Json.items) | ForEach-Object { $_.entityType } | Sort-Object -Unique) }
+    $counts = @{}
+    if ($items.Status -eq 200) { foreach ($it in @($items.Json.items)) { $counts[$it.entityType] = 1 + [int]$counts[$it.entityType] } }
+    return [pscustomobject]@{ PackageId = $id; Status = $status; ItemsStatus = $items.Status; Types = $types; Counts = $counts }
+}
+function Format-Counts($run) { (($run.Counts.Keys | Sort-Object) | ForEach-Object { "$_=$($run.Counts[$_])" }) -join ', ' }
+
+$tAlice = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'alice.a'
+$tBob   = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'bob.b'
+$tCarol = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'carol.ab'
+
+$putA = Set-EntityPolicy $tAlice $policyA
+$putB = Set-EntityPolicy $tBob $policyB
+Add-Check 'P3-01' 'alice sets entity A policy (SSN only, REVIEW_ALL)' 'HTTP 200' "HTTP $($putA.Status)" ($putA.Status -eq 200)
+Add-Check 'P3-02' 'bob sets entity B policy (SSN, card, date of birth, REVIEW_ALL)' 'HTTP 200' "HTTP $($putB.Status)" ($putB.Status -eq 200)
+$readA = Get-PolicyTypes (Invoke-Api -Path '/api/v1/business-admin/configuration' -Token $tAlice)
+$readB = Get-PolicyTypes (Invoke-Api -Path '/api/v1/business-admin/configuration' -Token $tBob)
+Add-Check 'P3-03' 'entity A policy reads back as set' 'HTTP 200 SSN REVIEW_ALL' $readA ($readA -eq 'HTTP 200 SSN REVIEW_ALL')
+Add-Check 'P3-04' 'entity B policy reads back as set' 'HTTP 200 CREDIT_CARD_NUMBER,DATE_OF_BIRTH,SSN REVIEW_ALL' $readB ($readB -eq 'HTTP 200 CREDIT_CARD_NUMBER,DATE_OF_BIRTH,SSN REVIEW_ALL')
+Check-Status 'P3-05' "bob (B admin): read entity A's policy" '/api/v1/business-admin/configuration' $tBob (Sel $A) @(403)
+Check-Status 'P3-06' "alice (A admin): read entity B's policy" '/api/v1/business-admin/configuration' $tAlice (Sel $B) @(403)
+$crossPut = Invoke-Api -Method 'PUT' -Path '/api/v1/business-admin/sensitive-data-policy' -Token $tBob -Headers (Sel $A) -Body @{ enabledEntityTypes = @('CREDIT_SCORE'); autoRedactThreshold = 0.8; reviewMode = 'REVIEW_ALL'; maskSsnLastFour = $true }
+Add-Check 'P3-07' "bob (B admin): change entity A's policy" 'HTTP 403' "HTTP $($crossPut.Status)" ($crossPut.Status -eq 403)
+
+$runA = $null; $runB = $null
+try {
+    $runA = Invoke-EntityRun $tAlice 'A'
+    $runB = Invoke-EntityRun $tBob 'B'
+    Add-Check 'P3-08' 'same three PDFs processed in each entity' 'both packages PENDING_REVIEW' "A=$($runA.Status), B=$($runB.Status)" (($runA.Status -eq 'PENDING_REVIEW') -and ($runB.Status -eq 'PENDING_REVIEW'))
+} catch {
+    Add-Check 'P3-08' 'same three PDFs processed in each entity' 'both packages PENDING_REVIEW' $_.Exception.Message $false
+}
+if ($runA -and $runB) {
+    $typesA = ($runA.Types -join ',')
+    $typesB = ($runB.Types -join ',')
+    Add-Check 'P3-09' 'entity A findings: SSN only' 'SSN' "$typesA ($(Format-Counts $runA))" ($typesA -eq 'SSN')
+    $bCore = ($runB.Types -contains 'SSN') -and ($runB.Types -contains 'CREDIT_CARD_NUMBER') -and (@($runB.Types | Where-Object { $_ -notin $policyB }).Count -eq 0)
+    Add-Check 'P3-10' 'entity B findings: SSN and card number, nothing outside its policy' 'includes SSN and CREDIT_CARD_NUMBER; only B policy types' "$typesB ($(Format-Counts $runB))" $bCore
+    if ($runB.Types -contains 'DATE_OF_BIRTH') {
+        Add-Check 'P3-11' 'entity B also finds the date of birth' 'DATE_OF_BIRTH present' 'present' $true
+    } else {
+        # Task 0006: if the rule-based detector misses the date of birth, report it; point 3 still passes on the card number.
+        $results.Add([pscustomobject]@{ Id = 'P3-11'; Check = 'entity B also finds the date of birth'; Expected = 'DATE_OF_BIRTH present'; Actual = 'not found by the rule-based detector'; Result = 'NOTE' })
+        Write-Host '[NOTE] P3-11  entity B also finds the date of birth  (expected: DATE_OF_BIRTH present; actual: not found by the rule-based detector)'
+    }
+    $cross = Invoke-Api -Path "/api/v1/review-items?packageId=$($runB.PackageId)&limit=200" -Token $tCarol -Headers (Sel $A)
+    $crossCount = if ($cross.Status -eq 200) { @($cross.Json.items).Count } else { -1 }
+    Add-Check 'P3-12' "carol in A: B's review items not visible" 'HTTP 403/404, or HTTP 200 with 0 items' "HTTP $($cross.Status), items=$crossCount" (($cross.Status -in 403, 404) -or ($cross.Status -eq 200 -and $crossCount -eq 0))
+}
+
 # ---------------------------------------------------------------- Toggles on entity B (always restored)
 $sqlRestore = "update enterprise_identity_connections set status = 'ACTIVE', updated_at = now() where connection_id = 'b2b2b2b2-0000-4000-8000-0000000c0002'; update tenants set status = 'ACTIVE', updated_at = now() where id = '$B';"
 function Restore-B { Invoke-Phase1Sql $sqlRestore | Out-Null }
@@ -235,9 +340,10 @@ $summary = [ordered]@{
     issuer   = $Phase1.Issuer
     passed   = @($results | Where-Object Result -eq 'PASS').Count
     failed   = @($results | Where-Object Result -eq 'FAIL').Count
+    notes    = @($results | Where-Object Result -eq 'NOTE').Count
     checks   = $results
 }
 $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $file -Encoding UTF8
 Write-Host ''
-Write-Host ("[phase1] {0} passed, {1} failed. Results: {2}" -f $summary.passed, $summary.failed, $file)
+Write-Host ("[phase1] {0} passed, {1} failed, {2} notes. Results: {3}" -f $summary.passed, $summary.failed, $summary.notes, $file)
 if ($summary.failed -gt 0) { exit 1 }
