@@ -61,3 +61,14 @@ test-results/
 *.bak
 *.orig
 *.rej
+
+# Local runtime state and delivered output
+.run/
+**/securedoc-output/
+
+# Performance and release-readiness results (required by the final release preflight)
+.gradle/
+performance-results/
+performance-logs/
+performance-cluster/
+release-readiness-results/
