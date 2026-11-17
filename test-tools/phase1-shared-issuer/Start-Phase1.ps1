@@ -106,10 +106,28 @@ $adminToken = (Invoke-RestMethod -Method Post -Uri "http://localhost:$($Phase1.K
     -Body @{ grant_type = 'password'; client_id = 'admin-cli'; username = 'phase1-admin'; password = $secrets['PHASE1_KC_ADMIN_PASSWORD'] }).access_token
 $userPasswords = Get-Content -LiteralPath $Phase1.UsersFile -Raw | ConvertFrom-Json
 $adminHeaders = @{ Authorization = "Bearer $adminToken" }
+
+# The realm import ignores realms that already exist, so clients added to the realm files later are
+# created here if missing. The realm files stay the single source of truth.
+foreach ($realmFile in Get-ChildItem -LiteralPath (Join-Path $Phase1.ToolDir 'keycloak') -Filter '*.json') {
+    $realmRep = Get-Content -LiteralPath $realmFile.FullName -Raw | ConvertFrom-Json
+    foreach ($client in @($realmRep.clients)) {
+        # Assign first, then wrap: Windows PowerShell 5.1 passes a JSON array from Invoke-RestMethod as ONE
+        # object, so @(Invoke-RestMethod ...) of an empty array would count 1.
+        $haveRaw = Invoke-RestMethod -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$($realmRep.realm)/clients?clientId=$($client.clientId)" -Headers $adminHeaders
+        $have = @($haveRaw)
+        if ($have.Count -eq 0) {
+            Invoke-RestMethod -Method Post -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$($realmRep.realm)/clients" `
+                -Headers $adminHeaders -ContentType 'application/json' -Body ($client | ConvertTo-Json -Depth 10) | Out-Null
+            Write-Step "Created missing Keycloak client $($client.clientId) in realm $($realmRep.realm) from $($realmFile.Name)."
+        }
+    }
+}
 foreach ($pair in @(@($Phase1.Realm, $Phase1.Users), @($Phase1.OtherRealm, $Phase1.OtherUsers))) {
     $realm = $pair[0]
     foreach ($u in $pair[1]) {
-        $found = @(Invoke-RestMethod -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$realm/users?exact=true&username=$u" -Headers $adminHeaders)
+        $foundRaw = Invoke-RestMethod -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$realm/users?exact=true&username=$u" -Headers $adminHeaders
+        $found = @($foundRaw)
         if ($found.Count -ne 1) { throw "Keycloak user $u not found in realm $realm (realm import problem)." }
         $body = @{ type = 'password'; value = $userPasswords.$u; temporary = $false } | ConvertTo-Json
         Invoke-RestMethod -Method Put -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$realm/users/$($found[0].id)/reset-password" `

@@ -192,6 +192,9 @@ Check-Status 'R-10' 'wrong issuer (other realm, same group name lv-a-staff): /me
 Check-Status 'R-11' 'wrong issuer: /me/tenants' '/api/v1/me/tenants' $tEve @{} @(401)
 $tEve = $null
 Check-Status 'R-12' 'malformed bearer token' '/api/v1/me' 'not-a-jwt' @{} @(401)
+$tOtherAud = Get-Token $Phase1.Realm $Phase1.OtherAudClientId 'alice.a'
+Check-Status 'R-15' 'token with an aud claim that is not the LexaVault API' '/api/v1/me' $tOtherAud @{} @(401)
+$tOtherAud = $null
 
 # ---------------------------------------------------------------- Toggles on entity B (always restored)
 $sqlRestore = "update enterprise_identity_connections set status = 'ACTIVE', updated_at = now() where connection_id = 'b2b2b2b2-0000-4000-8000-0000000c0002'; update tenants set status = 'ACTIVE', updated_at = now() where id = '$B';"

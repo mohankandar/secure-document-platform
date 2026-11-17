@@ -28,6 +28,7 @@ $Phase1 = [ordered]@{
     WebClientId      = 'lexavault-phase1-web'
     ChecksClientId   = 'lexavault-phase1-checks'
     NoAudClientId    = 'lexavault-phase1-noaud'
+    OtherAudClientId = 'lexavault-phase1-otheraud'
     OtherClientId    = 'lexavault-phase1-other-checks'
     TenantA          = 'a1a1a1a1-0000-4000-8000-00000000000a'
     TenantB          = 'b2b2b2b2-0000-4000-8000-00000000000b'
