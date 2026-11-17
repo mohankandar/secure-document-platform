@@ -65,6 +65,10 @@ Related repositories on this machine:
 
 **How to report.** The owner prefers short, plain answers: what changed, what was run, what passed, what is next. No long background.
 
+## Work routine
+
+Tasks and reports live in `docs/work/`. When the owner says "do the next task", follow `docs/work/README.md`: find the highest-numbered task with no report, do it, and write the matching report. Work that did not come from a task file still gets a report if it changed code.
+
 ## Environment (Windows)
 
 - Java 21 (Temurin), Maven 3.9.16, Node 22, Git, Tesseract 5.4, Ollama with the `qwen3.5:9b` model.
