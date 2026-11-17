@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PHASE 1 TEST-ONLY LIQUIBASE MASTER. Used only by Start-Phase1.ps1 against the throwaway
+  database lexavault_phase1 on 127.0.0.1:15432.
+
+  It applies the unchanged product master (001-036) and then the staged, unregistered
+  migration 037. The product master db/changelog/db.changelog-master.xml is NOT modified:
+  migration 037 stays out of it (SharedIssuerMigration037ContractTest guards that).
+  Both includes are resolved from the backend jar's classpath.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <include file="db/changelog/db.changelog-master.xml"/>
+    <include file="db/changelog/037-r1b-shared-issuer-active-bindings.xml"/>
+</databaseChangeLog>
