@@ -10,8 +10,6 @@ import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.documentplatform.identity.admission.EntitySelection;
 import com.documentplatform.identity.admission.MachineEntityAdmission;
-import com.documentplatform.identity.admission.SharedIssuerPreflight;
-import com.securedoc.platform.api.security.oidc.ProductEntityRoleCatalog;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
@@ -63,7 +61,6 @@ public class RequestContextResolver {
     // Enterprise Identity 0.3.0 admission rules; refusals are mapped to SecurityContextException (403) at each call.
     private final EntitySelection tenantSelection = new EntitySelection();
     private final MachineEntityAdmission machineAdmission = new MachineEntityAdmission();
-    private final SharedIssuerPreflight sharedIssuerPreflight = new SharedIssuerPreflight(new ProductEntityRoleCatalog());
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
 
@@ -211,12 +208,13 @@ public class RequestContextResolver {
                 throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections");
             }
             var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
-            var entities = toEntityKeys(authorized);
-            refusingAsSecurityContext(() -> sharedIssuerPreflight.requireReady(true,
-                    securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled(),
-                    entities.keySet(), entities));
+            // The membership resolver already refuses empty role sets and the platform role, and only returns entities
+            // with an ACTIVE connection, so the only check left before selection is "no entity at all".
+            if (authorized.isEmpty()) {
+                throw new SecurityContextException("No verified ACTIVE tenant membership is available");
+            }
             tenantId = toTenant(refusingAsSecurityContext(
-                    () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), entities)));
+                    () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), toEntityKeys(authorized))));
             roles = authorized.get(tenantId);
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
