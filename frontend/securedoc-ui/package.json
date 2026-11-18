@@ -12,7 +12,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts",
     "test:oidc-signin": "playwright test --config playwright.oidc-signin.config.ts",
-    "test:vocabulary": "node --experimental-strip-types --test src/studio/words.test.ts src/studio/caseRules.test.ts",
+    "test:vocabulary": "node --experimental-strip-types --test src/studio/words.test.ts src/studio/caseRules.test.ts src/studio/reviewRules.test.ts",
     "test:standalone": "npm run test:auth && npm run test:vocabulary && npm run test:ui-framework && npm run test:oidc-signin"
   },
   "dependencies": {

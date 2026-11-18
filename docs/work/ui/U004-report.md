@@ -1,0 +1,122 @@
+# Report U004: Review: the words found, zoom, and "Redact all like this" (findings 6, 7)
+
+Date: 2026-11-18
+Branch: `feature/ui-polish`
+Outcome: DONE. The found-text read was proven with tests and mocked screens; the local data has no finding in review, so it was not seen on real data (see "Not done").
+
+## What was done
+
+**Owner's approval (2026-11-18), and how each condition is met.** The text field was approved on four conditions:
+
+| Condition | How it is met |
+|---|---|
+| Returned only to MANUAL_REVIEW | Only on `GET /api/v1/review-items`, which already requires MANUAL_REVIEW. No other endpoint returns it. |
+| Never in logs, audit detail or browser storage | Nothing new is logged or audited. The records holding the text print as "redacted" (`toString`), so an accidental log line cannot leak it. Skip log lines carry only the document id and a reason code. The response is `Cache-Control: no-store`. The UI keeps the queue in memory only (SWR); a browser test checks that local and session storage hold no part of it. |
+| Full text only in the decision panel; queue items masked except the last 4 | The panel shows "Text found" and the same line around it. Queue items show `••••0193`. The mask has a fixed width, so it does not show the length. **One choice made:** a value of 4 characters or fewer (for example a credit score, "712") is masked in full, because its "last 4" would be all of it. |
+| No schema change | None. Nothing new is stored. |
+
+**Backend: where the text comes from.** The stored finding has only a masked preview (by design, `snippet` is "never raw sensitive value"). So the text is read when the queue is asked for:
+- from the document's stored `EXTRACTED_TEXT` artifact, using the finding's page and character positions (new `ReviewFoundTextReader`);
+- one read per document, and only for the items returned;
+- **it fails closed:** no text is returned when there is not exactly one available text artifact, the page count does not match the document, the positions fall outside the page or are 0..0 (unlocated), the span is blank or over 200 characters, or the read fails. The UI then hides the row;
+- the context is up to 40 characters each side, on the same line. A span that crosses a line (an address) is shown on one line.
+- The page-break marker used when the text artifact is written is now a shared constant (`TextExtractionService.PAGE_SEPARATOR`), with the same value. Extraction behaviour is unchanged.
+
+**Backend: one more field, not a security matter.** The queue response now also carries `autoRedactThreshold`, the policy level from which findings are redacted automatically. The UI needs it for the "why" sentence, and Processors and Supervisors cannot read the policy otherwise. The service already loaded the policy to work out the reason.
+
+**Review screen**
+1. **Text found:** shown in the decision panel ("Text found", the value, and “Borrower SSN: **412-55-0193**”); masked in queue items. The row is hidden when the field is absent.
+2. **Zoom:** −, the percentage, + and Fit above the page. 100% is the page at actual size (the preview is rendered at 144 DPI). Steps: 50 to 300%. The page scrolls inside the viewer so the finding (or the person's mark) stays in view. Zoom stays the same when moving to the next finding.
+3. **Why a person is asked**, in one sentence: "LexaVault is 62% sure this is sensitive. Your policy redacts automatically from 85%, so a person decides." There are other sentences for "place not found" and "policy sends this type to a person". The panel follows the design: the confidence bar is replaced by this sentence, and Document and page are on one line.
+4. **Redact all like this:**
+   - shows "<n> more <type> waiting in this case" and "Redact all <n+1> like this" (Shift+R);
+   - counts only the same type (aliases such as US_SSN count as SSN) in the same case;
+   - each finding is confirmed through the existing per-finding call, one after another, so each is audited as its own decision;
+   - findings whose place is not found are skipped and stay in the queue; the panel says how many will be skipped before, and the result says how many were. A finding someone else already decided is dropped quietly; any other failure is counted and stays in the queue;
+   - there is no "Keep visible all".
+5. **Type names** come from the vocabulary module, which now also has plurals ("Dates of birth", not "Date of births").
+
+## Commands run and results
+
+- **Full build:** `.\Build-LexaVault-All.ps1` passed (backend Maven clean install with tests, and the frontend build). A first run failed before building, because I had redirected all of the script's output; run normally, it passed.
+- **Frontend:**
+  - `npm run build`: passed.
+  - `npm run test:standalone`: passed (`test:auth` 8, `test:vocabulary` 18 (8 new), `test:ui-framework` 17, `test:oidc-signin` 25 (6 new)).
+  - **One failed run:** an earlier run stopped because the sign-in suite's dev server did not start within 60 seconds, right after a build. The rerun passed, and so did the final run.
+- **Mocked screen checks:** Review as Document Processor, in light and dark, at 1440 and 1024 px, at Fit and zoomed in. They used the mocked browser harness: text found, the masked queue, the why sentence, the bulk block and zoom. No page errors.
+- **Local app:**
+  - started with `.\Start-LexaVault-Local.ps1 -ScannerMode SIMULATOR -AiModel qwen3.5:9b`, with the jar from this branch. The script stopped with "Frontend did not become ready on localhost:5173", but the frontend answered shortly after and every check ran.
+  - Review checked as Document Processor and Document Supervisor, light and dark, 1440 and 1024 px, in Edge (Playwright). The queue is empty in the local data, so the screens show "Nothing left to decide".
+  - The live API answered with `autoRedactThreshold` 0.8 and `Cache-Control: no-store`. No page errors.
+  - Stopped with `.\Stop-LexaVault-Local.ps1`.
+- **Rules:** no raw hex outside `tokens.css`, only documented breakpoints, no new dependency. The bundled `node:zlib` is used in the test only.
+
+## Tests: counts per module, and any failures with their output
+
+- **Backend:** 440 tests, none failing (domain 31, application 125 (+9), scan bridge 47, infrastructure 8, API 229 (+1)).
+- **New `ReviewFoundTextReaderTest` (application, 9):**
+  - reads the text and the line around it;
+  - context is cut at 40 characters and at line ends;
+  - a span across a line is shown on one line;
+  - findings with positions but no box still get their text;
+  - fails closed for unlocated, out-of-range, wrong-page, over-long and blank spans;
+  - a page-count mismatch hides all text;
+  - zero, two or an unavailable text artifact hides all text;
+  - a read error hides the text instead of failing the queue;
+  - the queue adds text only to the items it returns, reads each document once, and returns the policy level.
+- **`FocusedReviewControllerSerializationTest` (API, +1):** the text is in the JSON, and never in any `toString`. The existing test now also checks `foundText: null`.
+- **New `src/studio/reviewRules.test.ts` (node, 8):**
+  - bulk counts only the same type in the same case;
+  - bulk is not offered when no other finding of the type waits;
+  - bulk skips findings with no place (and a drawn mark counts as a place);
+  - singular wording;
+  - the result sentence;
+  - the masking rule;
+  - the why sentence;
+  - zoom steps.
+- **New `e2e-oidc/review.spec.ts` (Playwright, mocked API, 6):**
+  - the full text is only in the panel, the queue is masked, and nothing is in browser storage;
+  - the why sentence with 85%;
+  - no "Text found" row without text;
+  - Shift+R confirms f1 and f2 once each, not the unplaced one or the other case, and the unplaced one stays;
+  - no "Keep visible all";
+  - zoom −, %, + and Fit.
+- No existing test was weakened.
+
+## Files changed
+
+- **Backend, new:**
+  - `securedoc-application/.../review/result/ReviewFoundText.java`;
+  - `securedoc-application/.../review/service/ReviewFoundTextReader.java`;
+  - `securedoc-application/src/test/.../review/service/ReviewFoundTextReaderTest.java`.
+- **Backend, changed:**
+  - `ReviewItemSummary.java` (`foundText`, redacted `toString`);
+  - `ReviewQueueResult.java` (`autoRedactThreshold`);
+  - `FocusedReviewService.java` (reads text for returned items; new constructor argument);
+  - `TextExtractionService.java` (shared `PAGE_SEPARATOR` constant, same value);
+  - `FocusedReviewController.java` (`foundText`, `autoRedactThreshold`, `no-store`, redacted `toString`);
+  - `ApplicationServiceConfig.java` (wiring);
+  - `FocusedReviewControllerSerializationTest.java`.
+- **Frontend, new:** `src/studio/reviewRules.ts`, `src/studio/reviewRules.test.ts`, `e2e-oidc/review.spec.ts`.
+- **Frontend, changed:** `src/studio/Review.tsx`, `src/studio/words.ts` (plurals, type key, `whyAsked`), `src/studio/studio.css`, `src/types/index.ts`, `package.json` (`test:vocabulary` also runs `reviewRules.test.ts`).
+
+## Commits (hash and message), or "not committed"
+
+- The commit that adds this work and this report.
+
+Not pushed, not merged.
+
+## Not done, and why
+
+1. **Not seen on real data:** the local data has no finding in review. The text read was proven with unit tests on the real reader and service code, and the screens with the mocked harness, but not with a real document. Seeing it live needs a case in review, for example an upload that LexaVault is unsure about. That adds data to the dev database, so I did not do it without asking.
+2. **No confirmation step on "Redact all".** It runs straight away on click or Shift+R, like single Redact. It only ever redacts more, never shows more.
+
+## Questions for the owner
+
+1. **Masking short values:** values of 4 characters or fewer are masked in full in the queue. Is that right?
+2. **Live check:** may I create one test case in the local data (a test PDF with a value LexaVault is unsure about) to see the found text on real data?
+3. **Redact all:** should "Redact all" ask for confirmation first? Today it does not.
+
+## Suggested next step
+
+U005.

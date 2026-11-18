@@ -284,12 +284,22 @@ export interface FocusedReviewItem {
   hasBoundingBox: boolean;
   boundingBox?: ReviewBoundingBox | null;
   reason: 'LOW_CONFIDENCE' | 'LOCATION_UNCERTAIN' | 'POLICY_REVIEW' | string;
+  /** The text found and the same line around it. Sensitive: show in full only in the decision panel, masked elsewhere; never log or store it. Absent when it cannot be read safely. */
+  foundText?: ReviewFoundText | null;
 }
 
+
+export interface ReviewFoundText {
+  text: string;
+  before: string;
+  after: string;
+}
 
 export interface FocusedReviewQueue {
   items: FocusedReviewItem[];
   totalItems: number;
+  /** The policy's automatic-redaction level (0..1), for "why a person is asked". */
+  autoRedactThreshold?: number | null;
 }
 
 export interface ReviewPagePreview {

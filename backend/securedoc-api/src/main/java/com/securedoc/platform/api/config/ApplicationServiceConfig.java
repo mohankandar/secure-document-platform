@@ -108,6 +108,7 @@ import com.securedoc.platform.application.resilience.TenantRoutingSensitiveConte
 import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.review.service.FindingReviewService;
 import com.securedoc.platform.application.review.service.FocusedReviewService;
+import com.securedoc.platform.application.review.service.ReviewFoundTextReader;
 import com.securedoc.platform.application.review.service.ReviewWorkflowService;
 import com.securedoc.platform.application.review.service.ReviewPagePreviewService;
 import com.securedoc.platform.application.manual.service.ManualFallbackService;
@@ -899,9 +900,12 @@ public class ApplicationServiceConfig {
             FindingRepository findingRepository,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             PackageProcessingDispatcher packageProcessingDispatcher,
-            AuditService auditService) {
+            AuditService auditService,
+            ArtifactRepository artifactRepository,
+            StoragePort storagePort) {
         return new FocusedReviewService(packageRepository, documentRepository, findingRepository,
-                tenantRedactionPolicyRepository, packageProcessingDispatcher, auditService);
+                tenantRedactionPolicyRepository, packageProcessingDispatcher, auditService,
+                new ReviewFoundTextReader(artifactRepository, storagePort));
     }
 
     @Bean

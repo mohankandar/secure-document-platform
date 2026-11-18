@@ -45,6 +45,8 @@ export interface SensitiveType {
   key: string;
   /** The one name people see, in Review, Policy, the case panel and Continue manually. */
   name: string;
+  /** The plural, for counts such as "2 more Dates of birth". */
+  plural: string;
   /** What the detection finds, for the policy screen. */
   detects: string;
 }
@@ -54,10 +56,10 @@ export interface SensitiveType {
  * text span and redacts only that span; none redacts a whole page, image or document.
  */
 export const SENSITIVE_TYPES: readonly SensitiveType[] = [
-  { key: 'SSN', name: 'Social Security Number', detects: 'Full Social Security Numbers in text, including clearly labeled test values. Form, reference and case numbers are excluded.' },
-  { key: 'DATE_OF_BIRTH', name: 'Date of birth', detects: 'A person’s birth date only. Signature, payment, effective and other dates are excluded.' },
-  { key: 'CREDIT_CARD_NUMBER', name: 'Credit card number', detects: 'Full 13–19 digit payment card numbers. Masked or last-four displays and account numbers are excluded.' },
-  { key: 'CREDIT_SCORE', name: 'Credit score', detects: 'A consumer credit or FICO score tied to a person or report. Bare three-digit numbers are excluded.' },
+  { key: 'SSN', name: 'Social Security Number', plural: 'Social Security Numbers', detects: 'Full Social Security Numbers in text, including clearly labeled test values. Form, reference and case numbers are excluded.' },
+  { key: 'DATE_OF_BIRTH', name: 'Date of birth', plural: 'Dates of birth', detects: 'A person’s birth date only. Signature, payment, effective and other dates are excluded.' },
+  { key: 'CREDIT_CARD_NUMBER', name: 'Credit card number', plural: 'Credit card numbers', detects: 'Full 13–19 digit payment card numbers. Masked or last-four displays and account numbers are excluded.' },
+  { key: 'CREDIT_SCORE', name: 'Credit score', plural: 'Credit scores', detects: 'A consumer credit or FICO score tied to a person or report. Bare three-digit numbers are excluded.' },
 ];
 
 /** Other spellings the server or older data use for the same types. */
@@ -87,11 +89,43 @@ export function sensitiveTypeName(raw: string | null | undefined): string {
   return findSensitiveType(raw)?.name ?? sentenceCase(raw);
 }
 
+/** The plural for counts. An unknown type becomes "<Name> findings" rather than a guessed plural. */
+export function sensitiveTypePlural(raw: string | null | undefined): string {
+  if (!raw) return 'Sensitive values';
+  return findSensitiveType(raw)?.plural ?? `${sentenceCase(raw)} findings`;
+}
+
+/** One key per type, so aliases (US_SSN, SSN) count as the same type. */
+export function sensitiveTypeKey(raw: string | null | undefined): string {
+  return raw ? normalizeTypeKey(raw) : '';
+}
+
 /* ---------- Review ---------- */
 
 export const REVIEW_WORDS = {
   placeNotFound: 'place not found',
+  textFound: 'Text found',
 } as const;
+
+/**
+ * Why a person is asked, in one sentence that names the policy level when it applies (U004). The threshold is the
+ * tenant's automatic-redaction level (0..1) from the review queue; without it the sentence leaves the number out.
+ */
+export function whyAsked(reason: string | null | undefined, confidence: number, threshold: number | null | undefined): string {
+  const sure = `LexaVault is ${Math.round(confidence * 100)}% sure this is sensitive.`;
+  switch (reason) {
+    case 'LOW_CONFIDENCE':
+      return typeof threshold === 'number' && threshold > 0 && threshold <= 1
+        ? `${sure} Your policy redacts automatically from ${Math.round(threshold * 100)}%, so a person decides.`
+        : `${sure} That is below your policy’s level for automatic redaction, so a person decides.`;
+    case 'LOCATION_UNCERTAIN':
+      return 'LexaVault found this text but not its exact place on the page, so a person decides.';
+    case 'POLICY_REVIEW':
+      return `${sure} Your policy sends findings like this to a person before anything is redacted.`;
+    default:
+      return reasonText(reason);
+  }
+}
 
 /** Why a finding needs a person, in plain words. */
 export const REASON_TEXT: Record<string, string> = {

@@ -29,12 +29,18 @@ import com.securedoc.platform.domain.finding.FindingLocation;
 import com.securedoc.platform.domain.finding.FindingStatus;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.identity.DocumentId;
+import com.securedoc.platform.domain.identity.FindingId;
+import com.securedoc.platform.application.review.result.ReviewFoundText;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * V1 finding-focused review service. It deliberately avoids assignment/create/start task mechanics:
@@ -49,13 +55,16 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
     private final TenantRedactionPolicyRepository tenantRedactionPolicyRepository;
     private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final AuditService auditService;
+    private final ReviewFoundTextReader foundTextReader;
 
     public FocusedReviewService(PackageRepository packageRepository,
                                 DocumentRepository documentRepository,
                                 FindingRepository findingRepository,
                                 TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
                                 PackageProcessingDispatcher packageProcessingDispatcher,
-                                AuditService auditService) {
+                                AuditService auditService,
+                                ReviewFoundTextReader foundTextReader) {
+        this.foundTextReader = Objects.requireNonNull(foundTextReader);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -70,6 +79,8 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         Objects.requireNonNull(packageId);
         int safeLimit = Math.max(1, Math.min(100, limit));
         List<ReviewItemSummary> result = new ArrayList<>();
+        Map<FindingId, Finding> findingsById = new HashMap<>();
+        Map<DocumentId, Document> documentsById = new HashMap<>();
 
         // Global review stays tenant-wide. When entered from Intake Details, fetch only that package
         // so the backend enforces the same package scope as the UI instead of client-side filtering.
@@ -90,6 +101,8 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                         continue;
                     }
                     result.add(toSummary(pkg.id(), document, finding));
+                    findingsById.put(finding.id(), finding);
+                    documentsById.put(document.id(), document);
                 }
             }
         }
@@ -101,7 +114,31 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                         .thenComparingInt(ReviewItemSummary::pageNumber)
                         .thenComparing(item -> item.findingId().toString()))
                 .toList();
-        return new ReviewQueueResult(sorted.stream().limit(safeLimit).toList(), sorted.size());
+        List<ReviewItemSummary> page = sorted.stream().limit(safeLimit).toList();
+        double threshold = tenantRedactionPolicyRepository.findByTenantId(tenantId)
+                .orElseGet(() -> TenantRedactionPolicy.defaults(tenantId))
+                .autoRedactThreshold();
+        return new ReviewQueueResult(withFoundText(page, findingsById, documentsById), sorted.size(), threshold);
+    }
+
+    /**
+     * Adds the found text to the returned items only, reading each document's text once.
+     * Items whose text cannot be read safely keep {@code foundText == null}.
+     */
+    private List<ReviewItemSummary> withFoundText(List<ReviewItemSummary> page,
+                                                  Map<FindingId, Finding> findingsById,
+                                                  Map<DocumentId, Document> documentsById) {
+        Map<DocumentId, List<Finding>> byDocument = new LinkedHashMap<>();
+        for (ReviewItemSummary item : page) {
+            byDocument.computeIfAbsent(item.documentId(), id -> new ArrayList<>())
+                    .add(findingsById.get(item.findingId()));
+        }
+        Map<FindingId, ReviewFoundText> texts = new HashMap<>();
+        byDocument.forEach((documentId, findings) ->
+                texts.putAll(foundTextReader.read(documentsById.get(documentId), findings)));
+        return page.stream()
+                .map(item -> item.withFoundText(texts.get(item.findingId())))
+                .toList();
     }
 
     @Override
@@ -190,7 +227,7 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         return new ReviewItemSummary(
                 finding.id(), packageId, document.id(), document.fileName().value(), finding.entityType(),
                 finding.confidence().value(), finding.location().pageNumber(),
-                finding.location().hasBoundingBox(), boxSummary, reason);
+                finding.location().hasBoundingBox(), boxSummary, reason, null);
     }
 
     private boolean packageHasPendingFindings(PackageId packageId, TenantId tenantId) {
