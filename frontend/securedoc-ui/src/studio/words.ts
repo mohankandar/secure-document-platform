@@ -142,3 +142,55 @@ export function sentenceCase(raw: string): string {
     return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
   }).join(' ');
 }
+
+/* ---------- Cases rows and the case panel (UI task U003) ---------- */
+
+/** The next step in words, shown in each Cases row instead of the small bars. */
+export const NEXT_STEP = {
+  waitingForDocuments: 'Waiting for documents',
+  readyToSubmit: 'Ready to submit',
+  queued: 'Queued',
+  finding: 'Finding sensitive data…',
+  processingAgain: 'Processing again…',
+  waitingForReview: 'Waiting for review',
+  readyToApprove: 'Redaction done, ready to approve',
+  sent: 'Redacted and sent',
+  stopped: 'Processing stopped',
+  notAccepted: 'Not accepted at intake',
+  unknown: 'Status not recognised',
+} as const;
+
+export function findingsToReview(count: number): string {
+  return `${count} finding${count === 1 ? '' : 's'} to review`;
+}
+
+/** The one action a row offers, by kind. */
+export const ACTION_WORDS = {
+  review: 'Review',
+  approve: 'Approve',
+  retry: 'Retry',
+  continueManually: 'Continue manually',
+  processAgain: 'Process again',
+} as const;
+
+export const CASE_SECTIONS = {
+  keeping: 'Keeping and deleting',
+  details: 'Case details',
+  whatWentWrong: 'What went wrong',
+  sentTo: 'Sent to',
+} as const;
+
+/** Where a case was delivered, from the lifecycle's destination type ("sdv", "local-folder"). */
+export function destinationName(raw: string | null | undefined): string {
+  if (!raw) return 'its destination';
+  const key = raw.trim().toLowerCase();
+  if (key === 'sdv' || key.includes('secure-document-vault') || key.includes('secure_document_vault')) return 'Secure Document Vault';
+  if (key === 'local-folder' || key.includes('folder') || key.includes('filesystem')) return 'the delivery folder';
+  return sentenceCase(raw.replace(/-/g, ' '));
+}
+
+/** "2 of 3 runs left": how many more times a delivered case can be processed again. */
+export function runsLeft(used: number, maximum: number): string {
+  const left = Math.max(0, maximum - used);
+  return `${left} of ${maximum} run${maximum === 1 ? '' : 's'} left`;
+}

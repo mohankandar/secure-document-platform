@@ -116,7 +116,7 @@ export function caseActions(status: string, caps: string[], life: PackageLifecyc
       if (has(CAP.review)) actions.push({ kind: 'manual-fallback', label: 'Continue manually', primary: !has(CAP.technicalRetry) });
       break;
     case 'COMPLETED':
-      if (has(CAP.reprocess) && life?.canReprocess) actions.push({ kind: 'reprocess', label: 'Reprocess retained original', primary: false });
+      if (has(CAP.reprocess) && life?.canReprocess) actions.push({ kind: 'reprocess', label: 'Process again', primary: false });
       break;
     default:
       break;
@@ -209,16 +209,23 @@ export function usePackage(packageId: string | undefined) {
 }
 
 export function usePackageLifecycle(packageId: string | undefined, enabled: boolean) {
-  return useSWR(packageId && enabled ? ['lifecycle', packageId] : null, () => apiClient.getPackageLifecycle(packageId as string), { refreshInterval: 5000 });
+  return useSWR(packageId && enabled ? ['lifecycle', packageId] : null,
+    () => checked(`GET /packages/${packageId}/lifecycle`, apiClient.getPackageLifecycle(packageId as string),
+      (v) => isRecord(v) && typeof v.successfulExportCycles === 'number' && typeof v.maximumExportCycles === 'number'),
+    { refreshInterval: 5000 });
 }
 
 /** Production only loads derived deliveries for users who can approve delivery. */
 export function useDerivedDeliveries(packageId: string | undefined, enabled: boolean) {
-  return useSWR(packageId && enabled ? ['derived-deliveries', packageId] : null, () => apiClient.listDerivedDeliveries(packageId as string), { refreshInterval: 8000 });
+  return useSWR(packageId && enabled ? ['derived-deliveries', packageId] : null,
+    () => checked(`GET /packages/${packageId}/derived-deliveries`, apiClient.listDerivedDeliveries(packageId as string), isArrayOf(isRecord)),
+    { refreshInterval: 8000 });
 }
 
 export function useTechnicalException(packageId: string | undefined, enabled: boolean) {
-  return useSWR(packageId && enabled ? ['technical-exception', packageId] : null, () => apiClient.getTechnicalException(packageId as string), { revalidateOnFocus: false, shouldRetryOnError: false });
+  return useSWR(packageId && enabled ? ['technical-exception', packageId] : null,
+    () => checked(`GET /technical-exceptions/${packageId}`, apiClient.getTechnicalException(packageId as string), (v) => isRecord(v) && typeof v.explanation === 'string'),
+    { revalidateOnFocus: false, shouldRetryOnError: false });
 }
 
 export function useReviewQueue(enabled: boolean) {

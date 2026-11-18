@@ -29,6 +29,15 @@ export default function Intake() {
   const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method } | null>(null);
   useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
+  // "Start a new case for this …" on a rejected case opens New case with ?for=<primary identifier> (UI task U003).
+  const prefill = params.get('for');
+  const [prefilled, setPrefilled] = useState(false);
+  if (!prefilled && prefill && definitions.length > 0) {
+    const primary = definitions.find((d) => d.primary) ?? definitions[0];
+    setPrefilled(true);
+    setValues((current) => (Object.values(current).some((v) => v.trim() !== '') ? current : { ...current, [primary.key]: prefill }));
+  }
+
   const errors = useMemo(() => identityErrors(definitions, values), [definitions, values]);
   const valid = definitions.length > 0 && Object.keys(errors).length === 0;
 

@@ -7,9 +7,13 @@ import {
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
 import { CASE_GROUPS, NAV, caseSearchPlaceholder } from './words';
-import { FindingStrip, Kbd, Notice, Spinner, StageChip } from './atoms';
+import { Kbd, Notice, Spinner, StageChip } from './atoms';
 import CaseDrawer from './CaseDrawer';
 import { LoadErrorCard } from './failure';
+import { apiClient } from '../api/client';
+import { nextStepText, rowAction, type RowAction } from './caseRules';
+import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
+import { ConfirmDialog } from './admin/shared';
 
 type Filter = 'all' | 'you' | StageKey;
 
@@ -195,12 +199,18 @@ function LifecycleBand({ counts, total, active, onSelect }: {
   );
 }
 
+/**
+ * One case: the row opens the case panel; the action button at the end (only when this person can act) runs the
+ * action with the same confirmation as the case panel and never also opens the panel (UI spec findings 2, 3).
+ */
 function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: string[]; open: number; selected: boolean }) {
   const title = caseTitle(pkg.businessIdentifiers);
   const stage = stageOf(pkg.status);
   const you = needsYou(pkg, caps);
+  const action = rowAction(pkg.status, caps, open);
+  const next = nextStepText(pkg.status, caps.includes(CAP.review) ? open : undefined);
   return (
-    <li id={`cf-row-${pkg.packageId}`}>
+    <li id={`cf-row-${pkg.packageId}`} className="cf-case-row" data-selected={selected || undefined} data-you={you || undefined}>
       <Link to={`/case/${pkg.packageId}`} className="cf-case" aria-current={selected ? 'true' : undefined} data-you={you || undefined}>
         <span className="cf-case-flag" aria-hidden="true" />
         <span className="cf-case-id">
@@ -209,10 +219,64 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
         </span>
         <span className="cf-case-source">{SOURCE_LABEL[pkg.packageType] ?? pkg.packageType}</span>
         <span className="cf-case-docs">{pkg.documentCount} {pkg.documentCount === 1 ? 'doc' : 'docs'}</span>
-        <span className="cf-case-strip"><FindingStrip open={open} stage={stage} /></span>
+        <span className="cf-case-next" data-stage={stage}>{next}</span>
         <span className="cf-case-stage"><StageChip stage={stage} status={pkg.status} /></span>
         <time className="cf-case-time" dateTime={pkg.updatedAt}>{relativeTime(pkg.updatedAt)}</time>
       </Link>
+      <span className="cf-case-act">{action && <RowActionButton pkg={pkg} action={action} caseLabel={title.primary} />}</span>
     </li>
+  );
+}
+
+function RowActionButton({ pkg, action, caseLabel }: { pkg: PackageSummary; action: RowAction; caseLabel: string }) {
+  const navigate = useNavigate();
+  const runner = useCaseActionRunner(pkg.packageId);
+  const [confirming, setConfirming] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const copy = CONFIRM_COPY[action.kind];
+
+  async function start() {
+    runner.clearError();
+    setRefusal(null);
+    if (action.kind === 'review') { navigate(`/review?case=${pkg.packageId}`); return; }
+    if (action.kind === 'manual-fallback') {
+      // The same eligibility check the case panel makes before it offers Continue manually.
+      setChecking(true);
+      try {
+        const eligibility = await apiClient.getManualFallbackEligibility(pkg.packageId);
+        if (!eligibility.eligible) setRefusal(`Continuing manually is not possible: ${eligibility.reason}`);
+      } catch {
+        setRefusal('Whether this case can be continued manually could not be checked. Open the case for details.');
+      } finally {
+        setChecking(false);
+      }
+    }
+    setConfirming(true);
+  }
+
+  return (
+    <>
+      <button type="button" className="cf-btn" data-size="sm" data-variant={action.kind === 'review' ? 'mark' : undefined}
+        aria-label={`${action.label} ${caseLabel}`} disabled={checking || runner.busy !== null} onClick={start}>
+        {checking && <Spinner label="Checking" />}{action.label}
+      </button>
+      {copy && (
+        <ConfirmDialog
+          open={confirming}
+          title={refusal ? 'This case cannot be continued manually' : copy.title}
+          facts={[['Case', <span className="cf-mono" key="c">{caseLabel}</span>]]}
+          consequence={refusal ?? copy.body}
+          confirmLabel={copy.confirm}
+          busy={runner.busy !== null}
+          error={runner.error}
+          onCancel={() => { setConfirming(false); runner.clearError(); }}
+          onConfirm={async () => {
+            if (refusal) { setConfirming(false); return; }
+            if (await runner.run(action.kind)) setConfirming(false);
+          }}
+        />
+      )}
+    </>
   );
 }

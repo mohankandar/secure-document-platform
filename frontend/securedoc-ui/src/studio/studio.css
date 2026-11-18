@@ -262,17 +262,23 @@
 
 .cf-cases { background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 8px; overflow: hidden; }
 .cf-cases li + li { border-top: 1px solid var(--cf-line); }
+/* A row is the case link (opens the case panel) plus a separate action column (UI task U003). */
+.cf-case-row { display: grid; grid-template-columns: minmax(0, 1fr) 156px; align-items: center; transition: background-color 100ms ease; }
+.cf-case-row:hover { background: var(--cf-raised); }
+.cf-case-row[data-selected] { background: var(--cf-raised); box-shadow: inset 2px 0 0 var(--cf-ink); }
 .cf-case {
   position: relative;
   display: grid; align-items: center; gap: 16px;
-  grid-template-columns: minmax(180px, 1.6fr) 64px 64px minmax(80px, 1fr) 110px 72px;
+  grid-template-columns: minmax(160px, 1.4fr) 56px 56px minmax(140px, 1.4fr) 110px 64px;
   padding: 12px 16px 12px 20px; min-height: 60px;
-  transition: background-color 100ms ease;
 }
-.cf-case:hover { background: var(--cf-raised); }
-.cf-case[aria-current='true'] { background: var(--cf-raised); box-shadow: inset 2px 0 0 var(--cf-ink); }
 .cf-case-flag { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
 .cf-case[data-you] .cf-case-flag { background: var(--cf-mark); }
+.cf-case-next { font-size: 13px; color: var(--cf-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-case-next[data-stage='stopped'] { color: var(--cf-danger); }
+.cf-case-next[data-stage='delivered'], .cf-case-next[data-stage='redacting'], .cf-case-next[data-stage='intake'] { color: var(--cf-muted); }
+.cf-case-act { display: flex; justify-content: flex-end; padding-right: 16px; }
+.cf-case-act .cf-btn { white-space: nowrap; }
 .cf-case-id { display: flex; flex-direction: column; min-width: 0; }
 .cf-case-primary { font-weight: 500; font-size: 14px; }
 .cf-case-secondary, .cf-case-source, .cf-case-docs, .cf-case-time { color: var(--cf-muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -312,7 +318,7 @@
 .cf-timeline li[data-state='done']::before, .cf-timeline li[data-state='current']::before { background: var(--stage); }
 .cf-timeline li[data-state='stopped']::before { background: var(--cf-stage-stopped); }
 .cf-timeline-dot { display: none; }
-.cf-timeline-label { font-size: 11px; color: var(--cf-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-timeline-label { font-size: 11px; color: var(--cf-faint); overflow-wrap: anywhere; }
 .cf-timeline li[data-state='done'] .cf-timeline-label { color: var(--cf-muted); }
 .cf-timeline li[data-state='current'] .cf-timeline-label { color: var(--cf-ink); font-weight: 600; }
 .cf-timeline li[data-state='stopped'] .cf-timeline-label { color: var(--cf-danger); font-weight: 600; }
@@ -535,8 +541,9 @@
   .cf-queue-case ul { flex-direction: row; }
   .cf-queue-item { white-space: nowrap; }
   .cf-drawer { width: 360px; }
-  .cf-case { grid-template-columns: minmax(160px, 1.6fr) 56px minmax(60px, 1fr) 100px 64px; }
+  .cf-case { grid-template-columns: minmax(140px, 1.4fr) 52px minmax(120px, 1.4fr) 104px 60px; }
   .cf-case-docs { display: none; }
+  .cf-case-row { grid-template-columns: minmax(0, 1fr) 148px; }
   /* Below 1200 px (the documented breakpoint covering the spec's "below 1100 px") the find box is an icon button. */
   .cf-find { width: auto; padding: 0 9px; }
   .cf-find-label, .cf-find-keys { display: none; }
@@ -546,7 +553,7 @@
   .cf-top { gap: 12px; padding: 0 16px; }
   .cf-main { padding: 24px 16px 48px; }
   .cf-desk.has-drawer .cf-case { grid-template-columns: minmax(0, 1fr) auto; }
-  .cf-desk.has-drawer .cf-case-source, .cf-desk.has-drawer .cf-case-strip, .cf-desk.has-drawer .cf-case-time { display: none; }
+  .cf-desk.has-drawer .cf-case-source, .cf-desk.has-drawer .cf-case-next, .cf-desk.has-drawer .cf-case-time { display: none; }
   .cf-intake-grid { grid-template-columns: 1fr; }
   .cf-band-label { font-size: 11px; }
 }
@@ -555,7 +562,8 @@
   .cf-desk { flex-direction: column; }
   .cf-drawer { position: fixed; inset: auto 0 0 0; width: auto; max-height: 85vh; top: auto; z-index: 30; border-radius: 14px 14px 0 0; box-shadow: var(--cf-shadow-pop); }
   .cf-case { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-  .cf-case-source, .cf-case-strip, .cf-case-time { display: none; }
+  .cf-case-source, .cf-case-next, .cf-case-time { display: none; }
+  .cf-case-row { grid-template-columns: minmax(0, 1fr) auto; }
   .cf-band { flex-wrap: wrap; }
   .cf-band-seg { min-width: calc(33% - 4px); }
   .cf-review-grid { grid-template-columns: 1fr; }
@@ -596,3 +604,7 @@
 /* No-access page (finding 21). */
 .cf-scope-who { font-weight: 600; color: var(--cf-ink); }
 .cf-scope-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Case panel: a choice with a one-line explanation under it ("2 of 3 runs left"). */
+.cf-next-choice { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.cf-next-hint { font-size: 12px; color: var(--cf-muted); }
