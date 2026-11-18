@@ -128,6 +128,7 @@ What we bring:
 - The running product checks at start that the schema is the version it expects, and refuses to start if not. It does not create or change tables.
 - The customer's administrator enters the database address and passwords. We do not need to know them.
 - Customers and entities are created by an explicit setup command run during the install. Nothing is inserted as a side effect of starting the server.
+- In local development only, the server may create its tables automatically at start, for speed. It never inserts rows, in any mode: setup data comes only from the setup command. (Agreed 2026-11-17, task 0011.)
 
 **Customer IDs, entity IDs and licences come from us.**
 - We issue the customer ID, one tenant ID per entity, and a licence for each entity. A licence is already tied to a tenant ID in the code.
@@ -190,11 +191,13 @@ Still to confirm in the hub proof of concept: the exact shape of the organizatio
 | Goes into the shared library | Stays in each product |
 |---|---|
 | Checking the sign-in token | Its own roles and what each role may do |
-| Customer and entity records, and the rule that ties them together | Its own screens |
+| Customer and entity record types, and the rule that ties them together | Its own screens |
 | Working out which entities a person may enter | Its own data |
-| Group-to-role mapping and the mapping file loader | |
+| Group-to-role mapping and the mapping file loader | The persistence of all of the above: tables, migrations and the code that reads them |
 | The entity chooser rules | |
 | The core of the setup command, and the licence check | |
+
+**The library holds the record types and the rules; each product holds the persistence.** The library owns no tables and no migrations. It states what it needs through small interfaces the product implements (which entities have an ACTIVE login-system record, which groups grant which roles, which machine identity is bound to which entity, which role names exist). Each product keeps its own tables and migrations, as SDV already does for the login-system records. (Agreed 2026-11-17, task 0011.)
 
 R1B is proven at runtime in LexaVault first, then moved into the library with its tests as the safety net, and new pieces are built in the library from then on.
 
@@ -282,8 +285,8 @@ A stand-in proves the connection type works. It will not show quirks specific to
 | Phase | Work | Proof |
 |---|---|---|
 | 0 | Fix the test plugin so the 5 skipped LexaVault tests run | All tests execute and pass |
-| 1 | Run R1B for real: one login system, two entities, isolated database | Points 1 to 3 of section 11 |
-| 1b | Move the R1B login and entity code into the Enterprise Identity library (version 0.3.0); LexaVault uses it from there | The same tests and the same runtime proof pass unchanged |
+| 1 | Run R1B for real: one login system, two entities, isolated database. **Done 2026-11-17** (reports 0004 to 0009): 60 scripted checks, the browser script and the owner's screen checks pass; the newest (Case File) design now has the entity switch | Points 1 to 3 of section 11 |
+| 1b | Move the R1B login and entity code into the Enterprise Identity library (version 0.3.0); LexaVault uses it from there | Tests that move with their classes keep the same cases, mapped one to one; all other tests and the Phase 1 runtime proof pass unchanged |
 | 2 | Role mapping file and its loader | Point 7 |
 | 3 | Platform access from an install-level setting | Point 5 |
 | 4 | Machine integrations tied to one entity; caching | Point 4 |
@@ -401,6 +404,16 @@ Not built, and not needed for the first customer. It is a different thing from m
 | SDV encryption keys | The documents are encrypted with keys held in the customer's Vault. A move needs those keys carried across or the documents re-protected under new keys. Decide how before the first customer who might move goes live, because it affects how their keys are created |
 | Login | The customer's login system is connected to the hub in place of the direct connection |
 | Proof | The moved entity opens its old documents, and nothing from another customer is reachable |
+
+**Found during Phase 1 and its follow-up** (added 2026-11-17)
+
+| Item | Why it matters |
+|---|---|
+| Validate role names when the mapping file is loaded | Today one mistyped role in any grant row makes the grant lookup fail for every person on that login system. The loader must refuse a bad file instead |
+| Add `X-Selected-Tenant-Id` to the CORS allowed headers | It is missing. Harmless while the UI reaches the API through the same address, but it breaks a layout where the UI is served from a different address |
+| SDV to move to the current Enterprise Identity library | SDV is still on 0.2.0, without the 0.2.1 audience fix; it joins the shared admission code in Phase 6 |
+| LexaVault and SDV to agree one status per refusal reason, before Phase 6 | Today the same identity-claim problem gets 403 in LexaVault and 401 in SDV. Proposal: 401 when the token cannot establish who the caller is, 403 when the caller is known but not allowed |
+| Product work items and AI enhancements | Kept in `docs/product/ENHANCEMENT_BACKLOG.md` |
 
 **Parked from the development setup work on 2026-11-16**
 
