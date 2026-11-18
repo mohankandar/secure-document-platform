@@ -7,6 +7,7 @@ import { CAP, errorMessage, type StageKey } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ErrorBoundary, LoadErrorCard, checked, isRecord } from '../failure';
+import { axisTicks, bucketDate, hours, labelledBuckets, pct, ratio } from './reportRules';
 import './reports.css';
 
 type Preset = 'TODAY' | '7D' | '30D' | 'THIS_MONTH' | 'THIS_QUARTER' | 'CUSTOM';
@@ -32,7 +33,7 @@ const OUTCOMES = [
   { value: 'ALL', label: 'All outcomes' },
   { value: 'DELIVERED', label: 'Delivered' },
   { value: 'IN_PROGRESS', label: 'In progress' },
-  { value: 'ATTENTION', label: 'Needs attention' },
+  { value: 'ATTENTION', label: 'Stopped' },
 ];
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -62,9 +63,6 @@ function periodFor(preset: Preset, customFrom: string, customTo: string): { from
   }
 }
 
-const pct = (v: number) => `${Math.round(v * (v <= 1 ? 100 : 1))}%`;
-const ratio = (v: number) => (v <= 1 ? v * 100 : v);
-const hours = (h: number) => (h < 1 ? `${Math.round(h * 60)}m` : h < 48 ? `${h.toFixed(1)}h` : `${(h / 24).toFixed(1)}d`);
 function delta(current: number, previous: number) {
   if (!previous) return null;
   const change = ((current - previous) / previous) * 100;
@@ -116,10 +114,10 @@ export default function Reports({ caps }: { caps: string[] }) {
       <header className="cf-page-head">
         <div>
           <span className="cf-eyebrow">Reports</span>
-          <h1 className="cf-title">How the desk is performing</h1>
+          <h1 className="cf-title">How the work is going</h1>
           <p className="cf-lede">
             {period ? period.label : 'Choose a valid range'}
-            {data && <> · generated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}
+            {data && <> · updated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}
             {isValidating && data && <> · refreshing</>}
           </p>
         </div>
@@ -175,7 +173,7 @@ export default function Reports({ caps }: { caps: string[] }) {
               {data.dimensions.map((d) => <Card key={d.key} name={d.label || 'A breakdown'}><Dimension dim={d} /></Card>)}
             </>
           ) : (
-            <p className="cf-rp-scope">Pipeline, backlog, retention and dimension breakdowns need operational report access.</p>
+            <p className="cf-rp-scope">More detail is available to Business Administrators.</p>
           )}
         </div>
       )}
@@ -228,33 +226,61 @@ function Executive({ r }: { r: OperationalReports }) {
     <dl className="cf-rp-stats">
       <Stat label="Cases received" value={e.batches.toLocaleString()} sub={`${e.documents.toLocaleString()} documents · ${e.pages.toLocaleString()} pages`} change={delta(e.batches, e.previousBatches)} />
       <Stat label="Delivered" value={e.delivered.toLocaleString()} sub={`${pct(e.deliveryRate)} of cases`} change={delta(e.delivered, e.previousDelivered)} />
-      <Stat label="Median to delivery" value={hours(e.medianDeliveryHours)} sub={`p95 ${hours(e.p95DeliveryHours)}`} />
-      <Stat label="Straight-through" value={pct(e.straightThroughRate)} sub={`${pct(e.reviewRate)} needed review`} />
-      <Stat label="Open backlog" value={e.currentBacklog.toLocaleString()} sub={e.currentAttention ? `${e.currentAttention} need attention · oldest ${hours(e.oldestBacklogHours)}` : `oldest ${hours(e.oldestBacklogHours)}`} />
+      <Stat label="Typical time to delivery" value={hours(e.medianDeliveryHours)} sub={`slowest 5%: ${hours(e.p95DeliveryHours)}`} />
+      <Stat label="No review needed" value={pct(e.straightThroughRate)} sub={`${pct(e.reviewRate)} needed a person`} />
+      <Stat label="Open now" value={e.currentBacklog.toLocaleString()} sub={e.currentAttention ? `${e.currentAttention} stopped · oldest ${hours(e.oldestBacklogHours)}` : `oldest ${hours(e.oldestBacklogHours)}`} />
     </dl>
   );
 }
 
 function Trend({ r }: { r: OperationalReports }) {
   const points = r.executive.trend;
-  const max = Math.max(1, ...points.map((p) => Math.max(p.received, p.delivered)));
+  const [hover, setHover] = useState<number | null>(null);
   if (!points.length) return null;
+  const ticks = axisTicks(Math.max(...points.map((p) => Math.max(p.received, p.delivered))));
+  const top = ticks[ticks.length - 1];
+  const at = (v: number) => `${(v / top) * 100}%`;
+  const labelled = new Set(labelledBuckets(points.length));
+  const shown = hover === null ? null : points[hover];
   return (
-    <Section title="Received and delivered" note="Per period bucket">
+    <Section title="Received and delivered" note="Cases per day">
       <div className="cf-rp-legend" aria-hidden="true"><span data-k="received">Received</span><span data-k="delivered">Delivered</span></div>
-      <div className="cf-rp-trend" role="img" aria-label={`Trend over ${points.length} buckets. Total received ${points.reduce((s, p) => s + p.received, 0)}, delivered ${points.reduce((s, p) => s + p.delivered, 0)}.`}>
-        {points.map((p) => (
-          <div key={p.bucket} className="cf-rp-trend-col" title={`${p.bucket}: ${p.received} received, ${p.delivered} delivered`}>
-            <div className="cf-rp-trend-bars">
-              <span data-k="received" style={{ height: `${(p.received / max) * 100}%` }} />
-              <span data-k="delivered" style={{ height: `${(p.delivered / max) * 100}%` }} />
-            </div>
+      <div className="cf-rp-chart" data-testid="trend-chart" aria-hidden="true">
+        <div className="cf-rp-yaxis">
+          {ticks.map((t) => <span key={t} style={{ bottom: at(t) }}>{t.toLocaleString()}</span>)}
+        </div>
+        <div className="cf-rp-plot" onMouseLeave={() => setHover(null)}>
+          {ticks.map((t) => <span key={t} className="cf-rp-gridline" style={{ bottom: at(t) }} />)}
+          <div className="cf-rp-trend">
+            {points.map((p, i) => (
+              <div key={p.bucket} className="cf-rp-trend-col" data-hover={hover === i || undefined} onMouseEnter={() => setHover(i)}>
+                <span data-k="received" style={{ height: at(p.received) }} />
+                <span data-k="delivered" style={{ height: at(p.delivered) }} />
+              </div>
+            ))}
           </div>
-        ))}
+          {shown && hover !== null && (
+            <div className="cf-rp-tip" data-testid="trend-tip" data-side={hover >= points.length / 2 ? 'left' : 'right'}
+              style={{ left: `${((hover + 0.5) / points.length) * 100}%` }}>
+              <strong>{bucketDate(shown.bucket)}</strong>
+              <span data-k="received">{shown.received.toLocaleString()} received</span>
+              <span data-k="delivered">{shown.delivered.toLocaleString()} delivered</span>
+            </div>
+          )}
+          <div className="cf-rp-xaxis">
+            {points.map((p, i) => <span key={p.bucket}>{labelled.has(i) ? bucketDate(p.bucket) : ''}</span>)}
+          </div>
+        </div>
       </div>
-      <div className="cf-rp-trend-axis" aria-hidden="true">
-        <span>{points[0].bucket}</span>
-        <span>{points[points.length - 1].bucket}</span>
+      {/* A table never shrinks to the 1 px hidden box, so it is hidden through a wrapper. */}
+      <div className="cf-sr">
+        <table>
+          <caption>Cases received and delivered per day</caption>
+          <thead><tr><th scope="col">Day</th><th scope="col">Received</th><th scope="col">Delivered</th></tr></thead>
+          <tbody>
+            {points.map((p) => <tr key={p.bucket}><th scope="row">{bucketDate(p.bucket)}</th><td>{p.received}</td><td>{p.delivered}</td></tr>)}
+          </tbody>
+        </table>
       </div>
     </Section>
   );
@@ -282,10 +308,10 @@ function TargetBar({ label, actual, target, detail }: { label: string; actual: n
 function ServiceLevel({ r }: { r: OperationalReports }) {
   const s = r.serviceLevel;
   return (
-    <Section title="Service levels" note="Targets are set in Admin › Reporting">
+    <Section title="Service levels" note="Targets are set in Admin › Redaction & retention › Reporting">
       <div className="cf-rp-targets">
-        <TargetBar label={`Delivered within ${hours(s.deliveryTargetMinutes / 60)}`} actual={s.deliveryWithinTargetRate} target={s.deliveryTargetPercent} detail={`${s.deliveryBreaches} of ${s.deliveryEligible} eligible cases missed the target`} />
-        <TargetBar label="Straight-through processing" actual={s.straightThroughActualPercent} target={s.straightThroughTargetPercent} detail="Cases delivered without a human review step" />
+        <TargetBar label={`Delivered within ${hours(s.deliveryTargetMinutes / 60)}`} actual={s.deliveryWithinTargetRate} target={s.deliveryTargetPercent} detail={`${s.deliveryBreaches} of ${s.deliveryEligible} cases missed the target`} />
+        <TargetBar label="No review needed" actual={s.straightThroughActualPercent} target={s.straightThroughTargetPercent} detail="Cases delivered without a person reviewing" />
         <TargetBar label={`Review picked up within ${hours(s.reviewWaitTargetMinutes / 60)}`} actual={s.reviewWithinTargetRate} target={100} detail={`${s.reviewBreaches} of ${s.reviewEligible} reviews waited longer`} />
       </div>
     </Section>
@@ -299,7 +325,7 @@ function Pipeline({ r }: { r: OperationalReports }) {
     { label: 'Needs review', value: p.needsReview, stage: 'review' },
     { label: 'Awaiting approval', value: p.needsApproval, stage: 'approval' },
     { label: 'Delivered', value: p.completed, stage: 'delivered' },
-    { label: 'Technical attention', value: p.technicalAttention, stage: 'stopped', tone: 'danger' },
+    { label: 'Stopped', value: p.technicalAttention, stage: 'stopped', tone: 'danger' },
     { label: 'Rejected', value: p.rejected, stage: 'stopped', tone: 'danger' },
   ];
   return (
@@ -373,10 +399,10 @@ function Timing({ r }: { r: OperationalReports }) {
   return (
     <Section title="Timing and volume">
       <dl className="cf-rp-grid">
-        <Stat label="Turnaround" value={hours(t.medianTurnaroundHours)} sub={`p95 ${hours(t.p95TurnaroundHours)} · ${t.turnaroundSamples} cases`} />
-        <Stat label="Active processing" value={hours(t.medianActiveProcessingHours)} sub={`p95 ${hours(t.p95ActiveProcessingHours)}`} />
-        <Stat label="Wait for reviewer" value={hours(t.medianReviewWaitHours)} sub={`${t.reviewWaitSamples} reviews`} />
-        <Stat label="Review handling" value={hours(t.medianReviewHandlingHours)} sub={`${t.reviewHandlingSamples} reviews`} />
+        <Stat label="Typical turnaround" value={hours(t.medianTurnaroundHours)} sub={`slowest 5%: ${hours(t.p95TurnaroundHours)} · ${t.turnaroundSamples} cases`} />
+        <Stat label="Typical active processing" value={hours(t.medianActiveProcessingHours)} sub={`slowest 5%: ${hours(t.p95ActiveProcessingHours)}`} />
+        <Stat label="Typical wait for a reviewer" value={hours(t.medianReviewWaitHours)} sub={`${t.reviewWaitSamples} reviews`} />
+        <Stat label="Typical review handling" value={hours(t.medianReviewHandlingHours)} sub={`${t.reviewHandlingSamples} reviews`} />
         <Stat label="Documents per case" value={u.averageDocumentsPerPackage.toFixed(1)} sub={`${u.averagePagesPerPackage.toFixed(1)} pages`} />
         <Stat label="Reprocessed" value={u.reprocessedPackages.toLocaleString()} sub={`of ${u.packages.toLocaleString()} cases`} />
       </dl>
@@ -406,7 +432,7 @@ function Dimension({ dim }: { dim: OperationalReports['dimensions'][number] }) {
       <div className="cf-rp-table-wrap">
         <table className="cf-rp-table">
           <thead>
-            <tr><th scope="col">{dim.label}</th><th scope="col">Cases</th><th scope="col">Delivered</th><th scope="col">Rate</th><th scope="col">Median</th></tr>
+            <tr><th scope="col">{dim.label}</th><th scope="col">Cases</th><th scope="col">Delivered</th><th scope="col">Delivery rate</th><th scope="col">Typical time</th></tr>
           </thead>
           <tbody>
             {dim.values.map((v) => (

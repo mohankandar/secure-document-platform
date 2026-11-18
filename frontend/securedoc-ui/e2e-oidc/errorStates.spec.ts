@@ -128,7 +128,7 @@ test('Reports with an answer of the wrong shape shows the error card; the top ba
   broken.clear();
   await card.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('alert', { name: "Reports couldn't be loaded" })).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'How the desk is performing' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How the work is going' })).toBeVisible();
 
   // Another screen still works.
   await workspaceNav(page).getByRole('link', { name: 'Cases' }).click();
@@ -141,7 +141,7 @@ test('a card that fails while drawing shows its own error card; the other report
   await signIn(page);
   await workspaceNav(page).getByRole('link', { name: 'Reports' }).click();
   await expect(page.getByRole('alert', { name: "The trend couldn't be shown" })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'How the desk is performing' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'How the work is going' })).toBeVisible();
   await expect(page.getByText('Cases received')).toBeVisible();
   await expect(workspaceNav(page)).toBeVisible();
 });

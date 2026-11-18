@@ -22,3 +22,13 @@ Reports use the same layout as `docs/work/README.md`, saved as `UNNN-report.md` 
 - Roles: show an action only to people whose capability allows it. The backend still enforces every rule; the UI only hides what would be refused.
 - Some tasks need small backend changes (named in the task). Those follow the backend rules: ask before any schema change.
 - Run `npm run build` and `npm run test:standalone` for every task; add tests where the task says so. Check every changed screen in light and dark, at 1440 px and 1024 px.
+
+## Keep it lean (owner's decision, 2026-11-18)
+
+Quality comes first; save usage only where it costs no quality.
+
+- **Read only what the task needs:** the task file, the `SPEC.md` sections it names, its design file, and the code it changes. Do not survey the whole repo or re-read files already read in this session.
+- **No recaps:** don't restate the task or the project before starting. The chat summary at the end is short (outcome, checks, questions); the details live in the report.
+- **Repeat test runs only where they matter:** run the entity-switch tests several times only when the task touches entity switching or sign-in. Otherwise run each suite once. The build and `test:standalone` always run.
+- **Screen checks:** check the screens the task changes, in light and dark at 1440 and 1024 px, for the roles the task names. Not every screen for every role.
+- **One task per run.** Stop after the report; do not start the next task.
