@@ -28,7 +28,8 @@ Reports use the same layout as `docs/work/README.md`, saved as `UNNN-report.md` 
 Quality comes first; save usage only where it costs no quality.
 
 - **Read only what the task needs:** the task file, the `SPEC.md` sections it names, its design file, and the code it changes. Do not survey the whole repo or re-read files already read in this session.
-- **No recaps:** don't restate the task or the project before starting. The chat summary at the end is short (outcome, checks, questions); the details live in the report.
+- **Everything goes in the report, not the chat:** questions, gaps, decisions needed, findings and results all go in `UNNN-report.md`. The chat reply is one line only: `UNNN done, see the report` or `UNNN stopped, see the report`. Do not restate the task or the project before starting.
+- **Owner's answers:** the design chat writes the owner's answers into the report under `## Owner's answers`. When the owner says "read the owner's answers", apply them, note what was done under that heading, and commit.
 - **Repeat test runs only where they matter:** run the entity-switch tests several times only when the task touches entity switching or sign-in. Otherwise run each suite once. The build and `test:standalone` always run.
 - **Screen checks:** check the screens the task changes, in light and dark at 1440 and 1024 px, for the roles the task names. Not every screen for every role.
 - **One task per run.** Stop after the report; do not start the next task.
