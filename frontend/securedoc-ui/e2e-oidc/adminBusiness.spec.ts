@@ -55,7 +55,13 @@ function configuration() {
       { id: 'd3', key: 'property_state', label: 'Property state', required: false, primary: false, searchable: false, extractable: false, displayable: true, displayOrder: 3,
         validationType: 'ALLOW_LIST', exactLength: null, minLength: null, maxLength: null, caseNormalization: 'UPPER', stripSeparators: false, allowedValues: ['CA', 'NV', 'AZ', 'OR'], customPattern: null },
     ],
-    dashboardColumns: [],
+    dashboardColumns: [
+      { key: 'identifier:loan', label: 'Loan number', kind: 'IDENTIFIER', primary: true, allowed: true, defaultVisible: true, displayOrder: 0 },
+      { key: 'received', label: 'Received', kind: 'SYSTEM', primary: false, allowed: true, defaultVisible: true, displayOrder: 1 },
+      { key: 'intakeSource', label: 'Intake Source', kind: 'SYSTEM', primary: false, allowed: true, defaultVisible: false, displayOrder: 2 },
+      { key: 'exportStatus', label: 'Export Status', kind: 'SYSTEM', primary: false, allowed: false, defaultVisible: false, displayOrder: 3 },
+      { key: 'lastUpdated', label: 'Last Updated', kind: 'SYSTEM', primary: false, allowed: true, defaultVisible: false, displayOrder: 4 },
+    ],
     sensitiveDataPolicy: { enabledEntityTypes: ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true },
     lifecyclePolicy: { originalRetentionHours: 72, redactedCacheHours: 168, neverExportedHoldHours: 336, finalApprovalRequired: true, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 720 },
     documentIntelligence: {
@@ -226,4 +232,17 @@ test('Case fields: names as configured, headings over their columns, rules spell
   heads.forEach(([l, r], i) => { expect(Math.abs(l - firstRow[i][0])).toBeLessThan(1); expect(Math.abs(r - firstRow[i][1])).toBeLessThan(1); });
   const fieldHead = await table.getByRole('columnheader', { name: 'Field', exact: true }).evaluate((e) => getComputedStyle(e).textAlign);
   expect(fieldHead).toBe('left');
+
+  // Columns on Cases: LexaVault's columns by key in sentence case, case fields as configured (owner's U007 answer).
+  const columns = page.getByRole('region', { name: 'Columns on Cases' });
+  const names = await columns.locator('.cf-ad-row-label').evaluateAll((els) => els.map((e) => e.firstChild?.textContent ?? ''));
+  expect(names).toEqual(['Loan number', 'Received', 'Intake source', 'Export status', 'Last updated']);
+  await expect(columns).not.toContainText(/Intake Source|Export Status|Last Updated/);
+});
+
+test('Sensitive data: the types are headed "Sensitive types", never "entities"', async ({ page }) => {
+  await openAdmin(page, []);
+  const card = page.getByRole('region', { name: 'Sensitive data' });
+  await expect(card.getByRole('group', { name: 'Sensitive types (4)' })).toBeVisible();
+  await expect(card).not.toContainText(/entit(y|ies)/i);
 });

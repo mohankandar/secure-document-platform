@@ -7,10 +7,10 @@ import { useToast } from '../toast';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
 import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
 import { ErrorBoundary } from '../failure';
-import { SENSITIVE_TYPES, sensitiveTypeName } from '../words';
+import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
 
 /** The one name for a sensitive type (words.ts), shared with Review, the case panel and Continue manually. */
-export const entityLabel = sensitiveTypeName;
+export const typeName = sensitiveTypeName;
 
 function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
   const sdp = data.sensitiveDataPolicy;
@@ -44,7 +44,7 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
             <p className="cf-ad-hint">Findings below this go to a reviewer{d.reviewMode === 'REVIEW_ALL' ? '. Every case is reviewed regardless' : ''}.</p>
           </div>
           <fieldset className="cf-ad-fieldset">
-            <legend>Detected entities <span className="cf-muted">({d.enabledEntityTypes.length})</span></legend>
+            <legend>{SENSITIVE_TYPES_HEADING} <span className="cf-muted">({d.enabledEntityTypes.length})</span></legend>
             <div className="cf-ad-chips">
               {[...SENSITIVE_TYPES.map((s) => s.key), ...unsupported].map((t) => {
                 const on = d.enabledEntityTypes.includes(t);
@@ -52,7 +52,7 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
                 return (
                   <button key={t} type="button" aria-pressed={on} className="cf-ad-chip" title={meta?.detects}
                     onClick={() => set({ ...d, enabledEntityTypes: on ? d.enabledEntityTypes.filter((x) => x !== t) : [...d.enabledEntityTypes, t] })}>
-                    {entityLabel(t)}{!meta && ' (not supported)'}
+                    {typeName(t)}{!meta && ' (not supported)'}
                   </button>
                 );
               })}
@@ -62,10 +62,10 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
             </dl>
             <p className="cf-ad-hint">
               Detection works on text values, not document types. Each finding blacks out only the matched value on the page.
-              There is no whole-document or image-region redaction. A driver’s license, for example, is not an entity type,
+              There is no whole-document or image-region redaction. A driver’s license, for example, is not a sensitive type,
               though an SSN or date of birth printed on one is found like any other text.
             </p>
-            {unsupported.length > 0 && <p className="cf-ad-warn">{unsupported.map(entityLabel).join(', ')} {unsupported.length === 1 ? 'is' : 'are'} not acted on by the detection engine. Turn {unsupported.length === 1 ? 'it' : 'them'} off to keep the policy accurate.</p>}
+            {unsupported.length > 0 && <p className="cf-ad-warn">{unsupported.map(typeName).join(', ')} {unsupported.length === 1 ? 'is' : 'are'} not acted on by the detection engine. Turn {unsupported.length === 1 ? 'it' : 'them'} off to keep the policy accurate.</p>}
             {d.enabledEntityTypes.length === 0 && <p className="cf-ad-warn">Enable at least one category. The policy cannot be saved empty.</p>}
           </fieldset>
           <Toggle label="Treat labeled last-four SSNs as sensitive" hint="When on, a last-four value is also redacted, but only when it is explicitly labeled SSN." checked={d.maskSsnLastFour} disabled={!d.enabledEntityTypes.includes('SSN')} onChange={(v) => set({ ...d, maskSsnLastFour: v })} />

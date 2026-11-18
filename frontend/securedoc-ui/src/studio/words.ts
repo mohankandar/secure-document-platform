@@ -177,6 +177,35 @@ export function sentenceCase(raw: string): string {
   }).join(' ');
 }
 
+/**
+ * The heading over the sensitive types in a policy ("Sensitive types (4)"). In this product "entity" means only a
+ * legal entity (the entity switch), never a kind of sensitive data.
+ */
+export const SENSITIVE_TYPES_HEADING = 'Sensitive types';
+
+/* ---------- Columns on Cases (owner's U007 answer) ---------- */
+
+/** LexaVault's own Cases columns, by the stable key the server sends (DashboardColumnConfigurationService). */
+export const SYSTEM_COLUMN_NAMES: Record<string, string> = {
+  received: 'Received',
+  stage: 'Stage',
+  documents: 'Documents',
+  attention: 'Attention',
+  intakeSource: 'Intake source',
+  exportStatus: 'Export status',
+  lastUpdated: 'Last updated',
+  exportCycles: 'Export cycles',
+};
+
+/**
+ * The name of a Cases column. A case field keeps its configured label as it is; a LexaVault column is named from
+ * its key, and an unknown LexaVault column falls back to its server label in sentence case.
+ */
+export function dashboardColumnName(column: { key: string; label: string; kind: string }): string {
+  if (column.kind === 'IDENTIFIER') return column.label;
+  return SYSTEM_COLUMN_NAMES[column.key] ?? sentenceCase(column.label);
+}
+
 /* ---------- Cases rows and the case panel (UI task U003) ---------- */
 
 /** The next step in words, shown in each Cases row instead of the small bars. */

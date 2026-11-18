@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NAV, SENSITIVE_TYPES, STAGE_NAMES, caseSearchPlaceholder, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { NAV, SENSITIVE_TYPES, SENSITIVE_TYPES_HEADING, STAGE_NAMES, caseSearchPlaceholder, dashboardColumnName, findSensitiveType, sensitiveTypeName } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -57,4 +57,23 @@ test('search placeholders use the configured field labels, never "contract"', ()
   for (const text of [caseSearchPlaceholder(fields), caseSearchPlaceholder([]), caseSearchPlaceholder([], true)]) {
     assert.doesNotMatch(text, /contract/i);
   }
+});
+
+test('sensitive types are never called entities (an entity is only a legal entity)', () => {
+  assert.equal(SENSITIVE_TYPES_HEADING, 'Sensitive types');
+  assert.doesNotMatch(SENSITIVE_TYPES_HEADING, /entit/i);
+});
+
+test('Columns on Cases: LexaVault columns by key in sentence case, case fields as configured', () => {
+  const sys = (key: string, label: string) => dashboardColumnName({ key, label, kind: 'SYSTEM' });
+  assert.equal(sys('intakeSource', 'Intake Source'), 'Intake source');
+  assert.equal(sys('exportStatus', 'Export Status'), 'Export status');
+  assert.equal(sys('lastUpdated', 'Last Updated'), 'Last updated');
+  assert.equal(sys('exportCycles', 'Export Cycles'), 'Export cycles');
+  // The key decides, not the label the server sends.
+  assert.equal(sys('received', 'RECEIVED AT'), 'Received');
+  // An unknown LexaVault column falls back to its label in sentence case.
+  assert.equal(sys('newColumn', 'Delivery Folder'), 'Delivery folder');
+  // A configured case field is shown exactly as configured.
+  assert.equal(dashboardColumnName({ key: 'identifier:x', label: 'Loan Number SDV', kind: 'IDENTIFIER' }), 'Loan Number SDV');
 });

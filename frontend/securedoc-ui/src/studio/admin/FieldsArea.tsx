@@ -5,6 +5,7 @@ import { Notice } from '../atoms';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, Sheet, TextField, SelectField, OptionalInt } from './shared';
 import { useUnsavedWork } from '../unsavedWork';
 import { fieldRule } from './adminRules';
+import { dashboardColumnName } from '../words';
 
 const VALIDATION_TYPES: [BusinessIdentifierValidationType, string][] = [
   ['TEXT', 'Text'], ['NUMERIC', 'Numbers only'], ['ALPHANUMERIC', 'Letters and numbers'], ['EMAIL', 'Email address'],
@@ -227,7 +228,7 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
               {[...d].sort((a, b) => a.displayOrder - b.displayOrder).map((col) => (
                 <div key={col.key} className="cf-ad-row">
                   <span className="cf-ad-row-label">
-                    {col.label}{col.primary && <span className="cf-ad-tag">Main ID</span>}
+                    {dashboardColumnName(col)}{col.primary && <span className="cf-ad-tag">Main ID</span>}
                     <span className="cf-ad-cell-sub">{col.kind === 'IDENTIFIER' ? 'Case field' : 'Set by LexaVault'}</span>
                   </span>
                   <Toggle label="Allowed" checked={col.allowed} disabled={col.primary} onChange={(v) => set(d.map((x) => (x.key === col.key ? { ...x, allowed: v, defaultVisible: v ? x.defaultVisible : false } : x)))} />

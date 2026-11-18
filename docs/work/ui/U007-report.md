@@ -163,3 +163,33 @@ Outcome: DONE. It includes the owner-approved migration 038 (review pickup targe
 
 1. **Columns on Cases** lists LexaVault's own columns with the server's names in title case ("Intake Source", "Export Status", "Last Updated"). Rename them to the vocabulary ("Receiving", "Sending to SDV" and so on, in sentence case)? This would be a small backend wording change, so it was not done here.
 2. **"Detected entities (4)"** in Sensitive data uses "entities", which now also means a legal entity (the entity switch). Change it to "Sensitive types (4)"?
+
+## Owner's answers (2026-11-18)
+
+1. **Cases column names:** yes, show them as vocabulary words in sentence case ("Intake source", "Export status"). If the server sends a stable key for each column, map the key to `words.ts` in the UI and change nothing in the backend. Only if it sends display labels alone, keep them as they are now and add "stable column keys" to the backend work after the UI series.
+2. **"Detected entities":** yes, rename it to "Sensitive types (4)". In this product "entity" means only a legal entity. Put it in `words.ts`, and change any other screen that uses "entity" for a sensitive-data type to the same word.
+
+Apply both, note what was done here, commit, and then do the next UI task.
+
+## Owner's answers applied (2026-11-18)
+
+1. **Cases column names.** The server sends a stable key for each column (`intakeSource`, `exportStatus`, `lastUpdated`, `exportCycles`, …, from `DashboardColumnConfigurationService`), so this is UI only; the backend is unchanged.
+   - `words.ts` gains `SYSTEM_COLUMN_NAMES` and `dashboardColumnName()`. Columns on Cases now reads "Intake source", "Export status", "Last updated", "Export cycles" (and Received, Stage, Documents, Attention as before).
+   - A case field keeps its configured label exactly. An unknown LexaVault column falls back to its server label in sentence case.
+   - The words are the owner's examples. "Intake source" is not changed to "Receiving" (the vocabulary word for the Integrations tab); say if it should be.
+   - The Case File Cases screen does not show these columns, so nothing else changed.
+2. **"Detected entities" is now "Sensitive types (4)"** (`SENSITIVE_TYPES_HEADING` in `words.ts`).
+   - The new test also found the Sensitive data hint saying "A driver's license … is not an entity type"; it now says "is not a sensitive type".
+   - The helper in `PolicyArea.tsx` is renamed from `entityLabel` to `typeName`.
+   - No other Case File screen shows "entity" for a sensitive type. The legacy Review and Continue manually pages (frozen) use the word only in code names, not in what people see; they are unchanged.
+
+**Commands and results**
+- `npm run build`: passed.
+- `npm run test:standalone`: passed: `test:auth` 8, `test:vocabulary` 40 (2 new), `test:ui-framework` 17, `test:oidc-signin` 45 (1 new, 1 extended).
+- **New and changed tests:**
+  - `words.test.ts`: the heading has no "entity"; column names by key, the fallback, and case fields as configured.
+  - `adminBusiness.spec.ts`: the fixture gained five columns; the Case fields test checks the Columns on Cases names; a new test checks "Sensitive types (4)" and no "entity" on the Sensitive data card.
+- **Failures during the work (my own checks):**
+  - the new Sensitive data test first failed on the hint's "entity type" (a real wording miss, fixed above);
+  - then on two wrong locators of mine (an exact text match on "Sensitive types" and the card's first legend, which is "Send to review"). Both were narrowed to the "Sensitive types (4)" group.
+- Not checked on the live app: these are word changes on screens already checked in this task; the mocked browser tests cover them.
