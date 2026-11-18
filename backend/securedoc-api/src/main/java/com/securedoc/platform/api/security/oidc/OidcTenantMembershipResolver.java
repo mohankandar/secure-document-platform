@@ -1,70 +1,65 @@
 package com.securedoc.platform.api.security.oidc;
 
+import com.documentplatform.identity.admission.AdmissionSettings;
+import com.documentplatform.identity.admission.EntityMembershipResolver;
 import com.securedoc.platform.api.context.SecurityContextException;
 import com.securedoc.platform.api.security.SecurityProperties;
-import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import com.securedoc.platform.application.port.out.ActiveOidcTenantCandidates;
+import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import com.securedoc.platform.domain.identity.TenantId;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.refusingAsSecurityContext;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntities;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntity;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntityKeys;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toTenant;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toTenantKeys;
+
 /**
- * Finds tenant admissions from persisted ACTIVE connections and groups in a verified OIDC identity.
- * Not a replacement for the legacy OidcTenantResolver until tenant selection is implemented.
+ * LexaVault's seam to Enterprise Identity 0.3.0 entity admission. The rules (an entity is admitted only with an
+ * ACTIVE connection AND a matching verified group; roles from that entity's grants only) are the library's
+ * {@link EntityMembershipResolver}. This class adapts LexaVault's lookups, ids, roles and refusals to it.
  */
 @Component
 public class OidcTenantMembershipResolver {
-    private final TenantOidcGroupGrantRepository grants;
-    private final ActiveOidcTenantCandidates candidates;
-    private final TenantGroupAuthorization authorization = new TenantGroupAuthorization();
-    private final TrustedTenantAdmission admission = new TrustedTenantAdmission();
-    private final String providerId;
-    private final String audience;
+
+    private final EntityMembershipResolver admission;
 
     public OidcTenantMembershipResolver(TenantOidcGroupGrantRepository grants,
                                         ActiveOidcTenantCandidates candidates,
                                         SecurityProperties securityProperties) {
-        this.grants = Objects.requireNonNull(grants);
-        this.candidates = Objects.requireNonNull(candidates);
-        this.providerId = securityProperties.getOidc().getProviderId();
-        this.audience = securityProperties.getOidc().getAudience();
+        Objects.requireNonNull(grants);
+        Objects.requireNonNull(candidates);
+        var oidc = securityProperties.getOidc();
+        this.admission = new EntityMembershipResolver(
+                key -> toEntityKeys(grants.activeGrants(key.providerId(), key.issuer(), key.audience())),
+                key -> toEntities(candidates.findCandidates(key.providerId(), key.issuer(), key.audience())),
+                new ProductEntityRoleCatalog(),
+                new AdmissionSettings(oidc.isSharedIssuerTenantSelectionEnabled(), oidc.isPersistentConnectionEnabled(),
+                        oidc.getProviderId(), oidc.getAudience()));
     }
 
     /** The caller must supply groups from normalized, cryptographically authenticated OIDC identity. */
     public Map<TenantId, Set<String>> authorizedTenants(Jwt verifiedJwt, Object authenticatedGroups) {
-        if (verifiedJwt == null || verifiedJwt.getIssuer() == null
-                || audience == null || audience.isBlank()) {
+        if (verifiedJwt == null) {
             throw new SecurityContextException("Verified OIDC tenant membership context is unavailable");
         }
-        Map<TenantId, Map<String, Set<String>>> policies =
-                grants.activeGrants(providerId, URI.create(verifiedJwt.getIssuer().toString()), audience);
-        Set<TenantId> activeCandidates = candidates.findCandidates(providerId, URI.create(verifiedJwt.getIssuer().toString()), audience);
-        if (policies == null || activeCandidates == null) {
-            throw new SecurityContextException("OIDC tenant admission policy or ACTIVE tenant bindings are unavailable");
-        }
-        // Only a tenant backed by both an ACTIVE connection and a matching verified group is admissible.
-        Map<TenantId, Set<String>> authorized = new LinkedHashMap<>();
-        for (TenantId tenant : policies.keySet()) {
-            if (!activeCandidates.contains(tenant)) continue;
-            // Absence of a matching group means no membership. Invalid policy is a hard failure.
-            if (authorization.hasMatchingGroup(authenticatedGroups, policies.get(tenant))) {
-                authorized.put(tenant, authorization.authorizedRoles(tenant, authenticatedGroups, policies));
-            }
-        }
-        return Map.copyOf(authorized);
+        URI issuer = verifiedJwt.getIssuer() == null ? null : URI.create(verifiedJwt.getIssuer().toString());
+        return refusingAsSecurityContext(() -> Map.copyOf(toTenantKeys(admission.authorizedEntities(issuer, authenticatedGroups))));
     }
 
     public TenantId select(TenantId requestedTenant, Map<TenantId, Set<String>> authorizedTenants) {
-        return admission.requireAuthorized(requestedTenant, authorizedTenants == null ? null : authorizedTenants.keySet());
+        return refusingAsSecurityContext(() -> toTenant(admission.select(toEntity(requestedTenant), toEntityKeys(authorizedTenants))));
     }
 
     public TenantId selectOnlyIfUnambiguous(Map<TenantId, Set<String>> authorizedTenants) {
-        return admission.requireUnambiguous(authorizedTenants == null ? null : authorizedTenants.keySet());
+        return refusingAsSecurityContext(() -> toTenant(admission.selectOnlyIfUnambiguous(toEntityKeys(authorizedTenants))));
     }
 }

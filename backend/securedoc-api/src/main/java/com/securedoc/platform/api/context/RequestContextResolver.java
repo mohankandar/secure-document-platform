@@ -8,9 +8,10 @@ import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
-import com.securedoc.platform.api.security.oidc.OidcTenantSelection;
-import com.securedoc.platform.api.security.oidc.OidcMachineTenantAdmission;
-import com.securedoc.platform.api.security.oidc.SharedIssuerActivationPreflight;
+import com.documentplatform.identity.admission.EntitySelection;
+import com.documentplatform.identity.admission.MachineEntityAdmission;
+import com.documentplatform.identity.admission.SharedIssuerPreflight;
+import com.securedoc.platform.api.security.oidc.ProductEntityRoleCatalog;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
@@ -30,6 +31,11 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.refusingAsSecurityContext;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntities;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntityKeys;
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toTenant;
 
 /**
  * Resolves the application principal from the configured trust boundary.
@@ -52,9 +58,10 @@ public class RequestContextResolver {
     private final OidcTenantResolver oidcTenantResolver;
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
     private final ActiveOidcMachineTenantBindings machineTenantBindings;
-    private final OidcTenantSelection tenantSelection = new OidcTenantSelection();
-    private final OidcMachineTenantAdmission machineAdmission = new OidcMachineTenantAdmission();
-    private final SharedIssuerActivationPreflight sharedIssuerPreflight = new SharedIssuerActivationPreflight();
+    // Enterprise Identity 0.3.0 admission rules; refusals are mapped to SecurityContextException (403) at each call.
+    private final EntitySelection tenantSelection = new EntitySelection();
+    private final MachineEntityAdmission machineAdmission = new MachineEntityAdmission();
+    private final SharedIssuerPreflight sharedIssuerPreflight = new SharedIssuerPreflight(new ProductEntityRoleCatalog());
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
 
@@ -174,7 +181,7 @@ public class RequestContextResolver {
             var candidates = machineTenantBindings.findEnabledPushTenants(
                     securityProperties.getOidc().getProviderId(), java.net.URI.create(jwt.getIssuer().toString()),
                     securityProperties.getOidc().getAudience(), identity.username());
-            tenantId = machineAdmission.requireUnique(candidates);
+            tenantId = toTenant(refusingAsSecurityContext(() -> machineAdmission.requireUnique(toEntities(candidates))));
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
         }
@@ -193,10 +200,12 @@ public class RequestContextResolver {
                 throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections");
             }
             var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
-            sharedIssuerPreflight.requireReady(true,
+            var entities = toEntityKeys(authorized);
+            refusingAsSecurityContext(() -> sharedIssuerPreflight.requireReady(true,
                     securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled(),
-                    authorized.keySet(), authorized);
-            tenantId = tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), authorized);
+                    entities.keySet(), entities));
+            tenantId = toTenant(refusingAsSecurityContext(
+                    () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), entities)));
             roles = authorized.get(tenantId);
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);

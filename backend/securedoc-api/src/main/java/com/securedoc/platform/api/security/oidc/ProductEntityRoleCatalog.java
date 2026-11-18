@@ -6,10 +6,9 @@ import com.securedoc.platform.api.security.ProductRole;
 import java.util.Optional;
 
 /**
- * LexaVault's roles for Enterprise Identity 0.3.0 entity admission. Uses exactly the same rules as
- * {@link TenantGroupAuthorization} and {@link SharedIssuerActivationPreflight}: role names are canonicalised by
+ * LexaVault's roles for Enterprise Identity 0.3.0 entity admission: role names are canonicalised by
  * {@link ProductRole#fromIdentityName}, and PLATFORM_OPERATIONS_ADMIN is the platform role, which an entity's groups
- * can never grant.
+ * can never grant. (The same rules the R1B TenantGroupAuthorization and SharedIssuerActivationPreflight used.)
  */
 public final class ProductEntityRoleCatalog implements EntityRoleCatalog {
 
