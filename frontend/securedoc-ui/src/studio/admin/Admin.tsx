@@ -19,7 +19,7 @@ const AREAS: { key: AreaKey; label: string; short: string; hint: string; allowed
   { key: 'integrations', label: 'Integrations', short: 'Integrations', hint: 'Where documents come from and where they are sent: SDV, and pages by barcode.', allowed: (c) => c.includes(CAP.integrations) },
   { key: 'identity', label: 'Sign-in', short: 'Sign-in', hint: 'How people sign in. It is managed through the login hub.', allowed: (c) => c.includes(CAP.auth) },
   { key: 'health', label: 'Platform operations', short: 'Platform', hint: 'Service health, the watched folder, processing storage, licensing, branding and usage data.', allowed: (c) => c.includes(CAP.technicalAdmin) },
-  { key: 'audit', label: 'Audit trail', short: 'Audit', hint: 'Who changed what, and when.', allowed: (c) => c.includes(CAP.audit) },
+  { key: 'audit', label: 'Audit trail', short: 'Audit', hint: 'Who did what, and when.', allowed: (c) => c.includes(CAP.audit) },
 ];
 
 export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser }) {
