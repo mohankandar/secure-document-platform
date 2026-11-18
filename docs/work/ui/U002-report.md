@@ -89,6 +89,8 @@ Not pushed, not merged.
 
 1. Should `/me` return the person's email, so the menu shows it as the design does? It is a small backend change (`CurrentUserResponse`) and needs no schema change. **Recommendation:** yes, in a backend task. Until then the username shows.
 
+**Owner's answer (2026-11-17):** yes. The email is added to `/me` in a backend task after the UI series. Until then the menu keeps showing the username.
+
 ## Suggested next step
 
 U003: the Cases rows and the case panel.
