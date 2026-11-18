@@ -3,6 +3,7 @@ import { apiClient } from '../../api/client';
 import type { BusinessAdminIdentifierDraft, BusinessIdentifierValidationType } from '../../types';
 import { Notice } from '../atoms';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, Sheet, TextField, SelectField, OptionalInt } from './shared';
+import { useUnsavedWork } from '../unsavedWork';
 
 const VALIDATION_TYPES: [BusinessIdentifierValidationType, string][] = [
   ['TEXT', 'Text'], ['NUMERIC', 'Numeric'], ['ALPHANUMERIC', 'Alphanumeric'], ['EMAIL', 'Email'],
@@ -117,6 +118,7 @@ function IdentifierEditor({ value, isNew, canRemove, onApply, onRemove, onClose 
 
 function IdentifierList({ d, set }: { d: BusinessAdminIdentifierDraft[]; set: (n: BusinessAdminIdentifierDraft[]) => void }) {
   const [editing, setEditing] = useState<number | 'new' | null>(null);
+  useUnsavedWork(editing !== null);
 
   const apply = (next: BusinessAdminIdentifierDraft, at: number | 'new') => {
     let list = at === 'new' ? [...d, next] : d.map((x, i) => (i === at ? next : x));

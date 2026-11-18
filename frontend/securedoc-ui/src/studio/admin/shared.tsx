@@ -5,6 +5,7 @@ import type { BusinessAdminConfiguration } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
+import { useUnsavedWork } from '../unsavedWork';
 
 export function useBusinessAdmin() {
   return useSWR<BusinessAdminConfiguration>('business-admin', () => apiClient.getBusinessAdminConfiguration(), { revalidateOnFocus: false });
@@ -45,6 +46,7 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
     setDraft(value);
   }
   const dirty = JSON.stringify(draft) !== JSON.stringify(value);
+  useUnsavedWork(dirty || saving);
 
   async function save() {
     setSaving(true);

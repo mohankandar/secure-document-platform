@@ -7,6 +7,7 @@ import type { FocusedReviewItem, ReviewBoundingBox } from '../types';
 import { CAP, REASON_COPY, caseTitle, errorMessage, humanize, usePackages, useReviewQueue } from './data';
 import { Kbd, Notice, Spinner } from './atoms';
 import { useToast } from './toast';
+import { useUnsavedWork } from './unsavedWork';
 
 export default function Review({ caps }: { caps: string[] }) {
   const [params, setParams] = useSearchParams();
@@ -18,6 +19,7 @@ export default function Review({ caps }: { caps: string[] }) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReviewBoundingBox | null>(null);
+  useUnsavedWork(draft !== null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [decided, setDecided] = useState(0);

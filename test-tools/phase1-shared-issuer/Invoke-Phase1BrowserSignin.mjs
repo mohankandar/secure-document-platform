@@ -26,11 +26,13 @@ const users = arg('user', null) ? [arg('user')] : ['carol.ab', 'alice.a', 'bob.b
 const runRoot = 'C:/dev/lexavault/phase1-run';
 const passwords = JSON.parse(fs.readFileSync(`${runRoot}/secrets/users.json`, 'utf8').replace(/^\uFEFF/, ''));
 
-// What each user should end up seeing. carol is asked to choose Entity A on the chooser.
+// What each user should end up seeing. carol is asked to choose Entity A on the chooser, then (newest design)
+// switches to Entity B and back without signing out.
 const expected = {
-  'carol.ab': { choose: 'Phase1 Entity A', outcome: 'WORKSPACE Phase1 Entity A (after the chooser)' },
-  'alice.a': { outcome: 'WORKSPACE Phase1 Entity A' },
-  'bob.b': { outcome: 'WORKSPACE Phase1 Entity B' },
+  'carol.ab': { choose: 'Phase1 Entity A', switchTo: ['Phase1 Entity B', 'Phase1 Entity A'],
+    outcome: 'WORKSPACE Phase1 Entity A (after the chooser); switch to Phase1 Entity B ok; switch to Phase1 Entity A ok' },
+  'alice.a': { outcome: 'WORKSPACE Phase1 Entity A; no switch control' },
+  'bob.b': { outcome: 'WORKSPACE Phase1 Entity B; no switch control' },
   'dave.none': { outcome: 'REFUSED' },
 };
 
@@ -44,6 +46,28 @@ function classify(text, sawChooser) {
   if (text.includes('Sign out') && entity) return `WORKSPACE ${entity}${sawChooser ? ' (after the chooser)' : ''}`;
   if (text.includes('Sign-in could not be completed') || text.includes('does not have access')) return 'REFUSED';
   return 'UNKNOWN';
+}
+
+// Phase 1 seeds and the check script give entity A contract numbers ending in 1 and entity B ending in 2.
+const caseNumbers = (text) => [...text.matchAll(/\b[89]\d{10}([12])\b/g)].map((m) => m[1]);
+
+// Uses the switch at the top right (newest design). Returns 'ok' or a short reason; never signs out.
+async function switchEntity(page, target) {
+  const control = page.getByRole('button', { name: /switch organization/i });
+  if ((await control.count()) === 0) return 'FAILED: no switch control';
+  await control.click();
+  await page.getByRole('dialog', { name: /switch organization/i }).getByRole('button', { name: new RegExp(target) }).click();
+  const confirm = page.getByRole('alertdialog');
+  if (await confirm.isVisible().catch(() => false)) return 'FAILED: unexpected unsaved-work confirmation';
+  await page.waitForTimeout(5000);
+  const label = (await control.getAttribute('aria-label').catch(() => '')) ?? '';
+  if (!label.includes(target)) return `FAILED: still on "${label}"`;
+  const main = (await page.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ');
+  const digits = caseNumbers(main);
+  const want = target.endsWith('A') ? '1' : '2';
+  if (digits.length === 0) return 'FAILED: no cases shown';
+  if (digits.some((d) => d !== want)) return `FAILED: another entity's case shown (${digits.join(',')})`;
+  return 'ok';
 }
 
 const results = [];
@@ -83,6 +107,12 @@ try {
         text = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
       }
       outcome = classify(text, sawChooser);
+      for (const target of (outcome.startsWith('WORKSPACE') ? expected[user]?.switchTo ?? [] : [])) {
+        outcome += `; switch to ${target} ${await switchEntity(page, target)}`;
+      }
+      if (outcome.startsWith('WORKSPACE') && !expected[user]?.switchTo) {
+        outcome += (await page.getByRole('button', { name: /switch organization/i }).count()) === 0 ? '; no switch control' : '; switch control shown';
+      }
       screen = redact(text).slice(0, 160);
     } catch (e) {
       outcome = `ERROR ${redact(e.message).split('\n')[0].slice(0, 120)}`;

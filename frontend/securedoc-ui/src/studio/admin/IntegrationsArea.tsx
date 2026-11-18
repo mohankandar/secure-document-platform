@@ -18,6 +18,7 @@ import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, Loading, NumberField, SelectField, Sheet, TextField, Toggle, humanize, when } from './shared';
 import RoutingRules from './RoutingRules';
+import { useUnsavedWork } from '../unsavedWork';
 
 type View = IntegrationPurpose | 'ALL';
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
@@ -158,6 +159,7 @@ export default function IntegrationsArea() {
   const [scanningFolder, setScanningFolder] = useState(false);
   const attention = useSWR<DerivedDelivery[]>('derived-attention', () => apiClient.listDerivedDeliveryAttention().catch(() => []), { revalidateOnFocus: false });
   const [draft, setDraft] = useState<Draft | null>(null);
+  useUnsavedWork(draft !== null);
   const [toggling, setToggling] = useState<IntegrationConnection | null>(null);
 
   if (!conns.data) return <Loading error={conns.error} retry={() => conns.mutate()} label="Integrations" />;
