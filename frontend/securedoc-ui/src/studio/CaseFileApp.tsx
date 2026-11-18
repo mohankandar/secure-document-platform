@@ -16,6 +16,7 @@ import Intake from './Intake';
 import Review from './Review';
 import Reports from './reports/Reports';
 import Admin from './admin/Admin';
+import NoAccess from './NoAccess';
 import SupportList from './support/SupportList';
 import { CaseProblem, IncidentProblem } from './support/ProblemDetail';
 import ManualCase from './support/ManualCase';
@@ -28,7 +29,7 @@ export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, on
   // App keys this component by organization, so a switch unmounts it and everything below it.
   const [swrCache] = useState(() => new Map());
   const caps = me.capabilities ?? [];
-  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <NoAccess me={me} onSignOut={onSignOut} />;
+  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <NoAccess who={me.username} onSignOut={onSignOut} />;
 
   return (
     <div className="cf">
@@ -162,22 +163,3 @@ function LegacyCaseRedirect() {
   return <Navigate to={`/case/${caseId}`} replace />;
 }
 
-/** Signed in, but no LexaVault role (UI spec finding 21). */
-function NoAccess({ me, onSignOut }: { me: CurrentUser; onSignOut: () => void }) {
-  return (
-    <div className="cf cf-boot">
-      <div className="cf-scope" role="main">
-        <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>
-        <h1>You don&apos;t have access to anything in LexaVault yet</h1>
-        <p>
-          You&apos;re signed in as <span className="cf-scope-who">{me.username}</span>, but your account has no LexaVault role.
-          Ask your administrator to add you to a LexaVault group, then sign in again.
-        </p>
-        <div className="cf-scope-actions">
-          <button type="button" className="cf-btn" data-variant="solid" onClick={onSignOut}>Sign out</button>
-          <button type="button" className="cf-btn" onClick={() => window.location.reload()}>Try again</button>
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -3,7 +3,7 @@ import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'reac
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
 import { selectedOidcTenant, setSelectedOidcTenant, TENANT_CONTEXT_CHANGED_EVENT } from './api/tenantContext';
-import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode, OIDC_SESSION_EXPIRED_EVENT } from './api/auth';
+import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode, OIDC_SESSION_EXPIRED_EVENT, signedInIdentity } from './api/auth';
 import type { CurrentUser, TenantChoice } from './types';
 import DashboardPage from './pages/DashboardPage';
 import CreatePackagePage from './pages/CreatePackagePage';
@@ -28,6 +28,11 @@ import useMediaQuery from './components/ui/useMediaQuery';
 import AdministrationTabs from './components/AdministrationTabs';
 import Button from './components/ui/Button';
 const CaseFileApp = lazy(() => import('./studio/CaseFileApp'));
+// The "no access" screen in the Case File design (UI task U013); loaded only when someone is refused.
+const NoAccess = lazy(() => import('./studio/NoAccess'));
+
+/** The server lists no organization for this account: a refusal, the same as a 403 from /me (owner's decision, U013). */
+class NoOrganizationError extends Error {}
 
 function PermissionDenied() {
   return (
@@ -318,7 +323,7 @@ export default function App() {
           // change the tenant selection: that would make the active run's in-flight requests stale.
           if (!active) return;
           if (choices.length === 0) {
-            throw new Error('No authorized ACTIVE organization is available for this account.');
+            throw new NoOrganizationError('No authorized ACTIVE organization is available for this account.');
           }
           const currentSelection = selectedOidcTenant();
           if (currentSelection && !choices.some((choice) => choice.tenantId === currentSelection)) {
@@ -335,7 +340,7 @@ export default function App() {
           // silently enter a workspace with an unverified tenant selection.
           const status = typeof discoveryError === 'object' && discoveryError !== null && 'httpStatus' in discoveryError
             ? Number((discoveryError as { httpStatus?: number }).httpStatus) : undefined;
-          if (status !== 403 && status !== 404) throw discoveryError;
+          if (discoveryError instanceof NoOrganizationError || (status !== 403 && status !== 404)) throw discoveryError;
         }
         const user = await apiClient.getCurrentUser();
         console.info('[LexaVault OIDC] Production session verified.', { roles: user.roles, capabilityCount: (user.capabilities || []).length });
@@ -349,8 +354,8 @@ export default function App() {
         if (!active) return;
         console.error('[LexaVault OIDC] Production-session verification failed.', error);
         const status = typeof error === 'object' && error !== null && 'httpStatus' in error ? Number((error as { httpStatus?: number }).httpStatus) : undefined;
-        if (status === 403) {
-          if (active) { setAuthDenied(true); setAuthError('You are signed in, but this account does not have access to LexaVault. Contact your administrator if you believe you should have access.'); }
+        if (status === 403 || error instanceof NoOrganizationError) {
+          if (active) { setAuthDenied(true); setAuthError(''); }
         } else {
           clearOidcSession();
           if (active) { setAuthDenied(false); setAuthError(status === 401 ? 'Your organization session has expired or could not be verified. Please sign in again.' : 'Sign-in could not be completed. Please try again.'); }
@@ -454,6 +459,16 @@ export default function App() {
           </button>
         ))}
       </div></div>
+    );
+  }
+
+  if (!localMode && !currentUser && authDenied) {
+    // Signed in, but refused: the Case File no-access screen (UI spec finding 21, task U013). Only the look and the
+    // words changed; the refusal and the session handling are as before.
+    return (
+      <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading…</p></div></div>}>
+        <NoAccess who={signedInIdentity()} onSignOut={() => void endOidcSession()} />
+      </Suspense>
     );
   }
 

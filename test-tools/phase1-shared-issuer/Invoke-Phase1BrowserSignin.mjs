@@ -45,7 +45,8 @@ function classify(text, sawChooser, inWorkspace) {
   const entity = /Phase1 Entity [AB]/.exec(text)?.[0];
   if (text.includes('Select organization')) return 'CHOOSER';
   if ((inWorkspace || text.includes('Sign out')) && entity) return `WORKSPACE ${entity}${sawChooser ? ' (after the chooser)' : ''}`;
-  if (text.includes('Sign-in could not be completed') || text.includes('does not have access')) return 'REFUSED';
+  // UI task U013: the refusal is the Case File no-access screen (it replaces "does not have access" and, for no entity, "Sign-in could not be completed").
+  if (text.includes("You don't have access to anything in LexaVault yet")) return 'REFUSED';
   return 'UNKNOWN';
 }
 
