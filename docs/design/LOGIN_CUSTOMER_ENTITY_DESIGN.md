@@ -1,7 +1,7 @@
 # Login, customer and entity design for LexaVault and SDV
 
-**Status:** Requirements and design agreed in discussion on 2026-11-16. Nothing here is implemented yet. The login hub is unproven until its proof of concept (section 13) passes.
-**Based on:** `secure-document-platform` (branch `feature/lexavault-r1b-tenant-identity`), `secure-document-vault` (branch `release/vero-r7`), `enterprise-identity-parent` 0.2.0, Keycloak 26.8.
+**Status:** Requirements and design agreed in discussion on 2026-11-16. **Done (2026-11-17):** Phase 0 (all tests run), Phase 1 (one login system, two entities, proven at runtime in an isolated environment, with the entity chooser and the entity switch in the newest design) and Phase 1b (the login and entity rules moved into Enterprise Identity 0.3.0, used by LexaVault). **Not done:** Phases 2 to 7 (role mapping file, platform access, machine integrations and caching, customer record and setup command, schema step, containers and runbook), SDV's move to the shared rules (Phase 6), and everything in "Second: hosting", including the login hub, which is unproven until its proof of concept (section 13) passes.
+**Based on:** `secure-document-platform` (branch `feature/lexavault-r1b-tenant-identity`), `secure-document-vault` (branch `release/vero-r7`), `enterprise-identity-parent` 0.3.0, Keycloak 26.8.
 **See also:** `R1B-Gap-Analysis.md` for what the current code already delivers.
 
 ## 1. Goal
@@ -286,7 +286,7 @@ A stand-in proves the connection type works. It will not show quirks specific to
 |---|---|---|
 | 0 | Fix the test plugin so the 5 skipped LexaVault tests run | All tests execute and pass |
 | 1 | Run R1B for real: one login system, two entities, isolated database. **Done 2026-11-17** (reports 0004 to 0009): 60 scripted checks, the browser script and the owner's screen checks pass; the newest (Case File) design now has the entity switch | Points 1 to 3 of section 11 |
-| 1b | Move the R1B login and entity code into the Enterprise Identity library (version 0.3.0); LexaVault uses it from there | Tests that move with their classes keep the same cases, mapped one to one; all other tests and the Phase 1 runtime proof pass unchanged |
+| 1b | Move the R1B login and entity code into the Enterprise Identity library (version 0.3.0); LexaVault uses it from there. **Done 2026-11-17** (reports 0011 and 0012): library tag `v0.3.0`; the Phase 1 runtime proof passed three times during the move | Tests that move with their classes keep the same cases, mapped one to one; all other tests and the Phase 1 runtime proof pass unchanged |
 | 2 | Role mapping file and its loader | Point 7 |
 | 3 | Platform access from an install-level setting | Point 5 |
 | 4 | Machine integrations tied to one entity; caching | Point 4 |
@@ -413,6 +413,7 @@ Not built, and not needed for the first customer. It is a different thing from m
 | Add `X-Selected-Tenant-Id` to the CORS allowed headers | It is missing. Harmless while the UI reaches the API through the same address, but it breaks a layout where the UI is served from a different address |
 | SDV to move to the current Enterprise Identity library | SDV is still on 0.2.0, without the 0.2.1 audience fix; it joins the shared admission code in Phase 6 |
 | LexaVault and SDV to agree one status per refusal reason, before Phase 6 | Today the same identity-claim problem gets 403 in LexaVault and 401 in SDV. Proposal: 401 when the token cannot establish who the caller is, 403 when the caller is known but not allowed |
+| The library's refusal messages use product words | The shared library's messages say "tenant" and "Platform Operations", which are LexaVault's words. The product should own the words and the library the reasons: each product turns the library's reason code into its own message (listed in report 0012) |
 | Product work items and AI enhancements | Kept in `docs/product/ENHANCEMENT_BACKLOG.md` |
 
 **Parked from the development setup work on 2026-11-16**
