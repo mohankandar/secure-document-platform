@@ -15,15 +15,17 @@ export interface ReviewItemLike {
 const MASK = '••••';
 
 /**
- * The found text as a queue item shows it: masked except the last 4 characters (owner's condition, 2026-11-18).
- * The mask has a fixed width so it does not reveal the length. A text of 4 characters or fewer is masked in full,
- * because showing its "last 4" would show all of it.
+ * The found text as a queue item shows it (owner's decision, 2026-11-18): the last 4 characters only when the value
+ * has 8 or more characters; a shorter value is masked in full. The mask has a fixed width so it does not reveal
+ * the length.
  */
+export const MIN_LENGTH_FOR_LAST_FOUR = 8;
+
 export function maskFoundText(text: string | null | undefined): string | null {
   if (typeof text !== 'string') return null;
   const value = text.trim();
   if (!value) return null;
-  if (value.length <= 4) return MASK;
+  if (value.length < MIN_LENGTH_FOR_LAST_FOUR) return MASK;
   return MASK + value.slice(-4);
 }
 
@@ -66,6 +68,21 @@ export function bulkWaitingText(plan: BulkPlan<ReviewItemLike>): string {
 /** "Redact all 2 like this" */
 export function bulkButtonText(plan: BulkPlan<ReviewItemLike>): string {
   return `Redact all ${plan.all.length} like this`;
+}
+
+/** The confirmation before a bulk run (owner's decision, 2026-11-18): "Redact 2 Social Security Number findings?" */
+export function bulkConfirmTitle(plan: BulkPlan<ReviewItemLike>): string {
+  const n = plan.toRedact.length;
+  return `Redact ${n} ${sensitiveTypeName(plan.all[0].entityType)} ${n === 1 ? 'finding' : 'findings'}?`;
+}
+
+/** What the confirmation says will happen. */
+export function bulkConfirmBody(plan: BulkPlan<ReviewItemLike>): string {
+  const skipped = plan.skipped.length;
+  const each = 'Each one is redacted and recorded as its own decision.';
+  return skipped === 0
+    ? each
+    : `${each} ${skipped} with no place on the page ${skipped === 1 ? 'is' : 'are'} skipped and ${skipped === 1 ? 'stays' : 'stay'} in the queue.`;
 }
 
 /** The sentence after a bulk run: what was redacted, what was skipped, what failed. */

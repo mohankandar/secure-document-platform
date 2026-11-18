@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bulkButtonText, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom } from './reviewRules.ts';
+import { bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom } from './reviewRules.ts';
 import { whyAsked } from './words.ts';
 
 const item = (findingId: string, packageId: string, entityType: string, hasBoundingBox = true) =>
@@ -47,17 +47,28 @@ test('bulk: one more uses the singular', () => {
     '1 more Social Security Number is waiting in this case.');
 });
 
+test('bulk: the confirmation names how many will be redacted and the type', () => {
+  const selected = item('a', 'case-1', 'SSN');
+  const plan = bulkPlan([selected, item('b', 'case-1', 'SSN'), item('c', 'case-1', 'SSN', false)], selected)!;
+  assert.equal(bulkConfirmTitle(plan), 'Redact 2 Social Security Number findings?');
+  assert.equal(bulkConfirmBody(plan), 'Each one is redacted and recorded as its own decision. 1 with no place on the page is skipped and stays in the queue.');
+  const one = bulkPlan([item('x', 'case-1', 'CREDIT_SCORE', false), item('y', 'case-1', 'CREDIT_SCORE')], item('x', 'case-1', 'CREDIT_SCORE', false))!;
+  assert.equal(bulkConfirmTitle(one), 'Redact 1 Credit score finding?');
+});
+
 test('bulk: the result says what was skipped and what failed', () => {
   assert.equal(bulkResultText(3, 0, 0), 'Redacted 3 findings.');
   assert.equal(bulkResultText(1, 1, 0), 'Redacted 1 finding. 1 skipped because its place was not found; it stays in the queue.');
   assert.equal(bulkResultText(2, 2, 1), 'Redacted 2 findings. 2 skipped because their place was not found; they stay in the queue. 1 could not be saved and stays in the queue.');
 });
 
-test('queue text: masked except the last 4 characters, never in full', () => {
+test('queue text: last 4 only from 8 characters; shorter values masked in full', () => {
   assert.equal(maskFoundText('412-55-0193'), '••••0193');
   assert.equal(maskFoundText('4532 0151 1283 0366'), '••••0366');
-  assert.equal(maskFoundText('712'), '••••', 'a short value is masked in full');
-  assert.equal(maskFoundText('1234'), '••••');
+  assert.equal(maskFoundText('12345678'), '••••5678', '8 characters: last 4 shown');
+  assert.equal(maskFoundText('1234567'), '••••', '7 characters: masked in full');
+  assert.equal(maskFoundText('3/4/79'), '••••');
+  assert.equal(maskFoundText('712'), '••••');
   assert.equal(maskFoundText(''), null);
   assert.equal(maskFoundText(undefined), null);
   assert.ok(!maskFoundText('412-55-0193')!.includes('412'));

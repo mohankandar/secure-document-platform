@@ -6,8 +6,9 @@ import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
 import { NAV, REVIEW_WORDS, sensitiveTypeName, whyAsked } from './words';
-import { PREVIEW_PIXELS_PER_CSS_PIXEL, bulkButtonText, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom } from './reviewRules';
+import { PREVIEW_PIXELS_PER_CSS_PIXEL, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
+import { ConfirmDialog } from './admin/shared';
 import { useToast } from './toast';
 import { useUnsavedWork } from './unsavedWork';
 
@@ -43,6 +44,7 @@ export default function Review({ caps }: { caps: string[] }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [decided, setDecided] = useState(0);
   const [zoom, setZoom] = useState<Zoom>('fit');
+  const [confirmingBulk, setConfirmingBulk] = useState(false);
 
   const titles = useMemo(() => {
     const map = new Map<string, string>();
@@ -156,10 +158,10 @@ export default function Review({ caps }: { caps: string[] }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat || confirmingBulk) return;
       if ((event.target as HTMLElement).closest('input, textarea, select, [role="dialog"]')) return;
       const key = event.key.toLowerCase();
-      if (key === 'r' && event.shiftKey) { event.preventDefault(); if (bulk) redactAllLikeThis(); }
+      if (key === 'r' && event.shiftKey) { event.preventDefault(); if (bulk && bulk.toRedact.length > 0 && !busy) setConfirmingBulk(true); }
       else if (key === 'r') { event.preventDefault(); decide('redact'); }
       else if (key === 'v') { event.preventDefault(); decide('keep'); }
       else if (key === 'j' || event.key === 'ArrowDown') { event.preventDefault(); select(items[index + 1]); }
@@ -168,7 +170,7 @@ export default function Review({ caps }: { caps: string[] }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [bulk, decide, draft, index, items, redactAllLikeThis, select]);
+  }, [bulk, busy, confirmingBulk, decide, draft, index, items, select]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, FocusedReviewItem[]>();
@@ -296,9 +298,19 @@ export default function Review({ caps }: { caps: string[] }) {
                 {bulk.skipped.length > 0 && (
                   <p className="cf-bulk-note">{bulk.skipped.length} of them {bulk.skipped.length === 1 ? 'has' : 'have'} no place on the page and will be skipped.</p>
                 )}
-                <button type="button" className="cf-btn" data-size="sm" onClick={redactAllLikeThis} disabled={busy || bulk.toRedact.length === 0}>
+                <button type="button" className="cf-btn" data-size="sm" onClick={() => setConfirmingBulk(true)} disabled={busy || bulk.toRedact.length === 0}>
                   {bulkButtonText(bulk)} <Kbd>Shift R</Kbd>
                 </button>
+                <ConfirmDialog
+                  open={confirmingBulk}
+                  title={bulkConfirmTitle(bulk)}
+                  facts={[['Case', <span className="cf-mono" key="c">{titles.get(selected.packageId) ?? '—'}</span>]]}
+                  consequence={bulkConfirmBody(bulk)}
+                  confirmLabel="Redact"
+                  busy={busy}
+                  onCancel={() => setConfirmingBulk(false)}
+                  onConfirm={async () => { await redactAllLikeThis(); setConfirmingBulk(false); }}
+                />
               </div>
             )}
 

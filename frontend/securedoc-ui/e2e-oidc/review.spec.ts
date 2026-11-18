@@ -84,6 +84,7 @@ function queueItems() {
     finding('f3', CASE_A.packageId, 'US_SSN', '623-11-0042', false), // same type (alias), place not found
     finding('f4', CASE_A.packageId, 'DATE_OF_BIRTH', '03/14/1979'),
     finding('f5', CASE_B.packageId, 'SSN', '701-33-9184'), // same type, other case
+    finding('f6', CASE_B.packageId, 'CREDIT_SCORE', '712'), // shorter than 8: masked in full
   ];
 }
 
@@ -125,7 +126,7 @@ async function openReview(page: Page, confirmed: string[] = [], dismissed: strin
 const queue = (page: Page) => page.getByRole('navigation', { name: 'Findings queue' });
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Decision' });
 
-test('the full text is only in the decision panel; queue items show it masked except the last 4', async ({ page }) => {
+test('the full text is only in the decision panel; queue items show only the last 4, and short values not at all', async ({ page }) => {
   await openReview(page);
   await expect(panel(page)).toContainText('Text found');
   await expect(panel(page)).toContainText('412-55-0193');
@@ -136,6 +137,9 @@ test('the full text is only in the decision panel; queue items show it masked ex
   for (const full of ['412-55-0193', '518-22-7741', '623-11-0042', '03/14/1979', '701-33-9184']) {
     await expect(queue(page)).not.toContainText(full);
   }
+  const score = queue(page).locator('.cf-queue-item').filter({ hasText: 'Credit score' });
+  await expect(score.locator('.cf-queue-found')).toHaveText('••••');
+  await expect(score).not.toContainText('712');
   await expect(queue(page)).toContainText('place not found');
 
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
@@ -153,19 +157,38 @@ test('a finding without text has no "Text found" row', async ({ page }) => {
   await expect(panel(page)).not.toContainText('Text found');
 });
 
-test('Redact all like this: same type and same case only, one call each, unplaced ones skipped and kept', async ({ page }) => {
+test('Redact all like this: confirms first; same type and same case only, one call each, unplaced ones skipped and kept', async ({ page }) => {
   const confirmed: string[] = [];
   await openReview(page, confirmed);
   await expect(panel(page)).toContainText('2 more Social Security Numbers are waiting in this case.');
   await expect(panel(page)).toContainText('1 of them has no place on the page and will be skipped.');
 
+  // Shift+R asks first; Cancel sends nothing.
   await page.keyboard.press('Shift+R');
+  const dialog = page.getByRole('dialog', { name: 'Redact 2 Social Security Number findings?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  expect(confirmed).toEqual([]);
+
+  // The button asks too; Redact runs it.
+  await panel(page).getByRole('button', { name: /Redact all 3 like this/ }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Redact', exact: true }).click();
   await expect(page.locator('.cf-toast')).toContainText('Redacted 2 findings. 1 skipped because its place was not found; it stays in the queue.');
   expect(confirmed.sort()).toEqual(['f1', 'f2']);
 
   await expect(queue(page)).toContainText('place not found');
   await expect(queue(page)).toContainText('Date of birth');
-  await expect(queue(page).locator('.cf-queue-item')).toHaveCount(3); // f3, f4, f5 remain
+  await expect(queue(page).locator('.cf-queue-item')).toHaveCount(4); // f3, f4, f5, f6 remain
+});
+
+test('single Redact stays without confirmation', async ({ page }) => {
+  const confirmed: string[] = [];
+  await openReview(page, confirmed);
+  await page.keyboard.press('r');
+  await expect.poll(() => confirmed).toEqual(['f1']);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('there is no "Keep visible all"', async ({ page }) => {
