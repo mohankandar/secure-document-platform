@@ -10,7 +10,8 @@
     "test:auth": "node --experimental-strip-types --test src/security/uiAuthorization.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts"
+    "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts",
+    "test:oidc-signin": "playwright test --config playwright.oidc-signin.config.ts"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",
