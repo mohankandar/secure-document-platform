@@ -786,6 +786,22 @@ export interface LicenseHistoryItem {
   verificationEvidence?: 'CURRENT_KEY' | 'VERIFIED_AT_INSTALL' | 'UNAVAILABLE' | string;
 }
 
+/** An organization the signed-in person may choose, as listed by GET /api/v1/me/tenants. */
+export interface TenantChoice {
+  tenantId: string;
+  name: string;
+  slug: string;
+  roles: string[];
+}
+
+/** The organization switch handed to the newest design: one implementation, owned by App. */
+export interface TenantSwitchActions {
+  /** Fresh list from the server, or null when the person has fewer than two organizations. */
+  list: () => Promise<TenantChoice[] | null>;
+  /** Enters the organization; false when the server refuses (nothing has changed). */
+  enter: (tenantId: string) => Promise<boolean>;
+}
+
 export interface CurrentUser {
   username: string;
   roles: string[];

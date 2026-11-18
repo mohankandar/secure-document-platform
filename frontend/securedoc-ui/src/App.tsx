@@ -4,7 +4,7 @@ import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/
 import { apiClient } from './api/client';
 import { selectedOidcTenant, setSelectedOidcTenant, TENANT_CONTEXT_CHANGED_EVENT } from './api/tenantContext';
 import { beginOidcLogin, clearOidcSession, endOidcSession, getAccessToken, handleOidcCallback, isLocalSecurityMode, OIDC_SESSION_EXPIRED_EVENT } from './api/auth';
-import type { CurrentUser } from './types';
+import type { CurrentUser, TenantChoice } from './types';
 import DashboardPage from './pages/DashboardPage';
 import CreatePackagePage from './pages/CreatePackagePage';
 import ScanIntakePage from './pages/ScanIntakePage';
@@ -269,7 +269,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(!localMode);
   const [authError, setAuthError] = useState('');
   const [authDenied, setAuthDenied] = useState(false);
-  const [tenantChoices, setTenantChoices] = useState<Array<{ tenantId: string; name: string; slug: string; roles: string[] }>>([]);
+  const [tenantChoices, setTenantChoices] = useState<TenantChoice[]>([]);
+  const [switchingTenant, setSwitchingTenant] = useState(false);
 
   useEffect(() => {
     if (localMode) return;
@@ -385,28 +386,61 @@ export default function App() {
     setCurrentCapabilities([]); setCurrentUser(null); setCurrentRoles(value); setSelectedRole(value);
   };
 
+  // One implementation of changing organization, shared by the sign-in chooser, the older sidebar switch and the
+  // newest design's switch. The server is asked first, so a refused choice changes nothing on screen.
+  const listSwitchableTenants = async (): Promise<TenantChoice[] | null> => {
+    const choices = await apiClient.getAvailableOidcTenants();
+    if (choices.length < 2 || !choices.some((choice) => choice.tenantId === selectedOidcTenant())) return null;
+    return choices;
+  };
+
+  const applyUser = (user: CurrentUser) => {
+    setCurrentUser(user);
+    setCurrentRoles(user.roles.join(','));
+    setCurrentCapabilities(user.capabilities || []);
+  };
+
+  const enterTenant = async (tenantId: string): Promise<boolean> => {
+    const previous = selectedOidcTenant();
+    try {
+      await apiClient.getCurrentUserForTenant(tenantId);
+    } catch {
+      return false; // refused or unreachable: nothing has changed
+    }
+    setSwitchingTenant(true);
+    try {
+      // Changing the selection bumps the tenant-context revision, so the API client discards responses to any
+      // request started for the previous organization, and TENANT_CONTEXT_CHANGED_EVENT clears the principal.
+      // The server revalidates the new selection on this and every later request.
+      setSelectedOidcTenant(tenantId);
+      applyUser(await apiClient.getCurrentUser());
+      setTenantChoices([]);
+      navigate('/', { replace: true });
+      return true;
+    } catch {
+      setSelectedOidcTenant(previous);
+      if (previous) {
+        try { applyUser(await apiClient.getCurrentUser()); } catch { /* normal session handling takes over */ }
+      }
+      return false;
+    } finally {
+      setSwitchingTenant(false);
+    }
+  };
+
   if (!localMode && authLoading) {
     return <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p>Verifying your session…</p></div></div>;
   }
 
+  if (!localMode && switchingTenant && !currentUser) {
+    return <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p role="status">Switching organization…</p></div></div>;
+  }
+
   if (!localMode && !currentUser && tenantChoices.length > 1 && getAccessToken()) {
     const chooseTenant = async (tenantId: string) => {
-      setAuthLoading(true);
       setAuthError('');
-      try {
-        setSelectedOidcTenant(tenantId);
-        const user = await apiClient.getCurrentUser();
-        setCurrentUser(user);
-        setCurrentRoles(user.roles.join(','));
-        setCurrentCapabilities(user.capabilities || []);
-        setTenantChoices([]);
-        navigate('/', { replace: true });
-      } catch {
-        setSelectedOidcTenant(null);
-        setAuthError('Unable to enter that tenant. Contact your administrator.');
-      } finally {
-        setAuthLoading(false);
-      }
+      const entered = await enterTenant(tenantId);
+      if (!entered) setAuthError('Unable to enter that tenant. Contact your administrator.');
     };
     return (
       <div className="auth-shell"><div className="auth-card">
@@ -432,10 +466,11 @@ export default function App() {
     );
   }
 
+  // Older sidebar: returns to the chooser screen, which enters the chosen organization through enterTenant.
   const switchTenant = async (): Promise<boolean> => {
     try {
-      const choices = await apiClient.getAvailableOidcTenants();
-      if (choices.length < 2 || !choices.some((choice) => choice.tenantId === selectedOidcTenant())) return false;
+      const choices = await listSwitchableTenants();
+      if (!choices) return false;
       setTenantChoices(choices);
       setAuthError('');
       navigate('/', { replace: true });
@@ -461,7 +496,12 @@ export default function App() {
   return (
     <BrandingProvider key={localMode ? 'local' : selectedOidcTenant() || 'oidc-unselected'}>
       {caseFilePreviewEnabled && currentUser
-        ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}><CaseFileApp me={currentUser} onSignOut={signOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={handleRoleChange} /></Suspense>
+        ? <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading workspace…</p></div></div>}>
+            {/* Keyed by organization: a switch unmounts the whole workspace, including its private data cache. */}
+            <CaseFileApp key={localMode ? 'local' : selectedOidcTenant() || 'oidc-unselected'} me={currentUser} onSignOut={signOut} localMode={localMode}
+              selectedRole={selectedRole} onRoleChange={handleRoleChange}
+              tenantSwitch={localMode ? undefined : { list: listSwitchableTenants, enter: enterTenant }} />
+          </Suspense>
         : <AuthenticatedApplication key={localMode ? 'local' : selectedOidcTenant() || 'oidc-default'} localMode={localMode} selectedRole={selectedRole} currentUser={currentUser} roles={roles}
             hasRole={hasRole} hasCapability={hasCapability} onRoleChange={handleRoleChange} onSignOut={signOut} onSwitchTenant={switchTenant} />}
     </BrandingProvider>

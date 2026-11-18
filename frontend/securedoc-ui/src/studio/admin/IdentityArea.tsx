@@ -6,6 +6,7 @@ import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, Loading, when } from './shared';
+import { useUnsavedWork } from '../unsavedWork';
 
 const EMPTY: EnterpriseIdentityDraftRequest = { providerId: 'customer-oidc', displayName: 'Corporate identity provider', issuerUri: '', browserClientId: 'lexavault-web', apiAudience: 'lexavault-api' };
 const toDraft = (c: EnterpriseIdentityConnection | null): EnterpriseIdentityDraftRequest =>
@@ -41,6 +42,7 @@ function IdentityBody({ data, replace, reload }: { data: EnterpriseIdentityOverv
 
   const staged = data.staged;
   const dirty = JSON.stringify(form) !== JSON.stringify(toDraft(source));
+  useUnsavedWork(dirty || busy !== null);
   const httpsIssuer = /^https:\/\//.test(form.issuerUri.trim());
   const complete = !!(form.providerId.trim() && form.displayName.trim() && form.issuerUri.trim() && form.browserClientId.trim() && form.apiAudience.trim());
   const testAgeSeconds = staged?.lastTestedAt ? (now - new Date(staged.lastTestedAt).getTime()) / 1000 : Infinity;

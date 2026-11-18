@@ -1,6 +1,7 @@
 import { API_BASE_URL, defaultHeaders, baseHeaders } from './config';
 import { expireOidcSession, isOidcSecurityMode } from './auth';
 import { selectedOidcTenant, oidcTenantContextRevision } from './tenantContext';
+import { beginWrite } from './pendingWork';
 import type {
   PackageSummary,
   PackageDetail,
@@ -62,7 +63,15 @@ import type {
 class ApiClient {
   private baseUrl = API_BASE_URL;
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  private request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    // Writes in flight count as in-progress work (an organization switch asks for confirmation first).
+    const method = (options.method ?? 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return this.send<T>(path, options);
+    const endWrite = beginWrite();
+    return this.send<T>(path, options).finally(endWrite);
+  }
+
+  private async send<T>(path: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const startingTenant = selectedOidcTenant();
     const startingRevision = oidcTenantContextRevision();
@@ -112,6 +121,14 @@ class ApiClient {
 
   async getCurrentUser(): Promise<CurrentUser> {
     return this.request('/me');
+  }
+
+  /**
+   * Asks the server whether this person may enter `tenantId`, without changing the current selection.
+   * The server revalidates the hint against the verified token and memberships, as on every request.
+   */
+  async getCurrentUserForTenant(tenantId: string): Promise<CurrentUser> {
+    return this.request('/me', { headers: { 'X-Selected-Tenant-Id': tenantId } });
   }
 
   async getEnterpriseIdentityOverview(): Promise<EnterpriseIdentityOverview> {
@@ -501,22 +518,27 @@ class ApiClient {
     formData.append('file', file);
 
     const url = `${this.baseUrl}/packages/${packageId}/documents`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: await baseHeaders(),
-      body: formData,
-    });
+    const endWrite = beginWrite();
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: await baseHeaders(),
+        body: formData,
+      });
 
-    if (!response.ok) {
-      let error: ApiError = { message: 'Upload failed' };
-      try {
-        error = await response.json();
-      } catch {
-        error.message = `HTTP ${response.status}: ${response.statusText}`;
+      if (!response.ok) {
+        let error: ApiError = { message: 'Upload failed' };
+        try {
+          error = await response.json();
+        } catch {
+          error.message = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw error;
       }
-      throw error;
+      return await response.json();
+    } finally {
+      endWrite();
     }
-    return response.json();
   }
 
   async submitPackage(packageId: string): Promise<PackageStatusResult> {

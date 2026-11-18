@@ -5,6 +5,7 @@ import { apiClient } from '../api/client';
 import { errorMessage, formatBytes } from './data';
 import { Notice, Spinner } from './atoms';
 import type { IdentityGate } from './Intake';
+import { useUnsavedWork } from './unsavedWork';
 
 type DraftState = 'ready' | 'uploading' | 'done' | 'error';
 interface Draft { id: number; file: File; state: DraftState; error?: string }
@@ -27,6 +28,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
   const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [phase, setPhase] = useState<'idle' | 'working'>('idle');
+  useUnsavedWork(drafts.some((d) => d.state !== 'done'));
 
   const setState = (id: number, state: DraftState, error?: string) =>
     setDrafts((current) => current.map((d) => (d.id === id ? { ...d, state, error } : d)));

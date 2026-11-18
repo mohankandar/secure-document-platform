@@ -6,6 +6,7 @@ import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, Loading, SelectField, Sheet, TextField, Toggle, humanize } from './shared';
+import { useUnsavedWork } from '../unsavedWork';
 
 type Draft = RoutingRuleRequest & { ruleId?: string };
 
@@ -23,6 +24,7 @@ export default function RoutingRules() {
   const rules = useSWR<RoutingRule[]>('routing-rules', () => apiClient.listRoutingRules(), { revalidateOnFocus: false });
   const destinations = useSWR<RoutingDestinationOption[]>('routing-destinations', () => apiClient.listRoutingDestinations(), { revalidateOnFocus: false });
   const [draft, setDraft] = useState<Draft | null>(null);
+  useUnsavedWork(draft !== null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<RoutingRule | null>(null);

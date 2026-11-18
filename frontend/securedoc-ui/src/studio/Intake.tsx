@@ -7,6 +7,7 @@ import { canonicalIdentity, identityErrors, sortDefinitions } from './identity';
 import { Notice, Spinner } from './atoms';
 import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
+import { useUnsavedWork } from './unsavedWork';
 
 type Method = 'upload' | 'scan';
 
@@ -26,6 +27,7 @@ export default function Intake() {
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   const [lockedBy, setLockedBy] = useState<string | null>(null);
   const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method } | null>(null);
+  useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
   const errors = useMemo(() => identityErrors(definitions, values), [definitions, values]);
   const valid = definitions.length > 0 && Object.keys(errors).length === 0;

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Moon, Search, Sun } from 'lucide-react';
 import { useTheme } from './theme';
-import type { CurrentUser } from '../types';
+import { SWRConfig } from 'swr';
+import type { CurrentUser, TenantSwitchActions } from '../types';
+import EntitySwitch from './EntitySwitch';
 import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
 import { useBranding } from '../branding/BrandingContext';
 import { ROLE_OPTIONS } from '../security/uiAuthorization';
@@ -38,21 +40,27 @@ function ThemeToggle() {
   );
 }
 
-export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, onRoleChange }: { me: CurrentUser; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void }) {
+export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, onRoleChange, tenantSwitch }: { me: CurrentUser; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void; tenantSwitch?: TenantSwitchActions }) {
   // The production App owns OIDC validation, session expiry and principal capabilities.
+  // App keys this component by organization, so a switch unmounts it and everything below it.
+  const [swrCache] = useState(() => new Map());
   const caps = me.capabilities ?? [];
   if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
 
   return (
     <div className="cf">
-      <ToastProvider>
-        <Workspace me={me} caps={caps} onSignOut={onSignOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={onRoleChange} />
-      </ToastProvider>
+      {/* A private data cache per mount (that is, per organization): nothing cached for one organization
+          can be shown in another. SWR's default cache is global and its keys carry no organization. */}
+      <SWRConfig value={{ provider: () => swrCache }}>
+        <ToastProvider>
+          <Workspace me={me} caps={caps} onSignOut={onSignOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={onRoleChange} tenantSwitch={tenantSwitch} />
+        </ToastProvider>
+      </SWRConfig>
     </div>
   );
 }
 
-function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange }: { me: CurrentUser; caps: string[]; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void }) {
+function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange, tenantSwitch }: { me: CurrentUser; caps: string[]; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void; tenantSwitch?: TenantSwitchActions }) {
   const { branding } = useBranding();
   const location = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -141,7 +149,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange 
           <span className="cf-me-avatar" aria-hidden="true">{initials(me.username)}</span>
           <span className="cf-me-text">
             <span className="cf-me-name">{displayName(me.username)}</span>
-            <span className="cf-me-org">{branding.organizationName || me.tenantName}</span>
+            <EntitySwitch label={branding.organizationName || me.tenantName} tenantName={me.tenantName} actions={localMode ? undefined : tenantSwitch} />
           </span>
         </div>
         <button type="button" className="cf-theme-toggle" onClick={onSignOut} aria-label="Sign out" title="Sign out">Sign out</button>
