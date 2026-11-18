@@ -23,6 +23,10 @@ Build new Case File screens and leave the legacy pages alone, as U003 to U011 di
    - Roles as today: Support and problem detail for IT Administrator and Platform Operations; Retry for IT Administrator only; Continue manually for Document Processor and Supervisor. A test for each.
    - If a backend or schema change turns out to be needed, stop and ask.
    - Removing the old pages is a later clean-up.
+2. **After the build (the question about missing case details):**
+   - The plain stop reason for Processors and Supervisors is already approved for the backend work after the UI series (see U003).
+   - No borrower name and no file name on Support or the problem page. IT Administrator and Platform Operations are kept out of case content on purpose.
+   - For the backend work, add only the document's position and page ("document 2 of 3, page 14").
 
 ## What was done
 
@@ -175,10 +179,6 @@ Build new Case File screens and leave the legacy pages alone, as U003 to U011 di
 - **Stop reason on Continue manually:** Processors and Supervisors can't read the technical problem (it needs `TECHNICAL_EXCEPTION_VIEW`). So the banner says "Automatic processing stopped", without "text recognition timed out on page 14".
 - **"Case received from the watched folder"** in the design's timeline is not a support step. The timeline shows only the recorded problem steps.
 - Removing the old pages: a later clean-up (owner's answer).
-
-## Questions for the owner
-
-1. For the backend work after the UI series: should support records also carry the case's other displayable fields (the borrower name) and the failed file name? Should Processors and Supervisors get the plain stop reason for their stopped case? Both are likely read-only additions to existing answers, not schema changes. I have not started them.
 
 ## Suggested next step
 
