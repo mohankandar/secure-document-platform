@@ -7,6 +7,7 @@ import { Notice, Spinner } from '../atoms';
 import { LoadErrorCard, checked, isRecord } from '../failure';
 import { useToast } from '../toast';
 import { useUnsavedWork } from '../unsavedWork';
+import { durationText, pickUnit, toBase, type Unit } from './adminRules';
 
 export function useBusinessAdmin() {
   return useSWR<BusinessAdminConfiguration>('business-admin', () => checked('GET /business-admin/configuration', apiClient.getBusinessAdminConfiguration(), isBusinessAdminConfiguration), { revalidateOnFocus: false });
@@ -111,6 +112,55 @@ export function NumberField({ label, value, onChange, min, max, step = 1, suffix
       </label>
       <input type="number" inputMode="decimal" value={Number.isNaN(value) ? '' : value} min={min} max={max} step={step} onChange={(e) => onChange(e.target.valueAsNumber)} aria-invalid={invalid || undefined} />
       <span className="cf-field-hint">{invalid ? `Enter a value${min !== undefined ? ` from ${min}` : ''}${max !== undefined ? ` to ${max}` : ''}.` : hint}</span>
+    </div>
+  );
+}
+
+/**
+ * A duration stored in one unit (hours or minutes) and typed in a unit people use (UI task U007): it opens in the
+ * largest unit the stored value is a whole number of, and the person can change the unit. What is typed must be a
+ * whole number of the stored unit; anything else is marked, never rounded.
+ */
+export function DurationField({ label, value, onChange, units, min, max, hint, fixedUnit, inline }: {
+  label: string; value: number; onChange: (base: number) => void; units: readonly Unit[];
+  min?: number; max?: number; hint?: string; fixedUnit?: string; inline?: boolean;
+}) {
+  const id = useId();
+  const [unit, setUnit] = useState<Unit>(() => units.find((u) => u.name === fixedUnit) ?? pickUnit(value, units));
+  const [typed, setTyped] = useState<number>(() => value / unit.factor);
+  // Follow the stored value when it changes from outside (Reset, a save), keeping the unit the person chose.
+  const [seen, setSeen] = useState(value);
+  if (value !== seen && !(Number.isNaN(value) && Number.isNaN(seen))) {
+    setSeen(value);
+    if (!Number.isNaN(value)) setTyped(value / unit.factor);
+  }
+  const invalid = Number.isNaN(value) || (min !== undefined && value < min) || (max !== undefined && value > max);
+  const change = (v: number, u: Unit) => { setTyped(v); const base = toBase(v, u); setSeen(base); onChange(base); };
+  const unitName = (u: Unit) => (typed === 1 ? u.one : u.name);
+  const control = (
+    <span className="cf-ad-duration">
+      <input id={id} type="number" inputMode="decimal" min={0} step="any" value={Number.isNaN(typed) ? '' : typed}
+        aria-label={inline ? label : undefined} aria-invalid={invalid || undefined} aria-describedby={`${id}-hint`}
+        onChange={(e) => change(e.target.valueAsNumber, unit)} />
+      {fixedUnit || units.length === 1
+        ? <span className="cf-ad-duration-unit">{unitName(unit)}</span>
+        : (
+          <select aria-label={`${label}: unit`} value={unit.name}
+            onChange={(e) => { const u = units.find((x) => x.name === e.target.value) ?? units[0]; setUnit(u); change(typed, u); }}>
+            {units.map((u) => <option key={u.name} value={u.name}>{unitName(u)}</option>)}
+          </select>
+        )}
+    </span>
+  );
+  const message = invalid
+    ? `Enter a whole number of ${units[0].name}${min !== undefined ? ` from ${durationText(min, units)}` : ''}${max !== undefined ? ` up to ${durationText(max, units)}` : ''}.`
+    : hint;
+  if (inline) return <>{control}{invalid && <span id={`${id}-hint`} className="cf-ad-sentence-error">{label}: {message}</span>}</>;
+  return (
+    <div className="cf-field cf-ad-number" data-invalid={invalid || undefined}>
+      <label htmlFor={id}><span>{label}</span></label>
+      {control}
+      <span id={`${id}-hint`} className="cf-field-hint">{message}</span>
     </div>
   );
 }

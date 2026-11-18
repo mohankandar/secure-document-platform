@@ -282,3 +282,40 @@
   .cf-ad-brand { grid-template-columns: minmax(0, 1fr) 280px; }
   .cf-ad-preview { position: sticky; top: 16px; }
 }
+
+/* ---- U007 ----------------------------------------------------------------------------------------------------
+ * The legacy stylesheet (src/index.css, frozen) sets every `table th` in capitals and every `input` to full width.
+ * That is why field names showed in capitals and the mode radios floated mid-card with the text pushed right.
+ * These rules undo both inside the Case File admin only; index.css is not changed.
+ */
+.cf-ad-table th { text-transform: none; letter-spacing: normal; }
+.cf-ad-table th[scope='row'] { color: var(--cf-ink); font-size: 13px; }
+.cf-ad-table thead th { font-size: 12px; font-weight: 500; }
+.cf-ad-table thead th.cf-ad-col-field { text-align: left; }
+.cf-ad-table input[type='checkbox'], .cf-ad-table input[type='radio'] { padding: 0; }
+.cf-ad-radio { justify-content: flex-start; text-align: left; }
+.cf-ad-radio input { flex: none; width: 16px; height: 16px; padding: 0; margin: 2px 0 0; accent-color: var(--cf-ink); }
+.cf-ad-radio > span { flex: 1; min-width: 0; }
+.cf-ad-radios[data-layout='row'] { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+
+/* A number with its unit, on its own or inside a sentence. */
+.cf-ad-duration { display: inline-flex; align-items: center; gap: 6px; }
+.cf-ad-duration input {
+  width: 84px; height: 34px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--cf-ink);
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+}
+.cf-ad-duration select {
+  width: auto; height: 34px; padding: 0 8px; font: inherit; font-size: 14px; color: var(--cf-ink);
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+}
+.cf-ad-duration input[aria-invalid='true'] { border-color: var(--cf-danger); }
+.cf-ad-duration input:focus-visible, .cf-ad-duration select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-ad-duration-unit { font-size: 14px; color: var(--cf-muted); }
+.cf-ad-sentences { display: flex; flex-direction: column; gap: 12px; }
+.cf-ad-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
+.cf-ad-sentence-error { flex-basis: 100%; font-size: 12px; color: var(--cf-danger); }
+
+/* The page gutter drops to 16 px at 1024 px (studio.css); the tab strip bled 24 px and scrolled the page sideways. */
+@media (max-width: 1024px) {
+  .cf-ad-tabs { margin: 0 -16px; padding: 0 16px; }
+}

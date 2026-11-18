@@ -4,10 +4,11 @@ import type { BusinessAdminIdentifierDraft, BusinessIdentifierValidationType } f
 import { Notice } from '../atoms';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, Sheet, TextField, SelectField, OptionalInt } from './shared';
 import { useUnsavedWork } from '../unsavedWork';
+import { fieldRule } from './adminRules';
 
 const VALIDATION_TYPES: [BusinessIdentifierValidationType, string][] = [
-  ['TEXT', 'Text'], ['NUMERIC', 'Numeric'], ['ALPHANUMERIC', 'Alphanumeric'], ['EMAIL', 'Email'],
-  ['UUID', 'UUID'], ['ALLOW_LIST', 'Allowed values'], ['CUSTOM_PATTERN', 'Custom pattern'],
+  ['TEXT', 'Text'], ['NUMERIC', 'Numbers only'], ['ALPHANUMERIC', 'Letters and numbers'], ['EMAIL', 'Email address'],
+  ['UUID', 'System ID'], ['ALLOW_LIST', 'One of a list of allowed values'], ['CUSTOM_PATTERN', 'Must match a set pattern'],
 ];
 
 const blankIdentifier = (): BusinessAdminIdentifierDraft => ({
@@ -18,13 +19,13 @@ const blankIdentifier = (): BusinessAdminIdentifierDraft => ({
 
 /** Mirrors BusinessAdminPage's client-side rules; the server remains authoritative. */
 export function identifierIssue(list: BusinessAdminIdentifierDraft[]): string | null {
-  if (list.length === 0) return 'At least one identifier is required.';
-  if (list.some((i) => !i.label.trim())) return 'Every identifier needs a label.';
-  if (list.filter((i) => i.primary).length !== 1) return 'Choose exactly one Primary identifier.';
+  if (list.length === 0) return 'At least one case field is required.';
+  if (list.some((i) => !i.label.trim())) return 'Every case field needs a name.';
+  if (list.filter((i) => i.primary).length !== 1) return 'Choose exactly one main ID.';
   const labels = list.map((i) => i.label.trim().toLowerCase());
-  if (new Set(labels).size !== labels.length) return 'Identifier labels must be unique.';
+  if (new Set(labels).size !== labels.length) return 'Each case field needs a different name.';
   for (const i of list) {
-    const name = i.label || 'Identifier';
+    const name = i.label || 'Case field';
     const lengths = [i.exactLength, i.minLength, i.maxLength].filter((v): v is number => v != null);
     if (lengths.some((v) => !Number.isInteger(v) || v < 1 || v > 512)) return `${name}: lengths must be whole numbers from 1 to 512.`;
     if (i.exactLength != null && (i.minLength != null || i.maxLength != null)) return `${name}: exact length cannot be combined with min/max length.`;
@@ -42,15 +43,8 @@ const toRequest = (list: BusinessAdminIdentifierDraft[]) => list.map((i) => ({
   customPattern: i.validationType === 'CUSTOM_PATTERN' ? i.customPattern?.trim() || null : null,
 }));
 
-function rule(i: BusinessAdminIdentifierDraft) {
-  const parts = [VALIDATION_TYPES.find(([v]) => v === i.validationType)?.[1] ?? i.validationType];
-  if (i.exactLength != null) parts.push(`${i.exactLength} chars`);
-  else if (i.minLength != null || i.maxLength != null) parts.push(`${i.minLength ?? 1}–${i.maxLength ?? '∞'} chars`);
-  if (i.validationType === 'ALLOW_LIST') parts.push(`${i.allowedValues.filter(Boolean).length} values`);
-  if (i.caseNormalization !== 'PRESERVE') parts.push(i.caseNormalization === 'UPPER' ? 'Uppercased' : 'Lowercased');
-  if (i.stripSeparators) parts.push('Separators stripped');
-  return parts.join(' · ');
-}
+/** The field's rule spelled out (U007): "Letters and numbers · 6–12 characters · saved in capitals · spaces and dashes removed". */
+const rule = (i: BusinessAdminIdentifierDraft) => fieldRule(i);
 
 function IdentifierEditor({ value, isNew, canRemove, onApply, onRemove, onClose }: {
   value: BusinessAdminIdentifierDraft; isNew: boolean; canRemove: boolean;
@@ -62,29 +56,29 @@ function IdentifierEditor({ value, isNew, canRemove, onApply, onRemove, onClose 
   const exact = d.exactLength != null;
 
   return (
-    <Sheet open wide title={isNew ? 'Add identifier' : `Edit ${value.label}`} onClose={onClose}
-      description="Changes are staged in the Identifiers card. Nothing is saved until you choose Save changes there."
+    <Sheet open wide title={isNew ? 'Add case field' : `Edit ${value.label}`} onClose={onClose}
+      description="Changes wait in the Case fields card. Nothing is saved until you choose Save changes there."
       footer={<>
         {!isNew && <button type="button" className="cf-btn" data-variant="danger" data-size="sm" disabled={!canRemove} onClick={onRemove}
-          title={canRemove ? undefined : 'At least one identifier is required.'}>Remove</button>}
+          title={canRemove ? undefined : 'At least one case field is required.'}>Remove</button>}
         <span className="cf-ad-spacer" />
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={onClose}>Cancel</button>
         <button type="button" className="cf-btn" data-variant="solid" data-size="sm" onClick={() => setIssue(onApply(d))}>{isNew ? 'Add to list' : 'Apply'}</button>
       </>}
     >
       <div className="cf-ad-form">
-        <TextField label="Label" required maxLength={128} value={d.label} onChange={(label) => set({ label })} invalid={!d.label.trim() && !!issue} hint="Shown to staff on New case and on Cases." />
+        <TextField label="Name" required maxLength={128} value={d.label} onChange={(label) => set({ label })} invalid={!d.label.trim() && !!issue} hint="Shown to staff on New case and on Cases." />
         <fieldset className="cf-ad-fieldset">
           <legend>Behavior</legend>
-          <Toggle label="Primary identifier" checked={d.primary} onChange={(primary) => set(primary ? { primary, required: true, displayable: true } : { primary })} hint="Names the case everywhere. Exactly one field is primary; it is always required and shown." />
-          <Toggle label="Required at intake" checked={d.required} disabled={d.primary} onChange={(required) => set({ required })} />
+          <Toggle label="Main ID" checked={d.primary} onChange={(primary) => set(primary ? { primary, required: true, displayable: true } : { primary })} hint="Names the case everywhere. Exactly one field is the main ID; it is always required and shown." />
+          <Toggle label="Required when a case is created" checked={d.required} disabled={d.primary} onChange={(required) => set({ required })} />
           <Toggle label="Searchable" checked={d.searchable} onChange={(searchable) => set({ searchable })} hint="Staff can find cases by this value." />
-          <Toggle label="Displayable" checked={d.displayable} disabled={d.primary} onChange={(displayable) => set({ displayable })} hint="Can appear on Cases and in the case panel." />
-          <Toggle label="Auto-extract" checked={d.extractable} onChange={(extractable) => set({ extractable })} hint="Document Intelligence may propose this value from the document." />
+          <Toggle label="Shown" checked={d.displayable} disabled={d.primary} onChange={(displayable) => set({ displayable })} hint="Can appear on Cases and in the case panel." />
+          <Toggle label="AI fills in" checked={d.extractable} onChange={(extractable) => set({ extractable })} hint="When the AI is on, it may suggest this value from the document for staff to confirm." />
         </fieldset>
         <fieldset className="cf-ad-fieldset">
-          <legend>Validation</legend>
-          <SelectField label="Validation type" value={d.validationType} options={VALIDATION_TYPES}
+          <legend>Rule</legend>
+          <SelectField label="What it can contain" value={d.validationType} options={VALIDATION_TYPES}
             onChange={(validationType) => set({ validationType, customPattern: validationType === 'CUSTOM_PATTERN' ? d.customPattern : null })} />
           <div className="cf-ad-grid3">
             <OptionalInt label="Exact length" min={1} max={512} value={d.exactLength}
@@ -92,23 +86,23 @@ function IdentifierEditor({ value, isNew, canRemove, onApply, onRemove, onClose 
             <OptionalInt label="Minimum length" min={1} max={512} disabled={exact} value={d.minLength} onChange={(minLength) => set({ minLength })} />
             <OptionalInt label="Maximum length" min={1} max={512} disabled={exact} value={d.maxLength} onChange={(maxLength) => set({ maxLength })} />
           </div>
-          <p className="cf-ad-hint">Exact length replaces min/max. Lengths are measured after normalization.</p>
+          <p className="cf-ad-hint">Exact length replaces minimum and maximum. Lengths are counted after capitals and spaces are applied.</p>
           {d.validationType === 'ALLOW_LIST' && (
             <div className="cf-field">
               <label htmlFor="idf-allowed"><span>Allowed values</span></label>
               <textarea id="idf-allowed" rows={4} value={d.allowedValues.join('\n')}
                 onChange={(e) => set({ allowedValues: e.target.value.split(/[\n,]/) })} />
-              <span className="cf-field-hint">One per line or comma-separated. 1–100 values also make this field eligible as a reporting dimension.</span>
+              <span className="cf-field-hint">One per line or separated by commas. With 1–100 values, Reports can also break down by this field.</span>
             </div>
           )}
           {d.validationType === 'CUSTOM_PATTERN' && (
             <TextField label="Custom pattern" required mono maxLength={512} value={d.customPattern ?? ''} placeholder="^[A-Z]{2}[0-9]{8}$"
               onChange={(customPattern) => set({ customPattern })} hint="Regular expression evaluated by the server against the normalized value." />
           )}
-          <SelectField label="Case normalization" value={d.caseNormalization}
-            options={[['PRESERVE', 'Preserve as entered'], ['UPPER', 'Convert to uppercase'], ['LOWER', 'Convert to lowercase']]}
+          <SelectField label="Capitals" value={d.caseNormalization}
+            options={[['PRESERVE', 'Keep as typed'], ['UPPER', 'Save in capitals'], ['LOWER', 'Save in lower case']]}
             onChange={(caseNormalization) => set({ caseNormalization })} />
-          <Toggle label="Strip separators" checked={d.stripSeparators} onChange={(stripSeparators) => set({ stripSeparators })} hint="Removes spaces, hyphens and similar separators before validation." />
+          <Toggle label="Remove spaces and dashes" checked={d.stripSeparators} onChange={(stripSeparators) => set({ stripSeparators })} hint="Removes spaces, dashes and similar separators before the value is checked." />
         </fieldset>
         {issue && <Notice tone="danger">{issue}</Notice>}
       </div>
@@ -155,7 +149,7 @@ function IdentifierList({ d, set }: { d: BusinessAdminIdentifierDraft[]; set: (n
       <div className="cf-ad-table-wrap">
         <table className="cf-ad-table">
           <thead>
-            <tr><th scope="col">Order</th><th scope="col">Field</th><th scope="col">Primary</th><th scope="col">Required</th><th scope="col">Searchable</th><th scope="col">Auto-extract</th><th scope="col">Shown</th><th scope="col"><span className="sr-only">Edit</span></th></tr>
+            <tr><th scope="col"><span className="cf-sr">Order</span></th><th scope="col" className="cf-ad-col-field">Field</th><th scope="col">Main ID</th><th scope="col">Required</th><th scope="col">Searchable</th><th scope="col">AI fills in</th><th scope="col">Shown</th><th scope="col"><span className="cf-sr">Edit</span></th></tr>
           </thead>
           <tbody>
             {d.map((idf, i) => (
@@ -168,11 +162,11 @@ function IdentifierList({ d, set }: { d: BusinessAdminIdentifierDraft[]; set: (n
                   <span className="cf-ad-cell-title">{idf.label || <em>Unnamed</em>}{!idf.id && <span className="cf-ad-tag">New</span>}</span>
                   <span className="cf-ad-cell-sub">{rule(idf)}</span>
                 </th>
-                <td><input type="radio" name="primary-identifier" aria-label={`Make ${idf.label} primary`} checked={idf.primary} onChange={() => set(d.map((x, j) => (j === i ? { ...x, primary: true, required: true, displayable: true } : { ...x, primary: false })))} /></td>
-                <td><input type="checkbox" aria-label={`${idf.label} required`} checked={idf.required} disabled={idf.primary} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, required: e.target.checked } : x)))} /></td>
-                <td><input type="checkbox" aria-label={`${idf.label} searchable`} checked={idf.searchable} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, searchable: e.target.checked } : x)))} /></td>
-                <td><input type="checkbox" aria-label={`${idf.label} auto-extract`} checked={idf.extractable} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, extractable: e.target.checked } : x)))} /></td>
-                <td><input type="checkbox" aria-label={`${idf.label} shown`} checked={idf.displayable} disabled={idf.primary} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, displayable: e.target.checked } : x)))} /></td>
+                <td><input type="radio" name="primary-identifier" aria-label={`Make ${idf.label} the main ID`} checked={idf.primary} onChange={() => set(d.map((x, j) => (j === i ? { ...x, primary: true, required: true, displayable: true } : { ...x, primary: false })))} /></td>
+                <td><input type="checkbox" aria-label={`${idf.label}: required`} checked={idf.required} disabled={idf.primary} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, required: e.target.checked } : x)))} /></td>
+                <td><input type="checkbox" aria-label={`${idf.label}: searchable`} checked={idf.searchable} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, searchable: e.target.checked } : x)))} /></td>
+                <td><input type="checkbox" aria-label={`${idf.label}: AI fills in`} checked={idf.extractable} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, extractable: e.target.checked } : x)))} /></td>
+                <td><input type="checkbox" aria-label={`${idf.label}: shown`} checked={idf.displayable} disabled={idf.primary} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, displayable: e.target.checked } : x)))} /></td>
                 <td><button type="button" className="cf-btn" data-size="sm" onClick={() => setEditing(i)}>Edit<span className="sr-only"> {idf.label}</span></button></td>
               </tr>
             ))}
@@ -180,7 +174,7 @@ function IdentifierList({ d, set }: { d: BusinessAdminIdentifierDraft[]; set: (n
         </table>
       </div>
       <div className="cf-ad-inline-actions">
-        <button type="button" className="cf-btn" data-size="sm" onClick={() => setEditing('new')}>Add identifier</button>
+        <button type="button" className="cf-btn" data-size="sm" onClick={() => setEditing('new')}>Add case field</button>
         {issue && <p className="cf-ad-warn" role="status">{issue}</p>}
       </div>
       {editing !== null && (
@@ -206,10 +200,10 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
     <div className="cf-ad-stack">
       {canIdentifiers && (
         <SettingsCard
-          title="Identifiers"
-          description="Captured at intake. Order here is the order staff see. The primary identifier names the case everywhere."
+          title="Case fields"
+          description="Captured when a case is created. The order here is the order staff see. The main ID names the case everywhere."
           value={data.identifiers as BusinessAdminIdentifierDraft[]}
-          savedMessage="Identifiers saved."
+          savedMessage="Case fields saved."
           onSave={async (d) => {
             const issue = identifierIssue(d);
             if (issue) throw new Error(issue);
@@ -223,7 +217,7 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
       {canColumns && (
         <SettingsCard
           title="Columns on Cases"
-          description="Allowed columns can be turned on by anyone. Default columns are on for new users. The primary identifier is always allowed."
+          description="Allowed columns can be turned on by anyone. Default columns are on for new users. The main ID is always allowed."
           value={data.dashboardColumns}
           savedMessage="Columns on Cases saved."
           onSave={async (d) => mutate(await apiClient.updateDashboardColumns(d), { revalidate: false })}
@@ -233,8 +227,8 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
               {[...d].sort((a, b) => a.displayOrder - b.displayOrder).map((col) => (
                 <div key={col.key} className="cf-ad-row">
                   <span className="cf-ad-row-label">
-                    {col.label}{col.primary && <span className="cf-ad-tag">Primary</span>}
-                    <span className="cf-ad-cell-sub">{col.kind === 'IDENTIFIER' ? 'Business identifier' : 'Operational field'}</span>
+                    {col.label}{col.primary && <span className="cf-ad-tag">Main ID</span>}
+                    <span className="cf-ad-cell-sub">{col.kind === 'IDENTIFIER' ? 'Case field' : 'Set by LexaVault'}</span>
                   </span>
                   <Toggle label="Allowed" checked={col.allowed} disabled={col.primary} onChange={(v) => set(d.map((x) => (x.key === col.key ? { ...x, allowed: v, defaultVisible: v ? x.defaultVisible : false } : x)))} />
                   <Toggle label="Default" checked={col.defaultVisible} disabled={!col.allowed} onChange={(v) => set(d.map((x) => (x.key === col.key ? { ...x, defaultVisible: v } : x)))} />

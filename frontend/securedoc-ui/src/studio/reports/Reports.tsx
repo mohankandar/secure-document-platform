@@ -325,6 +325,12 @@ function TargetBar({ label, actual, target, detail, empty }: { label: string; ac
 
 function ServiceLevel({ r }: { r: OperationalReports }) {
   const s = r.serviceLevel;
+  // The review target is a setting (Admin › Report targets). An answer without a readable one is not guessed:
+  // the card fails on its own and says so.
+  const reviewTarget = s.reviewWaitTargetPercent;
+  if (typeof reviewTarget !== 'number' || !Number.isFinite(reviewTarget) || reviewTarget < 0 || reviewTarget > 100) {
+    throw new Error('The review pickup target is missing from the report.');
+  }
   const noDeliveries = 'No deliveries in this period';
   return (
     <Section title="Service levels" note="Targets are set in Admin › Redaction & retention › Reporting">
@@ -333,7 +339,7 @@ function ServiceLevel({ r }: { r: OperationalReports }) {
           detail={`${s.deliveryBreaches} of ${s.deliveryEligible} cases missed the target`} empty={s.deliveryEligible > 0 ? undefined : noDeliveries} />
         <TargetBar label="No review needed" actual={s.straightThroughActualPercent} target={s.straightThroughTargetPercent}
           detail="Cases delivered without a person reviewing" empty={r.executive.delivered > 0 ? undefined : noDeliveries} />
-        <TargetBar label={`Review picked up within ${hours(s.reviewWaitTargetMinutes / 60)}`} actual={s.reviewWithinTargetRate} target={100}
+        <TargetBar label={`Review picked up within ${hours(s.reviewWaitTargetMinutes / 60)}`} actual={s.reviewWithinTargetRate} target={reviewTarget}
           detail={`${s.reviewBreaches} of ${s.reviewEligible} reviews waited longer`} empty={s.reviewEligible > 0 ? undefined : 'No reviews in this period'} />
       </div>
     </Section>

@@ -14,7 +14,7 @@ import './admin.css';
 type AreaKey = 'policy' | 'fields' | 'integrations' | 'identity' | 'health' | 'audit';
 
 const AREAS: { key: AreaKey; label: string; short: string; hint: string; allowed: (caps: string[]) => boolean }[] = [
-  { key: 'policy', label: 'Redaction & retention', short: 'Redaction', hint: 'What gets redacted, how long artifacts live, and the service targets Reports measures against.', allowed: (c) => c.includes(CAP.policy) },
+  { key: 'policy', label: 'Redaction & retention', short: 'Redaction', hint: 'What gets redacted, how long copies are kept, and the targets Reports measures against.', allowed: (c) => c.includes(CAP.policy) },
   { key: 'fields', label: 'Case fields', short: 'Fields', hint: 'The fields captured for each new case, and the columns shown on Cases.', allowed: (c) => c.includes(CAP.identifiers) || c.includes(CAP.policy) },
   { key: 'integrations', label: 'Integrations', short: 'Integrations', hint: 'Intake sources and delivery destinations, with polling, testing and routing.', allowed: (c) => c.includes(CAP.integrations) },
   { key: 'identity', label: 'Sign-in', short: 'Sign-in', hint: 'Enterprise identity provider: draft, test, activate and roll back.', allowed: (c) => c.includes(CAP.auth) },

@@ -4,7 +4,8 @@ import type { BusinessAdminConfiguration, BusinessReviewMode, DocumentIntelligen
 import { errorMessage } from '../data';
 import { Notice } from '../atoms';
 import { useToast } from '../toast';
-import { SettingsCard, Toggle, NumberField, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField } from './shared';
+import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
+import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
 import { ErrorBoundary } from '../failure';
 import { SENSITIVE_TYPES, sensitiveTypeName } from '../words';
 
@@ -75,9 +76,9 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
 }
 
 const MODES: [DocumentIntelligenceMode, string, string][] = [
-  ['DISABLED', 'Disabled', 'No intelligence runs. Identifiers are keyed in by staff.'],
-  ['OBSERVE', 'Observe', 'Proposals are recorded for comparison but never applied to cases.'],
-  ['ENABLED', 'Enabled', 'Proposals pre-fill auto-extract identifiers for staff to confirm.'],
+  ['DISABLED', 'Off', 'No AI runs. Staff type the case fields.'],
+  ['OBSERVE', 'Observe', 'AI suggestions are recorded for comparison but never filled in.'],
+  ['ENABLED', 'On', 'AI fills in case fields for staff to confirm.'],
 ];
 
 function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
@@ -87,15 +88,17 @@ function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const choices = di.availableBundles.filter((b) => b.status === 'PROMOTED' || b.version === di.activeBundleVersion);
+  const names = bundleNames(di.availableBundles);
+  const nameOf = (version: string) => names.get(version)?.name ?? version;
 
   async function run(action: 'rollback' | 'lkg') {
     setBusy(true); setError(null);
     try {
       mutate(action === 'rollback' ? await apiClient.rollbackDocumentIntelligence() : await apiClient.markDocumentIntelligenceLastKnownGood());
-      toast(action === 'rollback' ? `Rolled back to ${di.lastKnownGoodBundleVersion}.` : `${di.activeBundleVersion} marked last known good.`);
+      toast(action === 'rollback' ? `Went back to ${nameOf(di.lastKnownGoodBundleVersion)}.` : `${nameOf(di.activeBundleVersion)} is now the fallback.`);
       setConfirm(null);
     } catch (e) {
-      setError(errorMessage(e, action === 'rollback' ? 'Unable to roll back Document Intelligence.' : 'Unable to update the last-known-good bundle.'));
+      setError(errorMessage(e, action === 'rollback' ? 'Could not go back to the fallback version.' : 'Could not set the fallback version.'));
     } finally { setBusy(false); }
   }
 
@@ -103,7 +106,7 @@ function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; 
     <>
       <SettingsCard
         title="Document intelligence"
-        description={`Configuration v${di.configurationVersion}. Changes apply to cases received after saving.`}
+        description="Changes apply to cases received after saving."
         value={{ mode: di.mode, activeBundleVersion: di.activeBundleVersion }}
         savedMessage="Document intelligence saved."
         onSave={async (d) => mutate(await apiClient.updateDocumentIntelligence(d.mode, d.activeBundleVersion))}
@@ -111,11 +114,12 @@ function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; 
         {(d, set) => {
           const bundle = di.availableBundles.find((b) => b.version === d.activeBundleVersion);
           const dirty = d.mode !== di.mode || d.activeBundleVersion !== di.activeBundleVersion;
+          const sameAsFallback = di.activeBundleVersion === di.lastKnownGoodBundleVersion;
           return (
             <>
               <fieldset className="cf-ad-fieldset">
                 <legend>Mode</legend>
-                <div className="cf-ad-radios" role="radiogroup" aria-label="Intelligence mode">
+                <div className="cf-ad-radios" data-layout="row" role="radiogroup" aria-label="AI mode">
                   {MODES.map(([m, label, hint]) => (
                     <label key={m} className="cf-ad-radio">
                       <input type="radio" name="di-mode" checked={d.mode === m} onChange={() => set({ ...d, mode: m })} />
@@ -124,42 +128,51 @@ function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; 
                   ))}
                 </div>
               </fieldset>
-              <SelectField label="Active bundle" value={d.activeBundleVersion}
-                options={choices.map((b) => [b.version, `${b.version}${b.status !== 'PROMOTED' ? ` (${humanize(b.status)})` : ''}`] as [string, string])}
+              <SelectField label="AI version in use" value={d.activeBundleVersion}
+                options={choices.map((b) => [b.version, bundleLabel(names.get(b.version) ?? bundleName(b))] as [string, string])}
                 onChange={(activeBundleVersion) => set({ ...d, activeBundleVersion })}
-                hint="Only promoted bundles can be selected. Candidate and retired bundles are not offered." />
-              {bundle && (
-                <dl className="cf-ad-facts cf-ad-facts-compact">
-                  <div><dt>Status</dt><dd>{humanize(bundle.status)}</dd></div>
-                  <div><dt>Model</dt><dd>{bundle.modelVersion}</dd></div>
-                  <div><dt>Prompt</dt><dd>{bundle.promptVersion}</dd></div>
-                  <div><dt>Detector</dt><dd>{bundle.detectorVersion}</dd></div>
-                  <div><dt>OCR rules</dt><dd>{bundle.ocrRulesVersion}</dd></div>
-                  <div><dt>Profile</dt><dd>{bundle.profileVersion}</dd></div>
-                  <div><dt>Validation rules</dt><dd>{bundle.validationRulesVersion}</dd></div>
-                  <div><dt>Thresholds</dt><dd>{bundle.thresholdsVersion}</dd></div>
-                  {bundle.description && <div className="cf-ad-span"><dt>Notes</dt><dd>{bundle.description}</dd></div>}
-                </dl>
-              )}
-              {di.baselineDiscoveryRequired && <Notice tone="mark">Baseline discovery is still required for this tenant. Run in Observe before enabling so proposals can be compared.</Notice>}
+                hint={`${bundle?.description ? `${bundle.description} ` : ''}Only tested and released versions are offered.`} />
+              {di.baselineDiscoveryRequired && <Notice tone="mark">Run in Observe first, so AI suggestions can be compared before you turn it on.</Notice>}
               <div className="cf-ad-inline-actions">
-                <span className="cf-ad-hint">Last known good: <strong>{di.lastKnownGoodBundleVersion}</strong></span>
+                <span className="cf-ad-hint">Fallback if something goes wrong: <strong>{nameOf(di.lastKnownGoodBundleVersion)}</strong></span>
                 <span className="cf-ad-spacer" />
-                <button type="button" className="cf-btn" data-size="sm" disabled={busy || dirty || di.activeBundleVersion === di.lastKnownGoodBundleVersion} onClick={() => run('lkg')}
-                  title={dirty ? 'Save or reset changes first.' : undefined}>Mark active as last known good</button>
-                <button type="button" className="cf-btn" data-size="sm" disabled={busy || dirty || di.activeBundleVersion === di.lastKnownGoodBundleVersion} onClick={() => setConfirm('rollback')}>Roll back…</button>
+                <button type="button" className="cf-btn" data-size="sm" disabled={busy || dirty || sameAsFallback} onClick={() => run('lkg')}
+                  title={dirty ? 'Save or reset changes first.' : sameAsFallback ? 'This version is already the fallback.' : undefined}>Use this version as the fallback</button>
+                <button type="button" className="cf-btn" data-size="sm" disabled={busy || dirty || sameAsFallback} onClick={() => setConfirm('rollback')}
+                  title={dirty ? 'Save or reset changes first.' : sameAsFallback ? 'This version is already the fallback.' : undefined}>Go back to fallback…</button>
               </div>
               {error && !confirm && <Notice tone="danger">{error}</Notice>}
+              <details className="cf-disclosure">
+                <summary>Technical details</summary>
+                <dl className="cf-ad-facts cf-ad-facts-compact">
+                  <div><dt>Version</dt><dd>{d.activeBundleVersion}</dd></div>
+                  <div><dt>Fallback version</dt><dd>{di.lastKnownGoodBundleVersion}</dd></div>
+                  <div><dt>Configuration</dt><dd>v{di.configurationVersion}</dd></div>
+                  {bundle && (
+                    <>
+                      <div><dt>Status</dt><dd>{humanize(bundle.status)}</dd></div>
+                      <div><dt>Model</dt><dd>{bundle.modelVersion}</dd></div>
+                      <div><dt>Prompt</dt><dd>{bundle.promptVersion}</dd></div>
+                      <div><dt>Detector</dt><dd>{bundle.detectorVersion}</dd></div>
+                      <div><dt>OCR rules</dt><dd>{bundle.ocrRulesVersion}</dd></div>
+                      <div><dt>Profile</dt><dd>{bundle.profileVersion}</dd></div>
+                      <div><dt>Validation rules</dt><dd>{bundle.validationRulesVersion}</dd></div>
+                      <div><dt>Thresholds</dt><dd>{bundle.thresholdsVersion}</dd></div>
+                      <div className="cf-ad-span"><dt>Name</dt><dd>{nameSource(names.get(bundle.version) ?? bundleName(bundle))}</dd></div>
+                    </>
+                  )}
+                </dl>
+              </details>
             </>
           );
         }}
       </SettingsCard>
       <ConfirmDialog
         open={confirm === 'rollback'}
-        title="Roll back document intelligence?"
-        facts={[['Current bundle', di.activeBundleVersion], ['Roll back to', di.lastKnownGoodBundleVersion], ['Mode', humanize(di.mode)], ['Configuration', `v${di.configurationVersion} → v${di.configurationVersion + 1}`]]}
-        consequence="New cases will use the last-known-good bundle immediately. Cases already processed are not re-run."
-        confirmLabel="Roll back"
+        title="Go back to the fallback version?"
+        facts={[['Version in use', nameOf(di.activeBundleVersion)], ['Go back to', nameOf(di.lastKnownGoodBundleVersion)], ['Mode', MODES.find(([m]) => m === di.mode)?.[1] ?? humanize(di.mode)]]}
+        consequence="New cases use the fallback version straight away. Cases already processed are not run again."
+        confirmLabel="Go back to fallback"
         danger busy={busy} error={error}
         onConfirm={() => run('rollback')}
         onCancel={() => { setConfirm(null); setError(null); }}
@@ -168,33 +181,39 @@ function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; 
   );
 }
 
+/** Says where a version's plain name came from: versions have no display name of their own. */
+function nameSource(n: ReturnType<typeof bundleName>) {
+  if (n.from === 'version') return 'Taken from the year and month in the version.';
+  if (n.from === 'release date') return 'Taken from the month the version was released.';
+  return 'This version has no date, so its version is shown.';
+}
+
 function LifecycleCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
   const lc = data.lifecyclePolicy;
   return (
     <SettingsCard
-      title="Retention and approval"
-      description="When originals and redacted copies are purged, and what must happen before delivery."
+      title="Keeping and deleting"
+      description="How long LexaVault keeps copies, and what must happen before delivery."
       value={{ originalRetentionHours: lc.originalRetentionHours, redactedCacheHours: lc.redactedCacheHours, neverExportedHoldHours: lc.neverExportedHoldHours, finalApprovalRequired: lc.finalApprovalRequired }}
-      savedMessage="Retention policy saved."
+      savedMessage="Keeping and deleting saved."
       onSave={async (d) => {
-        if (d.redactedCacheHours > lc.maximumRedactedCacheHours) throw new Error(`Redacted copies can be kept at most ${lc.maximumRedactedCacheHours} hours.`);
-        if ([d.originalRetentionHours, d.redactedCacheHours, d.neverExportedHoldHours].some((v) => !Number.isInteger(v) || v < 1)) throw new Error('Retention periods must be whole hours of at least 1.');
+        if ([d.originalRetentionHours, d.redactedCacheHours, d.neverExportedHoldHours].some((v) => !Number.isInteger(v) || v < 1)) throw new Error('Each time must be a whole number of hours, at least 1 hour.');
+        if (d.redactedCacheHours > lc.maximumRedactedCacheHours) throw new Error(`Redacted copies can be kept for up to ${durationText(lc.maximumRedactedCacheHours, HOUR_UNITS)}.`);
         return mutate(await apiClient.updateLifecyclePolicy(d));
       }}
     >
       {(d, set) => (
         <>
           <div className="cf-ad-grid">
-            <NumberField label="Keep originals" suffix="hours" min={1} value={d.originalRetentionHours} onChange={(v) => set({ ...d, originalRetentionHours: v })} hint="After this, originals are purged and the case can no longer be reprocessed." />
-            <NumberField label="Keep redacted copies" suffix="hours" min={1} max={lc.maximumRedactedCacheHours} value={d.redactedCacheHours} onChange={(v) => set({ ...d, redactedCacheHours: v })} hint={`Maximum ${lc.maximumRedactedCacheHours} hours.`} />
-            <NumberField label="Hold if never delivered" suffix="hours" min={1} value={d.neverExportedHoldHours} onChange={(v) => set({ ...d, neverExportedHoldHours: v })} hint="Cases needing technical attention are kept this long before purge." />
+            <DurationField label="Keep originals for" units={HOUR_UNITS} fixedUnit="hours" min={1} value={d.originalRetentionHours}
+              onChange={(v) => set({ ...d, originalRetentionHours: v })} hint="After this, a case can't be processed again." />
+            <DurationField label="Keep redacted copies for" units={HOUR_UNITS} min={1} max={lc.maximumRedactedCacheHours} value={d.redactedCacheHours}
+              onChange={(v) => set({ ...d, redactedCacheHours: v })} hint={`Up to ${durationText(lc.maximumRedactedCacheHours, HOUR_UNITS)}.`} />
+            <DurationField label="Keep stopped cases for" units={HOUR_UNITS} min={1} value={d.neverExportedHoldHours}
+              onChange={(v) => set({ ...d, neverExportedHoldHours: v })} hint="Time to fix and finish a stopped case before it is deleted." />
           </div>
-          <Toggle label="Require final approval before delivery" hint="Cases wait in Approval until someone with approval rights signs off." checked={d.finalApprovalRequired} onChange={(v) => set({ ...d, finalApprovalRequired: v })} />
-          <dl className="cf-ad-facts cf-ad-facts-compact">
-            <div><dt>Successful export cycles</dt><dd>At most {lc.maximumSuccessfulExportCycles} per original intake batch</dd></div>
-            <div><dt>Reprocessing</dt><dd>Only while the original is retained and the export-cycle limit has not been reached</dd></div>
-          </dl>
-          <p className="cf-ad-hint">The export-cycle limit and the redacted-copy maximum are fixed by the platform and cannot be changed here.</p>
+          <Toggle label="Require a supervisor's approval before delivery" hint="Cases wait in Approval until a supervisor signs off." checked={d.finalApprovalRequired} onChange={(v) => set({ ...d, finalApprovalRequired: v })} />
+          <p className="cf-ad-hint">A case can be processed again at most {lc.maximumSuccessfulExportCycles} {lc.maximumSuccessfulExportCycles === 1 ? 'time' : 'times'} (set by LexaVault).</p>
         </>
       )}
     </SettingsCard>
@@ -209,37 +228,68 @@ function eligibleDimensions(data: BusinessAdminConfiguration, rc: ReportingConfi
     .map((i, n) => ({ definitionId: i.id, key: i.key, label: i.label, enabled: current.get(i.id)?.enabled ?? false, displayOrder: current.get(i.id)?.displayOrder ?? n }));
 }
 
+/** A percentage typed inside a sentence. Marked, never clamped, when outside its range. */
+function PercentInput({ label, value, onChange, min = 0 }: { label: string; value: number; onChange: (v: number) => void; min?: number }) {
+  const invalid = !Number.isFinite(value) || value < min || value > 100;
+  return (
+    <>
+      <span className="cf-ad-duration">
+        <input type="number" inputMode="decimal" min={min} max={100} step={1} aria-label={label} aria-invalid={invalid || undefined}
+          value={Number.isNaN(value) ? '' : value} onChange={(e) => onChange(e.target.valueAsNumber)} />
+        <span className="cf-ad-duration-unit">%</span>
+      </span>
+      {invalid && <span className="cf-ad-sentence-error">{label}: enter a number from {min} to 100.</span>}
+    </>
+  );
+}
+
 function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
   const rc = data.reportingConfiguration;
   const value = { ...rc, dimensions: eligibleDimensions(data, rc) };
   return (
     <SettingsCard
-      title="Reporting"
-      description="Targets Reports uses to judge delivery, automation and review, and the business dimensions it can break down by."
+      title="Report targets"
+      description="What Reports measures against."
       value={value}
-      savedMessage="Reporting saved. Historical reporting facts stay aggregate-only."
+      savedMessage="Report targets saved."
       onSave={async (d) => {
-        if (d.deliveryTargetPercent < 1 || d.deliveryTargetPercent > 100 || d.straightThroughTargetPercent < 0 || d.straightThroughTargetPercent > 100) throw new Error('Percentages must be between 0 and 100.');
-        if (d.deliveryTargetMinutes < 1 || d.reviewWaitTargetMinutes < 1) throw new Error('Time targets must be at least 1 minute.');
+        if (!(d.deliveryTargetPercent >= 1 && d.deliveryTargetPercent <= 100)) throw new Error('The delivery target must be from 1% to 100%.');
+        if (!(d.straightThroughTargetPercent >= 0 && d.straightThroughTargetPercent <= 100)) throw new Error('The no-review target must be from 0% to 100%.');
+        if (!(Number.isInteger(d.reviewWaitTargetPercent) && d.reviewWaitTargetPercent >= 0 && d.reviewWaitTargetPercent <= 100)) throw new Error('The review target must be a whole number from 0% to 100%.');
+        if (!(Number.isInteger(d.deliveryTargetMinutes) && d.deliveryTargetMinutes >= 1) || !(Number.isInteger(d.reviewWaitTargetMinutes) && d.reviewWaitTargetMinutes >= 1)) throw new Error('Each time must be a whole number of minutes, at least 1 minute.');
         return mutate(await apiClient.updateReportingConfiguration(d));
       }}
     >
       {(d, set) => (
         <>
-          <div className="cf-ad-grid">
-            <NumberField label="Deliver within" suffix="minutes" min={1} value={d.deliveryTargetMinutes} onChange={(v) => set({ ...d, deliveryTargetMinutes: v })} />
-            <NumberField label="For at least" suffix="% of cases" min={1} max={100} value={d.deliveryTargetPercent} onChange={(v) => set({ ...d, deliveryTargetPercent: v })} />
-            <NumberField label="Straight-through goal" suffix="%" min={0} max={100} value={d.straightThroughTargetPercent} onChange={(v) => set({ ...d, straightThroughTargetPercent: v })} />
-            <NumberField label="Pick up reviews within" suffix="minutes" min={1} value={d.reviewWaitTargetMinutes} onChange={(v) => set({ ...d, reviewWaitTargetMinutes: v })} />
+          <div className="cf-ad-sentences">
+            <div className="cf-ad-sentence">
+              <span>Deliver within</span>
+              <DurationField inline label="Deliver within" units={MINUTE_UNITS} min={1} value={d.deliveryTargetMinutes} onChange={(v) => set({ ...d, deliveryTargetMinutes: v })} />
+              <span>for at least</span>
+              <PercentInput label="Share of cases delivered in time" min={1} value={d.deliveryTargetPercent} onChange={(v) => set({ ...d, deliveryTargetPercent: v })} />
+              <span>of cases</span>
+            </div>
+            <div className="cf-ad-sentence">
+              <span>Cases needing no review: at least</span>
+              <PercentInput label="Cases needing no review" value={d.straightThroughTargetPercent} onChange={(v) => set({ ...d, straightThroughTargetPercent: v })} />
+            </div>
+            <div className="cf-ad-sentence">
+              <span>Pick up reviews within</span>
+              <DurationField inline label="Pick up reviews within" units={MINUTE_UNITS} min={1} value={d.reviewWaitTargetMinutes} onChange={(v) => set({ ...d, reviewWaitTargetMinutes: v })} />
+              <span>for at least</span>
+              <PercentInput label="Share of reviews picked up in time" value={d.reviewWaitTargetPercent} onChange={(v) => set({ ...d, reviewWaitTargetPercent: v })} />
+              <span>of reviews</span>
+            </div>
           </div>
           <fieldset className="cf-ad-fieldset">
-            <legend>Report breakdowns</legend>
+            <legend>Break reports down by</legend>
             {d.dimensions.length === 0
-              ? <p className="cf-ad-hint">No eligible field yet. Give an identifier 1–100 allowed values in Case fields to make it a breakdown. High-cardinality fields such as account numbers cannot be used.</p>
+              ? <p className="cf-ad-hint">No case field can be used yet. A field with 1–100 allowed values (set in Case fields) can be used. Fields such as loan numbers cannot.</p>
               : (
                 <div className="cf-ad-list">
                   {d.dimensions.map((dim) => (
-                    <Toggle key={dim.definitionId} label={dim.label} hint={dim.enabled ? 'Included in Reports' : 'Not used in Reports'} checked={dim.enabled}
+                    <Toggle key={dim.definitionId} label={dim.label} hint={dim.enabled ? 'Shown in Reports' : 'Not used in Reports'} checked={dim.enabled}
                       onChange={(v) => set({ ...d, dimensions: d.dimensions.map((x) => (x.definitionId === dim.definitionId ? { ...x, enabled: v } : x)) })} />
                   ))}
                 </div>
@@ -261,7 +311,7 @@ export default function PolicyArea() {
       <ErrorBoundary title="Sensitive data settings couldn't be shown" request="GET /business-admin/configuration"><SensitiveDataCard data={data} mutate={apply} /></ErrorBoundary>
       <ErrorBoundary title="Document intelligence settings couldn't be shown" request="GET /business-admin/configuration"><IntelligenceCard data={data} mutate={apply} /></ErrorBoundary>
       <div className="cf-ad-pair">
-        <ErrorBoundary title="Retention settings couldn't be shown" request="GET /business-admin/configuration"><LifecycleCard data={data} mutate={apply} /></ErrorBoundary>
+        <ErrorBoundary title="Keeping and deleting couldn't be shown" request="GET /business-admin/configuration"><LifecycleCard data={data} mutate={apply} /></ErrorBoundary>
         <ErrorBoundary title="Report targets couldn't be shown" request="GET /business-admin/configuration"><ReportingCard data={data} mutate={apply} /></ErrorBoundary>
       </div>
     </div>

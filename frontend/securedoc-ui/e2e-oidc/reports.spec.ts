@@ -89,7 +89,7 @@ function reports() {
     serviceLevel: {
       deliveryTargetMinutes: 240, deliveryTargetPercent: 95, deliveryWithinTargetRate: 91, deliveryEligible: 463, deliveryBreaches: 42,
       straightThroughTargetPercent: 70, straightThroughActualPercent: 68,
-      reviewWaitTargetMinutes: 60, reviewWithinTargetRate: 83, reviewEligible: 148, reviewBreaches: 25,
+      reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, reviewWithinTargetRate: 83, reviewEligible: 148, reviewBreaches: 25,
     },
     dimensions: [],
   };
@@ -190,4 +190,19 @@ test('a period with deliveries and reviews still shows the measured bars', async
   await expect(levels.getByRole('meter')).toHaveCount(3);
   await expect(levels.getByText(/in this period/)).toHaveCount(0);
   await expect(levels.getByText('25 of 148 reviews waited longer')).toBeVisible();
+});
+
+test('the review bar measures against the review target set in Admin, not 100%', async ({ page }) => {
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS);
+  const levels = page.getByRole('region', { name: 'Service levels' });
+  await expect(levels.getByRole('meter', { name: 'Review picked up within 1 h: 83% against a 80% target' })).toBeVisible();
+  await expect(levels.getByText('target 100%')).toHaveCount(0);
+});
+
+test('an answer without a readable review target fails only the service levels card', async ({ page }) => {
+  const missing = () => { const r = reports(); delete (r.serviceLevel as Partial<typeof r.serviceLevel>).reviewWaitTargetPercent; return r; };
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS, missing);
+  await expect(page.getByRole('alert', { name: "Service levels couldn't be shown" })).toBeVisible();
+  await expect(page.getByText('Typical time to delivery')).toBeVisible();
+  await expect(page.getByTestId('trend-chart')).toBeVisible();
 });

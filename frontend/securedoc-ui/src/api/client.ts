@@ -230,6 +230,7 @@ class ApiClient {
         deliveryTargetPercent: configuration.deliveryTargetPercent,
         straightThroughTargetPercent: configuration.straightThroughTargetPercent,
         reviewWaitTargetMinutes: configuration.reviewWaitTargetMinutes,
+        reviewWaitTargetPercent: configuration.reviewWaitTargetPercent,
       }),
     });
   }

@@ -78,7 +78,7 @@ public record OperationalReportSnapshot(
             int deliveryTargetMinutes, double deliveryTargetPercent,
             double deliveryWithinTargetRate, long deliveryEligible, long deliveryBreaches,
             double straightThroughTargetPercent, double straightThroughActualPercent,
-            int reviewWaitTargetMinutes, double reviewWithinTargetRate,
+            int reviewWaitTargetMinutes, int reviewWaitTargetPercent, double reviewWithinTargetRate,
             long reviewEligible, long reviewBreaches
     ) {}
 

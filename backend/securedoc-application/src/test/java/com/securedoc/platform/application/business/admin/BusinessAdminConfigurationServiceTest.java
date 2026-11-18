@@ -68,7 +68,7 @@ class BusinessAdminConfigurationServiceTest {
         BusinessAdminConfigurationService service = service(definitions);
 
         var saved = service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(),
-                List.of(serviceEntity.id().value()), 240, 95.0, 90.0, 60);
+                List.of(serviceEntity.id().value()), 240, 95.0, 90.0, 60, 80);
         assertEquals(1, saved.dimensions().size());
         assertEquals("service_entity", saved.dimensions().getFirst().key());
         assertEquals("Service Entity", saved.dimensions().getFirst().label());
@@ -76,7 +76,52 @@ class BusinessAdminConfigurationServiceTest {
         // High-cardinality identifiers such as Contract Number remain ineligible because they do not
         // define a bounded tenant-controlled value set.
         assertThrows(ValidationException.class, () -> service.updateReportingConfiguration(tenant, ActorId.generate(),
-                CorrelationId.generate(), List.of(contract.id().value()), 240, 95.0, 90.0, 60));
+                CorrelationId.generate(), List.of(contract.id().value()), 240, 95.0, 90.0, 60, 80));
+    }
+
+    @Test
+    void reviewPickupTargetPercentDefaultsTo80AndIsSaved() {
+        TenantId tenant = TenantId.generate();
+        BusinessAdminConfigurationService service = service(new DefinitionRepo(List.of(numericContract(tenant))));
+        assertEquals(80, ReportingConfiguration.defaults().reviewWaitTargetPercent());
+
+        var saved = service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(),
+                List.of(), 240, 95.0, 70.0, 60, 85);
+        assertEquals(85, saved.reviewWaitTargetPercent());
+        assertEquals(85, service.getConfiguration(tenant).reportingConfiguration().reviewWaitTargetPercent());
+
+        // 0 and 100 are allowed.
+        assertEquals(0, service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(),
+                List.of(), 240, 95.0, 70.0, 60, 0).reviewWaitTargetPercent());
+        assertEquals(100, service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(),
+                List.of(), 240, 95.0, 70.0, 60, 100).reviewWaitTargetPercent());
+    }
+
+    @Test
+    void reviewPickupTargetPercentOutside0To100IsRefusedAndNothingIsSaved() {
+        TenantId tenant = TenantId.generate();
+        BusinessAdminConfigurationService service = service(new DefinitionRepo(List.of(numericContract(tenant))));
+        service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(), List.of(), 240, 95.0, 70.0, 60, 85);
+
+        for (int bad : new int[]{-1, 101}) {
+            ValidationException error = assertThrows(ValidationException.class, () -> service.updateReportingConfiguration(tenant,
+                    ActorId.generate(), CorrelationId.generate(), List.of(), 240, 95.0, 70.0, 60, bad));
+            assertTrue(error.getMessage().contains("reviewWaitTargetPercent"));
+        }
+        assertEquals(85, service.getConfiguration(tenant).reportingConfiguration().reviewWaitTargetPercent());
+    }
+
+    @Test
+    void aCallerThatLeavesOutTheReviewPercentKeepsTheStoredValue() {
+        TenantId tenant = TenantId.generate();
+        BusinessAdminConfigurationService service = service(new DefinitionRepo(List.of(numericContract(tenant))));
+        service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(), List.of(), 240, 95.0, 70.0, 60, 65);
+
+        var saved = service.updateReportingConfiguration(tenant, ActorId.generate(), CorrelationId.generate(),
+                List.of(), 120, 95.0, 70.0, 30, null);
+        assertEquals(65, saved.reviewWaitTargetPercent());
+        assertEquals(30, saved.reviewWaitTargetMinutes());
+        assertEquals(120, saved.deliveryTargetMinutes());
     }
 
     private BusinessIdentifierDefinition numericContract(TenantId tenant) {

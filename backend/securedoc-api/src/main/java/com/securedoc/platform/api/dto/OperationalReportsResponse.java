@@ -37,7 +37,7 @@ public record OperationalReportsResponse(Instant generatedAt, Period period, Exe
     public record ServiceLevel(int deliveryTargetMinutes, double deliveryTargetPercent,
                                double deliveryWithinTargetRate, long deliveryEligible, long deliveryBreaches,
                                double straightThroughTargetPercent, double straightThroughActualPercent,
-                               int reviewWaitTargetMinutes, double reviewWithinTargetRate,
+                               int reviewWaitTargetMinutes, int reviewWaitTargetPercent, double reviewWithinTargetRate,
                                long reviewEligible, long reviewBreaches) {}
     public record DimensionBreakdown(String key, String label, List<DimensionValue> values) {}
     public record DimensionValue(String value, long packages, long delivered, double deliveryRate,

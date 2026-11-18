@@ -51,6 +51,8 @@ export interface IntelligenceBundleConfiguration {
   validationRulesVersion: string;
   thresholdsVersion: string;
   description?: string | null;
+  /** When the version was released (promoted). */
+  promotedAt?: string | null;
 }
 
 export interface DocumentIntelligenceConfiguration {
@@ -105,6 +107,8 @@ export interface ReportingConfiguration {
   deliveryTargetPercent: number;
   straightThroughTargetPercent: number;
   reviewWaitTargetMinutes: number;
+  /** 0–100: pick up reviews within reviewWaitTargetMinutes for at least this share of reviews. */
+  reviewWaitTargetPercent: number;
 }
 
 export interface BusinessAdminConfiguration {
@@ -523,6 +527,7 @@ export interface OperationalReports {
     straightThroughTargetPercent: number;
     straightThroughActualPercent: number;
     reviewWaitTargetMinutes: number;
+    reviewWaitTargetPercent: number;
     reviewWithinTargetRate: number;
     reviewEligible: number;
     reviewBreaches: number;

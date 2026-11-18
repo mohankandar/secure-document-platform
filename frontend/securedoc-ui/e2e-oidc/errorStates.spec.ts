@@ -91,7 +91,7 @@ function reports() {
     backlog: zeroes(['underOneHour', 'oneToFourHours', 'fourToTwentyFourHours', 'oneToThreeDays', 'overThreeDays', 'oldestHours']),
     usage: zeroes(['packages', 'documents', 'pages', 'averageDocumentsPerPackage', 'averagePagesPerPackage', 'reviewedPackages', 'straightThroughPackages', 'reprocessedPackages']),
     serviceLevel: zeroes(['deliveryTargetMinutes', 'deliveryTargetPercent', 'deliveryWithinTargetRate', 'deliveryEligible', 'deliveryBreaches',
-      'straightThroughTargetPercent', 'straightThroughActualPercent', 'reviewWaitTargetMinutes', 'reviewWithinTargetRate', 'reviewEligible', 'reviewBreaches']),
+      'straightThroughTargetPercent', 'straightThroughActualPercent', 'reviewWaitTargetMinutes', 'reviewWaitTargetPercent', 'reviewWithinTargetRate', 'reviewEligible', 'reviewBreaches']),
     dimensions: [],
   };
 }

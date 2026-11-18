@@ -10,12 +10,14 @@ public record ReportingConfiguration(
         int deliveryTargetMinutes,
         double deliveryTargetPercent,
         double straightThroughTargetPercent,
-        int reviewWaitTargetMinutes
+        int reviewWaitTargetMinutes,
+        int reviewWaitTargetPercent
 ) {
     public static final int DEFAULT_DELIVERY_TARGET_MINUTES = 240;
     public static final double DEFAULT_DELIVERY_TARGET_PERCENT = 95.0;
     public static final double DEFAULT_STRAIGHT_THROUGH_TARGET_PERCENT = 90.0;
     public static final int DEFAULT_REVIEW_WAIT_TARGET_MINUTES = 60;
+    public static final int DEFAULT_REVIEW_WAIT_TARGET_PERCENT = 80;
 
     public ReportingConfiguration {
         dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
@@ -31,12 +33,15 @@ public record ReportingConfiguration(
         if (reviewWaitTargetMinutes < 1 || reviewWaitTargetMinutes > 10080) {
             throw new IllegalArgumentException("reviewWaitTargetMinutes must be between 1 and 10080");
         }
+        if (reviewWaitTargetPercent < 0 || reviewWaitTargetPercent > 100) {
+            throw new IllegalArgumentException("reviewWaitTargetPercent must be between 0 and 100");
+        }
     }
 
     public static ReportingConfiguration defaults() {
         return new ReportingConfiguration(List.of(), DEFAULT_DELIVERY_TARGET_MINUTES,
                 DEFAULT_DELIVERY_TARGET_PERCENT, DEFAULT_STRAIGHT_THROUGH_TARGET_PERCENT,
-                DEFAULT_REVIEW_WAIT_TARGET_MINUTES);
+                DEFAULT_REVIEW_WAIT_TARGET_MINUTES, DEFAULT_REVIEW_WAIT_TARGET_PERCENT);
     }
 
     public record Dimension(UUID definitionId, String key, String label, boolean enabled, int displayOrder) {

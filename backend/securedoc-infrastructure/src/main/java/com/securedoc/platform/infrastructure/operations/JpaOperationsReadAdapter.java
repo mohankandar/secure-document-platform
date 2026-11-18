@@ -267,6 +267,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         double deliveryTargetPercent = ((Number) reportingSettings[1]).doubleValue();
         double straightThroughTargetPercent = ((Number) reportingSettings[2]).doubleValue();
         int reviewWaitTargetMinutes = ((Number) reportingSettings[3]).intValue();
+        int reviewWaitTargetPercent = ((Number) reportingSettings[4]).intValue();
 
         Query deliverySlaQuery = entityManager.createNativeQuery("""
                 select count(*) filter (where f.first_delivered_at is not null and f.first_delivered_at<:to),
@@ -335,7 +336,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                         deliveryTargetMinutes, deliveryTargetPercent, percent(deliveryWithinTarget, deliveryEligible),
                         deliveryEligible, Math.max(0, deliveryEligible - deliveryWithinTarget),
                         straightThroughTargetPercent, percent(straightThrough, deliveredSample),
-                        reviewWaitTargetMinutes, percent(reviewWithinTarget, reviewEligible),
+                        reviewWaitTargetMinutes, reviewWaitTargetPercent, percent(reviewWithinTarget, reviewEligible),
                         reviewEligible, Math.max(0, reviewEligible - reviewWithinTarget)),
                 dimensions
         );
@@ -344,12 +345,12 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     private Object[] reportingSettings(UUID tenant) {
         Query query = entityManager.createNativeQuery("""
                 select delivery_target_minutes, delivery_target_percent,
-                       straight_through_target_percent, review_wait_target_minutes
+                       straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent
                   from reporting_tenant_settings where tenant_id=:tenant
                 """).setParameter("tenant", tenant);
         @SuppressWarnings("unchecked")
         List<Object[]> rows = query.getResultList();
-        if (rows.isEmpty()) return new Object[]{240, 95.0, 90.0, 60};
+        if (rows.isEmpty()) return new Object[]{240, 95.0, 90.0, 60, 80};
         return rows.get(0);
     }
 
