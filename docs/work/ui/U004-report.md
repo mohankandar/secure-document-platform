@@ -164,6 +164,17 @@ What covers those today, in code and tests:
    
    Neither was done. Should one of them be part of a later task?
 
+## Third follow-up: owner's answer (2026-11-18)
+
+**Answer to question 1:** yes, add a switch to `Start-LexaVault-Local.ps1` to start with the AI off. It goes in the backend task after the UI series (backend tasks are paused until the UI tasks are done).
+
+**The live U004 check moves to the pre-merge check** of `feature/ui-polish`:
+- open fixture 401 under a new fake 9999 number, with the AI off;
+- check that the text shows in the decision panel and is masked in the queue;
+- check that the fake value appears nowhere in the backend logs or audit records.
+
+Until then, the mocked test and the unit tests listed above are the coverage. No code changed for this follow-up.
+
 ## Suggested next step
 
 U005.
