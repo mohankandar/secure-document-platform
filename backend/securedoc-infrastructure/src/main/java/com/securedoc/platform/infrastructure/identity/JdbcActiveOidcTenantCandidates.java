@@ -1,8 +1,5 @@
 package com.securedoc.platform.infrastructure.identity;
 
-import com.documentplatform.identity.admission.ActiveEntityCandidates;
-import com.documentplatform.identity.admission.ConnectionKey;
-import com.documentplatform.identity.admission.EntityId;
 import com.securedoc.platform.application.port.out.ActiveOidcTenantCandidates;
 import com.securedoc.platform.domain.identity.TenantId;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,7 +10,6 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Discovers ACTIVE connection candidates without inferring user membership.
@@ -21,7 +17,7 @@ import java.util.stream.Collectors;
  * shared-issuer migration; always returns candidates, not an authorized tenant.
  */
 @Repository
-public class JdbcActiveOidcTenantCandidates implements ActiveOidcTenantCandidates, ActiveEntityCandidates {
+public class JdbcActiveOidcTenantCandidates implements ActiveOidcTenantCandidates {
     private final JdbcTemplate jdbc;
 
     public JdbcActiveOidcTenantCandidates(JdbcTemplate jdbc) {
@@ -46,12 +42,5 @@ public class JdbcActiveOidcTenantCandidates implements ActiveOidcTenantCandidate
                 TenantId.of(rs.getObject("tenant_id", UUID.class))),
                 providerId.trim(), issuer.toString(), audience.trim());
         return Set.copyOf(candidates);
-    }
-
-    /** Enterprise Identity 0.3.0 seam: the same lookup and SQL as {@link #findCandidates}, in the library's types. */
-    @Override
-    public Set<EntityId> find(ConnectionKey key) {
-        Set<TenantId> tenants = findCandidates(key.providerId(), key.issuer(), key.audience());
-        return tenants.stream().map(tenant -> EntityId.of(tenant.value())).collect(Collectors.toUnmodifiableSet());
     }
 }
