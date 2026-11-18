@@ -2,7 +2,7 @@
 
 Date: 2026-11-18
 Branch: `feature/ui-polish`
-Outcome: DONE, with one gap. The owner's three answers are applied (see "Follow-up"). Review was checked live on a fake case in review. The text being shown has not been seen on a real document yet: the only real finding in review has no known place, so its text is correctly withheld (see "Not done").
+Outcome: DONE, with one gap. The owner's answers are applied (see the two follow-up sections). Review was checked live on a fake case in review. The text being shown is covered by a mocked browser test, not seen on a real document: the start script cannot turn the AI off, so the live run was skipped as instructed.
 
 ## What was done
 
@@ -111,7 +111,8 @@ Outcome: DONE, with one gap. The owner's three answers are applied (see "Follow-
 ## Commits (hash and message), or "not committed"
 
 - `0ee0271` feat(ui): Review shows the text found, zoom, and Redact all like this (UI task U004)
-- The follow-up commit that applies the owner's answers and updates this report.
+- `617b870` feat(ui): apply the owner's U004 answers (masking from 8 characters, confirm Redact all)
+- The commit that adds the second follow-up to this report (report only, no code).
 
 Not pushed, not merged.
 
@@ -129,9 +130,39 @@ Not pushed, not merged.
    
    The read itself is proven by the unit tests on the real reader and service code. A live check would need a new fake fixture: for example an image-only PDF with a fake SSN starting with 9, scanned poorly enough that text recognition is unsure of it. There is no tracked tool for that (`scripts/testing` has a Python generator, and Python is not installed here), and getting the confidence below 0.8 may take a few tries, each one adding a fake case to the local data.
 
+## Second follow-up: owner's answer (2026-11-18)
+
+**Asked:** no new PDF. Restart the local app with the AI model off, if the start script supports it, and open fixture 401 again under a new fake 9999 number. Check that the text shows in the panel and is masked in the queue, and that the fake value appears nowhere in the backend logs or audit records. If the AI cannot be turned off, skip the live run, make sure a mocked Playwright test covers the panel showing the text, and note it here.
+
+**Result: live run skipped. The start script cannot turn the AI off.**
+- `Start-LexaVault-Local.ps1` always starts the backend with `SECUREDOC_AI_PROVIDER = 'ollama'`.
+- Its only AI switches are `-AiModel`, `-SkipAiWarmup` and `-PullModelIfMissing`; none of them turns the AI off.
+- No case was opened, and no settings or scripts were changed.
+
+**Mocked coverage instead:** `e2e-oidc/review.spec.ts`, test "the full text is only in the decision panel; queue items show only the last 4, and short values not at all". It checks that:
+- the panel shows "Text found", the value `412-55-0193`, and “Borrower SSN: 412-55-0193”;
+- the queue shows `••••0193` and `••••7741`, and no full value;
+- a 3-character score shows only `••••`;
+- browser storage holds no part of the value.
+
+It passed in the last `npm run test:standalone` run (`test:oidc-signin` 26 of 26).
+
+**Not checked live, therefore:**
+- the text showing on a real document;
+- a search of the backend logs and audit records for a live fake value.
+
+What covers those today, in code and tests:
+- the reader and every record holding the text never print it (`toString` is redacted, and tested in `FocusedReviewControllerSerializationTest`);
+- skip log lines carry only a document id and a reason code;
+- the audit entries for a decision carry only the finding type.
+
 ## Questions for the owner
 
-1. **Should I make the fake OCR fixture** described above, to see the found text on a real document? If it works, it would be committed as a clearly fake fixture under `test-data/`. Or is the unit-test proof enough for U004?
+1. **How to see it live later:** a live run needs the AI off. Two ways:
+   - a switch added to the start script (a script change);
+   - turning the AI mode off for the local tenant in Admin (a change to the local settings).
+   
+   Neither was done. Should one of them be part of a later task?
 
 ## Suggested next step
 
