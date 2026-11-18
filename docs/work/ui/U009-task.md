@@ -19,3 +19,13 @@ Do not build either until the owner picks.
 - Every changed screen checked in light and dark, at 1440 px and 1024 px, with the local app (`.\Start-LexaVault-Local.ps1`). Say which local test roles you checked.
 - No raw hex outside `tokens.css`; only documented breakpoints; no new dependency without asking.
 - Commit on `feature/ui-polish`. Do not push or merge.
+
+## Owner's decision (2026-11-18): B
+
+Owner picked **B**, so skip the "decide, then stop" step. Under the agreed install approach (`docs/work/install-onboarding-approach.md`), sign-in is set by the sign-in config file and the setup command at the login hub. There are no sign-in screens in the app.
+
+- **Replace the tab's content** with a read-only card for the IT Administrator: "Your sign-in is managed through the login hub. To change it, contact LexaVault support."
+- **Read-only details:** below that, only details the server already returns: the login system's name and address and when it was last used successfully. Show them as plain text with no edit controls. Add no backend for this; if a detail isn't available, leave it out.
+- **Role mappings** stay where Phase 2 put them. This task does not change them.
+- **Remove the old edit, test and switch-on controls** from this tab in the Case File admin. Leave the legacy pages and their contract untouched.
+- **Test** that the tab shows no edit controls and the right words, for IT Administrator, and that other roles don't see the tab.
