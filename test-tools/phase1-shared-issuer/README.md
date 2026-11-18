@@ -28,7 +28,11 @@ Everything is in Docker Compose project `lexavault-phase1`, and every container 
 ```powershell
 .\test-tools\phase1-shared-issuer\Start-Phase1.ps1         # containers, backend, schema proof, seed
 .\test-tools\phase1-shared-issuer\Invoke-Phase1Checks.ps1  # scripted checks; results in phase1-run\results
-.\test-tools\phase1-shared-issuer\Remove-Phase1.ps1 -KeepContainers  # stop the backend only
+.\test-tools\phase1-shared-issuer\Start-Phase1Ui.ps1      # UI, Vite dev server, http://localhost:15173/
+.\test-tools\phase1-shared-issuer\Start-Phase1UiProd.ps1  # UI, production build, http://localhost:15174/
+node test-tools/phase1-shared-issuer/Invoke-Phase1BrowserSignin.mjs --mode dev   # real browser sign-in, 4 users
+node test-tools/phase1-shared-issuer/Invoke-Phase1BrowserSignin.mjs --mode prod  # same, against the production build
+.\test-tools\phase1-shared-issuer\Remove-Phase1.ps1 -KeepContainers  # stop the backend and UIs only
 .\test-tools\phase1-shared-issuer\Remove-Phase1.ps1        # remove everything Phase 1 created
 ```
 

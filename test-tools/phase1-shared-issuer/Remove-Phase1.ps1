@@ -23,7 +23,7 @@ param([switch]$KeepContainers)
 . (Join-Path $PSScriptRoot 'Phase1-Common.ps1')
 function Write-Step([string]$Text) { Write-Host "[phase1] $Text" }
 
-foreach ($name in @('ui', 'backend')) {
+foreach ($name in @('ui', 'ui-prod', 'backend')) {
     $proc = Get-Phase1OwnedProcess $name
     if ($proc) {
         Write-Step "Stopping Phase 1 $name (PID $($proc.ProcessId))."

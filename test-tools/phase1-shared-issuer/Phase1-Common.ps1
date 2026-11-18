@@ -109,6 +109,54 @@ function Read-Phase1EnvFile {
 
 function Get-Phase1PidFile([string]$Name) { Join-Path $Phase1.PidDir "$Name.pid" }
 
+function Sync-Phase1KeycloakClients {
+    # The realm import ignores realms that already exist. This makes the running throwaway Keycloak match the
+    # realm files for clients: creates missing clients, and updates redirect URIs, web origins and the
+    # post-logout redirect of existing ones. The realm files stay the single source. Never prints a secret.
+    $secrets = Read-Phase1EnvFile
+    $kc = "http://localhost:$($Phase1.KeycloakPort)"
+    $adminToken = (Invoke-RestMethod -Method Post -Uri "$kc/realms/master/protocol/openid-connect/token" `
+        -ContentType 'application/x-www-form-urlencoded' `
+        -Body @{ grant_type = 'password'; client_id = 'admin-cli'; username = 'phase1-admin'; password = $secrets['PHASE1_KC_ADMIN_PASSWORD'] }).access_token
+    $headers = @{ Authorization = "Bearer $adminToken" }
+    try {
+        foreach ($realmFile in Get-ChildItem -LiteralPath (Join-Path $Phase1.ToolDir 'keycloak') -Filter '*.json') {
+            $realmRep = Get-Content -LiteralPath $realmFile.FullName -Raw | ConvertFrom-Json
+            foreach ($client in @($realmRep.clients)) {
+                # Assign first, then wrap: Windows PowerShell 5.1 passes a JSON array from Invoke-RestMethod as ONE object.
+                $haveRaw = Invoke-RestMethod -Uri "$kc/admin/realms/$($realmRep.realm)/clients?clientId=$($client.clientId)" -Headers $headers
+                $have = @($haveRaw)
+                if ($have.Count -eq 0) {
+                    Invoke-RestMethod -Method Post -Uri "$kc/admin/realms/$($realmRep.realm)/clients" -Headers $headers `
+                        -ContentType 'application/json' -Body ($client | ConvertTo-Json -Depth 10) | Out-Null
+                    Write-Host "[phase1] Created missing Keycloak client $($client.clientId) in realm $($realmRep.realm)."
+                    continue
+                }
+                # Only clients whose realm-file entry lists redirect URIs (the browser client) are compared.
+                if ($client.PSObject.Properties.Name -notcontains 'redirectUris') { continue }
+                $current = $have[0]
+                function Get-Phase1Prop($obj, [string]$name) { if ($null -ne $obj -and $obj.PSObject.Properties.Name -contains $name) { $obj.$name } else { $null } }
+                $wantRedirects = @(Get-Phase1Prop $client 'redirectUris') -join '|'
+                $wantOrigins = @(Get-Phase1Prop $client 'webOrigins') -join '|'
+                $wantLogout = [string](Get-Phase1Prop (Get-Phase1Prop $client 'attributes') 'post.logout.redirect.uris')
+                $haveLogout = [string](Get-Phase1Prop (Get-Phase1Prop $current 'attributes') 'post.logout.redirect.uris')
+                $haveRedirects = @(Get-Phase1Prop $current 'redirectUris') -join '|'
+                $haveOrigins = @(Get-Phase1Prop $current 'webOrigins') -join '|'
+                if ($haveRedirects -ne $wantRedirects -or $haveOrigins -ne $wantOrigins -or ($wantLogout -and $haveLogout -ne $wantLogout)) {
+                    $current | Add-Member -NotePropertyName 'redirectUris' -NotePropertyValue @($client.redirectUris) -Force
+                    $current | Add-Member -NotePropertyName 'webOrigins' -NotePropertyValue @(Get-Phase1Prop $client 'webOrigins') -Force
+                    if ($wantLogout) { $current.attributes | Add-Member -NotePropertyName 'post.logout.redirect.uris' -NotePropertyValue $wantLogout -Force }
+                    Invoke-RestMethod -Method Put -Uri "$kc/admin/realms/$($realmRep.realm)/clients/$($current.id)" -Headers $headers `
+                        -ContentType 'application/json' -Body ($current | ConvertTo-Json -Depth 10) | Out-Null
+                    Write-Host "[phase1] Updated redirect URIs and web origins of Keycloak client $($client.clientId) in realm $($realmRep.realm)."
+                }
+            }
+        }
+    } finally {
+        $adminToken = $null; $headers = $null
+    }
+}
+
 function Get-Phase1OwnedProcess([string]$Name) {
     # Returns the process only if it is still the one Phase 1 started (java/node with phase1-run on its command line).
     $pidFile = Get-Phase1PidFile $Name

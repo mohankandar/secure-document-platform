@@ -107,22 +107,8 @@ $adminToken = (Invoke-RestMethod -Method Post -Uri "http://localhost:$($Phase1.K
 $userPasswords = Get-Content -LiteralPath $Phase1.UsersFile -Raw | ConvertFrom-Json
 $adminHeaders = @{ Authorization = "Bearer $adminToken" }
 
-# The realm import ignores realms that already exist, so clients added to the realm files later are
-# created here if missing. The realm files stay the single source of truth.
-foreach ($realmFile in Get-ChildItem -LiteralPath (Join-Path $Phase1.ToolDir 'keycloak') -Filter '*.json') {
-    $realmRep = Get-Content -LiteralPath $realmFile.FullName -Raw | ConvertFrom-Json
-    foreach ($client in @($realmRep.clients)) {
-        # Assign first, then wrap: Windows PowerShell 5.1 passes a JSON array from Invoke-RestMethod as ONE
-        # object, so @(Invoke-RestMethod ...) of an empty array would count 1.
-        $haveRaw = Invoke-RestMethod -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$($realmRep.realm)/clients?clientId=$($client.clientId)" -Headers $adminHeaders
-        $have = @($haveRaw)
-        if ($have.Count -eq 0) {
-            Invoke-RestMethod -Method Post -Uri "http://localhost:$($Phase1.KeycloakPort)/admin/realms/$($realmRep.realm)/clients" `
-                -Headers $adminHeaders -ContentType 'application/json' -Body ($client | ConvertTo-Json -Depth 10) | Out-Null
-            Write-Step "Created missing Keycloak client $($client.clientId) in realm $($realmRep.realm) from $($realmFile.Name)."
-        }
-    }
-}
+# The realm import ignores realms that already exist: bring the running clients in line with the realm files.
+Sync-Phase1KeycloakClients
 foreach ($pair in @(@($Phase1.Realm, $Phase1.Users), @($Phase1.OtherRealm, $Phase1.OtherUsers))) {
     $realm = $pair[0]
     foreach ($u in $pair[1]) {

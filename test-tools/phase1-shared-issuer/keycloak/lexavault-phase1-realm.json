@@ -63,11 +63,11 @@
       "directAccessGrantsEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:15173/*"],
-      "webOrigins": ["http://localhost:15173"],
+      "redirectUris": ["http://localhost:15173/*", "http://localhost:15174/*"],
+      "webOrigins": ["http://localhost:15173", "http://localhost:15174"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:15173/*"
+        "post.logout.redirect.uris": "http://localhost:15173/*##http://localhost:15174/*"
       },
       "protocolMappers": [
         {
