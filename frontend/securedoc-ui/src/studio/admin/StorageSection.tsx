@@ -5,15 +5,18 @@ import type { CreateProcessingStorageProviderRequest, ProcessingStorageOverview,
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
-import { ConfirmDialog, Loading, SelectField, TextField, humanize, when } from './shared';
+import { ConfirmDialog, Loading, SelectField, TextField, when } from './shared';
+import { latestChecks, storageKind, storageReadiness, storageStatus, storageUsedBy, storageValidated } from './platformRules';
 
 type ProviderType = CreateProcessingStorageProviderRequest['providerType'];
 type Pending = { kind: 'default' | 'retire'; provider: ProcessingStorageProvider } | null;
 
+/** Admin › Platform operations › Processing storage (UI task U010, finding 26). Platform Operations only. */
 export default function StorageSection() {
   const toast = useToast();
   const { data, error, mutate, isValidating } = useSWR<ProcessingStorageOverview>('platform-storage', () => apiClient.getProcessingStorageOverview(), { revalidateOnFocus: false });
   const [busy, setBusy] = useState('');
+  const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [providerType, setProviderType] = useState<ProviderType>('SHARED_FILESYSTEM');
   const [rootPath, setRootPath] = useState('');
@@ -28,14 +31,11 @@ export default function StorageSection() {
   if (!data) return <Loading error={error} retry={() => mutate()} label="Processing storage" />;
   const o = data;
 
-  const healthyNodes = (providerId: string) =>
-    new Set(o.nodeValidations.filter((v) => v.providerId === providerId && v.status === 'HEALTHY').map((v) => `${v.nodeId}:${v.processInstanceId}`)).size;
-  const validated = (providerId: string) => o.activeNodeCount >= 1 && healthyNodes(providerId) === o.activeNodeCount;
   const byId = (id?: string | null) => o.providers.find((p) => p.id === id);
-  const defaultProvider = byId(o.deploymentDefault?.providerId);
+  const tenantName = (id?: string | null) => o.tenants.find((t) => t.tenantId === id)?.name ?? 'One customer';
   const assignedIds = new Set([...(o.deploymentDefault ? [o.deploymentDefault.providerId] : []), ...o.tenantOverrides.map((a) => a.providerId)]);
-  const selectable = o.providers.filter((p) => p.status !== 'RETIRED');
-  const localUnsafe = o.activeNodeCount > 1 && o.providers.some((p) => assignedIds.has(p.id) && p.providerType === 'LOCAL_FILESYSTEM');
+  const usable = o.providers.filter((p) => p.status !== 'RETIRED');
+  const readiness = storageReadiness(o);
 
   async function run(key: string, action: () => Promise<unknown>, success: string) {
     setBusy(key);
@@ -45,7 +45,7 @@ export default function StorageSection() {
       toast(success);
       return true;
     } catch (e) {
-      toast(errorMessage(e, 'Processing storage operation failed.'), 'danger');
+      toast(errorMessage(e, "That didn't work. Nothing was changed."), 'danger');
       return false;
     } finally {
       setBusy('');
@@ -54,16 +54,16 @@ export default function StorageSection() {
 
   async function create(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !rootPath.trim()) { setFormError('Provider name and filesystem path are required.'); return; }
+    if (!name.trim() || !rootPath.trim()) { setFormError('Give the storage a name and a folder path.'); return; }
     setFormError('');
     setBusy('create');
     try {
       const created = await apiClient.createProcessingStorageProvider({ name: name.trim(), providerType, rootPath: rootPath.trim() });
-      setName(''); setRootPath('');
+      setName(''); setRootPath(''); setAdding(false);
       await mutate();
-      toast(`${created.name} created as a candidate. Test it from every active node before activation.`);
+      toast(`${created.name} added. Next: test it from every server.`);
     } catch (err) {
-      setFormError(errorMessage(err, 'Unable to create processing storage provider.'));
+      setFormError(errorMessage(err, "The storage couldn't be added."));
     } finally {
       setBusy('');
     }
@@ -78,201 +78,78 @@ export default function StorageSection() {
       if (kind === 'default') await apiClient.activateProcessingStorageDefault(provider.id);
       else await apiClient.retireProcessingStorageProvider(provider.id);
       await mutate();
-      toast(kind === 'default' ? `${provider.name} is now the deployment default.` : `${provider.name} retired.`);
+      toast(kind === 'default' ? `${provider.name} is now the default.` : `${provider.name} is no longer used for new work.`);
       setPending(null);
     } catch (e) {
-      setPendingError(errorMessage(e, 'Processing storage operation failed.'));
+      setPendingError(errorMessage(e, "That didn't work. Nothing was changed."));
     } finally {
       setBusy('');
     }
   }
 
   function applyOverride() {
-    const tenant = o.tenants.find((t) => t.tenantId === tenantId);
     const provider = byId(overrideProviderId);
-    void run(`tenant:${tenantId}`, () => apiClient.activateProcessingStorageTenant(overrideProviderId, tenantId), `Tenant override activated: ${tenant?.name || tenantId} → ${provider?.name || overrideProviderId}.`)
+    void run(`tenant:${tenantId}`, () => apiClient.activateProcessingStorageTenant(overrideProviderId, tenantId), `${tenantName(tenantId)} now uses ${provider?.name ?? 'its own storage'}.`)
       .then((ok) => { if (ok) { setTenantId(''); setOverrideProviderId(''); } });
   }
 
   return (
     <>
-      <section className="cf-ad-readiness" data-ready={o.ready || undefined} aria-labelledby="cf-st-ready">
-        <div>
-          <span className="cf-eyebrow">Platform readiness</span>
-          <h2 id="cf-st-ready">{o.ready ? 'Processing storage is ready' : 'Processing storage requires attention'}</h2>
-          <p>
-            {o.ready
-              ? 'New processing cycles can use the active deployment or tenant provider. Final redacted delivery remains configured separately.'
-              : localUnsafe
-                ? 'Multiple application nodes are active, so LOCAL_FILESYSTEM is not cluster-safe. Activate a validated SHARED_FILESYSTEM provider before document intake or processing can continue.'
-                : 'Document processing stays fail-closed until a deployment default exists and validates healthy on every active application node.'}
-          </p>
-        </div>
-        <div className="cf-ad-readiness-meta">
-          <span className="cf-ad-tag" data-tone={o.ready ? undefined : 'danger'}>{o.ready ? 'Ready' : 'Not ready'}</span>
-          <span>{o.activeNodeCount} active node{o.activeNodeCount === 1 ? '' : 's'}</span>
-          <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy || isValidating} onClick={() => mutate()}>Refresh</button>
-        </div>
-      </section>
-
-      <section className="cf-ad-card" aria-labelledby="cf-st-default">
+      <section className="cf-ad-card" aria-labelledby="cf-st-head">
         <header className="cf-ad-card-head">
           <div>
-            <h2 id="cf-st-default">Deployment default</h2>
-            <p>Used when a tenant has no dedicated override. A provider switch applies to new processing cycles only.</p>
+            <h2 id="cf-st-head">Where LexaVault works on documents</h2>
+            <p>Temporary space used while documents are redacted. Delivered copies go to SDV, not here.</p>
+          </div>
+          <div className="cf-ad-inline-actions">
+            <span className="cf-ad-tag" data-tone={readiness.ready ? undefined : 'danger'}>{readiness.title}</span>
+            <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy || isValidating} onClick={() => mutate()}>Refresh</button>
           </div>
         </header>
-        {defaultProvider ? (
-          <div className="cf-ad-conn">
-            <span className="cf-ad-health" data-h={validated(defaultProvider.id) ? 'ok' : 'danger'} aria-hidden="true" />
-            <div className="cf-ad-conn-main">
-              <div className="cf-ad-conn-name">{defaultProvider.name}<span className="cf-ad-tag">{humanize(defaultProvider.status)}</span></div>
-              <div className="cf-ad-conn-meta"><span>{humanize(defaultProvider.providerType)}</span><span>Configuration v{defaultProvider.configurationVersion}</span></div>
-              <code className="cf-ad-conn-endpoint cf-ad-mono">{defaultProvider.rootPath}</code>
-            </div>
-            <span className="cf-ad-status">{healthyNodes(defaultProvider.id)} / {o.activeNodeCount} nodes healthy</span>
-          </div>
-        ) : (
-          <Notice tone="mark"><strong>Configuration required.</strong> Create a provider, test it from all active nodes, then activate it as the deployment default.</Notice>
-        )}
-      </section>
+        {!readiness.ready && <Notice tone="danger">{readiness.note}</Notice>}
 
-      <section className="cf-ad-card" aria-labelledby="cf-st-create">
-        <header className="cf-ad-card-head">
-          <div>
-            <h2 id="cf-st-create">Create processing storage</h2>
-            <p>The filesystem root must already exist. The platform uses the operating-system/service identity and does not store SMB/NFS passwords.</p>
-          </div>
-        </header>
-        <form className="cf-ad-form" onSubmit={create} noValidate>
-          <div className="cf-ad-grid">
-            <TextField label="Name" value={name} onChange={setName} required maxLength={120} placeholder="Production Processing Storage" invalid={!!formError && !name.trim()} />
-            <SelectField<ProviderType> label="Type" value={providerType} onChange={setProviderType} options={[['SHARED_FILESYSTEM', 'Shared filesystem'], ['LOCAL_FILESYSTEM', 'Local filesystem']]} />
-          </div>
-          <TextField label="Filesystem path" value={rootPath} onChange={setRootPath} required mono invalid={!!formError && !rootPath.trim()}
-            placeholder={providerType === 'SHARED_FILESYSTEM' ? '\\\\NAS01\\DocumentPlatform\\Processing or /mnt/document-platform/processing' : 'C:\\ProgramData\\DocumentPlatform\\Processing'}
-            hint={<>For multi-node deployments use <strong>Shared filesystem</strong>. Local filesystem cannot be activated while more than one application node is active.</>} />
-          {formError && <Notice tone="danger">{formError}</Notice>}
-          <div className="cf-ad-card-foot">
-            <button type="submit" className="cf-btn" data-variant="solid" data-size="sm" disabled={!!busy}>{busy === 'create' && <Spinner label="Creating" />}Create candidate</button>
-          </div>
-        </form>
-      </section>
-
-      <section className="cf-ad-card" aria-labelledby="cf-st-providers">
-        <header className="cf-ad-card-head">
-          <div>
-            <h2 id="cf-st-providers">Providers and cluster validation <span className="cf-ad-tag">{o.providers.length}</span></h2>
-            <p>Test connection probes read/write/delete access from the current node immediately; other active nodes report on their normal monitor interval.</p>
-          </div>
-        </header>
         {o.providers.length === 0 ? (
-          <p className="cf-ad-hint">No processing-storage providers have been created.</p>
-        ) : (
-          <ul className="cf-ad-conns">
-            {o.providers.map((p) => {
-              const isDefault = o.deploymentDefault?.providerId === p.id;
-              const retired = p.status === 'RETIRED';
-              const full = validated(p.id);
-              const nodes = o.nodeValidations.filter((v) => v.providerId === p.id);
-              return (
-                <li key={p.id} className="cf-ad-conn cf-ad-conn-top">
-                  <span className="cf-ad-health" data-h={retired ? undefined : full ? 'ok' : 'warn'} aria-hidden="true" />
-                  <div className="cf-ad-conn-main">
-                    <div className="cf-ad-conn-name">
-                      {p.name}
-                      <span className="cf-ad-tag">{humanize(p.status)}</span>
-                      {isDefault && <span className="cf-ad-tag">Deployment default</span>}
-                    </div>
-                    <div className="cf-ad-conn-meta"><span>{humanize(p.providerType)} · v{p.configurationVersion}</span><span>{healthyNodes(p.id)} / {o.activeNodeCount} active nodes healthy</span></div>
-                    <code className="cf-ad-conn-endpoint cf-ad-mono">{p.rootPath}</code>
-                    {o.activeNodeCount < 1 && <span className="cf-ad-hint">No active application heartbeat detected.</span>}
-                    {nodes.length > 0 && (
-                      <ul className="cf-ad-nodes" aria-label={`${p.name} node validations`}>
-                        {nodes.map((v) => (
-                          <li key={`${v.nodeId}:${v.processInstanceId}`}>
-                            <span className="cf-ad-mono">{v.nodeId}</span>
-                            <span className={v.status === 'HEALTHY' ? '' : 'cf-danger-text'}>{humanize(v.status)}{v.failureCode ? ` · ${humanize(v.failureCode)}` : ''}</span>
-                            <time dateTime={v.checkedAt}>{when(v.checkedAt)}</time>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  {!retired && (
-                    <div className="cf-ad-conn-actions">
-                      <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy}
-                        onClick={() => void run(`test:${p.id}`, () => apiClient.testProcessingStorageProvider(p.id), `${p.name} validation requested.`)}>
-                        {busy === `test:${p.id}` && <Spinner label="Testing" />}Test connection
-                      </button>
-                      {!isDefault && (
-                        <button type="button" className="cf-btn" data-size="sm" disabled={!!busy || !full} title={full ? undefined : 'Every active node must validate healthy first'}
-                          onClick={() => { setPendingError(null); setPending({ kind: 'default', provider: p }); }}>
-                          Activate default
-                        </button>
-                      )}
-                      {!assignedIds.has(p.id) && (
-                        <button type="button" className="cf-btn" data-variant="danger" data-size="sm" disabled={!!busy}
-                          onClick={() => { setPendingError(null); setPending({ kind: 'retire', provider: p }); }}>
-                          Retire
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      <section className="cf-ad-card" aria-labelledby="cf-st-tenants">
-        <header className="cf-ad-card-head">
-          <div>
-            <h2 id="cf-st-tenants">Tenant overrides</h2>
-            <p>Tenants inherit the deployment default unless Platform Operations assigns a dedicated validated provider.</p>
-          </div>
-        </header>
-        <div className="cf-ad-toolbar">
-          <div className="cf-field">
-            <label htmlFor={tenantSelectId}><span>Tenant</span></label>
-            <select id={tenantSelectId} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              <option value="">Select tenant</option>
-              {o.tenants.map((t) => <option key={t.tenantId} value={t.tenantId}>{t.name} ({t.slug})</option>)}
-            </select>
-          </div>
-          <div className="cf-field">
-            <label htmlFor={providerSelectId}><span>Provider</span></label>
-            <select id={providerSelectId} value={overrideProviderId} onChange={(e) => setOverrideProviderId(e.target.value)}>
-              <option value="">Select validated provider</option>
-              {selectable.map((p) => <option key={p.id} value={p.id} disabled={!validated(p.id)}>{p.name}{validated(p.id) ? '' : ' (validation required)'}</option>)}
-            </select>
-          </div>
-          <button type="button" className="cf-btn" data-size="sm" disabled={!!busy || !tenantId || !overrideProviderId || !validated(overrideProviderId)} onClick={applyOverride}>
-            {busy === `tenant:${tenantId}` && <Spinner label="Applying" />}Apply override
-          </button>
-        </div>
-        {o.tenants.length === 0 ? (
-          <p className="cf-ad-hint">No provisioned tenants are available for storage assignment.</p>
+          <p className="cf-ad-hint">No storage has been added yet.</p>
         ) : (
           <div className="cf-ad-table-wrap">
-            <table className="cf-ad-table cf-ad-table-left">
-              <thead><tr><th scope="col">Tenant</th><th scope="col">Effective provider</th><th scope="col">Source</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+            <table className="cf-ad-table cf-ad-table-left cf-ad-storage">
+              <thead><tr><th scope="col">Storage</th><th scope="col">Used by</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
-                {o.tenants.map((t) => {
-                  const override = o.tenantOverrides.find((a) => a.tenantId === t.tenantId);
-                  const effective = byId(override?.providerId || o.deploymentDefault?.providerId);
+                {o.providers.map((p) => {
+                  const isDefault = o.deploymentDefault?.providerId === p.id;
+                  const retired = p.status === 'RETIRED';
+                  const full = storageValidated(o, p.id);
+                  const s = storageStatus(p, o);
                   return (
-                    <tr key={t.tenantId}>
-                      <th scope="row"><span className="cf-ad-cell-title">{t.name}</span><span className="cf-ad-cell-sub">{t.slug} · {humanize(t.status)}</span></th>
-                      <td>{effective?.name || 'Not configured'}</td>
-                      <td>{override ? 'Tenant override' : 'Deployment default'}</td>
+                    <tr key={p.id}>
+                      <th scope="row">
+                        <span className="cf-ad-cell-title">{p.name}</span>
+                        <span className="cf-ad-cell-sub cf-mono">{p.rootPath}</span>
+                      </th>
+                      <td>{storageUsedBy(p, o)}</td>
                       <td>
-                        {override && (
-                          <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy}
-                            onClick={() => void run(`clear:${t.tenantId}`, () => apiClient.clearProcessingStorageTenantOverride(t.tenantId), `${t.name} now inherits the deployment default.`)}>
-                            Use default
-                          </button>
+                        <span className="cf-ad-conn-status"><span className="cf-ad-health" data-h={s.tone} aria-hidden="true" /> <span data-tone={s.tone}>{s.word}</span>{s.rest.length > 0 && ` · ${s.rest.join(' · ')}`}</span>
+                      </td>
+                      <td>
+                        {!retired && (
+                          <div className="cf-ad-conn-actions">
+                            <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy}
+                              onClick={() => void run(`test:${p.id}`, () => apiClient.testProcessingStorageProvider(p.id), `${p.name} tested from this server. Other servers report within a few minutes.`)}>
+                              {busy === `test:${p.id}` && <Spinner label="Testing" />}Test
+                            </button>
+                            {!isDefault && (
+                              <button type="button" className="cf-btn" data-size="sm" disabled={!!busy || !full} title={full ? undefined : 'It must work from every server first'}
+                                onClick={() => { setPendingError(null); setPending({ kind: 'default', provider: p }); }}>
+                                Make default
+                              </button>
+                            )}
+                            {!assignedIds.has(p.id) && (
+                              <button type="button" className="cf-btn" data-variant="danger" data-size="sm" disabled={!!busy}
+                                onClick={() => { setPendingError(null); setPending({ kind: 'retire', provider: p }); }}>
+                                Stop using…
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -282,16 +159,120 @@ export default function StorageSection() {
             </table>
           </div>
         )}
+
+        {adding ? (
+          <form className="cf-ad-form cf-ad-block" onSubmit={create} noValidate aria-labelledby="cf-st-add">
+            <h3 id="cf-st-add" className="cf-ad-block-title">Add storage</h3>
+            <div className="cf-ad-grid">
+              <TextField label="Name" value={name} onChange={setName} required maxLength={120} placeholder="Shared processing folder" invalid={!!formError && !name.trim()} />
+              <SelectField<ProviderType> label="Kind" value={providerType} onChange={setProviderType} options={[['SHARED_FILESYSTEM', storageKind('SHARED_FILESYSTEM')], ['LOCAL_FILESYSTEM', storageKind('LOCAL_FILESYSTEM')]]} />
+            </div>
+            <TextField label="Folder path" value={rootPath} onChange={setRootPath} required mono invalid={!!formError && !rootPath.trim()}
+              placeholder={providerType === 'SHARED_FILESYSTEM' ? '\\\\NAS01\\LexaVault\\Processing' : 'D:\\LexaVault\\Processing'}
+              hint={<>The folder must already exist. LexaVault uses the server's own account and stores no network passwords. With more than one server, use a <strong>shared network folder</strong>.</>} />
+            {formError && <Notice tone="danger">{formError}</Notice>}
+            <div className="cf-ad-card-foot">
+              <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={busy === 'create'} onClick={() => { setAdding(false); setFormError(''); }}>Cancel</button>
+              <button type="submit" className="cf-btn" data-variant="solid" data-size="sm" disabled={!!busy}>{busy === 'create' && <Spinner label="Adding" />}Add storage</button>
+            </div>
+          </form>
+        ) : (
+          <div className="cf-ad-card-foot cf-ad-foot-left">
+            <button type="button" className="cf-btn" data-size="sm" onClick={() => setAdding(true)}>Add storage</button>
+            <span className="cf-ad-hint">Add → Test from every server → Make default, or give it to one customer.</span>
+          </div>
+        )}
       </section>
+
+      <section className="cf-ad-card" aria-labelledby="cf-st-tenants">
+        <header className="cf-ad-card-head">
+          <div>
+            <h2 id="cf-st-tenants">Give one customer its own storage</h2>
+            <p>Everyone else keeps using the default. A change applies to new work only.</p>
+          </div>
+        </header>
+        {o.tenants.length === 0 ? (
+          <p className="cf-ad-hint">There are no customers yet.</p>
+        ) : (
+          <>
+            <div className="cf-ad-toolbar">
+              <div className="cf-field">
+                <label htmlFor={tenantSelectId}><span>Customer</span></label>
+                <select id={tenantSelectId} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+                  <option value="">Choose a customer</option>
+                  {o.tenants.map((t) => <option key={t.tenantId} value={t.tenantId}>{t.name}</option>)}
+                </select>
+              </div>
+              <div className="cf-field">
+                <label htmlFor={providerSelectId}><span>Storage</span></label>
+                <select id={providerSelectId} value={overrideProviderId} onChange={(e) => setOverrideProviderId(e.target.value)}>
+                  <option value="">Choose a storage</option>
+                  {usable.map((p) => { const ok = storageValidated(o, p.id); return <option key={p.id} value={p.id} disabled={!ok}>{p.name}{ok ? '' : ' (test it first)'}</option>; })}
+                </select>
+              </div>
+              <button type="button" className="cf-btn" data-size="sm" disabled={!!busy || !tenantId || !overrideProviderId || !storageValidated(o, overrideProviderId)} onClick={applyOverride}>
+                {busy === `tenant:${tenantId}` && <Spinner label="Applying" />}Apply
+              </button>
+            </div>
+            {o.tenantOverrides.length > 0 && (
+              <ul className="cf-ad-conns" aria-label="Customers with their own storage">
+                {o.tenantOverrides.map((a) => (
+                  <li key={a.id} className="cf-ad-conn">
+                    <div className="cf-ad-conn-main">
+                      <div className="cf-ad-conn-name">{tenantName(a.tenantId)}</div>
+                      <div className="cf-ad-conn-meta"><span>Uses {byId(a.providerId)?.name ?? 'a storage that no longer exists'}</span></div>
+                    </div>
+                    <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy}
+                      onClick={() => void run(`clear:${a.tenantId}`, () => apiClient.clearProcessingStorageTenantOverride(a.tenantId ?? ''), `${tenantName(a.tenantId)} now uses the default.`)}>
+                      Use the default
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <details className="cf-disclosure">
+        <summary>Technical details</summary>
+        <div className="cf-ad-stack">
+          <dl className="cf-ad-facts cf-ad-facts-compact">
+            <div><dt>Active nodes</dt><dd>{o.activeNodeCount}</dd></div>
+            <div><dt>Ready</dt><dd className="cf-ad-mono">{String(o.ready)}</dd></div>
+            <div><dt>Deployment default</dt><dd className="cf-ad-mono">{o.deploymentDefault ? `${o.deploymentDefault.id} → ${o.deploymentDefault.providerId}` : 'None'}</dd></div>
+            {o.tenantOverrides.map((a) => <div key={a.id}><dt>Tenant override</dt><dd className="cf-ad-mono">{a.id} · {a.tenantId} → {a.providerId}</dd></div>)}
+          </dl>
+          <div className="cf-ad-table-wrap">
+            <table className="cf-ad-table cf-ad-table-left">
+              <thead><tr><th scope="col">Provider</th><th scope="col">Type · status · version</th><th scope="col">Node validations</th></tr></thead>
+              <tbody>
+                {o.providers.map((p) => (
+                  <tr key={p.id}>
+                    <th scope="row"><span className="cf-ad-cell-title">{p.name}</span><span className="cf-ad-cell-sub cf-ad-mono">{p.id}</span></th>
+                    <td className="cf-ad-mono">{p.providerType} · {p.status} · v{p.configurationVersion}</td>
+                    <td>
+                      {latestChecks(o.nodeValidations, p.id).map((v) => (
+                        <div key={`${v.nodeId}:${v.processInstanceId}`} className="cf-ad-mono">{v.nodeId} · {v.status}{v.failureCode ? ` · ${v.failureCode}` : ''} · {when(v.checkedAt)}</div>
+                      ))}
+                      {latestChecks(o.nodeValidations, p.id).length === 0 && '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
 
       <ConfirmDialog
         open={!!pending}
-        title={pending?.kind === 'retire' ? 'Retire storage provider' : 'Activate deployment default'}
-        facts={pending ? [['Provider', pending.provider.name], ['Type', humanize(pending.provider.providerType)], ['Path', <code className="cf-ad-mono" key="p">{pending.provider.rootPath}</code>], ['Configuration', `v${pending.provider.configurationVersion}`]] : []}
+        title={pending?.kind === 'retire' ? `Stop using ${pending.provider.name}?` : `Make ${pending?.provider.name ?? ''} the default?`}
+        facts={pending ? [['Storage', pending.provider.name], ['Kind', storageKind(pending.provider.providerType)], ['Folder', <code className="cf-ad-mono" key="p">{pending.provider.rootPath}</code>]] : []}
         consequence={pending?.kind === 'retire'
-          ? 'It remains readable for existing artifacts but cannot receive new assignments.'
-          : 'New processing cycles will use this provider. Existing artifacts remain tied to their original provider.'}
-        confirmLabel={pending?.kind === 'retire' ? 'Retire provider' : 'Activate default'}
+          ? 'New work will not be placed here, and it cannot be made the default or given to a customer again. Documents already being worked on here can still be read.'
+          : 'New work for every customer without its own storage goes here. Documents already being worked on stay where they are.'}
+        confirmLabel={pending?.kind === 'retire' ? 'Stop using it' : 'Make default'}
         danger={pending?.kind === 'retire'}
         busy={!!pending && busy === `${pending.kind}:${pending.provider.id}`}
         error={pendingError}

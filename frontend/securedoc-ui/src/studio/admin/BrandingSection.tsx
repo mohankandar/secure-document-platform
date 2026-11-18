@@ -1,4 +1,4 @@
-import { useId, useState, type CSSProperties } from 'react';
+import { useId, useState } from 'react';
 import useSWR from 'swr';
 import { apiClient } from '../../api/client';
 import type { BrandingConfiguration, BrandingOverview, BrandingUpdateRequest, TenantBrandingDetail } from '../../types';
@@ -94,181 +94,128 @@ function ColorField({ label, value, fallback, onChange, hint, invalid }: { label
 }
 
 function BrandingForm({ value, onChange, tenantMode }: { value: Editable; onChange: (v: Editable) => void; tenantMode?: boolean }) {
-  const inherit = (fallback: string) => (tenantMode ? 'Inherit deployment' : fallback);
+  const inherit = (fallback: string) => (tenantMode ? "Everyone's look" : fallback);
   const accentOk = !value.accentColor || accessibleAccent(value.accentColor);
   const setAsset = (k: Asset) => (dataUrl: string | null, clear: boolean) => onChange({ ...value, assets: { ...value.assets, [k]: { dataUrl, clear, changed: true } } });
   return (
     <div className="cf-ad-form">
-      {tenantMode && <p className="cf-ad-hint">Leave a field blank to inherit the deployment brand.</p>}
       <div className="cf-ad-grid">
-        <TextField label="Application name" value={value.applicationName} maxLength={80} placeholder={inherit(FALLBACK.applicationName)} onChange={(v) => onChange({ ...value, applicationName: v })} />
-        <TextField label="Short name" value={value.shortName} maxLength={32} placeholder={inherit(FALLBACK.shortName)} onChange={(v) => onChange({ ...value, shortName: v })} />
-        <TextField label="Organization name" value={value.organizationName} maxLength={100} placeholder={inherit('Customer organization')} onChange={(v) => onChange({ ...value, organizationName: v })} />
-        <TextField label="Browser/page title" value={value.pageTitle} maxLength={100} placeholder={inherit(FALLBACK.pageTitle)} onChange={(v) => onChange({ ...value, pageTitle: v })} />
+        <TextField label="Product name" value={value.applicationName} maxLength={80} placeholder={inherit(FALLBACK.applicationName)} onChange={(v) => onChange({ ...value, applicationName: v })} />
+        <TextField label="Organization name" value={value.organizationName} maxLength={100} placeholder={inherit('Your organization')} onChange={(v) => onChange({ ...value, organizationName: v })}
+          hint="Shown in the account menu, above the entity switch." />
       </div>
-      <div className="cf-ad-grid">
-        <ColorField label="Primary accent" value={value.accentColor} fallback={FALLBACK.accentColor} invalid={!accentOk} onChange={(v) => onChange({ ...value, accentColor: v })}
-          hint={accentOk ? 'Accessible contrast can be generated for UI surfaces.' : 'Choose a color with sufficient contrast (4.5:1 against white).'} />
-        <ColorField label="Secondary brand color" value={value.secondaryColor} fallback={FALLBACK.secondaryColor} onChange={(v) => onChange({ ...value, secondaryColor: v })}
-          hint="Used sparingly for branded accents, never for semantic success, warning or error." />
-      </div>
-      <div className="cf-ad-assets">
-        <AssetField label="Primary logo" help="Navigation and wider layouts. PNG or WebP, max 512 KB." value={value.assets.primaryLogo.dataUrl} maxBytes={512 * 1024} onChange={setAsset('primaryLogo')} />
-        <AssetField label="Compact logo" help="Collapsed sidebar and tablet shell. PNG or WebP, max 512 KB." value={value.assets.compactLogo.dataUrl} maxBytes={512 * 1024} onChange={setAsset('compactLogo')} />
-        <AssetField label="Favicon" help="Browser icon. PNG or WebP, max 128 KB." value={value.assets.favicon.dataUrl} maxBytes={128 * 1024} onChange={setAsset('favicon')} />
-      </div>
+      <ColorField label="Accent colour" value={value.accentColor} fallback={FALLBACK.accentColor} invalid={!accentOk} onChange={(v) => onChange({ ...value, accentColor: v })}
+        hint={accentOk ? 'Used for highlights on a few older screens. Status colours never change.' : 'Pick a darker colour: white text on it must be easy to read (4.5 to 1).'} />
+      <AssetField label="Logo" help="PNG or WebP, up to 512 KB. Shown at the left of the top bar." value={value.assets.primaryLogo.dataUrl} maxBytes={512 * 1024} onChange={setAsset('primaryLogo')} />
+      <details className="cf-disclosure">
+        <summary>More options</summary>
+        <div className="cf-ad-form">
+          <div className="cf-ad-grid">
+            <TextField label="Short name" value={value.shortName} maxLength={32} placeholder={inherit('Same as product name')} onChange={(v) => onChange({ ...value, shortName: v })} hint="Shown in the top bar instead of the product name." />
+            <TextField label="Browser tab title" value={value.pageTitle} maxLength={100} placeholder={inherit(FALLBACK.pageTitle)} onChange={(v) => onChange({ ...value, pageTitle: v })} />
+          </div>
+          <ColorField label="Second colour" value={value.secondaryColor} fallback={FALLBACK.secondaryColor} onChange={(v) => onChange({ ...value, secondaryColor: v })}
+            hint="Used sparingly on older screens, never for success, warning or error." />
+          <div className="cf-ad-assets">
+            <AssetField label="Small logo" help="Used in the top bar instead of the logo. PNG or WebP, up to 512 KB." value={value.assets.compactLogo.dataUrl} maxBytes={512 * 1024} onChange={setAsset('compactLogo')} />
+            <AssetField label="Browser icon" help="The small icon on the browser tab. PNG or WebP, up to 128 KB." value={value.assets.favicon.dataUrl} maxBytes={128 * 1024} onChange={setAsset('favicon')} />
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
 
+/** Today's top bar, as the app draws it (CaseFileApp): small logo or logo, then the short or product name, the nav and the account. */
 function Preview({ value, inherited, label }: { value: Editable; inherited?: BrandingConfiguration | null; label: string }) {
   const app = value.applicationName || inherited?.applicationName || FALLBACK.applicationName;
-  const short = value.shortName || inherited?.shortName || app;
-  const org = value.organizationName || inherited?.organizationName || 'Customer organization';
-  const accent = value.accentColor || inherited?.accentColor || FALLBACK.accentColor;
-  const primary = value.assets.primaryLogo.dataUrl || inherited?.primaryLogoDataUrl;
-  const compact = value.assets.compactLogo.dataUrl || inherited?.compactLogoDataUrl || primary;
-  const mark = compact ? <img src={compact} alt="" /> : app.slice(0, 1).toUpperCase();
+  const word = value.shortName || inherited?.shortName || app;
+  const org = value.organizationName || inherited?.organizationName;
+  const logo = value.assets.compactLogo.dataUrl || inherited?.compactLogoDataUrl || value.assets.primaryLogo.dataUrl || inherited?.primaryLogoDataUrl;
   return (
-    <figure className="cf-ad-preview" style={{ '--preview-accent': HEX.test(accent) ? accent : FALLBACK.accentColor } as CSSProperties}>
-      <figcaption className="sr-only">{label}</figcaption>
-      <div className="cf-ad-preview-bar"><span className="cf-ad-preview-mark">{mark}</span><strong>{short}</strong></div>
-      <div className="cf-ad-preview-body">
-        <div className="cf-ad-preview-side">
-          {primary ? <img className="cf-ad-preview-logo" src={primary} alt="" /> : <strong>{app}</strong>}
-          <small>{org}</small>
-          <span data-active="true">Cases</span><span>New case</span><span>Reports</span>
-        </div>
-        <div className="cf-ad-preview-main"><small>Work</small><strong>Cases</strong><span className="cf-ad-preview-btn">Primary action</span></div>
+    <figure className="cf-ad-preview">
+      <figcaption>Preview (today's top bar)</figcaption>
+      <div className="cf-ad-preview-top" role="img" aria-label={label}>
+        <span className="cf-brand">
+          {logo ? <img src={logo} alt="" className="cf-ad-preview-logo" /> : <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>}
+          <span className="cf-brand-word">{word}</span>
+        </span>
+        <span className="cf-ad-preview-nav"><span data-active="true">Cases</span><span>Review</span></span>
+        <span className="cf-ad-preview-acct"><span className="cf-acct-avatar">YN</span><span>Your name</span></span>
       </div>
+      {org && <p className="cf-ad-hint">Account menu: {org} · Entity</p>}
     </figure>
   );
 }
 
+const EVERYONE = '';
+
 export default function BrandingSection() {
   const { data, error, mutate } = useSWR<BrandingOverview>('platform-branding', () => apiClient.getBrandingOverview(), { revalidateOnFocus: false });
-  const [picked, setPicked] = useState('');
-  const tenantSelectId = useId();
+  const [target, setTarget] = useState(EVERYONE);
+  const targetId = useId();
 
   if (!data) return <Loading error={error} retry={() => mutate()} label="Branding" />;
-  const tenantId = picked || data.tenants[0]?.tenantId || '';
-  const tenant = data.tenants.find((t) => t.tenantId === tenantId) || null;
+  const tenant = data.tenants.find((t) => t.tenantId === target) || null;
 
   return (
-    <>
-      <section className="cf-ad-card" aria-labelledby="cf-br-intro">
-        <header className="cf-ad-card-head">
-          <div>
-            <h2 id="cf-br-intro">Branding and theme</h2>
-            <p>Change customer-facing names, logos and brand colors without changing tenant IDs, licensing identity, APIs, audit records or exported documents. Semantic success, warning and error colors remain platform controlled.</p>
-          </div>
-        </header>
-      </section>
-
-      <DeploymentEditor key={data.deployment?.updatedAt ?? 'none'} config={data.deployment} onSaved={() => mutate()} />
-
-      <section className="cf-ad-card" aria-labelledby="cf-br-tenant">
-        <header className="cf-ad-card-head">
-          <div>
-            <h2 id="cf-br-tenant">Tenant overrides {tenant?.customBranding && <span className="cf-ad-tag">Custom branding</span>}</h2>
-            <p>Override only what a tenant needs; blank values inherit deployment branding.</p>
-          </div>
-        </header>
-        {data.tenants.length === 0 ? (
-          <p className="cf-ad-hint">No provisioned tenants are available for branding.</p>
-        ) : (
-          <>
-            <div className="cf-field cf-ad-narrow">
-              <label htmlFor={tenantSelectId}><span>Tenant</span></label>
-              <select id={tenantSelectId} value={tenantId} onChange={(e) => setPicked(e.target.value)}>
-                {data.tenants.map((t) => <option key={t.tenantId} value={t.tenantId}>{t.tenantName} · {t.tenantSlug}</option>)}
-              </select>
-            </div>
-            {tenant && <TenantEditor key={tenant.tenantId} tenantId={tenant.tenantId} tenantName={tenant.tenantName} custom={tenant.customBranding} inherited={data.deployment} onSaved={() => mutate()} />}
-          </>
-        )}
-      </section>
-    </>
-  );
-}
-
-function DeploymentEditor({ config, onSaved }: { config?: BrandingConfiguration | null; onSaved: () => void }) {
-  const toast = useToast();
-  const [value, setValue] = useState(() => fromConfig(config));
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-
-  async function save() {
-    if (value.accentColor && !accessibleAccent(value.accentColor)) { setErr('Primary accent does not meet the branding contrast requirement.'); return; }
-    setErr(''); setSaving(true);
-    try {
-      await apiClient.updateDeploymentBranding(toRequest(value));
-      toast('Deployment branding saved.');
-      onSaved();
-    } catch (e) {
-      setErr(errorMessage(e, 'Unable to save deployment branding.'));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="cf-ad-card" aria-labelledby="cf-br-dep">
+    <section className="cf-ad-card" aria-labelledby="cf-br-head">
       <header className="cf-ad-card-head">
         <div>
-          <h2 id="cf-br-dep">Deployment branding</h2>
-          <p>Default presentation for this installation and any tenant that does not override it.</p>
+          <h2 id="cf-br-head">Branding</h2>
+          <p>Names, logos and colours people see. Status colours (success, warning, error) never change.</p>
         </div>
       </header>
-      <div className="cf-ad-brand">
-        <BrandingForm value={value} onChange={setValue} />
-        <Preview value={value} label="Deployment branding preview" />
+      <div className="cf-field cf-ad-narrow">
+        <label htmlFor={targetId}><span>Apply to</span></label>
+        <select id={targetId} value={tenant ? target : EVERYONE} onChange={(e) => setTarget(e.target.value)}>
+          <option value={EVERYONE}>Everyone (default)</option>
+          {data.tenants.map((t) => <option key={t.tenantId} value={t.tenantId}>{t.tenantName}{t.customBranding ? ' · own look' : ''}</option>)}
+        </select>
+        <span className="cf-field-hint">{tenant ? "Blank fields use everyone's look." : 'Or pick one customer to give it its own look.'}</span>
       </div>
-      {err && <Notice tone="danger">{err}</Notice>}
-      <div className="cf-ad-card-foot">
-        <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={saving} onClick={() => void save()}>{saving && <Spinner label="Saving" />}Save deployment branding</button>
-      </div>
+      {tenant
+        ? <TenantEditor key={tenant.tenantId} tenantId={tenant.tenantId} tenantName={tenant.tenantName} custom={tenant.customBranding} inherited={data.deployment} onSaved={() => mutate()} />
+        : <Editor key={`everyone:${data.deployment?.updatedAt ?? 'none'}`} config={data.deployment} label="Everyone's branding preview" onSaved={() => mutate()}
+            save={(r) => apiClient.updateDeploymentBranding(r)} savedMessage="Branding saved for everyone." />}
     </section>
   );
 }
 
 function TenantEditor({ tenantId, tenantName, custom, inherited, onSaved }: { tenantId: string; tenantName: string; custom: boolean; inherited?: BrandingConfiguration | null; onSaved: () => void }) {
   const detail = useSWR<TenantBrandingDetail>(['platform-branding-tenant', tenantId], () => apiClient.getTenantBranding(tenantId), { revalidateOnFocus: false });
-  if (!detail.data) return <Loading error={detail.error} retry={() => detail.mutate()} label="Tenant branding" />;
+  if (!detail.data) return <Loading error={detail.error} retry={() => detail.mutate()} label={`${tenantName} branding`} />;
+  const refresh = () => { void detail.mutate(); onSaved(); };
   return (
-    <TenantForm key={detail.data.configuration?.updatedAt ?? 'none'} tenantId={tenantId} tenantName={tenantName} custom={custom} inherited={inherited}
-      config={detail.data.configuration} onSaved={() => { void detail.mutate(); onSaved(); }} />
+    <Editor key={`${tenantId}:${detail.data.configuration?.updatedAt ?? 'none'}`} config={detail.data.configuration} inherited={inherited} tenantMode
+      label={`${tenantName} branding preview`} onSaved={refresh}
+      save={(r) => apiClient.updateTenantBranding(tenantId, r)} savedMessage={`${tenantName} now has its own look.`}
+      clear={custom ? { label: "Use everyone's look", run: () => apiClient.clearTenantBranding(tenantId), done: `${tenantName} now uses everyone's look.` } : undefined} />
   );
 }
 
-function TenantForm({ tenantId, tenantName, custom, inherited, config, onSaved }: { tenantId: string; tenantName: string; custom: boolean; inherited?: BrandingConfiguration | null; config?: BrandingConfiguration | null; onSaved: () => void }) {
+function Editor({ config, inherited, tenantMode, label, save, savedMessage, clear, onSaved }: {
+  config?: BrandingConfiguration | null; inherited?: BrandingConfiguration | null; tenantMode?: boolean; label: string;
+  save: (r: BrandingUpdateRequest) => Promise<unknown>; savedMessage: string;
+  clear?: { label: string; run: () => Promise<unknown>; done: string };
+  onSaved: () => void;
+}) {
   const toast = useToast();
-  const [value, setValue] = useState(() => fromConfig(config));
-  const [busy, setBusy] = useState<'' | 'save' | 'reset'>('');
+  const [initial] = useState(() => fromConfig(config));
+  const [value, setValue] = useState(initial);
+  const [busy, setBusy] = useState<'' | 'save' | 'clear'>('');
   const [err, setErr] = useState('');
+  const changed = JSON.stringify(value) !== JSON.stringify(initial);
 
-  async function save() {
-    if (value.accentColor && !accessibleAccent(value.accentColor)) { setErr('Primary accent does not meet the branding contrast requirement.'); return; }
-    setErr(''); setBusy('save');
+  async function act(kind: 'save' | 'clear') {
+    if (kind === 'save' && value.accentColor && !accessibleAccent(value.accentColor)) { setErr('Pick a darker accent colour before saving.'); return; }
+    setErr(''); setBusy(kind);
     try {
-      await apiClient.updateTenantBranding(tenantId, toRequest(value));
-      toast('Tenant branding override saved.');
+      if (kind === 'save') { await save(toRequest(value)); toast(savedMessage); }
+      else if (clear) { await clear.run(); toast(clear.done); }
       onSaved();
     } catch (e) {
-      setErr(errorMessage(e, 'Unable to save tenant branding.'));
-    } finally {
-      setBusy('');
-    }
-  }
-
-  async function reset() {
-    setErr(''); setBusy('reset');
-    try {
-      await apiClient.clearTenantBranding(tenantId);
-      toast('Tenant now inherits deployment branding.');
-      onSaved();
-    } catch (e) {
-      setErr(errorMessage(e, 'Unable to reset tenant branding.'));
+      setErr(errorMessage(e, "The branding couldn't be saved. Nothing was changed."));
     } finally {
       setBusy('');
     }
@@ -277,13 +224,14 @@ function TenantForm({ tenantId, tenantName, custom, inherited, config, onSaved }
   return (
     <>
       <div className="cf-ad-brand">
-        <BrandingForm value={value} onChange={setValue} tenantMode />
-        <Preview value={value} inherited={inherited} label={`${tenantName} branding preview`} />
+        <BrandingForm value={value} onChange={setValue} tenantMode={tenantMode} />
+        <Preview value={value} inherited={inherited} label={label} />
       </div>
       {err && <Notice tone="danger">{err}</Notice>}
       <div className="cf-ad-card-foot">
-        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy || !custom} onClick={() => void reset()}>{busy === 'reset' && <Spinner label="Resetting" />}Reset to deployment</button>
-        <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={!!busy} onClick={() => void save()}>{busy === 'save' && <Spinner label="Saving" />}Save tenant override</button>
+        {clear && <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy} onClick={() => void act('clear')}>{busy === 'clear' && <Spinner label="Resetting" />}{clear.label}</button>}
+        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy || !changed} onClick={() => { setValue(initial); setErr(''); }}>Reset</button>
+        <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={!!busy || !changed} onClick={() => void act('save')}>{busy === 'save' && <Spinner label="Saving" />}Save</button>
       </div>
     </>
   );
