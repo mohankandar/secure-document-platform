@@ -49,6 +49,8 @@ public class RequestContextResolver {
     private static final String HEADER_CORRELATION_ID = "X-Correlation-Id";
     private static final String HEADER_ACTOR_ROLES = "X-Actor-Roles";
     private static final String HEADER_INTEGRATION_CLIENT = "X-Integration-Client";
+    private static final String PRINCIPAL_ATTRIBUTE = RequestContextResolver.class.getName() + ".principal";
+    private static final String INTEGRATION_PRINCIPAL_ATTRIBUTE = RequestContextResolver.class.getName() + ".integrationPrincipal";
 
 
     private final UUID demoTenantId;
@@ -87,9 +89,15 @@ public class RequestContextResolver {
     }
 
     public AuthenticatedPrincipal resolvePrincipal(HttpServletRequest request) {
-        AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
-                ? resolveLocalPrincipal(request)
-                : resolveOidcPrincipal(request);
+        // Resolved once per request: the interceptors and the controller all ask, and in shared-issuer mode each
+        // resolution reads the grant and candidate stores. Inputs (verified token, headers) cannot change within a
+        // request, so the first answer is reused. Refusals are not stored: a later call refuses again.
+        AuthenticatedPrincipal principal = request.getAttribute(PRINCIPAL_ATTRIBUTE) instanceof AuthenticatedPrincipal known
+                ? known
+                : securityProperties.getMode() == SecurityMode.LOCAL
+                        ? resolveLocalPrincipal(request)
+                        : resolveOidcPrincipal(request);
+        request.setAttribute(PRINCIPAL_ATTRIBUTE, principal);
         StructuredLogContext.put("tenantId", principal.tenantId());
         StructuredLogContext.put("actorId", principal.actorId());
         return principal;
@@ -101,9 +109,12 @@ public class RequestContextResolver {
      * tenant PUSH_API Integration Connection. Production identity still comes only from the verified JWT.
      */
     public AuthenticatedPrincipal resolveIntegrationPrincipal(HttpServletRequest request) {
-        AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
-                ? resolveLocalIntegrationPrincipal(request)
-                : resolveOidcIntegrationPrincipal();
+        AuthenticatedPrincipal principal = request.getAttribute(INTEGRATION_PRINCIPAL_ATTRIBUTE) instanceof AuthenticatedPrincipal known
+                ? known
+                : securityProperties.getMode() == SecurityMode.LOCAL
+                        ? resolveLocalIntegrationPrincipal(request)
+                        : resolveOidcIntegrationPrincipal();
+        request.setAttribute(INTEGRATION_PRINCIPAL_ATTRIBUTE, principal);
         StructuredLogContext.put("tenantId", principal.tenantId());
         StructuredLogContext.put("actorId", principal.actorId());
         return principal;
