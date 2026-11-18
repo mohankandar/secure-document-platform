@@ -1,5 +1,8 @@
 package com.securedoc.platform.infrastructure.identity;
 
+import com.documentplatform.identity.admission.ConnectionKey;
+import com.documentplatform.identity.admission.EntityId;
+import com.documentplatform.identity.admission.MachineEntityBindings;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
 import com.securedoc.platform.domain.identity.TenantId;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -9,10 +12,11 @@ import java.net.URI;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Read-only candidate lookup, requiring ACTIVE identity and enabled PUSH_API source. */
 @Repository
-public class JdbcActiveOidcMachineTenantBindings implements ActiveOidcMachineTenantBindings {
+public class JdbcActiveOidcMachineTenantBindings implements ActiveOidcMachineTenantBindings, MachineEntityBindings {
     private final JdbcTemplate jdbc;
 
     public JdbcActiveOidcMachineTenantBindings(JdbcTemplate jdbc) {
@@ -43,5 +47,12 @@ public class JdbcActiveOidcMachineTenantBindings implements ActiveOidcMachineTen
         jdbc.query(sql, (org.springframework.jdbc.core.RowCallbackHandler) rs -> results.add(TenantId.of(rs.getObject("tenant_id", UUID.class))),
                 providerId.trim(), issuer.toString(), audience.trim(), clientPrincipal.trim());
         return Set.copyOf(results);
+    }
+
+    /** Enterprise Identity 0.3.0 seam: the same lookup and SQL as {@link #findEnabledPushTenants}, in the library's types. */
+    @Override
+    public Set<EntityId> find(ConnectionKey key, String clientPrincipal) {
+        Set<TenantId> tenants = findEnabledPushTenants(key.providerId(), key.issuer(), key.audience(), clientPrincipal);
+        return tenants.stream().map(tenant -> EntityId.of(tenant.value())).collect(Collectors.toUnmodifiableSet());
     }
 }

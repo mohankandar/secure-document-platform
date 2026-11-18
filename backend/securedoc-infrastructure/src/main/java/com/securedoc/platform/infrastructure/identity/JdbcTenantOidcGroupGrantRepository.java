@@ -1,5 +1,8 @@
 package com.securedoc.platform.infrastructure.identity;
 
+import com.documentplatform.identity.admission.ConnectionKey;
+import com.documentplatform.identity.admission.EntityGroupGrants;
+import com.documentplatform.identity.admission.EntityId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,7 +17,7 @@ import java.util.*;
  * Does not create users, credentials, or memberships in a LexaVault user directory.
  */
 @Repository
-public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantRepository {
+public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantRepository, EntityGroupGrants {
     private final JdbcTemplate jdbc;
 
     public JdbcTenantOidcGroupGrantRepository(JdbcTemplate jdbc) {
@@ -56,5 +59,17 @@ public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantR
             immutable.put(tenant, Map.copyOf(perTenant));
         });
         return Map.copyOf(immutable);
+    }
+
+    /**
+     * Enterprise Identity 0.3.0 seam: the same lookup, SQL and role-name check as the method above, in the library's
+     * types. A mistyped role in any grant row still refuses the whole lookup, as before.
+     */
+    @Override
+    public Map<EntityId, Map<String, Set<String>>> activeGrants(ConnectionKey key) {
+        Map<TenantId, Map<String, Set<String>>> grants = activeGrants(key.providerId(), key.issuer(), key.audience());
+        Map<EntityId, Map<String, Set<String>>> converted = new LinkedHashMap<>();
+        grants.forEach((tenant, mapping) -> converted.put(EntityId.of(tenant.value()), mapping));
+        return Map.copyOf(converted);
     }
 }
