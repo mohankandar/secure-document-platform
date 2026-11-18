@@ -178,14 +178,20 @@
 .cf-notice[data-tone='mark'] { background: var(--cf-mark-soft); border-color: color-mix(in srgb, var(--cf-mark) 60%, transparent); }
 
 /* Stage chip */
-.cf-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--cf-muted); white-space: nowrap; text-transform: none; letter-spacing: 0; }
-.cf-stage-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cf-faint); flex: none; }
-.cf-stage[data-stage='redacting'] .cf-stage-dot { background: var(--cf-ink); animation: cf-pulse 1.4s ease-in-out infinite; }
-.cf-stage[data-stage='review'], .cf-stage[data-stage='approval'] { color: var(--cf-ink); }
-.cf-stage[data-stage='review'] .cf-stage-dot, .cf-stage[data-stage='approval'] .cf-stage-dot { background: var(--cf-mark); box-shadow: 0 0 0 2px var(--cf-mark-soft); }
-.cf-stage[data-stage='delivered'] .cf-stage-dot { background: var(--cf-ok); }
+/* One colour per stage (tokens.css --cf-stage-*). Each stage sets --stage and --stage-soft once;
+   dots, chips, the Cases stage tiles and the case-panel stage bar all read them. */
+[data-stage] { --stage: var(--cf-faint); --stage-soft: var(--cf-raised); }
+[data-stage='intake'] { --stage: var(--cf-stage-new); --stage-soft: var(--cf-stage-new-soft); }
+[data-stage='redacting'] { --stage: var(--cf-stage-redacting); --stage-soft: var(--cf-stage-redacting-soft); }
+[data-stage='review'] { --stage: var(--cf-stage-review); --stage-soft: var(--cf-stage-review-soft); }
+[data-stage='approval'] { --stage: var(--cf-stage-approval); --stage-soft: var(--cf-stage-approval-soft); }
+[data-stage='delivered'] { --stage: var(--cf-stage-delivered); --stage-soft: var(--cf-stage-delivered-soft); }
+[data-stage='stopped'] { --stage: var(--cf-stage-stopped); --stage-soft: var(--cf-stage-stopped-soft); }
+
+.cf-stage { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--stage-soft); font-size: 12px; font-weight: 500; color: var(--cf-ink); white-space: nowrap; text-transform: none; letter-spacing: 0; }
+.cf-stage-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--stage); flex: none; }
+.cf-stage[data-stage='redacting'] .cf-stage-dot { animation: cf-pulse 1.4s ease-in-out infinite; }
 .cf-stage[data-stage='stopped'] { color: var(--cf-danger); }
-.cf-stage[data-stage='stopped'] .cf-stage-dot { background: var(--cf-danger); }
 @keyframes cf-pulse { 50% { opacity: 0.3; } }
 
 /* Redaction strip — one bar per open finding */
@@ -220,10 +226,7 @@
 .cf-band-seg:hover { border-color: var(--cf-line-strong); }
 .cf-band-seg[aria-pressed='true'] { border-color: var(--cf-ink); box-shadow: inset 0 0 0 1px var(--cf-ink); }
 .cf-band-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--cf-line-strong); }
-.cf-band-seg[data-stage='redacting'] .cf-band-fill { background: var(--cf-ink); }
-.cf-band-seg[data-stage='review'] .cf-band-fill, .cf-band-seg[data-stage='approval'] .cf-band-fill { background: var(--cf-mark); }
-.cf-band-seg[data-stage='delivered'] .cf-band-fill { background: var(--cf-ok); }
-.cf-band-seg[data-stage='stopped'] .cf-band-fill { background: var(--cf-danger); }
+.cf-band-seg[data-stage] .cf-band-fill { background: var(--stage); }
 .cf-band-label { font-size: 12px; color: var(--cf-muted); white-space: nowrap; }
 .cf-band-count { font-family: var(--cf-font-mono); font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
 
@@ -301,9 +304,8 @@
 .cf-timeline { display: flex; gap: 4px; }
 .cf-timeline li { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .cf-timeline li::before { content: ''; display: block; height: 3px; border-radius: 2px; background: var(--cf-line); }
-.cf-timeline li[data-state='done']::before { background: var(--cf-ink); }
-.cf-timeline li[data-state='current']::before { background: var(--cf-mark); }
-.cf-timeline li[data-state='stopped']::before { background: var(--cf-danger); }
+.cf-timeline li[data-state='done']::before, .cf-timeline li[data-state='current']::before { background: var(--stage); }
+.cf-timeline li[data-state='stopped']::before { background: var(--cf-stage-stopped); }
 .cf-timeline-dot { display: none; }
 .cf-timeline-label { font-size: 11px; color: var(--cf-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cf-timeline li[data-state='done'] .cf-timeline-label { color: var(--cf-muted); }
@@ -342,7 +344,7 @@
 .cf-count[data-tone='danger'] { color: var(--cf-danger); text-transform: none; letter-spacing: 0; }
 .cf-count[data-tone='mark'] { color: var(--cf-ink); background: var(--cf-mark-soft); padding: 0 6px; border-radius: 3px; text-transform: none; letter-spacing: 0; }
 .cf-small { font-size: 12px; margin-top: 8px; }
-.cf-stage[data-stage='unknown'] { color: var(--cf-muted); }
+.cf-stage[data-stage='unknown'] { color: var(--cf-muted); background: transparent; }
 .cf-stage[data-stage='unknown'] .cf-stage-dot { background: transparent; border: 1px dashed var(--cf-muted); }
 .cf-next-pulse { display: block; width: 100%; height: 3px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--cf-ink), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: cf-sweep 1.6s ease-in-out infinite; }
 @keyframes cf-sweep { from { background-position: -50% 0; } to { background-position: 150% 0; } }
@@ -561,3 +563,30 @@
 @media (prefers-reduced-motion: reduce) {
   .cf *, .cf *::before, .cf *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
+
+/* ---------- Failures (UI spec findings 8 and 22): one card, never a blank app ---------- */
+.cf-loaderr {
+  display: flex; flex-direction: column; gap: 10px; max-width: 720px;
+  padding: 18px 20px; border: 1px solid var(--cf-line); border-left: 3px solid var(--cf-danger);
+  border-radius: var(--cf-radius); background: var(--cf-surface); color: var(--cf-ink);
+}
+.cf-loaderr-title { margin: 0; font-size: 16px; font-weight: 600; }
+.cf-loaderr-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--cf-muted); }
+.cf-loaderr-actions { display: flex; gap: 8px; }
+
+/* Technical details: codes and IDs, collapsed by default. */
+.cf-tech { font-size: 13px; color: var(--cf-muted); }
+.cf-tech > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+.cf-tech > summary::-webkit-details-marker { display: none; }
+.cf-tech > summary::before { content: '▸'; font-size: 11px; transition: transform 120ms ease; }
+.cf-tech[open] > summary::before { transform: rotate(90deg); }
+.cf-tech > summary:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; border-radius: 3px; }
+.cf-tech-body { margin-top: 8px; padding: 10px 12px; border-radius: var(--cf-radius); background: var(--cf-raised); }
+.cf-tech-defs { display: grid; gap: 4px; margin: 0; }
+.cf-tech-defs > div { display: flex; gap: 10px; }
+.cf-tech-defs dt { min-width: 80px; color: var(--cf-faint); }
+.cf-tech-defs dd { margin: 0; color: var(--cf-ink); word-break: break-all; }
+
+/* No-access page (finding 21). */
+.cf-scope-who { font-weight: 600; color: var(--cf-ink); }
+.cf-scope-actions { display: flex; gap: 8px; margin-top: 8px; }

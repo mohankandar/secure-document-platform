@@ -4,10 +4,12 @@ import { Plus, Search, X } from 'lucide-react';
 import type { PackageSummary } from '../types';
 import {
   CAP, LIFECYCLE, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf,
-  usePackages, useReviewQueue, type StageKey,
+  useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
+import { CASE_GROUPS, NAV, caseSearchPlaceholder } from './words';
 import { FindingStrip, Kbd, Notice, Spinner, StageChip } from './atoms';
 import CaseDrawer from './CaseDrawer';
+import { LoadErrorCard } from './failure';
 
 type Filter = 'all' | 'you' | StageKey;
 
@@ -24,7 +26,8 @@ export default function Desk({ caps }: { caps: string[] }) {
   });
   const [query, setQuery] = useState('');
 
-  const { data: packages, error, isLoading } = usePackages(true);
+  const { data: packages, error, isLoading, mutate } = usePackages(true);
+  const fields = useCaseFields(caps, packages);
   const { data: queue } = useReviewQueue(caps.includes(CAP.review));
   const findings = useMemo(() => openFindingsByPackage(queue?.items), [queue]);
 
@@ -49,7 +52,7 @@ export default function Desk({ caps }: { caps: string[] }) {
     const rest = matches.filter((p) => !needsYou(p, caps));
     return [
       { key: 'you', title: 'Needs you', note: 'You can move these forward now', cases: you },
-      { key: 'motion', title: 'In motion', note: 'LexaVault or a colleague has these', cases: rest.filter((p) => !['delivered', 'stopped'].includes(stageOf(p.status))) },
+      { key: 'motion', title: CASE_GROUPS.inProgress, note: CASE_GROUPS.inProgressNote, cases: rest.filter((p) => !['delivered', 'stopped'].includes(stageOf(p.status))) },
       { key: 'stopped', title: 'Stopped', cases: rest.filter((p) => stageOf(p.status) === 'stopped') },
       { key: 'delivered', title: 'Delivered', cases: rest.filter((p) => stageOf(p.status) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
@@ -88,7 +91,7 @@ export default function Desk({ caps }: { caps: string[] }) {
       <section className="cf-desk-main" aria-labelledby="cf-desk-title">
         <header className="cf-page-head">
           <div>
-            <h1 id="cf-desk-title" className="cf-title">Desk</h1>
+            <h1 id="cf-desk-title" className="cf-title">{NAV.cases}</h1>
             <p className="cf-lede">
               {isLoading ? 'Gathering your cases…' : (
                 <>
@@ -117,14 +120,15 @@ export default function Desk({ caps }: { caps: string[] }) {
           <label className="cf-search">
             <Search size={15} aria-hidden="true" />
             <span className="cf-sr">Filter cases</span>
-            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by contract or borrower" />
+            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={caseSearchPlaceholder(fields)} />
             {query ? (
               <button type="button" className="cf-search-clear" onClick={() => setQuery('')} aria-label="Clear filter"><X size={14} /></button>
             ) : <Kbd>/</Kbd>}
           </label>
         </div>
 
-        {error && <Notice tone="danger">Cases couldn&apos;t be loaded. They&apos;ll refresh automatically.</Notice>}
+        {error && !packages && <LoadErrorCard title="Your cases couldn't be loaded" error={error} request="GET /packages" onRetry={() => void mutate()} />}
+        {error && packages && <Notice tone="danger">Cases couldn&apos;t be refreshed. They&apos;ll refresh automatically.</Notice>}
         {isLoading && <div className="cf-center"><Spinner label="Loading cases" /></div>}
 
         {!isLoading && flat.length === 0 && (

@@ -137,9 +137,9 @@ function Preview({ value, inherited, label }: { value: Editable; inherited?: Bra
         <div className="cf-ad-preview-side">
           {primary ? <img className="cf-ad-preview-logo" src={primary} alt="" /> : <strong>{app}</strong>}
           <small>{org}</small>
-          <span data-active="true">Desk</span><span>Intake</span><span>Reports</span>
+          <span data-active="true">Cases</span><span>New case</span><span>Reports</span>
         </div>
-        <div className="cf-ad-preview-main"><small>Work</small><strong>Desk</strong><span className="cf-ad-preview-btn">Primary action</span></div>
+        <div className="cf-ad-preview-main"><small>Work</small><strong>Cases</strong><span className="cf-ad-preview-btn">Primary action</span></div>
       </div>
     </figure>
   );

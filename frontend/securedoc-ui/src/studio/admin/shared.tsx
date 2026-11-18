@@ -4,22 +4,26 @@ import { apiClient } from '../../api/client';
 import type { BusinessAdminConfiguration } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
+import { LoadErrorCard, checked, isRecord } from '../failure';
 import { useToast } from '../toast';
 import { useUnsavedWork } from '../unsavedWork';
 
 export function useBusinessAdmin() {
-  return useSWR<BusinessAdminConfiguration>('business-admin', () => apiClient.getBusinessAdminConfiguration(), { revalidateOnFocus: false });
+  return useSWR<BusinessAdminConfiguration>('business-admin', () => checked('GET /business-admin/configuration', apiClient.getBusinessAdminConfiguration(), isBusinessAdminConfiguration), { revalidateOnFocus: false });
 }
 
-export function Loading({ error, retry, label }: { error?: unknown; retry: () => void; label: string }) {
-  if (error) {
-    return (
-      <Notice tone="danger">
-        {errorMessage(error, `${label} could not be loaded.`)}{' '}
-        <button type="button" className="cf-btn" data-size="sm" onClick={retry}>Retry</button>
-      </Notice>
-    );
-  }
+/** The parts of the configuration every admin card reads; anything else is an answer the screen does not understand. */
+function isBusinessAdminConfiguration(v: unknown): boolean {
+  if (!isRecord(v)) return false;
+  const policy = v.sensitiveDataPolicy;
+  return Array.isArray(v.identifiers) && Array.isArray(v.dashboardColumns)
+    && isRecord(policy) && Array.isArray(policy.enabledEntityTypes)
+    && isRecord(v.lifecyclePolicy) && isRecord(v.documentIntelligence)
+    && isRecord(v.reportingConfiguration) && Array.isArray(v.reportingConfiguration.dimensions);
+}
+
+export function Loading({ error, retry, label, request }: { error?: unknown; retry: () => void; label: string; request?: string }) {
+  if (error) return <LoadErrorCard title={`${label} couldn't be loaded`} error={error} request={request} onRetry={retry} />;
   return <div className="cf-center"><Spinner label={`Loading ${label.toLowerCase()}`} /></div>;
 }
 

@@ -2,7 +2,9 @@ import useSWR from 'swr';
 import { apiClient } from '../api/client';
 import { setCurrentCapabilities } from '../api/config';
 import { scanBridgeClient } from '../api/scanBridgeClient';
-import type { BusinessIdentifier, FocusedReviewItem, PackageLifecycleSummary as PackageLifecycle, PackageSummary } from '../types';
+import type { BusinessIdentifier, FocusedReviewItem, FocusedReviewQueue, IdentifierDefinition, PackageDetail, PackageLifecycleSummary as PackageLifecycle, PackageSummary } from '../types';
+import { checked, isArrayOf, isRecord } from './failure';
+import { REASON_TEXT, STAGE_NAMES } from './words';
 
 export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
 
@@ -23,19 +25,13 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
   COMPLETED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
   EXPORTED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
   DELIVERED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
-  FAILED: { stage: 'stopped', label: 'Technical attention', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
+  FAILED: { stage: 'stopped', label: 'Stopped', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
   REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'The source was rejected and will not be processed.' },
 };
 
-export const STAGES: { key: StageKey; label: string }[] = [
-  { key: 'intake', label: 'Intake' },
-  { key: 'redacting', label: 'Redacting' },
-  { key: 'review', label: 'Review' },
-  { key: 'approval', label: 'Approval' },
-  { key: 'delivered', label: 'Delivered' },
-  { key: 'stopped', label: 'Stopped' },
-  { key: 'unknown', label: 'Unrecognized' },
-];
+export const STAGES: { key: StageKey; label: string }[] = (
+  ['intake', 'redacting', 'review', 'approval', 'delivered', 'stopped', 'unknown'] as StageKey[]
+).map((key) => ({ key, label: STAGE_NAMES[key] }));
 
 export const LIFECYCLE: StageKey[] = ['intake', 'redacting', 'review', 'approval', 'delivered'];
 
@@ -158,11 +154,8 @@ export function humanize(token: string): string {
     .join(' ');
 }
 
-export const REASON_COPY: Record<string, string> = {
-  LOW_CONFIDENCE: 'The model is unsure this text is sensitive.',
-  LOCATION_UNCERTAIN: 'Sensitive text found, but its exact position is unclear.',
-  POLICY_REVIEW: 'Your policy requires a person to confirm this type.',
-};
+/** @deprecated use reasonText from ./words */
+export const REASON_COPY: Record<string, string> = REASON_TEXT;
 
 export function relativeTime(iso: string, now = Date.now()): string {
   const diff = Math.round((now - new Date(iso).getTime()) / 1000);
@@ -200,12 +193,19 @@ export function useMe() {
   }, { revalidateOnFocus: false });
 }
 
+/* Every hook checks the shape of the answer: an answer this screen does not understand is an error
+   (shown as a "couldn't load" card), never data that crashes the screen. */
+
 export function usePackages(enabled: boolean) {
-  return useSWR(enabled ? 'packages' : null, () => apiClient.listPackages(), { refreshInterval: 4000 });
+  return useSWR(enabled ? 'packages' : null,
+    () => checked('GET /packages', apiClient.listPackages(), isArrayOf((p) => isRecord(p) && typeof p.packageId === 'string' && Array.isArray(p.businessIdentifiers))),
+    { refreshInterval: 4000 });
 }
 
 export function usePackage(packageId: string | undefined) {
-  return useSWR(packageId ? ['package', packageId] : null, () => apiClient.getPackage(packageId as string), { refreshInterval: 3000 });
+  return useSWR(packageId ? ['package', packageId] : null,
+    () => checked<PackageDetail>(`GET /packages/${packageId}`, apiClient.getPackage(packageId as string), (v) => isRecord(v) && typeof v.packageId === 'string'),
+    { refreshInterval: 3000 });
 }
 
 export function usePackageLifecycle(packageId: string | undefined, enabled: boolean) {
@@ -222,15 +222,34 @@ export function useTechnicalException(packageId: string | undefined, enabled: bo
 }
 
 export function useReviewQueue(enabled: boolean) {
-  return useSWR(enabled ? 'review-queue' : null, () => apiClient.listReviewItems(500), { refreshInterval: 5000 });
+  return useSWR(enabled ? 'review-queue' : null,
+    () => checked<FocusedReviewQueue>('GET /review-items', apiClient.listReviewItems(500), (v) => isRecord(v) && Array.isArray(v.items)),
+    { refreshInterval: 5000 });
 }
 
-export function useIdentifierDefinitions() {
-  return useSWR('identifier-definitions', () => apiClient.listIdentifierDefinitions(), { revalidateOnFocus: false });
+/** The field definitions need DOCUMENT_INTAKE; pass enabled=false for people without it. */
+export function useIdentifierDefinitions(enabled = true) {
+  return useSWR(enabled ? 'identifier-definitions' : null,
+    () => checked<IdentifierDefinition[]>('GET /intake/identifier-definitions', apiClient.listIdentifierDefinitions(), isArrayOf((d) => isRecord(d) && typeof d.label === 'string')),
+    { revalidateOnFocus: false });
 }
 
 export function useScannerStatus(enabled: boolean) {
   return useSWR(enabled ? 'scanner-status' : null, () => scanBridgeClient.getScannerStatus(), { refreshInterval: 5000 });
+}
+
+/**
+ * The configured case fields, for labels such as search placeholders: the definitions when the person may read
+ * them, otherwise the labels the cases themselves carry. Never a hard-coded field name.
+ */
+export function useCaseFields(caps: string[], packages: PackageSummary[] | undefined): { label: string; primary: boolean; searchable: boolean }[] {
+  const { data: definitions } = useIdentifierDefinitions(caps.includes(CAP.intake));
+  if (definitions?.length) return definitions;
+  const seen = new Map<string, { label: string; primary: boolean; searchable: boolean }>();
+  for (const pkg of packages ?? []) {
+    for (const id of pkg.businessIdentifiers) if (!seen.has(id.label)) seen.set(id.label, { label: id.label, primary: id.primary, searchable: id.searchable });
+  }
+  return [...seen.values()];
 }
 
 export function openFindingsByPackage(items: FocusedReviewItem[] | undefined): Map<string, FocusedReviewItem[]> {

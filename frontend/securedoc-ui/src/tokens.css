@@ -141,6 +141,21 @@
   --cf-shadow: 0 1px 2px rgb(10 11 13 / 0.06), 0 8px 24px rgb(10 11 13 / 0.06);
   --cf-shadow-pop: 0 24px 64px rgb(10 11 13 / 0.22), 0 2px 6px rgb(10 11 13 / 0.08);
   --cf-radius: 6px;
+
+  /* One colour per case stage (UI spec, "Stage colours"); the soft tones are chip backgrounds.
+     --cf-mark stays reserved for "needs you". */
+  --cf-stage-new: #8a919b;
+  --cf-stage-redacting: #3b6fd4;
+  --cf-stage-review: #e0b400;
+  --cf-stage-approval: #7a52c7;
+  --cf-stage-delivered: #1d7a4e;
+  --cf-stage-stopped: #c43d30;
+  --cf-stage-new-soft: #eef0f2;
+  --cf-stage-redacting-soft: #e7eefb;
+  --cf-stage-review-soft: #fbf3cc;
+  --cf-stage-approval-soft: #efe9f8;
+  --cf-stage-delivered-soft: #e3f1ea;
+  --cf-stage-stopped-soft: #f8e5e3;
   color-scheme: light;
 }
 
@@ -165,5 +180,17 @@
   --cf-scrim: rgb(0 0 0 / 0.6);
   --cf-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
   --cf-shadow-pop: 0 24px 64px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --cf-stage-new: #8a919b;
+  --cf-stage-redacting: #6b9bf2;
+  --cf-stage-review: #f4d03f;
+  --cf-stage-approval: #a888e6;
+  --cf-stage-delivered: #6fcf97;
+  --cf-stage-stopped: #f0786b;
+  --cf-stage-new-soft: #23262b;
+  --cf-stage-redacting-soft: #1a2640;
+  --cf-stage-review-soft: #3a3214;
+  --cf-stage-approval-soft: #2a2140;
+  --cf-stage-delivered-soft: #16301f;
+  --cf-stage-stopped-soft: #3a1d1a;
   color-scheme: dark;
 }

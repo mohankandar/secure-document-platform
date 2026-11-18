@@ -11,6 +11,8 @@ import { ROLE_OPTIONS } from '../security/uiAuthorization';
 import { Kbd } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
+import { ErrorBoundary } from './failure';
+import { NAV } from './words';
 import Desk from './Desk';
 import Intake from './Intake';
 import Review from './Review';
@@ -45,7 +47,7 @@ export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, on
   // App keys this component by organization, so a switch unmounts it and everything below it.
   const [swrCache] = useState(() => new Map());
   const caps = me.capabilities ?? [];
-  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <OutOfScope me={me} />;
+  if (![CAP.desk, CAP.intake, CAP.review, CAP.reportExecutive, CAP.technicalView, ...ADMIN_CAPS].some((c) => caps.includes(c))) return <NoAccess me={me} onSignOut={onSignOut} />;
 
   return (
     <div className="cf">
@@ -103,28 +105,28 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
         <nav className="cf-nav" aria-label="Workspace">
           {canDesk && (
             <NavLink to="/" end className={({ isActive }) => `cf-nav-link${isActive || location.pathname.startsWith('/case/') ? ' is-active' : ''}`}>
-              Desk
+              {NAV.cases}
               {needsYouCount > 0 && <span className="cf-nav-count" data-tone="mark" aria-label={`${needsYouCount} need you`}>{needsYouCount}</span>}
             </NavLink>
           )}
           {canIntake && (
-            <NavLink to="/intake" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Intake</NavLink>
+            <NavLink to="/intake" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.newCase}</NavLink>
           )}
           {canReview && (
             <NavLink to="/review" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>
-              Review
+              {NAV.review}
               {openFindings > 0 && <span className="cf-nav-count" aria-label={`${openFindings} open findings`}>{openFindings}</span>}
             </NavLink>
           )}
           {(canReports || canAdmin) && (canDesk || canIntake || canReview) && <span className="cf-nav-sep" aria-hidden="true" />}
           {canReports && (
-            <NavLink to="/reports" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Reports</NavLink>
+            <NavLink to="/reports" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.reports}</NavLink>
           )}
           {canAdmin && (
-            <NavLink to="/admin" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Admin</NavLink>
+            <NavLink to="/admin" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.admin}</NavLink>
           )}
           {canSupport && (
-            <NavLink to="/support/incidents" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>Support</NavLink>
+            <NavLink to="/support/incidents" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.support}</NavLink>
           )}
         </nav>
 
@@ -156,6 +158,8 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
       </header>
 
       <main className="cf-main" id="cf-main">
+        {/* A failing screen shows its own card; the top bar above and every other screen keep working. */}
+        <ErrorBoundary title="This screen couldn't be loaded" request={location.pathname} resetKey={location.pathname}>
         <Routes>
           <Route path="/" element={canDesk ? <Desk caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/case/:caseId" element={canDesk ? <Desk caps={caps} /> : <Navigate to={home} replace />} />
@@ -179,6 +183,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/packages/:caseId" element={<LegacyCaseRedirect />} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
+        </ErrorBoundary>
       </main>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} caps={caps} />
@@ -191,16 +196,21 @@ function LegacyCaseRedirect() {
   return <Navigate to={`/case/${caseId}`} replace />;
 }
 
-function OutOfScope({ me }: { me: CurrentUser }) {
+/** Signed in, but no LexaVault role (UI spec finding 21). */
+function NoAccess({ me, onSignOut }: { me: CurrentUser; onSignOut: () => void }) {
   return (
     <div className="cf cf-boot">
-      <div className="cf-scope">
+      <div className="cf-scope" role="main">
         <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>
-        <h1>Nothing here is assigned to this role</h1>
+        <h1>You don&apos;t have access to anything in LexaVault yet</h1>
         <p>
-          {displayName(me.username)} is signed in as {me.roles.join(', ').replace(/_/g, ' ').toLowerCase()}, which holds no case, reporting or
-          administration or support capability. Contact your administrator if you believe you should have access.
+          You&apos;re signed in as <span className="cf-scope-who">{me.username}</span>, but your account has no LexaVault role.
+          Ask your administrator to add you to a LexaVault group, then sign in again.
         </p>
+        <div className="cf-scope-actions">
+          <button type="button" className="cf-btn" data-variant="solid" onClick={onSignOut}>Sign out</button>
+          <button type="button" className="cf-btn" onClick={() => window.location.reload()}>Try again</button>
+        </div>
       </div>
     </div>
   );

@@ -73,13 +73,13 @@ function IdentifierEditor({ value, isNew, canRemove, onApply, onRemove, onClose 
       </>}
     >
       <div className="cf-ad-form">
-        <TextField label="Label" required maxLength={128} value={d.label} onChange={(label) => set({ label })} invalid={!d.label.trim() && !!issue} hint="Shown to staff at intake and on the Desk." />
+        <TextField label="Label" required maxLength={128} value={d.label} onChange={(label) => set({ label })} invalid={!d.label.trim() && !!issue} hint="Shown to staff on New case and on Cases." />
         <fieldset className="cf-ad-fieldset">
           <legend>Behavior</legend>
           <Toggle label="Primary identifier" checked={d.primary} onChange={(primary) => set(primary ? { primary, required: true, displayable: true } : { primary })} hint="Names the case everywhere. Exactly one field is primary; it is always required and shown." />
           <Toggle label="Required at intake" checked={d.required} disabled={d.primary} onChange={(required) => set({ required })} />
           <Toggle label="Searchable" checked={d.searchable} onChange={(searchable) => set({ searchable })} hint="Staff can find cases by this value." />
-          <Toggle label="Displayable" checked={d.displayable} disabled={d.primary} onChange={(displayable) => set({ displayable })} hint="Eligible to appear on the Desk and case drawer." />
+          <Toggle label="Displayable" checked={d.displayable} disabled={d.primary} onChange={(displayable) => set({ displayable })} hint="Can appear on Cases and in the case panel." />
           <Toggle label="Auto-extract" checked={d.extractable} onChange={(extractable) => set({ extractable })} hint="Document Intelligence may propose this value from the document." />
         </fieldset>
         <fieldset className="cf-ad-fieldset">
@@ -222,10 +222,10 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
 
       {canColumns && (
         <SettingsCard
-          title="Desk columns"
+          title="Columns on Cases"
           description="Allowed columns can be turned on by anyone. Default columns are on for new users. The primary identifier is always allowed."
           value={data.dashboardColumns}
-          savedMessage="Desk columns saved."
+          savedMessage="Columns on Cases saved."
           onSave={async (d) => mutate(await apiClient.updateDashboardColumns(d), { revalidate: false })}
         >
           {(d, set) => (

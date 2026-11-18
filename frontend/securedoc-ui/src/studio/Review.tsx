@@ -4,7 +4,8 @@ import useSWR, { useSWRConfig } from 'swr';
 import { Eye, EyeOff, MousePointerSquareDashed, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, ReviewBoundingBox } from '../types';
-import { CAP, REASON_COPY, caseTitle, errorMessage, humanize, usePackages, useReviewQueue } from './data';
+import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
+import { NAV, REVIEW_WORDS, reasonText, sensitiveTypeName } from './words';
 import { Kbd, Notice, Spinner } from './atoms';
 import { useToast } from './toast';
 import { useUnsavedWork } from './unsavedWork';
@@ -145,7 +146,7 @@ export default function Review({ caps }: { caps: string[] }) {
           <p className="cf-empty-text">
             {decided > 0 ? `You cleared ${decided} ${decided === 1 ? 'finding' : 'findings'}. Reviewed cases are already back in processing.` : 'New findings land here when LexaVault is unsure.'}
           </p>
-          {caps.includes(CAP.desk) && <Link to="/" className="cf-btn" data-variant="ghost">Back to the desk</Link>}
+          {caps.includes(CAP.desk) && <Link to="/" className="cf-btn" data-variant="ghost">Back to {NAV.cases}</Link>}
         </div>
       )}
 
@@ -165,8 +166,8 @@ export default function Review({ caps }: { caps: string[] }) {
                         aria-current={item.findingId === selected.findingId ? 'true' : undefined}
                         onClick={() => select(item)}
                       >
-                        <span className="cf-queue-entity">{humanize(item.entityType)}</span>
-                        <span className="cf-queue-meta">p.{item.pageNumber} · {Math.round(item.confidence * 100)}%{!item.hasBoundingBox && ' · unplaced'}</span>
+                        <span className="cf-queue-entity">{sensitiveTypeName(item.entityType)}</span>
+                        <span className="cf-queue-meta">p.{item.pageNumber} · {Math.round(item.confidence * 100)}%{!item.hasBoundingBox && ` · ${REVIEW_WORDS.placeNotFound}`}</span>
                       </button>
                     </li>
                   ))}
@@ -179,8 +180,8 @@ export default function Review({ caps }: { caps: string[] }) {
 
           <aside className="cf-decision" aria-label="Decision">
             <span className="cf-eyebrow">Finding {index + 1} of {remaining}</span>
-            <h2 className="cf-decision-entity">{humanize(selected.entityType)}</h2>
-            <p className="cf-decision-reason">{REASON_COPY[selected.reason] ?? humanize(selected.reason)}</p>
+            <h2 className="cf-decision-entity">{sensitiveTypeName(selected.entityType)}</h2>
+            <p className="cf-decision-reason">{reasonText(selected.reason)}</p>
 
             <div className="cf-confidence">
               <div className="cf-confidence-row">

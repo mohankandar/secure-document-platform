@@ -5,19 +5,11 @@ import { errorMessage } from '../data';
 import { Notice } from '../atoms';
 import { useToast } from '../toast';
 import { SettingsCard, Toggle, NumberField, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField } from './shared';
+import { ErrorBoundary } from '../failure';
+import { SENSITIVE_TYPES, sensitiveTypeName } from '../words';
 
-/**
- * The production catalog (BusinessAdminPage SENSITIVE_TYPES). These are the only types the
- * detection prompt and heuristic adapters act on (SensitiveContentPromptBuilder). Each one finds an
- * exact text value span and redacts only that span; none redacts a whole page, image or document.
- */
-const SENSITIVE_TYPES: { key: string; label: string; detects: string }[] = [
-  { key: 'SSN', label: 'Social Security Number', detects: 'Full SSNs in text, including clearly labeled test values. Form, reference and contract numbers are excluded.' },
-  { key: 'DATE_OF_BIRTH', label: 'Date of Birth', detects: 'A person’s birth date only. Contract, signature, payment and effective dates are excluded.' },
-  { key: 'CREDIT_CARD_NUMBER', label: 'Credit Card Number', detects: 'Full 13–19 digit payment card numbers. Masked or last-four displays and account numbers are excluded.' },
-  { key: 'CREDIT_SCORE', label: 'Credit Score', detects: 'A consumer credit or FICO score tied to a person or report. Bare three-digit numbers are excluded.' },
-];
-export const entityLabel = (t: string) => SENSITIVE_TYPES.find((s) => s.key === t)?.label ?? humanize(t);
+/** The one name for a sensitive type (words.ts), shared with Review, the case panel and Continue manually. */
+export const entityLabel = sensitiveTypeName;
 
 function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
   const sdp = data.sensitiveDataPolicy;
@@ -65,7 +57,7 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
               })}
             </div>
             <dl className="cf-ad-defs">
-              {SENSITIVE_TYPES.map((s) => <div key={s.key}><dt>{s.label}</dt><dd>{s.detects}</dd></div>)}
+              {SENSITIVE_TYPES.map((s) => <div key={s.key}><dt>{s.name}</dt><dd>{s.detects}</dd></div>)}
             </dl>
             <p className="cf-ad-hint">
               Detection works on text values, not document types. Each finding blacks out only the matched value on the page.
@@ -266,11 +258,11 @@ export default function PolicyArea() {
 
   return (
     <div className="cf-ad-stack">
-      <SensitiveDataCard data={data} mutate={apply} />
-      <IntelligenceCard data={data} mutate={apply} />
+      <ErrorBoundary title="Sensitive data settings couldn't be shown" request="GET /business-admin/configuration"><SensitiveDataCard data={data} mutate={apply} /></ErrorBoundary>
+      <ErrorBoundary title="Document intelligence settings couldn't be shown" request="GET /business-admin/configuration"><IntelligenceCard data={data} mutate={apply} /></ErrorBoundary>
       <div className="cf-ad-pair">
-        <LifecycleCard data={data} mutate={apply} />
-        <ReportingCard data={data} mutate={apply} />
+        <ErrorBoundary title="Retention settings couldn't be shown" request="GET /business-admin/configuration"><LifecycleCard data={data} mutate={apply} /></ErrorBoundary>
+        <ErrorBoundary title="Report targets couldn't be shown" request="GET /business-admin/configuration"><ReportingCard data={data} mutate={apply} /></ErrorBoundary>
       </div>
     </div>
   );

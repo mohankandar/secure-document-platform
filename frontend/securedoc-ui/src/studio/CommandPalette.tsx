@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, FileStack, Inbox, ScanLine, Search, Upload } from 'lucide-react';
-import { CAP, caseTitle, stageOf, usePackages } from './data';
+import { CAP, caseTitle, stageOf, useCaseFields, usePackages } from './data';
+import { NAV, caseSearchPlaceholder } from './words';
 import { StageChip } from './atoms';
 
 interface Command {
@@ -21,6 +22,7 @@ export default function CommandPalette({ open, onClose, caps }: { open: boolean;
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const { data: packages } = usePackages(open && caps.includes(CAP.desk));
+  const fields = useCaseFields(caps, packages);
 
   useEffect(() => {
     if (open) {
@@ -38,7 +40,7 @@ export default function CommandPalette({ open, onClose, caps }: { open: boolean;
       actions.push({ id: 'scan', group: 'Actions', label: 'New case from paper', hint: 'Scan', icon: <ScanLine size={16} />, run: go('/intake?via=scan') });
     }
     if (caps.includes(CAP.review)) actions.push({ id: 'review', group: 'Actions', label: 'Open the review queue', icon: <Inbox size={16} />, run: go('/review') });
-    if (caps.includes(CAP.desk)) actions.push({ id: 'desk', group: 'Actions', label: 'Go to the desk', icon: <FileStack size={16} />, run: go('/') });
+    if (caps.includes(CAP.desk)) actions.push({ id: 'desk', group: 'Actions', label: `Go to ${NAV.cases}`, icon: <FileStack size={16} />, run: go('/') });
 
     const q = query.trim().toLowerCase();
     const matchedActions = q ? actions.filter((a) => `${a.label} ${a.hint ?? ''}`.toLowerCase().includes(q)) : actions;
@@ -88,7 +90,7 @@ export default function CommandPalette({ open, onClose, caps }: { open: boolean;
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Contract number, borrower, or an action…"
+            placeholder={caseSearchPlaceholder(fields, true)}
             aria-label="Search cases and actions"
             role="combobox"
             aria-expanded="true"

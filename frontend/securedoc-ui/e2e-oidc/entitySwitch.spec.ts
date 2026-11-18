@@ -119,14 +119,22 @@ async function switchTo(page: Page, entityName: string) {
 }
 
 /**
- * Samples the screen every 20 ms from the moment of the switch until the new organization's data is shown,
- * and fails if the previous organization's data is visible at any moment in between. (Without the per-mount
+ * Samples the screen every 20 ms from the moment the switch takes effect until the new organization's data is
+ * shown, and fails if the previous organization's data is visible at any moment in between. (Without the per-mount
  * data cache in CaseFileApp, the previous organization's cached case list briefly showed under the new name.)
+ *
+ * The switch takes effect when the server has accepted the new organization: until then the app keeps the previous
+ * organization's screen on purpose (a refused choice changes nothing), with the switch panel still open. Samples
+ * taken while the panel is open are not judged. The panel is checked before the screen is read, so a reading taken
+ * while it was open is never judged as after the switch. (UI task U001: sampling from the click made this test
+ * fail whenever the server's answer was slower than the first sample, 5 runs in 10 before U001.)
  */
 async function expectNoStaleDataDuringSwitch(page: Page, staleText: string, freshText: string) {
+  const panel = page.getByRole('dialog', { name: /switch organization/i });
   for (let sample = 0; sample < 250; sample++) {
+    const switching = (await panel.count()) > 0;
     const text = await page.locator('body').innerText().catch(() => '');
-    expect(text, `previous organization's data (${staleText}) shown during the switch`).not.toContain(staleText);
+    if (!switching) expect(text, `previous organization's data (${staleText}) shown during the switch`).not.toContain(staleText);
     if (text.includes(freshText)) return;
     await page.waitForTimeout(20);
   }
@@ -139,7 +147,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await signInAndChoose(page, 'Race Entity A');
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(workspaceNav(page).getByRole('link', { name: 'Intake' })).toBeVisible();
+  await expect(workspaceNav(page).getByRole('link', { name: 'New case' })).toBeVisible();
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
 
   // The list is read fresh from the server and marks the current entity.
@@ -152,7 +160,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
   await expect(page.getByText('A-CASE-1001')).toHaveCount(0);
   await expect(workspaceNav(page).getByRole('link', { name: 'Reports' })).toBeVisible();
-  await expect(workspaceNav(page).getByRole('link', { name: 'Intake' })).toHaveCount(0);
+  await expect(workspaceNav(page).getByRole('link', { name: 'New case' })).toHaveCount(0);
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity B/);
   await expect(page).toHaveURL(/localhost:15175\/$/);
   expect(await page.evaluate(() => sessionStorage.getItem('lexavault.oidc.selected-tenant'))).toBe(B.tenantId);
@@ -162,7 +170,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await expectNoStaleDataDuringSwitch(page, 'B-CASE-2002', 'A-CASE-1001');
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
   await expect(page.getByText('B-CASE-2002')).toHaveCount(0);
-  await expect(workspaceNav(page).getByRole('link', { name: 'Intake' })).toBeVisible();
+  await expect(workspaceNav(page).getByRole('link', { name: 'New case' })).toBeVisible();
 });
 
 test('a request still in flight during the switch is discarded, not shown', async ({ page }) => {
@@ -213,7 +221,7 @@ test('unsaved work on screen asks for confirmation before switching', async ({ p
   await mockIdentityProvider(page);
   await mockApi(page, [A, B]);
   await signInAndChoose(page, 'Race Entity A');
-  await workspaceNav(page).getByRole('link', { name: 'Intake' }).click();
+  await workspaceNav(page).getByRole('link', { name: 'New case' }).click();
   await page.locator('input[type="file"]').setInputFiles({ name: 'unsent.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') });
   await expect(page.getByText('unsent.pdf')).toBeVisible();
 

@@ -6,6 +6,7 @@ import type { OperationalReports } from '../../types';
 import { CAP, errorMessage, type StageKey } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
+import { ErrorBoundary, LoadErrorCard, checked, isRecord } from '../failure';
 import './reports.css';
 
 type Preset = 'TODAY' | '7D' | '30D' | 'THIS_MONTH' | 'THIS_QUARTER' | 'CUSTOM';
@@ -87,7 +88,7 @@ export default function Reports({ caps }: { caps: string[] }) {
 
   const { data, error, isLoading, isValidating, mutate } = useSWR<OperationalReports>(
     params ? ['reports', params.from, params.to, source, outcome] : null,
-    () => apiClient.getOperationalReports(params!),
+    () => checked('GET /operations/reports', apiClient.getOperationalReports(params!), isOperationalReports),
     { keepPreviousData: true, revalidateOnFocus: false },
   );
 
@@ -154,29 +155,24 @@ export default function Reports({ caps }: { caps: string[] }) {
       </div>
 
       {!period && <Notice>The end date must be on or after the start date.</Notice>}
-      {error && !data && (
-        <Notice tone="danger">
-          {errorMessage(error, 'Reports could not be loaded.')}{' '}
-          <button type="button" className="cf-btn" data-size="sm" onClick={() => mutate()}>Retry</button>
-        </Notice>
-      )}
+      {error && !data && <LoadErrorCard title="Reports couldn't be loaded" error={error} request="GET /operations/reports" onRetry={() => void mutate()} />}
       {isLoading && !data && <div className="cf-center"><Spinner label="Loading reports" /></div>}
 
       {data && (
         <div className="cf-rp-body" aria-busy={isValidating}>
-          <Executive r={data} />
-          <Trend r={data} />
-          <ServiceLevel r={data} />
+          <Card name="The headline"><Executive r={data} /></Card>
+          <Card name="The trend"><Trend r={data} /></Card>
+          <Card name="Service levels"><ServiceLevel r={data} /></Card>
           {canOperational ? (
             <>
-              <Pipeline r={data} />
+              <Card name="The pipeline"><Pipeline r={data} /></Card>
               <div className="cf-rp-pair">
-                <Backlog r={data} />
-                <Retention r={data} />
+                <Card name="The backlog"><Backlog r={data} /></Card>
+                <Card name="Keeping and deleting"><Retention r={data} /></Card>
               </div>
-              <Timing r={data} />
-              <Intake r={data} />
-              {data.dimensions.map((d) => <Dimension key={d.key} dim={d} />)}
+              <Card name="Timing"><Timing r={data} /></Card>
+              <Card name="Receiving"><Intake r={data} /></Card>
+              {data.dimensions.map((d) => <Card key={d.key} name={d.label || 'A breakdown'}><Dimension dim={d} /></Card>)}
             </>
           ) : (
             <p className="cf-rp-scope">Pipeline, backlog, retention and dimension breakdowns need operational report access.</p>
@@ -185,6 +181,20 @@ export default function Reports({ caps }: { caps: string[] }) {
       )}
     </div>
   );
+}
+
+/** Each report card fails on its own: the other cards, the filters and the top bar keep working. */
+function Card({ name, children }: { name: string; children: React.ReactNode }) {
+  return <ErrorBoundary title={`${name} couldn't be shown`} request="GET /operations/reports">{children}</ErrorBoundary>;
+}
+
+/** The parts of the report every card reads; anything else is an answer this screen does not understand. */
+function isOperationalReports(v: unknown): boolean {
+  if (!isRecord(v)) return false;
+  return typeof v.generatedAt === 'string' && isRecord(v.period) && isRecord(v.executive) && Array.isArray(v.executive.trend)
+    && isRecord(v.intake) && isRecord(v.processing) && isRecord(v.export) && isRecord(v.retention)
+    && isRecord(v.timing) && isRecord(v.backlog) && isRecord(v.serviceLevel)
+    && Array.isArray(v.dimensions) && v.dimensions.every((d) => isRecord(d) && typeof d.label === 'string' && Array.isArray(d.values));
 }
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
@@ -293,7 +303,7 @@ function Pipeline({ r }: { r: OperationalReports }) {
     { label: 'Rejected', value: p.rejected, stage: 'stopped', tone: 'danger' },
   ];
   return (
-    <Section title="Pipeline" note="Select a stage to open the matching cases on the Desk">
+    <Section title="Pipeline" note="Select a stage to open the matching cases">
       <ul className="cf-rp-pipeline">
         {rows.map((row) => (
           <li key={row.label}>
