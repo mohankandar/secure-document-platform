@@ -123,6 +123,8 @@ Both branches are pushed. Nothing is merged, and the library is not released.
    - The adapter now passes only exact role names. Anything else goes to the library marked `UNRECOGNISED:`, so only that entity is refused.
    - **Recommendation:** keep this. It is fail-closed.
 
+**Owner decision (2026-11-17): yes to both.** The platform-role grant stays a hard refusal, and the adapter keeps marking non-exact role names as unrecognised.
+
 ## Suggested next step
 
 Task B (Phases 3 and 4) as planned: B1 `PlatformAccess` in the library, then B2. Migration 037 to be registered in B5, after approval.
