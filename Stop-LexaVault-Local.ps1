@@ -10,7 +10,7 @@ function Stop-Tree {
     param([string]$Name, [string]$PidFile)
 
     if (-not (Test-Path $PidFile)) {
-        Write-Host "$Name: no PID file." -ForegroundColor DarkGray
+        Write-Host "${Name}: no PID file." -ForegroundColor DarkGray
         return
     }
 
