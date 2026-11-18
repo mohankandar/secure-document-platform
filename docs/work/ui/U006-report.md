@@ -112,3 +112,42 @@ Outcome: PARTLY DONE. The screen-only parts are done: plain words, the title, th
    - Which roles let a person see an entity in a combined report? The design says Report Viewer; is Business Administrator included?
 2. **Review target (item 3):** approve the migration adding `review_wait_target_percent` (default 80) to `reporting_tenant_settings`, in U007? U006 then reads it.
 3. **Empty service levels:** show "No reviews in this period" instead of a red 0% when nothing was eligible, and the same for deliveries?
+
+## Owner's answers (2026-11-18)
+
+1. **Combined reports (items 1 and 2):** do not build them now. The `entity` parameter is backend work (phase 11) and waits for the backend work after the UI series; the proposal above is the starting point. Keep the screen without the entity filter and the "By entity" table until then.
+   - **Roles:** base it on the capability, not on a role name. An entity is covered when the person holds `REPORT_EXECUTIVE_VIEW` there, so both Report Viewer and Business Administrator are included. Fail closed as proposed.
+2. **Review target (item 3):** approved. In U007, add the migration for `review_wait_target_percent` (integer 0–100, not null, default 80) on `reporting_tenant_settings`, the answer field and the admin form field. Then make U006's two-line change to read it, with its test, in U007's commit.
+3. **Empty service levels:** yes. When nothing was eligible, show "No reviews in this period" (and "No deliveries in this period") in a neutral colour instead of a red 0%. Do it now, with a test.
+4. **Commit these with this follow-up:** `docs/work/ui/U013-task.md` (written by the design chat) and `docs/work/install-onboarding-approach.md` (owner-approved install approach, also written by the design chat).
+5. **Start script:** "Frontend did not become ready on localhost:5173" has appeared since U004 while the frontend answers. Note it for the backend work after the UI series; do not fix it now.
+
+## What was done with the answers (2026-11-18)
+
+1. **Combined reports:** not built. The screen has no entity filter and no "By entity" table. For the backend work after the UI series, the proposal above stands, with one change: an entity is covered when the person holds `REPORT_EXECUTIVE_VIEW` there (Report Viewer and Business Administrator), not by role name.
+2. **Review target:** carried into U007: the migration for `review_wait_target_percent`, the answer field, the admin form field, and then the change that makes the third bar read it, with its test, all in U007's commit. Until then the bar still uses 100%.
+3. **Empty service levels: done.**
+   - When nothing was eligible, a bar shows "No deliveries in this period" or "No reviews in this period" in the neutral muted colour. It shows the target, no fill and no percentage, and no "0 of 0" line.
+   - Which bar uses which count:
+     - "Delivered within …" is empty when `deliveryEligible` is 0;
+     - "No review needed" is empty when no case was delivered in the period (`executive.delivered` is 0). That bar's percentage is measured over deliveries, so it uses the delivery wording;
+     - "Review picked up within …" is empty when `reviewEligible` is 0.
+   - A missing or unreadable count counts as nothing eligible.
+   - The empty bar is not a meter for screen readers. It reads as "<label>: No reviews in this period. Target <n>%."
+4. **Committed:** `docs/work/ui/U013-task.md` and `docs/work/install-onboarding-approach.md`, unchanged.
+5. **Start script:** "Frontend did not become ready on localhost:5173" is noted for the backend work after the UI series. It appeared again in this run while the frontend answered (200). It was not fixed.
+
+**Commands run and results:**
+- `npm run build`: passed.
+- `npm run test:standalone`: passed:
+  - `test:auth` 8;
+  - `test:vocabulary` 31;
+  - `test:ui-framework` 17;
+  - `test:oidc-signin` 36.
+- **New tests**, 2 added to `e2e-oidc/reports.spec.ts`:
+  - a period with nothing to measure: "No deliveries in this period" twice and "No reviews in this period" once, the target still shown, no meter, no "0%" and no "0 of 0", and no bar in the danger colour;
+  - a period with deliveries and reviews: the three measured bars and no empty wording.
+- **Local app:**
+  - Reports checked as Business Administrator and Report Viewer, light and dark, 1440 and 1024 px, in Edge (Playwright).
+  - The local data has deliveries but no reviews. So the first two bars showed measured values, and the third showed "No reviews in this period" in the muted colour.
+  - No page errors. The app was stopped afterwards.

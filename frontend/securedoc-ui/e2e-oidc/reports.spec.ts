@@ -43,7 +43,7 @@ async function mockIdentityProvider(page: Page) {
   });
 }
 
-async function mockApi(page: Page, roles: string[], capabilities: string[]) {
+async function mockApi(page: Page, roles: string[], capabilities: string[], answer = reports) {
   await page.route('**/api/v1/**', async (route: Route) => {
     const url = new URL(route.request().url());
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -52,7 +52,7 @@ async function mockApi(page: Page, roles: string[], capabilities: string[]) {
       return json({ username: 'reports.user@example.test', roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug,
         authenticationMode: 'OIDC', capabilities });
     }
-    if (url.pathname === '/api/v1/operations/reports') return json(reports());
+    if (url.pathname === '/api/v1/operations/reports') return json(answer());
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
   });
@@ -95,9 +95,9 @@ function reports() {
   };
 }
 
-async function openReports(page: Page, roles: string[], capabilities: string[]) {
+async function openReports(page: Page, roles: string[], capabilities: string[], answer = reports) {
   await mockIdentityProvider(page);
-  await mockApi(page, roles, capabilities);
+  await mockApi(page, roles, capabilities, answer);
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
   await page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Reports' }).click();
@@ -158,4 +158,36 @@ test('a Business Administrator sees the detail and Export CSV, not the Report Vi
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
   await expect(page.getByText('More detail is available to Business Administrators.')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Pipeline' }).getByText('Stopped', { exact: true })).toBeVisible();
+});
+
+test('a period with nothing to measure says so in a neutral colour, not a red 0%', async ({ page }) => {
+  const empty = () => {
+    const r = reports();
+    r.executive.delivered = 0;
+    Object.assign(r.serviceLevel, { deliveryWithinTargetRate: 0, deliveryEligible: 0, deliveryBreaches: 0, straightThroughActualPercent: 0,
+      reviewWithinTargetRate: 0, reviewEligible: 0, reviewBreaches: 0 });
+    return r;
+  };
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS, empty);
+  const levels = page.getByRole('region', { name: 'Service levels' });
+  await expect(levels.getByText('No deliveries in this period')).toHaveCount(2);
+  await expect(levels.getByText('No reviews in this period')).toBeVisible();
+  await expect(levels.getByText('target 95%')).toBeVisible();
+  await expect(levels.getByRole('meter')).toHaveCount(0);
+  await expect(levels.getByText(/^0%/)).toHaveCount(0);
+  await expect(levels.getByText(/0 of 0/)).toHaveCount(0);
+  // Neutral: none of the three uses the danger colour.
+  const danger = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--cf-danger').trim());
+  const colours = await levels.locator('.cf-rp-target-value').evaluateAll((els) => els.map((e) => getComputedStyle(e).color));
+  const probe = await page.evaluate((c) => { const d = document.createElement('span'); d.style.color = c; document.body.append(d); const v = getComputedStyle(d).color; d.remove(); return v; }, danger);
+  expect(colours).toHaveLength(3);
+  for (const c of colours) expect(c).not.toBe(probe);
+});
+
+test('a period with deliveries and reviews still shows the measured bars', async ({ page }) => {
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS);
+  const levels = page.getByRole('region', { name: 'Service levels' });
+  await expect(levels.getByRole('meter')).toHaveCount(3);
+  await expect(levels.getByText(/in this period/)).toHaveCount(0);
+  await expect(levels.getByText('25 of 148 reviews waited longer')).toBeVisible();
 });

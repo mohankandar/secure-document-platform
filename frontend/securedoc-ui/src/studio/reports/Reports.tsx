@@ -286,10 +286,28 @@ function Trend({ r }: { r: OperationalReports }) {
   );
 }
 
-function TargetBar({ label, actual, target, detail }: { label: string; actual: number; target: number; detail: string }) {
+/**
+ * One service-level bar. `empty` is set when nothing in the period could be measured: the bar then says so in a
+ * neutral colour instead of showing a red 0% (owner's answer to U006, 2026-11-18).
+ */
+function TargetBar({ label, actual, target, detail, empty }: { label: string; actual: number; target: number; detail: string; empty?: string }) {
   const a = Math.min(100, ratio(actual));
   const t = Math.min(100, ratio(target));
   const met = a >= t;
+  if (empty) {
+    return (
+      <div className="cf-rp-target" data-empty>
+        <div className="cf-rp-target-head">
+          <span>{label}</span>
+          <span className="cf-rp-target-value cf-muted">target {Math.round(t)}%</span>
+        </div>
+        <div className="cf-rp-target-track" role="img" aria-label={`${label}: ${empty}. Target ${Math.round(t)}%.`}>
+          <span className="cf-rp-target-line" style={{ left: `${t}%` }} />
+        </div>
+        <p className="cf-rp-target-detail">{empty}</p>
+      </div>
+    );
+  }
   return (
     <div className="cf-rp-target">
       <div className="cf-rp-target-head">
@@ -307,12 +325,16 @@ function TargetBar({ label, actual, target, detail }: { label: string; actual: n
 
 function ServiceLevel({ r }: { r: OperationalReports }) {
   const s = r.serviceLevel;
+  const noDeliveries = 'No deliveries in this period';
   return (
     <Section title="Service levels" note="Targets are set in Admin › Redaction & retention › Reporting">
       <div className="cf-rp-targets">
-        <TargetBar label={`Delivered within ${hours(s.deliveryTargetMinutes / 60)}`} actual={s.deliveryWithinTargetRate} target={s.deliveryTargetPercent} detail={`${s.deliveryBreaches} of ${s.deliveryEligible} cases missed the target`} />
-        <TargetBar label="No review needed" actual={s.straightThroughActualPercent} target={s.straightThroughTargetPercent} detail="Cases delivered without a person reviewing" />
-        <TargetBar label={`Review picked up within ${hours(s.reviewWaitTargetMinutes / 60)}`} actual={s.reviewWithinTargetRate} target={100} detail={`${s.reviewBreaches} of ${s.reviewEligible} reviews waited longer`} />
+        <TargetBar label={`Delivered within ${hours(s.deliveryTargetMinutes / 60)}`} actual={s.deliveryWithinTargetRate} target={s.deliveryTargetPercent}
+          detail={`${s.deliveryBreaches} of ${s.deliveryEligible} cases missed the target`} empty={s.deliveryEligible > 0 ? undefined : noDeliveries} />
+        <TargetBar label="No review needed" actual={s.straightThroughActualPercent} target={s.straightThroughTargetPercent}
+          detail="Cases delivered without a person reviewing" empty={r.executive.delivered > 0 ? undefined : noDeliveries} />
+        <TargetBar label={`Review picked up within ${hours(s.reviewWaitTargetMinutes / 60)}`} actual={s.reviewWithinTargetRate} target={100}
+          detail={`${s.reviewBreaches} of ${s.reviewEligible} reviews waited longer`} empty={s.reviewEligible > 0 ? undefined : 'No reviews in this period'} />
       </div>
     </Section>
   );

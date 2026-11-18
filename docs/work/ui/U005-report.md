@@ -91,3 +91,11 @@ Not pushed, not merged.
 ## Suggested next step
 
 U006.
+
+## Owner's answers (2026-11-18)
+
+1. **Pages per file and files per case:** keep the rule line as it is now, "PDF only · up to 50 MB each". Real server-enforced limits (the design's 500 pages per file and 50 files per case) go in the backend work after the UI series, because they change V1 upload (a frozen area). The screen shows them only once the server enforces them. Nothing to change now.
+
+## What was done with the answers (2026-11-18)
+
+- Answer 1: nothing changed. The rule line stays "PDF only · up to 50 MB each". Server-enforced pages-per-file and files-per-case limits are noted for the backend work after the UI series.
