@@ -313,6 +313,9 @@ export default function App() {
         // reject this optional endpoint, in which case existing /me behavior remains.
         try {
           const choices = await apiClient.getAvailableOidcTenants();
+          // A run that is no longer the active one (e.g. the first React.StrictMode mount) must not
+          // change the tenant selection: that would make the active run's in-flight requests stale.
+          if (!active) return;
           if (choices.length === 0) {
             throw new Error('No authorized ACTIVE organization is available for this account.');
           }
@@ -341,6 +344,8 @@ export default function App() {
           setCurrentCapabilities(user.capabilities || []);
         }
       } catch (error) {
+        // Only the active run may clear the session or report a failure.
+        if (!active) return;
         console.error('[LexaVault OIDC] Production-session verification failed.', error);
         const status = typeof error === 'object' && error !== null && 'httpStatus' in error ? Number((error as { httpStatus?: number }).httpStatus) : undefined;
         if (status === 403) {
