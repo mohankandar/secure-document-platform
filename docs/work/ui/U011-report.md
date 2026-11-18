@@ -96,6 +96,13 @@ Outcome: DONE. Names and loan numbers are not in the audit records (item 5), so 
 
 1. Should the backend work after the UI series also record, in each audit record, the actor's display name and the case's id and primary identifier (for findings and documents too)? That would give names, loan numbers and loan-number search. It is likely a schema change, so I have not started it.
 
+## Owner's answers (2026-11-18)
+
+1. **Names and loan numbers in the audit trail:** yes, in the backend work after the UI series.
+   - Each new audit record stores the actor's display name at the time of the action, and the case id (for findings and documents too).
+   - The primary identifier (loan number) is not stored. It is looked up by case id when the records are read. A loan-number search finds the case first, then its records.
+   - Old records are never changed; the new columns are empty on them.
+
 ## Suggested next step
 
 U012 (problem pages).
