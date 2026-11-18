@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.security;
 
+import com.documentplatform.identity.spring.RequiredAudienceValidator;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -35,7 +36,7 @@ class JwtBoundaryTest {
         privateKey = (RSAPrivateKey) pair.getPrivate();
         decoder = NimbusJwtDecoder.withPublicKey(publicKey).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(ISSUER), new OidcAudienceValidator(AUDIENCE)));
+                JwtValidators.createDefaultWithIssuer(ISSUER), new RequiredAudienceValidator(AUDIENCE)));
     }
 
     @Test
