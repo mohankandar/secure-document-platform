@@ -15,7 +15,7 @@ const capabilitiesByRole: Record<string, string[]> = {
 test('demo selector exposes canonical product roles only', () => {
   assert.deepEqual(ROLE_OPTIONS.map((option) => option.value), [
     'DOCUMENT_PROCESSOR', 'DOCUMENT_SUPERVISOR', 'BUSINESS_ADMIN', 'REPORT_VIEWER',
-    'TENANT_IT_ADMIN', 'PLATFORM_OPERATIONS_ADMIN', 'ADMIN',
+    'TENANT_IT_ADMIN', 'PLATFORM_OPERATIONS_ADMIN',
   ]);
 });
 
