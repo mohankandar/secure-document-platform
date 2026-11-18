@@ -63,6 +63,7 @@ Outcome: DONE. The sign-in refusal now shows the Case File no-access screen. One
   - An earlier Phase 1 backend and UI were still running on the old jar. I stopped them with `Remove-Phase1.ps1 -KeepContainers`, which keeps containers and data.
   - Started again with `Start-Phase1.ps1 -JarBuiltFromCommit 4474595`. The first try failed only because I had added `2>&1`, which makes PowerShell 5.1 treat docker's normal progress messages as errors. It ran without it.
   - `Invoke-Phase1Checks.ps1`: **60 passed, 0 failed** (R-04 to R-06 still show dave's `[]` and 403s).
+  - Why 60 and not 68 (task 0014): the 8 role-mapping checks M-01 to M-08 were added on `feature/phase2-role-mapping` (commit `05c358e`), which is not merged into `feature/ui-polish`, so this branch's script has only the 60 earlier checks.
   - `Start-Phase1Ui.ps1`, then `Invoke-Phase1BrowserSignin.mjs --mode dev`: **4 passed, 0 failed**:
     - carol.ab, alice.a and bob.b: workspace as before;
     - dave.none: REFUSED by the new wording.
