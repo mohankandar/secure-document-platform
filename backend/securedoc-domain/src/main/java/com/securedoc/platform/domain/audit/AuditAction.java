@@ -108,6 +108,8 @@ public enum AuditAction {
     // Security
     AUTHORIZATION_FAILED,
     SECURITY_CONTEXT_INVALID,
+    /** An entity's group-to-role grants were changed by loading a role mapping file. */
+    ROLE_MAPPING_LOADED,
 
     // Reporting
     REPORT_CSV_EXPORTED,
