@@ -50,13 +50,37 @@ public final class IdentityAdmissionMapping {
         return out;
     }
 
-    /** Runs a library call and maps any admission refusal to LexaVault's 403 refusal with the same message. */
+    /** Runs a library call and maps any admission refusal to LexaVault's 403 refusal with LexaVault's own words. */
     public static <T> T refusingAsSecurityContext(Supplier<T> call) {
         try {
             return call.get();
         } catch (IdentityAdmissionException refused) {
-            throw new SecurityContextException(refused.getMessage());
+            throw new SecurityContextException(message(refused.reason()));
         }
+    }
+
+    /**
+     * LexaVault's words for each library reason: the library owns the reasons, the product owns the words.
+     * These are the texts LexaVault used before Enterprise Identity 0.4.0, unchanged.
+     */
+    public static String message(IdentityAdmissionException.Reason reason) {
+        return switch (reason) {
+            case NOT_ENABLED -> "Shared-issuer tenant selection is not enabled";
+            case NO_VERIFIED_MEMBERSHIP -> "No verified ACTIVE tenant membership is available";
+            case MEMBERSHIP_NOT_BACKED -> "Tenant membership is not backed by ACTIVE identity connections";
+            case AMBIGUOUS_SELECTION -> "A unique authorized tenant context is required";
+            case NOT_AUTHORIZED_FOR_ENTITY -> "Authenticated identity is not authorized for the requested tenant";
+            case INVALID_SELECTION -> "Invalid selected tenant identifier";
+            case NO_ROLE_FOR_ENTITY -> "Authenticated identity has no tenant-authorized role";
+            case UNKNOWN_ROLE -> "Invalid tenant role configuration";
+            case INVALID_ROLE_GRANT -> "Invalid tenant-scoped role grant";
+            case PLATFORM_ROLE_IN_ENTITY_GRANT -> "Platform Operations cannot be granted through tenant IdP groups";
+            case GROUPS_NOT_A_COLLECTION -> "Trusted IdP group collection is required";
+            case NO_ADMISSION_POLICY -> "Tenant has no trusted group admission policy";
+            case CONTEXT_UNAVAILABLE -> "Verified OIDC tenant membership context is unavailable";
+            case POLICY_UNAVAILABLE -> "OIDC tenant admission policy or ACTIVE tenant bindings are unavailable";
+            case MACHINE_BINDING_NOT_UNIQUE -> "Machine identity has no unique ACTIVE tenant integration binding";
+        };
     }
 
     public static void refusingAsSecurityContext(Runnable call) {
