@@ -86,7 +86,7 @@ test('single-entity user opens the workspace on that entity under StrictMode', a
   await signIn(page);
 
   await expect(page.getByText('Race Entity A').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /account menu/i })).toBeVisible();
   await expect(page.getByText('Sign-in could not be completed')).toHaveCount(0);
   // The workspace was verified for the one authorized entity.
   expect(api.meSelections).toContain(ENTITY_A.tenantId);
@@ -104,7 +104,7 @@ test('two-entity user still gets the chooser', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Race Entity B' })).toBeVisible();
   await page.getByRole('button', { name: 'Race Entity B' }).click();
   await expect(page.getByText('Race Entity B').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /account menu/i })).toBeVisible();
 });
 
 test('no-entity user still gets the refusal', async ({ page }) => {
@@ -114,7 +114,7 @@ test('no-entity user still gets the refusal', async ({ page }) => {
   await signIn(page);
 
   await expect(page.getByText('Sign-in could not be completed. Please try again.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /account menu/i })).toHaveCount(0);
   expect(api.meSelections).toHaveLength(0);
   expect(await page.evaluate(() => sessionStorage.getItem('securedoc.oidc.access-token'))).toBeNull();
 });

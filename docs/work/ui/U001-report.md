@@ -91,6 +91,10 @@ Not pushed, not merged.
    - `securedoc-postgres` is still running. It was stopped before this task; I started it with `docker start`.
    - **Recommendation:** fix the one line, in its own commit.
 
+**Owner's answers (2026-11-17):**
+1. Yes. The sign-in "no access" screen gets the same design as the last UI task, after U012, with the Phase 1 browser script's expected wording updated in the same change. The owner adds it as U013.
+2. Yes. `Stop-LexaVault-Local.ps1` line 13 was fixed in its own commit, `781210f`.
+
 ## Suggested next step
 
 U002: the account menu in the top bar. It also fixes "Sign out" wrapping at 1024 and 1440 px, which the screenshots show today.

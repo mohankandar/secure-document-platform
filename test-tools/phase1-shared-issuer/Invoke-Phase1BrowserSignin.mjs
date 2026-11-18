@@ -40,10 +40,11 @@ const redact = (s) => String(s)
   .replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, '<jwt>')
   .replace(/(code|state|session_state|code_verifier|refresh_token|access_token|id_token)=[^&\s"]+/g, '$1=<x>');
 
-function classify(text, sawChooser) {
+// inWorkspace: the signed-in workspace is on screen (its account button, which holds Sign out since UI task U002).
+function classify(text, sawChooser, inWorkspace) {
   const entity = /Phase1 Entity [AB]/.exec(text)?.[0];
   if (text.includes('Select organization')) return 'CHOOSER';
-  if (text.includes('Sign out') && entity) return `WORKSPACE ${entity}${sawChooser ? ' (after the chooser)' : ''}`;
+  if ((inWorkspace || text.includes('Sign out')) && entity) return `WORKSPACE ${entity}${sawChooser ? ' (after the chooser)' : ''}`;
   if (text.includes('Sign-in could not be completed') || text.includes('does not have access')) return 'REFUSED';
   return 'UNKNOWN';
 }
@@ -51,12 +52,28 @@ function classify(text, sawChooser) {
 // Phase 1 seeds and the check script give entity A contract numbers ending in 1 and entity B ending in 2.
 const caseNumbers = (text) => [...text.matchAll(/\b[89]\d{10}([12])\b/g)].map((m) => m[1]);
 
-// Uses the switch at the top right (newest design). Returns 'ok' or a short reason; never signs out.
+// The entity switch is in the account menu at the top right (UI task U002): entities are menu items in the
+// "Entities" group. With one entity the group is absent.
+const accountButton = (page) => page.getByRole('button', { name: /account menu/i });
+const entityItems = (page) => page.getByRole('menu', { name: 'Account' }).getByRole('group', { name: 'Entities' }).getByRole('menuitemradio');
+
+async function hasSwitchControl(page) {
+  await accountButton(page).click();
+  await page.getByRole('menu', { name: 'Account' }).waitFor();
+  await page.waitForTimeout(1000); // the entity list is read fresh when the menu opens
+  const count = await entityItems(page).count();
+  await page.keyboard.press('Escape');
+  return count > 0;
+}
+
+// Uses the switch in the account menu (newest design). Returns 'ok' or a short reason; never signs out.
 async function switchEntity(page, target) {
-  const control = page.getByRole('button', { name: /switch organization/i });
-  if ((await control.count()) === 0) return 'FAILED: no switch control';
+  const control = accountButton(page);
+  if ((await control.count()) === 0) return 'FAILED: no account menu';
   await control.click();
-  await page.getByRole('dialog', { name: /switch organization/i }).getByRole('button', { name: new RegExp(target) }).click();
+  const item = entityItems(page).filter({ hasText: target });
+  try { await item.waitFor({ timeout: 10000 }); } catch { await page.keyboard.press('Escape'); return 'FAILED: no switch control'; }
+  await item.click();
   const confirm = page.getByRole('alertdialog');
   if (await confirm.isVisible().catch(() => false)) return 'FAILED: unexpected unsaved-work confirmation';
   await page.waitForTimeout(5000);
@@ -106,12 +123,12 @@ try {
         await page.waitForTimeout(6000);
         text = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
       }
-      outcome = classify(text, sawChooser);
+      outcome = classify(text, sawChooser, (await accountButton(page).count()) > 0);
       for (const target of (outcome.startsWith('WORKSPACE') ? expected[user]?.switchTo ?? [] : [])) {
         outcome += `; switch to ${target} ${await switchEntity(page, target)}`;
       }
       if (outcome.startsWith('WORKSPACE') && !expected[user]?.switchTo) {
-        outcome += (await page.getByRole('button', { name: /switch organization/i }).count()) === 0 ? '; no switch control' : '; switch control shown';
+        outcome += (await hasSwitchControl(page)) ? '; switch control shown' : '; no switch control';
       }
       screen = redact(text).slice(0, 160);
     } catch (e) {

@@ -110,12 +110,16 @@ async function signInAndChoose(page: Page, entityName?: string) {
   if (entityName) await page.getByRole('button', { name: entityName }).click();
 }
 
-const switchControl = (page: Page) => page.getByRole('button', { name: /switch organization/i });
+// Since UI task U002 the switch lives in the account menu: the account button names the current entity, and the
+// entities are menu items in the "Entities" group, the current one checked.
+const switchControl = (page: Page) => page.getByRole('button', { name: /account menu/i });
+const accountMenu = (page: Page) => page.getByRole('menu', { name: 'Account' });
+const entityItems = (page: Page) => accountMenu(page).getByRole('group', { name: 'Entities' }).getByRole('menuitemradio');
 const workspaceNav = (page: Page) => page.getByRole('navigation', { name: 'Workspace' });
 
 async function switchTo(page: Page, entityName: string) {
   await switchControl(page).click();
-  await page.getByRole('dialog', { name: /switch organization/i }).getByRole('button', { name: new RegExp(entityName) }).click();
+  await entityItems(page).filter({ hasText: entityName }).click();
 }
 
 /**
@@ -124,13 +128,13 @@ async function switchTo(page: Page, entityName: string) {
  * data cache in CaseFileApp, the previous organization's cached case list briefly showed under the new name.)
  *
  * The switch takes effect when the server has accepted the new organization: until then the app keeps the previous
- * organization's screen on purpose (a refused choice changes nothing), with the switch panel still open. Samples
- * taken while the panel is open are not judged. The panel is checked before the screen is read, so a reading taken
+ * organization's screen on purpose (a refused choice changes nothing), with the account menu still open. Samples
+ * taken while the menu is open are not judged. The menu is checked before the screen is read, so a reading taken
  * while it was open is never judged as after the switch. (UI task U001: sampling from the click made this test
  * fail whenever the server's answer was slower than the first sample, 5 runs in 10 before U001.)
  */
 async function expectNoStaleDataDuringSwitch(page: Page, staleText: string, freshText: string) {
-  const panel = page.getByRole('dialog', { name: /switch organization/i });
+  const panel = accountMenu(page);
   for (let sample = 0; sample < 250; sample++) {
     const switching = (await panel.count()) > 0;
     const text = await page.locator('body').innerText().catch(() => '');
@@ -152,9 +156,9 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
 
   // The list is read fresh from the server and marks the current entity.
   await switchControl(page).click();
-  const menu = page.getByRole('dialog', { name: /switch organization/i });
-  await expect(menu.getByRole('button', { name: /Race Entity A/ })).toHaveAttribute('aria-current', 'true');
-  await menu.getByRole('button', { name: /Race Entity B/ }).click();
+  await expect(entityItems(page).filter({ hasText: 'Race Entity A' })).toHaveAttribute('aria-checked', 'true');
+  await expect(entityItems(page).filter({ hasText: 'Race Entity B' })).toHaveAttribute('aria-checked', 'false');
+  await entityItems(page).filter({ hasText: 'Race Entity B' }).click();
   await expectNoStaleDataDuringSwitch(page, 'A-CASE-1001', 'B-CASE-2002');
 
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
@@ -198,8 +202,25 @@ test('one entity: no switch control, the name is plain text', async ({ page }) =
   await signInAndChoose(page);
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(page.getByText('Race Entity A').first()).toBeVisible();
-  await expect(switchControl(page)).toHaveCount(0);
+  await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
+  await switchControl(page).click();
+  await expect(accountMenu(page)).toBeVisible();
+  await expect(accountMenu(page).getByText('Race Entity A')).toBeVisible();
+  await expect(accountMenu(page).getByRole('group', { name: 'Entities' })).toHaveCount(0);
+  await expect(page.getByRole('menuitemradio', { name: /Race Entity/ })).toHaveCount(0);
+});
+
+test('the account menu has no test-role picker outside local security mode', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, [A, B]);
+  await signInAndChoose(page, 'Race Entity A');
+  await switchControl(page).click();
+  await expect(accountMenu(page)).toBeVisible();
+  await expect(accountMenu(page).getByRole('group', { name: 'Theme' })).toBeVisible();
+  await expect(accountMenu(page).getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+  await expect(accountMenu(page).getByRole('group', { name: 'Test role' })).toHaveCount(0);
+  await expect(page.getByRole('menuitemradio', { name: 'Document Supervisor' })).toHaveCount(0);
+  await expect(page.getByLabel('Local test role')).toHaveCount(0);
 });
 
 test('a refused choice leaves the person on the current entity with a plain message', async ({ page }) => {
@@ -246,15 +267,21 @@ test('the switch works by keyboard', async ({ page }) => {
 
   await switchControl(page).focus();
   await page.keyboard.press('Enter');
-  const menu = page.getByRole('dialog', { name: /switch organization/i });
+  const menu = accountMenu(page);
   await expect(menu).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(switchControl(page)).toBeFocused();
 
+  // Arrow keys move between the menu items; Enter on an entity switches to it.
   await page.keyboard.press('Enter');
-  await expect(menu.getByRole('button', { name: /Race Entity B/ })).toBeVisible();
-  await menu.getByRole('button', { name: /Race Entity B/ }).focus();
+  const b = entityItems(page).filter({ hasText: 'Race Entity B' });
+  await expect(b).toBeVisible();
+  for (let step = 0; step < 6; step++) {
+    if (await b.evaluate((el) => el === document.activeElement)) break;
+    await page.keyboard.press('ArrowDown');
+  }
+  await expect(b).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
 });

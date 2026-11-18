@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
-import { Moon, Search, Sun } from 'lucide-react';
-import { useTheme } from './theme';
+import { Search } from 'lucide-react';
 import { SWRConfig } from 'swr';
 import type { CurrentUser, TenantSwitchActions } from '../types';
-import EntitySwitch from './EntitySwitch';
+import AccountMenu from './AccountMenu';
 import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
 import { useBranding } from '../branding/BrandingContext';
-import { ROLE_OPTIONS } from '../security/uiAuthorization';
 import { Kbd } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
@@ -25,22 +23,6 @@ import ManualFallbackPage from '../pages/ManualFallbackPage';
 import './studio.css';
 
 const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
-
-function ThemeToggle() {
-  const [theme, setTheme] = useTheme();
-  const next = theme === 'dark' ? 'light' : 'dark';
-  return (
-    <button
-      type="button"
-      className="cf-theme-toggle"
-      onClick={() => setTheme(next)}
-      aria-label={`Switch to ${next} theme`}
-      title={`Switch to ${next} theme`}
-    >
-      {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-    </button>
-  );
-}
 
 export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, onRoleChange, tenantSwitch }: { me: CurrentUser; onSignOut: () => void; localMode: boolean; selectedRole: string; onRoleChange: (role: string) => void; tenantSwitch?: TenantSwitchActions }) {
   // The production App owns OIDC validation, session expiry and principal capabilities.
@@ -130,31 +112,15 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           )}
         </nav>
 
-        <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)}>
+        {/* Below 1200 px the box becomes an icon button (UI spec finding 31); the name stays for screen readers. */}
+        <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)} aria-label="Find a case or action" title="Find a case or action">
           <Search size={15} aria-hidden="true" />
           <span className="cf-find-label">Find a case or action</span>
           <span className="cf-find-keys" aria-hidden="true"><Kbd>{MOD_KEY}</Kbd><Kbd>K</Kbd></span>
         </button>
 
-        <ThemeToggle />
-
-        {localMode && (
-          <label className="cf-local-role">
-            <span className="cf-sr">Local test role</span>
-            <select aria-label="Local test role" value={selectedRole} onChange={(event) => onRoleChange(event.target.value)}>
-              {ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-            </select>
-          </label>
-        )}
-
-        <div className="cf-me">
-          <span className="cf-me-avatar" aria-hidden="true">{initials(me.username)}</span>
-          <span className="cf-me-text">
-            <span className="cf-me-name">{displayName(me.username)}</span>
-            <EntitySwitch label={branding.organizationName || me.tenantName} tenantName={me.tenantName} actions={localMode ? undefined : tenantSwitch} />
-          </span>
-        </div>
-        <button type="button" className="cf-theme-toggle" onClick={onSignOut} aria-label="Sign out" title="Sign out">Sign out</button>
+        <AccountMenu me={me} organizationName={branding.organizationName || undefined} onSignOut={onSignOut} localMode={localMode}
+          selectedRole={selectedRole} onRoleChange={onRoleChange} tenantSwitch={tenantSwitch} />
       </header>
 
       <main className="cf-main" id="cf-main">
@@ -214,20 +180,4 @@ function NoAccess({ me, onSignOut }: { me: CurrentUser; onSignOut: () => void })
       </div>
     </div>
   );
-}
-
-function displayName(username: string): string {
-  const local = username.split('@')[0] ?? username;
-  const parts = local.split(/[._-]+/).filter(Boolean);
-  if (parts.length >= 2) return `${cap(parts[0])}. ${cap(parts[parts.length - 1])}`.replace(/^(\w)\w*\./, '$1.');
-  return cap(local);
-}
-
-function initials(username: string): string {
-  const parts = (username.split('@')[0] ?? '').split(/[._-]+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || 'U';
-}
-
-function cap(word: string): string {
-  return word.charAt(0).toUpperCase() + word.slice(1);
 }
