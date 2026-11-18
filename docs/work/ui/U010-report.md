@@ -6,8 +6,6 @@ Outcome: DONE (Licensing not built, as the owner decided)
 
 ## What was done
 
-The owner's decisions were added to the end of `U010-task.md` and committed first (`8bbd095`).
-
 - **Overview (IT Administrator and Platform Operations):**
   - Services are listed in plain words: Database, AI model, Text recognition, Processing storage, and "Delivery to Secure Document Vault" (or "Delivery to a local folder").
   - Status words are limited to what the server reports (owner's decision):
@@ -31,7 +29,6 @@ The owner's decisions were added to the end of `U010-task.md` and committed firs
   - The add form opens from "Add storage". The kinds are "Shared network folder" and "Folder on this server".
   - "Give one customer its own storage" picks a customer and a storage, and lists the customers that have their own, with "Use the default".
   - IDs, provider types, versions and node checks are under Technical details.
-- **Licensing:** not changed (owner's decision; it waits for Phase 5). No backend work.
 - **Branding:**
   - One form with an "Apply to" picker: Everyone (default), or one customer (marked "own look" when it has one).
   - Fields up front: Product name, Organization name, Accent colour, Logo.
@@ -51,7 +48,7 @@ The owner's decisions were added to the end of `U010-task.md` and committed firs
 - **No "Sign-in · Okta" row:** the server reports no sign-in health.
 - **No model speed ("answers in 1.8 s"):** the server reports no timing. The AI row shows only "Ollama".
 - **Branding preview:**
-  - There is no accent-coloured "Primary" button. The Case File screens don't use the accent colour (only a few older screens do), so the preview would show something the app doesn't do. The field's hint says where it is used.
+  - There is no accent-coloured "Primary" button, because the Case File screens don't use the accent colour (see Owner's answers). The field's hint says where it is used.
   - "Organization name" is shown in the account menu, not under the person's name, so the hint and the preview say that.
 - **The Technical incidents card on Overview is unchanged:** the task does not cover it, and U012 handles problem pages.
 
@@ -123,7 +120,7 @@ The owner's decisions were added to the end of `U010-task.md` and committed firs
 ## Commits (hash and message), or "not committed"
 
 - `8bbd095` docs(ui): owner's decisions for U010 (licensing deferred, status words)
-- The work commit follows this report; its hash is given in the chat summary.
+- `bc7b7fa` feat(ui): Platform operations in plain words, one storage table, one branding form, usage data (UI task U010)
 
 ## Not done, and why
 
@@ -132,6 +129,10 @@ The owner's decisions were added to the end of `U010-task.md` and committed firs
 ## Questions for the owner
 
 1. The accent colour is stored and used by a few older screens, but the Case File screens never use it. Should the Case File screens use it (for example for the primary button), or should the field be removed from Branding later? I left it with an honest hint.
+
+## Owner's answers (2026-11-18)
+
+1. **Accent colour:** the Case File screens do not use it. Keep the honest hint for now. Removing the field from Branding goes in the backend work after the UI series.
 
 ## Suggested next step
 
