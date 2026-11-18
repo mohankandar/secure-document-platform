@@ -328,7 +328,126 @@ function Run-BToggle([string]$Prefix, [string]$What, [string]$Sql) {
 Run-BToggle 'R-13' "B's login-system record DISABLED" "update enterprise_identity_connections set status = 'DISABLED', updated_at = now() where connection_id = 'b2b2b2b2-0000-4000-8000-0000000c0002';"
 Run-BToggle 'R-14' 'Entity B SUSPENDED' "update tenants set status = 'SUSPENDED', updated_at = now() where id = '$B';"
 
+# ---------------------------------------------------------------- Role mapping file (task 0014, M-01 to M-08)
+# The grants are restored from the Phase 1 mapping file after every check that changes them.
+$mappingFile = Join-Path $Phase1.ToolDir 'db\phase1-role-mapping.csv'
+$mappingDir = Join-Path $Phase1.RunRoot 'mapping-checks'
+New-Item -ItemType Directory -Force -Path $mappingDir | Out-Null
+$mapHeader = "# Format: lexavault-role-mapping/1`nentity_id,entity_name,group,role`n"
+$nameA = 'Phase1 Entity A'; $nameB = 'Phase1 Entity B'
+
+function Invoke-Mapping([string]$File) {
+    $out = & (Join-Path $Phase1.ToolDir 'Invoke-Phase1RoleMapping.ps1') -File $File
+    $code = $LASTEXITCODE
+    $lines = @($out | Where-Object { $_ -notmatch '^\{' -and $_ -notmatch 'Commons Logging' })
+    return [pscustomobject]@{ Code = $code; Text = ($lines -join "`n") }
+}
+function New-MappingFile([string]$Name, [string]$Rows) {
+    $path = Join-Path $mappingDir $Name
+    [IO.File]::WriteAllText($path, $mapHeader + $Rows, (New-Object Text.UTF8Encoding $false))
+    return $path
+}
+function Get-Grants {
+    $rows = @(Invoke-Phase1Sql "select tenant_id || ',' || external_group || ',' || product_role from tenant_oidc_group_grants where tenant_id in ('$A', '$B');" | Sort-Object)
+    return ($rows -join ';')
+}
+function Get-FileGrants {
+    $rows = @(Get-Content -LiteralPath $mappingFile | Where-Object { $_ -and $_ -notmatch '^#' -and $_ -notmatch '^entity_id,' } |
+        ForEach-Object { $f = $_ -split ','; "$($f[0]),$($f[2]),$($f[3])" } | Sort-Object)
+    return ($rows -join ';')
+}
+function Get-MappingAuditCount { [int](@(Invoke-Phase1Sql "select count(*) from audit_records where action = 'ROLE_MAPPING_LOADED';")[0]) }
+function Restore-Mapping {
+    $r = Invoke-Mapping $mappingFile
+    if ($r.Code -ne 0) { throw "Restoring the Phase 1 mapping file failed (exit $($r.Code)): $($r.Text)" }
+}
+function Check-RefusedFile([string]$Id, [string]$Name, [string]$Rows, [string[]]$MustContain) {
+    $before = Get-Grants; $auditBefore = Get-MappingAuditCount
+    $r = Invoke-Mapping (New-MappingFile "$Id.csv" $Rows)
+    $after = Get-Grants; $auditAfter = Get-MappingAuditCount
+    $missing = @($MustContain | Where-Object { -not $r.Text.Contains($_) })
+    $msg = (@($r.Text -split "`n" | Where-Object { $_ -match '^\s+line \d+:' } | ForEach-Object { $_.Trim() }) -join ' | ')
+    $ok = ($r.Code -eq 1) -and ($missing.Count -eq 0) -and ($before -eq $after) -and ($auditBefore -eq $auditAfter)
+    Add-Check $Id $Name 'exit 1, every error named by line, grants and audit unchanged' `
+        "exit $($r.Code), unchanged=$($before -eq $after), audit unchanged=$($auditBefore -eq $auditAfter), messages: $msg" $ok
+}
+
+try {
+    # M-01: the stored grants differ from the file in both directions; loading makes them equal the file.
+    Invoke-Phase1Sql ("delete from tenant_oidc_group_grants where tenant_id = '$B' and external_group = 'lv-b-admin' and product_role = 'TENANT_IT_ADMIN';" +
+        "insert into tenant_oidc_group_grants (tenant_id, issuer_uri, external_group, product_role) values ('$A', '$($Phase1.Issuer)', 'lv-stray', 'REPORT_VIEWER');") | Out-Null
+    $auditBefore = Get-MappingAuditCount
+    $r1 = Invoke-Mapping $mappingFile
+    $equal = (Get-Grants) -eq (Get-FileGrants)
+    $added = Get-MappingAuditCount
+    $ok1 = ($r1.Code -eq 0) -and $equal -and ($added - $auditBefore -eq 2) -and $r1.Text.Contains('0 to add, 1 to remove, 3 unchanged') -and $r1.Text.Contains('1 to add, 0 to remove, 2 unchanged')
+    Add-Check 'M-01' 'load the test mapping file: the grants equal the file' 'exit 0, grants = file, A: 1 removed, B: 1 added, 2 audit records' `
+        "exit $($r1.Code), grants = file: $equal, new audit records: $($added - $auditBefore)" $ok1
+
+    # M-02: the same file again changes nothing.
+    $before = Get-Grants; $auditBefore = Get-MappingAuditCount
+    $r2 = Invoke-Mapping $mappingFile
+    $ok2 = ($r2.Code -eq 0) -and $r2.Text.Contains('No changes.') -and ((Get-Grants) -eq $before) -and ((Get-MappingAuditCount) -eq $auditBefore)
+    Add-Check 'M-02' 'load the same file again: no changes, no rows changed, no audit record' 'exit 0, "No changes.", grants and audit unchanged' `
+        "exit $($r2.Code), no changes reported: $($r2.Text.Contains('No changes.')), audit records: $auditBefore -> $(Get-MappingAuditCount)" $ok2
+
+    Check-RefusedFile 'M-03' 'a mistyped role is refused, the line is named, nothing written' `
+        "$A,$nameA,lv-a-staff,DOCUMENT_SUPERVISOR`n$A,$nameA,lv-a-admin,BUSINES_ADMIN`n" @('line 4: unknown role "BUSINES_ADMIN"')
+    Check-RefusedFile 'M-04' 'a file granting the platform role is refused' `
+        "$A,$nameA,lv-a-admin,PLATFORM_OPERATIONS_ADMIN`n" @('line 3: role "PLATFORM_OPERATIONS_ADMIN" is the platform role')
+    $unknown = [guid]::NewGuid().ToString()
+    Check-RefusedFile 'M-05' 'an unknown entity, or the wrong name for an id, is refused' `
+        "$unknown,Nobody,lv-a-staff,DOCUMENT_SUPERVISOR`n$B,$nameA,lv-b-staff,DOCUMENT_SUPERVISOR`n" @("line 3: entity $unknown does not exist", "line 4: entity_name `"$nameA`" does not match the entity's name `"$nameB`"")
+    Check-RefusedFile 'M-06' 'duplicate rows, or two names for one entity, are refused' `
+        "$A,$nameA,lv-a-staff,DOCUMENT_SUPERVISOR`n$A,$nameA,lv-a-staff,DOCUMENT_SUPERVISOR`n$B,$nameB,lv-b-staff,DOCUMENT_SUPERVISOR`n$B,Phase1 Entity Bee,lv-b-admin,BUSINESS_ADMIN`n" @('line 4: the same row as line 3', 'line 6: entity_name "Phase1 Entity Bee" does not match', "is named `"Phase1 Entity Bee`" here but `"$nameB`" on line 5")
+
+    # M-07: a file for B without the lv-b-staff group: carol (staff only) loses B and keeps A;
+    # bob (staff and admin) keeps B with his admin roles only.
+    try {
+        $r7 = Invoke-Mapping (New-MappingFile 'M-07.csv' "$B,$nameB,lv-b-admin,BUSINESS_ADMIN`n$B,$nameB,lv-b-admin,TENANT_IT_ADMIN`n")
+        Write-Host "[phase1] M-07 loaded (exit $($r7.Code)) - waiting $CacheWaitSeconds s for any cache."
+        Start-Sleep -Seconds $CacheWaitSeconds
+        $tc = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'carol.ab'
+        $tb = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'bob.b'
+        $c7 = Format-Tenants (Invoke-Api -Path '/api/v1/me/tenants' -Token $tc)
+        $cb = Format-Me (Invoke-Api -Path '/api/v1/me' -Token $tc -Headers (Sel $B))
+        $ca = Format-Me (Invoke-Api -Path '/api/v1/me' -Token $tc -Headers (Sel $A))
+        $bb = Format-Me (Invoke-Api -Path '/api/v1/me' -Token $tb)
+        $ok7 = ($r7.Code -eq 0) -and ($c7 -eq "HTTP 200 [phase1-entity-a{$roleSuper}]") -and ($cb -eq 'HTTP 403') -and ($ca -eq "HTTP 200 phase1-entity-a{$roleSuper}") -and ($bb -eq 'HTTP 200 phase1-entity-b{BUSINESS_ADMIN,TENANT_IT_ADMIN}')
+        Add-Check 'M-07' "a file dropping carol's B grant: carol loses B, keeps A; bob keeps B" `
+            "exit 0; carol tenants [A]; carol B 403; carol A 200; bob B 200 without the staff role" "exit $($r7.Code); carol tenants $c7; carol B $cb; carol A $ca; bob $bb" $ok7
+    } finally {
+        Restore-Mapping
+    }
+
+    # M-08: a bad role row written by hand into B only: bob and B refused; alice and A work; carol keeps both.
+    try {
+        Invoke-Phase1Sql "insert into tenant_oidc_group_grants (tenant_id, issuer_uri, external_group, product_role) values ('$B', '$($Phase1.Issuer)', 'lv-b-admin', 'BUSINES_ADMIN');" | Out-Null
+        Write-Host "[phase1] M-08 bad row inserted - waiting $CacheWaitSeconds s for any cache."
+        Start-Sleep -Seconds $CacheWaitSeconds
+        $ta = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'alice.a'
+        $tb = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'bob.b'
+        $tc = Get-Token $Phase1.Realm $Phase1.ChecksClientId 'carol.ab'
+        $b8 = Format-Tenants (Invoke-Api -Path '/api/v1/me/tenants' -Token $tb)
+        $bm = Invoke-Api -Path '/api/v1/me' -Token $tb
+        $a8 = Format-Me (Invoke-Api -Path '/api/v1/me' -Token $ta)
+        $c8 = Format-Tenants (Invoke-Api -Path '/api/v1/me/tenants' -Token $tc)
+        $ok8 = ($b8 -eq 'HTTP 200 []') -and ($bm.Status -eq 403) -and ($a8 -eq "HTTP 200 phase1-entity-a{$roleAdmin}") -and ($c8 -eq "HTTP 200 [phase1-entity-a{$roleSuper}; phase1-entity-b{$roleSuper}]")
+        Add-Check 'M-08' 'a bad role row in B only: bob and B refused; alice and A work; carol unaffected' `
+            "bob tenants []; bob /me 403; alice A 200; carol [A; B]" "bob tenants $b8; bob /me HTTP $($bm.Status); alice $a8; carol $c8" $ok8
+    } finally {
+        Restore-Mapping
+    }
+    Start-Sleep -Seconds $CacheWaitSeconds
+    $restored = (Get-Grants) -eq (Get-FileGrants)
+    Write-Host "[phase1] Mapping restored from the Phase 1 file: $restored"
+} catch {
+    Add-Check 'M-XX' 'role mapping checks could not run' 'no error' $_.Exception.Message $false
+    try { Restore-Mapping } catch { Write-Host "[phase1] Restore failed: $($_.Exception.Message)" }
+}
+
 $tAlice = $null; $tBob = $null; $tCarol = $null; $tDave = $null
+$ta = $null; $tb = $null; $tc = $null
 $http.Dispose()
 
 # ---------------------------------------------------------------- Results (no tokens)

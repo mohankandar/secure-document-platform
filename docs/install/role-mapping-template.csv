@@ -1,0 +1,25 @@
+# LexaVault role mapping file. Format: lexavault-role-mapping/1
+# Customer: <customer name>. Reviewed with <name> (<customer IT>) on <date>.
+# Login system: <login system name>, issuer <issuer URL>
+#
+# Lines starting with # are comments. Keep the Format line as it is.
+# One row per group and role. Columns:
+#   entity_id    the entity's id in LexaVault (a UUID). Ask the platform team for it.
+#   entity_name  the entity's name in LexaVault, written exactly. It is checked against the id.
+#   group        the group name exactly as the login system sends it in the token: same case,
+#                no leading slash, at most 200 characters. Commas are allowed if the cell is quoted.
+#   role         one of DOCUMENT_PROCESSOR, DOCUMENT_SUPERVISOR, BUSINESS_ADMIN, REPORT_VIEWER,
+#                TENANT_IT_ADMIN, in capitals. The platform role is never set in this file.
+#
+# For each entity named here, the entity's grants become exactly these rows: rows missing in
+# LexaVault are added and grants not in the file are removed. Entities not in the file are not
+# touched. One group may have several roles: write one row per role.
+# The example rows below are for two entities of one customer; replace them with real rows.
+entity_id,entity_name,group,role
+a1a1a1a1-0000-4000-8000-00000000000a,Acme Lending,Lending-Processors,DOCUMENT_PROCESSOR
+a1a1a1a1-0000-4000-8000-00000000000a,Acme Lending,Lending-Supervisors,DOCUMENT_SUPERVISOR
+a1a1a1a1-0000-4000-8000-00000000000a,Acme Lending,Lending-Admins,BUSINESS_ADMIN
+a1a1a1a1-0000-4000-8000-00000000000a,Acme Lending,Acme-IT,TENANT_IT_ADMIN
+b2b2b2b2-0000-4000-8000-00000000000b,Acme Servicing,Servicing-Staff,DOCUMENT_SUPERVISOR
+b2b2b2b2-0000-4000-8000-00000000000b,Acme Servicing,Servicing-Reports,REPORT_VIEWER
+b2b2b2b2-0000-4000-8000-00000000000b,Acme Servicing,Acme-IT,TENANT_IT_ADMIN

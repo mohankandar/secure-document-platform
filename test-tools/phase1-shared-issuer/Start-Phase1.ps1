@@ -215,6 +215,14 @@ $seedOut = Get-Content -LiteralPath (Join-Path $Phase1.ToolDir 'db\phase1-seed.s
 if ($LASTEXITCODE -ne 0) { throw 'Seed failed.' }
 $seedOut | ForEach-Object { Write-Host "    $_" }
 
+Write-Step 'Loading the group-to-role grants through the load-role-mappings command (test-only mapping file).'
+$mappingFile = Join-Path $Phase1.ToolDir 'db\phase1-role-mapping.csv'
+$loadOut = & (Join-Path $Phase1.ToolDir 'Invoke-Phase1RoleMapping.ps1') -File $mappingFile -Jar $runJar
+$loadCode = $LASTEXITCODE
+$loadOut | Where-Object { $_ -notmatch '^\{' -and $_ -notmatch 'Commons Logging' } | ForEach-Object { Write-Host "    $_" }
+if ($loadCode -ne 0) { throw "Loading the role mapping file failed (exit $loadCode)." }
+Invoke-Phase1Sql "select 'grants=' || count(*) from tenant_oidc_group_grants where issuer_uri = '$($Phase1.Issuer)';" | ForEach-Object { Write-Host "    $_" }
+
 Write-Step 'Normal containers after start:'
 Get-Phase1NormalContainerState | ForEach-Object { Write-Host ("    {0,-20} {1}" -f $_.Name, $_.Status) }
 Write-Step 'Phase 1 environment is ready. Next: .\Invoke-Phase1Checks.ps1'

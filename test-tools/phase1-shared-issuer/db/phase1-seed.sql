@@ -1,6 +1,7 @@
 -- PHASE 1 TEST DATA - throwaway database lexavault_phase1 only.
--- Creates two ACTIVE entities (tenants) that share one OIDC issuer, their login-system
--- records and their group-to-role grants. Idempotent: safe to run again.
+-- Creates two ACTIVE entities (tenants) that share one OIDC issuer and their login-system
+-- records. Idempotent: safe to run again. The group-to-role grants are not inserted here: since
+-- task 0014, Start-Phase1.ps1 loads db/phase1-role-mapping.csv through the load-role-mappings command.
 -- Run by Start-Phase1.ps1 after the backend has applied the schema (001-036 + 037).
 -- Contains no passwords or tokens.
 
@@ -69,21 +70,9 @@ values
    'ACTIVE', 1, 'BOOTSTRAP', 'PHASE1-SEED', now())
 on conflict (history_id) do nothing;
 
--- Group-to-role grants. external_group is the exact claim value (no leading slash).
--- product_role must be one of the five tenant roles, in upper case.
-insert into tenant_oidc_group_grants (tenant_id, issuer_uri, external_group, product_role) values
-  ('a1a1a1a1-0000-4000-8000-00000000000a', 'http://localhost:18181/realms/lexavault-phase1', 'lv-a-staff', 'DOCUMENT_SUPERVISOR'),
-  ('a1a1a1a1-0000-4000-8000-00000000000a', 'http://localhost:18181/realms/lexavault-phase1', 'lv-a-admin', 'BUSINESS_ADMIN'),
-  ('a1a1a1a1-0000-4000-8000-00000000000a', 'http://localhost:18181/realms/lexavault-phase1', 'lv-a-admin', 'TENANT_IT_ADMIN'),
-  ('b2b2b2b2-0000-4000-8000-00000000000b', 'http://localhost:18181/realms/lexavault-phase1', 'lv-b-staff', 'DOCUMENT_SUPERVISOR'),
-  ('b2b2b2b2-0000-4000-8000-00000000000b', 'http://localhost:18181/realms/lexavault-phase1', 'lv-b-admin', 'BUSINESS_ADMIN'),
-  ('b2b2b2b2-0000-4000-8000-00000000000b', 'http://localhost:18181/realms/lexavault-phase1', 'lv-b-admin', 'TENANT_IT_ADMIN')
-on conflict do nothing;
-
 commit;
 
 -- Summary for the start script (no secrets)
 select 'tenants' as item, count(*) from tenants where id in ('a1a1a1a1-0000-4000-8000-00000000000a','b2b2b2b2-0000-4000-8000-00000000000b')
 union all select 'active_connections', count(*) from enterprise_identity_connections where status = 'ACTIVE' and provider_id = 'phase1-oidc'
-union all select 'grants', count(*) from tenant_oidc_group_grants where issuer_uri = 'http://localhost:18181/realms/lexavault-phase1'
 union all select 'capabilities', count(*) from tenant_capabilities where tenant_id in ('a1a1a1a1-0000-4000-8000-00000000000a','b2b2b2b2-0000-4000-8000-00000000000b');

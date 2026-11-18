@@ -1,0 +1,10 @@
+# LexaVault role mapping file. Format: lexavault-role-mapping/1
+# PHASE 1 TEST DATA - throwaway database lexavault_phase1 only. Loaded by Start-Phase1.ps1
+# through the load-role-mappings command. The same grants the seed inserted by SQL before task 0014.
+entity_id,entity_name,group,role
+a1a1a1a1-0000-4000-8000-00000000000a,Phase1 Entity A,lv-a-staff,DOCUMENT_SUPERVISOR
+a1a1a1a1-0000-4000-8000-00000000000a,Phase1 Entity A,lv-a-admin,BUSINESS_ADMIN
+a1a1a1a1-0000-4000-8000-00000000000a,Phase1 Entity A,lv-a-admin,TENANT_IT_ADMIN
+b2b2b2b2-0000-4000-8000-00000000000b,Phase1 Entity B,lv-b-staff,DOCUMENT_SUPERVISOR
+b2b2b2b2-0000-4000-8000-00000000000b,Phase1 Entity B,lv-b-admin,BUSINESS_ADMIN
+b2b2b2b2-0000-4000-8000-00000000000b,Phase1 Entity B,lv-b-admin,TENANT_IT_ADMIN
