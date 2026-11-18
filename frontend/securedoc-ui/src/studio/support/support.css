@@ -1,0 +1,99 @@
+/* Support, the problem page and Continue manually (UI task U012). Tokens only; breakpoints from the documented set. */
+
+.cf-sp { display: flex; flex-direction: column; gap: 16px; }
+.cf-sp .cf-page-head { margin-bottom: 0; }
+.cf-sp-crumbs.cf-eyebrow { gap: 6px; margin-bottom: 6px; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; }
+.cf-sp-crumbs a:hover { color: var(--cf-ink); text-decoration: underline; }
+
+/* ---------- Support list ---------- */
+.cf-sp-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cf-sp-grow { flex: 1; }
+.cf-sp-find { width: min(320px, 100%); }
+.cf-sp-more > form { display: flex; flex-direction: column; gap: 14px; }
+.cf-sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 16px; }
+.cf-sp-count { font-size: 12px; color: var(--cf-muted); }
+
+.cf-sp-row {
+  position: relative; display: grid; align-items: center; gap: 16px;
+  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) 160px 80px 80px 84px;
+  padding: 12px 0 12px 20px; transition: background-color 100ms ease;
+}
+.cf-sp-row:hover { background: var(--cf-raised); }
+.cf-sp-row[data-blocked] .cf-case-flag { background: var(--cf-danger); }
+.cf-sp-row .cf-case-act { padding-right: 16px; }
+.cf-sp-what { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.cf-sp-what[data-muted] { color: var(--cf-muted); }
+.cf-sp-note { font-size: 12px; color: var(--cf-muted); }
+
+/* ---------- Problem page ---------- */
+.cf-pb-title { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.cf-pb-status { font-size: 13px; }
+.cf-pb-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.cf-pb-card { display: flex; flex-direction: column; gap: 10px; padding: 18px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 10px; min-width: 0; }
+.cf-pb-card h2 { font-size: 14px; font-weight: 600; }
+.cf-pb-card > p { font-size: 14px; text-wrap: pretty; }
+.cf-pb-actions { display: flex; flex-direction: column; gap: 8px; }
+.cf-pb-actions > .cf-btn { width: 100%; }
+.cf-pb-hint { font-size: 12px; color: var(--cf-muted); text-wrap: pretty; }
+.cf-pb-more { margin-top: 4px; }
+.cf-pb-more-list { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.cf-pb-steps { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.cf-pb-steps li { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.cf-pb-steps li.cf-muted { display: block; font-size: 12px; }
+.cf-pb-steps time { font-size: 12px; color: var(--cf-muted); }
+.cf-sp .cf-tech-defs dt { flex: none; width: 140px; }
+
+/* ---------- Continue manually ---------- */
+.cf-mc-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+.cf-mc-small { font-size: 12px; }
+.cf-mc-pad { padding: 24px; }
+.cf-mc-pages { position: sticky; top: 16px; max-height: calc(100vh - 120px); }
+.cf-mc-docs { display: flex; flex-wrap: wrap; gap: 6px; }
+.cf-mc-doc {
+  max-width: 100%; padding: 3px 10px; border: 1px solid var(--cf-line-strong); border-radius: 999px; background: var(--cf-surface);
+  color: var(--cf-muted); font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cf-mc-doc[aria-pressed='true'] { border-color: var(--cf-mark); color: var(--cf-ink); box-shadow: inset 0 0 0 1px var(--cf-mark); }
+.cf-mc-thumbs { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; padding: 2px; }
+.cf-mc-thumb {
+  position: relative; display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--cf-line); border-radius: 8px;
+  background: var(--cf-raised); cursor: pointer; text-align: left;
+}
+.cf-mc-thumb[aria-current='page'] { border-color: var(--cf-mark); box-shadow: 0 0 0 1px var(--cf-mark); }
+.cf-mc-thumb img { display: block; width: 100%; height: auto; border-radius: 2px; background: var(--cf-paper); }
+.cf-mc-thumb-empty { display: block; aspect-ratio: 8.5 / 11; border-radius: 2px; background: var(--cf-paper); font-size: 11px; color: var(--cf-muted); padding: 6px; }
+.cf-mc-thumb-label { font-size: 12px; color: var(--cf-muted); }
+.cf-mc-thumb[aria-current='page'] .cf-mc-thumb-label { color: var(--cf-ink); font-weight: 600; }
+.cf-mc-side { position: sticky; top: 16px; }
+.cf-mc-side > .cf-btn, .cf-mc-section > .cf-btn { width: 100%; }
+.cf-mc-section { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--cf-line); }
+.cf-mc-section h3 { font-size: 13px; font-weight: 500; }
+.cf-mc-marks { display: flex; flex-direction: column; gap: 6px; }
+.cf-mc-marks li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+/* A normal-size checkbox: the legacy stylesheet gives every input the full width. */
+.cf-mc-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--cf-ink); cursor: pointer; }
+.cf-mc-check input { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--cf-ink); }
+
+@media (max-width: 1200px) {
+  .cf-sp-row { grid-template-columns: minmax(130px, 170px) minmax(0, 1fr) 150px 72px 84px; }
+  .cf-sp-row > .cf-case-time { display: none; }
+  .cf-mc-grid { grid-template-columns: 180px minmax(0, 1fr) 260px; }
+}
+
+@media (max-width: 1024px) {
+  .cf-pb-cards { grid-template-columns: 1fr; }
+  .cf-sp-row { grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) 140px 84px; }
+  .cf-sp-row > .cf-muted { display: none; }
+  .cf-mc-grid { grid-template-columns: minmax(0, 1fr) 260px; }
+  .cf-mc-pages { grid-column: 1 / -1; position: static; max-height: none; }
+  .cf-mc-thumbs { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
+  .cf-mc-thumb { flex: none; width: 96px; }
+}
+
+@media (max-width: 768px) {
+  .cf-sp-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .cf-sp-row > .cf-sp-what, .cf-sp-row > span:nth-child(4) { grid-column: 1 / -1; }
+  .cf-mc-grid { grid-template-columns: 1fr; }
+  .cf-mc-side { position: static; }
+  .cf-pb-steps li { grid-template-columns: 1fr; gap: 0; }
+}

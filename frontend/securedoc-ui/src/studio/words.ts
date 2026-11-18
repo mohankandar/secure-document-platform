@@ -257,3 +257,66 @@ export function runsLeft(used: number, maximum: number): string {
   const left = Math.max(0, maximum - used);
   return `${left} of ${maximum} run${maximum === 1 ? '' : 's'} left`;
 }
+
+/* ---------- Processing problems (UI task U012) ---------- */
+
+export interface ProblemReason {
+  /** The page title and the Support row, for example "Text recognition timed out". */
+  title: string;
+  /** One plain sentence for "What happened". */
+  sentence: string;
+  /** False when the code is not in the list: the screen shows "Processing problem" and the code only under Technical details. */
+  known: boolean;
+}
+
+/** Reason codes as the server records them (TechnicalFailureCode), in plain words. */
+export const PROBLEM_REASONS: Record<string, Omit<ProblemReason, 'known'>> = {
+  OCR_TIMEOUT: { title: 'Text recognition timed out', sentence: 'Text recognition didn’t finish within the allowed time.' },
+  OCR_UNAVAILABLE: { title: 'Text recognition wasn’t available', sentence: 'The text recognition service didn’t answer.' },
+  OCR_PROCESS_FAILED: { title: 'Text recognition couldn’t read a document', sentence: 'Text recognition couldn’t read the document.' },
+  AI_TIMEOUT: { title: 'AI model didn’t answer in time', sentence: 'The AI model didn’t answer within the allowed time.' },
+  MODEL_TIMEOUT: { title: 'AI model didn’t answer in time', sentence: 'The AI model didn’t answer within the allowed time.' },
+  AI_UNAVAILABLE: { title: 'AI model wasn’t available', sentence: 'The AI model didn’t answer.' },
+  AI_RATE_LIMITED: { title: 'AI model asked LexaVault to slow down', sentence: 'The AI model turned requests away for a while because too many arrived.' },
+  AI_REJECTED: { title: 'AI model’s answer couldn’t be used', sentence: 'The AI model sent an answer LexaVault couldn’t safely use.' },
+  AI_INVALID_RESPONSE: { title: 'AI model’s answer couldn’t be used', sentence: 'The AI model sent an answer LexaVault couldn’t safely use.' },
+  SDV_UNAVAILABLE: { title: 'Secure Document Vault didn’t answer', sentence: 'Secure Document Vault didn’t answer when LexaVault tried to send the case.' },
+  DELIVERY_IO: { title: 'The delivery destination couldn’t be reached', sentence: 'LexaVault couldn’t reach the place the case is sent to.' },
+  DELIVERY_DESTINATION_INVALID: { title: 'The delivery destination isn’t set up for this case', sentence: 'The place this case is sent to isn’t set up correctly for it.' },
+  STORAGE_IO: { title: 'Document storage wasn’t available', sentence: 'LexaVault’s document storage didn’t answer for a while.' },
+};
+
+export const UNKNOWN_PROBLEM: Omit<ProblemReason, 'known'> = {
+  title: 'Processing problem',
+  sentence: 'Processing stopped for a technical reason. The code is under Technical details.',
+};
+
+export function problemReason(code: string | null | undefined): ProblemReason {
+  const found = code ? PROBLEM_REASONS[code.trim().toUpperCase()] : undefined;
+  return found ? { ...found, known: true } : { ...UNKNOWN_PROBLEM, known: false };
+}
+
+/** Where in processing a problem happened (ProcessingStage), for "at text recognition". */
+export const PROCESSING_STAGE_WORDS: Record<string, string> = {
+  INTAKE: 'receiving',
+  TEXT_EXTRACTION: 'reading the text',
+  OCR: 'text recognition',
+  AI_ANALYSIS: 'AI analysis',
+  SENSITIVE_DETECTION: 'finding sensitive data',
+  DOCUMENT_PROFILE: 'recognising the document type',
+  IDENTIFIER_EXTRACTION: 'reading the case fields',
+  MANUAL_REVIEW: 'review',
+  REDACTION: 'redacting',
+  VERIFICATION: 'checking the redaction',
+  DERIVED_DOCUMENT_SPLIT: 'splitting the documents',
+  ROUTING: 'choosing where to send it',
+  DELIVERY: 'sending',
+  STORAGE: 'storing documents',
+  RETENTION: 'keeping and deleting',
+  MIGRATION_REVALIDATION: 'checking again after an update',
+  DOCUMENT_PROCESSING: 'processing',
+};
+
+export function processingStageWords(stage: string | null | undefined): string {
+  return (stage && PROCESSING_STAGE_WORDS[stage.trim().toUpperCase()]) || 'processing';
+}

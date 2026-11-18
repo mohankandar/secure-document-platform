@@ -16,10 +16,9 @@ import Intake from './Intake';
 import Review from './Review';
 import Reports from './reports/Reports';
 import Admin from './admin/Admin';
-import SupportIncidentsPage from '../pages/SupportIncidentsPage';
-import SupportIncidentDetailPage from '../pages/SupportIncidentDetailPage';
-import TechnicalIssueDetailPage from '../pages/TechnicalIssueDetailPage';
-import ManualFallbackPage from '../pages/ManualFallbackPage';
+import SupportList from './support/SupportList';
+import { CaseProblem, IncidentProblem } from './support/ProblemDetail';
+import ManualCase from './support/ManualCase';
 import './studio.css';
 
 const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -140,10 +139,11 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/authentication-admin" element={<Navigate to={caps.includes(CAP.auth) ? '/admin/identity' : home} replace />} />
           <Route path="/platform-admin" element={<Navigate to={caps.includes(CAP.technicalAdmin) ? '/admin/health' : home} replace />} />
           <Route path="/audit" element={<Navigate to={caps.includes(CAP.audit) ? '/admin/audit' : home} replace />} />
-          <Route path="/support/incidents" element={canSupport ? <SupportIncidentsPage /> : <Navigate to={home} replace />} />
-          <Route path="/support/incidents/:incidentId" element={canSupport ? <SupportIncidentDetailPage /> : <Navigate to={home} replace />} />
-          <Route path="/technical-exceptions/:packageId" element={canSupport ? <TechnicalIssueDetailPage /> : <Navigate to={home} replace />} />
-          <Route path="/packages/:packageId/manual-processing" element={canReview ? <ManualFallbackPage /> : <Navigate to={home} replace />} />
+          {/* UI task U012: Case File screens; the legacy pages stay for the legacy app (App.tsx). */}
+          <Route path="/support/incidents" element={canSupport ? <SupportList caps={caps} entityName={me.tenantName} /> : <Navigate to={home} replace />} />
+          <Route path="/support/incidents/:incidentId" element={canSupport ? <IncidentProblem caps={caps} /> : <Navigate to={home} replace />} />
+          <Route path="/technical-exceptions/:packageId" element={canSupport ? <CaseProblem caps={caps} /> : <Navigate to={home} replace />} />
+          <Route path="/packages/:packageId/manual-processing" element={canReview ? <ManualCase /> : <Navigate to={home} replace />} />
           <Route path="/packages/new" element={canIntake ? <Navigate to="/intake?via=upload" replace /> : <Navigate to={home} replace />} />
           <Route path="/scanner-intake" element={canIntake ? <Navigate to="/intake?via=scan" replace /> : <Navigate to={home} replace />} />
           <Route path="/packages/:caseId" element={<LegacyCaseRedirect />} />
