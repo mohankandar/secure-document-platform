@@ -88,7 +88,10 @@ The app is at http://localhost:5173 and the backend at http://localhost:8080.
 ## Known state on 2026-11-17
 
 - The full build passes on this machine, with 426 backend tests, and the 21 R1B unit tests pass.
+- Frontend: `cd frontend/securedoc-ui; npm run test:standalone` runs every frontend suite that needs no running app (`test:auth` 8, `test:ui-framework` 17, `test:oidc-signin` 9). The standard build does not run it; run it with every frontend change. `test:e2e` still needs the LOCAL app running on 5173.
 - Surefire 3.5.2 is pinned in backend/pom.xml for every module. Before that, the 5 infrastructure test classes ran only where Maven's own default Surefire supported JUnit 5 (Maven 3.9 on Windows did, Maven 3.8.7 on Ubuntu did not).
-- Migration 037 was run by hand on PostgreSQL 16 in seven scenarios and behaved correctly. It has not been run through Liquibase.
-- No real sign-in with two entities has been run yet. That is Phase 1.
+- Enterprise Identity is at 0.2.1 (tag `v0.2.1`, null-safe audience validator). LexaVault uses 0.2.1; SDV still uses 0.2.0.
+- **Phase 1 is accepted** (reports 0004 to 0009): one login system, two entities, in the isolated environment under `test-tools/phase1-shared-issuer/` (60 scripted checks and the browser script pass; the owner's screen checks pass). Migration 037 was applied there through Liquibase by a test-only changelog; it is still not in the master changelog, and shared-issuer selection is still off by default.
+- The newest (Case File) design has the entity switch at the top right (task 0009). The single-entity sign-in race on the dev server is fixed (task 0008).
+- The Phase 1 containers are kept for Phase 1b; start the rest again with `test-tools/phase1-shared-issuer/Start-Phase1.ps1`. Tasks and reports are in `docs/work/`.
 - There is no automatic build on GitHub.
