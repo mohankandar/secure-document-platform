@@ -101,6 +101,8 @@ The API does not return some things the design shows. Nothing was invented in th
    
    No schema change is expected for the first and third (the data exists); the rejection reason needs checking. **Recommendation:** one backend task after the UI series, together with the email on `/me`.
 
+**Owner's answer (2026-11-18):** yes, in one backend task after the UI series, together with the email on `/me`. The stop reason shown to Processors and Supervisors must be a plain sentence with no technical detail; the full reason stays visible to the IT Administrator only.
+
 ## Suggested next step
 
 U004: Review (the text found with context, zoom, "Redact all like this").
