@@ -304,6 +304,10 @@ class ApiClient {
     return this.request(`/integrations/${connectionId}/polling`);
   }
 
+  async testPollingConnection(connectionId: string): Promise<PollingConnectionStatus> {
+    return this.request(`/integrations/${connectionId}/polling/test-connection`, { method: 'POST' });
+  }
+
   async runPollingNow(connectionId: string): Promise<PollingRun> {
     return this.request(`/integrations/${connectionId}/polling/run-now`, { method: 'POST' });
   }

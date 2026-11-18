@@ -3,55 +3,30 @@ import useSWR, { useSWRConfig } from 'swr';
 import { apiClient } from '../../api/client';
 import type {
   DerivedDelivery,
-  IntegrationAcknowledgementMode,
-  IntegrationAuthenticationType,
   IntegrationConnection,
   IntegrationConnectionRequest,
-  IntegrationPollingScheduleType,
   IntegrationProviderType,
   IntegrationPurpose,
   PollingConnectionStatus,
   PlatformAdminOverview,
+  WatchedFolderAdminStatus,
 } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
-import { ConfirmDialog, Loading, NumberField, SelectField, Sheet, TextField, Toggle, humanize, when } from './shared';
+import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
+import { MINUTE_UNITS } from './adminRules';
+import {
+  ACK_NAMES, AUTH_NAMES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
+  connectionStatus, connectionTag, isPolling, methodOf, watchedFolderStatus,
+  type Method, type StatusLine, type View,
+} from './integrationRules';
 import RoutingRules from './RoutingRules';
 import { useUnsavedWork } from '../unsavedWork';
 
-type View = IntegrationPurpose | 'ALL';
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
 
-const VIEWS: { id: View; label: string; note: string; empty: string }[] = [
-  { id: 'INGESTION_SOURCE', label: 'Intake sources', note: 'Trusted sources that send or supply document packages into this tenant.', empty: 'No intake-source connections are configured.' },
-  { id: 'SDV_DELIVERY', label: 'Master delivery', note: 'Destinations for the completed redacted master package.', empty: 'No master-delivery connections are configured.' },
-  { id: 'DERIVED_DOCUMENT_DELIVERY', label: 'Derived delivery', note: 'Destinations used by derived-document routing rules.', empty: 'No derived-delivery connections are configured.' },
-  { id: 'ALL', label: 'All', note: 'Every configured tenant integration in one place.', empty: 'No tenant integration connections are configured yet.' },
-];
-
-const PURPOSES: IntegrationPurpose[] = ['INGESTION_SOURCE', 'SDV_DELIVERY', 'DERIVED_DOCUMENT_DELIVERY'];
-const PROVIDERS: IntegrationProviderType[] = ['PUSH_API', 'HTTP_API', 'FILE_SHARE', 'WATCHED_FOLDER', 'SCANNER'];
-const PROVIDERS_BY_PURPOSE: Record<IntegrationPurpose, IntegrationProviderType[]> = {
-  INGESTION_SOURCE: ['PUSH_API', 'HTTP_API', 'WATCHED_FOLDER', 'SCANNER'],
-  SDV_DELIVERY: ['HTTP_API'],
-  DERIVED_DOCUMENT_DELIVERY: ['HTTP_API', 'FILE_SHARE'],
-};
-const AUTH: IntegrationAuthenticationType[] = ['NONE', 'BASIC', 'API_KEY', 'JWT', 'OAUTH2_CLIENT_CREDENTIALS', 'MTLS'];
-const ACK: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SDV_SUBMISSION_ACK'];
 const MB = 1048576;
-
-/** Business document flow is separate from the direction of the HTTP request. */
-const connectionFlow = (d: Pick<IntegrationConnection, 'purpose' | 'providerType'>) => {
-  if (d.purpose !== 'INGESTION_SOURCE') return 'Send processed documents to an external destination';
-  if (d.providerType === 'HTTP_API') return 'Receive documents — LexaVault retrieves them from an external HTTP source';
-  if (d.providerType === 'PUSH_API') return 'Receive documents — the external system sends them to LexaVault';
-  if (d.providerType === 'WATCHED_FOLDER') return 'Receive documents — LexaVault monitors a source folder';
-  return 'Receive documents — a scanner supplies the intake package';
-};
-
-const isPollingConnection = (c: Pick<IntegrationConnection, 'purpose' | 'providerType' | 'direction'>) =>
-  c.purpose === 'INGESTION_SOURCE' && c.providerType === 'HTTP_API' && c.direction === 'OUTBOUND';
 
 const baseDraft = (): Draft => ({
   name: '', description: '', purpose: 'INGESTION_SOURCE', direction: 'INBOUND', providerType: 'PUSH_API', authenticationType: 'NONE',
@@ -61,11 +36,34 @@ const baseDraft = (): Draft => ({
   acknowledgementMode: 'NONE', enabled: false,
 });
 
-function draftForPurpose(purpose: IntegrationPurpose): Draft {
-  const d = baseDraft();
-  if (purpose === 'SDV_DELIVERY') return { ...d, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' };
-  if (purpose === 'DERIVED_DOCUMENT_DELIVERY') return { ...d, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'DESTINATION_RECEIPT' };
-  return d;
+const NO_POLLING = { pollingScheduleType: undefined, pollingIntervalMinutes: undefined, pollingLocalTime: undefined, pollingTimeZone: undefined, pollingBatchLimit: undefined };
+
+/**
+ * A method sets purpose, provider, direction and acknowledgement together, with the same rules the earlier editor
+ * applied per purpose and provider (applyPurpose / applyProvider). Fields the method does not use are cleared.
+ */
+function applyMethod(cur: Draft, method: Method): Draft {
+  const keep = { connectionId: cur.connectionId, secretConfigured: cur.secretConfigured, name: cur.name, description: cur.description, enabled: cur.enabled,
+    timeoutSeconds: cur.timeoutSeconds, retryMaxAttempts: cur.retryMaxAttempts, authenticationType: cur.authenticationType, secretReference: cur.secretReference };
+  const base = { ...baseDraft(), ...keep };
+  const receive = (providerType: IntegrationProviderType, extra: Partial<Draft> = {}): Draft => ({
+    ...base, purpose: 'INGESTION_SOURCE', direction: 'INBOUND', providerType, acknowledgementMode: 'NONE', clientPrincipal: cur.clientPrincipal,
+    incompleteWindowHours: cur.incompleteWindowHours, maxDocumentsPerIntake: cur.maxDocumentsPerIntake, maxPdfSizeBytes: cur.maxPdfSizeBytes, maxPdfPages: cur.maxPdfPages,
+    ...NO_POLLING, ...extra,
+  });
+  switch (method) {
+    case 'PUSH': return receive('PUSH_API');
+    case 'FOLDER': return receive('WATCHED_FOLDER', { clientPrincipal: '' });
+    case 'SCANNER': return receive('SCANNER', { maxDocumentsPerIntake: 1, maxPdfSizeBytes: 2147483648, maxPdfPages: 10000 });
+    case 'POLL': return receive('HTTP_API', {
+      direction: 'OUTBOUND', clientPrincipal: '', endpoint: cur.endpoint, acknowledgementMode: 'SOURCE_PICKUP_ACK',
+      pollingScheduleType: cur.pollingScheduleType || 'INTERVAL', pollingIntervalMinutes: cur.pollingIntervalMinutes || 60,
+      pollingLocalTime: cur.pollingLocalTime, pollingTimeZone: cur.pollingTimeZone, pollingBatchLimit: cur.pollingBatchLimit || 100,
+    });
+    case 'SDV': return { ...base, purpose: 'SDV_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'SDV_SUBMISSION_ACK' };
+    case 'BARCODE_WEB': return { ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'DESTINATION_RECEIPT' };
+    case 'BARCODE_SHARE': return { ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'FILE_SHARE', authenticationType: 'NONE', fileShareRoot: cur.fileShareRoot, acknowledgementMode: 'DURABLE_FILE_WRITE' };
+  }
 }
 
 function toDraft(c: IntegrationConnection): Draft {
@@ -80,48 +78,8 @@ function toDraft(c: IntegrationConnection): Draft {
   };
 }
 
-/** Purpose change rules, identical to production IntegrationsPage.applyPurpose. */
-function applyPurpose(cur: Draft, purpose: IntegrationPurpose): Draft {
-  if (purpose === 'SDV_DELIVERY') return { ...cur, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' };
-  if (purpose === 'DERIVED_DOCUMENT_DELIVERY') {
-    const fs = cur.providerType === 'FILE_SHARE';
-    return { ...cur, purpose, direction: 'OUTBOUND', providerType: fs ? 'FILE_SHARE' : 'HTTP_API', acknowledgementMode: fs ? 'DURABLE_FILE_WRITE' : 'DESTINATION_RECEIPT' };
-  }
-  const providerType = PROVIDERS_BY_PURPOSE.INGESTION_SOURCE.includes(cur.providerType) ? cur.providerType : 'PUSH_API';
-  const polling = providerType === 'HTTP_API';
-  return {
-    ...cur, purpose, providerType, direction: polling ? 'OUTBOUND' : 'INBOUND', acknowledgementMode: polling ? 'SOURCE_PICKUP_ACK' : 'NONE',
-    pollingScheduleType: polling ? (cur.pollingScheduleType || 'INTERVAL') : undefined,
-    pollingIntervalMinutes: polling ? (cur.pollingIntervalMinutes || 60) : undefined,
-    pollingBatchLimit: polling ? (cur.pollingBatchLimit || 100) : undefined,
-  };
-}
-
-const NO_POLLING = { pollingScheduleType: undefined, pollingIntervalMinutes: undefined, pollingLocalTime: undefined, pollingTimeZone: undefined, pollingBatchLimit: undefined };
-
-/** Provider change rules, identical to production IntegrationsPage.applyProvider. */
-function applyProvider(cur: Draft, providerType: IntegrationProviderType): Draft {
-  const next: Draft = { ...cur, providerType };
-  if (providerType === 'PUSH_API' || providerType === 'WATCHED_FOLDER' || providerType === 'SCANNER') {
-    Object.assign(next, { direction: 'INBOUND', purpose: 'INGESTION_SOURCE', endpoint: '', fileShareRoot: '', acknowledgementMode: 'NONE' }, NO_POLLING);
-    if (providerType === 'SCANNER') Object.assign(next, { maxDocumentsPerIntake: 1, maxPdfSizeBytes: 2147483648, maxPdfPages: 10000 });
-  } else if (providerType === 'FILE_SHARE') {
-    Object.assign(next, { direction: 'OUTBOUND', purpose: 'DERIVED_DOCUMENT_DELIVERY', authenticationType: 'NONE', endpoint: '', acknowledgementMode: 'DURABLE_FILE_WRITE' }, NO_POLLING);
-  } else {
-    next.direction = 'OUTBOUND';
-    next.fileShareRoot = '';
-    next.acknowledgementMode = next.purpose === 'SDV_DELIVERY' ? 'SDV_SUBMISSION_ACK' : next.purpose === 'INGESTION_SOURCE' ? 'SOURCE_PICKUP_ACK' : 'DESTINATION_RECEIPT';
-    if (next.purpose === 'INGESTION_SOURCE') {
-      next.pollingScheduleType = next.pollingScheduleType || 'INTERVAL';
-      next.pollingIntervalMinutes = next.pollingIntervalMinutes || 60;
-      next.pollingBatchLimit = next.pollingBatchLimit || 100;
-    }
-  }
-  return next;
-}
-
 function toPayload(d: Draft): IntegrationConnectionRequest {
-  const polling = isPollingConnection(d);
+  const polling = isPolling(d);
   const scanner = d.providerType === 'SCANNER';
   return {
     name: d.name.trim(),
@@ -150,13 +108,20 @@ function toPayload(d: Draft): IntegrationConnectionRequest {
   };
 }
 
+/** Which saved connections LexaVault can test: the ones it connects to itself. */
+const testKind = (c: Pick<IntegrationConnection, 'purpose' | 'providerType'>): 'sdv' | 'derived' | 'polling' | null =>
+  c.purpose === 'SDV_DELIVERY' && c.providerType === 'HTTP_API' ? 'sdv'
+    : c.purpose === 'DERIVED_DOCUMENT_DELIVERY' ? 'derived'
+      : isPolling(c) ? 'polling' : null;
+
+const purposeOf = (v: View): IntegrationPurpose => (v === 'ALL' ? 'INGESTION_SOURCE' : v);
+
 export default function IntegrationsArea() {
   const { mutate: globalMutate } = useSWRConfig();
-  const toast = useToast();
   const conns = useSWR<IntegrationConnection[]>('integrations', () => apiClient.listIntegrationConnections(), { revalidateOnFocus: false });
   const [view, setView] = useState<View>('INGESTION_SOURCE');
-  const watched = useSWR<PlatformAdminOverview>(view === 'INGESTION_SOURCE' ? 'platform-overview' : null, () => apiClient.getPlatformAdminOverview(), { revalidateOnFocus: false });
-  const [scanningFolder, setScanningFolder] = useState(false);
+  const showsReceiving = view === 'INGESTION_SOURCE' || view === 'ALL';
+  const overview = useSWR<PlatformAdminOverview>('platform-overview', () => apiClient.getPlatformAdminOverview(), { revalidateOnFocus: false });
   const attention = useSWR<DerivedDelivery[]>('derived-attention', () => apiClient.listDerivedDeliveryAttention().catch(() => []), { revalidateOnFocus: false });
   const [draft, setDraft] = useState<Draft | null>(null);
   useUnsavedWork(draft !== null);
@@ -164,28 +129,24 @@ export default function IntegrationsArea() {
 
   if (!conns.data) return <Loading error={conns.error} retry={() => conns.mutate()} label="Integrations" />;
   const all = [...conns.data].sort((a, b) => a.name.localeCompare(b.name));
-  const count = (v: View) => (v === 'ALL' ? all.length : all.filter((c) => c.purpose === v).length);
-  const visible = view === 'ALL' ? all : all.filter((c) => c.purpose === view);
-  const viewCfg = VIEWS.find((v) => v.id === view)!;
-  const derivedAttention = attention.data ?? [];
-  const showAttention = derivedAttention.length > 0 && (view === 'DERIVED_DOCUMENT_DELIVERY' || view === 'ALL');
 
-  const scanWatchedFolder = async () => {
-    setScanningFolder(true);
-    try {
-      const result = await apiClient.scanPlatformWatchedFolder();
-      await watched.mutate();
-      toast(`Scan finished: ${result.accepted} accepted, ${result.rejected} rejected, ${result.duplicates} duplicates.`);
-    } catch (error) {
-      toast(errorMessage(error, 'Watched-folder scan failed.'), 'danger');
-    } finally {
-      setScanningFolder(false);
-    }
-  };
+  // The watched folder appears once (finding 16): on its connection when there is exactly one, else as its own row.
+  const folder = overview.data?.watchedFolder;
+  const folderConnections = all.filter((c) => c.providerType === 'WATCHED_FOLDER');
+  const folderOn = folderConnections.length === 1 ? folderConnections[0].connectionId : null;
+  const folderRow = !!folder?.rootPath && folderOn === null;
+
+  const inView = (v: View) => (v === 'ALL' ? all : all.filter((c) => c.purpose === v));
+  const count = (v: View) => inView(v).length + (folderRow && (v === 'INGESTION_SOURCE' || v === 'ALL') ? 1 : 0);
+  const visible = inView(view);
+  const viewCfg = VIEWS.find((v) => v.id === view)!;
+  const failed = (attention.data ?? []).filter((d) => d.status === 'ATTENTION_REQUIRED' || d.status === 'RETRY_PENDING');
 
   const refresh = async () => {
-    await Promise.all([conns.mutate(), attention.mutate(), globalMutate('routing-destinations'), globalMutate((k) => Array.isArray(k) && k[0] === 'polling')]);
+    await Promise.all([conns.mutate(), attention.mutate(), overview.mutate(), globalMutate('routing-destinations'), globalMutate('routing-rules'), globalMutate((k) => Array.isArray(k) && k[0] === 'polling')]);
   };
+
+  const empty = visible.length === 0 && !(folderRow && showsReceiving);
 
   return (
     <div className="cf-ad-stack">
@@ -198,130 +159,171 @@ export default function IntegrationsArea() {
           ))}
         </div>
         <span className="cf-ad-spacer" />
-        <span className="cf-ad-hint">{all.filter((c) => c.enabled).length} of {all.length} enabled</span>
         <button type="button" className="cf-btn" data-size="sm" data-variant="ghost" onClick={() => void refresh()}>Refresh</button>
-        <button type="button" className="cf-btn" data-size="sm" data-variant="solid" onClick={() => setDraft(draftForPurpose(view === 'ALL' ? 'INGESTION_SOURCE' : view))}>New connection</button>
+        <button type="button" className="cf-btn" data-size="sm" data-variant="solid" onClick={() => setDraft({ ...baseDraft(), purpose: purposeOf(view) })}>Add a connection</button>
       </div>
 
-      <section className="cf-ad-card" aria-label={viewCfg.label}>
-        <header className="cf-ad-card-head"><div><h2>{viewCfg.label}</h2><p>{viewCfg.note} Disabled connections remain auditable.</p></div></header>
-        {visible.length === 0 ? (
-          <div className="cf-ad-card-body"><p className="cf-ad-hint">{viewCfg.empty} Create a connection here when this tenant needs one.</p></div>
+      <section className="cf-ad-card" aria-label={viewCfg.title}>
+        <header className="cf-ad-card-head"><div><h2>{viewCfg.title}</h2><p>{viewCfg.note}</p></div></header>
+        {empty ? (
+          <div className="cf-ad-card-body"><p className="cf-ad-hint">{viewCfg.empty}</p></div>
         ) : (
           <ul className="cf-ad-conns">
             {visible.map((c) => (
-              <Connection key={c.connectionId} c={c} showPurpose={view === 'ALL'} onChanged={refresh} onEdit={() => setDraft(toDraft(c))} onToggle={() => setToggling(c)} />
+              <Connection key={c.connectionId} c={c} showGroup={view === 'ALL'} folder={c.connectionId === folderOn ? folder : undefined}
+                onChanged={refresh} onEdit={() => setDraft(toDraft(c))} onToggle={() => setToggling(c)} />
             ))}
+            {folderRow && showsReceiving && folder && <FolderRow folder={folder} onChanged={refresh} />}
           </ul>
         )}
+        {view === 'DERIVED_DOCUMENT_DELIVERY' && <BarcodeExtras failed={failed} onChanged={refresh} />}
       </section>
 
-      {view === 'INGESTION_SOURCE' && watched.data?.watchedFolder && (
-        <section className="cf-ad-card" aria-label="Watched-folder intake operations">
-          <header className="cf-ad-card-head">
-            <div>
-              <h2>Watched-folder intake operations</h2>
-              <p>Scan status for the configured folder intake. Manual scans use the existing coordinated multi-node scheduler.</p>
-            </div>
-            <button type="button" className="cf-btn" data-size="sm" disabled={!watched.data.watchedFolder.enabled || scanningFolder}
-              onClick={() => void scanWatchedFolder()}>{scanningFolder && <Spinner label="Scanning" />}Scan now</button>
-          </header>
-          <dl className="cf-ad-defs">
-            <div><dt>Connection</dt><dd>{watched.data.watchedFolder.enabled ? 'Enabled' : 'Disabled'}</dd></div>
-            <div><dt>Automatic scan</dt><dd>{watched.data.watchedFolder.schedulingEnabled ? `Every ${Math.round(watched.data.watchedFolder.scanIntervalMs / 1000)}s` : 'Disabled'}</dd></div>
-            <div><dt>Coordination</dt><dd>{watched.data.watchedFolder.coordinationEnabled ? 'Multi-node' : 'Single-node'}</dd></div>
-            <div><dt>Last scan</dt><dd>{watched.data.watchedFolder.lastScanAt ? when(watched.data.watchedFolder.lastScanAt) : 'Not run in this process'}</dd></div>
-            <div><dt>Outcome</dt><dd>{humanize(watched.data.watchedFolder.lastScanOutcome)}</dd></div>
-          </dl>
-          {watched.data.watchedFolder.lastScanResult && (
-            <ul className="cf-ad-tally" aria-label="Last scan result">
-              <li><strong>{watched.data.watchedFolder.lastScanResult.discovered}</strong> discovered</li>
-              <li><strong>{watched.data.watchedFolder.lastScanResult.accepted}</strong> accepted</li>
-              <li><strong>{watched.data.watchedFolder.lastScanResult.rejected}</strong> rejected</li>
-              <li><strong>{watched.data.watchedFolder.lastScanResult.duplicates}</strong> duplicates</li>
-            </ul>
-          )}
-          <p className="cf-ad-hint">Lease ownership, fencing generation and takeover diagnostics are monitored by Platform Operations.</p>
+      {view === 'ALL' && (
+        <section className="cf-ad-card" aria-label="Sending by barcode: rules">
+          <header className="cf-ad-card-head"><div><h2>Sending by barcode: rules</h2><p>Which pages go where.</p></div></header>
+          <BarcodeExtras failed={failed} onChanged={refresh} />
         </section>
       )}
-      {showAttention && <AttentionList items={derivedAttention} onChanged={refresh} />}
 
-      {(view === 'DERIVED_DOCUMENT_DELIVERY' || view === 'ALL') && <RoutingRules />}
-
-      <ConnectionEditor draft={draft} purposeLocked={view !== 'ALL'} onChange={setDraft} onClose={() => setDraft(null)}
-        onSaved={async (saved) => { setDraft(null); if (view !== 'ALL') setView(saved.purpose); await refresh(); }}
-        original={draft?.connectionId ? conns.data.find((c) => c.connectionId === draft.connectionId) : undefined} />
+      <ConnectionEditor draft={draft} onChange={setDraft} onClose={() => setDraft(null)}
+        original={draft?.connectionId ? conns.data.find((c) => c.connectionId === draft.connectionId) : undefined}
+        onSaved={async (saved) => { if (view !== 'ALL') setView(saved.purpose); await refresh(); }} />
 
       <ToggleConfirm conn={toggling} onClose={() => setToggling(null)} onDone={refresh} />
     </div>
   );
 }
 
-function Connection({ c, showPurpose, onChanged, onEdit, onToggle }: {
-  c: IntegrationConnection; showPurpose: boolean; onChanged: () => Promise<unknown>; onEdit: () => void; onToggle: () => void;
+/* ---------- One connection ---------- */
+
+function StatusText({ s }: { s: StatusLine }) {
+  return (
+    <div className="cf-ad-conn-status">
+      <span data-tone={s.tone}>{s.word}</span>{s.rest.map((r) => <span key={r}> · {r}</span>)}
+    </div>
+  );
+}
+
+function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
+  c: IntegrationConnection; showGroup: boolean; folder?: WatchedFolderAdminStatus; onChanged: () => Promise<unknown>; onEdit: () => void; onToggle: () => void;
 }) {
   const toast = useToast();
-  const [busy, setBusy] = useState<null | 'test' | 'poll'>(null);
-  const polls = isPollingConnection(c);
+  const [busy, setBusy] = useState<null | 'collect' | 'check'>(null);
+  const polls = isPolling(c);
   const pollStatus = useSWR<PollingConnectionStatus | null>(polls ? ['polling', c.connectionId] : null,
     () => apiClient.getPollingConnectionStatus(c.connectionId).catch(() => null), { revalidateOnFocus: false });
-  const testable = (c.purpose === 'SDV_DELIVERY' && c.providerType === 'HTTP_API') || c.purpose === 'DERIVED_DOCUMENT_DELIVERY';
-  const health = !c.enabled ? 'off' : c.healthStatus === 'HEALTHY' ? 'ok' : 'warn';
-  const lastRun = pollStatus.data?.recentRuns?.[0];
+  const now = Date.now();
+  const status = folder && c.enabled ? watchedFolderStatus(folder, now) : connectionStatus(c, now);
+  const address = c.endpoint || c.fileShareRoot || (folder ? folder.rootPath : null);
 
-  async function run(kind: 'test' | 'poll') {
-    setBusy(kind);
+  async function collect() {
+    setBusy('collect');
     try {
-      if (kind === 'poll') {
-        const r = await apiClient.runPollingNow(c.connectionId);
-        toast(`${c.name} polling finished: ${humanize(r.status).toLowerCase()}, ${r.packagesDiscovered} package${r.packagesDiscovered === 1 ? '' : 's'} found.`, r.status === 'SUCCESS' ? undefined : 'danger');
-      } else {
-        const r = c.purpose === 'SDV_DELIVERY' ? await apiClient.testSdvConnection(c.connectionId) : await apiClient.testDerivedConnection(c.connectionId);
-        const label = c.purpose === 'SDV_DELIVERY' ? 'SDV connection' : 'derived destination';
-        toast(`${c.name}: ${label} ${humanize(r.healthStatus).toLowerCase()}.`, r.healthStatus === 'HEALTHY' ? undefined : 'danger');
-      }
+      const r = await apiClient.runPollingNow(c.connectionId);
+      const n = r.packagesDiscovered;
+      toast(r.status === 'SUCCESS' || r.status === 'PARTIAL' ? `${c.name}: ${n} case${n === 1 ? '' : 's'} found.` : `${c.name}: collecting didn't work. See its status line.`, r.status === 'SUCCESS' ? undefined : 'danger');
       await onChanged();
     } catch (e) {
-      toast(errorMessage(e, kind === 'poll' ? 'Unable to run polling source.' : 'Connection test failed.'), 'danger');
+      toast(errorMessage(e, `${c.name} couldn't be collected from.`), 'danger');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function check() {
+    setBusy('check');
+    try {
+      const r = await apiClient.scanPlatformWatchedFolder();
+      toast(`Folder checked: ${r.accepted} accepted, ${r.rejected} refused, ${r.duplicates} already received.`);
+      await onChanged();
+    } catch (e) {
+      toast(errorMessage(e, "The folder couldn't be checked."), 'danger');
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <li className="cf-ad-conn">
-      <span className="cf-ad-health" data-h={health} aria-hidden="true" />
+    <li className="cf-ad-conn cf-ad-conn-top">
+      <span className="cf-ad-health" data-h={status.tone === 'off' ? 'off' : status.tone} aria-hidden="true" />
       <div className="cf-ad-conn-main">
         <div className="cf-ad-conn-name">
           {c.name}
-          {showPurpose && <span className="cf-ad-tag">{humanize(c.purpose)}</span>}
-          <span className="cf-ad-tag">{humanize(c.providerType)}</span>
-          <span className="cf-ad-tag">{c.purpose === "INGESTION_SOURCE" ? "Documents in" : "Documents out"}</span>
-          {!c.enabled && <span className="cf-ad-tag">Disabled</span>}
+          <span className="cf-ad-tag">{connectionTag(c)}</span>
+          {showGroup && <span className="cf-ad-tag">{VIEWS.find((v) => v.id === c.purpose)?.label}</span>}
         </div>
-        <div className="cf-ad-conn-meta">
-          <span>{c.enabled ? humanize(c.healthStatus) : 'Not running'}</span>
-          <span>Auth {humanize(c.authenticationType)}</span>
-          {c.authenticationType !== 'NONE' && (c.secretConfigured ? <span>Secret configured</span> : <span className="cf-danger-text">Secret not configured</span>)}
-          <span>Config v{c.configurationVersion}</span>
-          <span>Last success {when(c.lastSuccessAt)}</span>
-          {c.lastFailureAt && <span className="cf-danger-text">Failed {when(c.lastFailureAt)}{c.lastFailureCategory ? ` · ${humanize(c.lastFailureCategory)}` : ''}</span>}
-          {polls && <span>{c.pollingScheduleType === 'DAILY' ? `Daily at ${c.pollingLocalTime}${c.pollingTimeZone ? ` ${c.pollingTimeZone}` : ''}` : `Every ${c.pollingIntervalMinutes} min`}</span>}
-          {polls && <span>Next poll {pollStatus.data?.nextScheduledAt ? when(pollStatus.data.nextScheduledAt) : 'not scheduled'}</span>}
-          {lastRun && <span className={lastRun.status === 'FAILED' ? 'cf-danger-text' : undefined}>Last run {humanize(lastRun.status).toLowerCase()} · {lastRun.packagesDiscovered} found</span>}
-        </div>
-        {c.endpoint && <div className="cf-ad-conn-endpoint cf-mono">{c.endpoint}</div>}
-        {c.fileShareRoot && <div className="cf-ad-conn-endpoint cf-mono">{c.fileShareRoot}</div>}
+        <StatusText s={status} />
+        {address && <div className="cf-ad-conn-endpoint cf-mono">{address}</div>}
+        <details className="cf-disclosure">
+          <summary>Technical details</summary>
+          <dl className="cf-ad-facts cf-ad-facts-compact">
+            <div><dt>Provider</dt><dd>{c.providerType} · {c.direction}</dd></div>
+            <div><dt>Sign-in</dt><dd>{authName(c.authenticationType)}{c.authenticationType !== 'NONE' && (c.secretConfigured ? ' · key stored' : ' · no key stored')}</dd></div>
+            {c.clientPrincipal && <div><dt>Signs in as</dt><dd className="cf-mono">{c.clientPrincipal}</dd></div>}
+            <div><dt>Settings</dt><dd>{advancedSummary(c)}</dd></div>
+            {polls && <div><dt>Next collection</dt><dd>{pollStatus.data?.nextScheduledAt ? when(pollStatus.data.nextScheduledAt) : 'not scheduled'}</dd></div>}
+            <div><dt>Health</dt><dd>{c.healthStatus}</dd></div>
+            {c.lastFailureCategory && <div><dt>Last failure</dt><dd>{c.lastFailureCategory} · {when(c.lastFailureAt)}</dd></div>}
+            {folder && <div><dt>Last check</dt><dd>{folder.lastScanOutcome}{folder.coordinationEnabled ? ' · several servers' : ''}</dd></div>}
+            <div><dt>Configuration</dt><dd>v{c.configurationVersion}</dd></div>
+            <div><dt>Connection ID</dt><dd className="cf-mono">{c.connectionId}</dd></div>
+          </dl>
+        </details>
       </div>
       <div className="cf-ad-conn-actions">
+        {polls && <button type="button" className="cf-btn" data-size="sm" disabled={!c.enabled || !!busy} onClick={() => void collect()}>{busy === 'collect' && <Spinner label="Collecting" />}Collect now</button>}
+        {folder && <button type="button" className="cf-btn" data-size="sm" disabled={!folder.enabled || !!busy} onClick={() => void check()}>{busy === 'check' && <Spinner label="Checking" />}Check now</button>}
+        <button type="button" className="cf-btn" data-size="sm" data-variant="ghost" disabled={!!busy} onClick={onToggle}>{c.enabled ? 'Switch off' : 'Switch on'}</button>
         <button type="button" className="cf-btn" data-size="sm" onClick={onEdit}>Edit</button>
-        {polls && <button type="button" className="cf-btn" data-size="sm" disabled={!c.enabled || !!busy} onClick={() => run('poll')}>{busy === 'poll' && <Spinner label="Polling" />}Run now</button>}
-        {testable && <button type="button" className="cf-btn" data-size="sm" disabled={!c.enabled || !!busy} onClick={() => run('test')}>{busy === 'test' && <Spinner label="Testing" />}Test</button>}
-        <button type="button" className="cf-btn" data-size="sm" data-variant="ghost" disabled={!!busy} onClick={onToggle}>{c.enabled ? 'Disable' : 'Enable'}</button>
       </div>
     </li>
   );
 }
+
+/** The installed watched folder when no single connection stands for it. It is set when LexaVault is installed, so it has no Edit. */
+function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; onChanged: () => Promise<unknown> }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const status = watchedFolderStatus(folder, Date.now());
+  async function check() {
+    setBusy(true);
+    try {
+      const r = await apiClient.scanPlatformWatchedFolder();
+      toast(`Folder checked: ${r.accepted} accepted, ${r.rejected} refused, ${r.duplicates} already received.`);
+      await onChanged();
+    } catch (e) {
+      toast(errorMessage(e, "The folder couldn't be checked."), 'danger');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <li className="cf-ad-conn cf-ad-conn-top">
+      <span className="cf-ad-health" data-h={status.tone} aria-hidden="true" />
+      <div className="cf-ad-conn-main">
+        <div className="cf-ad-conn-name">Watched folder<span className="cf-ad-tag">Folder</span></div>
+        <StatusText s={status} />
+        <div className="cf-ad-conn-endpoint cf-mono">{folder.rootPath}</div>
+        <details className="cf-disclosure">
+          <summary>Technical details</summary>
+          <dl className="cf-ad-facts cf-ad-facts-compact">
+            <div><dt>Set by</dt><dd>LexaVault's installation settings</dd></div>
+            <div><dt>Checked automatically</dt><dd>{folder.schedulingEnabled ? `every ${Math.round(folder.scanIntervalMs / 1000)} s` : 'no'}</dd></div>
+            <div><dt>Ready file</dt><dd className="cf-mono">{folder.triggerFileName}</dd></div>
+            <div><dt>Last check</dt><dd>{folder.lastScanOutcome}{folder.lastScanAt ? ` · ${when(folder.lastScanAt)}` : ''}</dd></div>
+            <div><dt>Servers</dt><dd>{folder.coordinationEnabled ? 'several, coordinated' : 'one'}</dd></div>
+          </dl>
+        </details>
+      </div>
+      <div className="cf-ad-conn-actions">
+        <button type="button" className="cf-btn" data-size="sm" disabled={!folder.enabled || busy} onClick={() => void check()}>{busy && <Spinner label="Checking" />}Check now</button>
+      </div>
+    </li>
+  );
+}
+
+/* ---------- Switch on / off ---------- */
 
 function ToggleConfirm({ conn, onClose, onDone }: { conn: IntegrationConnection | null; onClose: () => void; onDone: () => Promise<unknown> }) {
   const toast = useToast();
@@ -329,7 +331,7 @@ function ToggleConfirm({ conn, onClose, onDone }: { conn: IntegrationConnection 
   const [error, setError] = useState<string | null>(null);
   const [lastId, setLastId] = useState<string | undefined>();
   if (conn?.connectionId !== lastId) { setLastId(conn?.connectionId); setError(null); }
-  const disabling = !!conn?.enabled;
+  const off = !!conn?.enabled;
 
   async function confirm() {
     if (!conn) return;
@@ -338,245 +340,295 @@ function ToggleConfirm({ conn, onClose, onDone }: { conn: IntegrationConnection 
     try {
       await apiClient.setIntegrationConnectionEnabled(conn.connectionId, !conn.enabled);
       await onDone();
-      toast(`${conn.name} ${conn.enabled ? 'disabled' : 'enabled'}.`);
+      toast(`${conn.name} switched ${conn.enabled ? 'off' : 'on'}.`);
       onClose();
     } catch (e) {
-      setError(errorMessage(e, 'Unable to update integration state.'));
+      setError(errorMessage(e, `${conn.name} couldn't be switched ${conn.enabled ? 'off' : 'on'}.`));
     } finally {
       setBusy(false);
     }
   }
 
-  const consequence = !conn ? null : disabling
+  const consequence = !conn ? null : off
     ? conn.purpose === 'INGESTION_SOURCE'
-      ? 'This source stops accepting or polling new packages. Cases already received are unaffected.'
+      ? 'It stops receiving or collecting new documents. Cases already received are not affected.'
       : conn.purpose === 'SDV_DELIVERY'
-        ? 'Completed master packages cannot be delivered through this destination until it is enabled again.'
-        : 'Routing rules pointing at this destination stop delivering derived documents until it is enabled again.'
-    : 'The connection resumes using its saved configuration immediately.';
+        ? "Delivered cases can't be sent to SDV through it until it is switched on again."
+        : 'Rules that send pages here stop sending until it is switched on again.'
+    : 'It starts again with its saved settings.';
 
   return (
-    <ConfirmDialog open={!!conn} title={disabling ? 'Disable connection?' : 'Enable connection?'} danger={disabling}
-      confirmLabel={disabling ? 'Disable' : 'Enable'} busy={busy} error={error}
-      facts={conn ? [['Connection', conn.name], ['Purpose', humanize(conn.purpose)], ['Provider', `${humanize(conn.providerType)} · ${humanize(conn.direction)}`], ['Configuration', `v${conn.configurationVersion}`]] : []}
+    <ConfirmDialog open={!!conn} title={off ? `Switch off ${conn?.name ?? ''}?` : `Switch on ${conn?.name ?? ''}?`} danger={off}
+      confirmLabel={off ? 'Switch off' : 'Switch on'} busy={busy} error={error}
+      facts={conn ? [['Connection', conn.name], ['What it does', connectionTag(conn)]] : []}
       consequence={consequence} onConfirm={confirm} onCancel={onClose} />
   );
 }
 
-function AttentionList({ items, onChanged }: { items: DerivedDelivery[]; onChanged: () => Promise<unknown> }) {
+/* ---------- Sending by barcode: rules and files that couldn't be sent ---------- */
+
+function BarcodeExtras({ failed, onChanged }: { failed: DerivedDelivery[]; onChanged: () => Promise<unknown> }) {
+  return (
+    <>
+      <RoutingRules />
+      {failed.length > 0 && <FailedFiles items={failed} onChanged={onChanged} />}
+    </>
+  );
+}
+
+function FailedFiles({ items, onChanged }: { items: DerivedDelivery[]; onChanged: () => Promise<unknown> }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   async function retry(d: DerivedDelivery) {
     setBusy(d.derivedDeliveryId);
     try {
       await apiClient.retryDerivedDelivery(d.derivedDeliveryId);
-      toast('Derived delivery retry completed.');
+      toast('Sent again.');
       await onChanged();
     } catch (e) {
-      toast(errorMessage(e, 'Derived delivery retry failed.'), 'danger');
+      toast(errorMessage(e, "It couldn't be sent again."), 'danger');
     } finally {
       setBusy(null);
     }
   }
   return (
-    <section className="cf-ad-card" aria-label="Derived delivery attention">
-      <header className="cf-ad-card-head">
-        <div><h2>Derived delivery attention</h2><p>Technical destination failures are independent of the completed master delivery.</p></div>
-        <span className="cf-ad-tag">{items.length}</span>
-      </header>
+    <div className="cf-ad-block" role="region" aria-label="Files that couldn't be sent">
+      <h3 className="cf-ad-block-title"><span className="cf-ad-health" data-h="warn" aria-hidden="true" />{attentionTitle(items.length)}</h3>
       <ul className="cf-ad-conns">
         {items.map((d) => (
-          <li key={d.derivedDeliveryId} className="cf-ad-conn">
-            <span className="cf-ad-health" data-h="warn" aria-hidden="true" />
+          <li key={d.derivedDeliveryId} className="cf-ad-conn cf-ad-conn-top">
             <div className="cf-ad-conn-main">
-              <div className="cf-ad-conn-name">
-                {d.destinationLabel || 'Routing attention'}
-                <span className="cf-ad-tag">{humanize(d.status)}</span>
-              </div>
-              <div className="cf-ad-conn-meta">
-                {d.failureCategory && <span className="cf-danger-text">{humanize(d.failureCategory)}</span>}
-                <span className="cf-mono">{d.packageId}</span>
-                <span>Pages {d.pageNumbers.length ? d.pageNumbers.join(', ') : '—'}</span>
-                <span>{d.attemptCount} attempt{d.attemptCount === 1 ? '' : 's'}</span>
-              </div>
+              <div className="cf-ad-conn-status">{attentionLine(d)}</div>
+              <details className="cf-disclosure">
+                <summary>Technical details</summary>
+                <dl className="cf-ad-facts cf-ad-facts-compact">
+                  <div><dt>Package</dt><dd className="cf-mono">{d.packageId}</dd></div>
+                  <div><dt>Status</dt><dd>{d.status}</dd></div>
+                  {d.failureCategory && <div><dt>Reason code</dt><dd>{d.failureCategory}</dd></div>}
+                  {d.fileName && <div><dt>File</dt><dd className="cf-mono">{d.fileName}</dd></div>}
+                  <div><dt>Delivery run</dt><dd>{d.exportCycle}</dd></div>
+                </dl>
+              </details>
             </div>
-            {d.destinationLabel && (
+            {d.markerType && (
               <div className="cf-ad-conn-actions">
-                <button type="button" className="cf-btn" data-size="sm" disabled={!!busy} onClick={() => retry(d)}>{busy === d.derivedDeliveryId && <Spinner label="Retrying" />}Technical retry</button>
+                <button type="button" className="cf-btn" data-size="sm" disabled={!!busy} onClick={() => void retry(d)}>{busy === d.derivedDeliveryId && <Spinner label="Retrying" />}Retry</button>
               </div>
             )}
           </li>
         ))}
       </ul>
-    </section>
+    </div>
   );
 }
 
-function ConnectionEditor({ draft, original, purposeLocked, onChange, onClose, onSaved }: {
-  draft: Draft | null; original?: IntegrationConnection; purposeLocked: boolean;
+/* ---------- The connection editor: what, details, test and save ---------- */
+
+type Step = 1 | 2 | 3;
+type TestResult = { tone: 'ok' | 'danger'; text: string };
+
+/** The fields a test of the saved connection depends on, to tell whether the draft still matches what was saved. */
+const sameAsSaved = (d: Draft, c: IntegrationConnection | undefined) =>
+  !!c && JSON.stringify({ ...toPayload(d), enabled: undefined, description: undefined }) === JSON.stringify({ ...toPayload(toDraft(c)), enabled: undefined, description: undefined });
+
+function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
+  draft: Draft | null; original?: IntegrationConnection;
   onChange: (d: Draft) => void; onClose: () => void; onSaved: (saved: IntegrationConnection) => Promise<void>;
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tested, setTested] = useState<TestResult | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [wizardStep, setWizardStep] = useState<'flow' | 'type' | 'configure'>('flow');
-  const [wizardFlow, setWizardFlow] = useState<'receive' | 'send'>('receive');
+  const [step, setStep] = useState<Step>(1);
   const key = draft ? draft.connectionId ?? 'new' : null;
-  if (key !== openKey) { setOpenKey(key); setError(null); setWizardStep(draft?.connectionId ? 'configure' : 'flow'); setWizardFlow(draft?.purpose === 'INGESTION_SOURCE' ? 'receive' : 'send'); }
+  if (key !== openKey) { setOpenKey(key); setError(null); setTested(null); setStep(draft?.connectionId ? 2 : 1); }
 
   if (!draft) return <Sheet open={false} title="" onClose={onClose}>{null}</Sheet>;
   const d = draft;
   const editing = !!d.connectionId;
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => onChange({ ...d, [k]: v });
-  const polling = isPollingConnection(d);
-  const scanner = d.providerType === 'SCANNER';
-  const providers = editing ? (purposeLocked ? PROVIDERS_BY_PURPOSE[d.purpose] : PROVIDERS) : PROVIDERS_BY_PURPOSE[d.purpose];
+  const receive = d.purpose === 'INGESTION_SOURCE';
+  const method = methodOf(d);
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => { setTested(null); onChange({ ...d, [k]: v }); };
   const nameMissing = !d.name.trim();
-
-  function reset() {
-    if (!editing) setWizardStep('flow');
-    setError(null);
-    onChange(original ? toDraft(original) : draftForPurpose(d.purpose));
-  }
+  const outbound = d.direction === 'OUTBOUND';
+  const hasAddress = method === 'POLL' || method === 'SDV' || method === 'BARCODE_WEB';
+  const kind = testKind(d);
+  const unchanged = editing && sameAsSaved(d, original);
 
   async function save() {
-    if (nameMissing) { setError('A connection name is required.'); return; }
+    if (nameMissing) { setStep(2); setError('Give the connection a name.'); return; }
     setSaving(true);
     setError(null);
     try {
       const body = toPayload(d);
       const saved = d.connectionId ? await apiClient.updateIntegrationConnection(d.connectionId, body) : await apiClient.createIntegrationConnection(body);
-      toast(`${saved.name} ${editing ? 'updated' : 'created'}.`);
+      toast(`${saved.name} saved.`);
+      onClose();
       await onSaved(saved);
     } catch (e) {
-      setError(errorMessage(e, 'Unable to save integration.'));
+      setError(errorMessage(e, "The connection couldn't be saved."));
     } finally {
       setSaving(false);
     }
   }
 
+  async function test() {
+    if (!d.connectionId || !kind) return;
+    setTesting(true);
+    setTested(null);
+    try {
+      const r = kind === 'sdv' ? await apiClient.testSdvConnection(d.connectionId)
+        : kind === 'derived' ? await apiClient.testDerivedConnection(d.connectionId)
+          : await apiClient.testPollingConnection(d.connectionId);
+      setTested(r.healthStatus === 'HEALTHY'
+        ? { tone: 'ok', text: 'The connection works.' }
+        : { tone: 'danger', text: "The connection didn't work. Check the address and sign-in, then test again." });
+    } catch (e) {
+      setTested({ tone: 'danger', text: errorMessage(e, "The connection didn't work. Check the address and sign-in, then test again.") });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const methodLabel = [...RECEIVE_METHODS, ...SEND_METHODS].find(([m]) => m === method)?.[1] ?? '';
+  const where = receive ? 'Receiving documents' : 'Sending documents';
+  const description = `Step ${step} of 3 · ${step === 1 ? 'What should it do?' : `${where} · ${methodLabel}`}`;
+
+  const testNote = !kind
+    ? receive ? 'Nothing to test here: the documents are sent to LexaVault, and they show up on Cases when they arrive.' : null
+    : !editing ? "A new connection can be tested once it is saved. Testing before saving isn't possible yet."
+      : !unchanged ? "Testing uses the saved settings. Save your changes first, then test." : null;
+
   return (
-    <Sheet open wide title={editing ? 'Edit connection' : 'New connection'}
-      description="Choose how documents enter or leave LexaVault. Only the configuration relevant to that method is shown."
+    <Sheet open wide title={editing ? `Edit ${original?.name ?? 'connection'}` : 'Add a connection'} description={description}
       onClose={() => { if (!saving) onClose(); }}
       footer={<>
-        {!editing && wizardStep !== 'flow' && <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={() => setWizardStep(wizardStep === 'configure' ? 'type' : 'flow')}>Back</button>}
-        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={reset}>Reset</button>
+        {step > (editing ? 2 : 1) && <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={() => setStep((step - 1) as Step)}>Back</button>}
         <span className="cf-ad-spacer" />
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={saving} onClick={onClose}>Cancel</button>
-        {(editing || wizardStep === 'configure') && <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={saving || nameMissing} onClick={save}>
-          {saving && <Spinner label="Saving" />}{editing ? 'Save changes' : 'Create connection'}
-        </button>}
+        {step < 3 && <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={step === 2 && nameMissing}
+          onClick={() => { setError(null); setStep((step + 1) as Step); }}>{step === 1 ? 'Next' : 'Next: test and save'}</button>}
+        {step === 3 && <>
+          {kind && <button type="button" className="cf-btn" data-size="sm" disabled={saving || testing || !unchanged} onClick={() => void test()}>{testing && <Spinner label="Testing" />}Test connection</button>}
+          <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={saving || nameMissing} onClick={() => void save()}>{saving && <Spinner label="Saving" />}Save</button>
+        </>}
       </>}
     >
       <div className="cf-ad-form">
-        {!editing && wizardStep === 'flow' && (
+        {step === 1 && (
           <fieldset className="cf-ad-fieldset">
-            <legend>Step 1 — What should LexaVault do?</legend>
-            <p className="cf-ad-context">Choose the direction the documents travel, not the direction of the HTTP request.</p>
-            <div className="cf-ad-grid">
-              <button type="button" className="cf-btn" data-variant="solid" onClick={() => { setWizardFlow('receive'); onChange(draftForPurpose('INGESTION_SOURCE')); setWizardStep('type'); }}>Receive documents</button>
-              <button type="button" className="cf-btn" data-variant="solid" onClick={() => { setWizardFlow('send'); onChange(draftForPurpose('SDV_DELIVERY')); setWizardStep('type'); }}>Send documents</button>
+            <legend>What should this connection do?</legend>
+            <div className="cf-ad-radios" data-layout="row">
+              {([
+                ['receive', 'Receive documents', 'A system sends them, LexaVault collects them, or a folder or scanner supplies them.'],
+                ['send', 'Send documents', 'To SDV, or pages by barcode to another place.'],
+              ] as const).map(([v, label, hint]) => (
+                <label key={v} className="cf-ad-radio">
+                  <input type="radio" name="cf-int-direction" checked={(v === 'receive') === receive}
+                    onChange={() => onChange(applyMethod(d, v === 'receive' ? 'PUSH' : 'SDV'))} />
+                  <span><strong>{label}</strong><span className="cf-ad-hint">{hint}</span></span>
+                </label>
+              ))}
             </div>
           </fieldset>
         )}
-        {!editing && wizardStep === 'type' && (
-          <fieldset className="cf-ad-fieldset">
-            <legend>Step 2 — {wizardFlow === 'receive' ? 'How will documents arrive?' : 'Where should processed documents go?'}</legend>
-            <div className="cf-ad-grid">
-              {wizardFlow === 'receive' ? (
-                <>
-                  {([['PUSH_API', 'External system sends (API push)'], ['HTTP_API', 'LexaVault retrieves (HTTP polling)'], ['WATCHED_FOLDER', 'Watched folder'], ['SCANNER', 'Scanner']] as [IntegrationProviderType, string][]).map(([provider, label]) =>
-                    <button key={provider} type="button" className="cf-btn" onClick={() => { onChange(applyProvider(draftForPurpose('INGESTION_SOURCE'), provider)); setWizardStep('configure'); }}>{label}</button>)}
-                </>
-              ) : (
-                <>
-                  <button type="button" className="cf-btn" onClick={() => { onChange(draftForPurpose('SDV_DELIVERY')); setWizardStep('configure'); }}>Master Delivery — completed redacted package</button>
-                  <button type="button" className="cf-btn" onClick={() => { onChange(draftForPurpose('DERIVED_DOCUMENT_DELIVERY')); setWizardStep('configure'); }}>Derived Delivery — routed outputs</button>
-                </>
-              )}
-            </div>
-          </fieldset>
-        )}
-        {(editing || wizardStep === 'configure') && <>
-        <fieldset className="cf-ad-fieldset">
-          <legend>{editing ? 'Connection' : 'Step 3 — Configure connection'}</legend>
-          <div className="cf-ad-grid">
-            <TextField label="Name" required value={d.name} invalid={nameMissing} onChange={(v) => set('name', v)} hint={nameMissing ? 'Required.' : undefined} />
-            <SelectField label="Purpose" value={d.purpose} options={PURPOSES} disabled={!editing || purposeLocked} onChange={(v) => onChange(applyPurpose(d, v))}
-              hint={purposeLocked ? 'Locked to the current group. Use All to choose a different purpose.' : undefined} />
-            <SelectField label="Transfer method" value={d.providerType} options={providers.map((provider) => [provider, provider === 'PUSH_API' ? 'External system sends (API push)' : provider === 'HTTP_API' && d.purpose === 'INGESTION_SOURCE' ? 'LexaVault retrieves (HTTP polling)' : provider === 'HTTP_API' ? 'Send to HTTP API' : provider === 'WATCHED_FOLDER' ? 'Watched folder' : provider === 'SCANNER' ? 'Scanner' : 'File share'] as [IntegrationProviderType, string])} onChange={(v) => onChange(applyProvider(d, v))} />
-            <div className="cf-ad-span"><p className="cf-ad-context">{connectionFlow(d)}. Connection initiated: {d.direction === 'OUTBOUND' ? 'by LexaVault' : 'by the external source'}.</p></div>
-          </div>
-        </fieldset>
 
-        <fieldset className="cf-ad-fieldset">
-          <legend>Endpoint and authentication</legend>
-          <div className="cf-ad-grid">
-            {(d.providerType === 'PUSH_API' || scanner) && (
-              <div className="cf-ad-span"><TextField label="Authenticated client principal" value={d.clientPrincipal || ''} mono placeholder="OIDC subject / preferred username bound to this source" onChange={(v) => set('clientPrincipal', v)} /></div>
-            )}
-            {d.providerType === 'HTTP_API' && (
-              <div className="cf-ad-span"><TextField label="Endpoint" value={d.endpoint || ''} mono placeholder="https://..." onChange={(v) => set('endpoint', v)} /></div>
-            )}
-            {d.providerType === 'FILE_SHARE' && (
-              <div className="cf-ad-span"><TextField label="Secure file-share root" value={d.fileShareRoot || ''} mono onChange={(v) => set('fileShareRoot', v)} /></div>
-            )}
-            <SelectField label="Authentication" value={d.authenticationType} options={AUTH} onChange={(v) => set('authenticationType', v)} />
-            <SelectField label="Acknowledgement" value={scanner ? 'NONE' : d.acknowledgementMode} options={ACK} disabled={scanner} onChange={(v) => set('acknowledgementMode', v)}
-              hint={scanner ? 'Scanner delivery uses the built-in idempotent intake and reconciliation contract.' : undefined} />
-            {d.authenticationType !== 'NONE' && (
-              <div className="cf-ad-span">
-                <TextField label="Protected secret reference" type="password" value={d.secretReference || ''}
-                  placeholder={d.secretConfigured ? 'Configured. Leave blank to keep the existing reference.' : 'Deployment-managed secret reference'}
-                  onChange={(v) => set('secretReference', v)}
-                  hint="Credential values are never displayed or returned by this screen." />
+        {step === 2 && <>
+          <fieldset className="cf-ad-fieldset">
+            <legend>Basics</legend>
+            <div className="cf-ad-grid">
+              <TextField label="Name" required value={d.name} invalid={nameMissing} onChange={(v) => set('name', v)} hint={nameMissing ? 'Required.' : 'Shown in this list and in the audit trail.'} />
+              <SelectField<Method> label={receive ? 'How documents arrive' : 'Where documents go'} value={method}
+                options={receive ? RECEIVE_METHODS : SEND_METHODS} onChange={(m) => { setTested(null); onChange(applyMethod(d, m)); }} />
+            </div>
+          </fieldset>
+
+          {method !== 'FOLDER' && (
+            <fieldset className="cf-ad-fieldset">
+              <legend>Where and how to connect</legend>
+              <div className="cf-ad-grid">
+                {hasAddress && (
+                  <div className="cf-ad-span"><TextField label="Address" required mono value={d.endpoint || ''} placeholder="https://…" onChange={(v) => set('endpoint', v)}
+                    hint={method === 'POLL' ? 'The web address LexaVault collects documents from.' : 'The web address LexaVault sends to.'} /></div>
+                )}
+                {method === 'BARCODE_SHARE' && (
+                  <div className="cf-ad-span"><TextField label="Folder on the file share" required mono value={d.fileShareRoot || ''} placeholder="\\server\share\folder" onChange={(v) => set('fileShareRoot', v)}
+                    hint="Files are written here. LexaVault needs permission to write to it." /></div>
+                )}
+                {(method === 'PUSH' || method === 'SCANNER') && (
+                  <div className="cf-ad-span"><TextField label="Account it signs in with" mono value={d.clientPrincipal || ''} onChange={(v) => set('clientPrincipal', v)}
+                    hint="The sign-in name the sending system uses (its OIDC subject or user name). Only this account can send documents here." /></div>
+                )}
+                {method !== 'BARCODE_SHARE' && (
+                  <SelectField label={outbound ? 'How LexaVault proves who it is' : 'How the system proves who it is'} value={d.authenticationType} options={AUTH_NAMES}
+                    onChange={(v) => set('authenticationType', v)} hint="The sign-in method the other side expects." />
+                )}
+                {d.authenticationType !== 'NONE' && (
+                  <TextField label="Where the key is stored" type="password" value={d.secretReference || ''}
+                    placeholder={d.secretConfigured ? 'A key is stored. Leave empty to keep it.' : 'For example vault:servicing/api-key'}
+                    onChange={(v) => set('secretReference', v)} hint="A reference to your secrets store. The key itself is never shown." />
+                )}
+                {method === 'POLL' && <>
+                  <SelectField label="Collect" value={d.pollingScheduleType || 'INTERVAL'} options={[['INTERVAL', 'Every few minutes or hours'], ['DAILY', 'Once a day']]}
+                    onChange={(v) => set('pollingScheduleType', v)} />
+                  {d.pollingScheduleType !== 'DAILY' ? (
+                    <DurationField label="Collect every" value={d.pollingIntervalMinutes || 60} units={MINUTE_UNITS.slice(0, 2)} min={5} max={1440}
+                      onChange={(v) => set('pollingIntervalMinutes', v)} hint="From 5 minutes up to 24 hours." />
+                  ) : <>
+                    <TextField label="At" required type="time" value={d.pollingLocalTime || '01:00'} onChange={(v) => set('pollingLocalTime', v)} />
+                    <TextField label="Time zone" required mono value={d.pollingTimeZone || ''} placeholder="America/New_York" onChange={(v) => set('pollingTimeZone', v)} hint="As a region and city, for example America/New_York." />
+                  </>}
+                </>}
               </div>
-            )}
-          </div>
-        </fieldset>
+            </fieldset>
+          )}
+          {method === 'FOLDER' && <p className="cf-ad-hint">The folder itself is set when LexaVault is installed. Its path and status are on the Receiving list.</p>}
 
-        <fieldset className="cf-ad-fieldset">
-          <legend>Limits</legend>
-          <div className="cf-ad-grid">
-            <NumberField label="Timeout" suffix="seconds" min={1} max={600} value={d.timeoutSeconds ?? 60} onChange={(v) => set('timeoutSeconds', v)} />
-            <NumberField label="Retry attempts" min={0} max={10} value={d.retryMaxAttempts ?? 2} onChange={(v) => set('retryMaxAttempts', v)} />
-            {d.purpose === 'INGESTION_SOURCE' && <>
-              <NumberField label="Incomplete window" suffix="hours" min={1} max={168} value={d.incompleteWindowHours ?? 24} onChange={(v) => set('incompleteWindowHours', v)} />
-              <NumberField label="Max documents per intake" min={1} max={1000} value={scanner ? 1 : (d.maxDocumentsPerIntake ?? 100)} onChange={(v) => { if (!scanner) set('maxDocumentsPerIntake', v); }}
-                hint={scanner ? 'Scanner intake is one consolidated PDF per physical package.' : undefined} />
-              <NumberField label="Max PDF size" suffix="MB" min={1} max={2048} value={Math.round((d.maxPdfSizeBytes ?? 262144000) / MB)} onChange={(v) => set('maxPdfSizeBytes', v * MB)} />
-              <NumberField label="Max PDF pages" min={1} max={10000} value={d.maxPdfPages ?? 2000} onChange={(v) => set('maxPdfPages', v)} />
-            </>}
-          </div>
-        </fieldset>
-
-        {polling && (
-          <fieldset className="cf-ad-fieldset">
-            <legend>Polling schedule</legend>
+          <details className="cf-disclosure">
+            <summary>Advanced (usually leave as is)</summary>
+            <p className="cf-ad-hint">{advancedSummary(d)}</p>
             <div className="cf-ad-grid">
-              <SelectField<IntegrationPollingScheduleType> label="Schedule" value={d.pollingScheduleType || 'INTERVAL'} options={[['INTERVAL', 'Interval'], ['DAILY', 'Daily']]} onChange={(v) => set('pollingScheduleType', v)} />
-              {d.pollingScheduleType !== 'DAILY' ? (
-                <NumberField label="Interval" suffix="minutes" min={5} max={1440} value={d.pollingIntervalMinutes || 60} onChange={(v) => set('pollingIntervalMinutes', v)} />
-              ) : <>
-                <TextField label="Daily time" required type="time" value={d.pollingLocalTime || '01:00'} onChange={(v) => set('pollingLocalTime', v)} />
-                <TextField label="IANA time zone" required mono value={d.pollingTimeZone || ''} placeholder="America/New_York" onChange={(v) => set('pollingTimeZone', v)} />
+              <NumberField label="Wait for an answer" suffix="seconds" min={1} max={600} value={d.timeoutSeconds ?? 60} onChange={(v) => set('timeoutSeconds', v)} />
+              <NumberField label="Try again up to" suffix="times" min={0} max={10} value={d.retryMaxAttempts ?? 2} onChange={(v) => set('retryMaxAttempts', v)} />
+              {receive && <>
+                <NumberField label="Finish incomplete cases within" suffix="hours" min={1} max={168} value={d.incompleteWindowHours ?? 24} onChange={(v) => set('incompleteWindowHours', v)}
+                  hint="A case still missing documents after this is refused." />
+                <NumberField label="Files per case, at most" min={1} max={1000} value={method === 'SCANNER' ? 1 : (d.maxDocumentsPerIntake ?? 100)} onChange={(v) => { if (method !== 'SCANNER') set('maxDocumentsPerIntake', v); }}
+                  hint={method === 'SCANNER' ? 'A scanner sends one PDF per case.' : undefined} />
+                <NumberField label="File size, at most" suffix="MB" min={1} max={2048} value={Math.round((d.maxPdfSizeBytes ?? 262144000) / MB)} onChange={(v) => set('maxPdfSizeBytes', v * MB)} />
+                <NumberField label="Pages per file, at most" min={1} max={10000} value={d.maxPdfPages ?? 2000} onChange={(v) => set('maxPdfPages', v)} />
               </>}
-              <NumberField label="Packages per poll" min={1} max={1000} value={d.pollingBatchLimit || 100} onChange={(v) => set('pollingBatchLimit', v)} />
+              {method === 'POLL' && <NumberField label="Cases per collection, at most" min={1} max={1000} value={d.pollingBatchLimit || 100} onChange={(v) => set('pollingBatchLimit', v)} />}
+              {method !== 'SCANNER' && <SelectField label="Confirmation" value={d.acknowledgementMode} options={ACK_NAMES} onChange={(v) => set('acknowledgementMode', v)}
+                hint="How LexaVault knows a hand-over worked." />}
             </div>
-          </fieldset>
-        )}
+          </details>
 
-        <div className="cf-field">
-          <label htmlFor="cf-int-desc"><span>Description</span><span className="cf-field-opt">Optional</span></label>
-          <textarea id="cf-int-desc" rows={3} value={d.description || ''} onChange={(e) => set('description', e.target.value)} />
-        </div>
-        {!editing && <Toggle label="Enable immediately after creation" checked={Boolean(d.enabled)} onChange={(v) => set('enabled', v)} />}
-        <p className="cf-ad-hint">Test actions never send a customer PDF.</p>
-        {error && <Notice tone="danger">{error}</Notice>}
+          <div className="cf-field">
+            <label htmlFor="cf-int-desc"><span>Description</span><span className="cf-field-opt">Optional</span></label>
+            <textarea id="cf-int-desc" rows={2} value={d.description || ''} onChange={(e) => set('description', e.target.value)} />
+          </div>
+          {!editing && <Toggle label="Switch on when saved" checked={Boolean(d.enabled)} onChange={(v) => set('enabled', v)} />}
         </>}
+
+        {step === 3 && <>
+          <dl className="cf-ad-facts" aria-label="What will be saved">
+            <div><dt>Name</dt><dd>{d.name}</dd></div>
+            <div><dt>{receive ? 'How documents arrive' : 'Where documents go'}</dt><dd>{methodLabel}</dd></div>
+            {(d.endpoint || d.fileShareRoot) && <div><dt>{method === 'BARCODE_SHARE' ? 'Folder' : 'Address'}</dt><dd className="cf-mono">{hasAddress ? d.endpoint : d.fileShareRoot}</dd></div>}
+            {method !== 'BARCODE_SHARE' && method !== 'FOLDER' && <div><dt>Sign-in</dt><dd>{authName(d.authenticationType)}</dd></div>}
+            <div><dt>Advanced</dt><dd>{advancedSummary(d)}</dd></div>
+            {!editing && <div><dt>When saved</dt><dd>{d.enabled ? 'Switched on' : 'Switched off'}</dd></div>}
+          </dl>
+          {testNote && <p className="cf-ad-hint">{testNote}</p>}
+          {kind && <p className="cf-ad-hint">A test never sends a customer document.</p>}
+          {tested && <Notice tone={tested.tone === 'ok' ? 'neutral' : 'danger'}>{tested.text}</Notice>}
+        </>}
+        {error && <Notice tone="danger">{error}</Notice>}
       </div>
     </Sheet>
   );
 }
+

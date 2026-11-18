@@ -80,6 +80,8 @@ import com.securedoc.platform.application.port.out.PdfRedactionPort;
 import com.securedoc.platform.application.port.out.ProcessingLockPort;
 import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.port.out.SupportIncidentSearchRepository;
+import com.securedoc.platform.application.port.out.CasePrimaryIdentifierLookup;
+import com.securedoc.platform.application.routing.service.DerivedDeliveryAttentionQuery;
 import com.securedoc.platform.application.port.out.ProcessingFingerprintProvider;
 import com.securedoc.platform.application.port.out.DocumentIntelligenceBundleRepository;
 import com.securedoc.platform.application.port.out.TenantDocumentIntelligencePolicyRepository;
@@ -1131,6 +1133,12 @@ public class ApplicationServiceConfig {
                                                          AuditService auditService) {
         return new DerivedDeliveryService(derivedDeliveryRepository, integrationConnectionRepository,
                 artifactRepository, storagePort, derivedDestinationDeliveryPort, auditService);
+    }
+
+    @Bean
+    public DerivedDeliveryAttentionQuery derivedDeliveryAttentionQuery(DerivedDeliveryRepository derivedDeliveryRepository,
+                                                                       CasePrimaryIdentifierLookup casePrimaryIdentifierLookup) {
+        return new DerivedDeliveryAttentionQuery(derivedDeliveryRepository, casePrimaryIdentifierLookup);
     }
 
     @Bean

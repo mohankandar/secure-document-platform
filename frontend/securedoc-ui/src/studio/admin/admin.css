@@ -319,3 +319,14 @@
 @media (max-width: 1024px) {
   .cf-ad-tabs { margin: 0 -16px; padding: 0 16px; }
 }
+
+/* Admin › Integrations (UI task U008): one status line, codes under a small Technical details in each row. */
+.cf-ad-conn-status { font-size: 13px; color: var(--cf-muted); }
+.cf-ad-conn-status [data-tone] { font-weight: 600; color: var(--cf-ink); }
+.cf-ad-conn-status [data-tone='danger'], .cf-ad-conn-status [data-tone='off'] { color: var(--cf-danger); }
+.cf-ad-conn .cf-disclosure { border-top: 0; padding-top: 2px; }
+.cf-ad-conn .cf-disclosure > summary { font-size: 11px; color: var(--cf-faint); }
+.cf-ad-conn .cf-disclosure .cf-ad-facts { margin-top: 8px; }
+.cf-ad-block { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--cf-line); }
+.cf-ad-block-title { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; font-weight: 600; }
+.cf-ad-rule-sentence { font-size: 14px; }

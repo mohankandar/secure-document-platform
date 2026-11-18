@@ -177,6 +177,9 @@ export interface DerivedDelivery {
   retryable: boolean;
   destinationReference?: string;
   deliveredAt?: string;
+  /** Only in the attention list: the case's main ID (for example the loan number), when the case has one. */
+  primaryIdentifierLabel?: string | null;
+  primaryIdentifierValue?: string | null;
 }
 
 export interface PackageSummary {
