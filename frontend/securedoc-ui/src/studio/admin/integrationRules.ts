@@ -98,7 +98,14 @@ export function failureReason(code: string | null | undefined): string {
       return 'collecting was interrupted';
     case 'SDV_CONNECTION_TEST_FAILED':
     case 'DERIVED_CONNECTION_TEST_FAILED':
+    case 'CONNECTION_TEST_FAILED':
       return 'the connection test failed';
+    case 'ADDRESS_NOT_ALLOWED':
+      return "that address isn't allowed";
+    case 'ADDRESS_NOT_RESOLVED':
+      return "the address couldn't be found";
+    case 'SDV_TEST_UNAVAILABLE':
+      return "SDV testing isn't set up in this installation";
     case 'DERIVED_DESTINATION_DISABLED':
       return 'the place it goes to is switched off';
     case 'ROUTING_MARKER_AMBIGUOUS':
@@ -111,6 +118,21 @@ export function failureReason(code: string | null | undefined): string {
     default:
       return 'reason not recognised (see Technical details)';
   }
+}
+
+/**
+ * The answer of a test before saving, in words: "The connection works." or
+ * "The connection didn't work: couldn't reach it. Check the address and sign-in, then test again."
+ * An unknown code is not guessed at.
+ */
+export function draftTestResult(r: { works: boolean; reasonCode: string | null }): { tone: 'ok' | 'danger'; text: string } {
+  if (r.works) return { tone: 'ok', text: 'The connection works.' };
+  const known = failureReason(r.reasonCode);
+  const reason = known.startsWith('reason not recognised') ? '' : `: ${known}`;
+  if (r.reasonCode === 'ADDRESS_NOT_ALLOWED') {
+    return { tone: 'danger', text: `The connection didn't work${reason}. Cloud metadata addresses are always refused.` };
+  }
+  return { tone: 'danger', text: `The connection didn't work${reason}. Check the address and sign-in, then test again.` };
 }
 
 export type Tone = 'ok' | 'warn' | 'danger' | 'off';

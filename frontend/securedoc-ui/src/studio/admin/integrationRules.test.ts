@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  VIEWS, advancedSummary, ago, attentionLine, attentionTitle, connectionStatus, connectionTag, everyText, failureReason,
+  VIEWS, advancedSummary, ago, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
   methodOf, pagesText, ruleSentence, statusText, watchedFolderStatus,
 } from './integrationRules.ts';
 
@@ -90,4 +90,19 @@ test('the editor: method from a saved connection, and the advanced settings in w
   assert.equal(methodOf({ purpose: 'SDV_DELIVERY', providerType: 'HTTP_API' }), 'SDV');
   assert.equal(advancedSummary({ timeoutSeconds: 30, retryMaxAttempts: 5, incompleteWindowHours: 24, maxDocumentsPerIntake: 50, maxPdfSizeBytes: 50 * 1048576, maxPdfPages: 500, acknowledgementMode: 'SOURCE_PICKUP_ACK', purpose: 'INGESTION_SOURCE' }),
     'wait 30 s · try again up to 5 times · finish incomplete cases within 24 h · up to 50 files, 50 MB, 500 pages · confirm pickup to the source');
+});
+
+test('a test before saving reads as works or a plain reason, never a code', () => {
+  assert.deepEqual(draftTestResult({ works: true, reasonCode: null }), { tone: 'ok', text: 'The connection works.' });
+  assert.equal(draftTestResult({ works: false, reasonCode: 'DELIVERY_IO' }).text,
+    "The connection didn't work: couldn't reach it. Check the address and sign-in, then test again.");
+  assert.equal(draftTestResult({ works: false, reasonCode: 'ADDRESS_NOT_ALLOWED' }).text,
+    "The connection didn't work: that address isn't allowed. Cloud metadata addresses are always refused.");
+  assert.equal(draftTestResult({ works: false, reasonCode: 'ADDRESS_NOT_RESOLVED' }).text,
+    "The connection didn't work: the address couldn't be found. Check the address and sign-in, then test again.");
+  const unknown = draftTestResult({ works: false, reasonCode: 'SOMETHING_NEW' });
+  assert.equal(unknown.text, "The connection didn't work. Check the address and sign-in, then test again.");
+  assert.doesNotMatch(unknown.text, /SOMETHING_NEW/);
+  assert.equal(failureReason('CONNECTION_TEST_FAILED'), 'the connection test failed');
+  assert.equal(failureReason('SDV_TEST_UNAVAILABLE'), "SDV testing isn't set up in this installation");
 });

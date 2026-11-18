@@ -336,6 +336,18 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
+    public com.securedoc.platform.application.integration.DraftConnectionTestService draftConnectionTestService(
+            IntegrationConnectionService integrationConnectionService,
+            org.springframework.beans.factory.ObjectProvider<SdvConnectionTestPort> sdvConnectionTestPort,
+            PollingSourcePort pollingSourcePort,
+            DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
+            AuditService auditService) {
+        return new com.securedoc.platform.application.integration.DraftConnectionTestService(integrationConnectionService,
+                sdvConnectionTestPort.getIfAvailable(), pollingSourcePort, derivedDestinationDeliveryPort,
+                new com.securedoc.platform.application.integration.OutboundAddressGuard(), auditService);
+    }
+
+    @Bean
     @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "sdv")
     public SdvConnectionTestService sdvConnectionTestService(
             IntegrationConnectionService integrationConnectionService,

@@ -4,6 +4,7 @@ import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.integration.DraftConnectionTestService;
 import com.securedoc.platform.application.integration.IntegrationConnectionService;
 import com.securedoc.platform.application.integration.IntegrationConnectionService.ConnectionInput;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
@@ -20,10 +21,13 @@ import java.time.LocalTime;
 @RequestMapping("/api/v1/integrations")
 public class IntegrationConnectionController {
     private final IntegrationConnectionService service;
+    private final DraftConnectionTestService draftTestService;
     private final RequestContextResolver contextResolver;
 
-    public IntegrationConnectionController(IntegrationConnectionService service, RequestContextResolver contextResolver) {
+    public IntegrationConnectionController(IntegrationConnectionService service, DraftConnectionTestService draftTestService,
+                                           RequestContextResolver contextResolver) {
         this.service = service;
+        this.draftTestService = draftTestService;
         this.contextResolver = contextResolver;
     }
 
@@ -72,6 +76,23 @@ public class IntegrationConnectionController {
     @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<IntegrationConnectionResponse> disable(@PathVariable String connectionId, HttpServletRequest request) {
         return setEnabled(connectionId, false, request);
+    }
+
+    /**
+     * Tests settings before they are saved. Same body as Save; {@code connectionId} (optional) names the saved
+     * connection being edited, so an empty key reference reuses its stored key. Saves nothing and leaves health as it
+     * was. The answer is only {@code works} and, if not, a fixed {@code reasonCode}.
+     */
+    @PostMapping("/test-draft")
+    @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
+    public ResponseEntity<DraftConnectionTestResponse> testDraft(@RequestParam(name = "connectionId", required = false) String connectionId,
+                                                                 @RequestBody IntegrationConnectionRequest body,
+                                                                 HttpServletRequest request) {
+        var principal = contextResolver.resolvePrincipal(request);
+        IntegrationConnectionId id = connectionId == null || connectionId.isBlank() ? null : parseId(connectionId);
+        var result = draftTestService.test(principal.tenantId(), id, principal.actorId(),
+                contextResolver.resolveCorrelationId(request), toInput(body, id != null));
+        return ResponseEntity.ok(new DraftConnectionTestResponse(result.works(), result.reasonCode()));
     }
 
     private ResponseEntity<IntegrationConnectionResponse> setEnabled(String connectionId, boolean enabled,

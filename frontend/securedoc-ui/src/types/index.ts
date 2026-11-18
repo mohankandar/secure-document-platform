@@ -613,6 +613,12 @@ export interface IntegrationConnectionRequest {
 }
 
 
+/** Answer of a test before saving: only whether it works and, if not, a fixed reason code. */
+export interface DraftConnectionTestResult {
+  works: boolean;
+  reasonCode: string | null;
+}
+
 export interface SdvConnectionTestResult {
   connectionId: string;
   healthStatus: string;

@@ -80,7 +80,7 @@ const ATTENTION = [{
   attemptCount: 5, failureCategory: 'DELIVERY_IO', retryable: true,
 }];
 
-type Call = { method: string; path: string; body: Record<string, unknown> };
+type Call = { method: string; path: string; search: string; body: Record<string, unknown> };
 
 const pageErrors: string[] = [];
 test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) => pageErrors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(m.text()); }); });
@@ -93,7 +93,7 @@ async function openIntegrations(page: Page, calls: Call[]) {
     const request = route.request();
     const url = new URL(request.url());
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    if (request.method() !== 'GET') calls.push({ method: request.method(), path: url.pathname, body: JSON.parse(request.postData() || '{}') });
+    if (request.method() !== 'GET') calls.push({ method: request.method(), path: url.pathname, search: url.search, body: JSON.parse(request.postData() || '{}') });
     if (url.pathname === '/api/v1/me/tenants') return json([{ ...ENTITY, roles: ['TENANT_IT_ADMIN'] }]);
     if (url.pathname === '/api/v1/me') {
       return json({ username: 'it.user@example.test', roles: ['TENANT_IT_ADMIN'], tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities: CAPS });
@@ -108,6 +108,10 @@ async function openIntegrations(page: Page, calls: Call[]) {
     }
     if (url.pathname === '/api/v1/business-admin/routing-rules/destinations') return json([{ connectionId: 'c-title', name: 'Title team folder', providerType: 'FILE_SHARE', enabled: false, healthStatus: 'DISABLED' }]);
     if (url.pathname === '/api/v1/integrations/c-poll/polling') return json({ connectionId: 'c-poll', name: 'Servicing outbox', enabled: true, healthStatus: 'DEGRADED', nextScheduledAt: minsAgo(-10), recentRuns: [] });
+    if (url.pathname === '/api/v1/integrations/test-draft') {
+      const draft = calls.at(-1)!.body as { endpoint?: string };
+      return json(draft.endpoint?.includes('169.254.169.254') ? { works: false, reasonCode: 'ADDRESS_NOT_ALLOWED' } : { works: true, reasonCode: null });
+    }
     if (url.pathname === '/api/v1/integrations/c-sdv/sdv/test-connection') return json({ connectionId: 'c-sdv', healthStatus: 'HEALTHY', secretConfigured: true, configurationVersion: 3 });
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
@@ -206,8 +210,13 @@ test('Add a connection: three steps, plain labels, Advanced closed, and what is 
 
   await sheet.getByRole('button', { name: 'Next: test and save' }).click();
   await expect(sheet).toContainText('Step 3 of 3');
-  await expect(sheet.getByRole('button', { name: 'Test connection' })).toBeDisabled();
-  await expect(sheet.getByText("A new connection can be tested once it is saved. Testing before saving isn't possible yet.")).toBeVisible();
+  await expect(sheet.getByText('The test uses the settings above. Nothing is saved until you choose Save, and you can save without testing.')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Test connection' }).click();
+  await expect(sheet.getByText('The connection works.')).toBeVisible();
+  const draftTest = calls.find((c) => c.path === '/api/v1/integrations/test-draft');
+  expect(draftTest?.search).toBe('');
+  expect(draftTest?.body).toMatchObject({ endpoint: 'https://servicing.northwind.example/api/outbox', pollingIntervalMinutes: 15 });
+  expect(calls.some((c) => c.method === 'POST' && c.path === '/api/v1/integrations')).toBe(false);
   await sheet.getByRole('button', { name: 'Save' }).click();
   await expect.poll(() => calls.find((c) => c.method === 'POST' && c.path === '/api/v1/integrations')?.body).toMatchObject({
     name: 'Servicing outbox 2', purpose: 'INGESTION_SOURCE', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'API_KEY',
@@ -215,7 +224,7 @@ test('Add a connection: three steps, plain labels, Advanced closed, and what is 
   });
 });
 
-test('Edit a saved connection: Test connection tests the saved settings, and is off once something changes', async ({ page }) => {
+test('Edit a saved connection: Test connection tests the saved settings, and after a change tests the new ones before saving', async ({ page }) => {
   const calls: Call[] = [];
   await openIntegrations(page, calls);
   await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to SDV/ }).click();
@@ -231,6 +240,18 @@ test('Edit a saved connection: Test connection tests the saved settings, and is 
   await sheet.getByRole('button', { name: 'Back' }).click();
   await sheet.getByLabel('Address').fill('https://sdv-new.northwind.example/api');
   await sheet.getByRole('button', { name: 'Next: test and save' }).click();
-  await expect(sheet.getByRole('button', { name: 'Test connection' })).toBeDisabled();
-  await expect(sheet.getByText('Testing uses the saved settings. Save your changes first, then test.')).toBeVisible();
+  await expect(sheet.getByText('The test uses the settings above. Nothing is saved until you choose Save, and you can save without testing.')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Test connection' }).click();
+  await expect(sheet.getByText('The connection works.')).toBeVisible();
+  const draftTest = calls.find((c) => c.path === '/api/v1/integrations/test-draft');
+  expect(draftTest?.search).toBe('?connectionId=c-sdv');
+  expect(draftTest?.body).toMatchObject({ endpoint: 'https://sdv-new.northwind.example/api' });
+
+  await sheet.getByRole('button', { name: 'Back' }).click();
+  await sheet.getByLabel('Address').fill('http://169.254.169.254/latest');
+  await sheet.getByRole('button', { name: 'Next: test and save' }).click();
+  await sheet.getByRole('button', { name: 'Test connection' }).click();
+  await expect(sheet.getByText("The connection didn't work: that address isn't allowed. Cloud metadata addresses are always refused.")).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Save' })).toBeEnabled();
+  expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 });

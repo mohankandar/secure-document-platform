@@ -146,3 +146,86 @@ Outcome: DONE, except item 9 (test **before** saving). That needs a new backend 
    - **In the UI:** step 3's Test connection then works for new and changed connections, and Save stays allowed either way.
 2. **"Slow".** Keep "Having problems" (the truth today), or record time-outs separately in the backend so "Slow" can be shown for them?
 3. **More than one watched-folder connection.** It is rare: the installation has one folder. In that case the folder's status goes on its own row, so it can appear beside those connections. Fine as it is?
+
+## Owner's answers (2026-11-18)
+
+1. **Test before saving:** approved as proposed (no schema change, `TENANT_INTEGRATION_MANAGE` only, saves nothing, health unchanged, one audit line marked draft, never sends a customer document). Conditions:
+   - the answer is only works / reason code: never echo the remote system's response body, headers or any secret;
+   - the key, and any secret behind the key reference, never appear in the answer, logs or audit detail;
+   - reusing the stored key with `connectionId` works only for a connection in the person's own active entity;
+   - the address goes through exactly the same checks as Save, and cloud metadata addresses (for example `169.254.169.254`) are always refused;
+   - a test with no "Test" result for a new connection still lets Save go ahead, as proposed.
+   Add backend tests for the entity check and for no secret in the answer.
+2. **"Slow":** keep "Having problems". Recording time-outs separately waits until a customer asks; nothing goes on the backlog now.
+3. **More than one watched-folder connection:** fine as it is.
+
+Apply these, note what was done here, commit, and then do the next UI task.
+
+## Done for the owner's answers (2026-11-18)
+
+Outcome: answer 1 is built. Answers 2 and 3 needed no change ("Having problems" stays; one watched-folder row stays as it is).
+
+### Backend (no schema change, no new dependency)
+
+- **`POST /api/v1/integrations/test-draft`**, `TENANT_INTEGRATION_MANAGE` only. The body is the same as Save. `?connectionId=` is optional: with it, an empty key reference reuses the stored key.
+- **Same checks as Save:** `IntegrationConnectionService.draft(...)` runs exactly what create and update run (name, account binding, one SDV, every domain rule). Create and update now call the same code. A failed check is the same 400 with the same message as Save.
+- **Own entity only:** with `connectionId`, the connection is looked up in the caller's active entity (`principal.tenantId()`). Another entity's ID is a 404, and its stored key is never read.
+- **Saves nothing and leaves health as it was.** Nothing is written except the audit line.
+- **One audit line:** `INTEGRATION_CONNECTION_TESTED`, target the connection ID or `draft`, detail `draft=true,purpose=…,provider=…,result=works` or `…,category=<code>`. It holds no address, no key reference and no key.
+- **The answer is only `{ works, reasonCode }`.** The reason is LexaVault's own code (`DELIVERY_IO`, `POLL_AUTH_CONFIGURATION_ERROR`, …). Anything else, or a code that is not plain capitals, becomes `CONNECTION_TEST_FAILED`. Messages, bodies and headers are never passed on. Nothing is logged.
+- **Cloud metadata addresses are always refused** (`OutboundAddressGuard`), before any request, with `ADDRESS_NOT_ALLOWED`:
+  - by name: `metadata`, `metadata.google.internal`, `metadata.goog`, `instance-data(.ec2.internal)`, `metadata.azure.com`, `metadata.tencentyun.com`;
+  - by every address the host resolves to: link-local `169.254.0.0/16` and `fe80::/10`, `fd00:ec2::254`, `100.100.100.200`, `168.63.129.16`;
+  - a host that doesn't resolve is refused as `ADDRESS_NOT_RESOLVED` (fail closed).
+- **No customer document:** the same safe probes as the saved tests: SDV health check, a barcode destination HEAD or folder check, and the collecting source's list with limit 1, which is then discarded.
+
+### Frontend
+
+- **Step 3, Test connection,** now works for new and changed connections and calls `test-draft`. An unchanged saved connection still uses the existing test, which also updates its status.
+- The note reads "The test uses the settings above. Nothing is saved until you choose Save, and you can save without testing." Save stays allowed whatever the result.
+- **Answers in words:** "The connection works.", or "The connection didn't work: couldn't reach it. Check the address and sign-in, then test again."
+  - For a metadata address: "… that address isn't allowed. Cloud metadata addresses are always refused."
+  - An unknown code gets no reason (it is never shown as a code).
+
+### Commands run and results
+
+- **Backend:** `cd backend; mvn clean install` passed with 453 tests:
+  - domain 31;
+  - application 138 (8 new in `DraftConnectionTestServiceTest`);
+  - scan bridge 47;
+  - infrastructure 8;
+  - API 229 (`IntegrationAuthorizationContractTest` now also covers `testDraft`).
+- **Frontend:**
+  - `npm run build`: passed.
+  - `npm run test:standalone`: passed:
+    - `test:auth` 8;
+    - `test:vocabulary` 48 (1 new);
+    - `test:ui-framework` 17;
+    - `test:oidc-signin` 52 (the 2 changed editor tests here; 3 new are U009's).
+- **Local app:**
+  - Started with `.\Start-LexaVault-Local.ps1 -ScannerMode SIMULATOR -AiModel qwen3.5:9b` and the new jar. "Frontend did not become ready" appeared again; both apps answered 200.
+  - Checked as **IT Administrator**: a new "Pages by barcode, to a web address" connection, step 3, in light and dark at 1440 and 1024 px (Edge, Playwright).
+    - `http://169.254.169.254/latest/meta-data` → "The connection didn't work: that address isn't allowed. Cloud metadata addresses are always refused."
+    - `https://nothing-here.invalid/in` → "… the address couldn't be found. …"
+  - The only writes were the 8 `test-draft` calls (8 draft audit lines). Nothing was saved. No page errors and no sideways scroll.
+  - Stopped with `.\Stop-LexaVault-Local.ps1`.
+
+### Tests
+
+- **`DraftConnectionTestServiceTest` (8):**
+  - another entity's `connectionId` → 404, no probe, no audit; own entity → the stored key reused, the changed address tested;
+  - nothing stored, the stored connection unchanged (health included);
+  - a failure carrying the key and a remote body → only `DELIVERY_DESTINATION_INVALID` in the answer; the audit line marked draft, without key, reference, remote text or address;
+  - unknown failures and unsafe codes → `CONNECTION_TEST_FAILED`; collecting tests ask only for the list (limit 1);
+  - eight metadata addresses (literal, name, trailing dot, a name resolving to 169.254.169.254, IPv6) refused for SDV, barcode and collecting, with no call; an unresolvable host refused;
+  - a missing address and a duplicate name fail with exactly Save's message;
+  - a system that sends to LexaVault has nothing to test;
+  - a working barcode destination → works, audited as `draft`.
+- **`adminIntegrations.spec.ts`:** the new-connection test now tests before saving (body sent, no `connectionId`, nothing saved), and the edit test sends `?connectionId=c-sdv`, then shows the metadata refusal with Save still on and no PUT.
+- **Failures during the work:** none in these tests.
+
+### Questions for the owner
+
+1. **Metadata addresses on Save and on the saved-connection tests.** The refusal applies to the test before saving only. Save still accepts such an address, and the existing saved tests still call it. Should Save (and those tests) refuse it too? That is a small validation change with no schema change.
+2. **Key references can name any server setting.** A key reference is `env:NAME` or `sys:NAME`, and it can name any environment variable or system property of the server, for example the database password, which a test then sends to the address given. This was already possible with Save and then Test; the test before saving doesn't widen it. Limit references to one prefix, for example `env:LEXAVAULT_INTEGRATION_…`?
+3. **DNS changing between check and call.** The address is checked once, just before the request. A name whose DNS answer changes in that moment is not covered. Closing that needs a pinned resolver in the HTTP client. Leave it for now?

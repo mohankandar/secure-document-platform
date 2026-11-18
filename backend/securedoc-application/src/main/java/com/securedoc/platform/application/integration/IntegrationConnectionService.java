@@ -44,20 +44,7 @@ public final class IntegrationConnectionService {
 
     public IntegrationConnection create(TenantId tenantId, ActorId actorId, CorrelationId correlationId,
                                         ConnectionInput input) {
-        Objects.requireNonNull(input, "Integration connection input is required");
-        ensureUniqueName(tenantId, input.name(), null);
-        ensureUniqueClientPrincipal(tenantId, input, null);
-        ensureSingleEnabledSdv(tenantId, input.purpose(), input.enabled(), null);
-        IntegrationConnection connection;
-        try {
-            connection = IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
-                    input.direction(), input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(),
-                    input.fileShareRoot(), input.secretReference(), input.timeoutSeconds(), input.retryMaxAttempts(), input.incompleteWindowHours(), input.maxDocumentsPerIntake(), input.maxPdfSizeBytes(), input.maxPdfPages(),
-                    input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
-                    input.acknowledgementMode(), input.enabled(), Instant.now(clock));
-        } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
-        }
+        IntegrationConnection connection = prepareCreate(tenantId, input);
         repository.save(connection);
         auditService.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_CREATED,
                 "IntegrationConnection", connection.id().toString(), correlationId,
@@ -67,14 +54,47 @@ public final class IntegrationConnectionService {
 
     public IntegrationConnection update(TenantId tenantId, IntegrationConnectionId id,
                                         ActorId actorId, CorrelationId correlationId, ConnectionInput input) {
+        IntegrationConnection updated = prepareUpdate(tenantId, id, input);
+        repository.save(updated);
+        auditService.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_UPDATED,
+                "IntegrationConnection", updated.id().toString(), correlationId,
+                safeAuditDetail(updated));
+        return updated;
+    }
+
+    /**
+     * Builds the connection that Save would store, through exactly the same checks as Save, but stores and audits
+     * nothing. With an id, the connection must belong to this tenant (the person's active entity), or
+     * {@link NotFoundException} is thrown, so another entity's stored key is never reached.
+     */
+    public IntegrationConnection draft(TenantId tenantId, IntegrationConnectionId idOrNull, ConnectionInput input) {
+        return idOrNull == null ? prepareCreate(tenantId, input) : prepareUpdate(tenantId, idOrNull, input);
+    }
+
+    private IntegrationConnection prepareCreate(TenantId tenantId, ConnectionInput input) {
+        Objects.requireNonNull(input, "Integration connection input is required");
+        ensureUniqueName(tenantId, input.name(), null);
+        ensureUniqueClientPrincipal(tenantId, input, null);
+        ensureSingleEnabledSdv(tenantId, input.purpose(), input.enabled(), null);
+        try {
+            return IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
+                    input.direction(), input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(),
+                    input.fileShareRoot(), input.secretReference(), input.timeoutSeconds(), input.retryMaxAttempts(), input.incompleteWindowHours(), input.maxDocumentsPerIntake(), input.maxPdfSizeBytes(), input.maxPdfPages(),
+                    input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
+                    input.acknowledgementMode(), input.enabled(), Instant.now(clock));
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(e.getMessage());
+        }
+    }
+
+    private IntegrationConnection prepareUpdate(TenantId tenantId, IntegrationConnectionId id, ConnectionInput input) {
         Objects.requireNonNull(input, "Integration connection input is required");
         IntegrationConnection existing = get(tenantId, id);
         ensureUniqueName(tenantId, input.name(), id);
         ensureUniqueClientPrincipal(tenantId, input, id);
         ensureSingleEnabledSdv(tenantId, input.purpose(), existing.enabled(), id);
-        IntegrationConnection updated;
         try {
-            updated = existing.updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
+            return existing.updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
                     input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(), input.fileShareRoot(),
                     input.secretReference(), input.preserveSecretReference(), input.timeoutSeconds(), input.retryMaxAttempts(), input.incompleteWindowHours(), input.maxDocumentsPerIntake(), input.maxPdfSizeBytes(), input.maxPdfPages(),
                     input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
@@ -82,11 +102,6 @@ public final class IntegrationConnectionService {
         } catch (IllegalArgumentException e) {
             throw new ValidationException(e.getMessage());
         }
-        repository.save(updated);
-        auditService.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_UPDATED,
-                "IntegrationConnection", updated.id().toString(), correlationId,
-                safeAuditDetail(updated));
-        return updated;
     }
 
     public IntegrationConnection setEnabled(TenantId tenantId, IntegrationConnectionId id, boolean enabled,

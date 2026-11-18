@@ -41,6 +41,7 @@ import type {
   PollingConnectionStatus,
   PollingRun,
   SdvConnectionTestResult,
+  DraftConnectionTestResult,
   RoutingRule,
   RoutingRuleRequest,
   RoutingDestinationOption,
@@ -310,6 +311,12 @@ class ApiClient {
 
   async runPollingNow(connectionId: string): Promise<PollingRun> {
     return this.request(`/integrations/${connectionId}/polling/run-now`, { method: 'POST' });
+  }
+
+  /** Tests settings before they are saved. With connectionId, an empty key reference reuses that connection's stored key. Saves nothing. */
+  async testDraftConnection(body: IntegrationConnectionRequest, connectionId?: string): Promise<DraftConnectionTestResult> {
+    const query = connectionId ? `?connectionId=${encodeURIComponent(connectionId)}` : '';
+    return this.request(`/integrations/test-draft${query}`, { method: 'POST', body: JSON.stringify(body) });
   }
 
   async testSdvConnection(connectionId: string): Promise<SdvConnectionTestResult> {

@@ -18,7 +18,7 @@ import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet,
 import { MINUTE_UNITS } from './adminRules';
 import {
   ACK_NAMES, AUTH_NAMES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
-  connectionStatus, connectionTag, isPolling, methodOf, watchedFolderStatus,
+  connectionStatus, connectionTag, draftTestResult, isPolling, methodOf, watchedFolderStatus,
   type Method, type StatusLine, type View,
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
@@ -475,16 +475,23 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
   }
 
   async function test() {
-    if (!d.connectionId || !kind) return;
+    if (!kind) return;
     setTesting(true);
     setTested(null);
     try {
-      const r = kind === 'sdv' ? await apiClient.testSdvConnection(d.connectionId)
-        : kind === 'derived' ? await apiClient.testDerivedConnection(d.connectionId)
-          : await apiClient.testPollingConnection(d.connectionId);
-      setTested(r.healthStatus === 'HEALTHY'
-        ? { tone: 'ok', text: 'The connection works.' }
-        : { tone: 'danger', text: "The connection didn't work. Check the address and sign-in, then test again." });
+      if (d.connectionId && unchanged) {
+        // The saved settings: the existing test, which also updates the connection's status.
+        const r = kind === 'sdv' ? await apiClient.testSdvConnection(d.connectionId)
+          : kind === 'derived' ? await apiClient.testDerivedConnection(d.connectionId)
+            : await apiClient.testPollingConnection(d.connectionId);
+        setTested(r.healthStatus === 'HEALTHY'
+          ? { tone: 'ok', text: 'The connection works.' }
+          : { tone: 'danger', text: "The connection didn't work. Check the address and sign-in, then test again." });
+      } else {
+        // New or changed settings: tested before saving. Nothing is saved and the status doesn't change.
+        const r = await apiClient.testDraftConnection(toPayload(d), d.connectionId ?? undefined);
+        setTested(draftTestResult(r));
+      }
     } catch (e) {
       setTested({ tone: 'danger', text: errorMessage(e, "The connection didn't work. Check the address and sign-in, then test again.") });
     } finally {
@@ -498,8 +505,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
 
   const testNote = !kind
     ? receive ? 'Nothing to test here: the documents are sent to LexaVault, and they show up on Cases when they arrive.' : null
-    : !editing ? "A new connection can be tested once it is saved. Testing before saving isn't possible yet."
-      : !unchanged ? "Testing uses the saved settings. Save your changes first, then test." : null;
+    : !unchanged ? "The test uses the settings above. Nothing is saved until you choose Save, and you can save without testing." : null;
 
   return (
     <Sheet open wide title={editing ? `Edit ${original?.name ?? 'connection'}` : 'Add a connection'} description={description}
@@ -511,7 +517,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
         {step < 3 && <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={step === 2 && nameMissing}
           onClick={() => { setError(null); setStep((step + 1) as Step); }}>{step === 1 ? 'Next' : 'Next: test and save'}</button>}
         {step === 3 && <>
-          {kind && <button type="button" className="cf-btn" data-size="sm" disabled={saving || testing || !unchanged} onClick={() => void test()}>{testing && <Spinner label="Testing" />}Test connection</button>}
+          {kind && <button type="button" className="cf-btn" data-size="sm" disabled={saving || testing} onClick={() => void test()}>{testing && <Spinner label="Testing" />}Test connection</button>}
           <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={saving || nameMissing} onClick={() => void save()}>{saving && <Spinner label="Saving" />}Save</button>
         </>}
       </>}
