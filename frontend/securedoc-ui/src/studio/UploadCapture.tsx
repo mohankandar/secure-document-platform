@@ -6,11 +6,28 @@ import { errorMessage, formatBytes } from './data';
 import { Notice, Spinner } from './atoms';
 import type { IdentityGate } from './Intake';
 import { useUnsavedWork } from './unsavedWork';
+import { countPdfPages, fileProblem, fileProblemText, intakeRulesLine, MAX_UPLOAD_BYTES, type FileProblem } from './intakeRules';
 
 type DraftState = 'ready' | 'uploading' | 'done' | 'error';
-interface Draft { id: number; file: File; state: DraftState; error?: string }
+/**
+ * `problem`: undefined while the file is being read, null when the server would take it.
+ * `pages`: undefined while reading, null when the count cannot be read with certainty (shown as "—").
+ */
+interface Draft { id: number; file: File; state: DraftState; error?: string; problem?: FileProblem | null; pages?: number | null }
 
-const isPdf = (file: File) => file.name.toLowerCase().endsWith('.pdf') && (!file.type || file.type === 'application/pdf');
+/** Reads the file in the browser only: its first bytes for the PDF header, then the page tree for the count. */
+async function inspect(file: File): Promise<{ problem: FileProblem | null; pages: number | null }> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+    const problem = fileProblem(file, head);
+    if (problem || file.size > MAX_UPLOAD_BYTES) return { problem, pages: null };
+    return { problem: null, pages: countPdfPages(new Uint8Array(await file.arrayBuffer())) };
+  } catch {
+    return { problem: 'NOT_PDF', pages: null };
+  }
+}
+
+const pagesText = (pages: number | null) => (pages === null ? '— pages' : `${pages} ${pages === 1 ? 'page' : 'pages'}`);
 const fileKey = (file: File) => `${file.name.toLowerCase()}::${file.size}::${file.lastModified}`;
 
 export default function UploadCapture({ gate, onLock, onCreated }: {
@@ -35,16 +52,19 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
 
   const add = (list: FileList | File[]) => {
     const files = Array.from(list);
-    const pdfs = files.filter(isPdf);
-    const rejected = files.length - pdfs.length;
-    setDrafts((current) => {
-      const seen = new Set(current.map((d) => fileKey(d.file)));
-      const fresh = pdfs.filter((f) => !seen.has(fileKey(f))).map((file) => ({ id: ++nextId.current, file, state: 'ready' as const }));
-      const dupes = pdfs.length - fresh.length;
-      const parts = [rejected ? `${rejected} non-PDF ${rejected === 1 ? 'file' : 'files'} skipped` : '', dupes ? `${dupes} duplicate${dupes === 1 ? '' : 's'} skipped` : ''].filter(Boolean);
-      setNotice(parts.length ? `${parts.join(' · ')}.` : null);
-      return [...current, ...fresh];
-    });
+    const seen = new Set(drafts.map((d) => fileKey(d.file)));
+    const fresh: Draft[] = [];
+    for (const file of files) {
+      if (seen.has(fileKey(file))) continue;
+      seen.add(fileKey(file));
+      fresh.push({ id: ++nextId.current, file, state: 'ready' });
+    }
+    const dupes = files.length - fresh.length;
+    setNotice(dupes ? `${dupes} duplicate${dupes === 1 ? '' : 's'} skipped.` : null);
+    setDrafts((current) => [...current, ...fresh]);
+    for (const draft of fresh) {
+      void inspect(draft.file).then((result) => setDrafts((current) => current.map((d) => (d.id === draft.id ? { ...d, ...result } : d))));
+    }
   };
 
   const move = (index: number, delta: number) => setDrafts((current) => {
@@ -62,6 +82,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
     const identity = gate.require();
     if (!identity) { setFailure('Complete the case identity first.'); return; }
     if (drafts.length === 0) { setFailure('Add at least one PDF.'); return; }
+    if (drafts.some((d) => d.problem !== null)) return; // a refused or unread file: fail closed
 
     inFlight.current = true;
     setPhase('working');
@@ -109,7 +130,9 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
   const working = phase === 'working';
   const errors = drafts.filter((d) => d.state === 'error').length;
   const uploaded = drafts.filter((d) => d.state === 'done').length;
-  const label = working ? null : errors > 0 ? 'Retry failed uploads' : draftPackageId ? 'Submit case' : 'Open case & submit';
+  const refused = drafts.filter((d) => d.problem).length;
+  const reading = drafts.some((d) => d.problem === undefined);
+  const label = working ? null : errors > 0 ? 'Retry failed uploads' : draftPackageId ? 'Submit case' : 'Create case';
 
   return (
     <div className="cf-capture">
@@ -124,6 +147,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
         <FileUp size={22} aria-hidden="true" />
         <p className="cf-drop-title">Drop PDFs here</p>
         <p className="cf-drop-text">They&apos;re processed in the order listed below.</p>
+        <p className="cf-drop-rules">{intakeRulesLine()}</p>
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => inputRef.current?.click()} disabled={working}>
           Choose files
         </button>
@@ -151,13 +175,19 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
           </div>
           <ol aria-live="polite">
             {drafts.map((draft, index) => (
-              <li key={draft.id} className="cf-ledger-row" data-state={draft.state}>
+              <li key={draft.id} className="cf-ledger-row" data-state={draft.problem ? 'refused' : draft.state}>
                 <span className="cf-ledger-order cf-mono" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
                 <FileText size={16} aria-hidden="true" className="cf-doc-icon" />
                 <span className="cf-ledger-name">
                   <span>{draft.file.name}</span>
                   <span className="cf-doc-meta">
-                    {draft.state === 'error' ? <span className="cf-danger-text">{draft.error}</span> : formatBytes(draft.file.size)}
+                    {draft.problem
+                      ? <span className="cf-danger-text">{fileProblemText[draft.problem]}</span>
+                      : draft.state === 'error' && <span className="cf-danger-text">{draft.error}</span>}
+                    <span className="cf-ledger-facts">
+                      <span>{formatBytes(draft.file.size)}</span>
+                      {!draft.problem && <span>{draft.problem === undefined ? 'Reading…' : pagesText(draft.pages ?? null)}</span>}
+                    </span>
                   </span>
                 </span>
                 {draft.state === 'uploading' && <Spinner label={`Uploading ${draft.file.name}`} />}
@@ -180,11 +210,13 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
 
       <div className="cf-capture-foot">
         <p className="cf-muted">
-          {draftPackageId
+          {refused > 0
+            ? `Fix the ${refused === 1 ? 'file' : 'files'} marked in red to continue.`
+            : draftPackageId
             ? 'The case is open as a draft. Identity is locked to it.'
             : gate.valid ? (drafts.length ? 'Ready to open the case.' : 'Add the documents to continue.') : 'Complete the identity to continue.'}
         </p>
-        <button type="button" className="cf-btn" data-variant="solid" onClick={submit} disabled={working || drafts.length === 0}>
+        <button type="button" className="cf-btn" data-variant="solid" onClick={submit} disabled={working || drafts.length === 0 || refused > 0 || reading}>
           {working ? <><Spinner label="Submitting" /> Submitting…</> : label}
         </button>
       </div>

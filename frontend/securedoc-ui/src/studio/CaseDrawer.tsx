@@ -209,7 +209,7 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
       {!confirmCopy && canStartNew && primaryField && (
         <div className="cf-next-action">
           <span className="cf-next-choice">
-            <button type="button" className="cf-btn" onClick={() => navigate(`/intake?for=${encodeURIComponent(primaryField.value)}`)}>
+            <button type="button" className="cf-btn" onClick={() => navigate(`/intake?id=${encodeURIComponent(primaryField.value)}`)}>
               <FilePlus size={16} aria-hidden="true" /> Start a new case for {title.primary}
             </button>
             <span className="cf-next-hint">Opens New case with the {primaryField.label} filled in.</span>

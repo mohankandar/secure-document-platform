@@ -8,6 +8,7 @@ import { Notice, Spinner } from './atoms';
 import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
 import { useUnsavedWork } from './unsavedWork';
+import { prefillIdentifier } from './intakeRules';
 
 type Method = 'upload' | 'scan';
 
@@ -29,8 +30,8 @@ export default function Intake() {
   const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method } | null>(null);
   useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
-  // "Start a new case for this …" on a rejected case opens New case with ?for=<primary identifier> (UI task U003).
-  const prefill = params.get('for');
+  // "Start a new case for this …" on a rejected case opens New case with ?id=<primary identifier> (UI tasks U003, U005).
+  const prefill = prefillIdentifier(params);
   const [prefilled, setPrefilled] = useState(false);
   if (!prefilled && prefill && definitions.length > 0) {
     const primary = definitions.find((d) => d.primary) ?? definitions[0];
@@ -119,7 +120,7 @@ export default function Intake() {
             <span className="cf-step" aria-hidden="true">2</span>
             <div>
               <h2 id="cf-capture-title">Add the documents</h2>
-              <p>Upload PDFs you already have, or scan paper straight into the vault.</p>
+              <p>Upload PDFs you already have, or scan paper.</p>
             </div>
           </header>
 

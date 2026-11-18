@@ -5,6 +5,7 @@ import { scanBridgeClient, type ScanSession } from '../api/scanBridgeClient';
 import { errorMessage, formatBytes, useScannerStatus } from './data';
 import { Notice, Spinner } from './atoms';
 import type { IdentityGate } from './Intake';
+import { scannerDisplayName } from './intakeRules';
 
 export default function ScanCapture({ gate, onLock, onCreated }: {
   gate: IdentityGate;
@@ -82,14 +83,24 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
       <div className="cf-scanner" data-ready={ready || undefined}>
         <Printer size={18} aria-hidden="true" />
         <div className="cf-scanner-text">
-          <span className="cf-scanner-name">{scanner ? `${scanner.scannerId.toUpperCase()} · ${scanner.siteId}` : 'Scanner'}</span>
+          <span className="cf-scanner-name">{scanner ? scannerDisplayName(scanner.siteId) : 'Scanner'}</span>
           <span className="cf-doc-meta">
-            {scannerError ? 'Bridge unreachable' : !scanner ? 'Checking…' : ready ? `Ready · ${formatBytes(scanner.usableSpaceBytes)} free` : !scanner.acquisitionAvailable ? 'Offline' : 'Storage unavailable'}
+            {scannerError ? 'Bridge unreachable' : !scanner ? 'Checking…' : ready ? 'Ready' : !scanner.acquisitionAvailable ? 'Offline' : 'Storage unavailable'}
             {simulator && ' · Simulator'}
           </span>
         </div>
         <span className="cf-scanner-dot" aria-hidden="true" />
       </div>
+      {scanner && (
+        <details className="cf-disclosure">
+          <summary>Technical details</summary>
+          <dl className="cf-facts">
+            <div><dt>Device ID</dt><dd className="cf-mono">{scanner.scannerId}</dd></div>
+            <div><dt>Site ID</dt><dd className="cf-mono">{scanner.siteId}</dd></div>
+            <div><dt>Free space</dt><dd>{formatBytes(scanner.usableSpaceBytes)}</dd></div>
+          </dl>
+        </details>
+      )}
 
       {!session && (scannerError || (scanner && !ready)) && (
         <Notice tone="danger">
@@ -161,7 +172,7 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
               {busy === 'cancel' ? 'Cancelling…' : 'Cancel session'}
             </button>
             <button type="button" className="cf-btn" data-variant="solid" onClick={submit} disabled={busy !== null || !prepared}>
-              {busy === 'submit' ? <><Spinner label="Submitting" /> Submitting…</> : 'Open case & submit'}
+              {busy === 'submit' ? <><Spinner label="Submitting" /> Submitting…</> : 'Create case'}
             </button>
           </>
         )}
