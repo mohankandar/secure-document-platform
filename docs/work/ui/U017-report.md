@@ -94,3 +94,11 @@ Rules checked:
   - the rejection reason;
   - the delivery receipt;
   - names and loan numbers in audit records.
+
+## Owner's answers
+
+Recorded from `U018-task.md` (2026-11-18); applied in U018.
+
+1. **Retry for the IT Administrator** is from Support (the problem page) only. The IT Administrator never sees Cases. `WhoSeesWhat.html` was wrong. Done in U018: `SPEC.md` says so; the designs are unchanged.
+2. **Correct the e2e tests' capability lists** to exactly what `ProductAuthorizationPolicy` grants each role. Done in U018.
+3. **Add the "AI off" switch to the start script now,** so the live U004 check can run before merging. Done in U018.
