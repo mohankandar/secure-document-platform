@@ -153,10 +153,14 @@ export interface FieldLabel {
   searchable?: boolean;
 }
 
+/** The case filter's placeholder when no field is configured, or when the field names don't fit the box (U019). */
+export const CASE_SEARCH_FALLBACK = 'Filter cases';
+
 /**
  * The placeholder for case search, built from the configured case fields (for example "Filter by loan number or
- * borrower name"). Field names inside a sentence are lower case (fieldNameInSentence). Falls back to "case" words
- * when no field is configured; never a hard-coded name.
+ * borrower name"). Field names inside a sentence are lower case (fieldNameInSentence). Two names that end in the same
+ * word say it once: "contract or member number" (U019). Falls back to "case" words when no field is configured;
+ * never a hard-coded name.
  */
 export function caseSearchPlaceholder(fields: readonly FieldLabel[] | undefined, withActions = false): string {
   const list = fields ?? [];
@@ -165,9 +169,24 @@ export function caseSearchPlaceholder(fields: readonly FieldLabel[] | undefined,
   const labels = [primary, ...searchable].filter((f): f is FieldLabel => Boolean(f && f.label.trim()))
     .slice(0, 2)
     .map((f) => fieldNameInSentence(f.label));
-  if (!labels.length) return withActions ? 'A case or an action…' : 'Filter cases';
-  const subject = labels.join(' or ');
+  if (!labels.length) return withActions ? 'A case or an action…' : CASE_SEARCH_FALLBACK;
+  const subject = joinFieldNames(labels);
   return withActions ? `${capitalizeFirst(subject)}, or an action…` : `Filter by ${subject}`;
+}
+
+/** "contract number" + "member number" → "contract or member number"; any other pair → "a or b". */
+function joinFieldNames(names: readonly string[]): string {
+  if (names.length !== 2) return names.join(' or ');
+  const first = names[0].split(/\s+/);
+  const second = names[1].split(/\s+/);
+  const shared = first.length > 1 && second.length > 1 && first[first.length - 1] === second[second.length - 1];
+  return shared ? `${first.slice(0, -1).join(' ')} or ${names[1]}` : names.join(' or ');
+}
+
+/** The preferred text when its measured width fits the room, otherwise the fallback (fail closed: unknown → fallback). */
+export function textThatFits(preferred: string, fallback: string, width: number | null, room: number | null): string {
+  if (width === null || room === null || !Number.isFinite(width) || !Number.isFinite(room)) return fallback;
+  return width <= room ? preferred : fallback;
 }
 
 /* ---------- Helpers ---------- */

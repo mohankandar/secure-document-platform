@@ -145,12 +145,15 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
         onDrop={(e) => { e.preventDefault(); setDragging(false); if (!working) add(e.dataTransfer.files); }}
       >
         <FileUp size={22} aria-hidden="true" />
-        <p className="cf-drop-title">Drop PDFs here</p>
-        <p className="cf-drop-text">They&apos;re processed in the order listed below.</p>
+        {/* Canvas NewCase: one centred line "Drop PDFs here or choose files", the rules under it. The list numbers the
+            files ("1 · name"), so the order needs no note of its own. */}
+        <p className="cf-drop-line">
+          <span className="cf-drop-title">Drop PDFs here</span> or{' '}
+          <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => inputRef.current?.click()} disabled={working}>
+            choose files
+          </button>
+        </p>
         <p className="cf-drop-rules">{intakeRulesLine()}</p>
-        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => inputRef.current?.click()} disabled={working}>
-          Choose files
-        </button>
         <input
           ref={inputRef}
           type="file"

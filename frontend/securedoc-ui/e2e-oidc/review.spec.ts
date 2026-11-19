@@ -199,6 +199,13 @@ test('single Redact stays without confirmation', async ({ page }) => {
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('U019: an empty queue shows no "decided this session" meter', async ({ page }) => {
+  await openReview(page, [], [], []);
+  await expect(page.getByText('The queue is clear.')).toBeVisible();
+  await expect(page.locator('.cf-review-meter')).toHaveCount(0);
+  await expect(page.getByText(/decided this session/)).toHaveCount(0);
+});
+
 test('there is no "Keep visible all"', async ({ page }) => {
   await openReview(page);
   await expect(panel(page).getByRole('button', { name: /Redact all 3 like this/ })).toBeVisible();

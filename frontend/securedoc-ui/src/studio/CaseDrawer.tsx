@@ -355,8 +355,14 @@ function RetentionSection({ life }: { life: PackageLifecycleSummary }) {
   return (
     <details className="cf-disclosure" open={soon}>
       <summary>
-        {CASE_SECTIONS.keeping}
-        {soon && <span className="cf-count" data-tone="mark">Redacted copy expires {relativeFuture(life.redactedDeleteAt as string)}</span>}
+        {/* U019: the summary wraps only between phrases, never inside "in 18 hours". */}
+        <span className="cf-phrase">{CASE_SECTIONS.keeping}</span>
+        {soon && (
+          <> <span className="cf-count" data-tone="mark">
+            <span className="cf-phrase">Redacted copy expires</span>{' '}
+            <span className="cf-phrase">{relativeFuture(life.redactedDeleteAt as string)}</span>
+          </span></>
+        )}
       </summary>
       <dl className="cf-facts">
         <div><dt>Runs used</dt><dd>{life.successfulExportCycles} of {life.maximumExportCycles}</dd></div>

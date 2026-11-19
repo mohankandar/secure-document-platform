@@ -88,7 +88,7 @@ test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) 
 // The Cases screen loads first and gets an empty mock answer; only errors from the Admin screens count here.
 test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/packages returned/.test(e))).toEqual([]); });
 
-async function openIntegrations(page: Page, calls: Call[]) {
+async function openIntegrations(page: Page, calls: Call[], connections: readonly unknown[] = CONNECTIONS) {
   await mockIdentityProvider(page);
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
@@ -99,7 +99,7 @@ async function openIntegrations(page: Page, calls: Call[]) {
     if (url.pathname === '/api/v1/me') {
       return json({ username: 'it.user@example.test', roles: ['TENANT_IT_ADMIN'], tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities: CAPS });
     }
-    if (url.pathname === '/api/v1/integrations' && request.method() === 'GET') return json(CONNECTIONS);
+    if (url.pathname === '/api/v1/integrations' && request.method() === 'GET') return json(connections);
     if (url.pathname === '/api/v1/integrations' && request.method() === 'POST') return json({ ...connection({ connectionId: 'c-new' }), ...calls.at(-1)!.body });
     if (url.pathname === '/api/v1/platform-admin/overview') return json(OVERVIEW);
     if (url.pathname === '/api/v1/derived-deliveries/attention') return json(ATTENTION);
@@ -163,6 +163,19 @@ test('Receiving: plain view names, one tag and one status line each, the watched
   await details.locator('summary').click();
   await expect(details).toContainText('API key · key stored');
   await expect(details).toContainText('POLL_SOURCE_UNAVAILABLE');
+});
+
+test('U019: the installed watched folder (no folder connection) has Check now only, and says why', async ({ page }) => {
+  await openIntegrations(page, [], CONNECTIONS.filter((c) => c.connectionId !== 'c-folder'));
+  const card = page.getByRole('region', { name: 'Receiving documents' });
+  const folder = card.getByRole('listitem').filter({ hasText: 'Watched folder' });
+  await expect(folder).toHaveCount(1);
+  await expect(folder.getByRole('button', { name: 'Check now' })).toBeEnabled();
+  await expect(folder.locator('.cf-ad-conn-note')).toHaveText('Set up by the install configuration');
+  for (const b of ['Switch off', 'Switch on', 'Edit']) await expect(folder.getByRole('button', { name: b })).toHaveCount(0);
+  // A connection row keeps its own actions.
+  const los = card.getByRole('listitem').filter({ hasText: 'Loan origination system' });
+  for (const b of ['Switch off', 'Edit']) await expect(los.getByRole('button', { name: b })).toBeVisible();
 });
 
 test('Sending by barcode: rules as a sentence, failed files by loan number, Retry', async ({ page }) => {

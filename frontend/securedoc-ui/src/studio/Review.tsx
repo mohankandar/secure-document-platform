@@ -203,10 +203,13 @@ export default function Review({ caps }: { caps: string[] }) {
             )}
           </p>
         </div>
-        <div className="cf-review-meter" aria-label={`${decided} decided this session`}>
-          <span className="cf-doc-meta">{decided} decided this session</span>
-          <span className="cf-meter" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></span>
-        </div>
+        {/* U019: no meter while there is nothing to review. */}
+        {remaining > 0 && (
+          <div className="cf-review-meter" aria-label={`${decided} decided this session`}>
+            <span className="cf-doc-meta">{decided} decided this session</span>
+            <span className="cf-meter" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></span>
+          </div>
+        )}
       </header>
 
       {caseFilter && (

@@ -99,6 +99,9 @@ test('states the rules, lists size and pages, and holds Create case while a file
   const calls: string[] = [];
   await openNewCase(page, '/intake', calls);
   await expect(page.getByText('PDF only · up to 50 MB each')).toBeVisible();
+  // U019: one line "Drop PDFs here or choose files", the rules under it, no separate order note.
+  await expect(page.locator('.cf-drop-line')).toHaveText('Drop PDFs here or choose files');
+  await expect(page.getByText(/processed in the order/)).toHaveCount(0);
   await expect(page.getByText('Upload PDFs you already have, or scan paper.')).toBeVisible();
   await expect(page.locator('.cf-intake')).not.toContainText(/\bvault\b/i); // "LexaVault" is the product name
   await expect(page.getByRole('button', { name: /Open case & submit/ })).toHaveCount(0);

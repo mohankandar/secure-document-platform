@@ -124,6 +124,9 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-conn-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--cf-muted); }
 .cf-ad-conn-endpoint { font-size: 13px; color: var(--cf-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cf-ad-conn-actions { flex: none; display: flex; gap: 6px; }
+/* U019: a row whose actions are limited says why, in a short muted line under its button. */
+.cf-ad-conn-actions-note { flex-direction: column; align-items: flex-end; gap: 4px; }
+.cf-ad-conn-note { font-size: 12px; color: var(--cf-muted); white-space: nowrap; }
 .cf-ad-status { flex: none; font-size: 12px; font-weight: 500; color: var(--cf-muted); }
 .cf-ad-status[data-tone='ok'] { color: var(--cf-ink); }
 .cf-ad-status[data-tone='danger'] { color: var(--cf-danger); }
@@ -420,3 +423,12 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-audit .cf-ad-audit-more[open] > summary::before { content: '▾'; }
 /* Technical details at the foot of a card, under a hairline (canvas .tech). */
 .cf-ad-card > .cf-disclosure { border-top: 1px solid var(--cf-line); }
+
+/* U019 (owner approved, slightly beyond the canvas): on full-width cards, inputs, dropdowns and the confidence slider
+   stop at 480 px instead of stretching with the card; number-and-unit fields stay short. Mode cards, tables and long
+   text keep the full width. The side sheets (the connection editor) keep the canvas's full-width fields. */
+.cf-admin .cf-field :is(input, select):not([type='checkbox'], [type='radio'], [type='range'], [type='color']) { max-width: 480px; }
+.cf-admin .cf-ad-threshold input[type='range'] { max-width: 480px; }
+.cf-admin .cf-ad-duration input { flex: none; width: 96px; }
+.cf-admin .cf-ad-duration select { flex: none; width: auto; }
+.cf-ad-sheet .cf-field :is(input, select):not([type='checkbox'], [type='radio'], [type='range'], [type='color']) { max-width: none; }

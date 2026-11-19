@@ -35,9 +35,10 @@
 .cf-sp-note { font-size: 12px; color: var(--cf-muted); }
 
 /* ---------- Problem page ---------- */
-/* Canvas ProblemDetail.html: one 1100 px column, centred; eyebrow crumbs; cards radius 8 with 16/600 titles;
+/* Canvas ProblemDetail.html: one centred column (the canvas main is 1100 px less 24 px padding each side, so 1052 px,
+   as New case); eyebrow crumbs; cards radius 8 with 16/600 titles;
    timeline rows 12 px apart with a hairline between, the time 150 px wide in 13 px mono; "▸" disclosures. */
-.cf-pb { max-width: 1100px; width: 100%; margin: 0 auto; }
+.cf-pb { max-width: 1052px; width: 100%; margin: 0 auto; }
 .cf-pb .cf-sp-crumbs.cf-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
 .cf-pb .cf-sp-crumbs .cf-mono { font-family: inherit; }
 .cf-pb .cf-pb-card { gap: 14px; border-radius: 8px; }

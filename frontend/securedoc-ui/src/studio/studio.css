@@ -138,7 +138,8 @@
 .cf-acct-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .cf-acct-message { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; max-width: 280px; padding: 6px 10px; border-radius: var(--cf-radius); background: var(--cf-surface); border: 1px solid var(--cf-line); box-shadow: var(--cf-shadow); font-size: 12px; color: var(--cf-ink); }
 
-.cf-main { padding: 32px 24px 64px; max-width: 1440px; margin: 0 auto; }
+/* Canvas .main: padding only, no width limit (U019). New case, the problem page and No access keep their own centred columns. */
+.cf-main { padding: 32px 24px 64px; }
 
 /* ---------- Primitives ---------- */
 .cf-kbd {
@@ -374,7 +375,9 @@
 .cf-drawer .cf-disclosure[open] > summary { margin-bottom: 6px; }
 .cf-drawer .cf-disclosure-lead { color: var(--cf-muted); }
 .cf-count[data-tone='danger'] { color: var(--cf-danger); text-transform: none; letter-spacing: 0; }
-.cf-count[data-tone='mark'] { color: var(--cf-ink); background: var(--cf-mark-soft); padding: 0 6px; border-radius: 3px; text-transform: none; letter-spacing: 0; }
+.cf-count[data-tone='mark'] { color: var(--cf-ink); background: var(--cf-mark-soft); padding: 0 6px; border-radius: 3px; text-transform: none; letter-spacing: 0; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* A short phrase that never breaks inside ("in 18 hours"); text wraps only between phrases (U019). */
+.cf-phrase { white-space: nowrap; }
 .cf-small { font-size: 12px; margin-top: 8px; }
 .cf-stage[data-stage='unknown'] { color: var(--cf-muted); background: transparent; }
 .cf-stage[data-stage='unknown'] .cf-stage-dot { background: transparent; border: 1px dashed var(--cf-muted); }
@@ -473,18 +476,14 @@
   background: var(--cf-raised); color: var(--cf-muted); transition: border-color 120ms ease, background-color 120ms ease;
 }
 .cf-drop[data-dragging] { border-color: var(--cf-ink); background: var(--cf-mark-soft); color: var(--cf-ink); }
-/* Canvas: a dashed box, padding 20, centred 14 px words; "choose files" reads as an underlined link. */
+/* Canvas: a dashed box, padding 20; one centred 14 px line "Drop PDFs here or choose files" ("choose files" reads as an
+   underlined link), the rules centred under it (U019). */
 .cf-capture .cf-drop { gap: 4px; padding: 20px; border-radius: 8px; background: transparent; font-size: 14px; }
 .cf-capture .cf-drop > svg { display: none; }
+.cf-capture .cf-drop-line { color: var(--cf-ink); }
 .cf-capture .cf-drop .cf-drop-title { font-weight: 500; }
 .cf-capture .cf-drop .cf-drop-rules { font-size: 13px; }
-.cf-capture .cf-drop .cf-btn { margin-top: 0; height: auto; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 400; color: var(--cf-ink); text-decoration: underline; }
-.cf-drop[data-compact] .cf-drop-text { display: none; }
-.cf-capture .cf-drop { flex-direction: row; flex-wrap: wrap; justify-content: center; column-gap: 4px; row-gap: 4px; }
-.cf-capture .cf-drop .cf-drop-title { order: 1; }
-.cf-capture .cf-drop .cf-btn { order: 2; }
-.cf-capture .cf-drop .cf-drop-text { order: 3; flex-basis: 100%; }
-.cf-capture .cf-drop .cf-drop-rules { order: 4; flex-basis: 100%; }
+.cf-capture .cf-drop .cf-btn { display: inline; margin-top: 0; height: auto; padding: 0; border: 0; background: transparent; font-size: 14px; font-weight: 400; color: var(--cf-ink); text-decoration: underline; vertical-align: baseline; }
 .cf-drop-title { color: var(--cf-ink); font-weight: 600; }
 .cf-drop-text { font-size: 13px; max-width: 360px; text-wrap: pretty; }
 .cf-drop .cf-btn, .cf-feeder .cf-btn { margin-top: 6px; }

@@ -316,8 +316,10 @@ function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; on
           </dl>
         </details>
       </div>
-      <div className="cf-ad-conn-actions">
+      <div className="cf-ad-conn-actions cf-ad-conn-actions-note">
         <button type="button" className="cf-btn" data-size="sm" disabled={!folder.enabled || busy} onClick={() => void check()}>{busy && <Spinner label="Checking" />}Check now</button>
+        {/* U019: the backend has no edit or switch-off for the installed folder (scan only), so say why they're missing. */}
+        <span className="cf-ad-conn-note">Set up by the install configuration</span>
       </div>
     </li>
   );

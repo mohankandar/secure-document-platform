@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Search, X } from 'lucide-react';
 import type { PackageSummary } from '../types';
@@ -6,7 +6,7 @@ import {
   CAP, LIFECYCLE, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf,
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
-import { CASE_GROUPS, NAV, caseSearchPlaceholder } from './words';
+import { CASE_GROUPS, CASE_SEARCH_FALLBACK, NAV, caseSearchPlaceholder, textThatFits } from './words';
 import { Kbd, Notice, Spinner, StageChip } from './atoms';
 import CaseDrawer from './CaseDrawer';
 import { LoadErrorCard } from './failure';
@@ -18,6 +18,37 @@ import { ConfirmDialog } from './admin/shared';
 type Filter = 'all' | 'you' | StageKey;
 
 interface Group { key: string; title: string; note?: string; cases: PackageSummary[] }
+
+/**
+ * The filter's placeholder while it fits the box at the box's current width, otherwise "Filter cases" (U019).
+ * Measured with the input's own font; measured again when the box resizes and once the web font has loaded.
+ */
+function usePlaceholderThatFits(ref: RefObject<HTMLInputElement | null>, preferred: string): string {
+  const [text, setText] = useState(preferred);
+  useLayoutEffect(() => {
+    const input = ref.current;
+    if (!input) return undefined;
+    const context = document.createElement('canvas').getContext('2d');
+    let live = true;
+    const measure = () => {
+      if (!live) return;
+      const style = getComputedStyle(input);
+      let width: number | null = null;
+      if (context) {
+        context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        width = context.measureText(preferred).width;
+      }
+      const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setText(textThatFits(preferred, CASE_SEARCH_FALLBACK, width, room));
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(input);
+    void document.fonts?.ready.then(measure);
+    return () => { live = false; observer?.disconnect(); };
+  }, [ref, preferred]);
+  return text;
+}
 
 export default function Desk({ caps }: { caps: string[] }) {
   const { caseId } = useParams();
@@ -32,6 +63,7 @@ export default function Desk({ caps }: { caps: string[] }) {
 
   const { data: packages, error, isLoading, mutate } = usePackages(true);
   const fields = useCaseFields(caps, packages);
+  const placeholder = usePlaceholderThatFits(searchRef, caseSearchPlaceholder(fields));
   const { data: queue } = useReviewQueue(caps.includes(CAP.review));
   const findings = useMemo(() => openFindingsByPackage(queue?.items), [queue]);
 
@@ -124,7 +156,7 @@ export default function Desk({ caps }: { caps: string[] }) {
           <label className="cf-search">
             <Search size={15} aria-hidden="true" />
             <span className="cf-sr">Filter cases</span>
-            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={caseSearchPlaceholder(fields)} />
+            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
             {query ? (
               <button type="button" className="cf-search-clear" onClick={() => setQuery('')} aria-label="Clear filter"><X size={14} /></button>
             ) : null}

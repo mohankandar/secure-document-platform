@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, caseSearchPlaceholder, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, textThatFits, caseSearchPlaceholder, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -43,6 +43,29 @@ test('stage and place names follow the spec', () => {
   assert.equal(STAGE_NAMES.stopped, 'Stopped');
   assert.equal(NAV.cases, 'Cases');
   assert.equal(NAV.newCase, 'New case');
+});
+
+test('two field names that end in the same word say it once (U019)', () => {
+  const fields = [
+    { label: 'Contract Number', primary: true, searchable: true },
+    { label: 'Member Number', primary: false, searchable: true },
+  ];
+  assert.equal(caseSearchPlaceholder(fields), 'Filter by contract or member number');
+  assert.equal(caseSearchPlaceholder(fields, true), 'Contract or member number, or an action…');
+  // A shared word only when both names have more than one word, and the last words match exactly.
+  assert.equal(caseSearchPlaceholder([{ label: 'Number', primary: true }, { label: 'Member number', searchable: true }]),
+    'Filter by number or member number');
+  assert.equal(caseSearchPlaceholder([{ label: 'Loan number', primary: true }, { label: 'SSN last 4', searchable: true }]),
+    'Filter by loan number or SSN last 4');
+});
+
+test('the filter placeholder falls back to "Filter cases" when it does not fit, or cannot be measured (U019)', () => {
+  assert.equal(CASE_SEARCH_FALLBACK, 'Filter cases');
+  assert.equal(textThatFits('Filter by contract or member number', CASE_SEARCH_FALLBACK, 240, 270), 'Filter by contract or member number');
+  assert.equal(textThatFits('Filter by contract or member number', CASE_SEARCH_FALLBACK, 270, 270), 'Filter by contract or member number');
+  assert.equal(textThatFits('Filter by contract or member number', CASE_SEARCH_FALLBACK, 271, 270), 'Filter cases');
+  assert.equal(textThatFits('Filter by x', CASE_SEARCH_FALLBACK, null, 270), 'Filter cases');
+  assert.equal(textThatFits('Filter by x', CASE_SEARCH_FALLBACK, 10, Number.NaN), 'Filter cases');
 });
 
 test('search placeholders use the configured field labels, never "contract"', () => {
