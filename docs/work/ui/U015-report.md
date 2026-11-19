@@ -101,3 +101,15 @@ Rules checked:
 
 - The 5 questions above.
 - Backend gaps, unchanged: stop reasons, the rejection reason, and the delivery receipt.
+
+## Owner's answers (2026-11-18)
+
+1. **Error-card reference:** keep it hidden until Technical details is opened (spec findings 8 and 22). The canvas is wrong here; no change.
+2. **No access, account chip:** no. Keep the brand-only top bar. The email is already on the page above Sign out.
+3. **Review queue, borrower name:** yes. Show the same second line as the Cases row ("LN204881 · Maria Alvarez"), using the same displayable fields and the same permissions.
+4. **"What went wrong" for Processor and Supervisor:** no change now. It comes through the backend item already approved after U003 (a plain stop reason, no technical detail). The full technical view stays `TECHNICAL_EXCEPTION_VIEW` only.
+5. **Documents open by default for 3 or fewer:** keep the app's behaviour.
+
+**Notes from the design chat's review of the U015 pairs. Fix them at the start of U016:**
+- **Review proof:** the app's page is blank in the pair because the mock has no page image. Give the mock a sample page image with the text at the finding's place, so the pair shows the highlight sitting on the text. Retake Review light and dark.
+- **New case proof:** give the sample files realistic sizes and page counts, so the pair is comparable. This changes test data only.
