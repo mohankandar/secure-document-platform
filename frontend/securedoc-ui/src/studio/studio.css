@@ -321,8 +321,6 @@
 .cf-drawer-title p { color: var(--cf-muted); font-size: 13px; }
 .cf-drawer-head > .cf-btn { color: var(--cf-muted); margin: -6px -6px 0 0; }
 .cf-drawer-body { display: flex; flex-direction: column; gap: 12px; }
-.cf-drawer-section { display: flex; flex-direction: column; gap: 10px; }
-.cf-drawer-section h3 { display: flex; align-items: baseline; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cf-muted); }
 
 /* Stage bar (canvas): passed stages ink, the current stage in its colour, later stages a hairline. */
 .cf-timeline { display: flex; gap: 4px; }
@@ -439,7 +437,6 @@
 .cf-panel-num { font-weight: 600; }
 .cf-panel-head h2 { font-size: 16px; font-weight: 600; }
 .cf-panel-head p { color: var(--cf-muted); font-size: 13px; margin-top: 2px; text-wrap: pretty; }
-.cf-step { width: 26px; height: 26px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--cf-ink); color: var(--cf-surface); font-family: var(--cf-font-mono); font-size: 12px; font-weight: 600; }
 
 .cf-locked { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 4px 10px; border-radius: 4px; background: var(--cf-mark-soft); color: var(--cf-ink); font-size: 12px; font-weight: 500; }
 .cf-fields { display: flex; flex-direction: column; gap: 14px; }
@@ -604,9 +601,6 @@
 /* Canvas .bulk: a dashed box, 13 px muted, with a full-width button. */
 .cf-bulk { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; border: 1px dashed var(--cf-line-strong); border-radius: var(--cf-radius); font-size: 13px; color: var(--cf-muted); }
 .cf-bulk-note { color: var(--cf-muted); font-size: 12px; }
-.cf-confidence { display: flex; flex-direction: column; gap: 6px; }
-.cf-confidence-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--cf-muted); }
-.cf-confidence-row strong { color: var(--cf-ink); font-weight: 600; }
 .cf-decision-hint { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--cf-radius); background: var(--cf-mark-soft); font-size: 13px; }
 .cf-decision-hint svg { flex: none; margin-top: 2px; }
 .cf-decision-actions { display: flex; flex-direction: column; gap: 10px; }

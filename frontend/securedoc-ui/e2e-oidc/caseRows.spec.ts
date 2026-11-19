@@ -11,7 +11,6 @@ import { capabilitiesFor } from './policyCapabilities';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c3c3c3c3-0000-4000-8000-00000000000c', name: 'Rows Entity', slug: 'rows-entity', roles: ['DOCUMENT_SUPERVISOR'] };
-const ADMIN_CAPS = ['DASHBOARD_ACCESS', 'REPORT_EXECUTIVE_VIEW', 'REPORT_OPERATIONAL_VIEW', 'TENANT_POLICY_MANAGE'];
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');

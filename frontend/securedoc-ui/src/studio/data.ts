@@ -1,10 +1,9 @@
 import useSWR from 'swr';
 import { apiClient } from '../api/client';
-import { setCurrentCapabilities } from '../api/config';
 import { scanBridgeClient } from '../api/scanBridgeClient';
 import type { BusinessIdentifier, FocusedReviewItem, FocusedReviewQueue, IdentifierDefinition, PackageDetail, PackageLifecycleSummary as PackageLifecycle, PackageSummary } from '../types';
 import { checked, isArrayOf, isRecord } from './failure';
-import { REASON_TEXT, STAGE_NAMES } from './words';
+import { STAGE_NAMES } from './words';
 
 export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
 
@@ -124,14 +123,6 @@ export function caseActions(status: string, caps: string[], life: PackageLifecyc
   return actions;
 }
 
-/** Redacted download is offered only when the artifact still exists and delivery has produced it. */
-export function redactedArtifactAvailable(status: string, life: PackageLifecycle | undefined, docStatus: string, now = Date.now()): boolean {
-  if (!life || !['COMPLETED', 'EXPORTED', 'DELIVERED'].includes(status)) return false;
-  if (docStatus === 'FAILED' || life.redactedPurgedAt || life.purgedAt) return false;
-  if (life.redactedDeleteAt && new Date(life.redactedDeleteAt).getTime() <= now) return false;
-  return life.successfulExportCycles > 0;
-}
-
 /** Production treats SUBMITTED/PROCESSING after a prior export as a reprocessing cycle. */
 export function isReprocessing(status: string, life: PackageLifecycle | undefined): boolean {
   return Boolean(life && life.successfulExportCycles > 0 && (status === 'SUBMITTED' || status === 'PROCESSING'));
@@ -153,9 +144,6 @@ export function humanize(token: string): string {
     .map((w) => (ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
     .join(' ');
 }
-
-/** @deprecated use reasonText from ./words */
-export const REASON_COPY: Record<string, string> = REASON_TEXT;
 
 export function relativeTime(iso: string, now = Date.now()): string {
   const diff = Math.round((now - new Date(iso).getTime()) / 1000);
@@ -184,14 +172,6 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong.')
 }
 
 /* ---------- SWR hooks ---------- */
-
-export function useMe() {
-  return useSWR('me', async () => {
-    const me = await apiClient.getCurrentUser();
-    setCurrentCapabilities(me.capabilities);
-    return me;
-  }, { revalidateOnFocus: false });
-}
 
 /* Every hook checks the shape of the answer: an answer this screen does not understand is an error
    (shown as a "couldn't load" card), never data that crashes the screen. */

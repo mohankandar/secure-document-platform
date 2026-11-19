@@ -63,11 +63,6 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-export function useTheme(): [Theme, (theme: Theme) => void] {
-  const theme = useSyncExternalStore(subscribe, () => current, () => current);
-  return [theme, setTheme];
-}
-
 /** "System" removes the stored choice, so the theme follows the computer's setting again. */
 export function setThemePreference(preference: ThemePreference) {
   if (preference !== 'system') {
