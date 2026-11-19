@@ -90,3 +90,17 @@ Rules checked:
 
 - The 4 questions above.
 - Known gaps, unchanged: the customer name in `/me`, stop reasons, the rejection reason, and the delivery receipt.
+
+## Owner's answers (2026-11-18)
+
+1. **Retention durations and report targets:** keep the app's controls (number plus unit) and its target sentences.
+2. **Supervisor approval:** keep the switch, like every other on/off in Admin.
+3. **Sign-in card:** keep the plain label and value rows, with no value boxes and no status pill. The server can't truly say "working" (U009).
+4. **Customer name in the Admin eyebrow:** yes, but in the backend work after the UI series (add the customer name to `/me`). Until then, show the entity name only.
+
+**Notes from the design chat's review of the U016 pairs. Fix them at the start of U017:**
+- **"Cases" in the IT Administrator's nav:** the Integrations pair shows "Cases 1" for the IT Administrator; the canvas shows only Admin and Support. Rerun the pair with exactly the IT Administrator capabilities from `ProductAuthorizationPolicy` (no `DASHBOARD_ACCESS`).
+  - If Cases still shows, it is an app bug: fix it so Cases shows only with `DASHBOARD_ACCESS`, and add a test.
+  - If it doesn't, fix the mock.
+  - Check every U015–U017 proof user the same way.
+- **Avatar initials:** "Arun Pillai" shows "A". When there are no given and family names, take the initials from the display name ("AP"; one word gives one letter). Add a test.
