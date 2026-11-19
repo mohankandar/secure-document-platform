@@ -72,3 +72,6 @@ performance-results/
 performance-logs/
 performance-cluster/
 release-readiness-results/
+
+# UI proof pictures (scratch)
+docs/work/ui/compare/
