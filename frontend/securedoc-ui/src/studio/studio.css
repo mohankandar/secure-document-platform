@@ -645,6 +645,67 @@
   .cf-acct-text { display: none; }
 }
 
+/* ---------- Tablet (U021): looking, deciding and approving by touch ---------- */
+/* A narrow row keeps the identifier, next step, stage and action: the next step goes under the identifier. */
+@media (max-width: 1024px) {
+  .cf-desk.has-drawer .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
+  /* With the case panel open the list is narrow: the stage tiles go to two rows of three so their names stay whole. */
+  .cf-desk.has-drawer .cf-band { flex-wrap: wrap; }
+  .cf-desk.has-drawer .cf-band-seg { min-width: calc(33% - 4px); }
+}
+@media (max-width: 768px) {
+  .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
+  /* The list takes the full width when the desk is one column. */
+  .cf-desk { align-items: stretch; }
+}
+/* Portrait (up to 1024 px wide): the page and the decision never squeeze side by side; the decision goes under the page,
+   and the page is shorter so the decision is close by. */
+@media (max-width: 1024px) and (orientation: portrait) {
+  .cf-review-grid { grid-template-columns: minmax(0, 1fr); }
+  .cf-decision { position: static; }
+  .cf-viewer-canvas { min-height: 320px; max-height: 40vh; }
+  /* Redact and Keep visible come before the case and document lines, so they sit in the first screen. */
+  .cf-decision > .cf-facts { order: 1; }
+  .cf-decision > .cf-hint { order: 2; }
+}
+
+/* A note only a touch device shows (Continue manually). */
+.cf-touch-note { display: none; }
+
+/* A coarse pointer (finger): every control on the tablet-friendly screens is at least 44 × 44 px to tap.
+   This is a media feature, not a width breakpoint, so a desktop at any width is unchanged. */
+@media (pointer: coarse) {
+  .cf-touch-note { display: block; }
+
+  .cf-top .cf-brand, .cf-top .cf-nav-link, .cf-top .cf-acct-button { min-height: 44px; }
+  .cf-top .cf-find { min-height: 44px; min-width: 44px; justify-content: center; }
+  .cf-acct-item, .cf .cf-acct-row .cf-acct-item[data-compact] { min-height: 44px; }
+  .cf-acct-panel .cf-btn { min-height: 44px; }
+  .cf-palette-item { height: 44px; }
+
+  :is(.cf-desk, .cf-review, .cf-intake, .cf-reports) :is(.cf-btn, .cf-segment button, .cf-method button) { min-height: 44px; }
+  :is(.cf-desk, .cf-review, .cf-intake, .cf-reports) .cf-btn[data-size='icon'] { min-width: 44px; }
+  .cf-zoom .cf-btn { min-width: 44px; }
+  .cf-search { min-height: 44px; }
+  .cf-search input { align-self: stretch; }
+  :is(.cf-intake, .cf-review) .cf-field :is(input, select), .cf-rp-range input, .cf-rp-select select { min-height: 44px; }
+
+  /* Case panel sections and technical details: the whole line is the tap area. */
+  .cf-drawer .cf-disclosure > summary { padding: 13px 0; }
+  .cf-drawer .cf-disclosure { padding-top: 0; }
+  :is(.cf-desk, .cf-review, .cf-reports) .cf-tech > summary { min-height: 44px; }
+
+  /* Hit areas that keep the look: "choose files" stays an underlined word, the filter pill's cross stays small. */
+  .cf-capture .cf-drop .cf-btn { position: relative; }
+  .cf-capture .cf-drop .cf-btn::after { content: ''; position: absolute; inset: -13px -4px; }
+  .cf-filter-pill button, .cf-search-clear { position: relative; }
+  .cf-filter-pill button::after, .cf-search-clear::after { content: ''; position: absolute; inset: -13px; }
+
+  /* A finger scrolls the page in Review; it draws a box only where the place was not found (U021). */
+  .cf-page { touch-action: pan-x pan-y pinch-zoom; }
+  .cf-page[data-needs-mark] { touch-action: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cf *, .cf *::before, .cf *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }

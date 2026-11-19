@@ -113,6 +113,13 @@ export const REVIEW_WORDS = {
   textFound: 'Text found',
 } as const;
 
+/* ---------- Continue manually ---------- */
+
+/** The owner's U021 wording: on a tablet, marking by hand is possible but not the aim. Shown only on a touch device. */
+export const MANUAL_WORDS = {
+  touchNote: 'Marking values by hand works best on a computer.',
+} as const;
+
 /**
  * Why a person is asked, in one sentence that names the policy level when it applies (U004). The threshold is the
  * tenant's automatic-redaction level (0..1) from the review queue; without it the sentence leaves the number out.

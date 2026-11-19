@@ -253,7 +253,7 @@ function Trend({ r }: { r: OperationalReports }) {
           {ticks.map((t) => <span key={t} className="cf-rp-gridline" style={{ bottom: at(t) }} />)}
           <div className="cf-rp-trend">
             {points.map((p, i) => (
-              <div key={p.bucket} className="cf-rp-trend-col" data-hover={hover === i || undefined} onMouseEnter={() => setHover(i)}>
+              <div key={p.bucket} className="cf-rp-trend-col" data-hover={hover === i || undefined} onMouseEnter={() => setHover(i)} onClick={() => setHover(i)}>
                 <span data-k="received" style={{ height: at(p.received) }} />
                 <span data-k="delivered" style={{ height: at(p.delivered) }} />
               </div>
