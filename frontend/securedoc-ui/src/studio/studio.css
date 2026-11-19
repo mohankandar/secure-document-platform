@@ -201,11 +201,6 @@
 @keyframes cf-pulse { 50% { opacity: 0.3; } }
 
 /* Redaction strip — one bar per open finding */
-.cf-strip { display: inline-flex; align-items: center; gap: 2px; }
-.cf-strip-mark { width: 4px; height: 14px; border-radius: 1px; background: var(--cf-mark); }
-.cf-strip-more { margin-left: 4px; font-family: var(--cf-font-mono); font-size: 11px; color: var(--cf-muted); }
-.cf-strip-settled { width: 34px; height: 6px; border-radius: 1px; background: var(--cf-ink); opacity: 0.85; }
-.cf-strip-none { color: var(--cf-faint); }
 
 .cf-meter { display: block; height: 4px; border-radius: 2px; background: var(--cf-line); overflow: hidden; }
 .cf-meter > span { display: block; height: 100%; background: var(--cf-ink); border-radius: 2px; transition: width 300ms ease; }

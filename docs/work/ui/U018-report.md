@@ -263,8 +263,15 @@ Outcome: DONE. Every answer applied; no real bug found. Not pushed, not merged.
 ### Commits
 
 - `1eebbc7` chore(ui): remove unused classes, exports and a test helper (U018 follow-up, owner's answer 3)
-- "fix(ui): U018 follow-up: policy personas, shared Continue manually rule, words from words.ts, brand link fallback". The hash is in the chat summary.
+- `67b4d2c` fix(ui): U018 follow-up: policy personas, shared Continue manually rule, words from words.ts, brand link fallback
 
 ### Next
 
 The owner's click-through (list above), then the decision on merging `feature/ui-polish`.
+
+### Second follow-up (owner: "yes to both")
+
+- Deleted the now-unused `.cf-strip`, `.cf-strip-mark`, `.cf-strip-more`, `.cf-strip-settled` and `.cf-strip-none` rules from `studio.css`. No `.ts`/`.tsx` names them.
+- `CLAUDE.md`: frontend counts are now `test:auth` 10, `test:vocabulary` 83, `test:ui-framework` 17, `test:oidc-signin` 67.
+- `npm run build`: passed. `npm run test:standalone`: 10, 83, 17, 67 passed, 0 failures.
+- The local app was then started for the owner's click-through with `.\Start-LexaVault-Local.ps1 -ScannerMode SIMULATOR -AiModel qwen3.5:9b`.
