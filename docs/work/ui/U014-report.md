@@ -139,3 +139,19 @@ What still differs in the pairs, and why:
 ## Suggested next step
 
 U015 (the case screens).
+
+## Owner's answers (2026-11-18)
+
+1. **Font: yes, bundle IBM Plex Sans and IBM Plex Mono with the app.** The new dependency is approved: `@fontsource/ibm-plex-sans` and `@fontsource/ibm-plex-mono`.
+   - Bundle the font files in the build. Never load them from the internet, because on-premises installs may have no outside access.
+   - Load only the weights the canvas uses (400, 500, 600; mono 400, 500).
+   - Leave `designs/*.html` unchanged. For the proof pairs, inject the same bundled font into the design page at screenshot time, so both sides use Plex.
+   - Do this first in U015, and retake the U014 pairs with the font.
+
+**Notes from the design chat's review of the U014 pairs. Fix them in U015:**
+- **Wrong role in the mock:** the sample user shows Retry on the stopped row. The canvas user is a Document Supervisor, so use that role's exact capabilities from `ProductAuthorizationPolicy`: Continue manually, no Retry. Check each proof pair uses the role its design shows.
+- **Field names in sentences are lower case:** "Filter by loan number or borrower name", not "Loan number or Borrower name". The same applies to any configured field name used mid-sentence. Words only, no behaviour change.
+- **Dark-mode stage colours** follow `SPEC.md`, not the canvas. This is correct; keep it.
+- The stopped row's reason ("Text recognition timed out on one page") is the known backend gap. Leave it.
+
+**What was done with these answers:** all of them are carried into U015 and done there first (font bundling, retaken U014 pairs, the Document Supervisor role in the mock, lower-case field names in sentences). See `U015-report.md`.
