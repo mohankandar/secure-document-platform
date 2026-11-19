@@ -6,7 +6,6 @@ import type { CurrentUser, TenantSwitchActions } from '../types';
 import AccountMenu from './AccountMenu';
 import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
 import { useBranding } from '../branding/BrandingContext';
-import { Kbd } from './atoms';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
 import { ErrorBoundary } from './failure';
@@ -116,7 +115,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
         <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)} aria-label="Find a case or action" title="Find a case or action">
           <Search size={15} aria-hidden="true" />
           <span className="cf-find-label">Find a case or action</span>
-          <span className="cf-find-keys" aria-hidden="true"><Kbd>{MOD_KEY}</Kbd><Kbd>K</Kbd></span>
+          <span className="cf-find-keys" aria-hidden="true">{MOD_KEY} K</span>
         </button>
 
         <AccountMenu me={me} organizationName={branding.organizationName || undefined} onSignOut={onSignOut} localMode={localMode}

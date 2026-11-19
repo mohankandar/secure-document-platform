@@ -14,7 +14,7 @@
 .cf-ad-tab {
   position: relative; flex: none;
   display: inline-flex; align-items: center; height: 44px; padding: 0 12px;
-  color: var(--cf-muted); font-size: 14px; font-weight: 500; white-space: nowrap;
+  color: var(--cf-ink); font-size: 15px; font-weight: 400; white-space: nowrap;
   transition: color 120ms;
 }
 .cf-ad-tab::after {
@@ -23,7 +23,7 @@
 }
 .cf-ad-tab:hover { color: var(--cf-ink); }
 .cf-ad-tab:hover::after { background: var(--cf-line-strong); }
-.cf-ad-tab.is-active { color: var(--cf-ink); font-weight: 600; }
+.cf-ad-tab.is-active { color: var(--cf-ink); font-weight: 500; }
 .cf-ad-tab.is-active::after { background: var(--cf-mark); }
 .cf-ad-tab:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: -4px; border-radius: var(--cf-radius); }
 .cf-ad-tab-short { display: none; }
@@ -52,9 +52,9 @@
   .cf-ad-tab-short { display: inline; }
 }
 
-.cf-ad-card { display: flex; flex-direction: column; gap: 16px; padding: 20px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 10px; min-width: 0; }
+.cf-ad-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 8px; min-width: 0; }
 .cf-ad-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.cf-ad-card-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.cf-ad-card-head h2 { font-size: 16px; font-weight: 600; }
 .cf-ad-card-head p { margin-top: 2px; font-size: 13px; color: var(--cf-muted); text-wrap: pretty; }
 .cf-ad-card-body { display: flex; flex-direction: column; gap: 18px; }
 .cf-ad-card-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--cf-line); }

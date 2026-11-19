@@ -114,7 +114,7 @@ export default function Desk({ caps }: { caps: string[] }) {
           )}
         </header>
 
-        <LifecycleBand counts={counts.byStage} total={total} active={filter} onSelect={(f) => setFilter((cur) => (cur === f ? 'all' : f))} />
+        <LifecycleBand counts={counts.byStage} active={filter} onSelect={(f) => setFilter((cur) => (cur === f ? 'all' : f))} />
 
         <div className="cf-desk-tools">
           <div className="cf-segment" role="group" aria-label="Show">
@@ -127,7 +127,7 @@ export default function Desk({ caps }: { caps: string[] }) {
             <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={caseSearchPlaceholder(fields)} />
             {query ? (
               <button type="button" className="cf-search-clear" onClick={() => setQuery('')} aria-label="Clear filter"><X size={14} /></button>
-            ) : <Kbd>/</Kbd>}
+            ) : null}
           </label>
         </div>
 
@@ -170,15 +170,14 @@ export default function Desk({ caps }: { caps: string[] }) {
   );
 }
 
-function LifecycleBand({ counts, total, active, onSelect }: {
-  counts: Map<StageKey, number>; total: number; active: Filter; onSelect: (f: StageKey) => void;
+function LifecycleBand({ counts, active, onSelect }: {
+  counts: Map<StageKey, number>; active: Filter; onSelect: (f: StageKey) => void;
 }) {
   const stages = [...LIFECYCLE, 'stopped' as StageKey];
   return (
     <div className="cf-band" role="group" aria-label="Cases by lifecycle stage">
       {stages.map((key) => {
         const count = counts.get(key) ?? 0;
-        const share = total ? Math.max(count / total, count ? 0.06 : 0.02) : 0.2;
         return (
           <button
             key={key}
@@ -186,11 +185,9 @@ function LifecycleBand({ counts, total, active, onSelect }: {
             className="cf-band-seg"
             data-stage={key}
             aria-pressed={active === key}
-            style={{ flexGrow: share }}
             onClick={() => onSelect(key)}
           >
-            <span className="cf-band-fill" aria-hidden="true" />
-            <span className="cf-band-label">{STAGES.find((s) => s.key === key)?.label}</span>
+            <span className="cf-band-label"><span className="cf-band-dot" aria-hidden="true" />{STAGES.find((s) => s.key === key)?.label}</span>
             <span className="cf-band-count">{count}</span>
           </button>
         );
@@ -257,7 +254,7 @@ function RowActionButton({ pkg, action, caseLabel }: { pkg: PackageSummary; acti
 
   return (
     <>
-      <button type="button" className="cf-btn" data-size="sm" data-variant={action.kind === 'review' ? 'mark' : undefined}
+      <button type="button" className="cf-btn" data-size="sm" data-variant={action.kind === 'review' ? 'mark' : action.kind === 'approve' ? 'solid' : undefined}
         aria-label={`${action.label} ${caseLabel}`} disabled={checking || runner.busy !== null} onClick={start}>
         {checking && <Spinner label="Checking" />}{action.label}
       </button>

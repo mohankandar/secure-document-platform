@@ -118,14 +118,15 @@
 /* Case File prototype — graphite desk, ink, and one highlighter accent.
    The highlighter marks anything a human must look at; ink marks what is settled. */
 .cf {
-  --cf-font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
-  --cf-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --cf-font-sans: 'IBM Plex Sans', Arial, sans-serif; /* the canvas stack: Plex where installed, else Arial */
+  --cf-font-mono: 'IBM Plex Mono', monospace;
 
   --cf-bg: #f2f3f4;
   --cf-surface: #ffffff;
   --cf-raised: #f7f8f9;
   --cf-line: #e1e3e6;
   --cf-line-strong: #c9cdd2;
+  --cf-fill: #eceef0; /* canvas: neutral counters and track fills */
   --cf-ink: #15171a;
   --cf-muted: #626872;
   --cf-faint: #9aa0a8;
@@ -166,6 +167,7 @@
   --cf-raised: #1b1e22;
   --cf-line: #262a2f;
   --cf-line-strong: #353a41;
+  --cf-fill: #23262b;
   --cf-ink: #e8e9eb;
   --cf-muted: #959ba4;
   --cf-faint: #636973;
