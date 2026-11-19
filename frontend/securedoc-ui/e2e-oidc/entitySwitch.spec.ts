@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * Entity switch in the newest (Case File) design (task 0009).
@@ -10,11 +11,12 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const A = { tenantId: 'a1a1a1a1-0000-4000-8000-00000000000a', name: 'Race Entity A', slug: 'race-entity-a', roles: ['DOCUMENT_SUPERVISOR'] };
-const B = { tenantId: 'b2b2b2b2-0000-4000-8000-00000000000b', name: 'Race Entity B', slug: 'race-entity-b', roles: ['REPORT_VIEWER'] };
-// Roles and capabilities differ per entity on purpose: A can take in documents, B can only see reports.
+const B = { tenantId: 'b2b2b2b2-0000-4000-8000-00000000000b', name: 'Race Entity B', slug: 'race-entity-b', roles: ['DOCUMENT_PROCESSOR'] };
+// Roles and capabilities differ per entity on purpose, with the policy's lists (U018 follow-up): in A the person is a
+// Document Supervisor and can approve delivery; in B a Document Processor, who cannot.
 const CAPABILITIES: Record<string, string[]> = {
-  [A.tenantId]: ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW'],
-  [B.tenantId]: ['DASHBOARD_ACCESS', 'REPORT_EXECUTIVE_VIEW'],
+  [A.tenantId]: capabilitiesFor(...A.roles),
+  [B.tenantId]: capabilitiesFor(...B.roles),
 };
 const CASE: Record<string, string> = { [A.tenantId]: 'A-CASE-1001', [B.tenantId]: 'B-CASE-2002' };
 
@@ -98,7 +100,7 @@ async function mockApi(page: Page, entities: Array<typeof A>): Promise<Api> {
 function packageFor(caseNumber: string, tenantId: string) {
   return {
     packageId: `${tenantId.slice(0, 8)}-0000-4000-8000-${caseNumber.replace(/\D/g, '').padStart(12, '0')}`,
-    tenantId, packageType: 'MANUAL_UPLOAD', status: 'PENDING_REVIEW', documentCount: 1,
+    tenantId, packageType: 'MANUAL_UPLOAD', status: 'PENDING_FINAL_APPROVAL', documentCount: 1,
     createdAt: '2026-11-17T12:00:00Z', updatedAt: '2026-11-17T12:00:00Z',
     businessIdentifiers: [{ key: 'contract_number', label: 'Contract Number', value: caseNumber, primary: true, searchable: true, displayable: true, displayOrder: 1 }],
   };
@@ -116,6 +118,8 @@ const switchControl = (page: Page) => page.getByRole('button', { name: /account 
 const accountMenu = (page: Page) => page.getByRole('menu', { name: 'Account' });
 const entityItems = (page: Page) => accountMenu(page).getByRole('group', { name: 'Entities' }).getByRole('menuitemradio');
 const workspaceNav = (page: Page) => page.getByRole('navigation', { name: 'Workspace' });
+// The row's Approve button: offered only with PACKAGE_APPROVE_DELIVERY (A's Supervisor role, not B's Processor role).
+const approveButtons = (page: Page) => page.getByRole('button', { name: /^Approve/ });
 
 async function switchTo(page: Page, entityName: string) {
   await switchControl(page).click();
@@ -151,7 +155,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await signInAndChoose(page, 'Race Entity A');
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(workspaceNav(page).getByRole('link', { name: 'New case' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve A-CASE-1001' })).toBeVisible();
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
 
   // The list is read fresh from the server and marks the current entity.
@@ -163,8 +167,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
 
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
   await expect(page.getByText('A-CASE-1001')).toHaveCount(0);
-  await expect(workspaceNav(page).getByRole('link', { name: 'Reports' })).toBeVisible();
-  await expect(workspaceNav(page).getByRole('link', { name: 'New case' })).toHaveCount(0);
+  await expect(approveButtons(page)).toHaveCount(0);
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity B/);
   await expect(page).toHaveURL(/localhost:15175\/$/);
   expect(await page.evaluate(() => sessionStorage.getItem('lexavault.oidc.selected-tenant'))).toBe(B.tenantId);
@@ -174,7 +177,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await expectNoStaleDataDuringSwitch(page, 'B-CASE-2002', 'A-CASE-1001');
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
   await expect(page.getByText('B-CASE-2002')).toHaveCount(0);
-  await expect(workspaceNav(page).getByRole('link', { name: 'New case' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve A-CASE-1001' })).toBeVisible();
 });
 
 test('a request still in flight during the switch is discarded, not shown', async ({ page }) => {

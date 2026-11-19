@@ -9,7 +9,7 @@ import { useBranding } from '../branding/BrandingContext';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
 import { ErrorBoundary } from './failure';
-import { NAV } from './words';
+import { NAV, brandHomeName } from './words';
 import Desk from './Desk';
 import Intake from './Intake';
 import Review from './Review';
@@ -76,7 +76,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
     <div className="cf-shell">
       <a className="cf-skip" href="#cf-main">Skip to content</a>
       <header className="cf-top">
-        <NavLink to={home} className="cf-brand" aria-label={`${branding.applicationName} home`}>
+        <NavLink to={home} className="cf-brand" aria-label={brandHomeName(branding.applicationName)}>
           {branding.compactLogoDataUrl || branding.primaryLogoDataUrl
             ? <img src={branding.compactLogoDataUrl || branding.primaryLogoDataUrl || ''} alt="" className="cf-brand-image" style={{ maxHeight: 30, maxWidth: 110, objectFit: 'contain' }} />
             : <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>}

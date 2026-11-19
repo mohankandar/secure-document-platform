@@ -4,6 +4,12 @@
  * Plain TypeScript with no imports, so node's test runner can check it directly.
  */
 
+/** The brand link's accessible name. Branding without a name reads "LexaVault home", never "undefined home". */
+export function brandHomeName(applicationName: string | null | undefined): string {
+  const name = typeof applicationName === 'string' ? applicationName.trim() : '';
+  return `${name || 'LexaVault'} home`;
+}
+
 /* ---------- Places in the app (routes stay as they are) ---------- */
 
 export const NAV = {

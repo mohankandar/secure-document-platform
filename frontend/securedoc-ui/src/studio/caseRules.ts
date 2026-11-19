@@ -1,10 +1,11 @@
 /**
  * Pure rules for the Cases rows (UI task U003): the next step in words, and the one action a row offers.
  * The action follows the same capability rules as caseActions and needsYou in data.ts; the backend still
- * enforces every rule, the row only hides what would be refused. No imports beyond words.ts, so node's test
- * runner can check it directly.
+ * enforces every rule, the row only hides what would be refused. Imports only pure modules (words.ts and
+ * supportRules.ts), so node's test runner can check it directly.
  */
 import { ACTION_WORDS, NEXT_STEP, findingsToReview } from './words.ts';
+import { canContinueManually } from './support/supportRules.ts';
 
 export const CAPS = {
   review: 'MANUAL_REVIEW',
@@ -55,7 +56,7 @@ export function rowAction(status: string, caps: readonly string[], openFindings:
     case 'FAILED':
       // Same order as the case panel: an IT Administrator retries; a Processor or Supervisor continues manually.
       if (has(CAPS.technicalRetry)) return { kind: 'technical-retry', label: ACTION_WORDS.retry };
-      if (has(CAPS.review)) return { kind: 'manual-fallback', label: ACTION_WORDS.continueManually };
+      if (canContinueManually(caps)) return { kind: 'manual-fallback', label: ACTION_WORDS.continueManually };
       return null;
     default:
       return null;

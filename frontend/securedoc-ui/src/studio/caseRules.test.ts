@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nextStepText, rowAction } from './caseRules.ts';
+import { canContinueManually } from './support/supportRules.ts';
 
 // Capabilities as the backend grants them (ProductAuthorizationPolicy), per role.
 const PROCESSOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW', 'FINDING_DECISION', 'REVIEW_SUBMIT'];
@@ -32,6 +33,12 @@ test('Continue manually: shown with MANUAL_REVIEW and no TECHNICAL_RETRY (Proces
   assert.deepEqual(rowAction('FAILED', PROCESSOR, 0), { kind: 'manual-fallback', label: 'Continue manually' });
   assert.deepEqual(rowAction('FAILED', SUPERVISOR, 0), { kind: 'manual-fallback', label: 'Continue manually' });
   assert.equal(rowAction('FAILED', ['DASHBOARD_ACCESS'], 0), null);
+});
+
+test('Continue manually on the row follows the one shared rule (canContinueManually)', () => {
+  for (const caps of [PROCESSOR, SUPERVISOR, REPORT_VIEWER, ['DASHBOARD_ACCESS'], ['MANUAL_REVIEW']]) {
+    assert.equal(rowAction('FAILED', caps, 0)?.kind === 'manual-fallback', canContinueManually(caps), caps.join(','));
+  }
 });
 
 test('no action for cases nobody needs to move now', () => {

@@ -154,6 +154,7 @@ Not pushed, not merged.
 - `entitySwitch` and `errorStates` still use their old capability lists (question 1).
 - The live panel and queue check (question 2).
 - No deletions, as the task says.
+- **Owner's answer 2, for the backend work after the UI series:** a backend automated test that creates a review finding with a known fake value and proves the value appears in no log output and no audit record. Until then, the mocked `review.spec.ts` plus the 2026-11-19 log and audit search stand for the live text-found check.
 
 ## Questions for the owner
 
@@ -203,3 +204,67 @@ Check each in light and dark (account menu › theme).
 ## Suggested next step
 
 The owner answers questions 1 to 3. Then a short follow-up applies them, and the owner does the click-through before approving the merge of `feature/ui-polish`.
+
+## Owner's answers (2026-11-19)
+
+Apply these as a short follow-up on `feature/ui-polish`, then stop. Do not push or merge.
+
+1. **Personas:** yes, as proposed.
+   - In `entitySwitch`, Entity B becomes a Document Processor. Check the difference with Approve instead of Reports.
+   - In `errorStates`, the person is Business Administrator + Document Supervisor.
+   - Both use the shared helper. Run `entitySwitch` 3 times.
+2. **Live text-found check:** (b). Accept the mocked `review.spec.ts` plus today's log and audit search for merging. Add a **backend automated test** to the backend work after the UI series: it creates a review finding with a known fake value and proves the value appears in no log output and no audit record. Note it in the report's "Not done".
+3. **Unused list:**
+   - **Delete:** `.cf-ad-inline`, `.cf-ad-steps`, `.cf-ad-search`, `.cf-ad-nodes`, `.cf-ad-narrow`, `.cf-drawer-section`, `.cf-step`, `.cf-confidence`, `.cf-confidence-row`, `FindingStrip`, `useTheme`, `REASON_COPY`, `useMe`, `redactedArtifactAvailable` and `ADMIN_CAPS`. Do it in one clean-up commit.
+   - **Use, don't delete:** `CASE_GROUPS.needsYou`, `.stopped` and `.delivered` in `Desk.tsx`, and `ACTION_WORDS.processAgain` in `data.ts`.
+   - **`canContinueManually`:** use it where the screens decide whether to show Continue manually (the case panel, Cases row and problem page, wherever they compute it today), so the rule lives and is tested in one place. Keep its test.
+4. **Brand link name:** yes, fall back to "LexaVault home" when branding sends no name, with a test.
+5. **`uiAuthorization.test.ts`:** yes, use the shared helper's lists. If that exposes a real bug, stop and report it.
+6. **`CLAUDE.md` test count:** update it to the current backend counts.
+
+Then run `mvn clean install`, `npm run build` and `npm run test:standalone`, and report the counts here under "Follow-up results".
+
+## Follow-up results (2026-11-19)
+
+Outcome: DONE. Every answer applied; no real bug found. Not pushed, not merged.
+
+**1. Personas** (`entitySwitch.spec.ts`, `errorStates.spec.ts`), both now on `capabilitiesFor(...)`:
+- `entitySwitch`: Entity A is a Document Supervisor, Entity B a Document Processor. The cases are now waiting for approval, so the difference is checked with the row's Approve button: "Approve A-CASE-1001" in A, no Approve button in B, and back again in A. The Reports and New case checks are gone (both roles have New case, neither has Reports).
+- `errorStates`: the person is Business Administrator + Document Supervisor.
+- No other assertion was changed. `entitySwitch` run 3 times on its own: 7 passed each time.
+
+**2. Live text-found check:** (b) accepted. The backend test is in "Not done" above.
+
+**3. Unused list.**
+- Deleted in one clean-up commit: the 15 items in the answer. `.cf-ad-inline-actions` (the `admin.css` lines 69, 70 and 225 the table listed with `.cf-ad-inline`) is in use and was kept; only the `.cf-ad-inline` rules themselves were removed. Two imports that only `useMe` and `REASON_COPY` used went with them.
+- Now used: `CASE_GROUPS.needsYou`, `.stopped`, `.delivered` in `Desk.tsx` (group titles and the Needs you button), `ACTION_WORDS.processAgain` and `.continueManually` in `data.ts`. New test in `words.test.ts`: fails if `Desk.tsx` or `data.ts` spell these words themselves (checked: it fails on the old code).
+- `canContinueManually` now decides Continue manually on the case panel (`caseActions` in `data.ts`) and on the Cases row (`rowAction` in `caseRules.ts`). The problem page computes no Continue manually button: it only shows a note for IT ("A Document Processor or Supervisor can also finish it"), which depends on the problem, not on the viewer's role, so it was left. New test in `caseRules.test.ts`: the row offers Continue manually exactly when `canContinueManually` says so. Its own test is kept.
+- Found while deleting, not deleted (not on the list): with `FindingStrip` gone, the `.cf-strip`, `.cf-strip-mark`, `.cf-strip-more`, `.cf-strip-settled` and `.cf-strip-none` rules in `studio.css` (lines 204–208) are unused.
+
+**4. Brand link:** new `brandHomeName()` in `words.ts`; `CaseFileApp.tsx` uses it. No name, an empty name or spaces read "LexaVault home". Tested in `words.test.ts`.
+
+**5. `uiAuthorization.test.ts`:** now takes every role's list from the shared helper and checks every surface for each role (open or closed). No real bug: `canAccessSurface` is a plain capability-to-surface map, and no screen calls it (only `ROLE_OPTIONS` from that file is used by the app). The expectations changed to what the policy grants: the Business Administrator has no Cases, New case or Review; the IT Administrator has no Cases and no Reports; Platform Operations has no Cases, Reports or Integrations. The internal-admin case now uses the union of all roles. Also checks that the demo role picker lists exactly the policy's roles.
+
+**6. `CLAUDE.md`:** the backend count is now 453 (domain 31, application 138, scan bridge 47, infrastructure 8, API 229). Its frontend counts (`test:auth` 8, `test:oidc-signin` 9) are also out of date and were not touched; today they are 10 and 67, plus `test:vocabulary` 83.
+
+### Commands run and results
+
+- `cd backend; mvn clean install`: **BUILD SUCCESS, 453 tests, 0 failures** (domain 31, application 138, scan bridge 47, infrastructure 8, API 229).
+- `cd frontend/securedoc-ui; npm run build`: passed.
+- `npm run test:standalone`: **passed**: `test:auth` 10, `test:vocabulary` 83 (was 80, plus 3 new), `test:ui-framework` 17, `test:oidc-signin` 67. 0 failures.
+- Also run after the clean-up commit alone: build passed, standalone 10 / 80 / 17 / 67.
+- `npx playwright test --config playwright.oidc-signin.config.ts entitySwitch errorStates`: 12 passed; then `entitySwitch` 3 times: 7, 7, 7 passed.
+
+### Files changed
+
+- Clean-up commit: `admin.css`, `studio.css`, `atoms.tsx`, `theme.ts`, `data.ts`, `e2e-oidc/caseRows.spec.ts`.
+- Follow-up commit: `Desk.tsx`, `data.ts`, `caseRules.ts`, `caseRules.test.ts`, `words.ts`, `words.test.ts`, `CaseFileApp.tsx`, `src/security/uiAuthorization.test.ts`, `e2e-oidc/entitySwitch.spec.ts`, `e2e-oidc/errorStates.spec.ts`, `CLAUDE.md`, this report.
+
+### Commits
+
+- `1eebbc7` chore(ui): remove unused classes, exports and a test helper (U018 follow-up, owner's answer 3)
+- "fix(ui): U018 follow-up: policy personas, shared Continue manually rule, words from words.ts, brand link fallback". The hash is in the chat summary.
+
+### Next
+
+The owner's click-through (list above), then the decision on merging `feature/ui-polish`.

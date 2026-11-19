@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NAV, SENSITIVE_TYPES, SENSITIVE_TYPES_HEADING, STAGE_NAMES, caseSearchPlaceholder, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, caseSearchPlaceholder, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -87,4 +87,21 @@ test('Columns on Cases: LexaVault columns by key in sentence case, case fields a
   assert.equal(sys('newColumn', 'Delivery Folder'), 'Delivery folder');
   // A configured case field is shown exactly as configured.
   assert.equal(dashboardColumnName({ key: 'identifier:x', label: 'Loan Number SDV', kind: 'IDENTIFIER' }), 'Loan Number SDV');
+});
+
+test('Cases groups and case actions take their words from words.ts, not their own spelling (U018 follow-up)', () => {
+  const desk = readFileSync(resolve(here, 'Desk.tsx'), 'utf8');
+  for (const word of ['Needs you', 'Stopped', 'Delivered']) {
+    assert.doesNotMatch(desk, new RegExp(`'${word}'|>${word}\b`), `Desk.tsx spells "${word}" itself`);
+  }
+  const data = readFileSync(resolve(here, 'data.ts'), 'utf8');
+  for (const word of ['Process again', 'Continue manually']) {
+    assert.doesNotMatch(data, new RegExp(`'${word}'`), `data.ts spells "${word}" itself`);
+  }
+});
+
+test('the brand link is named after the application, or "LexaVault home" when branding sends no name', () => {
+  assert.equal(brandHomeName('Acme Redact'), 'Acme Redact home');
+  assert.equal(brandHomeName('  Acme  '), 'Acme home');
+  for (const missing of [undefined, null, '', '   ']) assert.equal(brandHomeName(missing), 'LexaVault home', String(missing));
 });

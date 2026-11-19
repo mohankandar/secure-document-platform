@@ -3,7 +3,8 @@ import { apiClient } from '../api/client';
 import { scanBridgeClient } from '../api/scanBridgeClient';
 import type { BusinessIdentifier, FocusedReviewItem, FocusedReviewQueue, IdentifierDefinition, PackageDetail, PackageLifecycleSummary as PackageLifecycle, PackageSummary } from '../types';
 import { checked, isArrayOf, isRecord } from './failure';
-import { STAGE_NAMES } from './words';
+import { canContinueManually } from './support/supportRules';
+import { ACTION_WORDS, STAGE_NAMES } from './words';
 
 export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
 
@@ -112,10 +113,10 @@ export function caseActions(status: string, caps: string[], life: PackageLifecyc
       break;
     case 'FAILED':
       if (has(CAP.technicalRetry)) actions.push({ kind: 'technical-retry', label: 'Retry processing', primary: true });
-      if (has(CAP.review)) actions.push({ kind: 'manual-fallback', label: 'Continue manually', primary: !has(CAP.technicalRetry) });
+      if (canContinueManually(caps)) actions.push({ kind: 'manual-fallback', label: ACTION_WORDS.continueManually, primary: !has(CAP.technicalRetry) });
       break;
     case 'COMPLETED':
-      if (has(CAP.reprocess) && life?.canReprocess) actions.push({ kind: 'reprocess', label: 'Process again', primary: false });
+      if (has(CAP.reprocess) && life?.canReprocess) actions.push({ kind: 'reprocess', label: ACTION_WORDS.processAgain, primary: false });
       break;
     default:
       break;

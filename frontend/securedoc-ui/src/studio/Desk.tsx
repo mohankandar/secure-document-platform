@@ -50,15 +50,15 @@ export default function Desk({ caps }: { caps: string[] }) {
       .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
 
     if (filter !== 'all') {
-      return [{ key: filter, title: filter === 'you' ? 'Needs you' : stageLabel(filter), cases: matches }];
+      return [{ key: filter, title: filter === 'you' ? CASE_GROUPS.needsYou : stageLabel(filter), cases: matches }];
     }
     const you = matches.filter((p) => needsYou(p, caps));
     const rest = matches.filter((p) => !needsYou(p, caps));
     return [
-      { key: 'you', title: 'Needs you', note: 'You can move these forward now', cases: you },
+      { key: 'you', title: CASE_GROUPS.needsYou, note: 'You can move these forward now', cases: you },
       { key: 'motion', title: CASE_GROUPS.inProgress, note: CASE_GROUPS.inProgressNote, cases: rest.filter((p) => !['delivered', 'stopped'].includes(stageOf(p.status))) },
-      { key: 'stopped', title: 'Stopped', cases: rest.filter((p) => stageOf(p.status) === 'stopped') },
-      { key: 'delivered', title: 'Delivered', cases: rest.filter((p) => stageOf(p.status) === 'delivered') },
+      { key: 'stopped', title: CASE_GROUPS.stopped, cases: rest.filter((p) => stageOf(p.status) === 'stopped') },
+      { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => stageOf(p.status) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
   }, [all, caps, filter, query]);
 
@@ -119,7 +119,7 @@ export default function Desk({ caps }: { caps: string[] }) {
         <div className="cf-desk-tools">
           <div className="cf-segment" role="group" aria-label="Show">
             <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All <span>{total}</span></button>
-            <button type="button" aria-pressed={filter === 'you'} onClick={() => setFilter('you')} data-tone="mark">Needs you <span>{counts.you}</span></button>
+            <button type="button" aria-pressed={filter === 'you'} onClick={() => setFilter('you')} data-tone="mark">{CASE_GROUPS.needsYou} <span>{counts.you}</span></button>
           </div>
           <label className="cf-search">
             <Search size={15} aria-hidden="true" />
