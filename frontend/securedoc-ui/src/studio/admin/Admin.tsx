@@ -8,17 +8,18 @@ import IntegrationsArea from './IntegrationsArea';
 import IdentityArea from './IdentityArea';
 import AuditArea from './AuditArea';
 import HealthArea from './HealthArea';
+import { ErrorBoundary } from '../failure';
 import './admin.css';
 
 type AreaKey = 'policy' | 'fields' | 'integrations' | 'identity' | 'health' | 'audit';
 
 const AREAS: { key: AreaKey; label: string; short: string; hint: string; allowed: (caps: string[]) => boolean }[] = [
-  { key: 'policy', label: 'Redaction & retention', short: 'Redaction', hint: 'What gets redacted, how long artifacts live, and the service targets Reports measures against.', allowed: (c) => c.includes(CAP.policy) },
-  { key: 'fields', label: 'Case fields', short: 'Fields', hint: 'Identifiers captured at intake and the columns shown on the Desk.', allowed: (c) => c.includes(CAP.identifiers) || c.includes(CAP.policy) },
-  { key: 'integrations', label: 'Integrations', short: 'Integrations', hint: 'Intake sources and delivery destinations, with polling, testing and routing.', allowed: (c) => c.includes(CAP.integrations) },
-  { key: 'identity', label: 'Sign-in', short: 'Sign-in', hint: 'Enterprise identity provider: draft, test, activate and roll back.', allowed: (c) => c.includes(CAP.auth) },
-  { key: 'health', label: 'Platform operations', short: 'Platform', hint: 'Runtime health, intake, processing storage, licensing, branding and telemetry.', allowed: (c) => c.includes(CAP.technicalAdmin) },
-  { key: 'audit', label: 'Audit trail', short: 'Audit', hint: 'Who changed what, and when.', allowed: (c) => c.includes(CAP.audit) },
+  { key: 'policy', label: 'Redaction & retention', short: 'Redaction', hint: 'What gets redacted, how long copies are kept, and the targets Reports measures against.', allowed: (c) => c.includes(CAP.policy) },
+  { key: 'fields', label: 'Case fields', short: 'Fields', hint: 'The fields captured for each new case, and the columns shown on Cases.', allowed: (c) => c.includes(CAP.identifiers) || c.includes(CAP.policy) },
+  { key: 'integrations', label: 'Integrations', short: 'Integrations', hint: 'Where documents come from and where they are sent: SDV, and pages by barcode.', allowed: (c) => c.includes(CAP.integrations) },
+  { key: 'identity', label: 'Sign-in', short: 'Sign-in', hint: 'How people sign in. It is managed through the login hub.', allowed: (c) => c.includes(CAP.auth) },
+  { key: 'health', label: 'Platform operations', short: 'Platform', hint: 'Service health, the watched folder, processing storage, licensing, branding and usage data.', allowed: (c) => c.includes(CAP.technicalAdmin) },
+  { key: 'audit', label: 'Audit trail', short: 'Audit', hint: 'Who did what, and when.', allowed: (c) => c.includes(CAP.audit) },
 ];
 
 export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser }) {
@@ -53,12 +54,15 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
       <section className="cf-ad-content" aria-labelledby="cf-ad-area-title">
         <h2 id="cf-ad-area-title" className="sr-only">{current.label}</h2>
         <p className="cf-ad-context">{current.hint}</p>
-        {current.key === 'policy' && <PolicyArea />}
-        {current.key === 'fields' && <FieldsArea canIdentifiers={caps.includes(CAP.identifiers)} canColumns={caps.includes(CAP.policy)} />}
-        {current.key === 'integrations' && <IntegrationsArea />}
-        {current.key === 'identity' && <IdentityArea />}
-        {current.key === 'health' && <HealthArea canOperate={caps.includes(CAP.platformOps)} />}
-        {current.key === 'audit' && <AuditArea />}
+        {/* A failing area shows its own card; the tabs, the top bar and the other areas keep working. */}
+        <ErrorBoundary title={`${current.label} couldn't be shown`} request={`/admin/${current.key}`} resetKey={current.key}>
+          {current.key === 'policy' && <PolicyArea />}
+          {current.key === 'fields' && <FieldsArea canIdentifiers={caps.includes(CAP.identifiers)} canColumns={caps.includes(CAP.policy)} />}
+          {current.key === 'integrations' && <IntegrationsArea />}
+          {current.key === 'identity' && <IdentityArea />}
+          {current.key === 'health' && <HealthArea canOperate={caps.includes(CAP.platformOps)} />}
+          {current.key === 'audit' && <AuditArea />}
+        </ErrorBoundary>
       </section>
     </div>
   );

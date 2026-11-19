@@ -80,6 +80,8 @@ import com.securedoc.platform.application.port.out.PdfRedactionPort;
 import com.securedoc.platform.application.port.out.ProcessingLockPort;
 import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
 import com.securedoc.platform.application.port.out.SupportIncidentSearchRepository;
+import com.securedoc.platform.application.port.out.CasePrimaryIdentifierLookup;
+import com.securedoc.platform.application.routing.service.DerivedDeliveryAttentionQuery;
 import com.securedoc.platform.application.port.out.ProcessingFingerprintProvider;
 import com.securedoc.platform.application.port.out.DocumentIntelligenceBundleRepository;
 import com.securedoc.platform.application.port.out.TenantDocumentIntelligencePolicyRepository;
@@ -108,6 +110,7 @@ import com.securedoc.platform.application.resilience.TenantRoutingSensitiveConte
 import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.review.service.FindingReviewService;
 import com.securedoc.platform.application.review.service.FocusedReviewService;
+import com.securedoc.platform.application.review.service.ReviewFoundTextReader;
 import com.securedoc.platform.application.review.service.ReviewWorkflowService;
 import com.securedoc.platform.application.review.service.ReviewPagePreviewService;
 import com.securedoc.platform.application.manual.service.ManualFallbackService;
@@ -330,6 +333,18 @@ public class ApplicationServiceConfig {
             IntegrationConnectionRepository integrationConnectionRepository,
             AuditService auditService) {
         return new IntegrationConnectionService(integrationConnectionRepository, auditService);
+    }
+
+    @Bean
+    public com.securedoc.platform.application.integration.DraftConnectionTestService draftConnectionTestService(
+            IntegrationConnectionService integrationConnectionService,
+            org.springframework.beans.factory.ObjectProvider<SdvConnectionTestPort> sdvConnectionTestPort,
+            PollingSourcePort pollingSourcePort,
+            DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
+            AuditService auditService) {
+        return new com.securedoc.platform.application.integration.DraftConnectionTestService(integrationConnectionService,
+                sdvConnectionTestPort.getIfAvailable(), pollingSourcePort, derivedDestinationDeliveryPort,
+                new com.securedoc.platform.application.integration.OutboundAddressGuard(), auditService);
     }
 
     @Bean
@@ -899,9 +914,12 @@ public class ApplicationServiceConfig {
             FindingRepository findingRepository,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             PackageProcessingDispatcher packageProcessingDispatcher,
-            AuditService auditService) {
+            AuditService auditService,
+            ArtifactRepository artifactRepository,
+            StoragePort storagePort) {
         return new FocusedReviewService(packageRepository, documentRepository, findingRepository,
-                tenantRedactionPolicyRepository, packageProcessingDispatcher, auditService);
+                tenantRedactionPolicyRepository, packageProcessingDispatcher, auditService,
+                new ReviewFoundTextReader(artifactRepository, storagePort));
     }
 
     @Bean
@@ -1127,6 +1145,12 @@ public class ApplicationServiceConfig {
                                                          AuditService auditService) {
         return new DerivedDeliveryService(derivedDeliveryRepository, integrationConnectionRepository,
                 artifactRepository, storagePort, derivedDestinationDeliveryPort, auditService);
+    }
+
+    @Bean
+    public DerivedDeliveryAttentionQuery derivedDeliveryAttentionQuery(DerivedDeliveryRepository derivedDeliveryRepository,
+                                                                       CasePrimaryIdentifierLookup casePrimaryIdentifierLookup) {
+        return new DerivedDeliveryAttentionQuery(derivedDeliveryRepository, casePrimaryIdentifierLookup);
     }
 
     @Bean

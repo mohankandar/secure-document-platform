@@ -77,14 +77,17 @@ public record BusinessAdminConfigurationResponse(
             String profileVersion,
             String validationRulesVersion,
             String thresholdsVersion,
-            String description
+            String description,
+            /** When the bundle was released (promoted); null for a bundle that never was. */
+            java.time.Instant promotedAt
     ) {}
     public record ReportingConfigurationResponse(
             List<ReportingDimensionResponse> dimensions,
             int deliveryTargetMinutes,
             double deliveryTargetPercent,
             double straightThroughTargetPercent,
-            int reviewWaitTargetMinutes
+            int reviewWaitTargetMinutes,
+            int reviewWaitTargetPercent
     ) {}
 
     public record ReportingDimensionResponse(

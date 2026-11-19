@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        UI task U007 (owner approved 2026-11-18): the review pickup target becomes
+        "pick up reviews within <minutes> for at least <percent>% of reviews".
+        Existing tenants get the default 80%.
+    -->
+    <changeSet id="038-01-reporting-review-target-percent" author="securedoc">
+        <addColumn tableName="reporting_tenant_settings">
+            <column name="review_wait_target_percent" type="INT" defaultValueNumeric="80">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            alter table reporting_tenant_settings
+                add constraint ck_reporting_review_wait_target_percent
+                check (review_wait_target_percent between 0 and 100)
+        </sql>
+        <rollback>
+            <dropColumn tableName="reporting_tenant_settings" columnName="review_wait_target_percent"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

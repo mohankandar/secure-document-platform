@@ -8,5 +8,7 @@ public record UpdateReportingConfigurationRequest(
         int deliveryTargetMinutes,
         double deliveryTargetPercent,
         double straightThroughTargetPercent,
-        int reviewWaitTargetMinutes
+        int reviewWaitTargetMinutes,
+        /** 0 to 100. Left out by older callers, in which case the stored value is kept. */
+        Integer reviewWaitTargetPercent
 ) {}

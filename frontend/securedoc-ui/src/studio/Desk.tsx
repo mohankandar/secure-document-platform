@@ -1,17 +1,53 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Search, X } from 'lucide-react';
 import type { PackageSummary } from '../types';
 import {
   CAP, LIFECYCLE, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf,
-  usePackages, useReviewQueue, type StageKey,
+  useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
-import { FindingStrip, Kbd, Notice, Spinner, StageChip } from './atoms';
+import { CASE_GROUPS, NAV, caseSearchPlaceholders, firstThatFits } from './words';
+import { Kbd, Notice, Spinner, StageChip } from './atoms';
 import CaseDrawer from './CaseDrawer';
+import { LoadErrorCard } from './failure';
+import { apiClient } from '../api/client';
+import { nextStepText, rowAction, type RowAction } from './caseRules';
+import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
+import { ConfirmDialog } from './admin/shared';
 
 type Filter = 'all' | 'you' | StageKey;
 
 interface Group { key: string; title: string; note?: string; cases: PackageSummary[] }
+
+/**
+ * The filter's placeholder: the first of the given texts that fits the box at its current width, otherwise the last
+ * ("Filter cases"; U019, owner's U019 answer 1). Measured with the input's own font; measured again when the box
+ * resizes and once the web font has loaded.
+ */
+function usePlaceholderThatFits(ref: RefObject<HTMLInputElement | null>, texts: readonly string[]): string {
+  const key = JSON.stringify(texts);
+  const [text, setText] = useState(texts[texts.length - 1] ?? '');
+  useLayoutEffect(() => {
+    const input = ref.current;
+    if (!input) return undefined;
+    const candidates = JSON.parse(key) as string[];
+    const context = document.createElement('canvas').getContext('2d');
+    let live = true;
+    const measure = () => {
+      if (!live) return;
+      const style = getComputedStyle(input);
+      if (context) context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setText(firstThatFits(candidates, (t) => (context ? context.measureText(t).width : null), room));
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(input);
+    void document.fonts?.ready.then(measure);
+    return () => { live = false; observer?.disconnect(); };
+  }, [ref, key]);
+  return text;
+}
 
 export default function Desk({ caps }: { caps: string[] }) {
   const { caseId } = useParams();
@@ -24,7 +60,9 @@ export default function Desk({ caps }: { caps: string[] }) {
   });
   const [query, setQuery] = useState('');
 
-  const { data: packages, error, isLoading } = usePackages(true);
+  const { data: packages, error, isLoading, mutate } = usePackages(true);
+  const fields = useCaseFields(caps, packages);
+  const placeholder = usePlaceholderThatFits(searchRef, caseSearchPlaceholders(fields));
   const { data: queue } = useReviewQueue(caps.includes(CAP.review));
   const findings = useMemo(() => openFindingsByPackage(queue?.items), [queue]);
 
@@ -43,15 +81,15 @@ export default function Desk({ caps }: { caps: string[] }) {
       .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
 
     if (filter !== 'all') {
-      return [{ key: filter, title: filter === 'you' ? 'Needs you' : stageLabel(filter), cases: matches }];
+      return [{ key: filter, title: filter === 'you' ? CASE_GROUPS.needsYou : stageLabel(filter), cases: matches }];
     }
     const you = matches.filter((p) => needsYou(p, caps));
     const rest = matches.filter((p) => !needsYou(p, caps));
     return [
-      { key: 'you', title: 'Needs you', note: 'You can move these forward now', cases: you },
-      { key: 'motion', title: 'In motion', note: 'LexaVault or a colleague has these', cases: rest.filter((p) => !['delivered', 'stopped'].includes(stageOf(p.status))) },
-      { key: 'stopped', title: 'Stopped', cases: rest.filter((p) => stageOf(p.status) === 'stopped') },
-      { key: 'delivered', title: 'Delivered', cases: rest.filter((p) => stageOf(p.status) === 'delivered') },
+      { key: 'you', title: CASE_GROUPS.needsYou, note: 'You can move these forward now', cases: you },
+      { key: 'motion', title: CASE_GROUPS.inProgress, note: CASE_GROUPS.inProgressNote, cases: rest.filter((p) => !['delivered', 'stopped'].includes(stageOf(p.status))) },
+      { key: 'stopped', title: CASE_GROUPS.stopped, cases: rest.filter((p) => stageOf(p.status) === 'stopped') },
+      { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => stageOf(p.status) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
   }, [all, caps, filter, query]);
 
@@ -88,7 +126,7 @@ export default function Desk({ caps }: { caps: string[] }) {
       <section className="cf-desk-main" aria-labelledby="cf-desk-title">
         <header className="cf-page-head">
           <div>
-            <h1 id="cf-desk-title" className="cf-title">Desk</h1>
+            <h1 id="cf-desk-title" className="cf-title">{NAV.cases}</h1>
             <p className="cf-lede">
               {isLoading ? 'Gathering your cases…' : (
                 <>
@@ -107,24 +145,25 @@ export default function Desk({ caps }: { caps: string[] }) {
           )}
         </header>
 
-        <LifecycleBand counts={counts.byStage} total={total} active={filter} onSelect={(f) => setFilter((cur) => (cur === f ? 'all' : f))} />
+        <LifecycleBand counts={counts.byStage} active={filter} onSelect={(f) => setFilter((cur) => (cur === f ? 'all' : f))} />
 
         <div className="cf-desk-tools">
           <div className="cf-segment" role="group" aria-label="Show">
             <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All <span>{total}</span></button>
-            <button type="button" aria-pressed={filter === 'you'} onClick={() => setFilter('you')} data-tone="mark">Needs you <span>{counts.you}</span></button>
+            <button type="button" aria-pressed={filter === 'you'} onClick={() => setFilter('you')} data-tone="mark">{CASE_GROUPS.needsYou} <span>{counts.you}</span></button>
           </div>
-          <label className="cf-search">
+          <label className="cf-search cf-search-cases">
             <Search size={15} aria-hidden="true" />
             <span className="cf-sr">Filter cases</span>
-            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by contract or borrower" />
+            <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
             {query ? (
               <button type="button" className="cf-search-clear" onClick={() => setQuery('')} aria-label="Clear filter"><X size={14} /></button>
-            ) : <Kbd>/</Kbd>}
+            ) : null}
           </label>
         </div>
 
-        {error && <Notice tone="danger">Cases couldn&apos;t be loaded. They&apos;ll refresh automatically.</Notice>}
+        {error && !packages && <LoadErrorCard title="Your cases couldn't be loaded" error={error} request="GET /packages" onRetry={() => void mutate()} />}
+        {error && packages && <Notice tone="danger">Cases couldn&apos;t be refreshed. They&apos;ll refresh automatically.</Notice>}
         {isLoading && <div className="cf-center"><Spinner label="Loading cases" /></div>}
 
         {!isLoading && flat.length === 0 && (
@@ -162,15 +201,14 @@ export default function Desk({ caps }: { caps: string[] }) {
   );
 }
 
-function LifecycleBand({ counts, total, active, onSelect }: {
-  counts: Map<StageKey, number>; total: number; active: Filter; onSelect: (f: StageKey) => void;
+function LifecycleBand({ counts, active, onSelect }: {
+  counts: Map<StageKey, number>; active: Filter; onSelect: (f: StageKey) => void;
 }) {
   const stages = [...LIFECYCLE, 'stopped' as StageKey];
   return (
     <div className="cf-band" role="group" aria-label="Cases by lifecycle stage">
       {stages.map((key) => {
         const count = counts.get(key) ?? 0;
-        const share = total ? Math.max(count / total, count ? 0.06 : 0.02) : 0.2;
         return (
           <button
             key={key}
@@ -178,11 +216,9 @@ function LifecycleBand({ counts, total, active, onSelect }: {
             className="cf-band-seg"
             data-stage={key}
             aria-pressed={active === key}
-            style={{ flexGrow: share }}
             onClick={() => onSelect(key)}
           >
-            <span className="cf-band-fill" aria-hidden="true" />
-            <span className="cf-band-label">{STAGES.find((s) => s.key === key)?.label}</span>
+            <span className="cf-band-label"><span className="cf-band-dot" aria-hidden="true" />{STAGES.find((s) => s.key === key)?.label}</span>
             <span className="cf-band-count">{count}</span>
           </button>
         );
@@ -191,12 +227,18 @@ function LifecycleBand({ counts, total, active, onSelect }: {
   );
 }
 
+/**
+ * One case: the row opens the case panel; the action button at the end (only when this person can act) runs the
+ * action with the same confirmation as the case panel and never also opens the panel (UI spec findings 2, 3).
+ */
 function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: string[]; open: number; selected: boolean }) {
   const title = caseTitle(pkg.businessIdentifiers);
   const stage = stageOf(pkg.status);
   const you = needsYou(pkg, caps);
+  const action = rowAction(pkg.status, caps, open);
+  const next = nextStepText(pkg.status, caps.includes(CAP.review) ? open : undefined);
   return (
-    <li id={`cf-row-${pkg.packageId}`}>
+    <li id={`cf-row-${pkg.packageId}`} className="cf-case-row" data-selected={selected || undefined} data-you={you || undefined}>
       <Link to={`/case/${pkg.packageId}`} className="cf-case" aria-current={selected ? 'true' : undefined} data-you={you || undefined}>
         <span className="cf-case-flag" aria-hidden="true" />
         <span className="cf-case-id">
@@ -205,10 +247,64 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
         </span>
         <span className="cf-case-source">{SOURCE_LABEL[pkg.packageType] ?? pkg.packageType}</span>
         <span className="cf-case-docs">{pkg.documentCount} {pkg.documentCount === 1 ? 'doc' : 'docs'}</span>
-        <span className="cf-case-strip"><FindingStrip open={open} stage={stage} /></span>
+        <span className="cf-case-next" data-stage={stage}>{next}</span>
         <span className="cf-case-stage"><StageChip stage={stage} status={pkg.status} /></span>
         <time className="cf-case-time" dateTime={pkg.updatedAt}>{relativeTime(pkg.updatedAt)}</time>
       </Link>
+      <span className="cf-case-act">{action && <RowActionButton pkg={pkg} action={action} caseLabel={title.primary} />}</span>
     </li>
+  );
+}
+
+function RowActionButton({ pkg, action, caseLabel }: { pkg: PackageSummary; action: RowAction; caseLabel: string }) {
+  const navigate = useNavigate();
+  const runner = useCaseActionRunner(pkg.packageId);
+  const [confirming, setConfirming] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const copy = CONFIRM_COPY[action.kind];
+
+  async function start() {
+    runner.clearError();
+    setRefusal(null);
+    if (action.kind === 'review') { navigate(`/review?case=${pkg.packageId}`); return; }
+    if (action.kind === 'manual-fallback') {
+      // The same eligibility check the case panel makes before it offers Continue manually.
+      setChecking(true);
+      try {
+        const eligibility = await apiClient.getManualFallbackEligibility(pkg.packageId);
+        if (!eligibility.eligible) setRefusal(`Continuing manually is not possible: ${eligibility.reason}`);
+      } catch {
+        setRefusal('Whether this case can be continued manually could not be checked. Open the case for details.');
+      } finally {
+        setChecking(false);
+      }
+    }
+    setConfirming(true);
+  }
+
+  return (
+    <>
+      <button type="button" className="cf-btn" data-size="sm" data-variant={action.kind === 'review' ? 'mark' : action.kind === 'approve' ? 'solid' : undefined}
+        aria-label={`${action.label} ${caseLabel}`} disabled={checking || runner.busy !== null} onClick={start}>
+        {checking && <Spinner label="Checking" />}{action.label}
+      </button>
+      {copy && (
+        <ConfirmDialog
+          open={confirming}
+          title={refusal ? 'This case cannot be continued manually' : copy.title}
+          facts={[['Case', <span className="cf-mono" key="c">{caseLabel}</span>]]}
+          consequence={refusal ?? copy.body}
+          confirmLabel={copy.confirm}
+          busy={runner.busy !== null}
+          error={runner.error}
+          onCancel={() => { setConfirming(false); runner.clearError(); }}
+          onConfirm={async () => {
+            if (refusal) { setConfirming(false); return; }
+            if (await runner.run(action.kind)) setConfirming(false);
+          }}
+        />
+      )}
+    </>
   );
 }

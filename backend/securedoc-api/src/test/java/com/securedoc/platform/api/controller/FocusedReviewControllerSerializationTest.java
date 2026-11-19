@@ -3,6 +3,7 @@ package com.securedoc.platform.api.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.securedoc.platform.application.review.model.ReviewReason;
 import com.securedoc.platform.application.review.result.ReviewBoundingBoxSummary;
+import com.securedoc.platform.application.review.result.ReviewFoundText;
 import com.securedoc.platform.application.review.result.ReviewItemSummary;
 import com.securedoc.platform.application.review.result.ReviewQueueResult;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -34,7 +35,8 @@ class FocusedReviewControllerSerializationTest {
                 24,
                 true,
                 new ReviewBoundingBoxSummary(0.10, 0.20, 0.30, 0.04),
-                ReviewReason.LOW_CONFIDENCE);
+                ReviewReason.LOW_CONFIDENCE,
+                null);
 
         FocusedReviewController.ReviewQueueResponse response =
                 FocusedReviewController.ReviewQueueResponse.from(new ReviewQueueResult(List.of(summary), 1));
@@ -47,5 +49,27 @@ class FocusedReviewControllerSerializationTest {
         assertThat(json).doesNotContain("\"findingId\":{\"value\"");
         assertThat(json).doesNotContain("\"packageId\":{\"value\"");
         assertThat(json).doesNotContain("\"documentId\":{\"value\"");
+        assertThat(json).contains("\"foundText\":null");
+    }
+
+    @Test
+    void foundTextIsSerializedForTheBrowserButNeverAppearsInToString() throws Exception {
+        ReviewItemSummary summary = new ReviewItemSummary(
+                FindingId.of(UUID.randomUUID()), PackageId.of(UUID.randomUUID()),
+                DocumentId.of(UUID.randomUUID()), "loan.pdf", EntityType.SSN, 0.62, 2, true,
+                new ReviewBoundingBoxSummary(0.1, 0.2, 0.3, 0.04), ReviewReason.LOW_CONFIDENCE,
+                new ReviewFoundText("412-55-0193", "Borrower SSN: ", " (primary)"));
+
+        FocusedReviewController.ReviewQueueResponse response =
+                FocusedReviewController.ReviewQueueResponse.from(new ReviewQueueResult(List.of(summary), 1, 0.85));
+        String json = new ObjectMapper().writeValueAsString(response);
+
+        assertThat(json).contains("\"autoRedactThreshold\":0.85");
+        assertThat(json).contains(
+                "\"foundText\":{\"text\":\"412-55-0193\",\"before\":\"Borrower SSN: \",\"after\":\" (primary)\"}");
+        assertThat(summary.toString()).doesNotContain("412-55-0193").contains("foundText=redacted");
+        assertThat(summary.foundText().toString()).doesNotContain("412-55-0193");
+        assertThat(response.toString()).doesNotContain("412-55-0193");
+        assertThat(response.items().get(0).foundText().toString()).doesNotContain("412-55-0193");
     }
 }

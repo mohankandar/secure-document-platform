@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class IntegrationAuthorizationContractTest {
     @Test
     void everyIntegrationManagementEndpointRequiresTenantIntegrationCapability() {
-        for (String methodName : new String[]{"list", "get", "create", "update", "enable", "disable"}) {
+        for (String methodName : new String[]{"list", "get", "create", "update", "enable", "disable", "testDraft"}) {
             Method method = Arrays.stream(IntegrationConnectionController.class.getDeclaredMethods())
                     .filter(candidate -> candidate.getName().equals(methodName))
                     .findFirst().orElseThrow();

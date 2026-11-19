@@ -69,7 +69,10 @@ public class FocusedReviewController {
                 ? Optional.empty()
                 : Optional.of(PackageId.of(UUID.fromString(packageId)));
         ReviewQueueResult queue = listReviewItemsQuery.execute(principal.tenantId(), packageScope, limit);
-        return ResponseEntity.ok(ReviewQueueResponse.from(queue));
+        // Items carry the found text: never let a browser or proxy keep a copy.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ReviewQueueResponse.from(queue));
     }
 
     @GetMapping(value = "/{findingId}/page-preview", produces = MediaType.IMAGE_PNG_VALUE)
@@ -143,11 +146,17 @@ public class FocusedReviewController {
      * Returning FindingId/PackageId/DocumentId records directly causes Jackson to serialize
      * them as {"value":"..."}; the browser then interpolates [object Object] into review URLs.
      */
-    public record ReviewQueueResponse(List<ReviewItemResponse> items, int totalItems) {
+    public record ReviewQueueResponse(List<ReviewItemResponse> items, int totalItems, Double autoRedactThreshold) {
         static ReviewQueueResponse from(ReviewQueueResult queue) {
             return new ReviewQueueResponse(
                     queue.items().stream().map(ReviewItemResponse::from).toList(),
-                    queue.totalItems());
+                    queue.totalItems(),
+                    queue.autoRedactThreshold());
+        }
+
+        @Override
+        public String toString() {
+            return "ReviewQueueResponse[items=" + items.size() + ", totalItems=" + totalItems + "]";
         }
     }
 
@@ -161,8 +170,16 @@ public class FocusedReviewController {
             int pageNumber,
             boolean hasBoundingBox,
             ReviewBoundingBoxSummary boundingBox,
-            String reason
+            String reason,
+            FoundTextResponse foundText
     ) {
+        /** Redacted so the sensitive text cannot reach a log line through this DTO. */
+        @Override
+        public String toString() {
+            return "ReviewItemResponse[findingId=" + findingId + ", foundText="
+                    + (foundText == null ? "absent" : "redacted") + "]";
+        }
+
         static ReviewItemResponse from(ReviewItemSummary item) {
             return new ReviewItemResponse(
                     item.findingId().toString(),
@@ -174,7 +191,17 @@ public class FocusedReviewController {
                     item.pageNumber(),
                     item.hasBoundingBox(),
                     item.boundingBox(),
-                    item.reason().name());
+                    item.reason().name(),
+                    item.foundText() == null ? null : new FoundTextResponse(
+                            item.foundText().text(), item.foundText().before(), item.foundText().after()));
+        }
+    }
+
+    /** The text the finding covers and the same line around it. Sensitive; see ReviewFoundText. */
+    public record FoundTextResponse(String text, String before, String after) {
+        @Override
+        public String toString() {
+            return "FoundTextResponse[redacted]";
         }
     }
 

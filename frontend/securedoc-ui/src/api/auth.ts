@@ -324,3 +324,21 @@ function toBase64Url(bytes: Uint8Array): string {
   bytes.forEach((b) => { binary += String.fromCharCode(b); });
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
+
+/**
+ * Who is signed in, for the "no access" screen only (UI task U013): the ID token's email, or its user name.
+ * Display only; nothing is decided from it, and the token is never logged or sent anywhere by this.
+ */
+export function signedInIdentity(): string | null {
+  if (!isOidcSecurityMode()) return null;
+  const idToken = sessionStorage.getItem(ID_TOKEN_KEY);
+  const payload = idToken?.split('.')[1];
+  if (!payload) return null;
+  try {
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=')));
+    const value = [json.email, json.preferred_username].find((v) => typeof v === 'string' && v.trim());
+    return value ? String(value).trim() : null;
+  } catch {
+    return null;
+  }
+}

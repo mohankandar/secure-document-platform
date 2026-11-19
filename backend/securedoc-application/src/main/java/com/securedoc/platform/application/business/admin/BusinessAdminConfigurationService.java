@@ -269,7 +269,8 @@ public final class BusinessAdminConfigurationService {
                                                                 int deliveryTargetMinutes,
                                                                 double deliveryTargetPercent,
                                                                 double straightThroughTargetPercent,
-                                                                int reviewWaitTargetMinutes) {
+                                                                int reviewWaitTargetMinutes,
+                                                                Integer reviewWaitTargetPercent) {
         List<BusinessIdentifierDefinition> active = identifierRepository.findActiveByTenantId(tenantId);
         Map<UUID, BusinessIdentifierDefinition> byId = active.stream()
                 .collect(java.util.stream.Collectors.toMap(d -> d.id().value(), d -> d));
@@ -292,10 +293,13 @@ public final class BusinessAdminConfigurationService {
             dimensions.add(new ReportingConfiguration.Dimension(definition.id().value(), definition.key(),
                     definition.label(), true, order++));
         }
+        // A caller that does not send the percentage (the older admin page) keeps the stored value; it is never reset.
+        int reviewPercent = reviewWaitTargetPercent != null ? reviewWaitTargetPercent
+                : reportingConfigurationRepository.findByTenantId(tenantId).reviewWaitTargetPercent();
         ReportingConfiguration configuration;
         try {
             configuration = new ReportingConfiguration(dimensions, deliveryTargetMinutes, deliveryTargetPercent,
-                    straightThroughTargetPercent, reviewWaitTargetMinutes);
+                    straightThroughTargetPercent, reviewWaitTargetMinutes, reviewPercent);
         } catch (IllegalArgumentException e) {
             throw new ValidationException(e.getMessage());
         }
@@ -306,7 +310,8 @@ public final class BusinessAdminConfigurationService {
                         + "; deliveryTargetMinutes=" + deliveryTargetMinutes
                         + "; deliveryTargetPercent=" + deliveryTargetPercent
                         + "; straightThroughTargetPercent=" + straightThroughTargetPercent
-                        + "; reviewWaitTargetMinutes=" + reviewWaitTargetMinutes);
+                        + "; reviewWaitTargetMinutes=" + reviewWaitTargetMinutes
+                        + "; reviewWaitTargetPercent=" + reviewPercent);
         return configuration;
     }
 

@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
 export type Theme = 'light' | 'dark';
+/** What the person chose in the account menu: a theme, or "System" (follow the computer's setting). */
+export type ThemePreference = Theme | 'system';
 
 const STORAGE_KEY = 'lexavault.theme';
 const THEME_COLOR: Record<Theme, string> = { light: '#f2f3f4', dark: '#0d0e10' };
@@ -61,7 +63,28 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-export function useTheme(): [Theme, (theme: Theme) => void] {
-  const theme = useSyncExternalStore(subscribe, () => current, () => current);
-  return [theme, setTheme];
+/** "System" removes the stored choice, so the theme follows the computer's setting again. */
+export function setThemePreference(preference: ThemePreference) {
+  if (preference !== 'system') {
+    setTheme(preference);
+    return;
+  }
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Private mode: nothing was stored.
+  }
+  current = systemTheme();
+  apply(current);
+  listeners.forEach((listener) => listener());
+}
+
+function preference(): ThemePreference {
+  return readStoredTheme() ?? 'system';
+}
+
+export function useThemePreference(): [ThemePreference, (preference: ThemePreference) => void] {
+  // The snapshot is the stored choice, so choosing "System" re-renders even when the theme shown stays the same.
+  const chosen = useSyncExternalStore(subscribe, preference, () => 'system' as ThemePreference);
+  return [chosen, setThemePreference];
 }

@@ -1,5 +1,5 @@
 .cf-admin { display: flex; flex-direction: column; min-width: 0; }
-.cf-ad-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 18px; }
+.cf-ad-head { display: flex; flex-direction: column; gap: 0; margin-bottom: 16px; }
 
 .cf-ad-tabs {
   position: sticky; top: 56px; z-index: 10;
@@ -13,22 +13,22 @@
 .cf-ad-tabs::-webkit-scrollbar { display: none; }
 .cf-ad-tab {
   position: relative; flex: none;
-  display: inline-flex; align-items: center; height: 44px; padding: 0 12px;
-  color: var(--cf-muted); font-size: 14px; font-weight: 500; white-space: nowrap;
+  display: inline-flex; align-items: center; padding: 6px 12px 8px;
+  color: var(--cf-ink); font-size: 15px; font-weight: 400; white-space: nowrap;
   transition: color 120ms;
 }
 .cf-ad-tab::after {
-  content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
   border-radius: 2px 2px 0 0; background: transparent; transition: background 120ms;
 }
 .cf-ad-tab:hover { color: var(--cf-ink); }
 .cf-ad-tab:hover::after { background: var(--cf-line-strong); }
-.cf-ad-tab.is-active { color: var(--cf-ink); font-weight: 600; }
+.cf-ad-tab.is-active { color: var(--cf-ink); font-weight: 500; }
 .cf-ad-tab.is-active::after { background: var(--cf-mark); }
 .cf-ad-tab:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: -4px; border-radius: var(--cf-radius); }
 .cf-ad-tab-short { display: none; }
 
-.cf-ad-content { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding-top: 18px; }
+.cf-ad-content { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding-top: 16px; }
 .cf-ad-context { font-size: 14px; color: var(--cf-muted); text-wrap: pretty; }
 .cf-ad-stack { display: flex; flex-direction: column; gap: 16px; }
 .cf-ad-pair { display: flex; flex-direction: column; gap: 16px; }
@@ -40,7 +40,6 @@
 @media (max-width: 900px) {
   .cf-ad-head { margin-bottom: 12px; }
   .cf-ad-tab { padding: 0 10px; }
-  .cf-ad-tab::after { left: 10px; right: 10px; }
 }
 
 @media (max-width: 768px) {
@@ -52,19 +51,23 @@
   .cf-ad-tab-short { display: inline; }
 }
 
-.cf-ad-card { display: flex; flex-direction: column; gap: 16px; padding: 20px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 10px; min-width: 0; }
+.cf-ad-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 8px; min-width: 0; }
 .cf-ad-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.cf-ad-card-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.cf-ad-card-head h2 { font-size: 16px; font-weight: 600; }
 .cf-ad-card-head p { margin-top: 2px; font-size: 13px; color: var(--cf-muted); text-wrap: pretty; }
 .cf-ad-card-body { display: flex; flex-direction: column; gap: 18px; }
-.cf-ad-card-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 14px; border-top: 1px solid var(--cf-line); }
+.cf-ad-card-foot { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; }
 .cf-ad-dirty { flex: none; padding: 2px 8px; border-radius: 4px; background: var(--cf-mark-soft); color: var(--cf-ink); font-size: 12px; font-weight: 500; }
 
 .cf-ad-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 16px; }
 .cf-ad-number input { height: 36px; font-size: 14px; font-variant-numeric: tabular-nums; }
 .cf-ad-fieldset { display: flex; flex-direction: column; gap: 10px; border: 0; padding: 0; margin: 0; min-width: 0; }
-.cf-ad-fieldset legend { padding: 0; margin-bottom: 10px; font-size: 13px; font-weight: 500; }
-.cf-ad-hint { font-size: 12px; color: var(--cf-faint); text-wrap: pretty; }
+.cf-ad-fieldset > .cf-segment { align-self: flex-start; }
+.cf-ad-fieldset legend { padding: 0; margin-bottom: 10px; font-size: 14px; font-weight: 500; }
+/* Canvas: a field's own hint is 12 px (.field small); a line on its own in a card is 13 px (.small). Both muted. */
+.cf-ad-hint { font-size: 12px; color: var(--cf-muted); text-wrap: pretty; }
+p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { font-size: 13px; }
+.cf-ad-inline-actions > .cf-ad-hint strong { font-weight: 500; color: var(--cf-ink); }
 .cf-ad-warn { font-size: 12px; color: var(--cf-danger); }
 
 .cf-ad-threshold { display: flex; flex-direction: column; gap: 8px; }
@@ -99,61 +102,71 @@
 .cf-ad-tag[data-tone='ok'] { color: var(--cf-ok); }
 .cf-ad-tag[data-tone='danger'] { color: var(--cf-danger); background: var(--cf-danger-soft); }
 
-.cf-ad-table-wrap { overflow-x: auto; }
-.cf-ad-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.cf-ad-table th, .cf-ad-table td { padding: 6px 8px; border-bottom: 1px solid var(--cf-line); text-align: center; }
-.cf-ad-table thead th { font-size: 12px; font-weight: 500; color: var(--cf-muted); white-space: nowrap; }
+/* Canvas table.t: a bordered box, a raised head row (12/600 muted), lines between rows. */
+.cf-ad-table-wrap { overflow-x: auto; border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-ad-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cf-ad-table th, .cf-ad-table td { padding: 10px 14px; border-top: 1px solid var(--cf-line); text-align: center; vertical-align: middle; }
+.cf-ad-table thead th { padding: 9px 14px; border-top: 0; background: var(--cf-raised); font-size: 12px; font-weight: 600; color: var(--cf-muted); white-space: nowrap; }
 .cf-ad-table th[scope='row'] { text-align: left; font-weight: 400; min-width: 160px; }
 .cf-ad-table input[type='checkbox'], .cf-ad-table input[type='radio'] { accent-color: var(--cf-ink); width: 16px; height: 16px; }
-.cf-ad-inline { width: 100%; height: 32px; padding: 0 8px; font: inherit; color: var(--cf-ink); background: transparent; border: 1px solid transparent; border-radius: var(--cf-radius); }
-.cf-ad-inline:hover { border-color: var(--cf-line); }
-.cf-ad-inline:focus { outline: 0; border-color: var(--cf-ink); background: var(--cf-surface); }
 
-.cf-ad-conns { display: flex; flex-direction: column; list-style: none; }
-.cf-ad-conn { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--cf-line); }
-.cf-ad-conn:last-child { border-bottom: 0; padding-bottom: 0; }
-.cf-ad-conn:first-child { padding-top: 0; }
+/* Canvas connection rows: a hairline above each row (the first too), 14 px above and below. */
+.cf-ad-conns { display: flex; flex-direction: column; list-style: none; margin-top: -4px; }
+.cf-ad-conn { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--cf-line); }
+.cf-ad-conn:last-child { padding-bottom: 0; }
 .cf-ad-health { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-faint); }
 .cf-ad-health[data-h='ok'] { background: var(--cf-ok); }
 .cf-ad-health[data-h='warn'] { background: var(--cf-mark); }
 .cf-ad-health[data-h='danger'] { background: var(--cf-danger); }
 .cf-ad-conn-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.cf-ad-conn-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-weight: 500; }
+.cf-ad-conn-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 15px; font-weight: 500; }
+.cf-ad-conn-name .cf-ad-tag { height: auto; padding: 2px 8px; border: 1px solid var(--cf-line); border-radius: 10px; background: transparent; color: var(--cf-ink); font-size: 12px; font-weight: 400; }
 .cf-ad-conn-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--cf-muted); }
-.cf-ad-conn-endpoint { font-size: 12px; color: var(--cf-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-ad-conn-endpoint { font-size: 13px; color: var(--cf-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cf-ad-conn-actions { flex: none; display: flex; gap: 6px; }
+/* U019: a row whose actions are limited says why, in a short muted line under its button. */
+.cf-ad-conn-actions-note { flex-direction: column; align-items: flex-end; gap: 4px; }
+.cf-ad-conn-note { font-size: 12px; color: var(--cf-muted); white-space: nowrap; }
 .cf-ad-status { flex: none; font-size: 12px; font-weight: 500; color: var(--cf-muted); }
-.cf-ad-status[data-h='DOWN'], .cf-ad-status[data-h='DEGRADED'] { color: var(--cf-danger); }
+.cf-ad-status[data-tone='ok'] { color: var(--cf-ink); }
+.cf-ad-status[data-tone='danger'] { color: var(--cf-danger); }
 
-.cf-ad-steps { display: flex; gap: 6px; list-style: none; counter-reset: step; font-size: 12px; color: var(--cf-muted); }
-.cf-ad-steps li { counter-increment: step; display: inline-flex; align-items: center; gap: 6px; }
-.cf-ad-steps li + li::before { content: ''; width: 16px; height: 1px; background: var(--cf-line-strong); margin-right: 2px; }
-.cf-ad-steps li::after { content: counter(step); order: -1; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--cf-line-strong); font-family: var(--cf-font-mono); font-size: 10px; }
-.cf-ad-steps li[data-done] { color: var(--cf-ink); }
-.cf-ad-steps li[data-done]::after { content: '✓'; background: var(--cf-ink); color: var(--cf-surface); border-color: var(--cf-ink); }
 
 .cf-ad-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.cf-ad-search { flex: 1; min-width: 200px; height: 34px; padding: 0 12px; font: inherit; font-size: 13px; color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); }
-.cf-ad-search:focus { outline: 0; border-color: var(--cf-ink); }
-.cf-ad-audit { display: flex; flex-direction: column; list-style: none; }
-.cf-ad-audit li { display: grid; grid-template-columns: 116px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--cf-line); font-size: 13px; }
-.cf-ad-audit li:last-child { border-bottom: 0; }
-.cf-ad-audit time { font-size: 12px; color: var(--cf-muted); }
-.cf-ad-audit li[data-outcome='FAILURE'] .cf-ad-audit-action { color: var(--cf-danger); }
-.cf-ad-audit-action { font-weight: 500; }
-.cf-ad-audit-res { font-size: 11px; color: var(--cf-faint); white-space: nowrap; }
-.cf-ad-audit li:has(.cf-ad-audit-ids) { grid-template-columns: 116px minmax(0, 1fr); }
-.cf-ad-audit-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
-.cf-ad-audit-main .cf-ad-hint { flex-basis: 100%; }
-.cf-ad-audit li[data-outcome='DENIED'] .cf-ad-audit-action { color: var(--cf-danger); }
 .cf-ad-audit-ids { display: flex; flex-wrap: wrap; gap: 2px 16px; flex-basis: 100%; font-size: 12px; color: var(--cf-muted); }
 .cf-ad-audit-ids > div { display: flex; gap: 6px; min-width: 0; }
 .cf-ad-audit-ids dt { color: var(--cf-faint); }
 .cf-ad-audit-ids dd { min-width: 0; overflow-wrap: anywhere; }
 .cf-ad-audit-cats { flex-wrap: wrap; height: auto; }
+/* Audit trail (U011): one toolbar, sentence rows that open to every recorded field */
+.cf-ad-audit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cf-ad-audit-pick select { height: 36px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-ad-audit-find { flex: 1; min-width: 200px; display: flex; }
+.cf-ad-audit-find .cf-search { width: 100%; }
+.cf-search[data-invalid] { border-color: var(--cf-danger); }
+.cf-ad-audit-error { margin: 6px 0 0; font-size: 12px; color: var(--cf-danger); }
+.cf-ad-audit-export { position: relative; }
+.cf-ad-audit-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: 220px; display: flex; flex-direction: column; padding: 6px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); box-shadow: var(--cf-shadow-pop); }
+.cf-ad-audit-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--cf-ink); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer; }
+.cf-ad-audit-menu button span { font-size: 12px; font-weight: 400; color: var(--cf-muted); }
+.cf-ad-audit-menu button:hover, .cf-ad-audit-menu button:focus-visible { background: var(--cf-raised); outline: 0; }
+.cf-ad-audit-more { margin-top: 12px; }
+.cf-ad-audit-routine { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--cf-ink); }
+.cf-ad-audit-routine input { width: 16px; height: 16px; margin: 0; accent-color: var(--cf-ink); }
+.cf-ad-audit-count { margin: 12px 0 0; font-size: 12px; color: var(--cf-muted); }
+.cf-ad-audit-table { margin-top: 4px; }
+.cf-ad-audit-table td { vertical-align: baseline; }
+.cf-ad-audit-when { white-space: nowrap; color: var(--cf-muted); font-size: 12px; }
+.cf-ad-audit-what { padding: 0; border: 0; background: transparent; color: var(--cf-ink); font: inherit; font-weight: 500; text-align: left; cursor: pointer; }
+.cf-ad-audit-what:hover { text-decoration: underline; }
+.cf-ad-audit-what:focus-visible { outline: 2px solid var(--cf-mark); outline-offset: 2px; border-radius: 2px; }
+.cf-ad-audit-change { display: block; font-size: 12px; color: var(--cf-muted); }
+.cf-ad-audit-table tr[data-open] > td { border-bottom-color: transparent; }
+.cf-ad-audit-detail > td { background: var(--cf-raised); padding: 10px 12px; }
+.cf-ad-audit-detail .cf-ad-audit-ids { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; }
+.cf-ad-audit-detail .cf-ad-audit-ids > div { display: contents; }
 .cf-ad-audit-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; padding-top: 4px; }
 @media (max-width: 640px) {
-  .cf-ad-audit li { grid-template-columns: 1fr; gap: 2px; }
   .cf-ad-conn { flex-wrap: wrap; }
 }
 
@@ -167,24 +180,39 @@
   padding: 0; border: 0; border-left: 1px solid var(--cf-line);
   background: var(--cf-surface); color: var(--cf-ink);
 }
-.cf-ad-sheet[data-wide] { width: min(640px, 100vw); }
+.cf-ad-sheet[data-wide] { width: min(620px, 100vw); }
 .cf-ad-sheet::backdrop { background: color-mix(in srgb, var(--cf-ink) 40%, transparent); }
 .cf-ad-sheet-inner { display: flex; flex-direction: column; height: 100%; }
-.cf-ad-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px 16px; border-bottom: 1px solid var(--cf-line); }
-.cf-ad-sheet-head h2 { margin: 0; font-size: 17px; font-weight: 600; text-wrap: balance; }
-.cf-ad-sheet-head p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--cf-muted); }
+.cf-ad-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--cf-line); }
+.cf-ad-sheet-head h2 { margin: 0; font-size: 18px; font-weight: 600; text-wrap: balance; }
+.cf-ad-sheet-head p { margin: 0; font-size: 13px; color: var(--cf-muted); }
 .cf-ad-sheet-body { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
-.cf-ad-sheet-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 24px; border-top: 1px solid var(--cf-line); background: var(--cf-raised); }
+.cf-ad-sheet-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--cf-line); background: var(--cf-surface); }
+/* Canvas: the sheet's footer buttons are full size (36 px, 14 px). */
+.cf-ad-sheet-foot .cf-btn[data-size='sm'] { height: 36px; padding: 0 14px; font-size: 14px; }
 @media (max-width: 640px) {
   .cf-ad-sheet, .cf-ad-sheet[data-wide] { width: 100vw; border-left: 0; }
   .cf-ad-sheet-head, .cf-ad-sheet-body, .cf-ad-sheet-foot { padding-left: 16px; padding-right: 16px; }
 }
 
 .cf-ad-form { display: flex; flex-direction: column; gap: 16px; }
+/* The connection editor (canvas ConnectionEditor.html): full-width fields, paired only where the canvas pairs them,
+   14/600 section titles with a hairline between sections, and Advanced as a plain "▸" line. */
+.cf-ad-form .cf-ad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+.cf-ad-form .cf-ad-grid > .cf-ad-span { grid-column: 1 / -1; }
+.cf-ad-form .cf-ad-fieldset legend { font-weight: 600; }
+.cf-ad-form .cf-ad-fieldset + .cf-ad-fieldset > legend { float: left; width: 100%; padding-top: 14px; border-top: 1px solid var(--cf-line); }
+.cf-ad-form .cf-ad-fieldset + .cf-ad-fieldset > legend + * { clear: both; }
+.cf-ad-form .cf-field-hint { min-height: 0; }
+.cf-ad-form .cf-field-hint:empty { display: none; }
+.cf-ad-form .cf-disclosure { padding-top: 10px; }
+.cf-ad-form .cf-disclosure > summary { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--cf-ink); gap: 0; }
+.cf-ad-form .cf-disclosure > summary::before { content: '▸'; width: 16px; font-family: var(--cf-font-sans); color: var(--cf-ink); }
+.cf-ad-form .cf-disclosure[open] > summary::before { content: '▾'; }
 .cf-ad-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 640px) { .cf-ad-grid3 { grid-template-columns: 1fr; } }
 @media (max-width: 1200px) { .cf-ad-audit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .cf-ad-audit-grid { grid-template-columns: 1fr; } .cf-ad-audit li:has(.cf-ad-audit-ids) { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .cf-ad-audit-grid { grid-template-columns: 1fr; } }
 .cf-ad-spacer { flex: 1; }
 .cf-ad-inline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cf-ad-mono { font-family: var(--cf-font-mono, ui-monospace, monospace); }
@@ -206,7 +234,7 @@
 @media (max-width: 640px) { .cf-ad-defs > div { grid-template-columns: 1fr; gap: 0; } }
 
 .cf-ad-radios { display: flex; flex-direction: column; gap: 8px; }
-.cf-ad-radio { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--cf-line); border-radius: var(--cf-radius); cursor: pointer; }
+.cf-ad-radio { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--cf-line); border-radius: var(--cf-radius); cursor: pointer; }
 .cf-ad-radio:has(input:checked) { border-color: var(--cf-ink); background: var(--cf-raised); }
 .cf-ad-radio input { margin-top: 3px; }
 .cf-ad-radio > span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
@@ -230,9 +258,7 @@
 .cf-ad-tally li[data-strong] { color: var(--cf-ink); border-color: var(--cf-line-strong); font-weight: 500; }
 .cf-ad-tally strong { color: var(--cf-ink); font-weight: 600; }
 .cf-ad-conn-top { align-items: flex-start; }
-.cf-ad-conn-top .cf-ad-health { margin-top: 6px; }
-.cf-ad-nodes { display: flex; flex-direction: column; gap: 2px; list-style: none; margin-top: 6px; font-size: 12px; color: var(--cf-muted); }
-.cf-ad-nodes li { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.cf-ad-conn-top .cf-ad-health { margin-top: 7px; }
 .cf-ad-table-left th, .cf-ad-table-left td { text-align: left; }
 .cf-ad-table-left tr[data-selected] { background: var(--cf-raised); }
 .cf-ad-rowbtn { display: block; width: 100%; padding: 0; font: inherit; color: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
@@ -250,7 +276,6 @@
 .cf-ad-token textarea { width: 100%; min-height: 120px; padding: 8px 10px; font: 12px/1.5 var(--cf-font-mono); color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); resize: vertical; word-break: break-all; }
 .cf-ad-token textarea:focus { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-ad-token[data-invalid] textarea { border-color: var(--cf-danger); }
-.cf-ad-narrow { max-width: 360px; margin-bottom: 16px; }
 
 .cf-ad-brand { display: grid; gap: 20px; }
 .cf-ad-assets { display: flex; flex-direction: column; gap: 12px; }
@@ -264,21 +289,160 @@
 .cf-ad-color input[type='color'] { flex: none; width: 40px; padding: 2px; cursor: pointer; }
 .cf-ad-color input:not([type='color']) { flex: 1; min-width: 0; }
 
-.cf-ad-preview { align-self: start; overflow: hidden; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); box-shadow: var(--cf-shadow); font-size: 12px; }
-.cf-ad-preview-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--cf-line); }
-.cf-ad-preview-mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; overflow: hidden; border-radius: 5px; background: var(--preview-accent); color: var(--cf-paper); font-weight: 700; }
-.cf-ad-preview-mark img { width: 100%; height: 100%; object-fit: contain; }
-.cf-ad-preview-body { display: flex; min-height: 150px; }
-.cf-ad-preview-side { display: flex; flex-direction: column; gap: 4px; width: 44%; padding: 10px; background: var(--cf-raised); border-right: 1px solid var(--cf-line); }
-.cf-ad-preview-side small { color: var(--cf-muted); margin-bottom: 6px; }
-.cf-ad-preview-side span { padding: 3px 6px; border-radius: 4px; color: var(--cf-muted); }
-.cf-ad-preview-side span[data-active] { color: var(--preview-accent); background: color-mix(in srgb, var(--preview-accent) 12%, transparent); font-weight: 600; }
-.cf-ad-preview-logo { max-width: 100%; max-height: 28px; object-fit: contain; align-self: flex-start; }
-.cf-ad-preview-main { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 10px; }
-.cf-ad-preview-main small { color: var(--cf-faint); }
-.cf-ad-preview-btn { align-self: flex-start; margin-top: auto; padding: 5px 10px; border-radius: 5px; background: var(--preview-accent); color: var(--cf-paper); font-weight: 600; }
 
 @media (min-width: 1200px) {
-  .cf-ad-brand { grid-template-columns: minmax(0, 1fr) 280px; }
+  .cf-ad-brand { grid-template-columns: minmax(0, 1fr) 360px; }
   .cf-ad-preview { position: sticky; top: 16px; }
 }
+
+/* ---- U007 ----------------------------------------------------------------------------------------------------
+ * The legacy stylesheet (src/index.css, frozen) sets every `table th` in capitals and every `input` to full width.
+ * That is why field names showed in capitals and the mode radios floated mid-card with the text pushed right.
+ * These rules undo both inside the Case File admin only; index.css is not changed.
+ */
+.cf-ad-table th { text-transform: none; letter-spacing: normal; }
+.cf-ad-table th[scope='row'] { color: var(--cf-ink); font-size: 13px; }
+.cf-ad-table thead th { font-size: 12px; font-weight: 500; }
+.cf-ad-table thead th.cf-ad-col-field { text-align: left; }
+.cf-ad-table input[type='checkbox'], .cf-ad-table input[type='radio'] { padding: 0; }
+.cf-ad-radio { justify-content: flex-start; text-align: left; }
+.cf-ad-radio input { flex: none; width: 16px; height: 16px; padding: 0; margin: 2px 0 0; accent-color: var(--cf-ink); }
+.cf-ad-radio > span { flex: 1; min-width: 0; }
+.cf-ad-radios[data-layout='row'] { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+/* Canvas .tech: "▸ Technical details" in 13 px ink under a hairline, not an eyebrow. */
+.cf-ad-card .cf-disclosure { padding-top: 10px; }
+.cf-ad-card .cf-disclosure > summary { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--cf-ink); gap: 0; }
+.cf-ad-card .cf-disclosure > summary::before { content: '▸'; width: 16px; font-family: var(--cf-font-sans); color: var(--cf-ink); }
+.cf-ad-card .cf-disclosure[open] > summary::before { content: '▾'; }
+
+/* A number with its unit, on its own or inside a sentence. */
+.cf-ad-duration { display: inline-flex; align-items: center; gap: 6px; }
+.cf-ad-duration input {
+  width: 84px; height: 34px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--cf-ink);
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+}
+.cf-ad-duration select {
+  width: auto; height: 34px; padding: 0 8px; font: inherit; font-size: 14px; color: var(--cf-ink);
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+}
+.cf-ad-duration input[aria-invalid='true'] { border-color: var(--cf-danger); }
+.cf-ad-duration input:focus-visible, .cf-ad-duration select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-ad-duration-unit { font-size: 14px; color: var(--cf-muted); }
+.cf-ad-sentences { display: flex; flex-direction: column; gap: 12px; }
+.cf-ad-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
+.cf-ad-sentence-error { flex-basis: 100%; font-size: 12px; color: var(--cf-danger); }
+
+/* The page gutter drops to 16 px at 1024 px (studio.css); the tab strip bled 24 px and scrolled the page sideways. */
+@media (max-width: 1024px) {
+  .cf-ad-tabs { margin: 0 -16px; padding: 0 16px; }
+}
+
+/* Admin › Integrations (UI task U008): one status line, codes under a small Technical details in each row. */
+.cf-ad-conn-status { font-size: 13px; color: var(--cf-muted); }
+.cf-ad-conn-status [data-tone] { font-weight: 400; color: var(--cf-muted); }
+.cf-ad-conn-status [data-tone='warn'] { color: var(--cf-warn-ink); }
+.cf-ad-conn-status [data-tone='danger'], .cf-ad-conn-status [data-tone='off'] { color: var(--cf-danger); }
+.cf-ad-conn .cf-disclosure { border-top: 0; padding-top: 2px; }
+.cf-ad-conn .cf-disclosure > summary { font-size: 12px; font-weight: 400; color: var(--cf-muted); }
+.cf-ad-conn .cf-disclosure > summary::before { color: var(--cf-muted); }
+.cf-ad-conn .cf-disclosure .cf-ad-facts { margin-top: 8px; }
+.cf-ad-block { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--cf-line); }
+.cf-ad-block-title { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; font-weight: 500; }
+.cf-ad-rule-sentence { font-size: 14px; }
+
+/* Admin › Platform operations (UI task U010). */
+.cf-ad-foot-left { justify-content: flex-start; align-items: center; }
+.cf-ad-storage td { vertical-align: top; }
+.cf-ad-storage .cf-ad-conn-status { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cf-ad-storage .cf-ad-conn-actions { justify-content: flex-end; }
+.cf-ad-usage-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cf-ad-usage-mode .cf-segment button:disabled { cursor: default; opacity: 1; }
+.cf-ad-preview { align-self: start; display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.cf-ad-preview figcaption { font-size: 12px; font-weight: 500; color: var(--cf-muted); }
+.cf-ad-preview-top { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px; overflow: hidden; background: var(--cf-bg); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); font-size: 13px; }
+.cf-ad-preview-logo { max-height: 26px; max-width: 96px; object-fit: contain; }
+.cf-ad-preview-nav { display: flex; gap: 2px; min-width: 0; }
+.cf-ad-preview-nav span { padding: 4px 8px; border-radius: var(--cf-radius); color: var(--cf-muted); font-weight: 500; }
+.cf-ad-preview-nav span[data-active] { color: var(--cf-ink); background: var(--cf-surface); box-shadow: inset 0 0 0 1px var(--cf-line); }
+.cf-ad-preview-acct { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--cf-muted); white-space: nowrap; }
+.cf-ad-preview-acct .cf-acct-avatar { width: 24px; height: 24px; font-size: 10px; }
+
+/* Admin › Platform operations (UI task U017, canvas AdminPlatform.html). */
+/* Sub-tabs: plain 14 px words, 16 apart; the current one 500 with the yellow line under it (canvas toolbar). */
+.cf-ad-subtabs { display: flex; gap: 16px; white-space: nowrap; }
+.cf-ad-subtabs button { padding: 0 0 4px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--cf-ink); cursor: pointer; }
+.cf-ad-subtabs button:hover { box-shadow: inset 0 -2px 0 var(--cf-line-strong); }
+.cf-ad-subtabs button[aria-pressed='true'] { font-weight: 500; box-shadow: inset 0 -2px 0 var(--cf-mark); }
+.cf-ad-subtabs button:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; border-radius: 2px; }
+/* Service health (canvas .hl): one line each, a hairline between rows, the product in 12 px muted beside the name. */
+.cf-ad-services { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.cf-ad-service { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--cf-line); font-size: 14px; }
+.cf-ad-service:first-child { border-top: 0; }
+.cf-ad-service-product { font-size: 12px; color: var(--cf-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-ad-service .cf-ad-status { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--cf-ink); }
+.cf-ad-service .cf-ad-status[data-tone='warn'] { color: var(--cf-warn-ink); }
+.cf-ad-service .cf-ad-status[data-tone='danger'], .cf-ad-service .cf-ad-status[data-tone='off'] { color: var(--cf-danger); }
+.cf-ad-service .cf-ad-status[data-tone='neutral'] { color: var(--cf-muted); }
+/* Canvas .st2: a soft status pill. */
+.cf-ad-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 12px; font-size: 13px; font-weight: 500; color: var(--cf-ink); background: var(--cf-raised); white-space: nowrap; }
+.cf-ad-pill[data-tone='ok'] { background: var(--cf-stage-delivered-soft); }
+.cf-ad-pill[data-tone='warn'] { background: var(--cf-stage-review-soft); }
+.cf-ad-pill[data-tone='danger'], .cf-ad-pill[data-tone='off'] { background: var(--cf-danger-soft); }
+/* Processing storage (canvas PlatformStorage.html): status in ink, bordered row buttons, full-width pickers. */
+.cf-ad-storage td { vertical-align: middle; }
+.cf-ad-storage .cf-ad-conn-status { font-size: 14px; color: var(--cf-ink); }
+.cf-ad-storage .cf-ad-conn-status [data-tone='ok'], .cf-ad-storage .cf-ad-conn-status [data-tone='warn'] { color: var(--cf-ink); }
+.cf-ad-assign { flex-wrap: nowrap; align-items: flex-end; gap: 12px; }
+.cf-ad-assign .cf-field { flex: 1; min-width: 0; }
+.cf-ad-assign select { width: 100%; height: 38px; }
+.cf-ad-assign > .cf-btn { flex: none; }
+/* Branding (canvas PlatformBranding.html): "Apply to" at the top right, 320 wide; a 520 px preview beside the form. */
+.cf-ad-apply { flex: none; width: 320px; max-width: 100%; }
+.cf-ad-apply select { width: 100%; height: 38px; }
+.cf-ad-brand .cf-ad-form .cf-ad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 1200px) { .cf-ad-brand { grid-template-columns: minmax(0, 1fr) 520px; } }
+@media (max-width: 900px) { .cf-ad-card-head:has(.cf-ad-apply) { flex-direction: column; } }
+/* Audit trail (canvas AuditTrail.html): no card; the toolbar and table sit on the page. Fixed-width pickers and
+   search, Export at the right; the time in 13 px mono; the result as a plain coloured word. */
+.cf-ad-audit { display: flex; flex-direction: column; min-width: 0; }
+.cf-ad-audit-bar { gap: 10px; }
+.cf-ad-audit-pick:nth-of-type(1) select { width: 220px; }
+.cf-ad-audit-pick:nth-of-type(2) select { width: 200px; }
+.cf-ad-audit-find { flex: 0 1 260px; min-width: 200px; }
+.cf-ad-audit-export { margin-left: auto; }
+.cf-ad-audit-when { font-family: var(--cf-font-mono); font-size: 13px; }
+.cf-ad-audit-table td code.cf-mono { font-size: 14px; color: var(--cf-ink); }
+.cf-ad-audit-result { font-size: 14px; color: var(--cf-ink); }
+.cf-ad-audit-result[data-tone='ok'] { color: var(--cf-ok); }
+.cf-ad-audit-result[data-tone='danger'] { color: var(--cf-danger); }
+.cf-ad-audit-result[data-tone='neutral'] { color: var(--cf-muted); }
+.cf-ad-audit-table .cf-ad-audit-what { font-size: 14px; font-weight: 500; }
+.cf-ad-audit .cf-ad-audit-more { border-top: 0; padding-top: 0; }
+.cf-ad-audit .cf-ad-audit-more > summary { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--cf-ink); gap: 0; }
+.cf-ad-audit .cf-ad-audit-more > summary::before { content: '▸'; width: 16px; font-family: var(--cf-font-sans); color: var(--cf-ink); }
+.cf-ad-audit .cf-ad-audit-more[open] > summary::before { content: '▾'; }
+/* Technical details at the foot of a card, under a hairline (canvas .tech). */
+.cf-ad-card > .cf-disclosure { border-top: 1px solid var(--cf-line); }
+
+/* U019 (owner approved, slightly beyond the canvas): on full-width cards, inputs, dropdowns and the confidence slider
+   stop at 480 px instead of stretching with the card; number-and-unit fields stay short. Mode cards, tables and long
+   text keep the full width. The side sheets (the connection editor) keep the canvas's full-width fields. */
+.cf-admin .cf-field :is(input, select):not([type='checkbox'], [type='radio'], [type='range'], [type='color']) { max-width: 480px; }
+.cf-admin .cf-ad-threshold input[type='range'] { max-width: 480px; }
+.cf-admin .cf-ad-duration input { flex: none; width: 96px; }
+.cf-admin .cf-ad-duration select { flex: none; width: auto; }
+.cf-ad-sheet .cf-field :is(input, select):not([type='checkbox'], [type='radio'], [type='range'], [type='color']) { max-width: none; }
+
+/* U020 fix 1: descriptive text (notes, hints, card subtitles, paragraphs) stops at a readable line length on wide
+   screens. Tables, rows and lists keep the full width. */
+.cf-admin :is(p, .cf-ad-hint, .cf-field-hint, .cf-ad-defs dd) { max-width: 75ch; }
+
+/* U020 fix 2: a read-only key–value list on a full-width card puts the value next to its label (200 px label column,
+   value left-aligned). The narrow side panels keep the studio rule: label left, value right. */
+.cf-admin .cf-facts > div { display: grid; grid-template-columns: 200px minmax(0, 1fr); justify-content: start; }
+.cf-admin .cf-facts dd { text-align: left; }
+@media (max-width: 640px) { .cf-admin .cf-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* U020 fix 5: the address in the connection summary has its own full-width row and wraps only after a "/". */
+.cf-ad-facts dd.cf-ad-address { overflow-wrap: normal; }
+.cf-ad-facts dd.cf-ad-address > span { overflow-wrap: anywhere; }

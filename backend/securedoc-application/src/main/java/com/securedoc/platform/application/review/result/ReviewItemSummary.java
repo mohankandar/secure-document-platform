@@ -7,8 +7,9 @@ import com.securedoc.platform.domain.identity.FindingId;
 import com.securedoc.platform.domain.identity.PackageId;
 
 /**
- * Safe queue item for the focused Manual Review workbench. Raw sensitive text/snippets are
- * deliberately excluded; the UI uses the relevant rendered PDF page for context.
+ * Queue item for the focused Manual Review workbench. {@code foundText} is the only sensitive
+ * value: it is read on demand for MANUAL_REVIEW callers, is null when it cannot be read safely,
+ * and is left out of {@link #toString()} so it never reaches a log line.
  */
 public record ReviewItemSummary(
         FindingId findingId,
@@ -20,5 +21,20 @@ public record ReviewItemSummary(
         int pageNumber,
         boolean hasBoundingBox,
         ReviewBoundingBoxSummary boundingBox,
-        ReviewReason reason
-) {}
+        ReviewReason reason,
+        ReviewFoundText foundText
+) {
+
+    public ReviewItemSummary withFoundText(ReviewFoundText text) {
+        return new ReviewItemSummary(findingId, packageId, documentId, fileName, entityType,
+                confidence, pageNumber, hasBoundingBox, boundingBox, reason, text);
+    }
+
+    @Override
+    public String toString() {
+        return "ReviewItemSummary[findingId=" + findingId + ", packageId=" + packageId
+                + ", documentId=" + documentId + ", entityType=" + entityType
+                + ", pageNumber=" + pageNumber + ", reason=" + reason
+                + ", foundText=" + (foundText == null ? "absent" : "redacted") + "]";
+    }
+}

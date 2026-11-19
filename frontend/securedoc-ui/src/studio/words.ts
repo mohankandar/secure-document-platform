@@ -1,0 +1,385 @@
+/**
+ * One name for everything people see in the Case File design (docs/work/ui/SPEC.md, "Vocabulary").
+ * Screens take their words from here; they do not spell names of stages, places or sensitive types themselves.
+ * Plain TypeScript with no imports, so node's test runner can check it directly.
+ */
+
+/** The brand link's accessible name. Branding without a name reads "LexaVault home", never "undefined home". */
+export function brandHomeName(applicationName: string | null | undefined): string {
+  const name = typeof applicationName === 'string' ? applicationName.trim() : '';
+  return `${name || 'LexaVault'} home`;
+}
+
+/* ---------- Places in the app (routes stay as they are) ---------- */
+
+export const NAV = {
+  cases: 'Cases',
+  newCase: 'New case',
+  review: 'Review',
+  reports: 'Reports',
+  admin: 'Admin',
+  support: 'Support',
+} as const;
+
+/* ---------- Stages ---------- */
+
+export type StageWordKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
+
+export const STAGE_NAMES: Record<StageWordKey, string> = {
+  intake: 'New',
+  redacting: 'Redacting',
+  review: 'Review',
+  approval: 'Approval',
+  delivered: 'Delivered',
+  stopped: 'Stopped',
+  unknown: 'Unrecognized',
+};
+
+/** The groups on the Cases page. */
+export const CASE_GROUPS = {
+  needsYou: 'Needs you',
+  inProgress: 'In progress',
+  inProgressNote: 'LexaVault or a colleague has these',
+  stopped: STAGE_NAMES.stopped,
+  delivered: STAGE_NAMES.delivered,
+} as const;
+
+/* ---------- Sensitive types ---------- */
+
+export interface SensitiveType {
+  /** The policy and detection key, as the server sends it. */
+  key: string;
+  /** The one name people see, in Review, Policy, the case panel and Continue manually. */
+  name: string;
+  /** The plural, for counts such as "2 more Dates of birth". */
+  plural: string;
+  /** What the detection finds, for the policy screen. */
+  detects: string;
+}
+
+/**
+ * The types the detection acts on (SensitiveContentPromptBuilder and the heuristic adapters). Each finds an exact
+ * text span and redacts only that span; none redacts a whole page, image or document.
+ */
+export const SENSITIVE_TYPES: readonly SensitiveType[] = [
+  { key: 'SSN', name: 'Social Security Number', plural: 'Social Security Numbers', detects: 'Full Social Security Numbers in text, including clearly labeled test values. Form, reference and case numbers are excluded.' },
+  { key: 'DATE_OF_BIRTH', name: 'Date of birth', plural: 'Dates of birth', detects: 'A person’s birth date only. Signature, payment, effective and other dates are excluded.' },
+  { key: 'CREDIT_CARD_NUMBER', name: 'Credit card number', plural: 'Credit card numbers', detects: 'Full 13–19 digit payment card numbers. Masked or last-four displays and account numbers are excluded.' },
+  { key: 'CREDIT_SCORE', name: 'Credit score', plural: 'Credit scores', detects: 'A consumer credit or FICO score tied to a person or report. Bare three-digit numbers are excluded.' },
+];
+
+/** Other spellings the server or older data use for the same types. */
+const SENSITIVE_ALIASES: Record<string, string> = {
+  US_SSN: 'SSN',
+  SOCIAL_SECURITY_NUMBER: 'SSN',
+  DOB: 'DATE_OF_BIRTH',
+  BIRTH_DATE: 'DATE_OF_BIRTH',
+  CARD_NUMBER: 'CREDIT_CARD_NUMBER',
+  PAYMENT_CARD_NUMBER: 'CREDIT_CARD_NUMBER',
+};
+
+function normalizeTypeKey(raw: string): string {
+  const key = raw.trim().replace(/[\s-]+/g, '_').toUpperCase();
+  return SENSITIVE_ALIASES[key] ?? key;
+}
+
+export function findSensitiveType(raw: string | null | undefined): SensitiveType | undefined {
+  if (!raw) return undefined;
+  const key = normalizeTypeKey(raw);
+  return SENSITIVE_TYPES.find((t) => t.key === key);
+}
+
+/** The name for a sensitive type. An unknown type is shown in sentence case, never as a raw code. */
+export function sensitiveTypeName(raw: string | null | undefined): string {
+  if (!raw) return 'Sensitive value';
+  return findSensitiveType(raw)?.name ?? sentenceCase(raw);
+}
+
+/** The plural for counts. An unknown type becomes "<Name> findings" rather than a guessed plural. */
+export function sensitiveTypePlural(raw: string | null | undefined): string {
+  if (!raw) return 'Sensitive values';
+  return findSensitiveType(raw)?.plural ?? `${sentenceCase(raw)} findings`;
+}
+
+/** One key per type, so aliases (US_SSN, SSN) count as the same type. */
+export function sensitiveTypeKey(raw: string | null | undefined): string {
+  return raw ? normalizeTypeKey(raw) : '';
+}
+
+/* ---------- Review ---------- */
+
+export const REVIEW_WORDS = {
+  placeNotFound: 'place not found',
+  textFound: 'Text found',
+} as const;
+
+/**
+ * Why a person is asked, in one sentence that names the policy level when it applies (U004). The threshold is the
+ * tenant's automatic-redaction level (0..1) from the review queue; without it the sentence leaves the number out.
+ */
+export function whyAsked(reason: string | null | undefined, confidence: number, threshold: number | null | undefined): string {
+  const sure = `LexaVault is ${Math.round(confidence * 100)}% sure this is sensitive.`;
+  switch (reason) {
+    case 'LOW_CONFIDENCE':
+      return typeof threshold === 'number' && threshold > 0 && threshold <= 1
+        ? `${sure} Your policy redacts automatically from ${Math.round(threshold * 100)}%, so a person decides.`
+        : `${sure} That is below your policy’s level for automatic redaction, so a person decides.`;
+    case 'LOCATION_UNCERTAIN':
+      return 'LexaVault found this text but not its exact place on the page, so a person decides.';
+    case 'POLICY_REVIEW':
+      return `${sure} Your policy sends findings like this to a person before anything is redacted.`;
+    default:
+      return reasonText(reason);
+  }
+}
+
+/** Why a finding needs a person, in plain words. */
+export const REASON_TEXT: Record<string, string> = {
+  LOW_CONFIDENCE: 'LexaVault isn’t sure this text is sensitive.',
+  LOCATION_UNCERTAIN: 'Sensitive text was found, but its exact place on the page is unclear.',
+  POLICY_REVIEW: 'Your policy asks a person to confirm this type.',
+};
+
+export function reasonText(code: string | null | undefined): string {
+  if (!code) return 'A person needs to confirm this.';
+  return REASON_TEXT[code] ?? 'A person needs to confirm this.';
+}
+
+/* ---------- Search ---------- */
+
+export interface FieldLabel {
+  label: string;
+  primary?: boolean;
+  searchable?: boolean;
+}
+
+/** The case filter's placeholder when no field is configured, or when the field names don't fit the box (U019). */
+export const CASE_SEARCH_FALLBACK = 'Filter cases';
+
+/**
+ * The placeholder for case search, built from the configured case fields (for example "Filter by loan number or
+ * borrower name"). Field names inside a sentence are lower case (fieldNameInSentence). Two names that end in the same
+ * word say it once: "contract or member number" (U019). Falls back to "case" words when no field is configured;
+ * never a hard-coded name.
+ */
+export function caseSearchPlaceholder(fields: readonly FieldLabel[] | undefined, withActions = false): string {
+  const list = fields ?? [];
+  const primary = list.find((f) => f.primary);
+  const searchable = list.filter((f) => f.searchable && f !== primary);
+  const labels = [primary, ...searchable].filter((f): f is FieldLabel => Boolean(f && f.label.trim()))
+    .slice(0, 2)
+    .map((f) => fieldNameInSentence(f.label));
+  if (!labels.length) return withActions ? 'A case or an action…' : CASE_SEARCH_FALLBACK;
+  const subject = joinFieldNames(labels);
+  return withActions ? `${capitalizeFirst(subject)}, or an action…` : `Filter by ${subject}`;
+}
+
+/** "contract number" + "member number" → "contract or member number"; any other pair → "a or b". */
+function joinFieldNames(names: readonly string[]): string {
+  if (names.length !== 2) return names.join(' or ');
+  const first = names[0].split(/\s+/);
+  const second = names[1].split(/\s+/);
+  const shared = first.length > 1 && second.length > 1 && first[first.length - 1] === second[second.length - 1];
+  return shared ? `${first.slice(0, -1).join(' ')} or ${names[1]}` : names.join(' or ');
+}
+
+/**
+ * The case filter's placeholders, longest first, for the box to try in order (owner's U019 answer 1): the full
+ * wording ("Filter by loan number or borrower name"), then the main field alone ("Filter by loan number"), then
+ * "Filter cases". No duplicates; always ends with the fallback.
+ */
+export function caseSearchPlaceholders(fields: readonly FieldLabel[] | undefined): string[] {
+  const list = fields ?? [];
+  const primary = list.find((f) => f.primary && f.label.trim());
+  const candidates = [caseSearchPlaceholder(list), primary ? caseSearchPlaceholder([primary]) : CASE_SEARCH_FALLBACK, CASE_SEARCH_FALLBACK];
+  return candidates.filter((text, i) => candidates.indexOf(text) === i);
+}
+
+/**
+ * The first text whose measured width fits the room, otherwise the last text (fail closed: a width or room that
+ * is unknown never fits, so the result is the last, shortest text).
+ */
+export function firstThatFits(texts: readonly string[], widthOf: (text: string) => number | null, room: number | null): string {
+  const last = texts[texts.length - 1] ?? CASE_SEARCH_FALLBACK;
+  if (room === null || !Number.isFinite(room)) return last;
+  for (const text of texts.slice(0, -1)) {
+    const width = widthOf(text);
+    if (width !== null && Number.isFinite(width) && width <= room) return text;
+  }
+  return last;
+}
+
+/* ---------- Helpers ---------- */
+
+const ACRONYMS = new Set(['SSN', 'ID', 'EIN', 'ITIN', 'IBAN', 'TIN', 'VIN', 'NPI', 'ABA', 'FICO', 'SDV', 'PDF', 'API', 'URL']);
+
+/**
+ * A configured case field name as it reads inside a sentence (owner, U014 review): "Loan number" becomes
+ * "loan number", "Borrower Name" becomes "borrower name". Only plain capitalised or lower-case words are lowered;
+ * known acronyms, all-capital words and mixed-case words ("SSN", "MERS", "eNote") keep their configured spelling.
+ */
+export function fieldNameInSentence(label: string): string {
+  return label.trim().split(/(\s+)/).map((w) => {
+    if (!w.trim() || ACRONYMS.has(w.toUpperCase())) return w;
+    return /^\p{Lu}?[\p{Ll}\d'’-]*$/u.test(w) ? w.toLowerCase() : w;
+  }).join('');
+}
+
+/** The first letter in upper case and the rest as written: for a sentence that starts with a field name. */
+export function capitalizeFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** UPPER_SNAKE or Title Case to "Sentence case", keeping known acronyms. */
+export function sentenceCase(raw: string): string {
+  const words = raw.trim().split(/[_\s]+/).filter(Boolean);
+  return words.map((w, i) => {
+    if (ACRONYMS.has(w.toUpperCase())) return w.toUpperCase();
+    const lower = w.toLowerCase();
+    return i === 0 ? lower.charAt(0).toUpperCase() + lower.slice(1) : lower;
+  }).join(' ');
+}
+
+/**
+ * The heading over the sensitive types in a policy ("Sensitive types (4)"). In this product "entity" means only a
+ * legal entity (the entity switch), never a kind of sensitive data.
+ */
+export const SENSITIVE_TYPES_HEADING = 'Sensitive types';
+
+/* ---------- Columns on Cases (owner's U007 answer) ---------- */
+
+/** LexaVault's own Cases columns, by the stable key the server sends (DashboardColumnConfigurationService). */
+export const SYSTEM_COLUMN_NAMES: Record<string, string> = {
+  received: 'Received',
+  stage: 'Stage',
+  documents: 'Documents',
+  attention: 'Attention',
+  intakeSource: 'Intake source',
+  exportStatus: 'Export status',
+  lastUpdated: 'Last updated',
+  exportCycles: 'Export cycles',
+};
+
+/**
+ * The name of a Cases column. A case field keeps its configured label as it is; a LexaVault column is named from
+ * its key, and an unknown LexaVault column falls back to its server label in sentence case.
+ */
+export function dashboardColumnName(column: { key: string; label: string; kind: string }): string {
+  if (column.kind === 'IDENTIFIER') return column.label;
+  return SYSTEM_COLUMN_NAMES[column.key] ?? sentenceCase(column.label);
+}
+
+/* ---------- Cases rows and the case panel (UI task U003) ---------- */
+
+/** The next step in words, shown in each Cases row instead of the small bars. */
+export const NEXT_STEP = {
+  waitingForDocuments: 'Waiting for documents',
+  readyToSubmit: 'Ready to submit',
+  queued: 'Queued',
+  finding: 'Finding sensitive data…',
+  processingAgain: 'Processing again…',
+  waitingForReview: 'Waiting for review',
+  readyToApprove: 'Redaction done, ready to approve',
+  sent: 'Redacted and sent',
+  stopped: 'Processing stopped',
+  notAccepted: 'Not accepted at intake',
+  unknown: 'Status not recognised',
+} as const;
+
+export function findingsToReview(count: number): string {
+  return `${count} finding${count === 1 ? '' : 's'} to review`;
+}
+
+/** The one action a row offers, by kind. */
+export const ACTION_WORDS = {
+  review: 'Review',
+  approve: 'Approve',
+  retry: 'Retry',
+  continueManually: 'Continue manually',
+  processAgain: 'Process again',
+} as const;
+
+export const CASE_SECTIONS = {
+  keeping: 'Keeping and deleting',
+  details: 'Case details',
+  whatWentWrong: 'What went wrong',
+  sentTo: 'Sent to',
+} as const;
+
+/** Where a case was delivered, from the lifecycle's destination type ("sdv", "local-folder"). */
+export function destinationName(raw: string | null | undefined): string {
+  if (!raw) return 'its destination';
+  const key = raw.trim().toLowerCase();
+  if (key === 'sdv' || key.includes('secure-document-vault') || key.includes('secure_document_vault')) return 'Secure Document Vault';
+  if (key === 'local-folder' || key.includes('folder') || key.includes('filesystem')) return 'the delivery folder';
+  return sentenceCase(raw.replace(/-/g, ' '));
+}
+
+/** "2 of 3 runs left": how many more times a delivered case can be processed again. */
+export function runsLeft(used: number, maximum: number): string {
+  const left = Math.max(0, maximum - used);
+  return `${left} of ${maximum} run${maximum === 1 ? '' : 's'} left`;
+}
+
+/* ---------- Processing problems (UI task U012) ---------- */
+
+export interface ProblemReason {
+  /** The page title and the Support row, for example "Text recognition timed out". */
+  title: string;
+  /** One plain sentence for "What happened". */
+  sentence: string;
+  /** False when the code is not in the list: the screen shows "Processing problem" and the code only under Technical details. */
+  known: boolean;
+}
+
+/** Reason codes as the server records them (TechnicalFailureCode), in plain words. */
+export const PROBLEM_REASONS: Record<string, Omit<ProblemReason, 'known'>> = {
+  OCR_TIMEOUT: { title: 'Text recognition timed out', sentence: 'Text recognition didn’t finish within the allowed time.' },
+  OCR_UNAVAILABLE: { title: 'Text recognition wasn’t available', sentence: 'The text recognition service didn’t answer.' },
+  OCR_PROCESS_FAILED: { title: 'Text recognition couldn’t read a document', sentence: 'Text recognition couldn’t read the document.' },
+  AI_TIMEOUT: { title: 'AI model didn’t answer in time', sentence: 'The AI model didn’t answer within the allowed time.' },
+  MODEL_TIMEOUT: { title: 'AI model didn’t answer in time', sentence: 'The AI model didn’t answer within the allowed time.' },
+  AI_UNAVAILABLE: { title: 'AI model wasn’t available', sentence: 'The AI model didn’t answer.' },
+  AI_RATE_LIMITED: { title: 'AI model asked LexaVault to slow down', sentence: 'The AI model turned requests away for a while because too many arrived.' },
+  AI_REJECTED: { title: 'AI model’s answer couldn’t be used', sentence: 'The AI model sent an answer LexaVault couldn’t safely use.' },
+  AI_INVALID_RESPONSE: { title: 'AI model’s answer couldn’t be used', sentence: 'The AI model sent an answer LexaVault couldn’t safely use.' },
+  SDV_UNAVAILABLE: { title: 'Secure Document Vault didn’t answer', sentence: 'Secure Document Vault didn’t answer when LexaVault tried to send the case.' },
+  DELIVERY_IO: { title: 'The delivery destination couldn’t be reached', sentence: 'LexaVault couldn’t reach the place the case is sent to.' },
+  DELIVERY_DESTINATION_INVALID: { title: 'The delivery destination isn’t set up for this case', sentence: 'The place this case is sent to isn’t set up correctly for it.' },
+  STORAGE_IO: { title: 'Document storage wasn’t available', sentence: 'LexaVault’s document storage didn’t answer for a while.' },
+};
+
+export const UNKNOWN_PROBLEM: Omit<ProblemReason, 'known'> = {
+  title: 'Processing problem',
+  sentence: 'Processing stopped for a technical reason. The code is under Technical details.',
+};
+
+export function problemReason(code: string | null | undefined): ProblemReason {
+  const found = code ? PROBLEM_REASONS[code.trim().toUpperCase()] : undefined;
+  return found ? { ...found, known: true } : { ...UNKNOWN_PROBLEM, known: false };
+}
+
+/** Where in processing a problem happened (ProcessingStage), for "at text recognition". */
+export const PROCESSING_STAGE_WORDS: Record<string, string> = {
+  INTAKE: 'receiving',
+  TEXT_EXTRACTION: 'reading the text',
+  OCR: 'text recognition',
+  AI_ANALYSIS: 'AI analysis',
+  SENSITIVE_DETECTION: 'finding sensitive data',
+  DOCUMENT_PROFILE: 'recognising the document type',
+  IDENTIFIER_EXTRACTION: 'reading the case fields',
+  MANUAL_REVIEW: 'review',
+  REDACTION: 'redacting',
+  VERIFICATION: 'checking the redaction',
+  DERIVED_DOCUMENT_SPLIT: 'splitting the documents',
+  ROUTING: 'choosing where to send it',
+  DELIVERY: 'sending',
+  STORAGE: 'storing documents',
+  RETENTION: 'keeping and deleting',
+  MIGRATION_REVALIDATION: 'checking again after an update',
+  DOCUMENT_PROCESSING: 'processing',
+};
+
+export function processingStageWords(stage: string | null | undefined): string {
+  return (stage && PROCESSING_STAGE_WORDS[stage.trim().toUpperCase()]) || 'processing';
+}

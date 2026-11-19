@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * Entity switch in the newest (Case File) design (task 0009).
@@ -10,11 +11,12 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const A = { tenantId: 'a1a1a1a1-0000-4000-8000-00000000000a', name: 'Race Entity A', slug: 'race-entity-a', roles: ['DOCUMENT_SUPERVISOR'] };
-const B = { tenantId: 'b2b2b2b2-0000-4000-8000-00000000000b', name: 'Race Entity B', slug: 'race-entity-b', roles: ['REPORT_VIEWER'] };
-// Roles and capabilities differ per entity on purpose: A can take in documents, B can only see reports.
+const B = { tenantId: 'b2b2b2b2-0000-4000-8000-00000000000b', name: 'Race Entity B', slug: 'race-entity-b', roles: ['DOCUMENT_PROCESSOR'] };
+// Roles and capabilities differ per entity on purpose, with the policy's lists (U018 follow-up): in A the person is a
+// Document Supervisor and can approve delivery; in B a Document Processor, who cannot.
 const CAPABILITIES: Record<string, string[]> = {
-  [A.tenantId]: ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW'],
-  [B.tenantId]: ['DASHBOARD_ACCESS', 'REPORT_EXECUTIVE_VIEW'],
+  [A.tenantId]: capabilitiesFor(...A.roles),
+  [B.tenantId]: capabilitiesFor(...B.roles),
 };
 const CASE: Record<string, string> = { [A.tenantId]: 'A-CASE-1001', [B.tenantId]: 'B-CASE-2002' };
 
@@ -98,7 +100,7 @@ async function mockApi(page: Page, entities: Array<typeof A>): Promise<Api> {
 function packageFor(caseNumber: string, tenantId: string) {
   return {
     packageId: `${tenantId.slice(0, 8)}-0000-4000-8000-${caseNumber.replace(/\D/g, '').padStart(12, '0')}`,
-    tenantId, packageType: 'MANUAL_UPLOAD', status: 'PENDING_REVIEW', documentCount: 1,
+    tenantId, packageType: 'MANUAL_UPLOAD', status: 'PENDING_FINAL_APPROVAL', documentCount: 1,
     createdAt: '2026-11-17T12:00:00Z', updatedAt: '2026-11-17T12:00:00Z',
     businessIdentifiers: [{ key: 'contract_number', label: 'Contract Number', value: caseNumber, primary: true, searchable: true, displayable: true, displayOrder: 1 }],
   };
@@ -110,23 +112,37 @@ async function signInAndChoose(page: Page, entityName?: string) {
   if (entityName) await page.getByRole('button', { name: entityName }).click();
 }
 
-const switchControl = (page: Page) => page.getByRole('button', { name: /switch organization/i });
+// Since UI task U002 the switch lives in the account menu: the account button names the current entity, and the
+// entities are menu items in the "Entities" group, the current one checked.
+const switchControl = (page: Page) => page.getByRole('button', { name: /account menu/i });
+const accountMenu = (page: Page) => page.getByRole('menu', { name: 'Account' });
+const entityItems = (page: Page) => accountMenu(page).getByRole('group', { name: 'Entities' }).getByRole('menuitemradio');
 const workspaceNav = (page: Page) => page.getByRole('navigation', { name: 'Workspace' });
+// The row's Approve button: offered only with PACKAGE_APPROVE_DELIVERY (A's Supervisor role, not B's Processor role).
+const approveButtons = (page: Page) => page.getByRole('button', { name: /^Approve/ });
 
 async function switchTo(page: Page, entityName: string) {
   await switchControl(page).click();
-  await page.getByRole('dialog', { name: /switch organization/i }).getByRole('button', { name: new RegExp(entityName) }).click();
+  await entityItems(page).filter({ hasText: entityName }).click();
 }
 
 /**
- * Samples the screen every 20 ms from the moment of the switch until the new organization's data is shown,
- * and fails if the previous organization's data is visible at any moment in between. (Without the per-mount
+ * Samples the screen every 20 ms from the moment the switch takes effect until the new organization's data is
+ * shown, and fails if the previous organization's data is visible at any moment in between. (Without the per-mount
  * data cache in CaseFileApp, the previous organization's cached case list briefly showed under the new name.)
+ *
+ * The switch takes effect when the server has accepted the new organization: until then the app keeps the previous
+ * organization's screen on purpose (a refused choice changes nothing), with the account menu still open. Samples
+ * taken while the menu is open are not judged. The menu is checked before the screen is read, so a reading taken
+ * while it was open is never judged as after the switch. (UI task U001: sampling from the click made this test
+ * fail whenever the server's answer was slower than the first sample, 5 runs in 10 before U001.)
  */
 async function expectNoStaleDataDuringSwitch(page: Page, staleText: string, freshText: string) {
+  const panel = accountMenu(page);
   for (let sample = 0; sample < 250; sample++) {
+    const switching = (await panel.count()) > 0;
     const text = await page.locator('body').innerText().catch(() => '');
-    expect(text, `previous organization's data (${staleText}) shown during the switch`).not.toContain(staleText);
+    if (!switching) expect(text, `previous organization's data (${staleText}) shown during the switch`).not.toContain(staleText);
     if (text.includes(freshText)) return;
     await page.waitForTimeout(20);
   }
@@ -139,20 +155,19 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await signInAndChoose(page, 'Race Entity A');
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(workspaceNav(page).getByRole('link', { name: 'Intake' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve A-CASE-1001' })).toBeVisible();
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
 
   // The list is read fresh from the server and marks the current entity.
   await switchControl(page).click();
-  const menu = page.getByRole('dialog', { name: /switch organization/i });
-  await expect(menu.getByRole('button', { name: /Race Entity A/ })).toHaveAttribute('aria-current', 'true');
-  await menu.getByRole('button', { name: /Race Entity B/ }).click();
+  await expect(entityItems(page).filter({ hasText: 'Race Entity A' })).toHaveAttribute('aria-checked', 'true');
+  await expect(entityItems(page).filter({ hasText: 'Race Entity B' })).toHaveAttribute('aria-checked', 'false');
+  await entityItems(page).filter({ hasText: 'Race Entity B' }).click();
   await expectNoStaleDataDuringSwitch(page, 'A-CASE-1001', 'B-CASE-2002');
 
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
   await expect(page.getByText('A-CASE-1001')).toHaveCount(0);
-  await expect(workspaceNav(page).getByRole('link', { name: 'Reports' })).toBeVisible();
-  await expect(workspaceNav(page).getByRole('link', { name: 'Intake' })).toHaveCount(0);
+  await expect(approveButtons(page)).toHaveCount(0);
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity B/);
   await expect(page).toHaveURL(/localhost:15175\/$/);
   expect(await page.evaluate(() => sessionStorage.getItem('lexavault.oidc.selected-tenant'))).toBe(B.tenantId);
@@ -162,7 +177,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await expectNoStaleDataDuringSwitch(page, 'B-CASE-2002', 'A-CASE-1001');
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
   await expect(page.getByText('B-CASE-2002')).toHaveCount(0);
-  await expect(workspaceNav(page).getByRole('link', { name: 'Intake' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Approve A-CASE-1001' })).toBeVisible();
 });
 
 test('a request still in flight during the switch is discarded, not shown', async ({ page }) => {
@@ -190,8 +205,25 @@ test('one entity: no switch control, the name is plain text', async ({ page }) =
   await signInAndChoose(page);
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(page.getByText('Race Entity A').first()).toBeVisible();
-  await expect(switchControl(page)).toHaveCount(0);
+  await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
+  await switchControl(page).click();
+  await expect(accountMenu(page)).toBeVisible();
+  await expect(accountMenu(page).getByText('Race Entity A')).toBeVisible();
+  await expect(accountMenu(page).getByRole('group', { name: 'Entities' })).toHaveCount(0);
+  await expect(page.getByRole('menuitemradio', { name: /Race Entity/ })).toHaveCount(0);
+});
+
+test('the account menu has no test-role picker outside local security mode', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, [A, B]);
+  await signInAndChoose(page, 'Race Entity A');
+  await switchControl(page).click();
+  await expect(accountMenu(page)).toBeVisible();
+  await expect(accountMenu(page).getByRole('group', { name: 'Theme' })).toBeVisible();
+  await expect(accountMenu(page).getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
+  await expect(accountMenu(page).getByRole('group', { name: 'Test role' })).toHaveCount(0);
+  await expect(page.getByRole('menuitemradio', { name: 'Document Supervisor' })).toHaveCount(0);
+  await expect(page.getByLabel('Local test role')).toHaveCount(0);
 });
 
 test('a refused choice leaves the person on the current entity with a plain message', async ({ page }) => {
@@ -213,7 +245,7 @@ test('unsaved work on screen asks for confirmation before switching', async ({ p
   await mockIdentityProvider(page);
   await mockApi(page, [A, B]);
   await signInAndChoose(page, 'Race Entity A');
-  await workspaceNav(page).getByRole('link', { name: 'Intake' }).click();
+  await workspaceNav(page).getByRole('link', { name: 'New case' }).click();
   await page.locator('input[type="file"]').setInputFiles({ name: 'unsent.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') });
   await expect(page.getByText('unsent.pdf')).toBeVisible();
 
@@ -238,15 +270,21 @@ test('the switch works by keyboard', async ({ page }) => {
 
   await switchControl(page).focus();
   await page.keyboard.press('Enter');
-  const menu = page.getByRole('dialog', { name: /switch organization/i });
+  const menu = accountMenu(page);
   await expect(menu).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(switchControl(page)).toBeFocused();
 
+  // Arrow keys move between the menu items; Enter on an entity switches to it.
   await page.keyboard.press('Enter');
-  await expect(menu.getByRole('button', { name: /Race Entity B/ })).toBeVisible();
-  await menu.getByRole('button', { name: /Race Entity B/ }).focus();
+  const b = entityItems(page).filter({ hasText: 'Race Entity B' });
+  await expect(b).toBeVisible();
+  for (let step = 0; step < 6; step++) {
+    if (await b.evaluate((el) => el === document.activeElement)) break;
+    await page.keyboard.press('ArrowDown');
+  }
+  await expect(b).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
 });

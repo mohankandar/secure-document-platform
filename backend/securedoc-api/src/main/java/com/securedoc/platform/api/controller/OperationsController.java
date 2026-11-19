@@ -154,6 +154,7 @@ public class OperationsController {
                 "Delivery SLA breaches," + report.serviceLevel().deliveryBreaches() + "\r\n" +
                 "Straight-through target percent," + report.serviceLevel().straightThroughTargetPercent() + "%\r\n" +
                 "Review wait target minutes," + report.serviceLevel().reviewWaitTargetMinutes() + "\r\n" +
+                "Review wait target percent," + report.serviceLevel().reviewWaitTargetPercent() + "%\r\n" +
                 "Review wait within target rate," + report.serviceLevel().reviewWithinTargetRate() + "%\r\n";
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.REPORT_CSV_EXPORTED,
                 "OperationalReport", report.period().from() + "/" + report.period().to(),
@@ -223,7 +224,7 @@ public class OperationsController {
                         report.serviceLevel().deliveryWithinTargetRate(), report.serviceLevel().deliveryEligible(),
                         report.serviceLevel().deliveryBreaches(), report.serviceLevel().straightThroughTargetPercent(),
                         report.serviceLevel().straightThroughActualPercent(), report.serviceLevel().reviewWaitTargetMinutes(),
-                        report.serviceLevel().reviewWithinTargetRate(), report.serviceLevel().reviewEligible(),
+                        report.serviceLevel().reviewWaitTargetPercent(), report.serviceLevel().reviewWithinTargetRate(), report.serviceLevel().reviewEligible(),
                         report.serviceLevel().reviewBreaches()),
                 includeBusiness ? report.dimensions().stream().map(d -> new OperationalReportsResponse.DimensionBreakdown(
                         d.key(), d.label(), d.values().stream().map(v -> new OperationalReportsResponse.DimensionValue(

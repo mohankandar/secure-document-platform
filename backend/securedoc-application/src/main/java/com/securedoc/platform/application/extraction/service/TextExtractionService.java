@@ -59,6 +59,8 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
     private static final Logger log = LoggerFactory.getLogger(TextExtractionService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
     private static final String TEXT_MIME_TYPE = "text/plain";
+    /** Joins page texts in the EXTRACTED_TEXT artifact. Finding offsets are relative to each page. */
+    public static final String PAGE_SEPARATOR = "\n\n--- Page Break ---\n\n";
     private static final String NO_READABLE_TEXT_REASON = "No readable text could be normalized from a non-blank document";
 
     private final DocumentRepository documentRepository;
@@ -169,7 +171,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
         String fullText = extractionOutput.pages().stream()
                 .map(PageText::text)
-                .reduce((a, b) -> a + "\n\n--- Page Break ---\n\n" + b)
+                .reduce((a, b) -> a + PAGE_SEPARATOR + b)
                 .orElse("");
 
         byte[] textBytes = fullText.getBytes(StandardCharsets.UTF_8);

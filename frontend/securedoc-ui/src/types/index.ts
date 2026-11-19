@@ -51,6 +51,8 @@ export interface IntelligenceBundleConfiguration {
   validationRulesVersion: string;
   thresholdsVersion: string;
   description?: string | null;
+  /** When the version was released (promoted). */
+  promotedAt?: string | null;
 }
 
 export interface DocumentIntelligenceConfiguration {
@@ -105,6 +107,8 @@ export interface ReportingConfiguration {
   deliveryTargetPercent: number;
   straightThroughTargetPercent: number;
   reviewWaitTargetMinutes: number;
+  /** 0–100: pick up reviews within reviewWaitTargetMinutes for at least this share of reviews. */
+  reviewWaitTargetPercent: number;
 }
 
 export interface BusinessAdminConfiguration {
@@ -173,6 +177,9 @@ export interface DerivedDelivery {
   retryable: boolean;
   destinationReference?: string;
   deliveredAt?: string;
+  /** Only in the attention list: the case's main ID (for example the loan number), when the case has one. */
+  primaryIdentifierLabel?: string | null;
+  primaryIdentifierValue?: string | null;
 }
 
 export interface PackageSummary {
@@ -284,12 +291,22 @@ export interface FocusedReviewItem {
   hasBoundingBox: boolean;
   boundingBox?: ReviewBoundingBox | null;
   reason: 'LOW_CONFIDENCE' | 'LOCATION_UNCERTAIN' | 'POLICY_REVIEW' | string;
+  /** The text found and the same line around it. Sensitive: show in full only in the decision panel, masked elsewhere; never log or store it. Absent when it cannot be read safely. */
+  foundText?: ReviewFoundText | null;
 }
 
+
+export interface ReviewFoundText {
+  text: string;
+  before: string;
+  after: string;
+}
 
 export interface FocusedReviewQueue {
   items: FocusedReviewItem[];
   totalItems: number;
+  /** The policy's automatic-redaction level (0..1), for "why a person is asked". */
+  autoRedactThreshold?: number | null;
 }
 
 export interface ReviewPagePreview {
@@ -513,6 +530,7 @@ export interface OperationalReports {
     straightThroughTargetPercent: number;
     straightThroughActualPercent: number;
     reviewWaitTargetMinutes: number;
+    reviewWaitTargetPercent: number;
     reviewWithinTargetRate: number;
     reviewEligible: number;
     reviewBreaches: number;
@@ -594,6 +612,12 @@ export interface IntegrationConnectionRequest {
   enabled?: boolean;
 }
 
+
+/** Answer of a test before saving: only whether it works and, if not, a fixed reason code. */
+export interface DraftConnectionTestResult {
+  works: boolean;
+  reasonCode: string | null;
+}
 
 export interface SdvConnectionTestResult {
   connectionId: string;

@@ -139,7 +139,7 @@ public class BusinessAdminController {
         service.updateReportingConfiguration(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), body.enabledDimensionDefinitionIds(),
                 body.deliveryTargetMinutes(), body.deliveryTargetPercent(),
-                body.straightThroughTargetPercent(), body.reviewWaitTargetMinutes());
+                body.straightThroughTargetPercent(), body.reviewWaitTargetMinutes(), body.reviewWaitTargetPercent());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -222,13 +222,14 @@ public class BusinessAdminController {
                         new BusinessAdminConfigurationResponse.IntelligenceBundleResponse(
                                 bundle.version(), bundle.status().name(), bundle.modelVersion(), bundle.promptVersion(), bundle.detectorVersion(),
                                 bundle.ocrRulesVersion(), bundle.profileVersion(), bundle.validationRulesVersion(), bundle.thresholdsVersion(),
-                                bundle.description())).toList());
+                                bundle.description(), bundle.promotedAt())).toList());
         var reporting = configuration.reportingConfiguration();
         var reportingResponse = new BusinessAdminConfigurationResponse.ReportingConfigurationResponse(
                 reporting.dimensions().stream().map(d -> new BusinessAdminConfigurationResponse.ReportingDimensionResponse(
                         d.definitionId(), d.key(), d.label(), d.enabled(), d.displayOrder())).toList(),
                 reporting.deliveryTargetMinutes(), reporting.deliveryTargetPercent(),
-                reporting.straightThroughTargetPercent(), reporting.reviewWaitTargetMinutes());
+                reporting.straightThroughTargetPercent(), reporting.reviewWaitTargetMinutes(),
+                reporting.reviewWaitTargetPercent());
         return new BusinessAdminConfigurationResponse(identifiers, dashboardColumns, policyResponse, lifecycleResponse, intelligenceResponse, reportingResponse);
     }
 }

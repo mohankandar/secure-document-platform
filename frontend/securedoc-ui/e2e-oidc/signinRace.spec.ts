@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * Regression tests for the single-entity sign-in race (report 0007, task 0008).
@@ -15,8 +16,9 @@ const ENTITY_B = { tenantId: 'b2b2b2b2-0000-4000-8000-00000000000b', name: 'Race
 
 function fakeJwt(): string {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  // Unsigned test token: the browser only reads exp; the mocked API does not verify it.
-  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ sub: 'signin-race-user', exp: Math.floor(Date.now() / 1000) + 3600 })}.signature`;
+  // Unsigned test token: the browser reads exp, and the email only for the no-access screen (U013); the mocked API
+  // does not verify it.
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ sub: 'signin-race-user', email: 'race.user@example.test', exp: Math.floor(Date.now() / 1000) + 3600 })}.signature`;
 }
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
@@ -64,7 +66,7 @@ async function mockApi(page: Page, entities: typeof ENTITY_A[]): Promise<ApiLog>
       const entity = entities.find((candidate) => candidate.tenantId === selected) ?? (entities.length === 1 ? entities[0] : undefined);
       if (!entity) return json({ code: 'SECURITY_CONTEXT_INVALID' }, 403);
       return json({ username: 'signin.race', roles: entity.roles, tenantName: entity.name, tenantSlug: entity.slug, authenticationMode: 'OIDC',
-        capabilities: ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW'] });
+        capabilities: capabilitiesFor(...entity.roles) });
     }
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     if (url.pathname.startsWith('/api/v1/review-items')) return json({ items: [], totalItems: 0 });
@@ -86,7 +88,7 @@ test('single-entity user opens the workspace on that entity under StrictMode', a
   await signIn(page);
 
   await expect(page.getByText('Race Entity A').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /account menu/i })).toBeVisible();
   await expect(page.getByText('Sign-in could not be completed')).toHaveCount(0);
   // The workspace was verified for the one authorized entity.
   expect(api.meSelections).toContain(ENTITY_A.tenantId);
@@ -104,7 +106,7 @@ test('two-entity user still gets the chooser', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Race Entity B' })).toBeVisible();
   await page.getByRole('button', { name: 'Race Entity B' }).click();
   await expect(page.getByText('Race Entity B').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /account menu/i })).toBeVisible();
 });
 
 test('no-entity user still gets the refusal', async ({ page }) => {
@@ -113,8 +115,31 @@ test('no-entity user still gets the refusal', async ({ page }) => {
 
   await signIn(page);
 
-  await expect(page.getByText('Sign-in could not be completed. Please try again.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+  // UI task U013 (owner's decision): no organization is a refusal like a 403 from /me. It shows the Case File
+  // no-access screen and keeps the session, so Sign out can end it at the identity provider. Before U013 this
+  // test expected the generic "Sign-in could not be completed" message and a cleared access token.
+  await expect(page.getByRole('heading', { name: "You don't have access to anything in LexaVault yet" })).toBeVisible();
+  await expect(page.getByText("You're signed in as race.user@example.test, but your account has no LexaVault role.")).toBeVisible();
+  await expect(page.getByText('Sign-in could not be completed')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /account menu/i })).toHaveCount(0);
   expect(api.meSelections).toHaveLength(0);
-  expect(await page.evaluate(() => sessionStorage.getItem('securedoc.oidc.access-token'))).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem('securedoc.oidc.access-token'))).not.toBeNull();
+
+  const logout = page.waitForRequest((r) => r.url().includes('/protocol/openid-connect/logout'));
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  const url = new URL((await logout).url());
+  expect(url.searchParams.get('id_token_hint')).toBeTruthy();
+});
+
+test('a refused /me shows the same no-access screen', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, [ENTITY_A]);
+  // Registered last, so it answers /me before the shared mock: the server refuses this account.
+  await page.route('**/api/v1/me', (route) => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ errorCode: 'ACCESS_DENIED', message: 'Access denied' }) }));
+
+  await signIn(page);
+
+  await expect(page.getByRole('heading', { name: "You don't have access to anything in LexaVault yet" })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /account menu/i })).toHaveCount(0);
 });

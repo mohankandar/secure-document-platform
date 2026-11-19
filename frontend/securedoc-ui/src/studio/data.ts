@@ -1,8 +1,10 @@
 import useSWR from 'swr';
 import { apiClient } from '../api/client';
-import { setCurrentCapabilities } from '../api/config';
 import { scanBridgeClient } from '../api/scanBridgeClient';
-import type { BusinessIdentifier, FocusedReviewItem, PackageLifecycleSummary as PackageLifecycle, PackageSummary } from '../types';
+import type { BusinessIdentifier, FocusedReviewItem, FocusedReviewQueue, IdentifierDefinition, PackageDetail, PackageLifecycleSummary as PackageLifecycle, PackageSummary } from '../types';
+import { checked, isArrayOf, isRecord } from './failure';
+import { canContinueManually } from './support/supportRules';
+import { ACTION_WORDS, STAGE_NAMES } from './words';
 
 export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
 
@@ -23,19 +25,13 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
   COMPLETED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
   EXPORTED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
   DELIVERED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
-  FAILED: { stage: 'stopped', label: 'Technical attention', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
+  FAILED: { stage: 'stopped', label: 'Stopped', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
   REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'The source was rejected and will not be processed.' },
 };
 
-export const STAGES: { key: StageKey; label: string }[] = [
-  { key: 'intake', label: 'Intake' },
-  { key: 'redacting', label: 'Redacting' },
-  { key: 'review', label: 'Review' },
-  { key: 'approval', label: 'Approval' },
-  { key: 'delivered', label: 'Delivered' },
-  { key: 'stopped', label: 'Stopped' },
-  { key: 'unknown', label: 'Unrecognized' },
-];
+export const STAGES: { key: StageKey; label: string }[] = (
+  ['intake', 'redacting', 'review', 'approval', 'delivered', 'stopped', 'unknown'] as StageKey[]
+).map((key) => ({ key, label: STAGE_NAMES[key] }));
 
 export const LIFECYCLE: StageKey[] = ['intake', 'redacting', 'review', 'approval', 'delivered'];
 
@@ -117,23 +113,15 @@ export function caseActions(status: string, caps: string[], life: PackageLifecyc
       break;
     case 'FAILED':
       if (has(CAP.technicalRetry)) actions.push({ kind: 'technical-retry', label: 'Retry processing', primary: true });
-      if (has(CAP.review)) actions.push({ kind: 'manual-fallback', label: 'Continue manually', primary: !has(CAP.technicalRetry) });
+      if (canContinueManually(caps)) actions.push({ kind: 'manual-fallback', label: ACTION_WORDS.continueManually, primary: !has(CAP.technicalRetry) });
       break;
     case 'COMPLETED':
-      if (has(CAP.reprocess) && life?.canReprocess) actions.push({ kind: 'reprocess', label: 'Reprocess retained original', primary: false });
+      if (has(CAP.reprocess) && life?.canReprocess) actions.push({ kind: 'reprocess', label: ACTION_WORDS.processAgain, primary: false });
       break;
     default:
       break;
   }
   return actions;
-}
-
-/** Redacted download is offered only when the artifact still exists and delivery has produced it. */
-export function redactedArtifactAvailable(status: string, life: PackageLifecycle | undefined, docStatus: string, now = Date.now()): boolean {
-  if (!life || !['COMPLETED', 'EXPORTED', 'DELIVERED'].includes(status)) return false;
-  if (docStatus === 'FAILED' || life.redactedPurgedAt || life.purgedAt) return false;
-  if (life.redactedDeleteAt && new Date(life.redactedDeleteAt).getTime() <= now) return false;
-  return life.successfulExportCycles > 0;
 }
 
 /** Production treats SUBMITTED/PROCESSING after a prior export as a reprocessing cycle. */
@@ -157,12 +145,6 @@ export function humanize(token: string): string {
     .map((w) => (ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
     .join(' ');
 }
-
-export const REASON_COPY: Record<string, string> = {
-  LOW_CONFIDENCE: 'The model is unsure this text is sensitive.',
-  LOCATION_UNCERTAIN: 'Sensitive text found, but its exact position is unclear.',
-  POLICY_REVIEW: 'Your policy requires a person to confirm this type.',
-};
 
 export function relativeTime(iso: string, now = Date.now()): string {
   const diff = Math.round((now - new Date(iso).getTime()) / 1000);
@@ -192,45 +174,70 @@ export function errorMessage(error: unknown, fallback = 'Something went wrong.')
 
 /* ---------- SWR hooks ---------- */
 
-export function useMe() {
-  return useSWR('me', async () => {
-    const me = await apiClient.getCurrentUser();
-    setCurrentCapabilities(me.capabilities);
-    return me;
-  }, { revalidateOnFocus: false });
-}
+/* Every hook checks the shape of the answer: an answer this screen does not understand is an error
+   (shown as a "couldn't load" card), never data that crashes the screen. */
 
 export function usePackages(enabled: boolean) {
-  return useSWR(enabled ? 'packages' : null, () => apiClient.listPackages(), { refreshInterval: 4000 });
+  return useSWR(enabled ? 'packages' : null,
+    () => checked('GET /packages', apiClient.listPackages(), isArrayOf((p) => isRecord(p) && typeof p.packageId === 'string' && Array.isArray(p.businessIdentifiers))),
+    { refreshInterval: 4000 });
 }
 
 export function usePackage(packageId: string | undefined) {
-  return useSWR(packageId ? ['package', packageId] : null, () => apiClient.getPackage(packageId as string), { refreshInterval: 3000 });
+  return useSWR(packageId ? ['package', packageId] : null,
+    () => checked<PackageDetail>(`GET /packages/${packageId}`, apiClient.getPackage(packageId as string), (v) => isRecord(v) && typeof v.packageId === 'string'),
+    { refreshInterval: 3000 });
 }
 
 export function usePackageLifecycle(packageId: string | undefined, enabled: boolean) {
-  return useSWR(packageId && enabled ? ['lifecycle', packageId] : null, () => apiClient.getPackageLifecycle(packageId as string), { refreshInterval: 5000 });
+  return useSWR(packageId && enabled ? ['lifecycle', packageId] : null,
+    () => checked(`GET /packages/${packageId}/lifecycle`, apiClient.getPackageLifecycle(packageId as string),
+      (v) => isRecord(v) && typeof v.successfulExportCycles === 'number' && typeof v.maximumExportCycles === 'number'),
+    { refreshInterval: 5000 });
 }
 
 /** Production only loads derived deliveries for users who can approve delivery. */
 export function useDerivedDeliveries(packageId: string | undefined, enabled: boolean) {
-  return useSWR(packageId && enabled ? ['derived-deliveries', packageId] : null, () => apiClient.listDerivedDeliveries(packageId as string), { refreshInterval: 8000 });
+  return useSWR(packageId && enabled ? ['derived-deliveries', packageId] : null,
+    () => checked(`GET /packages/${packageId}/derived-deliveries`, apiClient.listDerivedDeliveries(packageId as string), isArrayOf(isRecord)),
+    { refreshInterval: 8000 });
 }
 
 export function useTechnicalException(packageId: string | undefined, enabled: boolean) {
-  return useSWR(packageId && enabled ? ['technical-exception', packageId] : null, () => apiClient.getTechnicalException(packageId as string), { revalidateOnFocus: false, shouldRetryOnError: false });
+  return useSWR(packageId && enabled ? ['technical-exception', packageId] : null,
+    () => checked(`GET /technical-exceptions/${packageId}`, apiClient.getTechnicalException(packageId as string), (v) => isRecord(v) && typeof v.explanation === 'string'),
+    { revalidateOnFocus: false, shouldRetryOnError: false });
 }
 
 export function useReviewQueue(enabled: boolean) {
-  return useSWR(enabled ? 'review-queue' : null, () => apiClient.listReviewItems(500), { refreshInterval: 5000 });
+  return useSWR(enabled ? 'review-queue' : null,
+    () => checked<FocusedReviewQueue>('GET /review-items', apiClient.listReviewItems(500), (v) => isRecord(v) && Array.isArray(v.items)),
+    { refreshInterval: 5000 });
 }
 
-export function useIdentifierDefinitions() {
-  return useSWR('identifier-definitions', () => apiClient.listIdentifierDefinitions(), { revalidateOnFocus: false });
+/** The field definitions need DOCUMENT_INTAKE; pass enabled=false for people without it. */
+export function useIdentifierDefinitions(enabled = true) {
+  return useSWR(enabled ? 'identifier-definitions' : null,
+    () => checked<IdentifierDefinition[]>('GET /intake/identifier-definitions', apiClient.listIdentifierDefinitions(), isArrayOf((d) => isRecord(d) && typeof d.label === 'string')),
+    { revalidateOnFocus: false });
 }
 
 export function useScannerStatus(enabled: boolean) {
   return useSWR(enabled ? 'scanner-status' : null, () => scanBridgeClient.getScannerStatus(), { refreshInterval: 5000 });
+}
+
+/**
+ * The configured case fields, for labels such as search placeholders: the definitions when the person may read
+ * them, otherwise the labels the cases themselves carry. Never a hard-coded field name.
+ */
+export function useCaseFields(caps: string[], packages: PackageSummary[] | undefined): { label: string; primary: boolean; searchable: boolean }[] {
+  const { data: definitions } = useIdentifierDefinitions(caps.includes(CAP.intake));
+  if (definitions?.length) return definitions;
+  const seen = new Map<string, { label: string; primary: boolean; searchable: boolean }>();
+  for (const pkg of packages ?? []) {
+    for (const id of pkg.businessIdentifiers) if (!seen.has(id.label)) seen.set(id.label, { label: id.label, primary: id.primary, searchable: id.searchable });
+  }
+  return [...seen.values()];
 }
 
 export function openFindingsByPackage(items: FocusedReviewItem[] | undefined): Map<string, FocusedReviewItem[]> {
