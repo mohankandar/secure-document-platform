@@ -144,7 +144,8 @@ test('IT Administrator: services and the watched folder in plain words, no sub-s
   await expect(services.getByRole('button', { name: 'Run health checks' })).toHaveCount(0);
   const folder = page.getByRole('region', { name: 'Watched folder' });
   await expect(folder.getByText('C:\\LexaVault\\inbound · checked every minute')).toBeVisible();
-  await expect(folder.locator('.cf-ad-conn-status')).toHaveText('Working · checked 1 min ago · 2 accepted, 1 waiting for its READY file');
+  await expect(folder.locator('.cf-ad-pill')).toHaveText('Working · checked 1 min ago');
+  await expect(folder.getByText(/^2 accepted, 1 waiting for its READY file\. Scan now/)).toBeVisible();
   await expect(page.getByText('Technical details')).toHaveCount(0);
   const text = await mainText(page.locator('.cf-ad-content'));
   expect(text).not.toMatch(/Slow|fencing|lease|node-a|HEALTHY|DEGRADED|Multi-node|Resilience|dependenc/i);

@@ -102,7 +102,7 @@ export default function StorageSection() {
             <p>Temporary space used while documents are redacted. Delivered copies go to SDV, not here.</p>
           </div>
           <div className="cf-ad-inline-actions">
-            <span className="cf-ad-tag" data-tone={readiness.ready ? undefined : 'danger'}>{readiness.title}</span>
+            <span className="cf-ad-pill" data-tone={readiness.ready ? 'ok' : 'danger'}><span className="cf-ad-health" data-h={readiness.ready ? 'ok' : 'danger'} aria-hidden="true" />{readiness.title}</span>
             <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy || isValidating} onClick={() => mutate()}>Refresh</button>
           </div>
         </header>
@@ -133,7 +133,7 @@ export default function StorageSection() {
                       <td>
                         {!retired && (
                           <div className="cf-ad-conn-actions">
-                            <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!!busy}
+                            <button type="button" className="cf-btn" data-size="sm" disabled={!!busy}
                               onClick={() => void run(`test:${p.id}`, () => apiClient.testProcessingStorageProvider(p.id), `${p.name} tested from this server. Other servers report within a few minutes.`)}>
                               {busy === `test:${p.id}` && <Spinner label="Testing" />}Test
                             </button>
@@ -144,7 +144,7 @@ export default function StorageSection() {
                               </button>
                             )}
                             {!assignedIds.has(p.id) && (
-                              <button type="button" className="cf-btn" data-variant="danger" data-size="sm" disabled={!!busy}
+                              <button type="button" className="cf-btn" data-size="sm" disabled={!!busy}
                                 onClick={() => { setPendingError(null); setPending({ kind: 'retire', provider: p }); }}>
                                 Stop using…
                               </button>
@@ -195,7 +195,7 @@ export default function StorageSection() {
           <p className="cf-ad-hint">There are no customers yet.</p>
         ) : (
           <>
-            <div className="cf-ad-toolbar">
+            <div className="cf-ad-toolbar cf-ad-assign">
               <div className="cf-field">
                 <label htmlFor={tenantSelectId}><span>Customer</span></label>
                 <select id={tenantSelectId} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
@@ -210,7 +210,7 @@ export default function StorageSection() {
                   {usable.map((p) => { const ok = storageValidated(o, p.id); return <option key={p.id} value={p.id} disabled={!ok}>{p.name}{ok ? '' : ' (test it first)'}</option>; })}
                 </select>
               </div>
-              <button type="button" className="cf-btn" data-size="sm" disabled={!!busy || !tenantId || !overrideProviderId || !storageValidated(o, overrideProviderId)} onClick={applyOverride}>
+              <button type="button" className="cf-btn" disabled={!!busy || !tenantId || !overrideProviderId || !storageValidated(o, overrideProviderId)} onClick={applyOverride}>
                 {busy === `tenant:${tenantId}` && <Spinner label="Applying" />}Apply
               </button>
             </div>
@@ -232,9 +232,8 @@ export default function StorageSection() {
             )}
           </>
         )}
-      </section>
 
-      <details className="cf-disclosure">
+        <details className="cf-disclosure">
         <summary>Technical details</summary>
         <div className="cf-ad-stack">
           <dl className="cf-ad-facts cf-ad-facts-compact">
@@ -263,7 +262,8 @@ export default function StorageSection() {
             </table>
           </div>
         </div>
-      </details>
+        </details>
+      </section>
 
       <ConfirmDialog
         open={!!pending}

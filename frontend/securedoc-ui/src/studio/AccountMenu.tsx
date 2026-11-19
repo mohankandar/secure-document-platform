@@ -4,6 +4,7 @@ import type { CurrentUser, TenantSwitchActions } from '../types';
 import { ROLE_OPTIONS } from '../security/uiAuthorization';
 import { useEntitySwitch } from './EntitySwitch';
 import { useThemePreference, type ThemePreference } from './theme';
+import { initials } from './userName';
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -241,11 +242,6 @@ export function displayName(username: string): string {
   const parts = local.split(/[._-]+/).filter(Boolean);
   if (parts.length >= 2) return `${cap(parts[0])}. ${cap(parts[parts.length - 1])}`.replace(/^(\w)\w*\./, '$1.');
   return cap(local);
-}
-
-export function initials(username: string): string {
-  const parts = (username.split('@')[0] ?? '').split(/[._-]+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || 'U';
 }
 
 function cap(word: string): string {

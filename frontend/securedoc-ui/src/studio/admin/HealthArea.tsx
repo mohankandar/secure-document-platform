@@ -26,7 +26,7 @@ export default function HealthArea({ canOperate }: { canOperate: boolean }) {
     <div className="cf-ad-stack">
       {canOperate && (
         <div className="cf-ad-subnav">
-          <div className="cf-segment" role="group" aria-label="Platform operations sections">
+          <div className="cf-ad-subtabs" role="group" aria-label="Platform operations sections">
             {SECTIONS.map(([key, label]) => (
               <button key={key} type="button" aria-pressed={section === key} onClick={() => setParams(key === 'overview' ? {} : { section: key }, { replace: true })}>
                 {label}
@@ -81,17 +81,15 @@ function Overview({ canOperate }: { canOperate: boolean }) {
             {canOperate && <button type="button" className="cf-btn" data-size="sm" onClick={check} disabled={checking}>{checking && <Spinner label="Checking" />}Run health checks</button>}
           </div>
         </header>
-        <ul className="cf-ad-conns">
+        <ul className="cf-ad-services">
           {data.providers.map((p) => {
             const s = serviceStatus(p.status);
             const product = serviceProduct(p);
             return (
-              <li key={p.key} className="cf-ad-conn">
+              <li key={p.key} className="cf-ad-service">
                 <span className="cf-ad-health" data-h={s.tone} aria-hidden="true" />
-                <div className="cf-ad-conn-main">
-                  <div className="cf-ad-conn-name">{serviceName(p)}</div>
-                  {product && <div className="cf-ad-conn-meta"><span>{product}</span></div>}
-                </div>
+                <span className="cf-ad-service-name">{serviceName(p)}</span>
+                {product && <span className="cf-ad-service-product">{product}</span>}
                 <span className="cf-ad-status" data-tone={s.tone}>{[s.word, ...s.rest].join(' · ')}</span>
               </li>
             );
@@ -123,16 +121,12 @@ function Overview({ canOperate }: { canOperate: boolean }) {
         <header className="cf-ad-card-head">
           <div>
             <h2 id="cf-pl-wf">Watched folder</h2>
-            <p>Scan now and the folder's settings are on the Integrations tab, for the IT Administrator.</p>
+            {wf.rootPath && <p>{wf.rootPath}{wf.enabled && wf.schedulingEnabled ? ` · checked ${intervalText(wf.scanIntervalMs)}` : ''}</p>}
           </div>
+          {/* Canvas .st2: the folder's state as a soft pill at the top right; the counts go in the line below. */}
+          <span className="cf-ad-pill" data-tone={folder.tone}><span className="cf-ad-health" data-h={folder.tone} aria-hidden="true" />{[folder.word, ...folder.rest.slice(0, 1)].join(' · ')}</span>
         </header>
-        <div className="cf-ad-conn">
-          <span className="cf-ad-health" data-h={folder.tone} aria-hidden="true" />
-          <div className="cf-ad-conn-main">
-            {wf.rootPath && <div className="cf-ad-conn-endpoint cf-mono">{wf.rootPath}{wf.enabled && wf.schedulingEnabled ? ` · checked ${intervalText(wf.scanIntervalMs)}` : ''}</div>}
-            <div className="cf-ad-conn-status"><span data-tone={folder.tone}>{folder.word}</span>{folder.rest.length > 0 && ` · ${folder.rest.join(' · ')}`}</div>
-          </div>
-        </div>
+        <p className="cf-ad-hint">{folder.rest.length > 1 && `${folder.rest.slice(1).join(' · ')}. `}Scan now and the folder's settings are on the Integrations tab, for the IT Administrator.</p>
         {canOperate && (
           <details className="cf-disclosure">
             <summary>Technical details</summary>

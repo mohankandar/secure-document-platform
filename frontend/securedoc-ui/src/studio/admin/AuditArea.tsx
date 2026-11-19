@@ -158,7 +158,7 @@ export default function AuditArea() {
   const routineNote = !applied.includeRoutine && applied.action !== ROUTINE_ACTION ? ' Routine folder checks that found nothing are left out.' : '';
 
   return (
-    <section className="cf-ad-card" aria-label="Audit records" aria-busy={isValidating || undefined}>
+    <section className="cf-ad-audit" aria-label="Audit records" aria-busy={isValidating || undefined}>
 
       <div className="cf-ad-audit-bar">
         <div className="cf-segment cf-ad-audit-cats" role="radiogroup" aria-label="Type">
@@ -261,7 +261,7 @@ export default function AuditArea() {
                       </td>
                       <td>{personName(r.actorId)}</td>
                       <td>{c ? <code className="cf-mono" title={c}>{shortId(c)}</code> : <span className="cf-muted">—</span>}</td>
-                      <td><span className="cf-ad-tag" data-tone={result.tone}>{result.word}</span></td>
+                      <td><span className="cf-ad-audit-result" data-tone={result.tone}>{result.word}</span></td>
                     </tr>
                     {expanded && (
                       <tr className="cf-ad-audit-detail" id={`cf-audit-${r.id}`}>

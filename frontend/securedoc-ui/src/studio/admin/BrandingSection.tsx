@@ -104,9 +104,11 @@ function BrandingForm({ value, onChange, tenantMode }: { value: Editable; onChan
         <TextField label="Organization name" value={value.organizationName} maxLength={100} placeholder={inherit('Your organization')} onChange={(v) => onChange({ ...value, organizationName: v })}
           hint="Shown in the account menu, above the entity switch." />
       </div>
+      <div className="cf-ad-grid">
       <ColorField label="Accent colour" value={value.accentColor} fallback={FALLBACK.accentColor} invalid={!accentOk} onChange={(v) => onChange({ ...value, accentColor: v })}
         hint={accentOk ? 'Used for highlights on a few older screens. Status colours never change.' : 'Pick a darker colour: white text on it must be easy to read (4.5 to 1).'} />
       <AssetField label="Logo" help="PNG or WebP, up to 512 KB. Shown at the left of the top bar." value={value.assets.primaryLogo.dataUrl} maxBytes={512 * 1024} onChange={setAsset('primaryLogo')} />
+      </div>
       <details className="cf-disclosure">
         <summary>More options</summary>
         <div className="cf-ad-form">
@@ -165,8 +167,7 @@ export default function BrandingSection() {
           <h2 id="cf-br-head">Branding</h2>
           <p>Names, logos and colours people see. Status colours (success, warning, error) never change.</p>
         </div>
-      </header>
-      <div className="cf-field cf-ad-narrow">
+      <div className="cf-field cf-ad-apply">
         <label htmlFor={targetId}><span>Apply to</span></label>
         <select id={targetId} value={tenant ? target : EVERYONE} onChange={(e) => setTarget(e.target.value)}>
           <option value={EVERYONE}>Everyone (default)</option>
@@ -174,6 +175,7 @@ export default function BrandingSection() {
         </select>
         <span className="cf-field-hint">{tenant ? "Blank fields use everyone's look." : 'Or pick one customer to give it its own look.'}</span>
       </div>
+      </header>
       {tenant
         ? <TenantEditor key={tenant.tenantId} tenantId={tenant.tenantId} tenantName={tenant.tenantName} custom={tenant.customBranding} inherited={data.deployment} onSaved={() => mutate()} />
         : <Editor key={`everyone:${data.deployment?.updatedAt ?? 'none'}`} config={data.deployment} label="Everyone's branding preview" onSaved={() => mutate()}

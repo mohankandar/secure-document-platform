@@ -13,19 +13,49 @@
 .cf-sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 16px; }
 .cf-sp-count { font-size: 12px; color: var(--cf-muted); }
 
+/* Canvas Support.html row: 4 px flag, then 200 (case, 18 px in), 1fr, 170, 150, 90, 100; no column gap; 64 px high. */
 .cf-sp-row {
-  position: relative; display: grid; align-items: center; gap: 16px;
-  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) 160px 80px 80px 84px;
-  padding: 12px 0 12px 20px; transition: background-color 100ms ease;
+  position: relative; display: grid; align-items: center; gap: 0;
+  grid-template-columns: 182px minmax(0, 1fr) 170px 150px 90px 100px;
+  min-height: 64px; padding: 8px 0 8px 22px; font-size: 14px; transition: background-color 100ms ease;
 }
 .cf-sp-row:hover { background: var(--cf-raised); }
 .cf-sp-row[data-blocked] .cf-case-flag { background: var(--cf-danger); }
-.cf-sp-row .cf-case-act { padding-right: 16px; }
+.cf-sp-row .cf-case-act { justify-self: end; padding-right: 16px; }
+.cf-sp-what { padding-right: 16px; }
+/* The canvas has no narrow layout; below 1200 px the columns shrink, so keep a gap between them. */
+@media (max-width: 1200px) { .cf-sp-row { column-gap: 12px; } }
+/* "More filters" reads as the canvas's plain "▸" line, like Technical details elsewhere. */
+.cf-sp-more { border-top: 0; padding-top: 0; }
+.cf-sp-more > summary { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--cf-ink); gap: 0; }
+.cf-sp-more > summary::before { content: '▸'; width: 16px; font-family: var(--cf-font-sans); color: var(--cf-ink); }
+.cf-sp-more[open] > summary::before { content: '▾'; }
 .cf-sp-what { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
 .cf-sp-what[data-muted] { color: var(--cf-muted); }
 .cf-sp-note { font-size: 12px; color: var(--cf-muted); }
 
 /* ---------- Problem page ---------- */
+/* Canvas ProblemDetail.html: one 1100 px column, centred; eyebrow crumbs; cards radius 8 with 16/600 titles;
+   timeline rows 12 px apart with a hairline between, the time 150 px wide in 13 px mono; "▸" disclosures. */
+.cf-pb { max-width: 1100px; width: 100%; margin: 0 auto; }
+.cf-pb .cf-sp-crumbs.cf-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.cf-pb .cf-sp-crumbs .cf-mono { font-family: inherit; }
+.cf-pb .cf-pb-card { gap: 14px; border-radius: 8px; }
+.cf-pb .cf-pb-card h2 { font-size: 16px; }
+.cf-pb .cf-pb-hint { font-size: 13px; }
+.cf-pb .cf-pb-steps { gap: 0; }
+.cf-pb .cf-pb-steps li { grid-template-columns: 150px minmax(0, 1fr); align-items: center; padding: 12px 0; border-top: 1px solid var(--cf-line); }
+.cf-pb .cf-pb-steps li:first-child { border-top: 0; padding-top: 0; }
+.cf-pb .cf-pb-steps li:last-child { padding-bottom: 0; }
+.cf-pb .cf-pb-steps time { font-size: 13px; }
+.cf-pb .cf-pb-steps li.cf-muted { padding: 0 0 12px; font-size: 13px; }
+.cf-pb-card:has(.cf-pb-steps) { gap: 8px; }
+.cf-pb .cf-pb-more { border-top: 0; padding-top: 0; }
+.cf-pb .cf-pb-more > summary, .cf-pb .cf-tech > summary { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--cf-ink); gap: 0; }
+.cf-pb .cf-pb-more > summary::before { content: '▸'; width: 16px; font-family: var(--cf-font-sans); color: var(--cf-ink); }
+.cf-pb .cf-pb-more[open] > summary::before { content: '▾'; }
+.cf-pb > .cf-tech { padding-top: 10px; border-top: 1px solid var(--cf-line); }
+.cf-pb > .cf-tech > summary { gap: 10px; }
 .cf-pb-title { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .cf-pb-status { font-size: 13px; }
 .cf-pb-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }

@@ -377,3 +377,60 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-preview-nav span[data-active] { color: var(--cf-ink); background: var(--cf-surface); box-shadow: inset 0 0 0 1px var(--cf-line); }
 .cf-ad-preview-acct { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--cf-muted); white-space: nowrap; }
 .cf-ad-preview-acct .cf-acct-avatar { width: 24px; height: 24px; font-size: 10px; }
+
+/* Admin › Platform operations (UI task U017, canvas AdminPlatform.html). */
+/* Sub-tabs: plain 14 px words, 16 apart; the current one 500 with the yellow line under it (canvas toolbar). */
+.cf-ad-subtabs { display: flex; gap: 16px; white-space: nowrap; }
+.cf-ad-subtabs button { padding: 0 0 4px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--cf-ink); cursor: pointer; }
+.cf-ad-subtabs button:hover { box-shadow: inset 0 -2px 0 var(--cf-line-strong); }
+.cf-ad-subtabs button[aria-pressed='true'] { font-weight: 500; box-shadow: inset 0 -2px 0 var(--cf-mark); }
+.cf-ad-subtabs button:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; border-radius: 2px; }
+/* Service health (canvas .hl): one line each, a hairline between rows, the product in 12 px muted beside the name. */
+.cf-ad-services { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.cf-ad-service { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--cf-line); font-size: 14px; }
+.cf-ad-service:first-child { border-top: 0; }
+.cf-ad-service-product { font-size: 12px; color: var(--cf-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-ad-service .cf-ad-status { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--cf-ink); }
+.cf-ad-service .cf-ad-status[data-tone='warn'] { color: var(--cf-warn-ink); }
+.cf-ad-service .cf-ad-status[data-tone='danger'], .cf-ad-service .cf-ad-status[data-tone='off'] { color: var(--cf-danger); }
+.cf-ad-service .cf-ad-status[data-tone='neutral'] { color: var(--cf-muted); }
+/* Canvas .st2: a soft status pill. */
+.cf-ad-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 12px; font-size: 13px; font-weight: 500; color: var(--cf-ink); background: var(--cf-raised); white-space: nowrap; }
+.cf-ad-pill[data-tone='ok'] { background: var(--cf-stage-delivered-soft); }
+.cf-ad-pill[data-tone='warn'] { background: var(--cf-stage-review-soft); }
+.cf-ad-pill[data-tone='danger'], .cf-ad-pill[data-tone='off'] { background: var(--cf-danger-soft); }
+/* Processing storage (canvas PlatformStorage.html): status in ink, bordered row buttons, full-width pickers. */
+.cf-ad-storage td { vertical-align: middle; }
+.cf-ad-storage .cf-ad-conn-status { font-size: 14px; color: var(--cf-ink); }
+.cf-ad-storage .cf-ad-conn-status [data-tone='ok'], .cf-ad-storage .cf-ad-conn-status [data-tone='warn'] { color: var(--cf-ink); }
+.cf-ad-assign { flex-wrap: nowrap; align-items: flex-end; gap: 12px; }
+.cf-ad-assign .cf-field { flex: 1; min-width: 0; }
+.cf-ad-assign select { width: 100%; height: 38px; }
+.cf-ad-assign > .cf-btn { flex: none; }
+/* Branding (canvas PlatformBranding.html): "Apply to" at the top right, 320 wide; a 520 px preview beside the form. */
+.cf-ad-apply { flex: none; width: 320px; max-width: 100%; }
+.cf-ad-apply select { width: 100%; height: 38px; }
+.cf-ad-brand .cf-ad-form .cf-ad-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 1200px) { .cf-ad-brand { grid-template-columns: minmax(0, 1fr) 520px; } }
+@media (max-width: 900px) { .cf-ad-card-head:has(.cf-ad-apply) { flex-direction: column; } }
+/* Audit trail (canvas AuditTrail.html): no card; the toolbar and table sit on the page. Fixed-width pickers and
+   search, Export at the right; the time in 13 px mono; the result as a plain coloured word. */
+.cf-ad-audit { display: flex; flex-direction: column; min-width: 0; }
+.cf-ad-audit-bar { gap: 10px; }
+.cf-ad-audit-pick:nth-of-type(1) select { width: 220px; }
+.cf-ad-audit-pick:nth-of-type(2) select { width: 200px; }
+.cf-ad-audit-find { flex: 0 1 260px; min-width: 200px; }
+.cf-ad-audit-export { margin-left: auto; }
+.cf-ad-audit-when { font-family: var(--cf-font-mono); font-size: 13px; }
+.cf-ad-audit-table td code.cf-mono { font-size: 14px; color: var(--cf-ink); }
+.cf-ad-audit-result { font-size: 14px; color: var(--cf-ink); }
+.cf-ad-audit-result[data-tone='ok'] { color: var(--cf-ok); }
+.cf-ad-audit-result[data-tone='danger'] { color: var(--cf-danger); }
+.cf-ad-audit-result[data-tone='neutral'] { color: var(--cf-muted); }
+.cf-ad-audit-table .cf-ad-audit-what { font-size: 14px; font-weight: 500; }
+.cf-ad-audit .cf-ad-audit-more { border-top: 0; padding-top: 0; }
+.cf-ad-audit .cf-ad-audit-more > summary { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--cf-ink); gap: 0; }
+.cf-ad-audit .cf-ad-audit-more > summary::before { content: '▸'; width: 16px; font-family: var(--cf-font-sans); color: var(--cf-ink); }
+.cf-ad-audit .cf-ad-audit-more[open] > summary::before { content: '▾'; }
+/* Technical details at the foot of a card, under a hairline (canvas .tech). */
+.cf-ad-card > .cf-disclosure { border-top: 1px solid var(--cf-line); }
