@@ -15,6 +15,12 @@
 
 .cf-rp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); background: var(--cf-surface); overflow: hidden; }
 .cf-rp-stats .cf-rp-stat { padding: 14px 18px; border-right: 1px solid var(--cf-line); border-bottom: 1px solid var(--cf-line); margin: 0 -1px -1px 0; }
+/* U021 follow-up: on a portrait tablet the five headline tiles sit 3 + 2, the second row filled, not 4 + 1 with a gap. */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .cf-rp-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .cf-rp-stats > .cf-rp-stat { grid-column: span 2; }
+  .cf-rp-stats > .cf-rp-stat:nth-child(n + 4) { grid-column: span 3; }
+}
 .cf-rp-stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cf-rp-stat dt { font-size: 13px; color: var(--cf-muted); }
 .cf-rp-stat dd { display: flex; align-items: baseline; gap: 8px; }

@@ -8,7 +8,7 @@ import { Notice, Spinner, StageChip } from '../atoms';
 import { LoadErrorCard, checked, isRecord } from '../failure';
 import { caseTitle, errorMessage, statusInfo, usePackage } from '../data';
 import { useToast } from '../toast';
-import { NAV, sensitiveTypeName } from '../words';
+import { MANUAL_WORDS, NAV, sensitiveTypeName } from '../words';
 import { PREVIEW_PIXELS_PER_CSS_PIXEL, nextZoom } from '../reviewRules';
 import { canFinish, pagesLine } from './supportRules';
 import './support.css';
@@ -147,6 +147,9 @@ export default function ManualCase() {
           </div>
         </div>
       </header>
+
+      {/* U021: shown only on a touch device (pointer: coarse). */}
+      <div className="cf-notice cf-touch-note" role="note">{MANUAL_WORDS.touchNote}</div>
 
       <Notice tone="mark">
         Automatic processing stopped. Mark every sensitive value by hand. Your marks are still checked, and the case still goes through approval before delivery.

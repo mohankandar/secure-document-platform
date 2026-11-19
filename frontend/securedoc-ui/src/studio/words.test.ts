@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -143,4 +143,8 @@ test('the brand link is named after the application, or "LexaVault home" when br
   assert.equal(brandHomeName('Acme Redact'), 'Acme Redact home');
   assert.equal(brandHomeName('  Acme  '), 'Acme home');
   for (const missing of [undefined, null, '', '   ']) assert.equal(brandHomeName(missing), 'LexaVault home', String(missing));
+});
+
+test("U021: the Continue manually touch note is the owner's wording", () => {
+  assert.equal(MANUAL_WORDS.touchNote, 'Marking values by hand works best on a computer.');
 });

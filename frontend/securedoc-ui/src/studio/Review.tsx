@@ -394,8 +394,11 @@ function PageStage({ item, draft, onDraft, zoom, onZoom }: {
     const canvas = canvasRef.current;
     const surface = surfaceRef.current;
     if (!canvas || !surface || fx === null || fy === null || shownWidth === 0) return;
-    const x = surface.offsetLeft + fx * surface.clientWidth;
-    const y = surface.offsetTop + fy * surface.clientHeight;
+    // The page's place inside the scrolling viewer (offsetTop would count from the document, not the viewer; U021).
+    const page = surface.getBoundingClientRect();
+    const view = canvas.getBoundingClientRect();
+    const x = page.left - view.left + canvas.scrollLeft + fx * surface.clientWidth;
+    const y = page.top - view.top + canvas.scrollTop + fy * surface.clientHeight;
     canvas.scrollTo({ left: Math.max(0, x - canvas.clientWidth / 2), top: Math.max(0, y - canvas.clientHeight / 2) });
   }, [fx, fy, shownWidth]);
 
@@ -423,6 +426,8 @@ function PageStage({ item, draft, onDraft, zoom, onZoom }: {
             ref={surfaceRef}
             className="cf-page"
             style={pageStyle}
+            data-needs-mark={!item.hasBoundingBox || undefined}
+            onPointerCancel={() => { origin.current = null; setLive(null); }}
             onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); origin.current = point(e); setLive(null); }}
             onPointerMove={(e) => { if (origin.current) setLive(boxFrom(origin.current, point(e))); }}
             onPointerUp={(e) => {
