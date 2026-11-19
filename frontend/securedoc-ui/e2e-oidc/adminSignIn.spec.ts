@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U009: Admin › Sign-in (UI spec finding 15), owner's decision B. Sign-in is managed through the login hub,
@@ -10,8 +11,8 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c8c8c8c8-0000-4000-8000-00000000000e', name: 'Sign-in Entity', slug: 'signin-entity' };
-const IT_CAPS = ['DASHBOARD_ACCESS', 'TENANT_INTEGRATION_MANAGE', 'TENANT_AUTH_MANAGE', 'TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'TECHNICAL_RETRY', 'AUDIT_VIEW'];
-const BUSINESS_CAPS = ['TENANT_POLICY_MANAGE', 'TENANT_IDENTIFIER_MANAGE', 'REPORT_EXECUTIVE_VIEW'];
+const IT_CAPS = capabilitiesFor('TENANT_IT_ADMIN');
+const BUSINESS_CAPS = capabilitiesFor('BUSINESS_ADMIN');
 
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };

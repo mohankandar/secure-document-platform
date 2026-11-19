@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U005: New case states the upload rules, lists each file with size and pages, marks a file the server would
@@ -11,7 +12,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c5c5c5c5-0000-4000-8000-00000000000c', name: 'Intake Entity', slug: 'intake-entity', roles: ['DOCUMENT_PROCESSOR'] };
-const PROCESSOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'DOCUMENT_UPLOAD', 'MANUAL_REVIEW', 'FINDING_DECISION', 'REVIEW_SUBMIT'];
+const PROCESSOR = capabilitiesFor(...ENTITY.roles);
 const BRIDGE = 'http://127.0.0.1:10090/api/v1';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };

@@ -55,7 +55,7 @@ Soft backgrounds for chips: light #eef0f2, #e7eefb, #fbf3cc, #efe9f8, #e3f1ea, #
 | Cases, New case, Review | ● | ● | | | | |
 | Continue a stopped case manually | ● | ● | | | | |
 | Approve delivery, Process again | | ● | | | | |
-| Retry processing | | | | | ● | |
+| Retry processing (from Support, the problem page, only: the IT Administrator never sees Cases; owner, U018) | | | | | ● | |
 | Reports: headline, trend, service levels, by entity | | | ● | ● | | |
 | Reports: pipeline, backlog, retention, timing, intake, breakdowns | | | ● | | | |
 | Reports: Export CSV | | | ● | | | |

@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U003: the Cases rows. The row's action button does its own job and never also opens the case panel; the
@@ -44,7 +45,7 @@ async function mockIdentityProvider(page: Page) {
 
 /** `broken` holds the API paths that currently answer with a shape no screen understands. */
 
-const SUPERVISOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW', 'PACKAGE_APPROVE_DELIVERY', 'PACKAGE_REPROCESS'];
+const SUPERVISOR = capabilitiesFor(...ENTITY.roles);
 const REVIEW_CASE = caseFor('LN-2001', 'PENDING_REVIEW', '0001');
 const APPROVAL_CASE = caseFor('LN-2002', 'PENDING_FINAL_APPROVAL', '0002');
 

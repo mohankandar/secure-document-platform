@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * Regression tests for the single-entity sign-in race (report 0007, task 0008).
@@ -65,7 +66,7 @@ async function mockApi(page: Page, entities: typeof ENTITY_A[]): Promise<ApiLog>
       const entity = entities.find((candidate) => candidate.tenantId === selected) ?? (entities.length === 1 ? entities[0] : undefined);
       if (!entity) return json({ code: 'SECURITY_CONTEXT_INVALID' }, 403);
       return json({ username: 'signin.race', roles: entity.roles, tenantName: entity.name, tenantSlug: entity.slug, authenticationMode: 'OIDC',
-        capabilities: ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW'] });
+        capabilities: capabilitiesFor(...entity.roles) });
     }
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     if (url.pathname.startsWith('/api/v1/review-items')) return json({ items: [], totalItems: 0 });

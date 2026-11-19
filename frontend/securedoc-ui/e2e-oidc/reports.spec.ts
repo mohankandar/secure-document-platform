@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U006: Reports in plain words, the trend chart with a left axis and the numbers on hover, and the one line a
@@ -10,8 +11,8 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c6c6c6c6-0000-4000-8000-00000000000c', name: 'Reports Entity', slug: 'reports-entity' };
-const ADMIN_CAPS = ['REPORT_EXECUTIVE_VIEW', 'REPORT_OPERATIONAL_VIEW', 'REPORT_EXPORT', 'TENANT_POLICY_MANAGE'];
-const VIEWER_CAPS = ['REPORT_EXECUTIVE_VIEW'];
+const ADMIN_CAPS = capabilitiesFor('BUSINESS_ADMIN');
+const VIEWER_CAPS = capabilitiesFor('REPORT_VIEWER');
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');

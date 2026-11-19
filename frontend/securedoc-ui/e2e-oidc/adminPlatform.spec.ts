@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U010: Admin › Platform operations (UI spec findings 26, 27, 28). Overview for the IT Administrator and
@@ -10,8 +11,8 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c8c8c8c8-0000-4000-8000-00000000000e', name: 'Ops Entity', slug: 'ops-entity' };
-const IT_CAPS = ['DASHBOARD_ACCESS', 'TENANT_INTEGRATION_MANAGE', 'TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'TECHNICAL_RETRY', 'AUDIT_VIEW'];
-const OPS_CAPS = ['DASHBOARD_ACCESS', 'TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'PLATFORM_OPERATIONS', 'AUDIT_VIEW'];
+const IT_CAPS = capabilitiesFor('TENANT_IT_ADMIN');
+const OPS_CAPS = capabilitiesFor('PLATFORM_OPERATIONS_ADMIN');
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS' };
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');

@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U011: Admin › Audit trail (UI spec finding 29). Sentence rows, one toolbar, More filters, rows that open to
@@ -8,7 +9,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c8c8c8c8-0000-4000-8000-00000000000e', name: 'Ops Entity', slug: 'ops-entity' };
-const CAPS = ['DASHBOARD_ACCESS', 'TENANT_INTEGRATION_MANAGE', 'TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'TECHNICAL_RETRY', 'AUDIT_VIEW'];
+const CAPS = capabilitiesFor('TENANT_IT_ADMIN');
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS' };
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');

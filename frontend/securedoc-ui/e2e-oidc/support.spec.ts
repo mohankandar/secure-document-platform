@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U012: Support list, one problem page, Continue manually (UI spec findings 9, 10, 30), one test per role rule.
@@ -8,10 +9,10 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c8c8c8c8-0000-4000-8000-00000000000e', name: 'Residential lending', slug: 'residential' };
 const ROLES: Record<string, { roles: string[]; caps: string[] }> = {
-  it: { roles: ['TENANT_IT_ADMIN'], caps: ['TENANT_INTEGRATION_MANAGE', 'TENANT_AUTH_MANAGE', 'TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'TECHNICAL_RETRY', 'TECHNICAL_HOLD_MANAGE', 'AUDIT_VIEW'] },
-  ops: { roles: ['PLATFORM_OPERATIONS_ADMIN'], caps: ['TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'AUDIT_VIEW', 'PLATFORM_DIAGNOSTICS', 'PLATFORM_OPERATIONS'] },
-  processor: { roles: ['DOCUMENT_PROCESSOR'], caps: ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW'] },
-  supervisor: { roles: ['DOCUMENT_SUPERVISOR'], caps: ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW', 'PACKAGE_APPROVE_DELIVERY', 'PACKAGE_REPROCESS'] },
+  it: { roles: ['TENANT_IT_ADMIN'], caps: capabilitiesFor('TENANT_IT_ADMIN') },
+  ops: { roles: ['PLATFORM_OPERATIONS_ADMIN'], caps: capabilitiesFor('PLATFORM_OPERATIONS_ADMIN') },
+  processor: { roles: ['DOCUMENT_PROCESSOR'], caps: capabilitiesFor('DOCUMENT_PROCESSOR') },
+  supervisor: { roles: ['DOCUMENT_SUPERVISOR'], caps: capabilitiesFor('DOCUMENT_SUPERVISOR') },
 };
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS' };

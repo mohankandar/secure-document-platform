@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U008: Admin › Integrations and the connection editor (UI spec findings 16, 24, 25), for the IT Administrator:
@@ -10,7 +11,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c8c8c8c8-0000-4000-8000-00000000000d', name: 'IT Entity', slug: 'it-entity' };
-const CAPS = ['DASHBOARD_ACCESS', 'TENANT_INTEGRATION_MANAGE', 'TECHNICAL_EXCEPTION_VIEW', 'TECHNICAL_ADMIN_VIEW', 'TECHNICAL_RETRY', 'AUDIT_VIEW'];
+const CAPS = capabilitiesFor('TENANT_IT_ADMIN');
 const PACKAGE_ID = '6f1c2d3e-0000-4000-8000-000000000001';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };

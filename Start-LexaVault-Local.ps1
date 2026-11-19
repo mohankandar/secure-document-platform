@@ -7,7 +7,10 @@ param(
     [string]$LoggingFormat = "Json",
     [ValidateSet("TRACE", "DEBUG", "INFO", "WARN", "ERROR")]
     [string]$LogLevel = "DEBUG",
-    [switch]$EnableRollingFileLog
+    [switch]$EnableRollingFileLog,
+    # Start the backend with the AI model off: the existing provider setting (securedoc.ai.provider) is set to
+    # "heuristic", the built-in rules-only reader, so Ollama is neither needed nor called. LOCAL testing only.
+    [switch]$AiOff
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +73,8 @@ else {
     "classpath:logback-json.xml"
 }
 $BannerMode = if ($LoggingFormat -eq "Json") { "off" } else { "console" }
+$AiProvider = if ($AiOff) { "heuristic" } else { "ollama" }
+$AiSummary = if ($AiOff) { "off (heuristic reader, no Ollama)" } else { "Ollama / $Model" }
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 New-Item -ItemType Directory -Force -Path $WatchedIntakeDir | Out-Null
@@ -77,15 +82,27 @@ New-Item -ItemType Directory -Force -Path $WatchedIntakeDir | Out-Null
 function Test-TcpPort {
     param([string]$HostName, [int]$Port, [int]$TimeoutMs = 750)
 
-    $client = New-Object System.Net.Sockets.TcpClient
-    try {
-        $async = $client.BeginConnect($HostName, $Port, $null, $null)
-        if (-not $async.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) { return $false }
-        $client.EndConnect($async)
-        return $true
+    # Try IPv4 and IPv6. TcpClient() on Windows PowerShell is IPv4 only, while Vite (Node 22) may listen on ::1
+    # alone for "localhost"; checking only IPv4 gave the false "Frontend did not become ready" stop (U004, U018).
+    $addresses = if ($HostName -eq "localhost") {
+        @([System.Net.IPAddress]::Loopback, [System.Net.IPAddress]::IPv6Loopback)
     }
-    catch { return $false }
-    finally { $client.Close() }
+    else {
+        try { @([System.Net.Dns]::GetHostAddresses($HostName)) } catch { @() }
+    }
+    foreach ($address in $addresses) {
+        $client = New-Object System.Net.Sockets.TcpClient($address.AddressFamily)
+        try {
+            $async = $client.BeginConnect($address, $Port, $null, $null)
+            if ($async.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+                $client.EndConnect($async)
+                return $true
+            }
+        }
+        catch { }
+        finally { $client.Close() }
+    }
+    return $false
 }
 
 function Wait-ForPort {
@@ -167,6 +184,7 @@ Write-Host "Logging:      $LoggingFormat ($LoggingConfig)"
 Write-Host "App log level: $LogLevel"
 Write-Host "Rolling file:  $EnableRollingFileLog"
 Write-Host "Scanner mode:  $EffectiveScannerMode"
+Write-Host "AI:            $AiSummary"
 
 if (-not (Test-Path $BackendDir)) {
     throw "Backend folder not found: $BackendDir"
@@ -178,7 +196,7 @@ if (-not (Test-Path $FrontendDir)) {
 Require-Command "java"
 Require-Command "node"
 Require-Command "npm"
-Require-Command "ollama"
+if (-not $AiOff) { Require-Command "ollama" }
 
 # Tesseract
 $tesseractExe = Resolve-Tesseract
@@ -206,8 +224,11 @@ else {
     Wait-ForPort -Name "PostgreSQL" -HostName "localhost" -Port 5432 -MaxSeconds 45
 }
 
-# Ollama
-if (Test-TcpPort -HostName "localhost" -Port 11434) {
+# Ollama (skipped with -AiOff)
+if ($AiOff) {
+    Write-Host "AI is off: Ollama is not checked, started or warmed up." -ForegroundColor Yellow
+}
+elseif (Test-TcpPort -HostName "localhost" -Port 11434) {
     Write-Host "Ollama already available on localhost:11434." -ForegroundColor Green
 }
 else {
@@ -218,41 +239,47 @@ else {
     Wait-ForPort -Name "Ollama" -HostName "localhost" -Port 11434 -MaxSeconds 30
 }
 
-$tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5
-$modelNames = @($tags.models | ForEach-Object { $_.name })
+if (-not $AiOff) {
+    $tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5
+    $modelNames = @($tags.models | ForEach-Object { $_.name })
 
-if ($modelNames -notcontains $Model) {
-    if ($PullModelIfMissing) {
-        Write-Host "Pulling required model $Model ..."
-        & ollama pull $Model
-        if ($LASTEXITCODE -ne 0) { throw "Failed to pull Ollama model $Model." }
+    if ($modelNames -notcontains $Model) {
+        if ($PullModelIfMissing) {
+            Write-Host "Pulling required model $Model ..."
+            & ollama pull $Model
+            if ($LASTEXITCODE -ne 0) { throw "Failed to pull Ollama model $Model." }
+        }
+        else {
+            throw "Required Ollama model '$Model' is not installed. Run 'ollama pull $Model'."
+        }
+    }
+    Write-Host "Ollama model $Model is installed." -ForegroundColor Green
+
+    if (-not $SkipAiWarmup) {
+        Write-Host "Preloading Ollama model $Model (keep_alive=$AiKeepAlive)..."
+        $warmupBody = @{ model = $Model; prompt = ""; stream = $false; keep_alive = $AiKeepAlive } | ConvertTo-Json -Compress
+        try {
+            Invoke-RestMethod -Uri "http://localhost:11434/api/generate" -Method Post `
+                -ContentType "application/json" -Body $warmupBody -TimeoutSec 300 | Out-Null
+            Write-Host "Ollama model $Model is warm and resident." -ForegroundColor Green
+        }
+        catch {
+            throw "Ollama model warmup failed for '$Model': $($_.Exception.Message)"
+        }
     }
     else {
-        throw "Required Ollama model '$Model' is not installed. Run 'ollama pull $Model'."
+        Write-Host "Skipping Ollama model warmup by request." -ForegroundColor Yellow
     }
-}
-Write-Host "Ollama model $Model is installed." -ForegroundColor Green
-
-if (-not $SkipAiWarmup) {
-    Write-Host "Preloading Ollama model $Model (keep_alive=$AiKeepAlive)..."
-    $warmupBody = @{ model = $Model; prompt = ""; stream = $false; keep_alive = $AiKeepAlive } | ConvertTo-Json -Compress
-    try {
-        Invoke-RestMethod -Uri "http://localhost:11434/api/generate" -Method Post `
-            -ContentType "application/json" -Body $warmupBody -TimeoutSec 300 | Out-Null
-        Write-Host "Ollama model $Model is warm and resident." -ForegroundColor Green
-    }
-    catch {
-        throw "Ollama model warmup failed for '$Model': $($_.Exception.Message)"
-    }
-}
-else {
-    Write-Host "Skipping Ollama model warmup by request." -ForegroundColor Yellow
 }
 
 # Backend - run the already-built executable Spring Boot JAR.
 $backendPidFile = Join-Path $RunDir "backend-shell.pid"
 
 if (Test-TcpPort -HostName "localhost" -Port 8080) {
+    if ($AiOff) {
+        # Fail closed: a backend that is already running keeps its own AI setting, so -AiOff would not take effect.
+        throw "-AiOff needs a fresh backend, but one is already running on localhost:8080. Run .Stop-LexaVault-Local.ps1 first."
+    }
     Write-Host "Backend already appears to be running on http://localhost:8080." -ForegroundColor Yellow
 }
 else {
@@ -281,7 +308,7 @@ else {
 Set-Location -LiteralPath '$backendDirEscaped'
 `$env:PATH = '$effectivePath'
 `$env:TESSDATA_PREFIX = '$tessdataPrefix'
-`$env:SECUREDOC_AI_PROVIDER = 'ollama'
+`$env:SECUREDOC_AI_PROVIDER = '$AiProvider'
 `$env:SECUREDOC_AI_OLLAMA_BASE_URL = 'http://localhost:11434'
 `$env:SECUREDOC_AI_OLLAMA_MODEL = '$Model'
 `$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
@@ -361,7 +388,7 @@ Write-Host ""
 Write-Host "=== LexaVault LOCAL is ready ===" -ForegroundColor Green
 Write-Host "UI:      http://localhost:5173"
 Write-Host "Backend: http://localhost:8080"
-Write-Host "AI:      Ollama / $Model"
+Write-Host "AI:      $AiSummary"
 Write-Host "AI batch: parallelism=$AiParallelism / pages=$AiPageBatchSize / maxChars=$AiPageBatchMaxCharacters"
 Write-Host "OCR:     $tesseractExe"
 Write-Host "Logging: $LoggingFormat / app=$LogLevel / rollingFile=$EnableRollingFileLog"

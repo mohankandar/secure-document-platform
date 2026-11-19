@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 
 /**
  * UI task U007: Admin for the Business Administrator (UI spec findings 11, 12, 13, 17, 23): Off / Observe / On with
@@ -10,7 +11,7 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c7c7c7c7-0000-4000-8000-00000000000c', name: 'Admin Entity', slug: 'admin-entity' };
-const CAPS = ['TENANT_POLICY_MANAGE', 'TENANT_IDENTIFIER_MANAGE', 'REPORT_EXECUTIVE_VIEW'];
+const CAPS = capabilitiesFor('BUSINESS_ADMIN');
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');

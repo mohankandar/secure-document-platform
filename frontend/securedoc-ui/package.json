@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "node node_modules/typescript/lib/tsc.js --noEmit && vite build",
     "preview": "vite preview",
-    "test:auth": "node --experimental-strip-types --test src/security/uiAuthorization.test.ts",
+    "test:auth": "node --experimental-strip-types --test src/security/uiAuthorization.test.ts src/security/policyCapabilities.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:ui-framework": "node node_modules/typescript/lib/tsc.js --noEmit && node --experimental-strip-types --test src/security/uiFrameworkContract.test.ts",

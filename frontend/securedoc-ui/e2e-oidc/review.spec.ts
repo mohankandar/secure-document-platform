@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { capabilitiesFor } from './policyCapabilities';
 import { crc32, deflateSync } from 'node:zlib';
 
 /**
@@ -10,7 +11,7 @@ import { crc32, deflateSync } from 'node:zlib';
 
 const ISSUER = 'http://idp.test/realms/signin-race';
 const ENTITY = { tenantId: 'c4c4c4c4-0000-4000-8000-00000000000c', name: 'Review Entity', slug: 'review-entity', roles: ['DOCUMENT_PROCESSOR'] };
-const PROCESSOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW', 'FINDING_DECISION', 'REVIEW_SUBMIT'];
+const PROCESSOR = capabilitiesFor(...ENTITY.roles);
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS' };
 const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
