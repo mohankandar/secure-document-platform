@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import useSWR, { useSWRConfig } from 'swr';
-import { Eye, EyeOff, Minus, MousePointerSquareDashed, Plus, X } from 'lucide-react';
+import { Minus, MousePointerSquareDashed, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
@@ -285,10 +285,10 @@ export default function Review({ caps }: { caps: string[] }) {
 
             <div className="cf-decision-actions">
               <button type="button" className="cf-btn cf-decide" data-variant="redact" onClick={() => decide('redact')} disabled={busy || needsMark}>
-                <EyeOff size={16} aria-hidden="true" /> Redact <Kbd>R</Kbd>
+                Redact <Kbd>R</Kbd>
               </button>
               <button type="button" className="cf-btn cf-decide" data-variant="ghost" onClick={() => decide('keep')} disabled={busy}>
-                <Eye size={16} aria-hidden="true" /> Keep visible <Kbd>V</Kbd>
+                Keep visible <Kbd>V</Kbd>
               </button>
             </div>
 

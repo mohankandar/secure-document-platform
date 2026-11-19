@@ -148,8 +148,9 @@ export interface FieldLabel {
 }
 
 /**
- * The placeholder for case search, built from the configured case fields exactly as they are written (for example
- * "Loan number or Borrower name"). Falls back to "case" words when no field is configured; never a hard-coded name.
+ * The placeholder for case search, built from the configured case fields (for example "Filter by loan number or
+ * borrower name"). Field names inside a sentence are lower case (fieldNameInSentence). Falls back to "case" words
+ * when no field is configured; never a hard-coded name.
  */
 export function caseSearchPlaceholder(fields: readonly FieldLabel[] | undefined, withActions = false): string {
   const list = fields ?? [];
@@ -157,15 +158,32 @@ export function caseSearchPlaceholder(fields: readonly FieldLabel[] | undefined,
   const searchable = list.filter((f) => f.searchable && f !== primary);
   const labels = [primary, ...searchable].filter((f): f is FieldLabel => Boolean(f && f.label.trim()))
     .slice(0, 2)
-    .map((f) => f.label.trim());
+    .map((f) => fieldNameInSentence(f.label));
   if (!labels.length) return withActions ? 'A case or an action…' : 'Filter cases';
   const subject = labels.join(' or ');
-  return withActions ? `${subject}, or an action…` : `Filter by ${subject}`;
+  return withActions ? `${capitalizeFirst(subject)}, or an action…` : `Filter by ${subject}`;
 }
 
 /* ---------- Helpers ---------- */
 
 const ACRONYMS = new Set(['SSN', 'ID', 'EIN', 'ITIN', 'IBAN', 'TIN', 'VIN', 'NPI', 'ABA', 'FICO', 'SDV', 'PDF', 'API', 'URL']);
+
+/**
+ * A configured case field name as it reads inside a sentence (owner, U014 review): "Loan number" becomes
+ * "loan number", "Borrower Name" becomes "borrower name". Only plain capitalised or lower-case words are lowered;
+ * known acronyms, all-capital words and mixed-case words ("SSN", "MERS", "eNote") keep their configured spelling.
+ */
+export function fieldNameInSentence(label: string): string {
+  return label.trim().split(/(\s+)/).map((w) => {
+    if (!w.trim() || ACRONYMS.has(w.toUpperCase())) return w;
+    return /^\p{Lu}?[\p{Ll}\d'’-]*$/u.test(w) ? w.toLowerCase() : w;
+  }).join('');
+}
+
+/** The first letter in upper case and the rest as written: for a sentence that starts with a field name. */
+export function capitalizeFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** UPPER_SNAKE or Title Case to "Sentence case", keeping known acronyms. */
 export function sentenceCase(raw: string): string {

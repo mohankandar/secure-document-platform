@@ -66,7 +66,7 @@ export function failureDetails(error: unknown, request?: string): { reference?: 
 export function TechnicalDetails({ children, label = 'Technical details' }: { children: ReactNode; label?: string }) {
   return (
     <details className="cf-tech">
-      <summary>{label}</summary>
+      <summary><span className="cf-tech-label">{label}</span></summary>
       <div className="cf-tech-body">{children}</div>
     </details>
   );
@@ -90,10 +90,12 @@ export function LoadErrorCard({ title, error, request, onRetry }: {
       : 'LexaVault’s server sent an answer this screen doesn’t understand. Nothing was changed. Try again in a minute; if it keeps happening, send the reference below to your IT team.';
   return (
     <section className="cf-loaderr" role="alert" aria-label={title}>
-      <h2 className="cf-loaderr-title">{title}</h2>
-      <p className="cf-loaderr-text">{sentence}</p>
-      <div className="cf-loaderr-actions">
-        <button type="button" className="cf-btn" data-variant="solid" data-size="sm" onClick={onRetry}>Try again</button>
+      <div className="cf-loaderr-head">
+        <div>
+          <h2 className="cf-loaderr-title">{title}</h2>
+          <p className="cf-loaderr-text">{sentence}</p>
+        </div>
+        <button type="button" className="cf-btn" data-size="sm" onClick={onRetry}>Try again</button>
       </div>
       <TechnicalDetails>
         <dl className="cf-tech-defs">

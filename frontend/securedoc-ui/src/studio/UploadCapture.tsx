@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
-import { ArrowDown, ArrowUp, Check, FileText, FileUp, RotateCcw, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, FileUp, RotateCcw } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { errorMessage, formatBytes } from './data';
 import { Notice, Spinner } from './atoms';
@@ -176,20 +176,15 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
           <ol aria-live="polite">
             {drafts.map((draft, index) => (
               <li key={draft.id} className="cf-ledger-row" data-state={draft.problem ? 'refused' : draft.state}>
-                <span className="cf-ledger-order cf-mono" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-                <FileText size={16} aria-hidden="true" className="cf-doc-icon" />
+                {/* Canvas NewCase file table: "1 · name" with its problem under it, then size and pages on the right. */}
                 <span className="cf-ledger-name">
-                  <span>{draft.file.name}</span>
-                  <span className="cf-doc-meta">
-                    {draft.problem
-                      ? <span className="cf-danger-text">{fileProblemText[draft.problem]}</span>
-                      : draft.state === 'error' && <span className="cf-danger-text">{draft.error}</span>}
-                    <span className="cf-ledger-facts">
-                      <span>{formatBytes(draft.file.size)}</span>
-                      {!draft.problem && <span>{draft.problem === undefined ? 'Reading…' : pagesText(draft.pages ?? null)}</span>}
-                    </span>
-                  </span>
+                  <span><span className="cf-ledger-order" aria-hidden="true">{index + 1} · </span>{draft.file.name}</span>
+                  {draft.problem
+                    ? <span className="cf-ledger-problem">{fileProblemText[draft.problem]}</span>
+                    : draft.state === 'error' && <span className="cf-ledger-problem">{draft.error}</span>}
                 </span>
+                <span className="cf-ledger-size">{formatBytes(draft.file.size)}</span>
+                <span className="cf-ledger-pages">{draft.problem ? '—' : draft.problem === undefined ? 'Reading…' : pagesText(draft.pages ?? null)}</span>
                 {draft.state === 'uploading' && <Spinner label={`Uploading ${draft.file.name}`} />}
                 {draft.state === 'done' && <Check size={16} className="cf-ok" aria-label="Uploaded" />}
                 {draft.state === 'error' && <RotateCcw size={14} className="cf-danger-text" aria-label="Will retry" />}
@@ -197,7 +192,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
                   <span className="cf-ledger-tools">
                     <button type="button" className="cf-btn" data-variant="ghost" data-size="icon" onClick={() => move(index, -1)} disabled={index === 0 || drafts[index - 1]?.state === 'done'} aria-label={`Move ${draft.file.name} up`}><ArrowUp size={14} /></button>
                     <button type="button" className="cf-btn" data-variant="ghost" data-size="icon" onClick={() => move(index, 1)} disabled={index === drafts.length - 1} aria-label={`Move ${draft.file.name} down`}><ArrowDown size={14} /></button>
-                    <button type="button" className="cf-btn" data-variant="ghost" data-size="icon" onClick={() => setDrafts((c) => c.filter((d) => d.id !== draft.id))} aria-label={`Remove ${draft.file.name}`}><X size={14} /></button>
+                    <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => setDrafts((c) => c.filter((d) => d.id !== draft.id))} aria-label={`Remove ${draft.file.name}`}>Remove</button>
                   </span>
                 )}
               </li>

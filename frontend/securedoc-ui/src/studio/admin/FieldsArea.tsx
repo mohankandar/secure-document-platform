@@ -5,7 +5,7 @@ import { Notice } from '../atoms';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, Sheet, TextField, SelectField, OptionalInt } from './shared';
 import { useUnsavedWork } from '../unsavedWork';
 import { fieldRule } from './adminRules';
-import { dashboardColumnName } from '../words';
+import { dashboardColumnName, fieldNameInSentence } from '../words';
 
 const VALIDATION_TYPES: [BusinessIdentifierValidationType, string][] = [
   ['TEXT', 'Text'], ['NUMERIC', 'Numbers only'], ['ALPHANUMERIC', 'Letters and numbers'], ['EMAIL', 'Email address'],
@@ -57,7 +57,7 @@ function IdentifierEditor({ value, isNew, canRemove, onApply, onRemove, onClose 
   const exact = d.exactLength != null;
 
   return (
-    <Sheet open wide title={isNew ? 'Add case field' : `Edit ${value.label}`} onClose={onClose}
+    <Sheet open wide title={isNew ? 'Add case field' : `Edit ${fieldNameInSentence(value.label)}`} onClose={onClose}
       description="Changes wait in the Case fields card. Nothing is saved until you choose Save changes there."
       footer={<>
         {!isNew && <button type="button" className="cf-btn" data-variant="danger" data-size="sm" disabled={!canRemove} onClick={onRemove}
@@ -156,14 +156,14 @@ function IdentifierList({ d, set }: { d: BusinessAdminIdentifierDraft[]; set: (n
             {d.map((idf, i) => (
               <tr key={idf.id ?? `new-${i}`}>
                 <td className="cf-ad-order">
-                  <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${idf.label || 'field'} up`}>↑</button>
-                  <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={i === d.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${idf.label || 'field'} down`}>↓</button>
+                  <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${fieldNameInSentence(idf.label) || 'field'} up`}>↑</button>
+                  <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={i === d.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${fieldNameInSentence(idf.label) || 'field'} down`}>↓</button>
                 </td>
                 <th scope="row">
                   <span className="cf-ad-cell-title">{idf.label || <em>Unnamed</em>}{!idf.id && <span className="cf-ad-tag">New</span>}</span>
                   <span className="cf-ad-cell-sub">{rule(idf)}</span>
                 </th>
-                <td><input type="radio" name="primary-identifier" aria-label={`Make ${idf.label} the main ID`} checked={idf.primary} onChange={() => set(d.map((x, j) => (j === i ? { ...x, primary: true, required: true, displayable: true } : { ...x, primary: false })))} /></td>
+                <td><input type="radio" name="primary-identifier" aria-label={`Make ${fieldNameInSentence(idf.label)} the main ID`} checked={idf.primary} onChange={() => set(d.map((x, j) => (j === i ? { ...x, primary: true, required: true, displayable: true } : { ...x, primary: false })))} /></td>
                 <td><input type="checkbox" aria-label={`${idf.label}: required`} checked={idf.required} disabled={idf.primary} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, required: e.target.checked } : x)))} /></td>
                 <td><input type="checkbox" aria-label={`${idf.label}: searchable`} checked={idf.searchable} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, searchable: e.target.checked } : x)))} /></td>
                 <td><input type="checkbox" aria-label={`${idf.label}: AI fills in`} checked={idf.extractable} onChange={(e) => set(d.map((x, j) => (j === i ? { ...x, extractable: e.target.checked } : x)))} /></td>

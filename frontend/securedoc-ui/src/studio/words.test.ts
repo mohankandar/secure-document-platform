@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NAV, SENSITIVE_TYPES, SENSITIVE_TYPES_HEADING, STAGE_NAMES, caseSearchPlaceholder, dashboardColumnName, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { NAV, SENSITIVE_TYPES, SENSITIVE_TYPES_HEADING, STAGE_NAMES, caseSearchPlaceholder, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -50,13 +50,24 @@ test('search placeholders use the configured field labels, never "contract"', ()
     { label: 'Loan number', primary: true, searchable: true },
     { label: 'Borrower name', primary: false, searchable: true },
   ];
-  assert.equal(caseSearchPlaceholder(fields), 'Filter by Loan number or Borrower name');
-  assert.equal(caseSearchPlaceholder(fields, true), 'Loan number or Borrower name, or an action…');
+  assert.equal(caseSearchPlaceholder(fields), 'Filter by loan number or borrower name');
+  assert.equal(caseSearchPlaceholder(fields, true), 'Loan number or borrower name, or an action…');
+  assert.equal(caseSearchPlaceholder([{ label: 'Borrower Name', primary: true }, { label: 'SSN last 4', searchable: true }]),
+    'Filter by borrower name or SSN last 4');
   assert.equal(caseSearchPlaceholder([]), 'Filter cases');
   assert.equal(caseSearchPlaceholder(undefined, true), 'A case or an action…');
   for (const text of [caseSearchPlaceholder(fields), caseSearchPlaceholder([]), caseSearchPlaceholder([], true)]) {
     assert.doesNotMatch(text, /contract/i);
   }
+});
+
+test('field names inside a sentence are lower case; acronyms and mixed-case words keep their spelling', () => {
+  assert.equal(fieldNameInSentence('Loan number'), 'loan number');
+  assert.equal(fieldNameInSentence(' Borrower Name '), 'borrower name');
+  assert.equal(fieldNameInSentence('Contract ID'), 'contract ID');
+  assert.equal(fieldNameInSentence('MERS number'), 'MERS number');
+  assert.equal(fieldNameInSentence('eNote reference'), 'eNote reference');
+  assert.equal(fieldNameInSentence("Owner's name"), "owner's name");
 });
 
 test('sensitive types are never called entities (an entity is only a legal entity)', () => {

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Lock, ScanLine, Upload } from 'lucide-react';
+import { ArrowRight, Lock } from 'lucide-react';
 import type { IdentifierDefinition } from '../types';
 import { useIdentifierDefinitions } from './data';
 import { canonicalIdentity, identityErrors, sortDefinitions } from './identity';
@@ -86,9 +86,8 @@ export default function Intake() {
       <div className="cf-intake-grid">
         <section className="cf-panel" aria-labelledby="cf-identity-title">
           <header className="cf-panel-head">
-            <span className="cf-step" aria-hidden="true">1</span>
             <div>
-              <h2 id="cf-identity-title">Identify the case</h2>
+              <h2 id="cf-identity-title"><span className="cf-panel-num" aria-hidden="true">1 · </span>Identify the case</h2>
               <p>These values follow the documents through redaction and delivery.</p>
             </div>
           </header>
@@ -117,9 +116,8 @@ export default function Intake() {
 
         <section className="cf-panel" aria-labelledby="cf-capture-title">
           <header className="cf-panel-head">
-            <span className="cf-step" aria-hidden="true">2</span>
             <div>
-              <h2 id="cf-capture-title">Add the documents</h2>
+              <h2 id="cf-capture-title"><span className="cf-panel-num" aria-hidden="true">2 · </span>Add the documents</h2>
               <p>Upload PDFs you already have, or scan paper.</p>
             </div>
           </header>
@@ -130,14 +128,14 @@ export default function Intake() {
               disabled={!!lockedBy && method !== 'upload'}
               onClick={() => setParams({ via: 'upload' }, { replace: true })}
             >
-              <Upload size={16} aria-hidden="true" /> Upload PDFs
+              Upload PDFs
             </button>
             <button
               type="button" role="tab" aria-selected={method === 'scan'}
               disabled={!!lockedBy && method !== 'scan'}
               onClick={() => setParams({ via: 'scan' }, { replace: true })}
             >
-              <ScanLine size={16} aria-hidden="true" /> Scan paper
+              Scan paper
             </button>
           </div>
 
@@ -180,12 +178,11 @@ function IdentityField({ definition, value, error, locked, onChange, onBlur }: {
           autoComplete="off"
           spellCheck={false}
           inputMode={definition.validationType === 'NUMERIC' ? 'numeric' : undefined}
-          className={definition.primary ? 'cf-mono' : undefined}
           aria-invalid={!!error}
           aria-describedby={hintId}
         />
       )}
-      <span id={hintId} className="cf-field-hint">{error ?? hint ?? '\u00a0'}</span>
+      <span id={hintId} className="cf-field-hint">{error ?? hint ?? ''}</span>
     </div>
   );
 }

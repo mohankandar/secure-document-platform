@@ -13,8 +13,14 @@ export default function NoAccess({ who, onSignOut, onTryAgain = () => window.loc
 }) {
   return (
     <div className="cf cf-boot">
+      {/* Canvas NoAccess: the top bar with the brand only (U015). */}
+      <header className="cf-top">
+        <span className="cf-brand">
+          <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>
+          <span className="cf-brand-word">LexaVault</span>
+        </span>
+      </header>
       <div className="cf-scope" role="main">
-        <span className="cf-brand-mark" aria-hidden="true"><span /><span /><span /></span>
         <h1>You don&apos;t have access to anything in LexaVault yet</h1>
         <p>
           {who ? <>You&apos;re signed in as <span className="cf-scope-who">{who}</span>, but your account</> : <>You&apos;re signed in, but your account</>} has

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { ArrowRight, Check, FilePlus, FileText, RotateCcw, Wrench, X } from 'lucide-react';
+import { ArrowRight, Check, FileText, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary, TechnicalExceptionDetail } from '../types';
 import {
@@ -9,10 +9,10 @@ import {
   relativeTime, stageLabel, stageOf, statusInfo, useDerivedDeliveries, usePackage,
   usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
 } from './data';
-import { Notice, Spinner, StageChip } from './atoms';
+import { Notice, Spinner } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
-import { CASE_SECTIONS, destinationName, runsLeft } from './words';
+import { CASE_SECTIONS, destinationName, fieldNameInSentence, runsLeft } from './words';
 
 export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   packageId: string; caps: string[]; openFindings: FocusedReviewItem[]; onClose: () => void;
@@ -155,7 +155,7 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
   const navigate = useNavigate();
   const info = statusInfo(status, reprocessing);
   const actionable = actions.some((a) => a.primary);
-  const tone: 'mark' | 'neutral' | 'danger' = stage === 'stopped' ? 'danger' : actionable ? 'mark' : 'neutral';
+  const tone: 'mark' | 'neutral' | 'danger' | 'ok' = stage === 'stopped' ? 'danger' : stage === 'delivered' ? 'ok' : actionable ? 'mark' : 'neutral';
   const settled = stage === 'delivered' || status === 'REJECTED';
   const heading = headingFor(stage, status, openFindings, actionable, reprocessing, life);
   const waitingOn = !actionable ? waitingCopy(stage, status, caps) : null;
@@ -168,7 +168,7 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
   return (
     <section className="cf-next" data-tone={tone} aria-label="Next step">
       <div className="cf-next-text">
-        <span className="cf-eyebrow">{settled ? 'Done' : 'Next step'} · <StageChip stage={stage} status={status} label={info.label} /></span>
+        <span className="cf-eyebrow">{settled ? 'Done' : 'Next step'} · {info.label}</span>
         <p className="cf-next-heading">{heading}</p>
         <p className="cf-next-body">{body}</p>
       </div>
@@ -194,8 +194,7 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
             </Link>
           ) : (
             <span key={a.kind} className="cf-next-choice">
-              <button type="button" className="cf-btn" data-variant={a.primary ? 'mark' : 'ghost'} onClick={() => onAction(a)} disabled={busy !== null}>
-                {a.kind === 'reprocess' || a.kind === 'technical-retry' ? <RotateCcw size={16} aria-hidden="true" /> : a.kind === 'manual-fallback' ? <Wrench size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+              <button type="button" className="cf-btn" data-variant={a.primary ? 'solid' : undefined} onClick={() => onAction(a)} disabled={busy !== null}>
                 {a.label}
               </button>
               {a.kind === 'reprocess' && life && (
@@ -210,9 +209,9 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
         <div className="cf-next-action">
           <span className="cf-next-choice">
             <button type="button" className="cf-btn" onClick={() => navigate(`/intake?id=${encodeURIComponent(primaryField.value)}`)}>
-              <FilePlus size={16} aria-hidden="true" /> Start a new case for {title.primary}
+              Start a new case for {title.primary}
             </button>
-            <span className="cf-next-hint">Opens New case with the {primaryField.label} filled in.</span>
+            <span className="cf-next-hint">Opens New case with the {fieldNameInSentence(primaryField.label)} filled in.</span>
           </span>
         </div>
       )}
