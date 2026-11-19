@@ -104,3 +104,7 @@ Not pushed, not merged.
 ## Suggested next step
 
 The design chat reviews the pairs in `compare/U019/`, and the owner answers question 1. Then the owner's click-through and the merge decision for `feature/ui-polish`.
+
+## Owner's answers
+
+1. **Question 1 (filter wording):** combine (c) and (b). The Cases filter box is 360 px wide. It tries the full wording first, then the main field alone ("Filter by loan number"), and only then "Filter cases". Done in U020: at 1024, 1440 and 1920 px the standard loan setup now shows "Filter by loan number or borrower name".

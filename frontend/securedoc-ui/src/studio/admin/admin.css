@@ -432,3 +432,17 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-admin .cf-ad-duration input { flex: none; width: 96px; }
 .cf-admin .cf-ad-duration select { flex: none; width: auto; }
 .cf-ad-sheet .cf-field :is(input, select):not([type='checkbox'], [type='radio'], [type='range'], [type='color']) { max-width: none; }
+
+/* U020 fix 1: descriptive text (notes, hints, card subtitles, paragraphs) stops at a readable line length on wide
+   screens. Tables, rows and lists keep the full width. */
+.cf-admin :is(p, .cf-ad-hint, .cf-field-hint, .cf-ad-defs dd) { max-width: 75ch; }
+
+/* U020 fix 2: a read-only key–value list on a full-width card puts the value next to its label (200 px label column,
+   value left-aligned). The narrow side panels keep the studio rule: label left, value right. */
+.cf-admin .cf-facts > div { display: grid; grid-template-columns: 200px minmax(0, 1fr); justify-content: start; }
+.cf-admin .cf-facts dd { text-align: left; }
+@media (max-width: 640px) { .cf-admin .cf-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* U020 fix 5: the address in the connection summary has its own full-width row and wraps only after a "/". */
+.cf-ad-facts dd.cf-ad-address { overflow-wrap: normal; }
+.cf-ad-facts dd.cf-ad-address > span { overflow-wrap: anywhere; }

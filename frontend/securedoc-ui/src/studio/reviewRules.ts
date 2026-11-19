@@ -105,3 +105,12 @@ export function nextZoom(current: number, direction: 1 | -1): number {
 
 /** The preview is rendered at 144 DPI; CSS pixels are 96 per inch. 100% means the page at actual size. */
 export const PREVIEW_PIXELS_PER_CSS_PIXEL = 144 / 96;
+
+/** "Fit" fills the width of the viewer, but never past this size: a page larger than 150% is harder to read (U020). */
+export const FIT_MAX_PERCENT = 150;
+
+/** The CSS width of the page at "Fit": the viewer's width, up to FIT_MAX_PERCENT of the page's actual size. */
+export function fitWidth(actualWidth: number): string | null {
+  if (!Number.isFinite(actualWidth) || actualWidth <= 0) return null;
+  return `min(100%, ${Math.round((actualWidth * FIT_MAX_PERCENT) / 100)}px)`;
+}

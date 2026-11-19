@@ -6,7 +6,7 @@ import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
 import { NAV, REVIEW_WORDS, sensitiveTypeName, whyAsked } from './words';
-import { PREVIEW_PIXELS_PER_CSS_PIXEL, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom } from './reviewRules';
+import { PREVIEW_PIXELS_PER_CSS_PIXEL, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
 import { ConfirmDialog } from './admin/shared';
 import { useToast } from './toast';
@@ -372,9 +372,11 @@ function PageStage({ item, draft, onDraft, zoom, onZoom }: {
   const percent = zoom === 'fit'
     ? (actualWidth > 0 && shownWidth > 0 ? Math.round((shownWidth / actualWidth) * 100) : null)
     : zoom;
+  // "Fit" fills the viewer's width, up to 150% (U020); until the page has loaded, the stylesheet's width applies.
+  const fit = zoom === 'fit' ? fitWidth(actualWidth) : null;
   const pageStyle: React.CSSProperties | undefined = zoom !== 'fit' && actualWidth > 0
     ? { width: `${Math.round((actualWidth * zoom) / 100)}px`, maxWidth: 'none' }
-    : undefined;
+    : fit ? { width: fit } : undefined;
 
   useEffect(() => {
     const surface = surfaceRef.current;

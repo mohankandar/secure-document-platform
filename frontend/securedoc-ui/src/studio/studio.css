@@ -249,6 +249,8 @@
   font-size: 14px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); color: var(--cf-muted);
 }
 .cf-search:focus-within { border-color: var(--cf-ink); }
+/* The Cases filter is wider so the configured field names fit (owner's U019 answer 1). */
+.cf-search.cf-search-cases { width: min(360px, 100%); }
 .cf-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: var(--cf-ink); }
 .cf-search-clear { display: inline-flex; border: 0; background: transparent; cursor: pointer; padding: 2px; color: var(--cf-muted); }
 

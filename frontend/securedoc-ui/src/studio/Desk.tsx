@@ -6,7 +6,7 @@ import {
   CAP, LIFECYCLE, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf,
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
-import { CASE_GROUPS, CASE_SEARCH_FALLBACK, NAV, caseSearchPlaceholder, textThatFits } from './words';
+import { CASE_GROUPS, NAV, caseSearchPlaceholders, firstThatFits } from './words';
 import { Kbd, Notice, Spinner, StageChip } from './atoms';
 import CaseDrawer from './CaseDrawer';
 import { LoadErrorCard } from './failure';
@@ -20,33 +20,32 @@ type Filter = 'all' | 'you' | StageKey;
 interface Group { key: string; title: string; note?: string; cases: PackageSummary[] }
 
 /**
- * The filter's placeholder while it fits the box at the box's current width, otherwise "Filter cases" (U019).
- * Measured with the input's own font; measured again when the box resizes and once the web font has loaded.
+ * The filter's placeholder: the first of the given texts that fits the box at its current width, otherwise the last
+ * ("Filter cases"; U019, owner's U019 answer 1). Measured with the input's own font; measured again when the box
+ * resizes and once the web font has loaded.
  */
-function usePlaceholderThatFits(ref: RefObject<HTMLInputElement | null>, preferred: string): string {
-  const [text, setText] = useState(preferred);
+function usePlaceholderThatFits(ref: RefObject<HTMLInputElement | null>, texts: readonly string[]): string {
+  const key = JSON.stringify(texts);
+  const [text, setText] = useState(texts[texts.length - 1] ?? '');
   useLayoutEffect(() => {
     const input = ref.current;
     if (!input) return undefined;
+    const candidates = JSON.parse(key) as string[];
     const context = document.createElement('canvas').getContext('2d');
     let live = true;
     const measure = () => {
       if (!live) return;
       const style = getComputedStyle(input);
-      let width: number | null = null;
-      if (context) {
-        context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-        width = context.measureText(preferred).width;
-      }
+      if (context) context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      setText(textThatFits(preferred, CASE_SEARCH_FALLBACK, width, room));
+      setText(firstThatFits(candidates, (t) => (context ? context.measureText(t).width : null), room));
     };
     measure();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
     observer?.observe(input);
     void document.fonts?.ready.then(measure);
     return () => { live = false; observer?.disconnect(); };
-  }, [ref, preferred]);
+  }, [ref, key]);
   return text;
 }
 
@@ -63,7 +62,7 @@ export default function Desk({ caps }: { caps: string[] }) {
 
   const { data: packages, error, isLoading, mutate } = usePackages(true);
   const fields = useCaseFields(caps, packages);
-  const placeholder = usePlaceholderThatFits(searchRef, caseSearchPlaceholder(fields));
+  const placeholder = usePlaceholderThatFits(searchRef, caseSearchPlaceholders(fields));
   const { data: queue } = useReviewQueue(caps.includes(CAP.review));
   const findings = useMemo(() => openFindingsByPackage(queue?.items), [queue]);
 
@@ -153,7 +152,7 @@ export default function Desk({ caps }: { caps: string[] }) {
             <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>All <span>{total}</span></button>
             <button type="button" aria-pressed={filter === 'you'} onClick={() => setFilter('you')} data-tone="mark">{CASE_GROUPS.needsYou} <span>{counts.you}</span></button>
           </div>
-          <label className="cf-search">
+          <label className="cf-search cf-search-cases">
             <Search size={15} aria-hidden="true" />
             <span className="cf-sr">Filter cases</span>
             <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />

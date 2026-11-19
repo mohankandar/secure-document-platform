@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, textThatFits, caseSearchPlaceholder, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -59,13 +59,29 @@ test('two field names that end in the same word say it once (U019)', () => {
     'Filter by loan number or SSN last 4');
 });
 
-test('the filter placeholder falls back to "Filter cases" when it does not fit, or cannot be measured (U019)', () => {
-  assert.equal(CASE_SEARCH_FALLBACK, 'Filter cases');
-  assert.equal(textThatFits('Filter by contract or member number', CASE_SEARCH_FALLBACK, 240, 270), 'Filter by contract or member number');
-  assert.equal(textThatFits('Filter by contract or member number', CASE_SEARCH_FALLBACK, 270, 270), 'Filter by contract or member number');
-  assert.equal(textThatFits('Filter by contract or member number', CASE_SEARCH_FALLBACK, 271, 270), 'Filter cases');
-  assert.equal(textThatFits('Filter by x', CASE_SEARCH_FALLBACK, null, 270), 'Filter cases');
-  assert.equal(textThatFits('Filter by x', CASE_SEARCH_FALLBACK, 10, Number.NaN), 'Filter cases');
+test('the filter tries the full wording, then the main field alone, then "Filter cases" (owner\'s U019 answer 1)', () => {
+  const loan = [
+    { label: 'Loan number', primary: true, searchable: true },
+    { label: 'Borrower name', primary: false, searchable: true },
+  ];
+  assert.deepEqual(caseSearchPlaceholders(loan), ['Filter by loan number or borrower name', 'Filter by loan number', 'Filter cases']);
+  assert.deepEqual(caseSearchPlaceholders([{ label: 'Loan number', primary: true }]), ['Filter by loan number', 'Filter cases']);
+  assert.deepEqual(caseSearchPlaceholders([{ label: 'Borrower name', searchable: true }]), ['Filter by borrower name', 'Filter cases']);
+  assert.deepEqual(caseSearchPlaceholders([]), ['Filter cases']);
+  assert.deepEqual(caseSearchPlaceholders(undefined), ['Filter cases']);
+});
+
+test('the filter placeholder is the first text that fits; unknown widths fall back to the last (U019, U020)', () => {
+  const texts = ['Filter by loan number or borrower name', 'Filter by loan number', CASE_SEARCH_FALLBACK];
+  const widths: Record<string, number> = { [texts[0]]: 249.5, [texts[1]]: 140, [texts[2]]: 80 };
+  const widthOf = (t: string) => widths[t] ?? null;
+  assert.equal(firstThatFits(texts, widthOf, 280), texts[0]);
+  assert.equal(firstThatFits(texts, widthOf, 249.5), texts[0]);
+  assert.equal(firstThatFits(texts, widthOf, 249), texts[1]);
+  assert.equal(firstThatFits(texts, widthOf, 100), 'Filter cases');
+  assert.equal(firstThatFits(texts, () => null, 280), 'Filter cases');
+  assert.equal(firstThatFits(texts, widthOf, Number.NaN), 'Filter cases');
+  assert.equal(firstThatFits(texts, widthOf, null), 'Filter cases');
 });
 
 test('search placeholders use the configured field labels, never "contract"', () => {

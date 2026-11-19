@@ -280,3 +280,11 @@ export function advancedSummary(d: { timeoutSeconds?: number; retryMaxAttempts?:
   parts.push(ackName(d.acknowledgementMode).toLowerCase());
   return parts.join(' · ');
 }
+
+/**
+ * An address or folder cut into pieces that each end at a "/" or "\" (never between the two slashes of "://"), so the
+ * summary can wrap only there (U020): "https://host/a/b" → ["https://", "host/", "a/", "b"].
+ */
+export function slashParts(address: string): string[] {
+  return address.split(/(?<=[/\\])(?![/\\])/).filter(Boolean);
+}

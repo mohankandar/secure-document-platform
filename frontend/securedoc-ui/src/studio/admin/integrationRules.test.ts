@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   VIEWS, advancedSummary, ago, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
-  methodOf, pagesText, ruleSentence, statusText, watchedFolderStatus,
+  methodOf, pagesText, ruleSentence, slashParts, statusText, watchedFolderStatus,
 } from './integrationRules.ts';
 
 const NOW = Date.parse('2026-11-18T12:00:00Z');
@@ -105,4 +105,12 @@ test('a test before saving reads as works or a plain reason, never a code', () =
   assert.doesNotMatch(unknown.text, /SOMETHING_NEW/);
   assert.equal(failureReason('CONNECTION_TEST_FAILED'), 'the connection test failed');
   assert.equal(failureReason('SDV_TEST_UNAVAILABLE'), "SDV testing isn't set up in this installation");
+});
+
+test('an address wraps only after a slash, never inside "://" (U020)', () => {
+  assert.deepEqual(slashParts('https://northwind.okta.com/oauth2/aus9lexa'), ['https://', 'northwind.okta.com/', 'oauth2/', 'aus9lexa']);
+  assert.deepEqual(slashParts('\\\\server\\share\\in'), ['\\\\', 'server\\', 'share\\', 'in']);
+  assert.deepEqual(slashParts('/data/inbox/'), ['/', 'data/', 'inbox/']);
+  assert.deepEqual(slashParts('plain'), ['plain']);
+  assert.deepEqual(slashParts(''), []);
 });

@@ -4,7 +4,7 @@ import type { CurrentUser, TenantSwitchActions } from '../types';
 import { ROLE_OPTIONS } from '../security/uiAuthorization';
 import { useEntitySwitch } from './EntitySwitch';
 import { useThemePreference, type ThemePreference } from './theme';
-import { initials } from './userName';
+import { initials, secondNameLine } from './userName';
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -146,7 +146,7 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
                 <span className="cf-acct-avatar" aria-hidden="true">{initials(me.username)}</span>
                 <span className="cf-acct-person-text">
                   <span className="cf-acct-person-name">{name}</span>
-                  <span className="cf-acct-person-id">{me.username}</span>
+                  {secondNameLine(name, me.username) && <span className="cf-acct-person-id">{me.username}</span>}
                   <span className="cf-acct-person-roles">{roleNames.join(', ')}</span>
                 </span>
               </div>

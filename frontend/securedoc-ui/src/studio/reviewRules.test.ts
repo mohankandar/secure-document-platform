@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom } from './reviewRules.ts';
+import { bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom, fitWidth, FIT_MAX_PERCENT } from './reviewRules.ts';
 import { whyAsked } from './words.ts';
 
 const item = (findingId: string, packageId: string, entityType: string, hasBoundingBox = true) =>
@@ -90,4 +90,11 @@ test('zoom steps up and down and stops at the ends', () => {
   assert.equal(nextZoom(88, -1), 75);
   assert.equal(nextZoom(300, 1), 300);
   assert.equal(nextZoom(50, -1), 50);
+});
+
+test('"Fit" fills the viewer width, up to 150% of the page (U020)', () => {
+  assert.equal(FIT_MAX_PERCENT, 150);
+  assert.equal(fitWidth(816), 'min(100%, 1224px)');
+  assert.equal(fitWidth(0), null);
+  assert.equal(fitWidth(Number.NaN), null);
 });

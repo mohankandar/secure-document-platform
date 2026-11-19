@@ -183,10 +183,30 @@ function joinFieldNames(names: readonly string[]): string {
   return shared ? `${first.slice(0, -1).join(' ')} or ${names[1]}` : names.join(' or ');
 }
 
-/** The preferred text when its measured width fits the room, otherwise the fallback (fail closed: unknown → fallback). */
-export function textThatFits(preferred: string, fallback: string, width: number | null, room: number | null): string {
-  if (width === null || room === null || !Number.isFinite(width) || !Number.isFinite(room)) return fallback;
-  return width <= room ? preferred : fallback;
+/**
+ * The case filter's placeholders, longest first, for the box to try in order (owner's U019 answer 1): the full
+ * wording ("Filter by loan number or borrower name"), then the main field alone ("Filter by loan number"), then
+ * "Filter cases". No duplicates; always ends with the fallback.
+ */
+export function caseSearchPlaceholders(fields: readonly FieldLabel[] | undefined): string[] {
+  const list = fields ?? [];
+  const primary = list.find((f) => f.primary && f.label.trim());
+  const candidates = [caseSearchPlaceholder(list), primary ? caseSearchPlaceholder([primary]) : CASE_SEARCH_FALLBACK, CASE_SEARCH_FALLBACK];
+  return candidates.filter((text, i) => candidates.indexOf(text) === i);
+}
+
+/**
+ * The first text whose measured width fits the room, otherwise the last text (fail closed: a width or room that
+ * is unknown never fits, so the result is the last, shortest text).
+ */
+export function firstThatFits(texts: readonly string[], widthOf: (text: string) => number | null, room: number | null): string {
+  const last = texts[texts.length - 1] ?? CASE_SEARCH_FALLBACK;
+  if (room === null || !Number.isFinite(room)) return last;
+  for (const text of texts.slice(0, -1)) {
+    const width = widthOf(text);
+    if (width !== null && Number.isFinite(width) && width <= room) return text;
+  }
+  return last;
 }
 
 /* ---------- Helpers ---------- */

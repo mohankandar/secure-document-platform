@@ -18,7 +18,7 @@ import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet,
 import { MINUTE_UNITS } from './adminRules';
 import {
   ACK_NAMES, AUTH_NAMES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
-  connectionStatus, connectionTag, draftTestResult, isPolling, methodOf, watchedFolderStatus,
+  connectionStatus, connectionTag, draftTestResult, isPolling, methodOf, slashParts, watchedFolderStatus,
   type Method, type StatusLine, type View,
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
@@ -625,7 +625,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
           <dl className="cf-ad-facts" aria-label="What will be saved">
             <div><dt>Name</dt><dd>{d.name}</dd></div>
             <div><dt>{receive ? 'How documents arrive' : 'Where documents go'}</dt><dd>{methodLabel}</dd></div>
-            {(d.endpoint || d.fileShareRoot) && <div><dt>{method === 'BARCODE_SHARE' ? 'Folder' : 'Address'}</dt><dd className="cf-mono">{hasAddress ? d.endpoint : d.fileShareRoot}</dd></div>}
+            {(d.endpoint || d.fileShareRoot) && <div className="cf-ad-span"><dt>{method === 'BARCODE_SHARE' ? 'Folder' : 'Address'}</dt><dd className="cf-mono cf-ad-address">{slashParts((hasAddress ? d.endpoint : d.fileShareRoot) ?? '').map((part, i) => <span key={i}>{part}<wbr /></span>)}</dd></div>}
             {method !== 'BARCODE_SHARE' && method !== 'FOLDER' && <div><dt>Sign-in</dt><dd>{authName(d.authenticationType)}</dd></div>}
             <div><dt>Advanced</dt><dd>{advancedSummary(d)}</dd></div>
             {!editing && <div><dt>When saved</dt><dd>{d.enabled ? 'Switched on' : 'Switched off'}</dd></div>}
