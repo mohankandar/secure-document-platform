@@ -545,9 +545,9 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
           <fieldset className="cf-ad-fieldset">
             <legend>Basics</legend>
             <div className="cf-ad-grid">
-              <TextField label="Name" required value={d.name} invalid={nameMissing} onChange={(v) => set('name', v)} hint={nameMissing ? 'Required.' : 'Shown in this list and in the audit trail.'} />
-              <SelectField<Method> label={receive ? 'How documents arrive' : 'Where documents go'} value={method}
-                options={receive ? RECEIVE_METHODS : SEND_METHODS} onChange={(m) => { setTested(null); onChange(applyMethod(d, m)); }} />
+              <div className="cf-ad-span"><TextField label="Name" required value={d.name} invalid={nameMissing} onChange={(v) => set('name', v)} hint={nameMissing ? 'Required.' : 'Shown in this list and in the audit trail.'} /></div>
+              <div className="cf-ad-span"><SelectField<Method> label={receive ? 'How documents arrive' : 'Where documents go'} value={method}
+                options={receive ? RECEIVE_METHODS : SEND_METHODS} onChange={(m) => { setTested(null); onChange(applyMethod(d, m)); }} /></div>
             </div>
           </fieldset>
 

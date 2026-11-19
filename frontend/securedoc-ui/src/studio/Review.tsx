@@ -52,6 +52,16 @@ export default function Review({ caps }: { caps: string[] }) {
     return map;
   }, [packages]);
 
+  /** The queue's case line: the same words as the Cases row, main ID then the other displayable fields (owner, U015 answer 3). */
+  const queueTitles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of packages ?? []) {
+      const t = caseTitle(p.businessIdentifiers);
+      map.set(p.packageId, t.secondary ? `${t.primary} · ${t.secondary}` : t.primary);
+    }
+    return map;
+  }, [packages]);
+
   const items = useMemo(
     () => (queue?.items ?? []).filter((i) => !caseFilter || i.packageId === caseFilter),
     [queue, caseFilter],
@@ -225,7 +235,7 @@ export default function Review({ caps }: { caps: string[] }) {
           <nav className="cf-queue" aria-label="Findings queue">
             {grouped.map(([packageId, list]) => (
               <div key={packageId} className="cf-queue-case">
-                {!caseFilter && <p className="cf-queue-case-title cf-mono">{titles.get(packageId) ?? 'Case'}</p>}
+                {!caseFilter && <p className="cf-queue-case-title cf-mono">{queueTitles.get(packageId) ?? 'Case'}</p>}
                 <ul>
                   {list.map((item) => {
                     const masked = maskFoundText(foundTextOf(item)?.text);

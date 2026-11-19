@@ -136,6 +136,7 @@
   --cf-redact: #15171a;
   --cf-danger: #c43d30;
   --cf-danger-soft: #fbe9e6;
+  --cf-warn-ink: #9a7a00; /* canvas: a status word that needs a look but is not an error ("Having problems") */
   --cf-ok: #1d7a4e;
   --cf-paper: #fdfdfc;
   --cf-scrim: rgb(10 11 13 / 0.48);
@@ -177,6 +178,7 @@
   --cf-redact: #000000;
   --cf-danger: #f0786b;
   --cf-danger-soft: #3a1c19;
+  --cf-warn-ink: #f4d03f;
   --cf-ok: #6fcf97;
   --cf-paper: #f4f5f6;
   --cf-scrim: rgb(0 0 0 / 0.6);

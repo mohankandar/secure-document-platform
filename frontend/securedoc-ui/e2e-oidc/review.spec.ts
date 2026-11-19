@@ -59,14 +59,14 @@ function blankPagePng(width = 1224, height = 1584): Buffer {
 }
 const PAGE_PNG = blankPagePng();
 
-const CASE_A = caseFor('LN204881', '0001');
-const CASE_B = caseFor('LN204885', '0002');
+const CASE_A = caseFor('LN204881', '0001', [{ key: 'borrower_name', label: 'Borrower name', value: 'Maria Alvarez', primary: false, searchable: true, displayable: true, displayOrder: 2 }]);
+const CASE_B = caseFor('LN204885', '0002', [{ key: 'borrower_name', label: 'Borrower name', value: 'Daniel Kim', primary: false, searchable: true, displayable: false, displayOrder: 2 }]);
 
-function caseFor(loan: string, n: string) {
+function caseFor(loan: string, n: string, more: object[] = []) {
   return {
     packageId: `c4c4c4c4-0000-4000-8000-00000000${n}`, tenantId: ENTITY.tenantId, packageType: 'MANUAL_UPLOAD', status: 'PENDING_REVIEW',
     documentCount: 1, createdAt: '2026-11-18T12:00:00Z', updatedAt: '2026-11-18T12:00:00Z', documents: [],
-    businessIdentifiers: [{ key: 'loan_number', label: 'Loan number', value: loan, primary: true, searchable: true, displayable: true, displayOrder: 1 }],
+    businessIdentifiers: [{ key: 'loan_number', label: 'Loan number', value: loan, primary: true, searchable: true, displayable: true, displayOrder: 1 }, ...more],
   };
 }
 
@@ -144,6 +144,13 @@ test('the full text is only in the decision panel; queue items show only the las
 
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
   expect(stored).not.toContain('0193');
+});
+
+test('the queue case line is the Cases row line: main ID, then displayable fields only', async ({ page }) => {
+  await openReview(page);
+  const titles = queue(page).locator('.cf-queue-case-title');
+  await expect(titles).toHaveText(['LN204881 · Maria Alvarez', 'LN204885']);
+  await expect(queue(page)).not.toContainText('Daniel Kim');
 });
 
 test('says why a person is asked, with the policy level', async ({ page }) => {
