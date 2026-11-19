@@ -86,16 +86,47 @@ const PAGE_PNG = blankPagePng();
 
 type Calls = { approvals: string[]; confirmed: string[] };
 
-async function mockApi(page: Page, calls: Calls) {
+/** The Reports headline numbers (five tiles); every other report section is empty. */
+function reports() {
+  const zeroes = (keys: string[]) => Object.fromEntries(keys.map((k) => [k, 0]));
+  return {
+    generatedAt: '2026-11-18T20:00:00Z',
+    period: { from: '2026-10-19T00:00:00Z', to: '2026-11-18T00:00:00Z', previousFrom: '2026-09-19T00:00:00Z', previousTo: '2026-10-19T00:00:00Z', source: 'ALL', outcome: 'ALL' },
+    executive: {
+      ...zeroes(['previousBatches', 'completed', 'previousCompleted', 'previousDelivered', 'periodIntakeDelivered', 'previousPeriodIntakeDelivered', 'completionRate', 'periodIntakeDeliveryRate']),
+      batches: 512, documents: 1873, pages: 14220, delivered: 463, deliveryRate: 0.9, medianDeliveryHours: 2.4, p95DeliveryHours: 9.8,
+      straightThroughRate: 0.68, reviewRate: 0.29, currentBacklog: 23, currentAttention: 4, oldestBacklogHours: 30.5,
+      trend: [{ bucket: '2026-11-17T00:00:00Z', received: 12, delivered: 10 }, { bucket: '2026-11-18T00:00:00Z', received: 14, delivered: 11 }],
+    },
+    intake: zeroes(['totalBatches', 'manual', 'api', 'watchedFolder', 'scanner', 'waitingForTrigger', 'duplicateObservations', 'rejectedObservations']),
+    processing: zeroes(['processing', 'needsReview', 'needsApproval', 'completed', 'technicalAttention', 'rejected']),
+    export: zeroes(['exportedPackages', 'successfulExportCycles', 'pendingFinalApproval']),
+    retention: zeroes(['originalsDueWithin24Hours', 'redactedCopiesDueWithin24Hours', 'technicalHoldsDueWithin24Hours', 'originalsOverdue', 'redactedCopiesOverdue', 'purgedPackages']),
+    timing: zeroes(['medianTurnaroundHours', 'p95TurnaroundHours', 'medianActiveProcessingHours', 'p95ActiveProcessingHours', 'medianReviewWaitHours',
+      'medianReviewHandlingHours', 'turnaroundSamples', 'activeProcessingSamples', 'reviewWaitSamples', 'reviewHandlingSamples']),
+    backlog: zeroes(['underOneHour', 'oneToFourHours', 'fourToTwentyFourHours', 'oneToThreeDays', 'overThreeDays', 'oldestHours']),
+    usage: zeroes(['packages', 'documents', 'pages', 'averageDocumentsPerPackage', 'averagePagesPerPackage', 'reviewedPackages', 'straightThroughPackages', 'reprocessedPackages']),
+    serviceLevel: {
+      deliveryTargetMinutes: 240, deliveryTargetPercent: 95, deliveryWithinTargetRate: 91, deliveryEligible: 463, deliveryBreaches: 42,
+      straightThroughTargetPercent: 70, straightThroughActualPercent: 68,
+      reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, reviewWithinTargetRate: 83, reviewEligible: 148, reviewBreaches: 25,
+    },
+    dimensions: [],
+  };
+}
+
+async function mockApi(page: Page, calls: Calls, roles: string[] = ENTITY.roles) {
   let items = [finding('f1', 'SSN', '412-55-0193'), finding('f2', 'SSN', '518-22-7741'), finding('f3', 'SSN', '623-11-0042'), finding('f4', 'DATE_OF_BIRTH', '03/14/1979')];
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    if (url.pathname === '/api/v1/me/tenants') return json([ENTITY]);
+    if (url.pathname === '/api/v1/me/tenants') return json([{ ...ENTITY, roles }]);
     if (url.pathname === '/api/v1/me') {
-      return json({ username: 'tablet.user', roles: ENTITY.roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities: CAPS });
+      return json({ username: 'tablet.user', roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC',
+        capabilities: roles === ENTITY.roles ? CAPS : capabilitiesFor(...roles) });
     }
+    if (url.pathname === '/api/v1/operations/reports') return json(reports());
     if (url.pathname === '/api/v1/packages') return json(CASES);
     const one = CASES.find((c) => url.pathname === `/api/v1/packages/${c.packageId}`);
     if (one) return json(one);
@@ -308,3 +339,33 @@ test('Safari: on New case, "choose files" opens the file picker and the picked P
   expect(hit).toBeGreaterThanOrEqual(44);
   expect(await sideways(page)).toBe(0);
 });
+
+for (const [who, roles] of [['Report viewer', ['REPORT_VIEWER']], ['Business Administrator', ['BUSINESS_ADMIN']]] as const) {
+  test(`Reports (${who}): the five headline tiles fill their rows; on a portrait tablet they sit 3 + 2`, async ({ page }, info) => {
+    await mockIdentityProvider(page);
+    await mockApi(page, { approvals: [], confirmed: [] }, [...roles]);
+    await page.goto('/');
+    await page.getByRole('button', { name: /sign in/i }).first().tap();
+    await page.locator('main h1').first().waitFor();
+    await page.evaluate(() => { window.history.pushState({}, '', '/reports'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await expect(page.getByRole('heading', { name: 'How the work is going' })).toBeVisible();
+    const stats = page.locator('dl.cf-rp-stats');
+    await expect(stats.locator('.cf-rp-stat')).toHaveCount(5);
+    const { rows, gaps } = await stats.evaluate((dl) => {
+      const box = dl.getBoundingClientRect();
+      const tops = new Map<number, DOMRect[]>();
+      for (const el of dl.querySelectorAll(':scope > .cf-rp-stat')) {
+        const r = el.getBoundingClientRect();
+        const key = Math.round(r.top);
+        tops.set(key, [...(tops.get(key) || []), r]);
+      }
+      const ordered = [...tops.entries()].sort((a, b) => a[0] - b[0]).map(([, rs]) => rs);
+      // How far each row's last tile stops short of the box's right edge (0 when the row is filled).
+      return { rows: ordered.map((rs) => rs.length), gaps: ordered.map((rs) => Math.round(box.right - Math.max(...rs.map((r) => r.right)))) };
+    });
+    for (const gap of gaps) expect(gap, 'every row of tiles reaches the right edge').toBeLessThanOrEqual(2);
+    const { width, height } = info.project.use.viewport!;
+    if (width <= 1024 && height > width) expect(rows).toEqual([3, 2]);
+    expect(await sideways(page)).toBe(0);
+  });
+}

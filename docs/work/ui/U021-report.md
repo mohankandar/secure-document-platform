@@ -90,3 +90,19 @@ Outcome: DONE (one desktop difference to approve, see Questions)
 ## Suggested next step
 
 The design chat reviews `compare/U021/` and answers the two questions. Then the owner checks on a real iPad.
+
+## Owner's answers (2026-11-19)
+
+1. **Desktop Review viewer:** keep the fix. Opening with the finding in view is the intended behaviour; the U020 position was the bug.
+2. **Portrait rule:** acceptable. `(max-width: 1024px) and (orientation: portrait)` is the right rule: a 1024 × 768 landscape iPad has room for the page and the decision side by side.
+
+**Note from the design chat's review of the pairs. Fix it in the follow-up:**
+- **Reports KPI tiles at 768–834 portrait:** the five tiles wrap as 4 + 1, leaving "Open now" alone with an empty area beside it (`ReportsViewer-768x1024`). At those widths, lay them out evenly: 3 + 2, with the two tiles in the second row filling the row, or a 2-column grid with the last tile spanning both columns. Apply the same to the Business Administrator view. Retake those Reports shots.
+
+Everything else reviewed (Review portrait 820, Cases 768, the case panel and Review at 1024 landscape, the Continue manually note) looks right.
+
+## Follow-up: Reports tiles (2026-11-19)
+
+- **Fix:** `src/studio/reports/reports.css`. On a portrait tablet, `(min-width: 768px) and (max-width: 1024px) and (orientation: portrait)`, the five headline tiles use a 6-column grid: the first three span 2 columns, the last two span 3. They now sit 3 + 2 with the second row filled. The same component serves the Report viewer and the Business Administrator, so both views get it. Landscape and desktop are unchanged.
+- **Test:** `e2e-tablet/tablet.spec.ts` gains "Reports (Report viewer / Business Administrator): the five headline tiles fill their rows" at all 5 sizes: every row reaches the right edge, 3 + 2 in portrait, nothing scrolls sideways. Without the fix it fails at 768 (the second row stopped 551 px short). `test:tablet` is now 55 (11 tests × 5 sizes).
+- **Shots retaken:** `compare/U021/Reports-*` and `ReportsViewer-*`, all 5 sizes, light and dark (not committed).
