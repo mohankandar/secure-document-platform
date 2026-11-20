@@ -146,3 +146,11 @@ One commit on `feature/no-redacted-values`: `fix(security): 0015 no redacted val
 ## Suggested next step
 
 Owner review of the diff. Then decide on question 1, and register build plan step 2 (audit detail changes) as the next task.
+
+## Owner's answers (2026-11-19, recorded by the design chat)
+
+1. Retention removing the stored extracted text: proven in build plan step 3 (compliance report backend), as part of its deletion proof.
+2. Old acceptance harness role name: fixed as a small extra step in task 0016, together with updating the backend test count in `CLAUDE.md` to 459.
+3. AI parse failures carry no cause, only the fixed message and failure code: accepted.
+4. The `toString()` on `TesseractOcrAdapter.WordRow`: approved.
+5. Merge `feature/no-redacted-values` into `feature/lexavault-r1b-tenant-identity` now, so task 0016 starts from it.
