@@ -185,3 +185,11 @@ Not pushed. `feature/audit-detail` is not merged.
 ## Suggested next step
 
 Owner review of the diff, then merge `feature/audit-detail`. Then build plan step 3 (compliance report backend), which reuses `PolicyPreset`, the `previous=` history and `COMPLIANCE_REPORT_CREATED`.
+
+## Owner's answers (2026-11-19, recorded by the design chat)
+
+1. Case IDs on Document, Finding and Artifact records: yes, done in task 0017 (needed by the compliance report's full audit trail appendix).
+2. Machine clients: record their client name as the display name (for example "Scanner: front desk"), in task 0017.
+3. CSV formula cells: yes, prefix a cell that starts with `=`, `+`, `-` or `@` with `'`, in the CSV export only, in task 0017.
+4. A policy save with no change writes no audit record, in task 0017.
+5. Merge `feature/audit-detail` into `feature/lexavault-r1b-tenant-identity` as step 0 of task 0017.
