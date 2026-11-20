@@ -446,3 +446,71 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 /* U020 fix 5: the address in the connection summary has its own full-width row and wraps only after a "/". */
 .cf-ad-facts dd.cf-ad-address { overflow-wrap: normal; }
 .cf-ad-facts dd.cf-ad-address > span { overflow-wrap: anywhere; }
+
+/* UI task U023: the Sensitive data card's presets, preview and confirm step, as on the canvas. Tokens only. */
+.cf-sp-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.cf-sp-preset {
+  display: flex; gap: 12px; align-items: flex-start; padding: 14px; cursor: pointer;
+  border: 1px solid var(--cf-line-strong); border-radius: 8px; background: var(--cf-surface);
+}
+.cf-sp-preset[data-chosen] { border-color: var(--cf-ink); box-shadow: inset 0 0 0 1px var(--cf-ink); background: var(--cf-raised); }
+.cf-sp-preset input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--cf-ink); }
+.cf-sp-preset b { font-size: 15px; font-weight: 600; }
+.cf-sp-inuse { margin-left: 4px; padding: 1px 8px; border-radius: 10px; background: var(--cf-fill); font-size: 12px; font-weight: 600; }
+.cf-sp-line { display: block; margin-top: 2px; font-size: 14px; color: var(--cf-muted); }
+.cf-sp-hint { margin: 0; font-size: 13px; color: var(--cf-muted); }
+.cf-sp-hint b { font-weight: 500; color: var(--cf-ink); }
+.cf-sp-hint[data-custom] b { font-weight: 600; }
+
+.cf-sp-preview {
+  position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 8px;
+  border: 1px solid var(--cf-stage-review); background: color-mix(in srgb, var(--cf-stage-review-soft) 55%, var(--cf-surface));
+}
+.cf-sp-preview[data-state='loading']:not(:has(.cf-sp-preview-body)) { min-height: 148px; box-sizing: border-box; }
+.cf-sp-preview[data-state='loading'] .cf-sp-preview-body { visibility: hidden; }
+.cf-sp-preview-body { display: flex; flex-direction: column; gap: 10px; }
+.cf-sp-preview-loading { position: absolute; top: 16px; left: 18px; right: 18px; }
+.cf-sp-preview p { margin: 0; }
+.cf-sp-preview-head { font-size: 14px; font-weight: 600; }
+.cf-sp-preview-text { font-size: 14px; }
+.cf-sp-preview-note { font-size: 13px; color: var(--cf-muted); }
+.cf-sp-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.cf-sp-tile { padding: 10px 12px; border: 1px solid var(--cf-line); border-radius: 6px; background: var(--cf-surface); min-width: 0; }
+.cf-sp-tile-label { font-size: 13px; color: var(--cf-muted); }
+.cf-sp-tile-nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 2px; }
+.cf-sp-now { font-family: var(--cf-font-mono); font-size: 15px; color: var(--cf-muted); }
+.cf-sp-next { font-family: var(--cf-font-mono); font-size: 22px; font-weight: 500; }
+.cf-sp-change { font-family: var(--cf-font-mono); font-size: 14px; color: var(--cf-warn-ink); }
+.cf-sp-change[data-direction='none'] { color: var(--cf-muted); }
+
+.cf-sp-section { border-top: 1px solid var(--cf-line); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+details.cf-sp-section { display: block; }
+.cf-sp-section > summary { font-size: 15px; font-weight: 500; min-height: 32px; }
+.cf-sp-fine { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+.cf-sp-heading { margin: 0; font-size: 15px; font-weight: 500; }
+.cf-sp-heading span { font-size: 13px; font-weight: 400; color: var(--cf-muted); }
+
+.cf-btn.cf-sp-action { height: 44px; padding: 0 16px; }
+.cf-btn.cf-sp-action[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+.cf-btn.cf-sp-action[data-variant='solid'][aria-disabled='true']:hover { background: var(--cf-ink); }
+
+.cf-sp-scrim {
+  position: fixed; inset: 0; z-index: 40; overflow-y: auto;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 140px 16px 32px; background: var(--cf-scrim-dialog);
+}
+.cf-sp-dialog {
+  width: 100%; max-width: 520px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 24px;
+  background: var(--cf-surface); color: var(--cf-ink); border-radius: 10px; box-shadow: var(--cf-shadow-pop);
+}
+.cf-sp-dialog:focus { outline: none; }
+.cf-sp-dialog h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.cf-sp-dialog p { margin: 0; }
+.cf-sp-dialog > p[id] { font-size: 15px; line-height: 1.5; }
+.cf-sp-dialog b { font-weight: 600; }
+.cf-sp-dialog b.cf-sp-num { font-family: var(--cf-font-mono); font-weight: 500; }
+.cf-sp-dialog-box { padding: 10px 12px; border: 1px solid var(--cf-line); border-radius: 6px; background: var(--cf-raised); font-size: 14px; line-height: 1.5; color: var(--cf-muted); }
+.cf-sp-dialog-note { font-size: 13px; color: var(--cf-muted); }
+.cf-sp-dialog-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+/* U023 canvas: the presets hint and the preview lines run the full card width (Admin's 75ch reading width does not apply). */
+.cf-admin :is(.cf-sp-hint, .cf-sp-preview p) { max-width: none; }

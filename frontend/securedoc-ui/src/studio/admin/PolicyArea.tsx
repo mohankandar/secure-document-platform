@@ -1,21 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { apiClient } from '../../api/client';
 import type { BusinessAdminConfiguration, BusinessReviewMode, DocumentIntelligenceMode, ReportingConfiguration } from '../../types';
 import { errorMessage } from '../data';
-import { Notice } from '../atoms';
+import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
 import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
 import { ErrorBoundary } from '../failure';
 import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
+import {
+  PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, latestOnly, needsConfirm, presetOf, previewHeadline, previewTiles,
+  reviewChanged, saveLabel, type ConfirmWords, type PolicyEstimate,
+} from './policyRules';
 
 /** The one name for a sensitive type (words.ts), shared with Review, the case panel and Continue manually. */
 export const typeName = sensitiveTypeName;
 
-function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
+type SensitiveDataPolicy = BusinessAdminConfiguration['sensitiveDataPolicy'];
+
+/** The estimate is used for the confirm step only when it answers for these saved and edited values. */
+const estimateKey = (saved: SensitiveDataPolicy, draft: SensitiveDataPolicy) =>
+  JSON.stringify([estimateQuery(saved), estimateQuery(draft)]);
+
+/**
+ * UI task U023: the "Sensitive data" card with presets, a preview of what changes, and a confirm step when fewer
+ * findings would go to a person. Presets set only the review mode and the threshold (policyRules.ts).
+ */
+function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown; entityName: string }) {
   const sdp = data.sensitiveDataPolicy;
+  const savedPreset = presetOf(sdp.reviewMode, sdp.autoRedactThreshold);
   const unsupported = sdp.enabledEntityTypes.filter((t) => !SENSITIVE_TYPES.some((s) => s.key === t));
+  const radioName = useId();
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const answered = useRef<{ key: string; estimate: PolicyEstimate } | null>(null);
+  const [confirm, setConfirm] = useState<{ words: ConfirmWords; save: () => Promise<void>; reset: () => void } | null>(null);
+
+  // "Fine-tune by hand" is closed by default and opens by itself when the saved policy is Custom.
+  const [fineTune, setFineTune] = useState(savedPreset === 'CUSTOM');
+  const [seen, setSeen] = useState(sdp);
+  if (seen !== sdp) { setSeen(sdp); if (savedPreset === 'CUSTOM') setFineTune(true); }
+
+  const focusSave = () => requestAnimationFrame(() => saveButton.current?.focus());
+
+  function requestSave(draft: SensitiveDataPolicy, save: () => Promise<void>, reset: () => void) {
+    const latest = answered.current;
+    const estimate = latest && latest.key === estimateKey(sdp, draft) ? latest.estimate : null;
+    if (reviewChanged(sdp, draft) && needsConfirm(estimate)) setConfirm({ words: confirmWords(sdp, draft, estimate!), save, reset });
+    else void save();
+  }
+
   return (
+    <>
     <SettingsCard
       title="Sensitive data"
       description="Which values are found and redacted, and when a person has to look."
@@ -25,9 +61,51 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
         if (d.enabledEntityTypes.length === 0) throw new Error('Enable at least one sensitive-data category.');
         return mutate(await apiClient.updateSensitiveDataPolicy(d));
       }}
+      footer={({ draft, dirty, saving, save, reset }) => {
+        const off = !dirty || saving;
+        return (
+          <>
+            <button type="button" className="cf-btn cf-sp-action" disabled={off} onClick={reset}>Reset</button>
+            {/* aria-disabled, not disabled, so focus can come back here after the confirm step. */}
+            <button ref={saveButton} type="button" className="cf-btn cf-sp-action" data-variant="solid" aria-disabled={off || undefined}
+              onClick={() => { if (!off) requestSave(draft, save, reset); }}>
+              {saving && <Spinner label="Saving" />}{saveLabel(sdp, draft)}
+            </button>
+          </>
+        );
+      }}
     >
-      {(d, set) => (
+      {(d, set) => {
+        const chosen = presetOf(d.reviewMode, d.autoRedactThreshold);
+        return (
         <>
+          <fieldset className="cf-ad-fieldset">
+            <legend>How much should a person check?</legend>
+            <div className="cf-sp-presets">
+              {PRESETS.map((p) => (
+                <label key={p.key} className="cf-sp-preset" data-chosen={chosen === p.key || undefined}>
+                  <input type="radio" name={radioName} checked={chosen === p.key} onChange={() => set(applyPreset(d, p.key))} />
+                  <span>
+                    <b>{p.name}</b>
+                    {savedPreset === p.key && <> <span className="cf-sp-inuse">In use</span></>}
+                    {' '}<span className="cf-sp-line">{p.line}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="cf-sp-hint" data-custom={chosen === 'CUSTOM' || undefined}>
+              {chosen === 'CUSTOM'
+                ? <><b>Custom</b>: these settings match no preset. Below the threshold, a finding always goes to a person; nothing is skipped.</>
+                : <>Changing the numbers below by hand shows <b>Custom</b>. Below the threshold, a finding always goes to a person; nothing is skipped.</>}
+            </p>
+          </fieldset>
+          {reviewChanged(sdp, d) && (
+            <EstimatePreview saved={sdp} draft={d} entityName={entityName}
+              onAnswer={(estimate) => { answered.current = { key: estimateKey(sdp, d), estimate }; }} />
+          )}
+          <details className="cf-disclosure cf-sp-section" open={fineTune} onToggle={(e) => setFineTune(e.currentTarget.open)}>
+            <summary>Fine-tune by hand</summary>
+            <div className="cf-sp-fine">
           <fieldset className="cf-ad-fieldset">
             <legend>Send to review</legend>
             <div className="cf-segment" role="radiogroup" aria-label="Review mode">
@@ -43,6 +121,10 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
             <input id="cf-threshold" type="range" min={50} max={99} step={1} value={Math.round(d.autoRedactThreshold * 100)} onChange={(e) => set({ ...d, autoRedactThreshold: Number(e.target.value) / 100 })} />
             <p className="cf-ad-hint">Findings below this go to a reviewer{d.reviewMode === 'REVIEW_ALL' ? '. Every case is reviewed regardless' : ''}.</p>
           </div>
+            </div>
+          </details>
+          <div className="cf-sp-section">
+          <h3 className="cf-sp-heading">What is redacted <span>· not changed by presets</span></h3>
           <fieldset className="cf-ad-fieldset">
             <legend>{SENSITIVE_TYPES_HEADING} <span className="cf-muted">({d.enabledEntityTypes.length})</span></legend>
             <div className="cf-ad-chips">
@@ -69,9 +151,144 @@ function SensitiveDataCard({ data, mutate }: { data: BusinessAdminConfiguration;
             {d.enabledEntityTypes.length === 0 && <p className="cf-ad-warn">Enable at least one category. The policy cannot be saved empty.</p>}
           </fieldset>
           <Toggle label="Treat labeled last-four SSNs as sensitive" hint="When on, a last-four value is also redacted, but only when it is explicitly labeled SSN." checked={d.maskSsnLastFour} disabled={!d.enabledEntityTypes.includes('SSN')} onChange={(v) => set({ ...d, maskSsnLastFour: v })} />
+          </div>
         </>
-      )}
+        );
+      }}
     </SettingsCard>
+    {confirm && (
+      <FewerChecksDialog words={confirm.words} anchor={saveButton.current}
+        onKeep={() => { confirm.reset(); setConfirm(null); focusSave(); }}
+        onSave={() => { const { save } = confirm; setConfirm(null); focusSave(); void save().finally(focusSave); }} />
+    )}
+    </>
+  );
+}
+
+/**
+ * The preview: what the edited review mode and threshold would have meant over the last 30 days. Asks again about
+ * 300 ms after the values stop changing; only the latest answer counts; on failure it says so once, no retry loop.
+ */
+function EstimatePreview({ saved, draft, entityName, onAnswer }: {
+  saved: SensitiveDataPolicy; draft: SensitiveDataPolicy; entityName: string; onAnswer: (estimate: PolicyEstimate) => void;
+}) {
+  const key = estimateKey(saved, draft);
+  const query = JSON.stringify(estimateQuery(draft));
+  const [answer, setAnswer] = useState<{ status: 'loading' | 'ready' | 'failed'; estimate?: PolicyEstimate }>({ status: 'loading' });
+  const [latest] = useState(latestOnly);
+  const report = useRef(onAnswer);
+  report.current = onAnswer;
+
+  useEffect(() => {
+    const ticket = latest.take();
+    setAnswer((a) => ({ status: 'loading', estimate: a.estimate }));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      apiClient.sensitiveDataPolicyEstimate(JSON.parse(query), controller.signal)
+        .then((estimate) => {
+          if (!latest.isLatest(ticket)) return;
+          setAnswer({ status: 'ready', estimate });
+          report.current(estimate);
+        })
+        .catch(() => { if (latest.isLatest(ticket) && !controller.signal.aborted) setAnswer({ status: 'failed' }); });
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [key, query, latest]);
+
+  const loading = answer.status === 'loading';
+  const shown = answer.estimate;
+  return (
+    <div className="cf-sp-preview" role="status" aria-busy={loading || undefined} data-state={answer.status}>
+      {answer.status === 'failed' && <p className="cf-sp-preview-text">{PREVIEW_WORDS.failed}</p>}
+      {loading && <p className="cf-sp-preview-text cf-sp-preview-loading">{PREVIEW_WORDS.loading}</p>}
+      {/* While loading, the last answer stays in place unseen, so the box keeps its height. */}
+      {shown && answer.status !== 'failed' && (
+        <div className="cf-sp-preview-body" aria-hidden={loading || undefined}>
+          <EstimateBody draft={draft} estimate={shown} entityName={entityName} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EstimateBody({ draft, estimate, entityName }: { draft: SensitiveDataPolicy; estimate: PolicyEstimate; entityName: string }) {
+  const tiles = previewTiles(estimate);
+  return (
+    <>
+      <p className="cf-sp-preview-head">{previewHeadline(draft, estimate, entityName)}</p>
+      {tiles ? (
+        <>
+          <div className="cf-sp-tiles">
+            {tiles.map((t) => (
+              <div key={t.label} className="cf-sp-tile">
+                <div className="cf-sp-tile-label">{t.label}</div>
+                <div className="cf-sp-tile-nums">
+                  <span className="cf-sp-now">{t.current}</span>
+                  <span aria-hidden="true">→</span><span className="sr-only">to</span>
+                  <b className="cf-sp-next">{t.proposed}</b>
+                  <span className="cf-sp-change" data-direction={t.change.direction}>{t.change.text}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="cf-sp-preview-note">{PREVIEW_WORDS.note}</p>
+        </>
+      ) : <p className="cf-sp-preview-text">{PREVIEW_WORDS.notEnough}</p>}
+    </>
+  );
+}
+
+const DIALOG_FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** The confirm step when fewer findings would go to a person. "Keep" is the main button; Esc keeps. */
+function FewerChecksDialog({ words, anchor, onKeep, onSave }: { words: ConfirmWords; anchor: HTMLElement | null; onKeep: () => void; onSave: () => void }) {
+  const id = useId();
+  const dialog = useRef<HTMLElement>(null);
+  const keep = useRef<HTMLButtonElement>(null);
+  useEffect(() => { keep.current?.focus(); }, []);
+
+  // Wherever focus is while the dialog is open, Esc and Tab belong to the dialog.
+  const keepRef = useRef(onKeep);
+  keepRef.current = onKeep;
+  useEffect(() => {
+    const onDocumentKey = (e: KeyboardEvent) => {
+      if (!dialog.current || dialog.current.contains(document.activeElement)) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); keepRef.current(); }
+      else if (e.key === 'Tab') { e.preventDefault(); keep.current?.focus(); }
+    };
+    document.addEventListener('keydown', onDocumentKey, true);
+    return () => document.removeEventListener('keydown', onDocumentKey, true);
+  }, []);
+
+  function onKeyDown(e: ReactKeyboardEvent<HTMLElement>) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onKeep(); return; }
+    if (e.key !== 'Tab' || !dialog.current) return;
+    const items = [...dialog.current.querySelectorAll<HTMLElement>(DIALOG_FOCUSABLE)];
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
+  // Drawn at the Case File root, where the colour tokens live, above every page section.
+  const host = (anchor?.closest('.cf') as HTMLElement | null) ?? document.body;
+  return createPortal(
+    <div className="cf-sp-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}>
+      <section ref={dialog} className="cf-sp-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-desc`} tabIndex={-1} onKeyDown={onKeyDown}>
+        <h2 id={`${id}-title`}>A person would check fewer findings</h2>
+        <p id={`${id}-desc`}>
+          With <b>{words.newName}</b>, about <b className="cf-sp-num">{words.fewerFindings}</b> fewer findings
+          {words.fewerCases && <> and <b className="cf-sp-num">{words.fewerCases}</b> fewer cases</>} in the last {words.days} days would have had a person check them.
+        </p>
+        <div className="cf-sp-dialog-box">Those findings are still redacted, automatically, without a person looking first. Findings below {words.threshold} confidence still go to a person.</div>
+        <p className="cf-sp-dialog-note">{words.auditLine}</p>
+        <div className="cf-sp-dialog-foot">
+          <button ref={keep} type="button" className="cf-btn cf-sp-action" data-variant="solid" onClick={onKeep}>Keep {words.oldName}</button>
+          <button type="button" className="cf-btn cf-sp-action" onClick={onSave}>Save {words.newName}</button>
+        </div>
+      </section>
+    </div>,
+    host,
   );
 }
 
@@ -301,14 +518,14 @@ function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
   );
 }
 
-export default function PolicyArea() {
+export default function PolicyArea({ entityName }: { entityName: string }) {
   const { data, error, mutate } = useBusinessAdmin();
   if (!data) return <Loading error={error} retry={() => mutate()} label="Policy" />;
   const apply = (next: BusinessAdminConfiguration) => mutate(next, { revalidate: false });
 
   return (
     <div className="cf-ad-stack">
-      <ErrorBoundary title="Sensitive data settings couldn't be shown" request="GET /business-admin/configuration"><SensitiveDataCard data={data} mutate={apply} /></ErrorBoundary>
+      <ErrorBoundary title="Sensitive data settings couldn't be shown" request="GET /business-admin/configuration"><SensitiveDataCard data={data} mutate={apply} entityName={entityName} /></ErrorBoundary>
       <ErrorBoundary title="Document intelligence settings couldn't be shown" request="GET /business-admin/configuration"><IntelligenceCard data={data} mutate={apply} /></ErrorBoundary>
       <div className="cf-ad-pair">
         <ErrorBoundary title="Keeping and deleting couldn't be shown" request="GET /business-admin/configuration"><LifecycleCard data={data} mutate={apply} /></ErrorBoundary>

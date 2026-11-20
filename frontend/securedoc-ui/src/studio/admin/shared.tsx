@@ -32,13 +32,18 @@ export function Loading({ error, retry, label, request }: { error?: unknown; ret
  * A form card with explicit dirty state. Save is only enabled when the draft differs
  * from what the server returned; Reset discards local edits.
  */
-export function SettingsCard<T>({ title, description, value, children, onSave, savedMessage }: {
+/** What a card's own footer gets (U023): the draft, whether it changed, and the card's save and reset. */
+export interface SettingsCardFooter<T> { draft: T; dirty: boolean; saving: boolean; save: () => Promise<void>; reset: () => void }
+
+export function SettingsCard<T>({ title, description, value, children, onSave, savedMessage, footer }: {
   title: string;
   description?: string;
   value: T;
   children: (draft: T, set: (next: T) => void) => ReactNode;
   onSave: (draft: T) => Promise<unknown>;
   savedMessage: string;
+  /** Replaces the standard Reset / Save changes buttons. */
+  footer?: (card: SettingsCardFooter<T>) => ReactNode;
 }) {
   const toast = useToast();
   const [draft, setDraft] = useState<T>(value);
@@ -52,6 +57,8 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
   }
   const dirty = JSON.stringify(draft) !== JSON.stringify(value);
   useUnsavedWork(dirty || saving);
+
+  function reset() { setDraft(value); setError(null); }
 
   async function save() {
     setSaving(true);
@@ -78,10 +85,14 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
       <div className="cf-ad-card-body">{children(draft, setDraft)}</div>
       {error && <Notice tone="danger">{error}</Notice>}
       <footer className="cf-ad-card-foot">
-        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!dirty || saving} onClick={() => { setDraft(value); setError(null); }}>Reset</button>
-        <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={!dirty || saving} onClick={save}>
-          {saving && <Spinner label="Saving" />}Save changes
-        </button>
+        {footer ? footer({ draft, dirty, saving, save, reset }) : (
+          <>
+            <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!dirty || saving} onClick={reset}>Reset</button>
+            <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={!dirty || saving} onClick={save}>
+              {saving && <Spinner label="Saving" />}Save changes
+            </button>
+          </>
+        )}
       </footer>
     </section>
   );
