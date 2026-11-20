@@ -187,3 +187,8 @@ No schema change, no new library, no change to detection or any other frozen are
 ## Suggested next step
 
 U023 (the policy screen) using this endpoint, after question 1 is answered.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Strict and cases with no findings: keep today's behaviour and make the wording honest: "A person checks every finding. Cases with nothing found are delivered without a check." Making Strict stop every case for a person goes to the backlog (it would change frozen V1 processing).
+2. The 30-day window counts cases by when they were received (created): OK.
