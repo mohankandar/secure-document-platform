@@ -100,7 +100,12 @@ In `test-tools\compliance-report\output\` (git-ignored):
 
 ## Commits (hash and message), or "not committed"
 
-On `feature/compliance-followups`: see the commit hash recorded in the "Commit" section at the end. Not pushed, not merged.
+- `89ce775` docs(work): 0017 report: owner's answers recorded (on `feature/compliance-report`, step 0)
+- `68272db` Merge branch 'feature/compliance-report' into feature/lexavault-r1b-tenant-identity (step 0)
+- `10940bd` feat(compliance): 0018 compliance report follow-ups (on `feature/compliance-followups`)
+- This hash note is a follow-up docs commit on the same branch.
+
+Not pushed, not merged.
 
 ## Not done, and why
 
