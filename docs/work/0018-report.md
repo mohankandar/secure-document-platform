@@ -121,3 +121,11 @@ Nothing from the task is left undone.
 ## Suggested next step
 
 Owner review of the diff and the four sample PDFs, then merge `feature/compliance-followups` into `feature/lexavault-r1b-tenant-identity`. Then U022, the compliance report dialog in the UI.
+
+## Owner's answers (2026-11-20, recorded by the design chat; recommended answers, the owner may still change them before U022 runs)
+
+1. Other 403s: record them too (tenant-boundary refusals and service `AccessDeniedException`s), in U022 step 0.
+2. Manual "Run now" keeps the person's own name: correct.
+3. An expired but installed licence still gives the customer name: keep.
+4. Several capabilities joined with `|`: acceptable.
+Also in U022 step 0: `COMPLIANCE_REPORT_FULL` may create either edition, so the IT Administrator can untick "Include full audit trail".
