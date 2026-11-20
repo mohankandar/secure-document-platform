@@ -535,6 +535,15 @@ public class ApplicationServiceConfig {
                 tenantLicensingService::installedCustomerName, java.time.Clock.systemUTC());
     }
 
+    /** Task 0019: the policy estimate (counts only, read-only). */
+    @Bean
+    public com.securedoc.platform.application.business.admin.PolicyEstimateService policyEstimateService(
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+            com.securedoc.platform.application.port.out.PolicyEstimateReadPort policyEstimateReadPort) {
+        return new com.securedoc.platform.application.business.admin.PolicyEstimateService(
+                tenantRedactionPolicyRepository, policyEstimateReadPort, java.time.Clock.systemUTC());
+    }
+
     @Bean
     public DashboardColumnConfigurationService dashboardColumnConfigurationService(
             BusinessIdentifierDefinitionRepository definitionRepository,

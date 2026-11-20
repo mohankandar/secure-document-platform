@@ -34,3 +34,6 @@ One PDF of each edition is saved under `output/` (git-ignored), and one of each 
 (`*-licensed-sample.pdf`). Exit code 0 only when every check passes.
 Evidence (`summary.json`, app logs, extracted text) stays in `%TEMP%\lexavault-0017\<timestamp>`. The container
 password is generated per run and never printed.
+
+Task 0019 adds: `GET /api/v1/audit-records/count` for the same custom period equals the full edition's appendix row
+count; a Business Administrator gets 403 for it (recorded once as `AUTHORIZATION_FAILED`); reading it is not audited.

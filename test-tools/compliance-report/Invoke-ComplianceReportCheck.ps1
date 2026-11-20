@@ -429,6 +429,16 @@ try {
     $periodRecords = Count-Audit "occurred_at >= '$from' and occurred_at < date '$to' + 1"
     Check 'full edition: one appendix row per record in the period' `
         (([regex]::Matches($texts['FULL'], '\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}')).Count -eq $periodRecords) "records=$periodRecords, rows=$(([regex]::Matches($texts['FULL'], '\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}')).Count)"
+    # Task 0019 A1: the dialog's "· N records" count is the appendix's row count, for the same period values.
+    $appendixRows = ([regex]::Matches($texts['FULL'], '\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}')).Count
+    $countAnswer = & $invokeApi -Method GET -Path "/api/v1/audit-records/count?period=CUSTOM&from=$from&to=$to&timeZone=UTC" -Roles 'TENANT_IT_ADMIN'
+    Check '0019 A1: GET /audit-records/count equals the full edition appendix row count' `
+        ([long]$countAnswer.count -eq $appendixRows) "count=$($countAnswer.count), rows=$appendixRows"
+    $refusedBefore = Count-Audit "action='AUTHORIZATION_FAILED'"
+    $countAsBa = Invoke-Raw 'GET' "/api/v1/audit-records/count?period=CUSTOM&from=$from&to=$to&timeZone=UTC" 'BUSINESS_ADMIN'
+    Check '0019 A1: the count needs COMPLIANCE_REPORT_FULL (Business Administrator: 403)' ($countAsBa -eq 403) "status=$countAsBa"
+    Check '0019 A1: reading the count is not audited; its refusal is recorded once as AUTHORIZATION_FAILED' `
+        ((Count-Audit "action='AUTHORIZATION_FAILED'") -eq ($refusedBefore + 1))
 
     $needles = @($fileMarker, $loanMarker) + $idMarkers + $fakeValues
     foreach ($edition in 'SUMMARY', 'FULL') {

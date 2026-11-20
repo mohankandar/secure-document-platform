@@ -40,8 +40,8 @@ import java.util.UUID;
  */
 public final class BusinessAdminConfigurationService {
 
-    private static final double MIN_THRESHOLD = 0.50;
-    private static final double MAX_THRESHOLD = 0.99;
+    static final double MIN_THRESHOLD = 0.50;
+    static final double MAX_THRESHOLD = 0.99;
 
     private final BusinessIdentifierDefinitionRepository identifierRepository;
     private final TenantRedactionPolicyRepository policyRepository;
