@@ -103,7 +103,7 @@ Each suite was run once; this task does not touch entity switching or sign-in. N
 
 ## Commit
 
-`TBD`, on `feature/ui-safe-policy`. Not pushed or merged.
+`e924410`, on `feature/ui-safe-policy`. Not pushed or merged.
 
 ## Questions for the owner
 
