@@ -37,6 +37,22 @@ public final class AuditService {
     }
 
     /**
+     * Runs {@code work} with a machine client's name bound for {@code actorId} on this thread (task 0018 A6), so every
+     * record that actor writes during the work carries {@code "<kind>: <configured name>"}. The binding is always
+     * cleared afterwards, also on failure, so a later record on the same thread gets no name. Only for threads that
+     * carry no request (schedulers): clearing also drops any binding made before.
+     */
+    public <T> T withMachineClientName(ActorId actorId, RequestActorDisplayName.MachineClientKind kind,
+                                       String configuredName, java.util.function.Supplier<T> work) {
+        actorDisplayName.bindMachineClient(actorId, kind, configuredName);
+        try {
+            return work.get();
+        } finally {
+            actorDisplayName.clear();
+        }
+    }
+
+    /**
      * Records a successful action.
      */
     public void recordSuccess(TenantId tenantId, ActorId actorId, AuditAction action,

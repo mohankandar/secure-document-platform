@@ -90,8 +90,12 @@ class ComplianceReportServiceTest {
             public void save(TenantLifecyclePolicy p) { }
         };
         return new ComplianceReportService(reads, pdf, reportsQuery, tenants, policies, lifecycle,
-                new AuditService(audits::add, names), names, clock);
+                new AuditService(audits::add, names), names,
+                id -> id.equals(tenant.id()) ? Optional.ofNullable(licenceCustomer) : Optional.empty(), clock);
     }
+
+    /** The installed licence's customerName; null = no licence. */
+    private String licenceCustomer;
 
     private static Clock nov19() {
         return Clock.fixed(Instant.parse("2026-11-19T12:00:00Z"), ZoneOffset.UTC);
@@ -125,7 +129,7 @@ class ComplianceReportServiceTest {
         assertEquals("Delivered", c.cases().outcomes().get(1).label());
         c.cases().outcomes().forEach(r -> assertEquals(0, r.count()));
         assertEquals("—", c.cases().outcomes().get(0).share(), "nothing to divide by");
-        assertEquals(9, c.activity().size());
+        assertEquals(8, c.activity().size(), "\"Cases rejected\" is hidden (task 0018 A3)");
         c.activity().forEach(r -> assertEquals(0, r.count(), r.label()));
         assertTrue(c.appendix().isEmpty());
         assertEquals("pat@example.test, Business Administrator", c.createdBy(), "no display name bound: the username");
@@ -170,7 +174,7 @@ class ComplianceReportServiceTest {
         create(ComplianceEdition.SUMMARY);
         List<CountRow> outcomes = rendered.get().cases().outcomes();
         assertEquals(List.of(new CountRow("Received", 20, "100%"), new CountRow("Delivered", 16, "80%"),
-                new CountRow("Rejected by a supervisor", 1, "5%"), new CountRow("Still open on Sep 30", 3, "15%")), outcomes);
+                new CountRow("Still open on Sep 30", 3, "15%")), outcomes, "no rejected row (task 0018 A3)");
         assertEquals(List.of(new CountRow("No review needed", 10, "63%"), new CountRow("Checked by a reviewer", 6, "38%"),
                 new CountRow("Finished by hand after a processing stop", 2, "13%")), rendered.get().cases().ofDelivered());
     }
@@ -241,7 +245,108 @@ class ComplianceReportServiceTest {
                 Instant.parse("2026-10-01T05:00:00Z"), null)); // after the period (New York midnight is 04:00Z)
         create(ComplianceEdition.SUMMARY);
         List<Long> counts = rendered.get().activity().stream().map(CountRow::count).toList();
-        assertEquals(List.of(0L, 0L, 2L, 1L, 0L, 1L, 2L, 0L, 2L), counts);
+        assertEquals(List.of(0L, 0L, 2L, 1L, 1L, 2L, 0L, 2L), counts);
+    }
+
+    /* ---------------- task 0018 ---------------- */
+
+    @Test
+    void customerNameIsTheInstalledLicencesCustomerNameAndAbsentWithoutALicence() {
+        create(ComplianceEdition.SUMMARY);
+        assertEquals(null, rendered.get().customerName(), "no licence: the entity name alone");
+        assertEquals("Residential lending", rendered.get().entityName());
+        String without = rendered.get().fingerprint();
+
+        licenceCustomer = "Acme Lending Group";
+        create(ComplianceEdition.SUMMARY);
+        assertEquals("Acme Lending Group", rendered.get().customerName());
+        assertEquals("Residential lending", rendered.get().entityName());
+        assertTrue(rendered.get().canonicalText().contains("customer=Acme Lending Group\n"));
+        assertNotEquals(without, rendered.get().fingerprint(), "the customer name is part of the fingerprint");
+    }
+
+    @Test
+    void rejectedRowsAreHiddenFromTheContentAndTheFingerprint() {
+        reads.cases = new ComplianceReportReadPort.CaseCounts(4, 0, 0);
+        reads.records.add(record("PACKAGE_REJECTED", "SUCCESS", UUID.randomUUID().toString(), null, "p", "x", IN_PERIOD, null));
+        create(ComplianceEdition.SUMMARY);
+        String canonical = rendered.get().canonicalText();
+        assertFalse(canonical.contains("Rejected by a supervisor"), canonical);
+        assertFalse(canonical.contains("Cases rejected"), canonical);
+        assertFalse(ComplianceReportService.SHOW_REJECTED_ROWS, "one switch brings both rows back");
+    }
+
+    @Test
+    void theDeliveredNoteIsUnderTheFirstTableAndInTheFingerprint() {
+        create(ComplianceEdition.SUMMARY);
+        String note = "Delivered counts cases first delivered in the period, whenever they were received, as on the "
+                + "Reports page. Shares are of cases received.";
+        assertEquals(note, rendered.get().cases().outcomesNote());
+        assertTrue(rendered.get().canonicalText().contains("cases.outcomesNote=" + note + "\n"));
+    }
+
+    @Test
+    void lifecycleChangesInTheNewFormatAreWordedFromTheirPreviousValues() {
+        // previous= holds 96 hours: proof the recorded value is used, not the rebuilt one (72 by default).
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), "Pat Example", "t",
+                "Lifecycle policy changed: originalRetentionHours=48, redactedCacheHours=24, neverExportedHoldHours=168, "
+                        + "finalApprovalRequired=false, previous=[originalRetentionHours=96, redactedCacheHours=24, "
+                        + "neverExportedHoldHours=168, finalApprovalRequired=true]", IN_PERIOD, null));
+        create(ComplianceEdition.SUMMARY);
+        ComplianceReportContent.Retention r = rendered.get().retention();
+        assertEquals(List.of("Originals kept for: 96 → 48 hours",
+                        "Supervisor approval before delivery: Required → Not required"),
+                r.changes().stream().map(ComplianceReportContent.ChangeRow::what).toList());
+        assertEquals("Aug 12, 06:42", r.changes().get(0).when());
+        assertEquals("Pat Example", r.changes().get(0).who());
+        assertEquals("48 hours after delivery", r.settings().get(0).value());
+        assertTrue(rendered.get().canonicalText().contains(
+                "retention.change=Aug 12, 06:42|Pat Example|Originals kept for: 96 → 48 hours\n"));
+    }
+
+    @Test
+    void aFirstLifecycleSaveAndALaterOnlyChangeUseThePreviousKey() {
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null, "t",
+                "Lifecycle policy changed: originalRetentionHours=48, redactedCacheHours=24, neverExportedHoldHours=168, "
+                        + "finalApprovalRequired=false, previous=none", IN_PERIOD, null));
+        create(ComplianceEdition.SUMMARY);
+        assertEquals(List.of("Policy saved for the first time"),
+                rendered.get().retention().changes().stream().map(ComplianceReportContent.ChangeRow::what).toList());
+
+        reads.records.clear();
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null, "t",
+                "Lifecycle policy changed: originalRetentionHours=48, redactedCacheHours=24, neverExportedHoldHours=168, "
+                        + "finalApprovalRequired=false, previous=[originalRetentionHours=120, redactedCacheHours=24, "
+                        + "neverExportedHoldHours=168, finalApprovalRequired=true]", Instant.parse("2026-10-05T00:00:00Z"), null));
+        create(ComplianceEdition.SUMMARY);
+        assertTrue(rendered.get().retention().changes().isEmpty(), "no change in the period: no table");
+        assertEquals("120 hours after delivery", rendered.get().retention().settings().get(0).value(),
+                "the period-end policy is the later change's previous=");
+        assertEquals("Delivered after supervisor approval", rendered.get().cases().outcomes().get(1).label());
+    }
+
+    @Test
+    void olderLifecycleRecordsWithoutPreviousAreRebuiltAsBefore() {
+        String old = "Lifecycle policy changed: originalRetentionHours=72, redactedCacheHours=24, neverExportedHoldHours=336, ";
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null, "t",
+                old + "finalApprovalRequired=true", Instant.parse("2026-05-01T00:00:00Z"), null));
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null, "t",
+                old + "finalApprovalRequired=false", IN_PERIOD, null));
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null, "t",
+                old.replace("=72", "=48") + "finalApprovalRequired=false", IN_PERIOD.plusSeconds(60), null));
+        create(ComplianceEdition.SUMMARY);
+        assertEquals(List.of("Supervisor approval before delivery: Required → Not required",
+                        "Originals kept for: 72 → 48 hours"),
+                rendered.get().retention().changes().stream().map(ComplianceReportContent.ChangeRow::what).toList());
+    }
+
+    @Test
+    void anUnreadableLifecycleRecordIsShownAsChangedWithoutGuessing() {
+        reads.records.add(record("LIFECYCLE_POLICY_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null, "t",
+                "Lifecycle policy changed: originalRetentionHours=oops", IN_PERIOD, null));
+        create(ComplianceEdition.SUMMARY);
+        assertEquals(List.of("Changed (this record does not hold the earlier values)"),
+                rendered.get().retention().changes().stream().map(ComplianceReportContent.ChangeRow::what).toList());
     }
 
     @Test

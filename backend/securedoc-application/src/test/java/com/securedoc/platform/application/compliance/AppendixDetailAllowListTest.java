@@ -33,15 +33,16 @@ class AppendixDetailAllowListTest {
 
     @Test
     void theListIsExactlyTheReviewedSet() {
-        // Changing the list is a review decision: update report 0017's list and this count together.
-        assertEquals(89, AppendixDetailAllowList.allowed().size());
+        // Changing the list is a review decision: update the report's list and this count together.
+        // 89 in task 0017; task 0018 A2 adds AUTHORIZATION_FAILED (now written by the capability interceptor).
+        assertEquals(90, AppendixDetailAllowList.allowed().size());
         assertTrue(AppendixDetailAllowList.isAllowed("SENSITIVE_DATA_POLICY_CHANGED"));
         assertTrue(AppendixDetailAllowList.isAllowed("COMPLIANCE_REPORT_CREATED"));
+        assertTrue(AppendixDetailAllowList.isAllowed("AUTHORIZATION_FAILED"));
         assertFalse(AppendixDetailAllowList.isAllowed("NOT_AN_ACTION"));
         assertFalse(AppendixDetailAllowList.isAllowed(null));
         // Actions nothing writes today stay off until someone reviews what they will hold.
         assertFalse(AppendixDetailAllowList.isAllowed("PACKAGE_REJECTED"));
-        assertFalse(AppendixDetailAllowList.isAllowed("AUTHORIZATION_FAILED"));
     }
 
     @Test

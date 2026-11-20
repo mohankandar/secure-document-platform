@@ -58,11 +58,12 @@ public record ComplianceReportContent(
         }
     }
 
-    /** Section 2. */
-    public record Retention(boolean unchangedSinceBefore, List<LabelValue> settings, long due, long onTime,
-                            long lateOrFailed, String note) {
+    /** Section 2. {@code changes}: the lifecycle changes in the period (task 0018 A4), shown only when any. */
+    public record Retention(boolean unchangedSinceBefore, List<LabelValue> settings, List<ChangeRow> changes,
+                            long due, long onTime, long lateOrFailed, String note) {
         public Retention {
             settings = List.copyOf(settings);
+            changes = changes == null ? List.of() : List.copyOf(changes);
             Objects.requireNonNull(note);
         }
     }
@@ -70,7 +71,8 @@ public record ComplianceReportContent(
     /** Section 3. {@code share} is a whole percent ("95%"). */
     public record CountRow(String label, long count, String share) { }
 
-    public record Cases(List<CountRow> outcomes, List<CountRow> ofDelivered) {
+    /** {@code outcomesNote}: the small grey note under the first table (task 0018 A5). */
+    public record Cases(List<CountRow> outcomes, String outcomesNote, List<CountRow> ofDelivered) {
         public Cases {
             outcomes = List.copyOf(outcomes);
             ofDelivered = List.copyOf(ofDelivered);
@@ -106,11 +108,13 @@ public record ComplianceReportContent(
         for (ChangeRow c : policy.changes()) line(out, "policy.change", c.when() + "|" + c.who() + "|" + c.what());
         line(out, "retention.unchangedSinceBefore", Boolean.toString(retention.unchangedSinceBefore()));
         for (LabelValue v : retention.settings()) line(out, "retention.setting", v.label() + "|" + v.value());
+        for (ChangeRow c : retention.changes()) line(out, "retention.change", c.when() + "|" + c.who() + "|" + c.what());
         line(out, "retention.due", Long.toString(retention.due()));
         line(out, "retention.onTime", Long.toString(retention.onTime()));
         line(out, "retention.lateOrFailed", Long.toString(retention.lateOrFailed()));
         line(out, "retention.note", retention.note());
         for (CountRow r : cases.outcomes()) line(out, "cases.outcome", count(r));
+        if (cases.outcomesNote() != null) line(out, "cases.outcomesNote", cases.outcomesNote());
         for (CountRow r : cases.ofDelivered()) line(out, "cases.ofDelivered", count(r));
         for (CountRow r : activity) line(out, "activity", count(r));
         for (AppendixRow r : appendix) {

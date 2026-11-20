@@ -134,6 +134,22 @@ public final class TenantLicensingService {
                 false, historicalStatus, claims, reasonCode, evidence);
     }
 
+    /**
+     * The {@code customerName} of the entity's installed (active) licence, for the compliance report (task 0018 A1).
+     * Read from the vendor-signed claims only: verified now, or verified at install for an expired licence. Empty
+     * when no licence is installed, the claims cannot be verified, or the name is blank. Independent of enforcement.
+     */
+    public java.util.Optional<String> installedCustomerName(TenantId tenantId) {
+        var active = licenseRepository.findActive(tenantId);
+        if (active.isEmpty()) return java.util.Optional.empty();
+        TenantLicenseRecord record = active.get();
+        LicenseClaims claims = verifier.verify(record.signedToken(), tenantId, Instant.now(clock)).claims();
+        if (claims == null) claims = verifier.readPersistedVerifiedClaims(record).orElse(null);
+        if (claims == null || !tenantId.equals(claims.tenantId())) return java.util.Optional.empty();
+        String name = claims.customerName();
+        return name == null || name.isBlank() ? java.util.Optional.empty() : java.util.Optional.of(name.strip());
+    }
+
     public void requireDocumentProcessing(TenantId tenantId, ActorId actorId, CorrelationId correlationId) {
         if (!enforcementEnabled) return;
         TenantLicenseStatus state = status(tenantId);

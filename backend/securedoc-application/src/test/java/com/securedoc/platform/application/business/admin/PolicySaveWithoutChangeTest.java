@@ -82,6 +82,24 @@ class PolicySaveWithoutChangeTest {
         assertEquals(5, count(AuditAction.LIFECYCLE_POLICY_CHANGED));
     }
 
+    @Test
+    void lifecycleDetailKeepsItsKeysFirstAndAddsThePreviousValues() {
+        // Task 0018 A4: previous=none on the first save, previous=[…] afterwards; the four keys stay first.
+        service.updateLifecyclePolicy(tenant, ActorId.generate(), CorrelationId.generate(), 72, 24, 168, true);
+        service.updateLifecyclePolicy(tenant, ActorId.generate(), CorrelationId.generate(), 48, 24, 168, false);
+        List<String> details = audits.stream().filter(r -> r.action() == AuditAction.LIFECYCLE_POLICY_CHANGED)
+                .map(AuditRecord::detail).toList();
+        assertEquals(List.of(
+                "Lifecycle policy changed: originalRetentionHours=72, redactedCacheHours=24, neverExportedHoldHours=168, "
+                        + "finalApprovalRequired=true, previous=none",
+                "Lifecycle policy changed: originalRetentionHours=48, redactedCacheHours=24, neverExportedHoldHours=168, "
+                        + "finalApprovalRequired=false, previous=[originalRetentionHours=72, redactedCacheHours=24, "
+                        + "neverExportedHoldHours=168, finalApprovalRequired=true]"), details);
+        var change = com.securedoc.platform.application.compliance.PolicyHistory.parseLifecycleChange(details.get(1));
+        assertEquals(72, change.previous().originalRetentionHours());
+        assertEquals(48, change.now().originalRetentionHours());
+    }
+
     private void saveSensitive(java.util.Set<EntityType> types, double threshold, ReviewMode mode, boolean mask) {
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), types, threshold, mode, mask);
     }

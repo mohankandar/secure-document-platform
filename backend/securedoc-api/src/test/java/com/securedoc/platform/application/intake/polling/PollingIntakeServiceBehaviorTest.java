@@ -85,6 +85,79 @@ class PollingIntakeServiceBehaviorTest {
         order.verify(sourcePort).acknowledgeReceived(source, pkg, 1);
     }
 
+    /* Task 0018 A6: a scheduled run's records are named "Polling: <connection name>", and only during the run. */
+
+    private final List<com.securedoc.platform.domain.audit.AuditRecord> records = new ArrayList<>();
+    private final com.securedoc.platform.application.audit.RequestActorDisplayName names =
+            new com.securedoc.platform.application.audit.RequestActorDisplayName();
+    private final AuditService realAudit = new AuditService(records::add, names);
+    private final PollingIntakeService namedService =
+            new PollingIntakeService(connections, runs, sourcePort, external, realAudit, clock);
+
+    @Test
+    void scheduledRunRecordsAreNamedAfterTheConnectionAndTheNameIsClearedAfterwards() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalSuccess(any())).thenReturn(source);
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of());
+
+        namedService.runScheduled(tenant, source.id()).orElseThrow();
+
+        assertEquals(List.of(com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_STARTED,
+                        com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_COMPLETED),
+                records.stream().map(com.securedoc.platform.domain.audit.AuditRecord::action).toList());
+        records.forEach(r -> assertEquals("Polling: Polling", r.actorDisplayName(), r.action().name()));
+
+        // A later record on the same thread, by the same polling actor, gets no name.
+        ActorId pollingActor = records.get(0).actorId();
+        realAudit.recordSuccess(tenant, pollingActor, com.securedoc.platform.domain.audit.AuditAction.PLATFORM_HEALTH_CHECKED,
+                "Platform", "x", CorrelationId.generate(), "later");
+        assertNull(records.get(records.size() - 1).actorDisplayName());
+        assertTrue(names.displayNameFor(pollingActor).isEmpty());
+    }
+
+    @Test
+    void aFailedScheduledRunIsNamedAndStillClearsTheName() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit()))
+                .thenThrow(new PollingSourceException("SOURCE_UNAVAILABLE", "down"));
+
+        assertEquals(PollingRunStatus.FAILED, namedService.runScheduled(tenant, source.id()).orElseThrow().status());
+        var failed = records.stream()
+                .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_FAILED)
+                .findFirst().orElseThrow();
+        assertEquals("Polling: Polling", failed.actorDisplayName());
+        assertTrue(names.displayNameFor(failed.actorId()).isEmpty(), "never left bound on the thread");
+    }
+
+    @Test
+    void anExceptionOutOfTheRunStillClearsTheName() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        // The repository fails before the run's own error handling: the binding is still cleared.
+        PollingRunRepository failingRuns = mock(PollingRunRepository.class);
+        when(failingRuns.tryStart(any(), any(), any(), any(), any())).thenThrow(new IllegalStateException("db down"));
+        PollingIntakeService failing = new PollingIntakeService(connections, failingRuns, sourcePort, external, realAudit, clock);
+        assertThrows(IllegalStateException.class, () -> failing.runScheduled(tenant, source.id()));
+        UUID pollingActor = UUID.nameUUIDFromBytes(("lexavault-polling:" + tenant + ":" + source.id())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertTrue(names.displayNameFor(ActorId.of(pollingActor)).isEmpty());
+    }
+
+    @Test
+    void aManualRunKeepsThePersonsOwnName() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalSuccess(any())).thenReturn(source);
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of());
+        ActorId person = ActorId.generate();
+        names.bind(person, "Pat Example", "pat");
+        try {
+            namedService.runNow(tenant, source.id(), person).orElseThrow();
+            records.forEach(r -> assertEquals("Pat Example", r.actorDisplayName()));
+        } finally {
+            names.clear();
+        }
+    }
+
     private IntegrationConnection pollingSource() {
         return IntegrationConnection.create(tenant, "Polling", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,

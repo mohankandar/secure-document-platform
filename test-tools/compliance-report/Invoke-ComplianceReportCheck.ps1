@@ -22,6 +22,12 @@
        and that no marker or fake value appears in either PDF, the report audit records or the new log lines.
     8. Saves one PDF of each edition under test-tools\compliance-report\output\ (git-ignored).
 
+    Task 0018 additions: the entity name alone without a licence, then a throwaway test licence (MakeTestLicence.java,
+    a new key pair per run, private key never written) and the licence's customer name on the cover and header line
+    (A1); a 403 from the capability check recorded as AUTHORIZATION_FAILED with capability, method and route pattern
+    only (A2); no "Rejected" rows (A3); lifecycle previous= values and the "Changes during the period" table (A4);
+    the note under section 3 (A5); single spaces in the footer fingerprint (A7).
+
     The container password is generated per run and never printed.
 #>
 [CmdletBinding()]
@@ -103,6 +109,16 @@ function New-Report([string] $roles, [bool] $full, [string] $from, [string] $to)
     if ($res.Content.Headers.ContentDisposition) { $disposition = $res.Content.Headers.ContentDisposition.FileName }
     return [pscustomobject]@{ status = [int]$res.StatusCode; bytes = $bytes; sha = $sha; fileName = $disposition
         contentType = "$($res.Content.Headers.ContentType)" }
+}
+
+function Invoke-Raw([string] $method, [string] $path, [string] $roles) {
+    $req = New-Object System.Net.Http.HttpRequestMessage((New-Object System.Net.Http.HttpMethod($method)), "$backend$path")
+    $req.Headers.Add('X-Tenant-Id', $tenantId)
+    $req.Headers.Add('X-Actor-Id', $actorId)
+    $req.Headers.Add('X-Actor-Roles', $roles)
+    $req.Headers.Add('X-Correlation-Id', [guid]::NewGuid().ToString())
+    $res = $http.SendAsync($req).GetAwaiter().GetResult()
+    return [int]$res.StatusCode
 }
 
 function Get-Sha256([byte[]] $bytes) {
@@ -206,6 +222,13 @@ try {
     Write-Host "Throwaway Postgres ready on 127.0.0.1:$DbPort"
 
     # --- 2. app ------------------------------------------------------------------------------
+    # A1: a throwaway test licence; the app trusts its public key through the LOCAL development-key override.
+    $customerName = 'Acme Test Lending Group'
+    $pubFile = Join-Path $runDir 'test-licence-public-key.txt'
+    $tokenFile = Join-Path $runDir 'test-licence-token.txt'
+    & java (Join-Path $here 'MakeTestLicence.java') $tenantId $customerName $pubFile $tokenFile
+    if ($LASTEXITCODE -ne 0) { throw "test licence was not made" }
+    $env:SECUREDOC_LICENSING_PUBLIC_KEY = [System.IO.File]::ReadAllText($pubFile).Trim()
     $app = Start-App $dbPassword
     $tenantName = Sql "select name from tenants where id='$tenantId'"
     Write-Host "Entity: $tenantName"
@@ -225,6 +248,21 @@ try {
     Set-Lifecycle 72 24 168 $false
     Set-Lifecycle 72 24 168 $false                                     # no change
     Check 'A4: a lifecycle save with no change writes no record' ((Count-Audit "action='LIFECYCLE_POLICY_CHANGED'") -eq 1)
+    Set-Lifecycle 48 24 168 $false                                     # 0018 A4: 72 -> 48 hours
+    $lifecycleDetail = Sql "select detail from audit_records where tenant_id='$tenantId' and action='LIFECYCLE_POLICY_CHANGED' order by occurred_at desc limit 1"
+    Check '0018 A4: LIFECYCLE_POLICY_CHANGED keeps its keys first and adds previous=[...]' `
+        ($lifecycleDetail -eq ('Lifecycle policy changed: originalRetentionHours=48, redactedCacheHours=24, neverExportedHoldHours=168, ' +
+            'finalApprovalRequired=false, previous=[originalRetentionHours=72, redactedCacheHours=24, neverExportedHoldHours=168, ' +
+            'finalApprovalRequired=false]')) $lifecycleDetail
+    $lifecycleFirst = Sql "select detail from audit_records where tenant_id='$tenantId' and action='LIFECYCLE_POLICY_CHANGED' order by occurred_at asc limit 1"
+    Check '0018 A4: the first lifecycle save records previous=none' ($lifecycleFirst -like '*finalApprovalRequired=false, previous=none') $lifecycleFirst
+
+    # 0018 A2: a 403 from the capability check is recorded with capability, method and route pattern only.
+    $refusedStatus = Invoke-Raw 'GET' "/api/v1/operations/reports/export?marker=$loanMarker" 'REPORT_VIEWER'
+    $authFailed = Sql "select coalesce(string_agg(outcome || ' ' || resource_id || ' ' || detail, ' | '), '') from audit_records where tenant_id='$tenantId' and action='AUTHORIZATION_FAILED'"
+    Check '0018 A2: a refused export (403) is recorded once as DENIED AUTHORIZATION_FAILED, route pattern only' `
+        ($refusedStatus -eq 403 -and $authFailed -eq 'DENIED /api/v1/operations/reports/export capability=REPORT_EXPORT, method=GET, route=/api/v1/operations/reports/export') `
+        "status=$refusedStatus record=$authFailed"
 
     $cases = @{}
     $i = 0
@@ -288,8 +326,8 @@ try {
 
     # Independent expectations, straight from the seeded tables.
     $expect = [ordered]@{ received = 6; delivered = 4; rejected = 1; open = 1; straight = 2; reviewed = 2; byHand = 1
-        due = 3; onTime = 1; late = 2; stillWithin = 1; policyChanges = $policyChangeCount; lifecycleChanges = 1; findings = 3
-        approved = 1; rejectedRow = 0; originals = 2; exports = 2; compliance = 0; refused = 1 }
+        due = 3; onTime = 1; late = 2; stillWithin = 1; policyChanges = $policyChangeCount; lifecycleChanges = 2; findings = 3
+        approved = 1; originals = 2; exports = 2; compliance = 0; refused = 2 }
     $fromInstant = "$($from)T00:00:00Z"; $toInstant = "$($today.AddDays(-30).ToString('yyyy-MM-dd'))T00:00:00Z"
     $reports = & $invokeApi -Method GET -Path "/api/v1/operations/reports?from=$fromInstant&to=$toInstant" -Roles 'BUSINESS_ADMIN'
     Check 'Reports agrees with the seed: received, delivered, reviewed, no review needed' `
@@ -319,6 +357,8 @@ try {
     }
     $deniedAfter = Count-Audit "action='COMPLIANCE_REPORT_CREATED' and outcome='DENIED'"
     Check 'every refusal is audited as a refused COMPLIANCE_REPORT_CREATED' (($deniedAfter - $deniedBefore) -eq 10) "denied=$($deniedAfter - $deniedBefore)"
+    Check '0018 A2: compliance report refusals are not recorded twice (no AUTHORIZATION_FAILED for them)' `
+        ((Count-Audit "action='AUTHORIZATION_FAILED'") -eq 1)
     $bad = New-Report 'BUSINESS_ADMIN' $false $today.ToString('yyyy-MM-dd') $today.ToString('yyyy-MM-dd')
     Check 'a period that does not end before today is refused with 400' ($bad.status -eq 400) "status=$($bad.status)"
     Check 'the failure is audited by category only' ((Count-Audit "action='COMPLIANCE_REPORT_CREATED' and outcome='FAILURE' and detail='period=invalid, edition=SUMMARY, failure=VALIDATION'") -eq 1)
@@ -339,26 +379,39 @@ try {
         $fp = [regex]::Match($detail, 'fingerprint=([0-9a-f]{64})').Groups[1].Value
         $grouped = (($fp -split '(.{4})' | Where-Object { $_ }) -join ' ')
         Check "$edition`: the cover prints the recorded content fingerprint" ((Flat $text).Contains($grouped)) $grouped
+        $footer = "Fingerprint $($fp.Substring(0,4)) $($fp.Substring(4,4)) $([char]0x2026) $($fp.Substring(60,4)) $([char]0x00B7) created by LexaVault"
+        Check "$edition`: 0018 A7: footer fingerprint with single spaces" ($text.Contains($footer) -and -not $text.Contains("$($fp.Substring(0,4))  ")) $footer
+        Check "$edition`: 0018 A1: no licence yet: no customer name" (-not $text.Contains($customerName))
     }
 
     # --- 7. numbers, wording and leaks -------------------------------------------------------
     $s = Flat $texts['SUMMARY']
     $expectedLines = @(
-        "Received $($expect.received) 100%", "Delivered $($expect.delivered) 67%", "Rejected by a supervisor $($expect.rejected) 17%",
+        "Received $($expect.received) 100%", "Delivered $($expect.delivered) 67%",
         "Still open on $endWords $($expect.open) 17%", "No review needed $($expect.straight) 50%", "Checked by a reviewer $($expect.reviewed) 50%",
         "Finished by hand after a processing stop $($expect.byHand) 25%",
         "Originals due for deletion $($expect.due) Deleted on time $($expect.onTime) Late or failed $($expect.late)",
-        "$($expect.stillWithin) case delivered in the last 72 hours of the period was still within its keep time on $endWords",
+        "$($expect.stillWithin) case delivered in the last 48 hours of the period was still within its keep time on $endWords",
         "Redaction policy changes $($expect.policyChanges)", "Keeping and deleting changes $($expect.lifecycleChanges)",
         "Findings decided by a reviewer $($expect.findings)", "Cases approved for delivery $($expect.approved)",
-        "Cases rejected $($expect.rejectedRow)", "Originals deleted $($expect.originals)", "Report exports (CSV) $($expect.exports)",
+        "Originals deleted $($expect.originals)", "Report exports (CSV) $($expect.exports)",
         "Compliance reports created $($expect.compliance)", "Access refused (wrong role) $($expect.refused)",
-"Preset: Balanced $([char]0x2192) Light", "Redacted without review at: 80% $([char]0x2192) 70%",
+        "Preset: Balanced $([char]0x2192) Light", "Redacted without review at: 80% $([char]0x2192) 70%",
         "Credit score turned off", "Social Security Number, Date of birth, Credit card number", "70% confidence or higher",
-        "Originals kept for 72 hours after delivery", "Stopped cases kept for 7 days", "Supervisor approval before delivery Not required",
-        "COMPLIANCE REPORT $([char]0x00B7) SUMMARY EDITION", "$tenantName only. Other entities are never included.")
+        "Originals kept for 48 hours after delivery", "Stopped cases kept for 7 days", "Supervisor approval before delivery Not required",
+        "COMPLIANCE REPORT $([char]0x00B7) SUMMARY EDITION", "$tenantName only. Other entities are never included.",
+        # 0018 A4: the lifecycle changes table in section 2.
+        "Originals kept for: 72 $([char]0x2192) 48 hours",
+        # 0018 A5: the note under the first table of section 3.
+        "Delivered counts cases first delivered in the period, whenever they were received, as on the Reports page. Shares are of cases received.")
     if ($firstSave) { $expectedLines += "Policy saved for the first time" }
     foreach ($line in $expectedLines) { Check "summary prints: $line" ($s.Contains($line)) }
+    $section2 = $s.Substring($s.IndexOf("2 $([char]0x00B7) Keeping and deleting"))
+    $section2 = $section2.Substring(0, $section2.IndexOf('Proof that deletions ran'))
+    Check '0018 A4: section 2 has a "Changes during the period" table' ($section2.Contains('Changes during the period') -and $section2.Contains('WHAT CHANGED')) $section2
+    Check '0018 A3: no "Rejected" rows in either edition' (-not ($s -match '(?i)rejected') -and -not ($texts['FULL'] -match 'Rejected by a supervisor|Cases rejected'))
+    Check '0018 A2: the full edition appendix prints the AUTHORIZATION_FAILED detail' `
+        (($texts['FULL'] -replace '\s+', '').Contains('capability=REPORT_EXPORT,method=GET,route=/api/v1/operations/reports/export'))
     $f = Flat $texts['FULL']
     Check 'full edition: appendix with every record of the period, oldest first' `
         ($f.Contains("Appendix $([char]0x00B7) Full audit trail") -and $f.Contains('Exported a document') -and $f.Contains('Could not check a connection for documents'))
@@ -386,6 +439,29 @@ try {
     }
     Check 'no marker or fake value in the log lines written while reports were created' ($logHits.Count -eq 0) ($logHits -join ', ')
 
+    # --- 8. 0018 A1: with an installed licence, its customer name is on the cover and in the header line ----
+    $token = [System.IO.File]::ReadAllText($tokenFile).Trim()
+    $install = & $invokeApi -Method POST -Path "/api/v1/platform/licensing/tenants/$tenantId/licenses" `
+        -Body @{ licenseToken = $token } -Roles 'PLATFORM_OPERATIONS_ADMIN'
+    Remove-Item -LiteralPath $tokenFile -Force
+    Check '0018 A1: the throwaway test licence installs' ($null -ne $install) "status=$($install.status)"
+    foreach ($edition in 'SUMMARY', 'FULL') {
+        $role = if ($edition -eq 'FULL') { 'TENANT_IT_ADMIN' } else { 'BUSINESS_ADMIN' }
+        $r = New-Report $role ($edition -eq 'FULL') $from $to
+        $out = Join-Path $outputDir ("compliance-report-$($edition.ToLower())-licensed-sample.pdf")
+        [System.IO.File]::WriteAllBytes($out, $r.bytes)
+        $lt = Get-PdfText $out
+        $pages = $lt -split "Page \d+ of \d+"
+        $cover = Flat $pages[0]
+        Check "$edition`: 0018 A1: the cover shows the licence's customer name above the entity" `
+            ($r.status -eq 200 -and $cover.Contains("$customerName $tenantName")) "status=$($r.status)"
+        $header = "Compliance report $([char]0x00B7) $tenantName $([char]0x00B7)"
+        $headerLines = @(($lt -split "`n") | Where-Object { $_.StartsWith($header) })
+        $withCustomer = @($headerLines | Where-Object { $_.TrimEnd().EndsWith($customerName) })
+        Check "$edition`: 0018 A1: every header line ends with the customer name" `
+            ($headerLines.Count -ge 2 -and $withCustomer.Count -eq $headerLines.Count) "headers=$($headerLines.Count) withCustomer=$($withCustomer.Count)"
+    }
+
     $failed = @($checks | Where-Object { -not $_.pass }).Count
     [pscustomobject]@{ period = "$from..$to"; cases = $cases; expect = $expect; checks = $checks } |
         ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $runDir 'summary.json')
@@ -403,7 +479,7 @@ finally {
     foreach ($name in 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED',
             'SECUREDOC_WATCHED_FOLDER_ENABLED', 'SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED', 'SECUREDOC_LOG_DIR',
             'SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH', 'SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH',
-            'SECUREDOC_BACKEND_URL', 'SECUREDOC_TENANT_ID', 'SECUREDOC_ACTOR_ID') {
+            'SECUREDOC_BACKEND_URL', 'SECUREDOC_TENANT_ID', 'SECUREDOC_ACTOR_ID', 'SECUREDOC_LICENSING_PUBLIC_KEY') {
         Remove-Item "Env:$name" -ErrorAction SilentlyContinue
     }
 }

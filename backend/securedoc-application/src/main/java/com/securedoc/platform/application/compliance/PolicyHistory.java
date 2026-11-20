@@ -57,10 +57,71 @@ public final class PolicyHistory {
         return new SensitiveChange(now, null, false);
     }
 
+    /**
+     * A parsed lifecycle change (task 0018 A4). {@code previousRecorded} is false for records written before 0018
+     * (no {@code previous=} key); {@code previous} is null when it was {@code previous=none} or not recorded.
+     */
+    public record LifecycleChange(LifecyclePolicy now, LifecyclePolicy previous, boolean previousRecorded) { }
+
     /** Null when the detail is not a lifecycle policy change with all four values. */
     public static LifecyclePolicy parseLifecycle(String detail) {
+        LifecycleChange change = parseLifecycleChange(detail);
+        return change == null ? null : change.now();
+    }
+
+    /** Null when the detail is not a lifecycle policy change with all four new values. */
+    public static LifecycleChange parseLifecycleChange(String detail) {
         if (detail == null || !detail.startsWith(LIFECYCLE_PREFIX)) return null;
-        Map<String, String> k = keys(detail.substring(LIFECYCLE_PREFIX.length()));
+        String body = detail.substring(LIFECYCLE_PREFIX.length());
+        int prevAt = body.indexOf(", previous=");
+        LifecyclePolicy now = lifecycle(keys(prevAt < 0 ? body : body.substring(0, prevAt)));
+        if (now == null) return null;
+        if (prevAt < 0) return new LifecycleChange(now, null, false);
+        String prev = body.substring(prevAt + ", previous=".length()).trim();
+        if (prev.equals("none")) return new LifecycleChange(now, null, true);
+        if (prev.startsWith("[") && prev.endsWith("]")) {
+            LifecyclePolicy before = lifecycle(keys(prev.substring(1, prev.length() - 1)));
+            if (before != null) return new LifecycleChange(now, before, true);
+        }
+        // An unreadable previous= is treated as not recorded: the caller falls back, never guesses.
+        return new LifecycleChange(now, null, false);
+    }
+
+    /**
+     * The plain-words lines for one lifecycle change from {@code before} to {@code after}, worded like section 1
+     * ("Originals kept for: 72 → 48 hours"). {@code before} null means the policy was saved for the first time.
+     */
+    public static List<String> lifecycleChangeLines(LifecyclePolicy before, LifecyclePolicy after) {
+        List<String> lines = new ArrayList<>();
+        if (before == null) {
+            lines.add("Policy saved for the first time");
+            return lines;
+        }
+        if (before.originalRetentionHours() != after.originalRetentionHours()) {
+            lines.add("Originals kept for: " + before.originalRetentionHours() + " → "
+                    + after.originalRetentionHours() + " hours");
+        }
+        if (before.redactedCacheHours() != after.redactedCacheHours()) {
+            lines.add("Redacted copies kept for: " + hoursWords(before.redactedCacheHours()) + " → "
+                    + hoursWords(after.redactedCacheHours()));
+        }
+        if (before.neverExportedHoldHours() != after.neverExportedHoldHours()) {
+            lines.add("Stopped cases kept for: " + hoursWords(before.neverExportedHoldHours()) + " → "
+                    + hoursWords(after.neverExportedHoldHours()));
+        }
+        if (before.finalApprovalRequired() != after.finalApprovalRequired()) {
+            lines.add("Supervisor approval before delivery: " + requiredWords(before.finalApprovalRequired()) + " → "
+                    + requiredWords(after.finalApprovalRequired()));
+        }
+        if (lines.isEmpty()) lines.add("Saved with no change");
+        return lines;
+    }
+
+    public static String requiredWords(boolean required) {
+        return required ? "Required" : "Not required";
+    }
+
+    private static LifecyclePolicy lifecycle(Map<String, String> k) {
         try {
             return new LifecyclePolicy(Integer.parseInt(k.get("originalRetentionHours")),
                     Integer.parseInt(k.get("redactedCacheHours")), Integer.parseInt(k.get("neverExportedHoldHours")),
