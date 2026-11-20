@@ -161,6 +161,38 @@ class PdfBoxComplianceReportAdapterTest {
     }
 
     @Test
+    void whatLexaVaultDidForYouIsTheLastTableOfSectionThreeAndItsSignsAreDrawn() throws IOException {
+        ComplianceReportContent base = content(ComplianceEdition.SUMMARY, List.of());
+        ComplianceReportContent.Cases cases = new ComplianceReportContent.Cases(base.cases().outcomes(),
+                base.cases().outcomesNote(), base.cases().ofDelivered(),
+                List.of(new ComplianceReportContent.ValueRow("Handled without a person", "348", "67%"),
+                        new ComplianceReportContent.ValueRow("Pages checked (in 1,873 documents)", "14,220", null),
+                        new ComplianceReportContent.ValueRow("Sensitive items redacted", "3,912", null),
+                        new ComplianceReportContent.ValueRow("Review time saved (estimate)", "≈ 161 h", null)),
+                "Estimate: pages in cases that needed no person × 1 minute per page, rounded down. "
+                        + "Pages a person reviewed count as zero.");
+        ComplianceReportContent withTable = new ComplianceReportContent(base.edition(), null, base.entityName(),
+                base.periodWords(), base.periodEndWords(), base.createdBy(), base.createdAt(), base.policy(),
+                base.retention(), cases, base.activity(), base.appendix());
+        byte[] pdf = adapter.render(withTable, FINGERPRINT);
+        writeSample("summary-did-for-you", pdf);
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            String all = text(doc, 1, doc.getNumberOfPages());
+            String section3 = all.substring(all.indexOf("3 · Cases and review"), all.indexOf("4 · Audit activity"));
+            for (String expected : List.of("WHAT LEXAVAULT DID FOR YOU NUMBER SHARE", "Handled without a person 348 67%",
+                    "Pages checked (in 1,873 documents) 14,220 —", "Sensitive items redacted 3,912 —",
+                    "Review time saved (estimate) ≈ 161 h —",
+                    "Estimate: pages in cases that needed no person × 1 minute per page, rounded down. Pages a person reviewed count as zero.")) {
+                assertTrue(section3.contains(expected), "section 3 lacks: " + expected + "\n" + section3);
+            }
+            assertTrue(section3.indexOf("Finished by hand after a processing stop") < section3.indexOf("WHAT LEXAVAULT DID FOR YOU"),
+                    "after the delivered table");
+            assertFalse(section3.contains("?"), "no replaced character");
+        }
+        assertFalse(adapter.render(base, FINGERPRINT).length == pdf.length && java.util.Arrays.equals(adapter.render(base, FINGERPRINT), pdf));
+    }
+
+    @Test
     void charactersTheFontCannotDrawAreReplacedNotFatal() throws IOException {
         ComplianceReportContent base = content(ComplianceEdition.SUMMARY, List.of());
         ComplianceReportContent odd = new ComplianceReportContent(base.edition(), null, "Entity \u0007😀 B",

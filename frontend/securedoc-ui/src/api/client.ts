@@ -239,6 +239,8 @@ class ApiClient {
         straightThroughTargetPercent: configuration.straightThroughTargetPercent,
         reviewWaitTargetMinutes: configuration.reviewWaitTargetMinutes,
         reviewWaitTargetPercent: configuration.reviewWaitTargetPercent,
+        // Left out (undefined) when not known: the server then keeps the stored value.
+        minutesPerPage: configuration.minutesPerPage,
       }),
     });
   }

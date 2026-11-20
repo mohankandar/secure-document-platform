@@ -32,7 +32,7 @@ class PolicyHistoryTest {
         String detail = "Sensitive-data policy changed: enabledCount=1, threshold=0.85, reviewMode=REVIEW_ALL, "
                 + "maskSsnLastFour=true, enabledTypes=SSN, preset=STRICT, previous=[enabledCount=1, threshold=0.85, "
                 + "reviewMode=UNCERTAIN_ONLY, maskSsnLastFour=true, enabledTypes=SSN, preset=CUSTOM]";
-        assertEquals(List.of("Preset: Custom → Strict", "Sent to a person: Only uncertain findings → Every case"),
+        assertEquals(List.of("Preset: Custom → Strict", "Sent to a person: Only uncertain findings → Every finding"),
                 PolicyHistory.changeLines(PolicyHistory.parseSensitive(detail)));
     }
 

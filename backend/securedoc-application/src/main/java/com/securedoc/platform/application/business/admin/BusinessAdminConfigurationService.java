@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.business.admin;
 
+import com.securedoc.platform.application.operations.TimeSavedRule;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
@@ -330,7 +331,8 @@ public final class BusinessAdminConfigurationService {
                                                                 double deliveryTargetPercent,
                                                                 double straightThroughTargetPercent,
                                                                 int reviewWaitTargetMinutes,
-                                                                Integer reviewWaitTargetPercent) {
+                                                                Integer reviewWaitTargetPercent,
+                                                                Double minutesPerPage) {
         List<BusinessIdentifierDefinition> active = identifierRepository.findActiveByTenantId(tenantId);
         Map<UUID, BusinessIdentifierDefinition> byId = active.stream()
                 .collect(java.util.stream.Collectors.toMap(d -> d.id().value(), d -> d));
@@ -353,26 +355,59 @@ public final class BusinessAdminConfigurationService {
             dimensions.add(new ReportingConfiguration.Dimension(definition.id().value(), definition.key(),
                     definition.label(), true, order++));
         }
-        // A caller that does not send the percentage (the older admin page) keeps the stored value; it is never reset.
-        int reviewPercent = reviewWaitTargetPercent != null ? reviewWaitTargetPercent
-                : reportingConfigurationRepository.findByTenantId(tenantId).reviewWaitTargetPercent();
+        ReportingConfiguration stored = reportingConfigurationRepository.findByTenantId(tenantId);
+        // A caller that does not send the percentage or the minutes per page (the older admin page) keeps the
+        // stored value; it is never reset.
+        int reviewPercent = reviewWaitTargetPercent != null ? reviewWaitTargetPercent : stored.reviewWaitTargetPercent();
+        double perPage = minutesPerPage != null ? minutesPerPage : stored.minutesPerPage();
         ReportingConfiguration configuration;
         try {
             configuration = new ReportingConfiguration(dimensions, deliveryTargetMinutes, deliveryTargetPercent,
-                    straightThroughTargetPercent, reviewWaitTargetMinutes, reviewPercent);
+                    straightThroughTargetPercent, reviewWaitTargetMinutes, reviewPercent, perPage);
         } catch (IllegalArgumentException e) {
             throw new ValidationException(e.getMessage());
+        }
+        if (sameReportingConfiguration(stored, configuration)) {
+            // Task 0020 B2: a save that changes nothing writes no audit record (and nothing is saved), as task 0017.
+            return stored;
         }
         reportingConfigurationRepository.save(tenantId, configuration);
         auditService.recordSuccess(tenantId, actorId, AuditAction.REPORTING_CONFIGURATION_CHANGED,
                 "ReportingConfiguration", tenantId.toString(), correlationId,
-                "Reporting configuration changed: dimensions=" + dimensions.size()
-                        + "; deliveryTargetMinutes=" + deliveryTargetMinutes
-                        + "; deliveryTargetPercent=" + deliveryTargetPercent
-                        + "; straightThroughTargetPercent=" + straightThroughTargetPercent
-                        + "; reviewWaitTargetMinutes=" + reviewWaitTargetMinutes
-                        + "; reviewWaitTargetPercent=" + reviewPercent);
+                reportingConfigurationChangeDetail(configuration, stored));
         return configuration;
+    }
+
+    /**
+     * The report-targets change audit detail. The six keys keep their order and format; task 0020 appends
+     * {@code minutesPerPage} and the same keys for the settings before the change ({@code previous=[...]}), as
+     * {@link #sensitiveDataPolicyChangeDetail} and {@link #lifecyclePolicyChangeDetail} do. Numbers only.
+     */
+    static String reportingConfigurationChangeDetail(ReportingConfiguration now, ReportingConfiguration previous) {
+        return "Reporting configuration changed: " + reportingKeys(now)
+                + "; previous=" + (previous == null ? "none" : "[" + reportingKeys(previous) + "]");
+    }
+
+    private static String reportingKeys(ReportingConfiguration c) {
+        return "dimensions=" + c.dimensions().size()
+                + "; deliveryTargetMinutes=" + c.deliveryTargetMinutes()
+                + "; deliveryTargetPercent=" + c.deliveryTargetPercent()
+                + "; straightThroughTargetPercent=" + c.straightThroughTargetPercent()
+                + "; reviewWaitTargetMinutes=" + c.reviewWaitTargetMinutes()
+                + "; reviewWaitTargetPercent=" + c.reviewWaitTargetPercent()
+                + "; minutesPerPage=" + TimeSavedRule.minutesPerPageKey(c.minutesPerPage());
+    }
+
+    /** Same values, and the same report breakdowns in the same order. Percentages compare within 1e-9. */
+    static boolean sameReportingConfiguration(ReportingConfiguration a, ReportingConfiguration b) {
+        return a.dimensions().stream().map(ReportingConfiguration.Dimension::definitionId).toList()
+                        .equals(b.dimensions().stream().map(ReportingConfiguration.Dimension::definitionId).toList())
+                && a.deliveryTargetMinutes() == b.deliveryTargetMinutes()
+                && Math.abs(a.deliveryTargetPercent() - b.deliveryTargetPercent()) < 1e-9
+                && Math.abs(a.straightThroughTargetPercent() - b.straightThroughTargetPercent()) < 1e-9
+                && a.reviewWaitTargetMinutes() == b.reviewWaitTargetMinutes()
+                && a.reviewWaitTargetPercent() == b.reviewWaitTargetPercent()
+                && Math.abs(a.minutesPerPage() - b.minutesPerPage()) < 1e-9;
     }
 
     private boolean hasValidationConfiguration(IdentifierConfigurationInput input) {

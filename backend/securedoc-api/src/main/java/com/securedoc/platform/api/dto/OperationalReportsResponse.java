@@ -5,7 +5,8 @@ import java.util.List;
 
 public record OperationalReportsResponse(Instant generatedAt, Period period, Executive executive, Intake intake, Processing processing,
                                          Export export, Retention retention, Timing timing, Backlog backlog, Usage usage,
-                                         ServiceLevel serviceLevel, List<DimensionBreakdown> dimensions) {
+                                         ServiceLevel serviceLevel, List<DimensionBreakdown> dimensions,
+                                         TimeSaved timeSaved) {
     public record Period(Instant from, Instant to, Instant previousFrom, Instant previousTo,
                          String source, String outcome) {}
     public record Executive(long batches, long previousBatches, long documents, long pages,
@@ -40,6 +41,10 @@ public record OperationalReportsResponse(Instant generatedAt, Period period, Exe
                                int reviewWaitTargetMinutes, int reviewWaitTargetPercent, double reviewWithinTargetRate,
                                long reviewEligible, long reviewBreaches) {}
     public record DimensionBreakdown(String key, String label, List<DimensionValue> values) {}
+    /** Task 0020 B3: "What LexaVault did for you". percentNoPerson is null with no delivered cases. */
+    public record TimeSaved(long casesDelivered, long casesNoPerson, Integer percentNoPerson,
+                            long pagesChecked, long documentsChecked, long itemsRedacted, List<String> itemTypes,
+                            long pagesNoPerson, Double minutesPerPage, long minutesSaved) {}
     public record DimensionValue(String value, long packages, long delivered, double deliveryRate,
                                  double medianTurnaroundHours) {}
 

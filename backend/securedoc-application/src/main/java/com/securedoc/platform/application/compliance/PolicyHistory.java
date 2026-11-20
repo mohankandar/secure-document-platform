@@ -170,10 +170,31 @@ public final class PolicyHistory {
         return lines;
     }
 
+    private static final java.util.regex.Pattern MINUTES_PER_PAGE =
+            java.util.regex.Pattern.compile("\\bminutesPerPage=([0-9]+(?:\\.[0-9]+)?)");
+
+    /**
+     * Task 0020 B4: the minutes per page in a {@code REPORTING_CONFIGURATION_CHANGED} detail: the value saved
+     * ({@code previous=false}) or the one in {@code previous=[...]} ({@code previous=true}). Null when that part does
+     * not hold it (records from before task 0020, or {@code previous=none}).
+     */
+    public static Double minutesPerPage(String detail, boolean previous) {
+        if (detail == null) return null;
+        int split = detail.indexOf("previous=");
+        String part = previous ? (split < 0 ? "" : detail.substring(split)) : (split < 0 ? detail : detail.substring(0, split));
+        java.util.regex.Matcher m = MINUTES_PER_PAGE.matcher(part);
+        if (!m.find()) return null;
+        try {
+            return Double.valueOf(m.group(1));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     public static String reviewModeWords(String mode) {
         if (mode == null) return "Not recorded";
         return switch (mode) {
-            case "REVIEW_ALL" -> "Every case";
+            case "REVIEW_ALL" -> "Every finding"; // task 0020 A3: the words of the Fine-tune button
             case "UNCERTAIN_ONLY" -> "Only uncertain findings";
             default -> SensitiveTypeNames.sentenceCase(mode);
         };

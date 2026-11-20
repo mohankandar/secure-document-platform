@@ -6,6 +6,7 @@ import com.securedoc.platform.application.compliance.ComplianceReportContent.App
 import com.securedoc.platform.application.compliance.ComplianceReportContent.ChangeRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.CountRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.LabelValue;
+import com.securedoc.platform.application.compliance.ComplianceReportContent.ValueRow;
 import com.securedoc.platform.application.compliance.PolicyHistory.LifecycleChange;
 import com.securedoc.platform.application.compliance.PolicyHistory.LifecyclePolicy;
 import com.securedoc.platform.application.compliance.PolicyHistory.SensitiveChange;
@@ -14,6 +15,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.ApplicationException;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.operations.TimeSavedRule;
 import com.securedoc.platform.application.operations.model.OperationalReportSnapshot;
 import com.securedoc.platform.application.port.in.GetOperationalReportsQuery;
 import com.securedoc.platform.application.port.out.ComplianceReportPdfPort;
@@ -272,6 +274,7 @@ public final class ComplianceReportService {
         }
         outcomes.add(new CountRow("Still open on " + endWords, caseCounts.stillOpenAtEnd(),
                 share(caseCounts.stillOpenAtEnd(), received)));
+        double minutesPerPageAtEnd = minutesPerPageAt(tenantId, end, reports.timeSaved().minutesPerPage());
         ComplianceReportContent.Cases cases = new ComplianceReportContent.Cases(
                 outcomes,
                 OUTCOMES_NOTE,
@@ -280,7 +283,9 @@ public final class ComplianceReportService {
                         new CountRow("Checked by a reviewer", reports.usage().reviewedPackages(),
                                 share(reports.usage().reviewedPackages(), delivered)),
                         new CountRow("Finished by hand after a processing stop", caseCounts.finishedByHand(),
-                                share(caseCounts.finishedByHand(), delivered))));
+                                share(caseCounts.finishedByHand(), delivered))),
+                didForYouRows(reports.timeSaved(), minutesPerPageAtEnd),
+                didForYouNote(minutesPerPageAtEnd));
 
         // 4. Audit activity
         List<CountRow> activity = new ArrayList<>();
@@ -421,6 +426,50 @@ public final class ComplianceReportService {
                         p.threshold() == null ? "Not recorded" : PolicyHistory.percent(p.threshold()) + " confidence or higher"),
                 new LabelValue("Labeled last-four SSN treated as sensitive",
                         p.maskSsnLastFour() == null ? "Not recorded" : PolicyHistory.yesNo(p.maskSsnLastFour())));
+    }
+
+    /**
+     * Task 0020 B4: the period's Reports numbers (cases first delivered in the period); the time saved uses the
+     * minutes per page as it stood at the period end.
+     */
+    static List<ValueRow> didForYouRows(OperationalReportSnapshot.TimeSaved t, double minutesPerPage) {
+        Integer percent = TimeSavedRule.percentRoundedDown(t.casesNoPerson(), t.casesDelivered());
+        return List.of(
+                new ValueRow("Handled without a person", number(t.casesNoPerson()), percent == null ? "—" : percent + "%"),
+                new ValueRow("Pages checked (in " + number(t.documentsChecked())
+                        + (t.documentsChecked() == 1 ? " document)" : " documents)"), number(t.pagesChecked()), null),
+                new ValueRow("Sensitive items redacted", number(t.itemsRedacted()), null),
+                new ValueRow("Review time saved (estimate)",
+                        TimeSavedRule.timeWords(TimeSavedRule.minutesSaved(t.pagesNoPerson(), minutesPerPage)), null));
+    }
+
+    static String didForYouNote(double minutesPerPage) {
+        String m = TimeSavedRule.minutesPerPageWords(minutesPerPage);
+        return "Estimate: pages in cases that needed no person × " + m + (minutesPerPage == 1.0 ? " minute" : " minutes")
+                + " per page, rounded down. Pages a person reviewed count as zero.";
+    }
+
+    private static String number(long n) {
+        return String.format(Locale.US, "%,d", n);
+    }
+
+    /**
+     * Minutes per page at {@code end}, from the {@code REPORTING_CONFIGURATION_CHANGED} history like the other
+     * settings: the latest change before the end that records it; otherwise the value the first later change that
+     * records it replaced; otherwise no change since, so the stored setting ({@code current}).
+     */
+    private double minutesPerPageAt(TenantId tenantId, Instant end, double current) {
+        String action = AuditAction.REPORTING_CONFIGURATION_CHANGED.name();
+        Optional<AuditRecordSummary> latest = readPort.latestSuccess(tenantId, action, end);
+        if (latest.isPresent()) {
+            Double saved = PolicyHistory.minutesPerPage(latest.get().detail(), false);
+            if (saved != null) return saved;
+        }
+        for (AuditRecordSummary later : readPort.successes(tenantId, action, end, Instant.now(clock).plusSeconds(1))) {
+            Double before = PolicyHistory.minutesPerPage(later.detail(), true);
+            if (before != null) return before;
+        }
+        return current;
     }
 
     static String retentionNote(long stillWithinKeep, int originalHours, String endWords) {

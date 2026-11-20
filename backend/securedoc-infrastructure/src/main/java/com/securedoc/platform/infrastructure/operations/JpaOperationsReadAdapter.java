@@ -6,6 +6,8 @@ import com.securedoc.platform.application.operations.model.DashboardItem;
 import com.securedoc.platform.application.operations.model.DashboardOverview;
 import com.securedoc.platform.application.operations.model.DashboardPage;
 import com.securedoc.platform.application.operations.model.DashboardStage;
+import com.securedoc.platform.application.compliance.SensitiveTypeNames;
+import com.securedoc.platform.application.operations.TimeSavedRule;
 import com.securedoc.platform.application.operations.model.OperationalReportSnapshot;
 import com.securedoc.platform.application.port.out.OperationsReadPort;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -268,6 +270,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         double straightThroughTargetPercent = ((Number) reportingSettings[2]).doubleValue();
         int reviewWaitTargetMinutes = ((Number) reportingSettings[3]).intValue();
         int reviewWaitTargetPercent = ((Number) reportingSettings[4]).intValue();
+        double minutesPerPage = ((Number) reportingSettings[5]).doubleValue();
 
         Query deliverySlaQuery = entityManager.createNativeQuery("""
                 select count(*) filter (where f.first_delivered_at is not null and f.first_delivered_at<:to),
@@ -338,20 +341,88 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                         straightThroughTargetPercent, percent(straightThrough, deliveredSample),
                         reviewWaitTargetMinutes, reviewWaitTargetPercent, percent(reviewWithinTarget, reviewEligible),
                         reviewEligible, Math.max(0, reviewEligible - reviewWithinTarget)),
-                dimensions
+                dimensions,
+                timeSaved(tenant, from, to, source, outcome, minutesPerPage)
         );
     }
 
     private Object[] reportingSettings(UUID tenant) {
         Query query = entityManager.createNativeQuery("""
                 select delivery_target_minutes, delivery_target_percent,
-                       straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent
+                       straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent,
+                       minutes_per_page
                   from reporting_tenant_settings where tenant_id=:tenant
                 """).setParameter("tenant", tenant);
         @SuppressWarnings("unchecked")
         List<Object[]> rows = query.getResultList();
-        if (rows.isEmpty()) return new Object[]{240, 95.0, 90.0, 60, 80};
+        if (rows.isEmpty()) return new Object[]{240, 95.0, 90.0, 60, 80, TimeSavedRule.DEFAULT_MINUTES_PER_PAGE};
         return rows.get(0);
+    }
+
+    /**
+     * Task 0020 B1. The delivered set is Reports' "Delivered": facts first delivered in [from, to), with the same
+     * source and outcome filters. A case was handled without a person when {@code reviewed_flag} is false and it has
+     * no {@code BUSINESS_MANUAL_FALLBACK_SUBMITTED} success (the compliance report's "Finished by hand" rule).
+     * Columns: cases, cases with no person, pages, documents, pages in cases with no person.
+     */
+    static final String TIME_SAVED_CASES_SQL = """
+            with delivered as (
+                select f.package_id, f.page_count, f.document_count,
+                       (not f.reviewed_flag and not exists (
+                           select 1 from audit_records a
+                            where a.tenant_id=f.tenant_id and a.action='BUSINESS_MANUAL_FALLBACK_SUBMITTED'
+                              and a.outcome='SUCCESS' and a.resource_type='DocumentPackage'
+                              and a.resource_id=cast(f.package_id as text))) as no_person
+                  from reporting_package_facts f
+                 where f.tenant_id=:tenant and f.first_delivered_at>=:from and f.first_delivered_at<:to%s%s
+            )
+            select count(*),
+                   coalesce(sum(case when no_person then 1 else 0 end),0),
+                   coalesce(sum(page_count),0),
+                   coalesce(sum(document_count),0),
+                   coalesce(sum(case when no_person then page_count else 0 end),0)
+              from delivered
+            """;
+
+    /**
+     * Task 0020 B1: findings in the same delivered cases that were redacted, decided by a person or automatically:
+     * status CONFIRMED, or REDACTED (a confirmed finding becomes REDACTED once its redaction is applied). Rows:
+     * entity type and count.
+     */
+    static final String TIME_SAVED_ITEMS_SQL = """
+            select fi.entity_type, count(*)
+              from reporting_package_facts f
+              join documents d on d.package_id=f.package_id and d.tenant_id=f.tenant_id
+              join findings fi on fi.document_id=d.id and fi.tenant_id=f.tenant_id
+             where f.tenant_id=:tenant and f.first_delivered_at>=:from and f.first_delivered_at<:to%s%s
+               and fi.status in ('CONFIRMED','REDACTED')
+             group by fi.entity_type
+            """;
+
+    private OperationalReportSnapshot.TimeSaved timeSaved(UUID tenant, Instant from, Instant to, String source,
+                                                          String outcome, double minutesPerPage) {
+        Query casesQuery = entityManager.createNativeQuery(TIME_SAVED_CASES_SQL.formatted(
+                sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(casesQuery, tenant, from, to, source);
+        Object[] cases = row(casesQuery.getSingleResult());
+        Query itemsQuery = entityManager.createNativeQuery(TIME_SAVED_ITEMS_SQL.formatted(
+                sourceClause("f", source), outcomeClause("f", outcome)));
+        bindReport(itemsQuery, tenant, from, to, source);
+        @SuppressWarnings("unchecked")
+        List<Object[]> itemRows = itemsQuery.getResultList();
+        long items = 0;
+        java.util.TreeSet<String> names = new java.util.TreeSet<>(SensitiveTypeNames.order());
+        for (Object[] r : itemRows) {
+            items += number(r[1]);
+            names.add(string(r[0]));
+        }
+        long delivered = number(cases[0]);
+        long noPerson = number(cases[1]);
+        long pagesNoPerson = number(cases[4]);
+        return new OperationalReportSnapshot.TimeSaved(delivered, noPerson,
+                TimeSavedRule.percentRoundedDown(noPerson, delivered), number(cases[2]), number(cases[3]), items,
+                names.stream().map(SensitiveTypeNames::name).distinct().toList(),
+                pagesNoPerson, minutesPerPage, TimeSavedRule.minutesSaved(pagesNoPerson, minutesPerPage));
     }
 
     private static final String LEGACY_DIMENSION_VALUE = "Legacy / Unmapped";

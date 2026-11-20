@@ -126,6 +126,7 @@ public final class InMemoryComplianceReads implements ComplianceReportReadPort {
                 new OperationalReportSnapshot.Backlog(0, 0, 0, 0, 0, 0),
                 new OperationalReportSnapshot.Usage(0, 0, 0, 0, 0, 0, 0, 0),
                 new OperationalReportSnapshot.ServiceLevel(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                List.of());
+                List.of(),
+                new OperationalReportSnapshot.TimeSaved(0, 0, null, 0, 0, 0, List.of(), 0, 1.0, 0));
     }
 }

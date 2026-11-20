@@ -87,7 +87,8 @@ public record BusinessAdminConfigurationResponse(
             double deliveryTargetPercent,
             double straightThroughTargetPercent,
             int reviewWaitTargetMinutes,
-            int reviewWaitTargetPercent
+            int reviewWaitTargetPercent,
+            double minutesPerPage
     ) {}
 
     public record ReportingDimensionResponse(

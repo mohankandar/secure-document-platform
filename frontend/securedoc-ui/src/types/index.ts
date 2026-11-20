@@ -109,6 +109,8 @@ export interface ReportingConfiguration {
   reviewWaitTargetMinutes: number;
   /** 0–100: pick up reviews within reviewWaitTargetMinutes for at least this share of reviews. */
   reviewWaitTargetPercent: number;
+  /** Task 0020: minutes a person would take to check one page by hand (0.5–30, steps of 0.5). U024 edits it. */
+  minutesPerPage?: number;
 }
 
 export interface BusinessAdminConfiguration {
@@ -543,6 +545,19 @@ export interface OperationalReports {
     label: string;
     values: Array<{ value: string; packages: number; delivered: number; deliveryRate: number; medianTurnaroundHours: number }>;
   }>;
+  /** Task 0020: "What LexaVault did for you" (U024 shows it). percentNoPerson is null with no delivered cases. */
+  timeSaved?: {
+    casesDelivered: number;
+    casesNoPerson: number;
+    percentNoPerson: number | null;
+    pagesChecked: number;
+    documentsChecked: number;
+    itemsRedacted: number;
+    itemTypes: string[];
+    pagesNoPerson: number;
+    minutesPerPage: number | null;
+    minutesSaved: number;
+  };
 
 }
 

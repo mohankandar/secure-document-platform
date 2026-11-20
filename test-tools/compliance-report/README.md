@@ -37,3 +37,11 @@ password is generated per run and never printed.
 
 Task 0019 adds: `GET /api/v1/audit-records/count` for the same custom period equals the full edition's appendix row
 count; a Business Administrator gets 403 for it (recorded once as `AUTHORIZATION_FAILED`); reading it is not audited.
+
+Task 0020 adds "What LexaVault did for you". Minutes per page: the default 1.0 (migration 041); 0.4, 30.5, 1.25 and 0
+are refused with 400 and write no record; 30, 0.5 and 2.5 are saved, each with one `REPORTING_CONFIGURATION_CHANGED`
+record holding the new value and `previous=[...]`, numbers only; a save with no change writes none. On hand-made facts
+(pages and documents per case, findings in each status, one unreviewed case finished by hand, and a second entity's
+big case in the same period) the `timeSaved` block of Reports is checked number by number, against Reports' own
+"Delivered" and "No review needed"; and section 3 of the PDF prints the new table and its grey line with the minutes per
+page as it stood at the period end (2.5), while Reports uses today's setting (1.5).

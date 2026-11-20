@@ -235,7 +235,16 @@ public class OperationsController {
                 includeBusiness ? report.dimensions().stream().map(d -> new OperationalReportsResponse.DimensionBreakdown(
                         d.key(), d.label(), d.values().stream().map(v -> new OperationalReportsResponse.DimensionValue(
                                 v.value(), v.packages(), v.delivered(), v.deliveryRate(), v.medianTurnaroundHours())).toList())).toList()
-                        : java.util.List.of()
+                        : java.util.List.of(),
+                timeSaved(report.timeSaved())
         );
+    }
+
+    /** Same capability as the headline (REPORT_EXECUTIVE_VIEW): counts only, never a found value or file name. */
+    static OperationalReportsResponse.TimeSaved timeSaved(
+            com.securedoc.platform.application.operations.model.OperationalReportSnapshot.TimeSaved t) {
+        return new OperationalReportsResponse.TimeSaved(t.casesDelivered(), t.casesNoPerson(), t.percentNoPerson(),
+                t.pagesChecked(), t.documentsChecked(), t.itemsRedacted(), t.itemTypes(), t.pagesNoPerson(),
+                t.minutesPerPage(), t.minutesSaved());
     }
 }
