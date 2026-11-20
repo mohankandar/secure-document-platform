@@ -178,3 +178,9 @@ The 0020 check "handled without a person = No review needed minus the unreviewed
 1. **Portrait iPad wraps the four tiles 3 + 1.** It reads well and nothing scrolls sideways. Should it be 2 + 2 instead, as the headline was made to fill its rows in U021? That would need one portrait-tablet rule like the headline's.
 2. **Service levels' grey line under "No review needed"** still reads "Cases delivered without a person reviewing". Since step 4 it also leaves out cases finished by hand. Should it say "…without a person reviewing or finishing by hand", or stay short?
 3. **The tile says "Handled without a person" and the headline says "No review needed".** Since step 4 they are always the same number, shown twice on one page (the tile as a percent of delivered cases, the headline as a rate). Keep both, or drop one later?
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Portrait iPad: the four tiles sit 2 + 2, with one portrait-tablet rule like the headline's (U026 step 0).
+2. Service levels' grey line under "No review needed" becomes "Cases delivered with no person reviewing or finishing them" (U026 step 0).
+3. Keep both "Handled without a person" and the headline's "No review needed".
