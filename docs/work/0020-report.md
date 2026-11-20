@@ -216,3 +216,12 @@ Not pushed, not merged. `docs/work/0021-task.md` appeared during this task and i
 
 ## Suggested next step
 U024: the four tiles, "How is this worked out?", and the "minutes per page" field in Report targets. The API and the setting are ready.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. "Sensitive items redacted" counts CONFIRMED and REDACTED: keep.
+2. Align Reports' "No review needed" with "Handled without a person": it also leaves out cases finished by hand (its target bar and the compliance report's row follow). Done in U024 step 0.
+3. Keep both page counts; the new tile's grey line reads "in N delivered documents".
+4. The canvas's 68% is sample data; the build keeps rounding down. No canvas change.
+5. "1 minute" when the setting is exactly 1: fine.
+Note: task numbers from the UI enhancements chat continue at 0022, because another chat wrote 0021 (sensitivity levels to Vero), which waits for the owner.
