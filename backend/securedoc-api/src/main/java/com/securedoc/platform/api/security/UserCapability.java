@@ -14,6 +14,10 @@ public enum UserCapability {
     REPORT_EXECUTIVE_VIEW,
     REPORT_OPERATIONAL_VIEW,
     REPORT_EXPORT,
+    /** Compliance report PDF, summary edition (task 0017). Business Administrator only. */
+    COMPLIANCE_REPORT_SUMMARY,
+    /** Compliance report PDF with the full audit trail appendix (task 0017). Tenant IT Administrator only. */
+    COMPLIANCE_REPORT_FULL,
     TENANT_POLICY_MANAGE,
     TENANT_IDENTIFIER_MANAGE,
     TENANT_INTEGRATION_MANAGE,

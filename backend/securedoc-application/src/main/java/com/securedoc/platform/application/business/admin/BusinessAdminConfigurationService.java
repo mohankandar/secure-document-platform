@@ -192,6 +192,11 @@ public final class BusinessAdminConfigurationService {
         }
 
         Optional<TenantRedactionPolicy> previous = policyRepository.findByTenantId(tenantId);
+        if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour)) {
+            // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
+            return previous.get();
+        }
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now());
         policyRepository.save(policy);
@@ -235,6 +240,11 @@ public final class BusinessAdminConfigurationService {
         } catch (IllegalArgumentException e) {
             throw new ValidationException(e.getMessage());
         }
+        Optional<TenantLifecyclePolicy> previousLifecycle = lifecyclePolicyRepository.findByTenantId(tenantId);
+        if (previousLifecycle.isPresent() && sameLifecyclePolicy(previousLifecycle.get(), policy)) {
+            // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
+            return previousLifecycle.get();
+        }
         lifecyclePolicyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId, AuditAction.LIFECYCLE_POLICY_CHANGED,
                 "LifecyclePolicy", tenantId.toString(), correlationId,
@@ -243,6 +253,23 @@ public final class BusinessAdminConfigurationService {
                         + ", neverExportedHoldHours=" + neverExportedHoldHours
                         + ", finalApprovalRequired=" + finalApprovalRequired);
         return policy;
+    }
+
+    /** Same values as the stored policy. The threshold compares within 1e-9, as {@link PolicyPreset} does. */
+    static boolean sameSensitiveDataPolicy(TenantRedactionPolicy stored, Set<EntityType> enabledTypes,
+                                           double autoRedactThreshold, ReviewMode reviewMode,
+                                           boolean maskSsnLastFour) {
+        return stored.enabledEntityTypes().equals(Set.copyOf(enabledTypes))
+                && Math.abs(stored.autoRedactThreshold() - autoRedactThreshold) < 1e-9
+                && stored.reviewMode() == reviewMode
+                && stored.maskSsnLastFour() == maskSsnLastFour;
+    }
+
+    static boolean sameLifecyclePolicy(TenantLifecyclePolicy stored, TenantLifecyclePolicy requested) {
+        return stored.originalRetentionHours() == requested.originalRetentionHours()
+                && stored.redactedCacheHours() == requested.redactedCacheHours()
+                && stored.neverExportedHoldHours() == requested.neverExportedHoldHours()
+                && stored.finalApprovalRequired() == requested.finalApprovalRequired();
     }
 
     private String uniqueKey(String label, Set<String> usedKeys) {

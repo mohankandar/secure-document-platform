@@ -197,6 +197,53 @@ class NoRedactedValueSavedTest {
         assertTrue(savedFindings.isEmpty());
     }
 
+    /**
+     * Task 0017 B5: a compliance report built from the records this detection wrote (both editions, the full one
+     * listing every record) holds no part of any fake value in its PDF text, its audit record or the logs.
+     */
+    @Test
+    void aComplianceReportOfTheseRecordsHoldsNoValue() throws Exception {
+        String aiAnswer = "{\"findings\":["
+                + aiFinding("SSN", SSN, "Borrower SSN: " + SSN) + ","
+                + aiFinding("CREDIT_CARD_NUMBER", CARD, "Card Number: " + CARD) + ","
+                + aiFinding("DATE_OF_BIRTH", DOB, "Date of Birth: " + DOB)
+                + "]}";
+        startServer(aiAnswer);
+        Fixture fixture = fixture();
+        service().execute(DetectSensitiveDataCommand.of(
+                fixture.document.id(), fixture.pkg.id(), tenantId, CorrelationId.generate()));
+        assertFalse(auditRecords.isEmpty());
+
+        com.securedoc.platform.domain.tenant.Tenant entity = com.securedoc.platform.domain.tenant.Tenant.reconstitute(
+                tenantId, "Leak test entity", "leak-test", Instant.now(),
+                com.securedoc.platform.domain.tenant.TenantStatus.ACTIVE,
+                com.securedoc.platform.domain.tenant.TenantCapabilityProfile.defaultProfile(), Instant.now());
+        // A clock 3 days ahead, so a custom period covering today has already ended.
+        java.time.Clock later = java.time.Clock.fixed(Instant.now().plus(Duration.ofDays(3)), java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        List<AuditRecord> reportAudits = new CopyOnWriteArrayList<>();
+        var reports = com.securedoc.platform.api.compliance.InMemoryComplianceReads.service(auditRecords, reportAudits,
+                List.of(entity), tenantId, new com.securedoc.platform.application.audit.RequestActorDisplayName(), later);
+        var principal = com.securedoc.platform.application.context.AuthenticatedPrincipal.of(
+                ActorId.of(UUID.randomUUID()), tenantId, "it-admin", Set.of("TENANT_IT_ADMIN"));
+        for (var edition : com.securedoc.platform.application.compliance.ComplianceEdition.values()) {
+            var created = reports.create(principal, CorrelationId.generate(),
+                    new com.securedoc.platform.application.compliance.ComplianceReportService.Request(
+                            "CUSTOM", today.minusDays(1), today.plusDays(1), "UTC"), edition, "IT Administrator");
+            String text;
+            try (var doc = org.apache.pdfbox.Loader.loadPDF(created.pdf())) {
+                text = new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+            }
+            if (edition == com.securedoc.platform.application.compliance.ComplianceEdition.FULL) {
+                String flat = text.replaceAll("\\s+", " ");
+                assertTrue(flat.contains("Checked a document for sensitive data"), () -> "the detection record is listed: " + flat);
+            }
+            assertNoValueIn("compliance report PDF (" + edition + ")", List.of(text, text.replaceAll("\\s+", "")));
+        }
+        assertNoValueIn("compliance report audit record", reportAudits.stream().map(NoRedactedValueSavedTest::dump).toList());
+        assertNoValueIn("log line", logs.list.stream().map(NoRedactedValueSavedTest::render).toList());
+    }
+
     // --- the search --------------------------------------------------------------------------
 
     /** Full value as written, digits only, and last 4, for every fake value. */

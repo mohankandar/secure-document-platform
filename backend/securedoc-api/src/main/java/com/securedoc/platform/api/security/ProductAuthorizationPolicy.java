@@ -42,6 +42,7 @@ public class ProductAuthorizationPolicy {
                 case "BUSINESS_ADMIN" -> {
                     capabilities.addAll(REPORT_READ_CAPABILITIES);
                     capabilities.add(UserCapability.REPORT_EXPORT);
+                    capabilities.add(UserCapability.COMPLIANCE_REPORT_SUMMARY);
                     capabilities.add(UserCapability.TENANT_POLICY_MANAGE);
                     capabilities.add(UserCapability.TENANT_IDENTIFIER_MANAGE);
                 }
@@ -54,6 +55,7 @@ public class ProductAuthorizationPolicy {
                     capabilities.add(UserCapability.TECHNICAL_RETRY);
                     capabilities.add(UserCapability.TECHNICAL_HOLD_MANAGE);
                     capabilities.add(UserCapability.AUDIT_VIEW);
+                    capabilities.add(UserCapability.COMPLIANCE_REPORT_FULL);
                 }
                 case "PLATFORM_OPERATIONS_ADMIN" -> {
                     capabilities.add(UserCapability.TECHNICAL_EXCEPTION_VIEW);

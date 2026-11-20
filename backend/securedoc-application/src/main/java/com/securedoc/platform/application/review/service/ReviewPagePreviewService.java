@@ -147,7 +147,7 @@ public final class ReviewPagePreviewService implements GetReviewPagePreviewQuery
                     findingId, pkg.id(), finding.documentId(), reviewPageNumber,
                     rendered.pixelWidth(), rendered.pixelHeight(), previewMasks.size());
             auditService.recordSuccess(tenantId, actorId,
-                    AuditAction.REVIEW_PAGE_PREVIEWED, "Finding", finding.id().toString(),
+                    AuditAction.REVIEW_PAGE_PREVIEWED, "Finding", finding.id().toString(), pkg.id(),
                     correlationId, "Focused review page preview rendered: page=" + reviewPageNumber
                             + ", previewMasks=" + previewMasks.size());
             return new ReviewPagePreviewResult(

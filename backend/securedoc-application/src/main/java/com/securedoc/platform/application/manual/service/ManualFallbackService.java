@@ -209,7 +209,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         findingRepository.save(finding);
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.BUSINESS_MANUAL_FALLBACK_REGION_ADDED, "Finding", finding.id().toString(),
+                AuditAction.BUSINESS_MANUAL_FALLBACK_REGION_ADDED, "Finding", finding.id().toString(), command.packageId(),
                 command.correlationId(), "Manual fallback region added: page=" + command.pageNumber()
                         + ", type=" + command.entityType());
         return toRegion(finding);
@@ -232,7 +232,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         finding.override(command.actorId(), "Business user removed manual redaction region");
         findingRepository.save(finding);
         auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.BUSINESS_MANUAL_FALLBACK_REGION_REMOVED, "Finding", finding.id().toString(),
+                AuditAction.BUSINESS_MANUAL_FALLBACK_REGION_REMOVED, "Finding", finding.id().toString(), command.packageId(),
                 command.correlationId(), "Manual fallback region removed: page=" + finding.location().pageNumber()
                         + ", type=" + finding.entityType());
     }

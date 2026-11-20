@@ -380,10 +380,11 @@ public class ApplicationServiceConfig {
             ChecksumPort checksumPort,
             PdfIntakeValidationPort pdfIntakeValidationPort,
             AuditService auditService,
-            ExternalIntakeMaintenanceService maintenanceService) {
+            ExternalIntakeMaintenanceService maintenanceService,
+            RequestActorDisplayName requestActorDisplayName) {
         return new ExternalIntakeService(integrationConnectionService, externalIntakeRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
-                checksumPort, pdfIntakeValidationPort, auditService, maintenanceService);
+                checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName);
     }
 
     @Bean
@@ -514,6 +515,22 @@ public class ApplicationServiceConfig {
     @Bean
     public OperationsQueryService operationsQueryService(OperationsReadPort operationsReadPort) {
         return new OperationsQueryService(operationsReadPort);
+    }
+
+    /** Task 0017: the compliance report PDF. */
+    @Bean
+    public com.securedoc.platform.application.compliance.ComplianceReportService complianceReportService(
+            com.securedoc.platform.application.port.out.ComplianceReportReadPort complianceReportReadPort,
+            com.securedoc.platform.application.port.out.ComplianceReportPdfPort complianceReportPdfPort,
+            OperationsQueryService operationsQueryService,
+            TenantRepository tenantRepository,
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+            TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
+            AuditService auditService,
+            RequestActorDisplayName requestActorDisplayName) {
+        return new com.securedoc.platform.application.compliance.ComplianceReportService(complianceReportReadPort,
+                complianceReportPdfPort, operationsQueryService, tenantRepository, tenantRedactionPolicyRepository,
+                tenantLifecyclePolicyRepository, auditService, requestActorDisplayName, java.time.Clock.systemUTC());
     }
 
     @Bean

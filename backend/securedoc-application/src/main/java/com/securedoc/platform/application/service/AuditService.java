@@ -8,6 +8,7 @@ import com.securedoc.platform.domain.audit.AuditOutcome;
 import com.securedoc.platform.domain.audit.AuditRecord;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
+import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 
 import java.util.Objects;
@@ -65,15 +66,51 @@ public final class AuditService {
                 AuditOutcome.DENIED, correlationId, detail);
     }
 
+    /**
+     * Records a successful action about something inside a case (a document, finding or artifact), with the case
+     * (package) ID the caller already holds (task 0017). A null {@code caseId} falls back to the derived one.
+     */
+    public void recordSuccess(TenantId tenantId, ActorId actorId, AuditAction action,
+                              String resourceType, String resourceId, PackageId caseId,
+                              CorrelationId correlationId, String detail) {
+        record(tenantId, actorId, action, resourceType, resourceId, caseId,
+                AuditOutcome.SUCCESS, correlationId, detail);
+    }
+
+    /** As {@link #recordSuccess(TenantId, ActorId, AuditAction, String, String, PackageId, CorrelationId, String)}. */
+    public void recordFailure(TenantId tenantId, ActorId actorId, AuditAction action,
+                              String resourceType, String resourceId, PackageId caseId,
+                              CorrelationId correlationId, String detail) {
+        record(tenantId, actorId, action, resourceType, resourceId, caseId,
+                AuditOutcome.FAILURE, correlationId, detail);
+    }
+
+    /** As {@link #recordSuccess(TenantId, ActorId, AuditAction, String, String, PackageId, CorrelationId, String)}. */
+    public void recordDenied(TenantId tenantId, ActorId actorId, AuditAction action,
+                             String resourceType, String resourceId, PackageId caseId,
+                             CorrelationId correlationId, String detail) {
+        record(tenantId, actorId, action, resourceType, resourceId, caseId,
+                AuditOutcome.DENIED, correlationId, detail);
+    }
+
     private void record(TenantId tenantId, ActorId actorId, AuditAction action,
                          String resourceType, String resourceId,
                          AuditOutcome outcome, CorrelationId correlationId, String detail) {
+        record(tenantId, actorId, action, resourceType, resourceId, null, outcome, correlationId, detail);
+    }
+
+    private void record(TenantId tenantId, ActorId actorId, AuditAction action,
+                         String resourceType, String resourceId, PackageId caseId,
+                         AuditOutcome outcome, CorrelationId correlationId, String detail) {
         String safeDetail = sanitizeDetail(detail);
+        String recordedCaseId = caseId != null
+                ? caseId.value().toString()
+                : AuditCaseIds.caseIdFor(resourceType, resourceId, safeDetail);
         AuditRecord auditRecord = AuditRecord.create(
                 tenantId, actorId, action, resourceType, resourceId,
                 outcome, correlationId, safeDetail,
                 actorDisplayName.displayNameFor(actorId).orElse(null),
-                AuditCaseIds.caseIdFor(resourceType, resourceId, safeDetail));
+                recordedCaseId);
         auditPort.record(auditRecord);
     }
 

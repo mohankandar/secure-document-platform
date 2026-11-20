@@ -87,14 +87,14 @@ public final class DocumentExportService implements ExportRedactedDocumentUseCas
         } catch (Exception e) {
             auditService.recordFailure(
                     command.tenantId(), SYSTEM_ACTOR,
-                    AuditAction.DOCUMENT_EXPORT_FAILED, "Document", command.documentId().toString(),
+                    AuditAction.DOCUMENT_EXPORT_FAILED, "Document", command.documentId().toString(), command.packageId(),
                     command.correlationId(), "Export failed");
             throw new RuntimeException("Failed to export redacted document", e);
         }
 
         auditService.recordSuccess(
                 command.tenantId(), SYSTEM_ACTOR,
-                AuditAction.DOCUMENT_EXPORTED, "Document", command.documentId().toString(),
+                AuditAction.DOCUMENT_EXPORTED, "Document", command.documentId().toString(), command.packageId(),
                 command.correlationId(),
                 "Document exported: destination=" + reference.destinationType()
                         + ", filename=" + originalFileName);

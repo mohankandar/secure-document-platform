@@ -184,7 +184,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
             exportDocuments.add(new PackageExportRecord.ExportedDocument(document.id(), document.fileName().value(),
                     artifact.sizeBytes(), artifact.checksum(), state.destinationLocation()));
             auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_EXPORTED,
-                    "Document", document.id().toString(), command.correlationId(),
+                    "Document", document.id().toString(), command.packageId(), command.correlationId(),
                     "Document acknowledged by master delivery destination=" + submission.destinationType()
                             + ", cycle=" + exportCycle + ", filename=" + document.fileName().value());
         }

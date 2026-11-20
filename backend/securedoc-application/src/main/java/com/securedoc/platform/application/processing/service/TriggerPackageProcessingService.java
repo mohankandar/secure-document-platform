@@ -491,7 +491,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         documentRepository.save(document);
         auditService.recordFailure(
                 tenantId, SYSTEM_ACTOR, AuditAction.DOCUMENT_PROCESSING_FAILED,
-                "Document", documentId.toString(), correlationId, safeReason);
+                "Document", documentId.toString(), document.packageId(), correlationId, safeReason);
     }
 
     private void markDocumentFailed(DocumentId documentId, TenantId tenantId,

@@ -348,6 +348,68 @@ class PackageLifecycleDashboardRetentionTest {
         assertTrue(storage.deleted.isEmpty());
     }
 
+    /**
+     * Task 0017 A5 (0015 answer 1): the final purge deletes the stored extracted text and OCR text together with
+     * the original, artifacts and stored files alike, and not before the original is due.
+     */
+    @Test
+    void finalPurgeDeletesExtractedTextAndOcrTextTogetherWithTheOriginal() {
+        TenantId tenantId = TenantId.generate();
+        ActorId actorId = ActorId.generate();
+        DocumentPackage pkg = DocumentPackage.create(
+                tenantId, PackageType.MANUAL_UPLOAD, actorId, PackageMetadata.empty());
+        Document document = Document.create(
+                tenantId, pkg.id(), FileName.of("text-purge.pdf"), MimeType.pdf(), 128,
+                Checksum.sha256("text-purge-document"), DocumentType.PDF);
+        pkg.addDocument(document);
+        pkg.submit();
+        pkg.startProcessing();
+        document.startExtraction();
+        document.completeExtraction(List.of(Page.withText(1, 612, 792, "synthetic")));
+        document.startRedaction();
+        document.completeProcessing();
+        pkg.completeSuccessfully();
+
+        MutableArtifactRepository artifacts = new MutableArtifactRepository();
+        Artifact original = availableArtifact(tenantId, document.id(), ArtifactType.ORIGINAL, "a5/original.pdf");
+        Artifact extracted = availableArtifact(tenantId, document.id(), ArtifactType.EXTRACTED_TEXT, "a5/extracted.txt");
+        Artifact ocr = availableArtifact(tenantId, document.id(), ArtifactType.OCR_TEXT, "a5/ocr.txt");
+        artifacts.values.addAll(List.of(original, extracted, ocr));
+        MutableLifecycleRepository lifecycles = new MutableLifecycleRepository();
+        CapturingStorage storage = new CapturingStorage();
+        CapturingAudit audit = new CapturingAudit();
+        PackageLifecycleService service = new PackageLifecycleService(
+                new FixedPolicyRepository(tenantId, 72), lifecycles, new CapturingExportRepository(),
+                new MutablePackageRepository(pkg), new CapturingVisibility(), new MutableDocumentRepository(document),
+                artifacts, storage, new AuditService(audit));
+
+        service.recordSuccessfulExport(pkg.id(), tenantId, 1, "LOCAL_FOLDER",
+                List.of(new PackageExportRecord.ExportedDocument(
+                        document.id(), "text-purge.pdf", 128, Checksum.sha256("x"), "local/text-purge.pdf")),
+                CorrelationId.generate());
+        Instant dueAt = lifecycles.lifecycle.orElseThrow().originalDeleteAt().orElseThrow();
+
+        service.execute(new PurgeDueRetentionCommand(dueAt.minusSeconds(1), 100, actorId, CorrelationId.generate()));
+        assertEquals(ArtifactStatus.AVAILABLE, original.status());
+        assertEquals(ArtifactStatus.AVAILABLE, extracted.status(), "extracted text is kept while the original is");
+        assertEquals(ArtifactStatus.AVAILABLE, ocr.status(), "OCR text is kept while the original is");
+        assertFalse(storage.deleted.contains(ArtifactStorageReference.local("a5/extracted.txt")));
+        assertFalse(storage.deleted.contains(ArtifactStorageReference.local("a5/ocr.txt")));
+
+        var result = service.execute(new PurgeDueRetentionCommand(dueAt, 100, actorId, CorrelationId.generate()));
+
+        assertEquals(1, result.packagesFullyPurged());
+        assertEquals(ArtifactStatus.DELETED, original.status());
+        assertEquals(ArtifactStatus.DELETED, extracted.status());
+        assertEquals(ArtifactStatus.DELETED, ocr.status());
+        assertTrue(storage.deleted.containsAll(List.of(
+                ArtifactStorageReference.local("a5/original.pdf"),
+                ArtifactStorageReference.local("a5/extracted.txt"),
+                ArtifactStorageReference.local("a5/ocr.txt"))), "every stored file is deleted: " + storage.deleted);
+        assertTrue(audit.records.stream().anyMatch(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.ORIGINAL_ARTIFACT_PURGED
+                && r.outcome() == com.securedoc.platform.domain.audit.AuditOutcome.SUCCESS));
+    }
+
     private static Artifact availableArtifact(TenantId tenantId, DocumentId documentId,
                                               ArtifactType type, String path) {
         Artifact artifact = Artifact.create(tenantId, documentId, type, MimeType.pdf(), 64, Checksum.sha256(path));

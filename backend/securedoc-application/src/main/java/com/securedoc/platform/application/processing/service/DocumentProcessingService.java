@@ -113,7 +113,7 @@ public final class DocumentProcessingService implements StartDocumentProcessingU
                     SYSTEM_ACTOR,
                     AuditAction.DOCUMENT_EXTRACTION_STARTED,
                     "Document",
-                    command.documentId().toString(),
+                    command.documentId().toString(), command.packageId(),
                     correlationId,
                     "Document extraction started"
             );
@@ -180,7 +180,7 @@ public final class DocumentProcessingService implements StartDocumentProcessingU
                 SYSTEM_ACTOR,
                 AuditAction.DOCUMENT_PROCESSING_FAILED,
                 "Document",
-                command.documentId().toString(),
+                command.documentId().toString(), command.packageId(),
                 correlationId,
                 "Processing failed: " + sanitizedReason
         );

@@ -1,6 +1,8 @@
 package com.securedoc.platform.application.intake.external;
 
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
+import com.securedoc.platform.application.audit.RequestActorDisplayName;
+import com.securedoc.platform.application.audit.RequestActorDisplayName.MachineClientKind;
 import com.securedoc.platform.application.exception.*;
 import com.securedoc.platform.application.integration.IntegrationConnectionService;
 import com.securedoc.platform.application.intake.command.*;
@@ -40,6 +42,7 @@ public final class ExternalIntakeService {
     private final AuditService auditService;
     private final ExternalIntakeMaintenanceService maintenanceService;
     private final Clock clock;
+    private final RequestActorDisplayName actorDisplayName;
 
     public ExternalIntakeService(IntegrationConnectionService integrationConnectionService,
                                  ExternalIntakeRepository externalIntakeRepository,
@@ -54,7 +57,28 @@ public final class ExternalIntakeService {
                                  ExternalIntakeMaintenanceService maintenanceService) {
         this(integrationConnectionService, externalIntakeRepository, packageRepository, createPackageUseCase,
                 uploadDocumentUseCase, submitPackageUseCase, processingDispatcher, checksumPort, pdfValidationPort,
-                auditService, maintenanceService, Clock.systemUTC());
+                auditService, maintenanceService, new RequestActorDisplayName(), Clock.systemUTC());
+    }
+
+    /**
+     * Records the push-API or scanner client's configured connection name as the display name of its audit
+     * records (task 0017), through the same request-bound holder {@code AuditService} reads.
+     */
+    public ExternalIntakeService(IntegrationConnectionService integrationConnectionService,
+                                 ExternalIntakeRepository externalIntakeRepository,
+                                 PackageRepository packageRepository,
+                                 CreatePackageUseCase createPackageUseCase,
+                                 UploadDocumentUseCase uploadDocumentUseCase,
+                                 SubmitPackageUseCase submitPackageUseCase,
+                                 PackageProcessingDispatcher processingDispatcher,
+                                 ChecksumPort checksumPort,
+                                 PdfIntakeValidationPort pdfValidationPort,
+                                 AuditService auditService,
+                                 ExternalIntakeMaintenanceService maintenanceService,
+                                 RequestActorDisplayName actorDisplayName) {
+        this(integrationConnectionService, externalIntakeRepository, packageRepository, createPackageUseCase,
+                uploadDocumentUseCase, submitPackageUseCase, processingDispatcher, checksumPort, pdfValidationPort,
+                auditService, maintenanceService, actorDisplayName, Clock.systemUTC());
     }
 
     ExternalIntakeService(IntegrationConnectionService integrationConnectionService,
@@ -67,6 +91,23 @@ public final class ExternalIntakeService {
                           ChecksumPort checksumPort,
                           PdfIntakeValidationPort pdfValidationPort,
                           AuditService auditService, ExternalIntakeMaintenanceService maintenanceService, Clock clock) {
+        this(integrationConnectionService, externalIntakeRepository, packageRepository, createPackageUseCase,
+                uploadDocumentUseCase, submitPackageUseCase, processingDispatcher, checksumPort, pdfValidationPort,
+                auditService, maintenanceService, new RequestActorDisplayName(), clock);
+    }
+
+    ExternalIntakeService(IntegrationConnectionService integrationConnectionService,
+                          ExternalIntakeRepository externalIntakeRepository,
+                          PackageRepository packageRepository,
+                          CreatePackageUseCase createPackageUseCase,
+                          UploadDocumentUseCase uploadDocumentUseCase,
+                          SubmitPackageUseCase submitPackageUseCase,
+                          PackageProcessingDispatcher processingDispatcher,
+                          ChecksumPort checksumPort,
+                          PdfIntakeValidationPort pdfValidationPort,
+                          AuditService auditService, ExternalIntakeMaintenanceService maintenanceService,
+                          RequestActorDisplayName actorDisplayName, Clock clock) {
+        this.actorDisplayName = Objects.requireNonNull(actorDisplayName);
         this.integrationConnectionService = Objects.requireNonNull(integrationConnectionService);
         this.externalIntakeRepository = Objects.requireNonNull(externalIntakeRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
@@ -81,19 +122,33 @@ public final class ExternalIntakeService {
         this.clock = Objects.requireNonNull(clock);
     }
 
+    /** The caller's enabled push source; its configured name becomes the display name of this request's records. */
+    private IntegrationConnection pushSource(AuthenticatedPrincipal principal) {
+        IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
+                principal.tenantId(), principal.username());
+        actorDisplayName.bindMachineClient(principal.actorId(), MachineClientKind.PUSH_API, source.name());
+        return source;
+    }
+
+    /** The caller's enabled scanner source; its configured name becomes the display name of this request's records. */
+    private IntegrationConnection scannerSource(AuthenticatedPrincipal principal) {
+        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
+                principal.tenantId(), principal.username());
+        actorDisplayName.bindMachineClient(principal.actorId(), MachineClientKind.SCANNER, source.name());
+        return source;
+    }
+
     public ExternalIntakeSnapshot createPushIntake(PushIntakeCreateInput input, AuthenticatedPrincipal principal,
                                                    CorrelationId correlationId) {
         Objects.requireNonNull(principal, "Authenticated integration principal is required");
-        IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
-                principal.tenantId(), principal.username());
+        IntegrationConnection source = pushSource(principal);
         return createMachineIntake(input, source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
     }
 
     public ExternalIntakeSnapshot createScannerIntake(PushIntakeCreateInput input, AuthenticatedPrincipal principal,
                                                        CorrelationId correlationId) {
         Objects.requireNonNull(principal, "Authenticated scanner principal is required");
-        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
-                principal.tenantId(), principal.username());
+        IntegrationConnection source = scannerSource(principal);
         if (input == null || input.documents().size() != 1) {
             throw new ValidationException("Scanner intake requires exactly one consolidated PDF");
         }
@@ -260,8 +315,7 @@ public final class ExternalIntakeService {
                                                         String mimeType, UploadContent content,
                                                         AuthenticatedPrincipal principal, CorrelationId correlationId) {
         Objects.requireNonNull(principal);
-        IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
-                principal.tenantId(), principal.username());
+        IntegrationConnection source = pushSource(principal);
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
                 source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
     }
@@ -271,8 +325,7 @@ public final class ExternalIntakeService {
                                                            String mimeType, UploadContent content,
                                                            AuthenticatedPrincipal principal, CorrelationId correlationId) {
         Objects.requireNonNull(principal);
-        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
-                principal.tenantId(), principal.username());
+        IntegrationConnection source = scannerSource(principal);
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
                 source, ExternalIntakeChannel.SCANNER, principal, correlationId);
     }
@@ -377,7 +430,7 @@ public final class ExternalIntakeService {
                     pageCount, actual.value());
         }
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.EXTERNAL_DOCUMENT_RECEIVED,
-                "Document", uploadResult.documentId().toString(), correlationId,
+                "Document", uploadResult.documentId().toString(), packageId, correlationId,
                 "External document durably received: sourceConnection=" + source.id() + ",received="
                         + intake.receivedCount() + "/" + intake.expectedCount());
 
@@ -422,16 +475,14 @@ public final class ExternalIntakeService {
     }
 
     public ExternalIntakeSnapshot status(PackageId packageId, AuthenticatedPrincipal principal, CorrelationId correlationId) {
-        IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
-                principal.tenantId(), principal.username());
+        IntegrationConnection source = pushSource(principal);
         ExternalIntake intake = authorizedIntake(principal, source, packageId, ExternalIntakeChannel.PUSH_API, true);
         expireForRequestIfDue(intake, principal.actorId(), correlationId);
         return snapshot(intake);
     }
 
     public ExternalIntakeSnapshot scannerStatus(PackageId packageId, AuthenticatedPrincipal principal, CorrelationId correlationId) {
-        IntegrationConnection source = integrationConnectionService.resolveEnabledScannerSource(
-                principal.tenantId(), principal.username());
+        IntegrationConnection source = scannerSource(principal);
         ExternalIntake intake = authorizedIntake(principal, source, packageId, ExternalIntakeChannel.SCANNER, true);
         expireForRequestIfDue(intake, principal.actorId(), correlationId);
         return snapshot(intake);

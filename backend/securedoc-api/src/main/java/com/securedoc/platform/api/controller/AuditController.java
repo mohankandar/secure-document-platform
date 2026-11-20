@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.csv.CsvCells;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.audit.query.AuditRecordFilter;
@@ -218,8 +219,7 @@ public class AuditController {
     }
 
     private String csv(String value) {
-        if (value == null) return "";
-        return "\"" + value.replace("\"", "\"\"") + "\"";
+        return CsvCells.quoted(value);
     }
 
     private String safe(String value) { return value == null || value.isBlank() ? "ALL" : value.trim(); }

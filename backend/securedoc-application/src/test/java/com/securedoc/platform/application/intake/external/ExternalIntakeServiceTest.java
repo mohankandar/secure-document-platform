@@ -24,6 +24,54 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExternalIntakeServiceTest {
+    /** Task 0017 A2: a push client's records carry its configured connection name, never its client principal. */
+    @Test
+    void pushClientRecordsTheConnectionNameAsDisplayName() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-01T00:00:00Z"));
+        TenantId tenant = TenantId.generate();
+        ActorId actor = ActorId.generate();
+        AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actor, tenant, "los-client-principal", Set.of());
+        List<AuditRecord> audits = new ArrayList<>();
+        com.securedoc.platform.application.audit.RequestActorDisplayName names =
+                new com.securedoc.platform.application.audit.RequestActorDisplayName();
+        AuditService auditService = new AuditService(audits::add, names);
+        FakeConnectionRepository connections = new FakeConnectionRepository();
+        connections.save(IntegrationConnection.create(tenant, "Loan origination", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API,
+                IntegrationAuthenticationType.JWT, "los-client-principal", null, null, null, 60, 2, 24,
+                10, 10_000_000L, 100, IntegrationAcknowledgementMode.NONE, true, clock.instant()));
+        IntegrationConnectionService connectionService = new IntegrationConnectionService(connections, auditService);
+        FakeExternalIntakeRepository intakes = new FakeExternalIntakeRepository();
+        FakePackageRepository packages = new FakePackageRepository();
+        CreatePackageUseCase create = (command, p) -> {
+            DocumentPackage pkg = DocumentPackage.create(p.tenantId(), command.packageType(), p.actorId(), PackageMetadata.of(command.metadata()));
+            packages.save(pkg);
+            return CreatePackageResult.of(pkg.id(), BusinessRecordId.generate(), pkg.status(), pkg.createdAt());
+        };
+        UploadDocumentUseCase upload = (command, p) -> { throw new AssertionError("upload not expected"); };
+        SubmitPackageUseCase submit = (command, p) -> { throw new AssertionError("submit not expected"); };
+        PackageProcessingDispatcher dispatcher = command -> { throw new AssertionError("dispatch not expected"); };
+        ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
+                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+        ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create, upload,
+                submit, dispatcher, input -> Checksum.sha256("a".repeat(64)), input -> new PdfIntakeValidationPort.PdfInfo(1),
+                auditService, maintenance, names, clock);
+
+        try {
+            service.createPushIntake(new PushIntakeCreateInput("SRC-NAME-1", "1", Map.of("contractNumber", "C-1"),
+                    Map.of(), List.of(new PushIntakeCreateInput.ManifestDocumentInput("DOC-1", "one.pdf", null))),
+                    principal, CorrelationId.generate());
+            AuditRecord created = audits.stream()
+                    .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.EXTERNAL_INTAKE_CREATED)
+                    .findFirst().orElseThrow();
+            assertEquals("Push API: Loan origination", created.actorDisplayName());
+            assertTrue(audits.stream().noneMatch(r -> r.actorDisplayName() != null
+                    && r.actorDisplayName().contains("los-client-principal")), "never the client principal");
+        } finally {
+            names.clear();
+        }
+    }
+
     @Test
     void expiredImmutableRevisionCanRetryAsNewAttemptButChangedPayloadRequiresNewRevision() {
         MutableClock clock = new MutableClock(Instant.parse("2026-09-01T00:00:00Z"));

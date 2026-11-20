@@ -40,6 +40,36 @@ public final class RequestActorDisplayName {
         current.set(new Bound(actorId.value(), name));
     }
 
+    /**
+     * Binds a machine client's name for this request (task 0017), as {@code "<kind>: <configured name>"}, for
+     * example {@code "Scanner: front desk"}. The name is the integration connection's configured name, never its
+     * client principal, key or secret. A blank name, or the system actor, binds nothing.
+     */
+    public void bindMachineClient(ActorId actorId, MachineClientKind kind, String configuredName) {
+        current.remove();
+        if (actorId == null || kind == null || SYSTEM_ACTOR_ID.equals(actorId.value())) return;
+        String name = clean(configuredName);
+        if (name == null) return;
+        String label = clean(kind.label() + ": " + name);
+        current.set(new Bound(actorId.value(), label));
+    }
+
+    /** The kinds of machine client whose configured name is recorded. */
+    public enum MachineClientKind {
+        PUSH_API("Push API"),
+        SCANNER("Scanner");
+
+        private final String label;
+
+        MachineClientKind(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+    }
+
     public void clear() {
         current.remove();
     }
