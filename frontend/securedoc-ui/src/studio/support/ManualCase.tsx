@@ -303,7 +303,8 @@ function PageViewer({ packageId, documentId, fileName, pageNumber, pageCount, ma
           </div>
         </div>
       </div>
-      <div className="cf-viewer-canvas">
+      {/* U026 (WCAG 2.1.1): the page can be scrolled by keyboard when zoomed in. */}
+      <div className="cf-viewer-canvas" tabIndex={0} role="group" aria-label="Page, scroll with the arrow keys">
         {error && <Notice tone="danger">The page preview is unavailable.</Notice>}
         {!url && !error && <Spinner label="Rendering page" />}
         {url && (

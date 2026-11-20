@@ -106,7 +106,9 @@ test('IT Administrator: a read-only card with the login system\'s name and addre
 
   const main = page.locator('.cf-admin');
   await expect(main.locator('input, textarea, select')).toHaveCount(0);
-  await expect(card.getByRole('button')).toHaveCount(0);
+  // U026: the card's only button is its "?" help; it changes nothing.
+  await expect(card.getByRole('button')).toHaveCount(1);
+  await expect(card.getByRole('button', { name: 'About Sign-in', exact: true })).toBeVisible();
   for (const name of [/save/i, /test/i, /activate/i, /switch on/i, /roll back/i, /edit/i]) {
     await expect(main.getByRole('button', { name })).toHaveCount(0);
   }
@@ -123,7 +125,9 @@ test('IT Administrator with no login system details: the card alone', async ({ p
   const card = await openSignInTab(page);
   await expect(card).toContainText('Your sign-in is managed through the login hub. To change it, contact LexaVault support.');
   await expect(card.locator('dl')).toHaveCount(0);
-  await expect(card.getByRole('button')).toHaveCount(0);
+  // U026: the card's only button is its "?" help.
+  await expect(card.getByRole('button')).toHaveCount(1);
+  await expect(card.getByRole('button', { name: 'About Sign-in', exact: true })).toBeVisible();
 });
 
 test('Business Administrator: no Sign-in tab, and its address leads elsewhere', async ({ page }) => {

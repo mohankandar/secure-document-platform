@@ -115,16 +115,17 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={`Account menu. ${name}, ${me.tenantName}`}
         disabled={entities.busy}
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={onButtonKey}
       >
         <span className="cf-acct-avatar" aria-hidden="true">{initials(me.username)}</span>
-        <span className="cf-acct-text" aria-hidden="true">
+        {/* U026 (WCAG 2.5.3): the name is the words shown (person, entity), then what the button is. */}
+        <span className="cf-acct-text">
           <span className="cf-acct-name">{name}</span>
           <span className="cf-acct-entity">{me.tenantName}</span>
         </span>
+        <span className="cf-sr">, account menu</span>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
 

@@ -420,7 +420,7 @@ function ServiceLevel({ r }: { r: OperationalReports }) {
         <TargetBar label={`Delivered within ${hours(s.deliveryTargetMinutes / 60)}`} actual={s.deliveryWithinTargetRate} target={s.deliveryTargetPercent}
           detail={`${s.deliveryBreaches} of ${s.deliveryEligible} cases missed the target`} empty={s.deliveryEligible > 0 ? undefined : noDeliveries} />
         <TargetBar label="No review needed" actual={s.straightThroughActualPercent} target={s.straightThroughTargetPercent}
-          detail="Cases delivered without a person reviewing" empty={r.executive.delivered > 0 ? undefined : noDeliveries} />
+          detail="Cases delivered with no person reviewing or finishing them" empty={r.executive.delivered > 0 ? undefined : noDeliveries} />
         <TargetBar label={`Review picked up within ${hours(s.reviewWaitTargetMinutes / 60)}`} actual={s.reviewWithinTargetRate} target={reviewTarget}
           detail={`${s.reviewBreaches} of ${s.reviewEligible} reviews waited longer`} empty={s.reviewEligible > 0 ? undefined : 'No reviews in this period'} />
       </div>

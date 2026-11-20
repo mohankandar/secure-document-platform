@@ -9,7 +9,7 @@ import { useBranding } from '../branding/BrandingContext';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
 import { ErrorBoundary } from './failure';
-import { NAV, brandHomeName } from './words';
+import { NAV, brandHomeName, screenTitle } from './words';
 import Desk from './Desk';
 import Intake from './Intake';
 import Review from './Review';
@@ -70,6 +70,12 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // U026: each screen has its own page title. After the branding provider's own title effect, which runs later.
+  const product = branding.pageTitle || branding.applicationName || 'LexaVault';
+  useEffect(() => {
+    queueMicrotask(() => { document.title = screenTitle(location.pathname, product); });
+  }, [location.pathname, product]);
+
   const home = canDesk ? '/' : canReview ? '/review' : canIntake ? '/intake' : canReports ? '/reports' : canAdmin ? '/admin' : '/support/incidents';
 
   return (
@@ -112,10 +118,11 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
         </nav>
 
         {/* Below 1200 px the box becomes an icon button (UI spec finding 31); the name stays for screen readers. */}
-        <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)} aria-label="Find a case or action" title="Find a case or action">
+        {/* U026 (WCAG 2.5.3): the name comes from the visible words, the shortcut included; the title names it when only the icon shows. */}
+        <button type="button" className="cf-find" onClick={() => setPaletteOpen(true)} title="Find a case or action" aria-keyshortcuts={MOD_KEY === '⌘' ? 'Meta+K' : 'Control+K'}>
           <Search size={15} aria-hidden="true" />
           <span className="cf-find-label">Find a case or action</span>
-          <span className="cf-find-keys" aria-hidden="true">{MOD_KEY} K</span>
+          <span className="cf-find-keys">{MOD_KEY} K</span>
         </button>
 
         <AccountMenu me={me} organizationName={branding.organizationName || undefined} onSignOut={onSignOut} localMode={localMode}

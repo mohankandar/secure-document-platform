@@ -171,6 +171,9 @@ export default function Review({ caps }: { caps: string[] }) {
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat || confirmingBulk) return;
       if ((event.target as HTMLElement).closest('input, textarea, select, [role="dialog"]')) return;
       const key = event.key.toLowerCase();
+      // U026: in the page viewer the arrow keys scroll the page; J and K still move through the queue.
+      const inViewer = (event.target as HTMLElement).closest('.cf-viewer-canvas') !== null;
+      if (inViewer && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) return;
       if (key === 'r' && event.shiftKey) { event.preventDefault(); if (bulk && bulk.toRedact.length > 0 && !busy) setConfirmingBulk(true); }
       else if (key === 'r') { event.preventDefault(); decide('redact'); }
       else if (key === 'v') { event.preventDefault(); decide('keep'); }
@@ -418,7 +421,8 @@ function PageStage({ item, draft, onDraft, zoom, onZoom }: {
           </div>
         </div>
       </div>
-      <div className="cf-viewer-canvas" ref={canvasRef}>
+      {/* U026 (WCAG 2.1.1): the page can be scrolled by keyboard when zoomed in. */}
+      <div className="cf-viewer-canvas" ref={canvasRef} tabIndex={0} role="group" aria-label={`Page ${item.pageNumber}, scroll with the arrow keys`}>
         {error && <Notice tone="danger">The page preview is unavailable.</Notice>}
         {!url && !error && <Spinner label="Rendering page" />}
         {url && (

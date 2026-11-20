@@ -132,7 +132,7 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
               <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => fileRef.current?.click()} disabled={busy !== null}>
                 {busy === 'stage' ? <Spinner label="Feeding" /> : <FileUp size={14} aria-hidden="true" />} Feed a PDF
               </button>
-              <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="cf-sr" tabIndex={-1}
+              <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="cf-sr" tabIndex={-1} aria-label="Feed a PDF"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) stage(f); e.target.value = ''; }} />
             </>
           )}

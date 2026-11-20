@@ -8,7 +8,7 @@
   height: 34px; padding: 0 12px; font: inherit; font-size: 14px; color: var(--cf-ink);
   background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
 }
-.cf-rp-range input:focus-visible, .cf-rp-select select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-rp-range input:focus-visible, .cf-rp-select select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-rp-body { display: flex; flex-direction: column; gap: 16px; transition: opacity 120ms; }
 .cf-rp-body[aria-busy='true'] { opacity: 0.7; }
 .cf-rp-scope { color: var(--cf-muted); font-size: 13px; padding: 12px 0; }
@@ -100,6 +100,8 @@
 .cf-rp-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .cf-rp-table th, .cf-rp-table td { padding: 10px 14px; text-align: right; border-top: 1px solid var(--cf-line); white-space: nowrap; }
 .cf-rp-table th:first-child { text-align: left; font-weight: 400; }
+/* U026: row names in the Case File ink, not the older pages' grey (3.6:1 in dark). */
+.cf-rp-table tbody th { color: var(--cf-ink); }
 .cf-rp-table thead th { padding: 9px 14px; border-top: 0; background: var(--cf-raised); font-size: 12px; font-weight: 600; color: var(--cf-muted); }
 
 /* U024 canvas "Reports with What LexaVault did for you": four tiles in a wrapping grid, the formula panel under them. */
@@ -131,3 +133,13 @@
 .cf .cf-rp-did-formula tr[data-result] td { padding-top: 7px; border-top: 1px solid var(--cf-line); font-weight: 500; color: var(--cf-ink); }
 .cf .cf-rp-did-note { font-size: 13px; line-height: 1.5; color: var(--cf-muted); }
 .cf-rp-did-panel > .cf-btn { align-self: flex-end; }
+/* U026 step 0 (owner's answer to U024): on a portrait tablet the four tiles sit 2 + 2, like the headline's rule above. */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .cf-rp-did-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* U026 (WCAG 1.4.10 Reflow): at 320 px the paired sections take one column and the period choice wraps;
+   a wide table still scrolls inside its own box. */
+@media (max-width: 640px) {
+  .cf-rp-pair { grid-template-columns: minmax(0, 1fr); }
+  .cf-rp-filters .cf-segment { flex-wrap: wrap; max-width: 100%; }
+}

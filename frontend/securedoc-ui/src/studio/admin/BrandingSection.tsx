@@ -6,6 +6,7 @@ import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { Loading, TextField } from './shared';
+import { HelpTip } from './HelpTip';
 
 type Asset = 'primaryLogo' | 'compactLogo' | 'favicon';
 type Editable = {
@@ -164,7 +165,7 @@ export default function BrandingSection() {
     <section className="cf-ad-card" aria-labelledby="cf-br-head">
       <header className="cf-ad-card-head">
         <div>
-          <h2 id="cf-br-head">Branding</h2>
+          <div className="cf-ad-title"><h2 id="cf-br-head">Branding</h2><HelpTip topic="branding" /></div>
           <p>Names, logos and colours people see. Status colours (success, warning, error) never change.</p>
         </div>
       <div className="cf-field cf-ad-apply">

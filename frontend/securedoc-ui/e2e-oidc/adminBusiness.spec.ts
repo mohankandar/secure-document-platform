@@ -146,7 +146,7 @@ test('Keeping and deleting: plain names, days where whole days, originals in hou
   const writes: { path: string; body: Body }[] = [];
   await openAdmin(page, writes);
   const card = page.getByRole('region', { name: 'Keeping and deleting' });
-  await expect(card.getByLabel('Keep originals for')).toHaveValue('72');
+  await expect(card.getByLabel('Keep originals for', { exact: true })).toHaveValue('72');
   await expect(card.locator('.cf-ad-duration-unit').first()).toHaveText('hours');
   await expect(card.getByLabel('Keep redacted copies for', { exact: true })).toHaveValue('7');
   await expect(card.getByLabel('Keep redacted copies for: unit')).toHaveValue('days');
@@ -172,7 +172,7 @@ test('Keeping and deleting: more than 30 days, or part of an hour, is marked and
   await card.getByRole('button', { name: 'Save changes' }).click();
   await expect(card.getByText('Redacted copies can be kept for up to 30 days.')).toBeVisible();
   await card.getByLabel('Keep redacted copies for', { exact: true }).fill('7');
-  await card.getByLabel('Keep originals for').fill('1.5');
+  await card.getByLabel('Keep originals for', { exact: true }).fill('1.5');
   await card.getByRole('button', { name: 'Save changes' }).click();
   await expect(card.getByText('Each time must be a whole number of hours, at least 1 hour.')).toBeVisible();
   expect(writes).toHaveLength(0);

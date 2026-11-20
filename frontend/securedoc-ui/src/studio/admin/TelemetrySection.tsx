@@ -4,6 +4,7 @@ import type { ProductTelemetryStatus } from '../../types';
 import { Notice } from '../atoms';
 import { Loading } from './shared';
 import { USAGE_MODES, usageMode, usageSummary } from './platformRules';
+import { HelpTip } from './HelpTip';
 
 /** Admin › Platform operations › Usage data (was Product telemetry; UI task U010, finding 28). Read-only. */
 export default function TelemetrySection() {
@@ -16,7 +17,7 @@ export default function TelemetrySection() {
     <section className="cf-ad-card" aria-labelledby="cf-te-head">
       <header className="cf-ad-card-head">
         <div>
-          <h2 id="cf-te-head">Usage data</h2>
+          <div className="cf-ad-title"><h2 id="cf-te-head">Usage data</h2><HelpTip topic="telemetry" /></div>
           <p>Anonymous counts that help improve LexaVault. Never document content, case values or names.</p>
         </div>
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={isValidating} onClick={() => mutate()}>Refresh</button>

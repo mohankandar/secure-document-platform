@@ -161,6 +161,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
           multiple
           className="cf-sr"
           tabIndex={-1}
+          aria-label="Choose PDF files"
           onChange={(e) => { if (e.target.files) add(e.target.files); e.target.value = ''; }}
         />
       </div>

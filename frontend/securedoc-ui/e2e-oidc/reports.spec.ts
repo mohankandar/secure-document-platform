@@ -116,7 +116,7 @@ test('the headline and service levels use the plain words', async ({ page }) => 
   await expect(page.getByText('Targets are set in Admin › Redaction & retention › Reporting')).toBeVisible();
   await expect(page.getByText('Delivered within 4 h')).toBeVisible();
   await expect(page.getByText('42 of 463 cases missed the target')).toBeVisible();
-  await expect(page.getByText('Cases delivered without a person reviewing')).toBeVisible();
+  await expect(page.getByText('Cases delivered with no person reviewing or finishing them')).toBeVisible();
   const body = await page.locator('.cf-reports').innerText();
   for (const old of [/median/i, /\bp95\b/i, /straight-through/i, /open backlog/i, /\bdesk\b/i, /needs attention/i]) expect(body).not.toMatch(old);
 });

@@ -8,6 +8,7 @@ import { useToast } from '../toast';
 import { ConfirmDialog, Loading, SelectField, Sheet, TextField, Toggle } from './shared';
 import { ruleSentence } from './integrationRules';
 import { useUnsavedWork } from '../unsavedWork';
+import { HelpTip } from './HelpTip';
 
 type Draft = RoutingRuleRequest & { ruleId?: string };
 
@@ -99,7 +100,7 @@ export default function RoutingRules() {
   return (
     <div className="cf-ad-block" role="region" aria-label="Rules">
       <div className="cf-ad-card-head">
-        <h3 className="cf-ad-block-title">Rules</h3>
+        <div className="cf-ad-title"><h3 className="cf-ad-block-title">Rules</h3><HelpTip topic="routingRules" /></div>
         <button type="button" className="cf-btn" data-size="sm" onClick={() => open()}>Add rule</button>
       </div>
       {rules.data.length === 0 ? (

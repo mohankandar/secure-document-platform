@@ -1,6 +1,7 @@
 import useSWR from 'swr';
 import { apiClient } from '../../api/client';
 import type { EnterpriseIdentityOverview } from '../../types';
+import { HelpTip } from './HelpTip';
 
 /**
  * Admin › Sign-in (UI task U009, owner's decision B). Sign-in is set at the login hub, by the sign-in config file and
@@ -18,7 +19,7 @@ export default function IdentityArea() {
       <section className="cf-ad-card" aria-label="Login hub">
         <header className="cf-ad-card-head">
           <div>
-            <h2>Sign-in</h2>
+            <div className="cf-ad-title"><h2>Sign-in</h2><HelpTip topic="signIn" /></div>
             <p>Your sign-in is managed through the login hub. To change it, contact LexaVault support.</p>
           </div>
         </header>
