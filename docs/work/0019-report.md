@@ -167,7 +167,10 @@ No schema change, no new library, no change to detection or any other frozen are
 
 ## Commits
 
-See the commit hash recorded below this line after committing.
+- `04ef377` docs(work): U022 report: owner's answers (on `feature/ui-compliance-report`)
+- `291eef0` Merge branch 'feature/ui-compliance-report' into feature/lexavault-r1b-tenant-identity
+- **`c7813ed`** feat(policy): 0019 policy estimate endpoint, audit record count, names in the audit trail (code, tests, task, this report), on `feature/policy-estimate`
+- A follow-up commit records this hash. Nothing pushed or merged.
 
 ## Not done, and why
 
