@@ -515,3 +515,16 @@ details.cf-sp-section { display: block; }
 .cf-sp-dialog-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 /* U023 canvas: the presets hint and the preview lines run the full card width (Admin's 75ch reading width does not apply). */
 .cf-admin :is(.cf-sp-hint, .cf-sp-preview p) { max-width: none; }
+
+/* U024 canvas "Report targets card with minutes per page": under the three targets, after a top border. */
+.cf-ad-timesaved { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--cf-line); }
+.cf-ad-timesaved-title { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 500; }
+.cf-ad-new-pill { padding: 1px 8px; font-size: 12px; font-weight: 600; color: var(--cf-mark-ink); background: var(--cf-mark); border-radius: 10px; }
+.cf-ad-timesaved-field { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
+.cf-ad-minutes {
+  flex: none; width: 80px; height: 40px; padding: 0 10px; font-family: var(--cf-font-mono); font-size: 15px; color: var(--cf-ink);
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+}
+.cf-ad-minutes[aria-invalid='true'] { border-color: var(--cf-danger); }
+.cf-ad-minutes:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-ad-timesaved .cf-ad-sentence-error { margin: 0; }

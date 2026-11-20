@@ -112,6 +112,7 @@ function reports() {
       reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, reviewWithinTargetRate: 83, reviewEligible: 148, reviewBreaches: 25,
     },
     dimensions: [],
+    timeSaved: { casesDelivered: 512, casesNoPerson: 348, percentNoPerson: 67, pagesChecked: 14220, documentsChecked: 1873, itemsRedacted: 3912, itemTypes: ['Social Security Number', 'Date of birth', 'Credit card number', 'Credit score'], pagesNoPerson: 9690, minutesPerPage: 1, minutesSaved: 9690 },
   };
 }
 
@@ -447,7 +448,7 @@ test('Admin › Redaction & retention (Business Administrator): the Sensitive da
       lifecyclePolicy: { originalRetentionHours: 72, redactedCacheHours: 168, neverExportedHoldHours: 336, finalApprovalRequired: false, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 720 },
       documentIntelligence: { mode: 'OBSERVE', activeBundleVersion: 'b1', lastKnownGoodBundleVersion: 'b1', configurationVersion: 1, baselineDiscoveryRequired: false,
         availableBundles: [{ version: 'b1', status: 'PROMOTED', modelVersion: 'm', promptVersion: 'p', detectorVersion: 'd', ocrRulesVersion: 'o', profileVersion: 'none', validationRulesVersion: 'v', thresholdsVersion: 't', description: '', promotedAt: '2026-11-01T15:00:00Z' }] },
-      reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80 },
+      reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, minutesPerPage: 1 },
     })));
     await page.route('**/api/v1/business-admin/sensitive-data-policy/estimate**', (route) => route.fulfill(json({
       windowDays: 30, cases: 512, enoughData: true,
@@ -473,4 +474,58 @@ test('Admin › Redaction & retention (Business Administrator): the Sensitive da
   await dialog.getByRole('button', { name: 'Keep Balanced' }).tap();
   await expect(dialog).toBeHidden();
   await expect(card.getByRole('radio', { name: /^Balanced In use/ })).toBeChecked();
+});
+
+test('Reports (Business Administrator): U024 "What LexaVault did for you" wraps its tiles, and the panel opens and closes by tap', async ({ page }) => {
+  await signInAs(page, ['BUSINESS_ADMIN'], '/reports');
+  const section = page.getByRole('region', { name: 'What LexaVault did for you' });
+  await expect(section).toBeVisible();
+  const tiles = section.locator('.cf-rp-did-tile');
+  await expect(tiles).toHaveCount(4);
+  // The tiles wrap inside the section: none sticks out, and nothing scrolls sideways.
+  const outside = await section.evaluate((s) => {
+    const box = s.getBoundingClientRect();
+    return [...s.querySelectorAll('.cf-rp-did-tile')].filter((t) => t.getBoundingClientRect().right > box.right + 1).length;
+  });
+  expect(outside).toBe(0);
+  expect(await sideways(page)).toBe(0);
+  const link = section.getByRole('button', { name: 'How is this worked out?' });
+  await expectTappable(link);
+  await link.tap();
+  const panel = page.getByRole('dialog', { name: 'How "Review time saved" is worked out' });
+  await expect(panel).toBeVisible();
+  await expect(panel).toBeFocused();
+  await expect(panel.getByRole('cell').nth(5)).toHaveText('≈ 161 h');
+  const box = (await panel.boundingBox())!;
+  expect(box.width).toBeLessThanOrEqual(460);
+  expect(await sideways(page)).toBe(0);
+  const close = panel.getByRole('button', { name: 'Close' });
+  await expectTappable(close);
+  await close.tap();
+  await expect(panel).toHaveCount(0);
+  await expect(link).toBeFocused();
+});
+
+test('Admin (Business Administrator): U024 the minutes per page field in Report targets works by touch', async ({ page }) => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await signInAs(page, ['BUSINESS_ADMIN'], '/admin/policy', async () => {
+    await page.route('**/api/v1/business-admin/configuration', (route) => route.fulfill(json({
+      identifiers: [], dashboardColumns: [],
+      sensitiveDataPolicy: { enabledEntityTypes: ['SSN'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true },
+      lifecyclePolicy: { originalRetentionHours: 72, redactedCacheHours: 168, neverExportedHoldHours: 336, finalApprovalRequired: false, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 720 },
+      documentIntelligence: { mode: 'OFF', activeBundleVersion: null, lastKnownGoodBundleVersion: null, configurationVersion: 1, baselineDiscoveryRequired: false, availableBundles: [] },
+      reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, minutesPerPage: 1 },
+    })));
+  });
+  const card = page.getByRole('region', { name: 'Report targets' });
+  await expect(card).toBeVisible();
+  const field = card.getByRole('spinbutton', { name: /^A person takes .*minutes to check one page by hand$/ });
+  await expect(field).toHaveValue('1');
+  await field.tap();
+  await field.fill('0.4');
+  await expect(card.getByText('Enter a number from 0.5 to 30, in steps of 0.5.')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await card.getByRole('button', { name: 'Reset' }).tap();
+  await expect(field).toHaveValue('1');
+  expect(await sideways(page)).toBe(0);
 });

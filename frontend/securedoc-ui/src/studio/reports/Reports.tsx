@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import useSWR from 'swr';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../../api/client';
@@ -8,6 +8,7 @@ import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ErrorBoundary, LoadErrorCard, checked, isRecord } from '../failure';
 import { axisTicks, bucketDate, hours, labelledBuckets, pct, ratio } from './reportRules';
+import { isTimeSaved, timeSavedWords } from './timeSavedRules';
 import { ComplianceReportButton } from '../compliance/ComplianceReport';
 import { complianceEdition } from '../compliance/complianceRules';
 import './reports.css';
@@ -75,6 +76,7 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
   const toast = useToast();
   const canOperational = caps.includes(CAP.reportOperational);
   const canExport = caps.includes(CAP.reportExport);
+  const canExecutive = caps.includes(CAP.reportExecutive);
   const compliance = complianceEdition('reports', caps);
 
   const [preset, setPreset] = useState<Preset>('30D');
@@ -166,6 +168,7 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
 
       {data && (
         <div className="cf-rp-body" aria-busy={isValidating}>
+          {canExecutive && <Card name="What LexaVault did for you"><DidForYou r={data} /></Card>}
           <Card name="The headline"><Executive r={data} /></Card>
           <Card name="The trend"><Trend r={data} /></Card>
           <Card name="Service levels"><ServiceLevel r={data} /></Card>
@@ -238,6 +241,77 @@ function Executive({ r }: { r: OperationalReports }) {
       <Stat label="No review needed" value={pct(e.straightThroughRate)} sub={`${pct(e.reviewRate)} needed a person`} />
       <Stat label="Open now" value={e.currentBacklog.toLocaleString()} sub={e.currentAttention ? `${e.currentAttention} stopped · oldest ${hours(e.oldestBacklogHours)}` : `oldest ${hours(e.oldestBacklogHours)}`} />
     </dl>
+  );
+}
+
+/**
+ * U024: what LexaVault did for you in the chosen period and filters (task 0020's `timeSaved`). Seen by the same people
+ * as the headline (REPORT_EXECUTIVE_VIEW). An answer without a readable block fails only this card.
+ */
+function DidForYou({ r }: { r: OperationalReports }) {
+  const [open, setOpen] = useState(false);
+  const link = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  // Opening moves focus into the panel once; a refresh of the report while it is open leaves focus where it is.
+  useEffect(() => { if (open) panel.current?.focus(); }, [open]);
+  const titleId = useId();
+  const panelId = useId();
+  const panelTitleId = useId();
+  if (!isTimeSaved(r.timeSaved)) throw new Error('What LexaVault did for you is missing from the report.');
+  const w = timeSavedWords(r.timeSaved);
+
+  function close() {
+    setOpen(false);
+    link.current?.focus();
+  }
+  function onKeyDown(e: ReactKeyboardEvent<HTMLElement>) {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+  }
+
+  return (
+    <section className="cf-rp-did" aria-labelledby={titleId}>
+      <h2 id={titleId}>What LexaVault did for you</h2>
+      <div className="cf-rp-did-tiles">
+        <div className="cf-rp-did-tile" data-tone="ok">
+          <span className="cf-rp-did-label">Handled without a person</span>
+          <b className="cf-rp-did-value">{w.noPerson.value}</b>
+          <span className="cf-rp-did-sub">{w.noPerson.sub}</span>
+        </div>
+        <div className="cf-rp-did-tile">
+          <span className="cf-rp-did-label">Pages checked</span>
+          <b className="cf-rp-did-value">{w.pages.value}</b>
+          <span className="cf-rp-did-sub">{w.pages.sub}</span>
+        </div>
+        <div className="cf-rp-did-tile">
+          <span className="cf-rp-did-label">Sensitive items redacted</span>
+          <b className="cf-rp-did-value">{w.items.value}</b>
+          <span className="cf-rp-did-sub">{w.items.sub}</span>
+        </div>
+        <div className="cf-rp-did-tile" data-tone="strong">
+          <span className="cf-rp-did-label">Review time saved (estimate)</span>
+          <b className="cf-rp-did-value">{w.saved.value}</b>
+          <button ref={link} type="button" className="cf-rp-did-how" aria-expanded={open} aria-controls={open ? panelId : undefined}
+            onClick={() => (open ? close() : setOpen(true))}>
+            How is this worked out?
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div id={panelId} className="cf-rp-did-panel" role="dialog" aria-labelledby={panelTitleId} tabIndex={-1} onKeyDown={onKeyDown}
+          ref={panel}>
+          <h3 id={panelTitleId}>How "Review time saved" is worked out</h3>
+          <table className="cf-rp-did-formula">
+            <tbody>
+              <tr><td>Pages in cases that needed no person</td><td>{w.formula.pages}</td></tr>
+              <tr><td>× minutes a person would take per page</td><td>{w.formula.minutesPerPage}</td></tr>
+              <tr data-result><td>{w.formula.result}</td><td>{w.formula.resultValue}</td></tr>
+            </tbody>
+          </table>
+          <p className="cf-rp-did-note">{w.formula.note}</p>
+          <button type="button" className="cf-btn" onClick={close}>Close</button>
+        </div>
+      )}
+    </section>
   );
 }
 

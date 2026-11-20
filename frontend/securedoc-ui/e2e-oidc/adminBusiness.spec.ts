@@ -76,7 +76,7 @@ function configuration() {
     },
     reportingConfiguration: {
       dimensions: [{ definitionId: 'd3', key: 'property_state', label: 'Property state', enabled: true, displayOrder: 1 }],
-      deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80,
+      deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, minutesPerPage: 1,
     },
   };
 }
@@ -246,4 +246,72 @@ test('Sensitive data: the types are headed "Sensitive types", never "entities"',
   const card = page.getByRole('region', { name: 'Sensitive data' });
   await expect(card.getByRole('group', { name: 'Sensitive types (4)' })).toBeVisible();
   await expect(card).not.toContainText(/entit(y|ies)/i);
+});
+
+// --- U024: the time saved estimate in Report targets -------------------------------------------------------------
+
+test('U024: Report targets: "Time saved estimate", New, the minutes field and its note; 2.5 is saved', async ({ page }) => {
+  const writes: { path: string; body: Body }[] = [];
+  await openAdmin(page, writes);
+  const card = page.getByRole('region', { name: 'Report targets' });
+  await expect(card.getByText('Time saved estimate', { exact: false })).toBeVisible();
+  const pill = card.locator('.cf-ad-new-pill');
+  await expect(pill).toHaveText('New');
+  const field = card.getByRole('spinbutton', { name: /^A person takes .*minutes to check one page by hand$/ });
+  await expect(field).toHaveValue('1');
+  // One <label> around the sentence and the field.
+  expect(await field.evaluate((el) => el.closest('label')?.textContent?.replace(/\s+/g, ' ').trim()))
+    .toBe('A person takes minutes to check one page by hand');
+  for (const [name, value] of [['type', 'number'], ['inputmode', 'decimal'], ['min', '0.5'], ['max', '30'], ['step', '0.5']]) {
+    await expect(field).toHaveAttribute(name, value);
+  }
+  const box = (await field.boundingBox())!;
+  expect([Math.round(box.width), Math.round(box.height)]).toEqual([80, 40]);
+  expect(await field.evaluate((el) => getComputedStyle(el).fontFamily)).toContain('IBM Plex Mono');
+  await expect(card.getByText('Used for "Review time saved" on Reports and in the compliance report. Default 1 minute: deliberately low, so '
+    + 'the estimate never overclaims. Set it from your own team\'s experience; changing it is recorded in the audit trail.', { exact: true })).toBeVisible();
+  // Under the three targets, after a top border, before "Break reports down by".
+  const block = card.locator('.cf-ad-timesaved');
+  expect(await block.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('1px');
+  const targets = (await card.locator('.cf-ad-sentences').boundingBox())!;
+  const blockBox = (await block.boundingBox())!;
+  const breakdown = (await card.getByText('Break reports down by').boundingBox())!;
+  expect(blockBox.y).toBeGreaterThanOrEqual(targets.y + targets.height);
+  expect(breakdown.y).toBeGreaterThanOrEqual(blockBox.y + blockBox.height);
+
+  await field.fill('2.5');
+  await card.getByRole('button', { name: 'Save changes' }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].path).toBe('/api/v1/business-admin/reporting-configuration');
+  expect(writes[0].body).toMatchObject({ minutesPerPage: 2.5, deliveryTargetMinutes: 240, reviewWaitTargetPercent: 80 });
+  await expect(field).toHaveValue('2.5');
+  await expect(card.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+});
+
+test('U024: Report targets: minutes outside 0.5–30 or not in steps of 0.5 are marked, and Save is disabled', async ({ page }) => {
+  const writes: { path: string; body: Body }[] = [];
+  await openAdmin(page, writes);
+  const card = page.getByRole('region', { name: 'Report targets' });
+  const field = card.getByRole('spinbutton', { name: /^A person takes .*minutes to check one page by hand$/ });
+  const save = card.getByRole('button', { name: 'Save changes' });
+  const error = card.getByText('Enter a number from 0.5 to 30, in steps of 0.5.', { exact: true });
+  await expect(error).toHaveCount(0);
+  for (const bad of ['0.4', '30.5', '1.25', '0', '']) {
+    await field.fill(bad);
+    await expect(error, `"${bad}" is marked`).toBeVisible();
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    await expect(save, `"${bad}" cannot be saved`).toBeDisabled();
+  }
+  await field.fill('30');
+  await expect(error).toHaveCount(0);
+  await expect(field).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(save).toBeEnabled();
+  await field.fill('1.25');
+  await expect(save).toBeDisabled();
+  // Reset puts the saved value back and clears the mark.
+  await card.getByRole('button', { name: 'Reset' }).click();
+  await expect(field).toHaveValue('1');
+  await expect(error).toHaveCount(0);
+  await expect(save).toBeDisabled();
+  expect(writes).toHaveLength(0);
 });

@@ -35,7 +35,7 @@ export function Loading({ error, retry, label, request }: { error?: unknown; ret
 /** What a card's own footer gets (U023): the draft, whether it changed, and the card's save and reset. */
 export interface SettingsCardFooter<T> { draft: T; dirty: boolean; saving: boolean; save: () => Promise<void>; reset: () => void }
 
-export function SettingsCard<T>({ title, description, value, children, onSave, savedMessage, footer }: {
+export function SettingsCard<T>({ title, description, value, children, onSave, savedMessage, footer, invalid }: {
   title: string;
   description?: string;
   value: T;
@@ -44,6 +44,8 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
   savedMessage: string;
   /** Replaces the standard Reset / Save changes buttons. */
   footer?: (card: SettingsCardFooter<T>) => ReactNode;
+  /** U024: true while the draft holds a value the card marks as wrong; Save stays disabled until it is fixed. */
+  invalid?: (draft: T) => boolean;
 }) {
   const toast = useToast();
   const [draft, setDraft] = useState<T>(value);
@@ -56,6 +58,7 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
     setDraft(value);
   }
   const dirty = JSON.stringify(draft) !== JSON.stringify(value);
+  const blocked = invalid?.(draft) ?? false;
   useUnsavedWork(dirty || saving);
 
   function reset() { setDraft(value); setError(null); }
@@ -88,7 +91,7 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
         {footer ? footer({ draft, dirty, saving, save, reset }) : (
           <>
             <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={!dirty || saving} onClick={reset}>Reset</button>
-            <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={!dirty || saving} onClick={save}>
+            <button type="button" className="cf-btn" data-variant="solid" data-size="sm" disabled={!dirty || saving || blocked} onClick={save}>
               {saving && <Spinner label="Saving" />}Save changes
             </button>
           </>

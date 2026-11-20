@@ -8,6 +8,7 @@ import { useToast } from '../toast';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
 import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
 import { ErrorBoundary } from '../failure';
+import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
 import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
 import {
   MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetOf, previewHeadline,
@@ -464,6 +465,28 @@ function PercentInput({ label, value, onChange, min = 0 }: { label: string; valu
   );
 }
 
+/** U024 canvas "Report targets card with minutes per page": the minutes a person takes to check one page by hand. */
+function MinutesPerPageField({ value, onChange }: { value: number | undefined; onChange: (v: number) => void }) {
+  const errorId = useId();
+  const error = value === undefined ? null : minutesPerPageError(value);
+  return (
+    <div className="cf-ad-timesaved">
+      <div className="cf-ad-timesaved-title">
+        Time saved estimate{TIME_SAVED_SETTING_IS_NEW && <span className="cf-ad-new-pill">New</span>}
+      </div>
+      <label className="cf-ad-timesaved-field">
+        A person takes{' '}
+        <input type="number" inputMode="decimal" min={MIN_MINUTES_PER_PAGE} max={MAX_MINUTES_PER_PAGE} step={0.5} className="cf-ad-minutes"
+          value={value === undefined || Number.isNaN(value) ? '' : value} aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined} onChange={(e) => onChange(e.target.valueAsNumber)} />
+        {' '}minutes to check one page by hand
+      </label>
+      {error && <p id={errorId} className="cf-ad-sentence-error">{error}</p>}
+      <p className="cf-ad-hint">Used for "Review time saved" on Reports and in the compliance report. Default 1 minute: deliberately low, so the estimate never overclaims. Set it from your own team's experience; changing it is recorded in the audit trail.</p>
+    </div>
+  );
+}
+
 function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
   const rc = data.reportingConfiguration;
   const value = { ...rc, dimensions: eligibleDimensions(data, rc) };
@@ -473,7 +496,9 @@ function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
       description="What Reports measures against."
       value={value}
       savedMessage="Report targets saved."
+      invalid={(d) => d.minutesPerPage !== undefined && minutesPerPageError(d.minutesPerPage) !== null}
       onSave={async (d) => {
+        if (d.minutesPerPage !== undefined && minutesPerPageError(d.minutesPerPage)) throw new Error(MINUTES_PER_PAGE_ERROR);
         if (!(d.deliveryTargetPercent >= 1 && d.deliveryTargetPercent <= 100)) throw new Error('The delivery target must be from 1% to 100%.');
         if (!(d.straightThroughTargetPercent >= 0 && d.straightThroughTargetPercent <= 100)) throw new Error('The no-review target must be from 0% to 100%.');
         if (!(Number.isInteger(d.reviewWaitTargetPercent) && d.reviewWaitTargetPercent >= 0 && d.reviewWaitTargetPercent <= 100)) throw new Error('The review target must be a whole number from 0% to 100%.');
@@ -503,6 +528,7 @@ function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
               <span>of reviews</span>
             </div>
           </div>
+          <MinutesPerPageField value={d.minutesPerPage} onChange={(v) => set({ ...d, minutesPerPage: v })} />
           <fieldset className="cf-ad-fieldset">
             <legend>Break reports down by</legend>
             {d.dimensions.length === 0
