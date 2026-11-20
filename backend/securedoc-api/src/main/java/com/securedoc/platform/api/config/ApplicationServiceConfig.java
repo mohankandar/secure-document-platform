@@ -527,10 +527,12 @@ public class ApplicationServiceConfig {
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
             AuditService auditService,
-            RequestActorDisplayName requestActorDisplayName) {
+            RequestActorDisplayName requestActorDisplayName,
+            TenantLicensingService tenantLicensingService) {
         return new com.securedoc.platform.application.compliance.ComplianceReportService(complianceReportReadPort,
                 complianceReportPdfPort, operationsQueryService, tenantRepository, tenantRedactionPolicyRepository,
-                tenantLifecyclePolicyRepository, auditService, requestActorDisplayName, java.time.Clock.systemUTC());
+                tenantLifecyclePolicyRepository, auditService, requestActorDisplayName,
+                tenantLicensingService::installedCustomerName, java.time.Clock.systemUTC());
     }
 
     @Bean

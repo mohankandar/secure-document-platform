@@ -87,7 +87,7 @@ The app is at http://localhost:5173 and the backend at http://localhost:8080.
 
 ## Known state on 2026-11-17
 
-- The full build passes on this machine, with 552 backend tests (domain 51, application 196, scan bridge 47, infrastructure 11, API 247; counted 2026-11-19, task 0017).
+- The full build passes on this machine, with 572 backend tests (domain 51, application 205, scan bridge 47, infrastructure 14, API 255; counted 2026-11-20, task 0018).
 - Frontend: `cd frontend/securedoc-ui; npm run test:standalone` runs every frontend suite that needs no running app (`test:auth` 10, `test:vocabulary` 90, `test:ui-framework` 17, `test:oidc-signin` 69, `test:tablet` 55 in WebKit with iPad settings; counted 2026-11-19, U021 follow-up). `test:tablet` needs Playwright's WebKit once per machine: `npx playwright install webkit`. The standard build does not run it; run it with every frontend change. `test:e2e` still needs the LOCAL app running on 5173.
 - Surefire 3.5.2 is pinned in backend/pom.xml for every module. Before that, the 5 infrastructure test classes ran only where Maven's own default Surefire supported JUnit 5 (Maven 3.9 on Windows did, Maven 3.8.7 on Ubuntu did not).
 - Enterprise Identity is at **0.3.0** (tag `v0.3.0`, entity admission). LexaVault uses 0.3.0; SDV still uses 0.2.0.

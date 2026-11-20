@@ -89,6 +89,20 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
         return hex.substring(0, 4) + " " + hex.substring(4, 8) + " … " + hex.substring(hex.length() - 4);
     }
 
+    /** One piece of the footer fingerprint: a hex group (mono) or the gap between groups (sans). */
+    record FingerprintPart(String text, boolean mono) { }
+
+    /** Splits the short fingerprint into hex groups and the gaps between them (task 0018 A7). */
+    static List<FingerprintPart> footerFingerprintParts(String shortFingerprint) {
+        List<FingerprintPart> parts = new ArrayList<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("[0-9a-f]+|[^0-9a-f]+").matcher(shortFingerprint);
+        while (m.find()) {
+            String part = m.group();
+            parts.add(new FingerprintPart(part, Character.digit(part.charAt(0), 16) >= 0));
+        }
+        return parts;
+    }
+
     /* ---------------- fonts ---------------- */
 
     static final class Fonts {
@@ -229,7 +243,11 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
                         }
                         float x = SIDE;
                         x += text(s, f.sans, 8.25f, MUTED, x, FOOTER_Y, "Fingerprint ");
-                        x += text(s, f.mono, 8.25f, MUTED, x, FOOTER_Y, shortFingerprint(fingerprint));
+                        // Task 0018 A7: the groups in mono, the gaps in sans. A mono space is as wide as a digit
+                        // and read as a double space at footer size; the text stays "cacc 4c84 … d0a7".
+                        for (FingerprintPart part : footerFingerprintParts(shortFingerprint(fingerprint))) {
+                            x += text(s, part.mono() ? f.mono : f.sans, 8.25f, MUTED, x, FOOTER_Y, part.text());
+                        }
                         text(s, f.sans, 8.25f, MUTED, x, FOOTER_Y, " · created by LexaVault");
                     }
                     text(s, f.sans, 8.25f, MUTED, W - SIDE - pw, FOOTER_Y, pageWords);
@@ -333,14 +351,18 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
             if (c.policy().changes().isEmpty()) {
                 y = paragraph(f.sans, 9.75f, BODY2, SIDE, y, CONTENT_W, "No changes during the period.", 1.5f);
             } else {
-                float[] cols = {90f, 112.5f, CONTENT_W - 202.5f};
-                tableHeader(cols, new String[]{"When", "Who", "What changed"}, new boolean[3]);
-                for (ChangeRow r : c.policy().changes()) {
-                    tableRow(cols, new Cell[]{new Cell(f.mono, r.when()), new Cell(f.sans, r.who()),
-                            new Cell(f.sans, r.what())}, new boolean[3], 9.75f);
-                }
+                changeTable(c.policy().changes());
             }
             y -= 16.5f;
+        }
+
+        private void changeTable(List<ChangeRow> rows) throws IOException {
+            float[] cols = {90f, 112.5f, CONTENT_W - 202.5f};
+            tableHeader(cols, new String[]{"When", "Who", "What changed"}, new boolean[3]);
+            for (ChangeRow r : rows) {
+                tableRow(cols, new Cell[]{new Cell(f.mono, r.when()), new Cell(f.sans, r.who()),
+                        new Cell(f.sans, r.what())}, new boolean[3], 9.75f);
+            }
         }
 
         private void sectionRetention() throws IOException {
@@ -348,6 +370,12 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
             if (c.retention().unchangedSinceBefore()) sub("At the end of the period (unchanged since before this period)");
             labelTable(c.retention().settings());
             y -= 4.5f;
+            if (!c.retention().changes().isEmpty()) {
+                // Task 0018 A4: shown only when there were changes.
+                sub("Changes during the period");
+                changeTable(c.retention().changes());
+                y -= 4.5f;
+            }
             sub("Proof that deletions ran");
             ensure(52f);
             float gap = 6f;
@@ -376,6 +404,11 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
         private void sectionCases() throws IOException {
             heading("3 · Cases and review");
             countTable("Outcome", "Cases", c.cases().outcomes(), true);
+            if (c.cases().outcomesNote() != null && !c.cases().outcomesNote().isBlank()) {
+                // Task 0018 A5: small grey text under the first table, as the canvas's notes.
+                y -= 4.5f;
+                y = paragraph(f.sans, 8.25f, MUTED, SIDE, y, CONTENT_W, c.cases().outcomesNote(), 1.5f);
+            }
             y -= 7.5f;
             countTable("Of the delivered cases", "Cases", c.cases().ofDelivered(), true);
             y -= 16.5f;

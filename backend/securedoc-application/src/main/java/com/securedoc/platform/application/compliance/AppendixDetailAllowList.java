@@ -63,6 +63,9 @@ public final class AppendixDetailAllowList {
             // Vault and access
             AuditAction.VAULT_ENTRY_REGISTERED, AuditAction.ACCESS_REQUESTED, AuditAction.ACCESS_APPROVED,
             AuditAction.ACCESS_DENIED, AuditAction.DOCUMENT_DOWNLOADED,
+            // Task 0018 A2: written only by CapabilityAuthorizationInterceptor, from a capability code, the HTTP
+            // method and the route pattern from the code (never the URL, query string or body).
+            AuditAction.AUTHORIZATION_FAILED,
             // Reporting
             AuditAction.REPORT_CSV_EXPORTED, AuditAction.REPORTING_CONFIGURATION_CHANGED,
             AuditAction.COMPLIANCE_REPORT_CREATED,

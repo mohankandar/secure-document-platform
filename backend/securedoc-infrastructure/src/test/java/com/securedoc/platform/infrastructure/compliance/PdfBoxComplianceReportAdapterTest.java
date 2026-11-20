@@ -67,8 +67,61 @@ class PdfBoxComplianceReportAdapterTest {
                 assertTrue(rest.contains(expected), "sections lack: " + expected + "\n" + rest);
             }
             assertFalse(rest.contains("Appendix"));
+            // Task 0018 A3/A4/A5: no rejected rows, no lifecycle change table without changes, the note under section 3.
+            assertFalse(rest.contains("Rejected") || rest.contains("rejected"), rest);
+            assertTrue(rest.contains(OUTCOMES_NOTE), rest);
+            String section2 = rest.substring(rest.indexOf("2 · Keeping and deleting"), rest.indexOf("Proof that deletions ran"));
+            assertFalse(section2.contains("Changes during the period"), section2);
+            // No licence: no customer name on the cover or in the header line.
+            assertFalse(cover.contains("Acme"));
             assertPlexEmbedded(doc);
         }
+    }
+
+    @Test
+    void customerNameFromTheLicenceIsOnTheCoverAndInTheHeaderLine() throws IOException {
+        byte[] pdf = adapter.render(content(ComplianceEdition.SUMMARY, List.of(), "Acme Lending Group", List.of()),
+                FINGERPRINT);
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            String cover = text(doc, 1, 1);
+            assertTrue(cover.contains("Acme Lending Group Test entity A"), cover);
+            // The cover has no header line (answer 1): the name appears once, as the title.
+            assertEquals(1, cover.split("Acme Lending Group", -1).length - 1, cover);
+            for (int p = 2; p <= doc.getNumberOfPages(); p++) {
+                String page = text(doc, p, p);
+                assertTrue(page.contains("Compliance report · Test entity A · Jul 1 – Sep 30, 2026 Acme Lending Group"),
+                        "header line on page " + p + ": " + page);
+            }
+        }
+    }
+
+    @Test
+    void lifecycleChangesAreShownInSectionTwoWhenThereAreAny() throws IOException {
+        List<ChangeRow> changes = List.of(
+                new ChangeRow("Aug 3, 09:15", "Pat Example", "Originals kept for: 72 → 48 hours"),
+                new ChangeRow("Aug 3, 09:15", "Pat Example", "Supervisor approval before delivery: Required → Not required"));
+        byte[] pdf = adapter.render(content(ComplianceEdition.SUMMARY, List.of(), null, changes), FINGERPRINT);
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            String rest = text(doc, 2, doc.getNumberOfPages());
+            String section2 = rest.substring(rest.indexOf("2 · Keeping and deleting"), rest.indexOf("Proof that deletions ran"));
+            for (String expected : List.of("Changes during the period", "WHEN", "WHO", "WHAT CHANGED", "Aug 3, 09:15",
+                    "Originals kept for: 72 → 48 hours",
+                    "Supervisor approval before delivery: Required → Not required")) {
+                assertTrue(section2.contains(expected), "section 2 lacks: " + expected + "\n" + section2);
+            }
+        }
+    }
+
+    @Test
+    void footerFingerprintGroupsAreMonoAndTheGapsAreSans() {
+        // Task 0018 A7: a mono space read as a double space ("cacc  4c84"); the gaps are now drawn in the sans font.
+        String shortFp = PdfBoxComplianceReportAdapter.shortFingerprint(FINGERPRINT);
+        assertEquals("0123 4567 … cdef", shortFp);
+        var parts = PdfBoxComplianceReportAdapter.footerFingerprintParts(shortFp);
+        assertEquals(List.of("0123", " ", "4567", " … ", "cdef"),
+                parts.stream().map(PdfBoxComplianceReportAdapter.FingerprintPart::text).toList());
+        assertEquals(List.of(true, false, true, false, true),
+                parts.stream().map(PdfBoxComplianceReportAdapter.FingerprintPart::mono).toList());
     }
 
     @Test
@@ -154,8 +207,16 @@ class PdfBoxComplianceReportAdapterTest {
         assertTrue(names.stream().anyMatch(n -> n.contains("IBMPlexMono")), names.toString());
     }
 
+    static final String OUTCOMES_NOTE = "Delivered counts cases first delivered in the period, whenever they were "
+            + "received, as on the Reports page. Shares are of cases received.";
+
     static ComplianceReportContent content(ComplianceEdition edition, List<AppendixRow> appendix) {
-        return new ComplianceReportContent(edition, null, "Test entity A", "Jul 1 – Sep 30, 2026", "Sep 30",
+        return content(edition, appendix, null, List.of());
+    }
+
+    static ComplianceReportContent content(ComplianceEdition edition, List<AppendixRow> appendix, String customer,
+                                           List<ChangeRow> lifecycleChanges) {
+        return new ComplianceReportContent(edition, customer, "Test entity A", "Jul 1 – Sep 30, 2026", "Sep 30",
                 "Pat Example, " + (edition == ComplianceEdition.FULL ? "IT Administrator" : "Business Administrator"),
                 "Nov 19, 2026, 8:14 PM EST",
                 new ComplianceReportContent.Policy(false, List.of(
@@ -170,16 +231,17 @@ class PdfBoxComplianceReportAdapterTest {
                         new LabelValue("Redacted copies kept for", "24 hours"),
                         new LabelValue("Stopped cases kept for", "7 days"),
                         new LabelValue("Supervisor approval before delivery", "Not required")),
-                        1402, 1402, 0, "Each deletion removes the original together with its extracted text and its "
+                        lifecycleChanges, 1402, 1402, 0, "Each deletion removes the original together with its extracted text and its "
                         + "text recognition output. No case was still within its keep time on Sep 30."),
                 new ComplianceReportContent.Cases(
                         List.of(new CountRow("Received", 1512, "100%"), new CountRow("Delivered", 1431, "95%"),
-                                new CountRow("Rejected by a supervisor", 0, "0%"), new CountRow("Still open on Sep 30", 59, "4%")),
+                                new CountRow("Still open on Sep 30", 59, "4%")),
+                        OUTCOMES_NOTE,
                         List.of(new CountRow("No review needed", 973, "68%"), new CountRow("Checked by a reviewer", 458, "32%"),
                                 new CountRow("Finished by hand after a processing stop", 9, "1%"))),
                 List.of(new CountRow("Redaction policy changes", 3, null), new CountRow("Keeping and deleting changes", 0, null),
                         new CountRow("Findings decided by a reviewer", 4210, null), new CountRow("Cases approved for delivery", 0, null),
-                        new CountRow("Cases rejected", 0, null), new CountRow("Originals deleted", 1402, null),
+                        new CountRow("Originals deleted", 1402, null),
                         new CountRow("Report exports (CSV)", 6, null), new CountRow("Compliance reports created", 1, null),
                         new CountRow("Access refused (wrong role)", 4, null)),
                 appendix);

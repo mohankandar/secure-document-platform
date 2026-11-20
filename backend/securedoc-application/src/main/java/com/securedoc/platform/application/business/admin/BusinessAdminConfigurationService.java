@@ -248,11 +248,24 @@ public final class BusinessAdminConfigurationService {
         lifecyclePolicyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId, AuditAction.LIFECYCLE_POLICY_CHANGED,
                 "LifecyclePolicy", tenantId.toString(), correlationId,
-                "Lifecycle policy changed: originalRetentionHours=" + originalRetentionHours
-                        + ", redactedCacheHours=" + redactedCacheHours
-                        + ", neverExportedHoldHours=" + neverExportedHoldHours
-                        + ", finalApprovalRequired=" + finalApprovalRequired);
+                lifecyclePolicyChangeDetail(policy, previousLifecycle.orElse(null)));
         return policy;
+    }
+
+    /**
+     * The lifecycle-change audit detail. The four keys keep their order and format; task 0018 appends the same keys
+     * for the policy before the change, as {@link #sensitiveDataPolicyChangeDetail} does.
+     */
+    static String lifecyclePolicyChangeDetail(TenantLifecyclePolicy policy, TenantLifecyclePolicy previous) {
+        return "Lifecycle policy changed: " + lifecycleKeys(policy)
+                + ", previous=" + (previous == null ? "none" : "[" + lifecycleKeys(previous) + "]");
+    }
+
+    private static String lifecycleKeys(TenantLifecyclePolicy policy) {
+        return "originalRetentionHours=" + policy.originalRetentionHours()
+                + ", redactedCacheHours=" + policy.redactedCacheHours()
+                + ", neverExportedHoldHours=" + policy.neverExportedHoldHours()
+                + ", finalApprovalRequired=" + policy.finalApprovalRequired();
     }
 
     /** Same values as the stored policy. The threshold compares within 1e-9, as {@link PolicyPreset} does. */

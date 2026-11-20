@@ -57,7 +57,9 @@ public final class RequestActorDisplayName {
     /** The kinds of machine client whose configured name is recorded. */
     public enum MachineClientKind {
         PUSH_API("Push API"),
-        SCANNER("Scanner");
+        SCANNER("Scanner"),
+        /** Task 0018 A6: a scheduled polling run, bound for the run on the scheduler thread only. */
+        POLLING("Polling");
 
         private final String label;
 

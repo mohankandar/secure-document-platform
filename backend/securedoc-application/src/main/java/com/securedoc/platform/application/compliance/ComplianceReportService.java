@@ -6,6 +6,7 @@ import com.securedoc.platform.application.compliance.ComplianceReportContent.App
 import com.securedoc.platform.application.compliance.ComplianceReportContent.ChangeRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.CountRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.LabelValue;
+import com.securedoc.platform.application.compliance.PolicyHistory.LifecycleChange;
 import com.securedoc.platform.application.compliance.PolicyHistory.LifecyclePolicy;
 import com.securedoc.platform.application.compliance.PolicyHistory.SensitiveChange;
 import com.securedoc.platform.application.compliance.PolicyHistory.SensitivePolicy;
@@ -66,6 +67,16 @@ public final class ComplianceReportService {
     private static final DateTimeFormatter CHANGE_TIME_YEAR = DateTimeFormatter.ofPattern("MMM d, yyyy, HH:mm", Locale.US);
     private static final DateTimeFormatter APPENDIX_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US);
 
+    /**
+     * Task 0018 A3: "Rejected by a supervisor" (section 3) and "Cases rejected" (section 4) are hidden until rejecting
+     * a case exists in the product. Turning this on brings both rows back, in the PDF and in the fingerprint.
+     */
+    static final boolean SHOW_REJECTED_ROWS = false;
+
+    /** Task 0018 A5: the note under the first table of section 3. */
+    static final String OUTCOMES_NOTE = "Delivered counts cases first delivered in the period, whenever they were "
+            + "received, as on the Reports page. Shares are of cases received.";
+
     private final ComplianceReportReadPort readPort;
     private final ComplianceReportPdfPort pdfPort;
     private final GetOperationalReportsQuery reportsQuery;
@@ -74,13 +85,34 @@ public final class ComplianceReportService {
     private final TenantLifecyclePolicyRepository lifecyclePolicyRepository;
     private final AuditService auditService;
     private final RequestActorDisplayName actorDisplayName;
+    private final CustomerNames customerNames;
     private final Clock clock;
 
+    /** The customer name of the entity's installed licence (task 0018 A1); empty without a licence. */
+    @FunctionalInterface
+    public interface CustomerNames {
+        Optional<String> installedCustomerName(TenantId tenantId);
+
+        CustomerNames NONE = tenantId -> Optional.empty();
+    }
+
+    /** Without a licence lookup: the report shows the entity name alone. */
     public ComplianceReportService(ComplianceReportReadPort readPort, ComplianceReportPdfPort pdfPort,
                                    GetOperationalReportsQuery reportsQuery, TenantRepository tenantRepository,
                                    TenantRedactionPolicyRepository redactionPolicyRepository,
                                    TenantLifecyclePolicyRepository lifecyclePolicyRepository,
                                    AuditService auditService, RequestActorDisplayName actorDisplayName, Clock clock) {
+        this(readPort, pdfPort, reportsQuery, tenantRepository, redactionPolicyRepository, lifecyclePolicyRepository,
+                auditService, actorDisplayName, CustomerNames.NONE, clock);
+    }
+
+    public ComplianceReportService(ComplianceReportReadPort readPort, ComplianceReportPdfPort pdfPort,
+                                   GetOperationalReportsQuery reportsQuery, TenantRepository tenantRepository,
+                                   TenantRedactionPolicyRepository redactionPolicyRepository,
+                                   TenantLifecyclePolicyRepository lifecyclePolicyRepository,
+                                   AuditService auditService, RequestActorDisplayName actorDisplayName,
+                                   CustomerNames customerNames, Clock clock) {
+        this.customerNames = Objects.requireNonNull(customerNames);
         this.readPort = Objects.requireNonNull(readPort);
         this.pdfPort = Objects.requireNonNull(pdfPort);
         this.reportsQuery = Objects.requireNonNull(reportsQuery);
@@ -178,6 +210,24 @@ public final class ComplianceReportService {
         boolean approvalWholePeriod = lifecycleAtStart.finalApprovalRequired() && lifecycleChanges.stream()
                 .map(r -> PolicyHistory.parseLifecycle(r.detail()))
                 .allMatch(p -> p != null && p.finalApprovalRequired());
+        List<ChangeRow> lifecycleChangeRows = new ArrayList<>();
+        LifecyclePolicy running = lifecycleAtStart;
+        for (AuditRecordSummary r : lifecycleChanges) {
+            LifecycleChange change = PolicyHistory.parseLifecycleChange(r.detail());
+            List<String> lines;
+            if (change == null) {
+                lines = List.of("Changed (this record does not hold the earlier values)");
+            } else {
+                // Task 0018 A4: the recorded previous= values when there; older records are rebuilt from the
+                // record before them (or the policy at the period start), as before.
+                LifecyclePolicy before = change.previousRecorded() ? change.previous() : running;
+                lines = PolicyHistory.lifecycleChangeLines(before, change.now());
+                running = change.now();
+            }
+            String when = (multiYear ? CHANGE_TIME_YEAR : CHANGE_TIME).format(r.occurredAt().atZone(zone));
+            String who = AuditSentences.person(r.actorId(), r.actorDisplayName());
+            for (String line : lines) lifecycleChangeRows.add(new ChangeRow(when, who, line));
+        }
         ComplianceReportReadPort.RetentionCounts retention = readPort.retention(tenantId, start, end);
         ComplianceReportContent.Retention retentionSection = new ComplianceReportContent.Retention(
                 lifecycleChanges.isEmpty(),
@@ -186,7 +236,8 @@ public final class ComplianceReportService {
                         new LabelValue("Redacted copies kept for", PolicyHistory.hoursWords(lifecycleAtEnd.redactedCacheHours())),
                         new LabelValue("Stopped cases kept for", PolicyHistory.hoursWords(lifecycleAtEnd.neverExportedHoldHours())),
                         new LabelValue("Supervisor approval before delivery",
-                                lifecycleAtEnd.finalApprovalRequired() ? "Required" : "Not required")),
+                                PolicyHistory.requiredWords(lifecycleAtEnd.finalApprovalRequired()))),
+                lifecycleChangeRows,
                 retention.due(), retention.onTime(), retention.lateOrFailed(),
                 retentionNote(retention.stillWithinKeep(), lifecycleAtEnd.originalRetentionHours(), endWords));
 
@@ -195,13 +246,19 @@ public final class ComplianceReportService {
         ComplianceReportReadPort.CaseCounts caseCounts = readPort.cases(tenantId, start, end);
         long received = reports.executive().batches();
         long delivered = reports.executive().delivered();
+        List<CountRow> outcomes = new ArrayList<>();
+        outcomes.add(new CountRow("Received", received, share(received, received)));
+        outcomes.add(new CountRow(approvalWholePeriod ? "Delivered after supervisor approval" : "Delivered",
+                delivered, share(delivered, received)));
+        if (SHOW_REJECTED_ROWS) {
+            outcomes.add(new CountRow("Rejected by a supervisor", caseCounts.rejected(),
+                    share(caseCounts.rejected(), received)));
+        }
+        outcomes.add(new CountRow("Still open on " + endWords, caseCounts.stillOpenAtEnd(),
+                share(caseCounts.stillOpenAtEnd(), received)));
         ComplianceReportContent.Cases cases = new ComplianceReportContent.Cases(
-                List.of(new CountRow("Received", received, share(received, received)),
-                        new CountRow(approvalWholePeriod ? "Delivered after supervisor approval" : "Delivered",
-                                delivered, share(delivered, received)),
-                        new CountRow("Rejected by a supervisor", caseCounts.rejected(), share(caseCounts.rejected(), received)),
-                        new CountRow("Still open on " + endWords, caseCounts.stillOpenAtEnd(),
-                                share(caseCounts.stillOpenAtEnd(), received))),
+                outcomes,
+                OUTCOMES_NOTE,
                 List.of(new CountRow("No review needed", reports.usage().straightThroughPackages(),
                                 share(reports.usage().straightThroughPackages(), delivered)),
                         new CountRow("Checked by a reviewer", reports.usage().reviewedPackages(),
@@ -212,6 +269,7 @@ public final class ComplianceReportService {
         // 4. Audit activity
         List<CountRow> activity = new ArrayList<>();
         for (ActivityRow row : ActivityRow.values()) {
+            if (row.rejectedRow && !SHOW_REJECTED_ROWS) continue;
             long count = 0;
             for (ActivityQuery q : row.queries) count += readPort.count(tenantId, q, start, end);
             activity.add(new CountRow(row.label, count, null));
@@ -230,7 +288,8 @@ public final class ComplianceReportService {
         }
 
         String creatorName = actorDisplayName.displayNameFor(principal.actorId()).orElse(principal.username());
-        return new ComplianceReportContent(edition, null, tenant.name(), periodWords(period), endWords,
+        String customerName = customerNames.installedCustomerName(tenantId).orElse(null);
+        return new ComplianceReportContent(edition, customerName, tenant.name(), periodWords(period), endWords,
                 creatorName + ", " + creatorRole,
                 CREATED_AT.format(ZonedDateTime.now(clock).withZoneSameInstant(zone)),
                 policy, retentionSection, cases, activity, appendix);
@@ -249,7 +308,7 @@ public final class ComplianceReportService {
                         SUCCESS, true, null)),
         CASES_APPROVED("Cases approved for delivery",
                 query(Set.of(AuditAction.PACKAGE_FINAL_APPROVED), SUCCESS, false, null)),
-        CASES_REJECTED("Cases rejected",
+        CASES_REJECTED("Cases rejected", true,
                 query(Set.of(AuditAction.PACKAGE_REJECTED, AuditAction.REVIEW_REJECTED), SUCCESS, false, null)),
         ORIGINALS_DELETED("Originals deleted",
                 query(Set.of(AuditAction.ORIGINAL_ARTIFACT_PURGED), SUCCESS, false, null)),
@@ -263,10 +322,17 @@ public final class ComplianceReportService {
                 query(Set.of(AuditAction.AUTHORIZATION_FAILED), Set.of("SUCCESS", "FAILURE"), false, null));
 
         final String label;
+        /** A "rejected" row, shown only when {@link #SHOW_REJECTED_ROWS} is on. */
+        final boolean rejectedRow;
         final List<ActivityQuery> queries;
 
         ActivityRow(String label, ActivityQuery... queries) {
+            this(label, false, queries);
+        }
+
+        ActivityRow(String label, boolean rejectedRow, ActivityQuery... queries) {
             this.label = label;
+            this.rejectedRow = rejectedRow;
             this.queries = List.of(queries);
         }
 
@@ -308,8 +374,14 @@ public final class ComplianceReportService {
             LifecyclePolicy parsed = PolicyHistory.parseLifecycle(latest.get().detail());
             if (parsed != null) return parsed;
         }
-        boolean changedLater = !readPort.successes(tenantId, AuditAction.LIFECYCLE_POLICY_CHANGED.name(), at,
-                Instant.now(clock).plusSeconds(1)).isEmpty();
+        Optional<AuditRecordSummary> later = readPort.successes(tenantId, AuditAction.LIFECYCLE_POLICY_CHANGED.name(),
+                at, Instant.now(clock).plusSeconds(1)).stream().findFirst();
+        if (later.isPresent()) {
+            // Task 0018 A4: the first later change holds the values it replaced (previous=none: nothing was saved).
+            LifecycleChange change = PolicyHistory.parseLifecycleChange(later.get().detail());
+            if (change != null && change.previousRecorded() && change.previous() != null) return change.previous();
+        }
+        boolean changedLater = later.isPresent();
         // Only a recorded save changes the lifecycle policy, so before the first one it was the default.
         TenantLifecyclePolicy p = changedLater ? TenantLifecyclePolicy.defaults(tenantId)
                 : lifecyclePolicyRepository.findByTenantId(tenantId).orElse(TenantLifecyclePolicy.defaults(tenantId));

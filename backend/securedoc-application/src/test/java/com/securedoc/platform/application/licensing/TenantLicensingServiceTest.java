@@ -110,6 +110,27 @@ class TenantLicensingServiceTest {
         assertEquals("VERIFIED_AT_INSTALL", first.verificationEvidence());
     }
 
+    @Test
+    void installedCustomerNameComesFromTheActiveLicenceOnlyAndEvenWhenNotEnforced() {
+        // Task 0018 A1: the compliance report's customer name.
+        Tenant tenant = Tenant.create("Retail", "retail-department");
+        ConfigurableVerifier verifier = new ConfigurableVerifier();
+        InMemoryLicenseRepository licenses = new InMemoryLicenseRepository();
+        TenantLicensingService service = service(tenant, false, verifier, licenses);
+        assertEquals(Optional.empty(), service.installedCustomerName(tenant.id()), "no licence installed");
+
+        verifier.result = result(LicenseValidationStatus.ACTIVE, claims(tenant.id(), Set.of("DOCUMENT_PROCESSING")));
+        service.install(tenant.id(), "LV1.test.sig", ActorId.generate(), CorrelationId.generate());
+        assertEquals(Optional.of("Customer"), service.installedCustomerName(tenant.id()));
+
+        // Claims that can no longer be verified, and nothing verified at install: no name (fail closed).
+        verifier.result = result(LicenseValidationStatus.INVALID_SIGNATURE, null);
+        assertEquals(Optional.empty(), service.installedCustomerName(tenant.id()));
+        // Another entity's claims are never used.
+        verifier.result = result(LicenseValidationStatus.ACTIVE, claims(TenantId.generate(), Set.of()));
+        assertEquals(Optional.empty(), service.installedCustomerName(tenant.id()));
+    }
+
     private static TenantLicensingService service(Tenant tenant, boolean enforced, LicenseVerificationResult result) {
         ConfigurableVerifier verifier = new ConfigurableVerifier();
         verifier.result = result;

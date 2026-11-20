@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intake.polling;
 
+import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.application.intake.external.*;
@@ -58,7 +59,11 @@ public final class PollingIntakeService {
     public Optional<PollingRunSnapshot> runScheduled(TenantId tenantId, IntegrationConnectionId connectionId) {
         IntegrationConnection source = connectionService.get(tenantId, connectionId);
         if (!source.enabled() || !source.pollingSource()) return Optional.empty();
-        return runInternal(source, PollingRunTrigger.SCHEDULED, systemActor(source));
+        ActorId actor = systemActor(source);
+        // Task 0018 A6: the run's records name the connection ("Polling: <connection name>"); cleared after the run.
+        // A manual run keeps the person's own name, bound by their request.
+        return auditService.withMachineClientName(actor, RequestActorDisplayName.MachineClientKind.POLLING,
+                source.name(), () -> runInternal(source, PollingRunTrigger.SCHEDULED, actor));
     }
 
     public Optional<PollingRunSnapshot> runNow(TenantId tenantId, IntegrationConnectionId connectionId, ActorId actorId) {
