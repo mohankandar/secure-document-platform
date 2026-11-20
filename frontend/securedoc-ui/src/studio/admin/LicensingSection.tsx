@@ -6,6 +6,7 @@ import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, Loading, humanize, when } from './shared';
+import { HelpTip } from './HelpTip';
 
 type Tone = 'neutral' | 'notice' | 'warning' | 'danger';
 const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
@@ -106,7 +107,7 @@ export default function LicensingSection() {
       <section className="cf-ad-readiness" data-ready={enforced || undefined} aria-labelledby="cf-li-head">
         <div>
           <span className="cf-eyebrow">Tenant licensing</span>
-          <h2 id="cf-li-head">{enforced ? 'License enforcement is active' : 'License enforcement is disabled'}</h2>
+          <div className="cf-ad-title"><h2 id="cf-li-head">{enforced ? 'License enforcement is active' : 'License enforcement is disabled'}</h2><HelpTip topic="licensing" /></div>
           <p>{enforced
             ? 'Each tenant must have a valid signed license with DOCUMENT_PROCESSING before intake or processing can continue.'
             : 'This runtime is operating in non-enforced mode. This is intended for local developer/demo use only.'}</p>

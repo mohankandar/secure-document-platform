@@ -202,6 +202,7 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
       {canIdentifiers && (
         <SettingsCard
           title="Case fields"
+          help="caseFields"
           description="Captured when a case is created. The order here is the order staff see. The main ID names the case everywhere."
           value={data.identifiers as BusinessAdminIdentifierDraft[]}
           savedMessage="Case fields saved."
@@ -218,6 +219,7 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
       {canColumns && (
         <SettingsCard
           title="Columns on Cases"
+          help="columnsOnCases"
           description="Allowed columns can be turned on by anyone. Default columns are on for new users. The main ID is always allowed."
           value={data.dashboardColumns}
           savedMessage="Columns on Cases saved."

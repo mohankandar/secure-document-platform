@@ -8,6 +8,7 @@ import { useToast } from '../toast';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
 import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
 import { ErrorBoundary } from '../failure';
+import { HelpTip } from './HelpTip';
 import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
 import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
 import {
@@ -68,6 +69,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
     <>
     <SettingsCard
       title="Sensitive data"
+      help="sensitiveData"
       description="Which values are found and redacted, and when a person has to look."
       value={sdp}
       savedMessage="Redaction policy saved. New cases use it immediately."
@@ -93,8 +95,8 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
         const chosen = presetOf(d.reviewMode, d.autoRedactThreshold);
         return (
         <fieldset className="cf-sp-lock" disabled={waiting}>
-          <fieldset className="cf-ad-fieldset">
-            <legend>How much should a person check?</legend>
+          <fieldset className="cf-ad-fieldset" aria-labelledby={`${radioName}-presets`}>
+            <legend className="cf-ad-title"><span id={`${radioName}-presets`}>How much should a person check?</span><HelpTip topic="presets" /></legend>
             <div className="cf-sp-presets">
               {PRESETS.map((p) => (
                 <label key={p.key} className="cf-sp-preset" data-chosen={chosen === p.key || undefined}>
@@ -119,8 +121,8 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
           <details className="cf-disclosure cf-sp-section" open={fineTune} onToggle={(e) => setFineTune(e.currentTarget.open)}>
             <summary>Fine-tune by hand</summary>
             <div className="cf-sp-fine">
-          <fieldset className="cf-ad-fieldset">
-            <legend>Send to review</legend>
+          <fieldset className="cf-ad-fieldset" aria-labelledby={`${radioName}-review`}>
+            <legend className="cf-ad-title"><span id={`${radioName}-review`}>Send to review</span><HelpTip topic="fineTune" /></legend>
             <div className="cf-segment" role="radiogroup" aria-label="Review mode">
               {(['UNCERTAIN_ONLY', 'REVIEW_ALL'] as BusinessReviewMode[]).map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={d.reviewMode === m} className={d.reviewMode === m ? 'is-active' : ''} onClick={() => set({ ...d, reviewMode: m })}>
@@ -328,6 +330,7 @@ function IntelligenceCard({ data, mutate }: { data: BusinessAdminConfiguration; 
     <>
       <SettingsCard
         title="Document intelligence"
+        help="documentIntelligence"
         description="Changes apply to cases received after saving."
         value={{ mode: di.mode, activeBundleVersion: di.activeBundleVersion }}
         savedMessage="Document intelligence saved."
@@ -415,6 +418,7 @@ function LifecycleCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
   return (
     <SettingsCard
       title="Keeping and deleting"
+      help="keepingAndDeleting"
       description="How long LexaVault keeps copies, and what must happen before delivery."
       value={{ originalRetentionHours: lc.originalRetentionHours, redactedCacheHours: lc.redactedCacheHours, neverExportedHoldHours: lc.neverExportedHoldHours, finalApprovalRequired: lc.finalApprovalRequired }}
       savedMessage="Keeping and deleting saved."
@@ -427,14 +431,14 @@ function LifecycleCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
       {(d, set) => (
         <>
           <div className="cf-ad-grid">
-            <DurationField label="Keep originals for" units={HOUR_UNITS} fixedUnit="hours" min={1} value={d.originalRetentionHours}
+            <DurationField label="Keep originals for" help="keepOriginals" units={HOUR_UNITS} fixedUnit="hours" min={1} value={d.originalRetentionHours}
               onChange={(v) => set({ ...d, originalRetentionHours: v })} hint="After this, a case can't be processed again." />
-            <DurationField label="Keep redacted copies for" units={HOUR_UNITS} min={1} max={lc.maximumRedactedCacheHours} value={d.redactedCacheHours}
+            <DurationField label="Keep redacted copies for" help="keepRedacted" units={HOUR_UNITS} min={1} max={lc.maximumRedactedCacheHours} value={d.redactedCacheHours}
               onChange={(v) => set({ ...d, redactedCacheHours: v })} hint={`Up to ${durationText(lc.maximumRedactedCacheHours, HOUR_UNITS)}.`} />
-            <DurationField label="Keep stopped cases for" units={HOUR_UNITS} min={1} value={d.neverExportedHoldHours}
+            <DurationField label="Keep stopped cases for" help="keepStopped" units={HOUR_UNITS} min={1} value={d.neverExportedHoldHours}
               onChange={(v) => set({ ...d, neverExportedHoldHours: v })} hint="Time to fix and finish a stopped case before it is deleted." />
           </div>
-          <Toggle label="Require a supervisor's approval before delivery" hint="Cases wait in Approval until a supervisor signs off." checked={d.finalApprovalRequired} onChange={(v) => set({ ...d, finalApprovalRequired: v })} />
+          <Toggle help="requireApproval" label="Require a supervisor's approval before delivery" hint="Cases wait in Approval until a supervisor signs off." checked={d.finalApprovalRequired} onChange={(v) => set({ ...d, finalApprovalRequired: v })} />
           <p className="cf-ad-hint">A case can be processed again at most {lc.maximumSuccessfulExportCycles} {lc.maximumSuccessfulExportCycles === 1 ? 'time' : 'times'} (set by LexaVault).</p>
         </>
       )}
@@ -452,15 +456,16 @@ function eligibleDimensions(data: BusinessAdminConfiguration, rc: ReportingConfi
 
 /** A percentage typed inside a sentence. Marked, never clamped, when outside its range. */
 function PercentInput({ label, value, onChange, min = 0 }: { label: string; value: number; onChange: (v: number) => void; min?: number }) {
+  const errorId = useId();
   const invalid = !Number.isFinite(value) || value < min || value > 100;
   return (
     <>
       <span className="cf-ad-duration">
-        <input type="number" inputMode="decimal" min={min} max={100} step={1} aria-label={label} aria-invalid={invalid || undefined}
+        <input type="number" inputMode="decimal" min={min} max={100} step={1} aria-label={label} aria-invalid={invalid || undefined} aria-describedby={invalid ? errorId : undefined}
           value={Number.isNaN(value) ? '' : value} onChange={(e) => onChange(e.target.valueAsNumber)} />
         <span className="cf-ad-duration-unit">%</span>
       </span>
-      {invalid && <span className="cf-ad-sentence-error">{label}: enter a number from {min} to 100.</span>}
+      {invalid && <span id={errorId} className="cf-ad-sentence-error">{label}: enter a number from {min} to 100.</span>}
     </>
   );
 }
@@ -472,7 +477,7 @@ function MinutesPerPageField({ value, onChange }: { value: number | undefined; o
   return (
     <div className="cf-ad-timesaved">
       <div className="cf-ad-timesaved-title">
-        Time saved estimate{TIME_SAVED_SETTING_IS_NEW && <span className="cf-ad-new-pill">New</span>}
+        Time saved estimate{TIME_SAVED_SETTING_IS_NEW && <span className="cf-ad-new-pill">New</span>}<HelpTip topic="minutesPerPage" />
       </div>
       <label className="cf-ad-timesaved-field">
         A person takes{' '}
@@ -488,11 +493,13 @@ function MinutesPerPageField({ value, onChange }: { value: number | undefined; o
 }
 
 function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mutate: (d: BusinessAdminConfiguration) => unknown }) {
+  const breakdownId = useId();
   const rc = data.reportingConfiguration;
   const value = { ...rc, dimensions: eligibleDimensions(data, rc) };
   return (
     <SettingsCard
       title="Report targets"
+      help="reportTargets"
       description="What Reports measures against."
       value={value}
       savedMessage="Report targets saved."
@@ -529,8 +536,8 @@ function ReportingCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
             </div>
           </div>
           <MinutesPerPageField value={d.minutesPerPage} onChange={(v) => set({ ...d, minutesPerPage: v })} />
-          <fieldset className="cf-ad-fieldset">
-            <legend>Break reports down by</legend>
+          <fieldset className="cf-ad-fieldset" aria-labelledby={breakdownId}>
+            <legend className="cf-ad-title"><span id={breakdownId}>Break reports down by</span><HelpTip topic="reportBreakdown" /></legend>
             {d.dimensions.length === 0
               ? <p className="cf-ad-hint">No case field can be used yet. A field with 1–100 allowed values (set in Case fields) can be used. Fields such as loan numbers cannot.</p>
               : (

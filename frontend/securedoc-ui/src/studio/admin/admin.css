@@ -2,7 +2,7 @@
 .cf-ad-head { display: flex; flex-direction: column; gap: 0; margin-bottom: 16px; }
 
 .cf-ad-tabs {
-  position: sticky; top: 56px; z-index: 10;
+  position: sticky; top: 56px; /* U026: not sticky below 640 px, where the top bar takes two rows (see the end of this file) */ z-index: 10;
   display: flex; flex-wrap: nowrap; gap: 4px; min-width: 0;
   margin: 0 -24px; padding: 0 24px;
   overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; scrollbar-width: none;
@@ -150,6 +150,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-audit-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--cf-ink); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer; }
 .cf-ad-audit-menu button span { font-size: 12px; font-weight: 400; color: var(--cf-muted); }
 .cf-ad-audit-menu button:hover, .cf-ad-audit-menu button:focus-visible { background: var(--cf-raised); outline: 0; }
+.cf-ad-audit-menu button:focus-visible { box-shadow: inset 0 0 0 2px var(--cf-focus); } /* U026 */
 .cf-ad-audit-more { margin-top: 12px; }
 .cf-ad-audit-routine { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--cf-ink); }
 .cf-ad-audit-routine input { width: 16px; height: 16px; margin: 0; accent-color: var(--cf-ink); }
@@ -274,7 +275,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-expiry[data-tone='danger'] { color: var(--cf-danger); font-weight: 600; }
 .cf-ad-fieldset h3 { font-size: 13px; font-weight: 500; margin-top: 12px; }
 .cf-ad-token textarea { width: 100%; min-height: 120px; padding: 8px 10px; font: 12px/1.5 var(--cf-font-mono); color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); resize: vertical; word-break: break-all; }
-.cf-ad-token textarea:focus { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-ad-token textarea:focus { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-ad-token[data-invalid] textarea { border-color: var(--cf-danger); }
 
 .cf-ad-brand { display: grid; gap: 20px; }
@@ -326,7 +327,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
   background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
 }
 .cf-ad-duration input[aria-invalid='true'] { border-color: var(--cf-danger); }
-.cf-ad-duration input:focus-visible, .cf-ad-duration select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-ad-duration input:focus-visible, .cf-ad-duration select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-ad-duration-unit { font-size: 14px; color: var(--cf-muted); }
 .cf-ad-sentences { display: flex; flex-direction: column; gap: 12px; }
 .cf-ad-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; }
@@ -526,5 +527,31 @@ details.cf-sp-section { display: block; }
   background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
 }
 .cf-ad-minutes[aria-invalid='true'] { border-color: var(--cf-danger); }
-.cf-ad-minutes:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-ad-minutes:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-ad-timesaved .cf-ad-sentence-error { margin: 0; }
+
+/* U026 part B: the "?" help next to a setting's label (HelpTip.tsx). A small ring in the muted ink; the note opens
+   under it in the card's own surface. On a coarse pointer the tap area grows to 44 px without moving the layout. */
+.cf-ad-title { display: inline-flex; align-items: center; gap: 6px; }
+.cf-help { position: relative; display: inline-flex; vertical-align: middle; flex: none; }
+.cf-help-button {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0;
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1; color: var(--cf-muted);
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: 50%; cursor: pointer;
+}
+.cf-help-button:hover, .cf-help-button[aria-expanded='true'] { color: var(--cf-ink); border-color: var(--cf-ink); }
+.cf-help-button:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; border-radius: 50%; }
+.cf-help-live { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; }
+.cf-help-note {
+  position: relative; left: var(--cf-help-shift, -8px); display: block; width: max-content; max-width: min(300px, calc(100vw - 32px));
+  padding: 10px 12px; font-size: 13px; font-weight: 400; line-height: 1.45; letter-spacing: 0; text-transform: none; text-align: left;
+  white-space: normal; color: var(--cf-ink); background: var(--cf-surface);
+  border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); box-shadow: var(--cf-shadow-pop);
+}
+@media (pointer: coarse) {
+  .cf-help-button::after { content: ''; position: absolute; inset: -12px; }
+}
+.cf-ad-toggle-help { display: flex; align-items: flex-start; gap: 8px; }
+.cf-ad-timesaved-title .cf-help { margin-left: 6px; }
+
+@media (max-width: 640px) { .cf-ad-tabs { position: static; } }

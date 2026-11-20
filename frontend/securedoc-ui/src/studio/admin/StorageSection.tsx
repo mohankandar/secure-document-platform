@@ -7,6 +7,7 @@ import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, Loading, SelectField, TextField, when } from './shared';
 import { latestChecks, storageKind, storageReadiness, storageStatus, storageUsedBy, storageValidated } from './platformRules';
+import { HelpTip } from './HelpTip';
 
 type ProviderType = CreateProcessingStorageProviderRequest['providerType'];
 type Pending = { kind: 'default' | 'retire'; provider: ProcessingStorageProvider } | null;
@@ -98,7 +99,7 @@ export default function StorageSection() {
       <section className="cf-ad-card" aria-labelledby="cf-st-head">
         <header className="cf-ad-card-head">
           <div>
-            <h2 id="cf-st-head">Where LexaVault works on documents</h2>
+            <div className="cf-ad-title"><h2 id="cf-st-head">Where LexaVault works on documents</h2><HelpTip topic="storage" /></div>
             <p>Temporary space used while documents are redacted. Delivered copies go to SDV, not here.</p>
           </div>
           <div className="cf-ad-inline-actions">

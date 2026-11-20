@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName } from './words.ts';
+import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName, screenTitle } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -147,4 +147,20 @@ test('the brand link is named after the application, or "LexaVault home" when br
 
 test("U021: the Continue manually touch note is the owner's wording", () => {
   assert.equal(MANUAL_WORDS.touchNote, 'Marking values by hand works best on a computer.');
+});
+
+test('U026: every screen has its own page title, the product name last', () => {
+  assert.equal(screenTitle('/', 'LexaVault'), 'Cases · LexaVault');
+  assert.equal(screenTitle('/case/abc', 'LexaVault'), 'Case · Cases · LexaVault');
+  assert.equal(screenTitle('/intake', 'LexaVault'), 'New case · LexaVault');
+  assert.equal(screenTitle('/review', 'LexaVault'), 'Review · LexaVault');
+  assert.equal(screenTitle('/reports', 'LexaVault'), 'Reports · LexaVault');
+  assert.equal(screenTitle('/admin/policy', 'LexaVault'), 'Redaction & retention · Admin · LexaVault');
+  assert.equal(screenTitle('/admin/audit', 'LexaVault'), 'Audit trail · Admin · LexaVault');
+  assert.equal(screenTitle('/admin', 'LexaVault'), 'Admin · LexaVault');
+  assert.equal(screenTitle('/support/incidents', 'Northwind'), 'Support · Northwind');
+  assert.equal(screenTitle('/support/incidents/x', 'LexaVault'), 'Problem · Support · LexaVault');
+  assert.equal(screenTitle('/technical-exceptions/x', 'LexaVault'), 'Problem · Support · LexaVault');
+  assert.equal(screenTitle('/packages/x/manual-processing', 'LexaVault'), 'Continue manually · LexaVault');
+  assert.equal(screenTitle('/somewhere', 'LexaVault'), 'LexaVault');
 });

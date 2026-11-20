@@ -23,6 +23,8 @@ import {
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
 import { useUnsavedWork } from '../unsavedWork';
+import { HelpTip } from './HelpTip';
+import type { HelpKey } from './helpTexts';
 
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
 
@@ -164,7 +166,7 @@ export default function IntegrationsArea() {
       </div>
 
       <section className="cf-ad-card" aria-label={viewCfg.title}>
-        <header className="cf-ad-card-head"><div><h2>{viewCfg.title}</h2><p>{viewCfg.note}</p></div></header>
+        <header className="cf-ad-card-head"><div><div className="cf-ad-title"><h2>{viewCfg.title}</h2><HelpTip topic={VIEW_HELP[view]} /></div><p>{viewCfg.note}</p></div></header>
         {empty ? (
           <div className="cf-ad-card-body"><p className="cf-ad-hint">{viewCfg.empty}</p></div>
         ) : (
@@ -194,6 +196,9 @@ export default function IntegrationsArea() {
     </div>
   );
 }
+
+/** U026: the "?" note for each view's card (helpTexts.ts). */
+const VIEW_HELP: Record<View, HelpKey> = { INGESTION_SOURCE: 'receiving', SDV_DELIVERY: 'sendingToSdv', DERIVED_DOCUMENT_DELIVERY: 'sendingByBarcode', ALL: 'allConnections' };
 
 /* ---------- One connection ---------- */
 

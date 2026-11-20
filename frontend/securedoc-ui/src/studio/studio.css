@@ -91,7 +91,7 @@
 }
 .cf-acct-button:hover:not(:disabled) { background: var(--cf-raised); }
 .cf-acct-button[aria-expanded='true'] { background: var(--cf-raised); }
-.cf-acct-button:focus-visible { outline: 2px solid var(--cf-mark); outline-offset: 2px; }
+.cf-acct-button:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: 2px; }
 .cf-acct-button:disabled { opacity: 0.6; cursor: progress; }
 .cf-acct-button > svg { flex: none; color: var(--cf-muted); }
 .cf-acct-avatar {
@@ -126,7 +126,7 @@
 .cf-acct-item[data-compact] { flex: 1; justify-content: center; padding: 6px 4px; }
 .cf-acct-item[data-compact] .cf-acct-item-text { flex: none; }
 .cf-acct-item:hover:not([aria-disabled='true']), .cf-acct-item:focus-visible { background: var(--cf-raised); outline: none; }
-.cf-acct-item:focus-visible { box-shadow: inset 0 0 0 2px var(--cf-mark); }
+.cf-acct-item:focus-visible { box-shadow: inset 0 0 0 2px var(--cf-focus); }
 .cf-acct-item[aria-disabled='true'] { opacity: 0.55; cursor: progress; }
 .cf-acct-item[aria-checked='true'] { font-weight: 600; }
 .cf-acct-check { width: 16px; display: inline-flex; justify-content: center; flex: none; color: var(--cf-ink); }
@@ -169,7 +169,7 @@
 .cf-btn[data-variant='ghost']:hover:not(:disabled) { background: var(--cf-raised); border-color: var(--cf-line); }
 .cf-btn[data-size='sm'] { height: 30px; padding: 0 12px; font-size: 13px; }
 .cf-btn[data-size='icon'] { width: 30px; height: 30px; padding: 0; }
-.cf-btn .cf-kbd { margin-left: 4px; background: transparent; color: inherit; border-color: currentColor; opacity: 0.55; }
+.cf-btn .cf-kbd { margin-left: 4px; background: transparent; color: inherit; border-color: currentColor; } /* U026: was opacity 0.55 (2.3:1); now the button's own colour */
 
 .cf-spinner {
   display: inline-block; width: 14px; height: 14px; flex: none;
@@ -248,7 +248,7 @@
   display: inline-flex; align-items: center; gap: 8px; height: 36px; width: min(320px, 100%); padding: 0 12px;
   font-size: 14px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); color: var(--cf-muted);
 }
-.cf-search:focus-within { border-color: var(--cf-ink); }
+.cf-search:focus-within { border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink); } /* U026: a 2 px ring, not a 1 px border */
 /* The Cases filter is wider so the configured field names fit (owner's U019 answer 1). */
 .cf-search.cf-search-cases { width: min(360px, 100%); }
 .cf-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: var(--cf-ink); }
@@ -364,7 +364,7 @@
 .cf-disclosure > summary::-webkit-details-marker { display: none; }
 .cf-disclosure > summary::before { content: '+'; font-family: var(--cf-font-mono); width: 10px; color: var(--cf-faint); }
 .cf-disclosure[open] > summary::before { content: '−'; }
-.cf-disclosure > summary:focus-visible { outline: 2px solid var(--cf-mark); outline-offset: 3px; border-radius: 2px; }
+.cf-disclosure > summary:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: 3px; border-radius: 2px; }
 .cf-disclosure[open] > summary { margin-bottom: 10px; }
 .cf-disclosure-lead { font-size: 13px; text-wrap: pretty; margin-bottom: 8px; }
 /* Case panel sections (canvas): "▸ Documents · 4", 13/600 ink, a hairline above, 10 px below it. */
@@ -452,7 +452,7 @@
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .cf-field select { padding-right: 8px; }
-.cf-field input:focus, .cf-field select:focus { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
+.cf-field input:focus, .cf-field select:focus { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-field input[readonly], .cf-field select:disabled { background: var(--cf-raised); color: var(--cf-muted); }
 .cf-field[data-invalid] input, .cf-field[data-invalid] select { border-color: var(--cf-danger); }
 .cf-field-hint { font-size: 12px; color: var(--cf-muted); min-height: 18px; }
@@ -643,6 +643,15 @@
   .cf-nav-link { padding: 0 8px; }
   .cf-brand-word { display: none; }
   .cf-acct-text { display: none; }
+}
+
+/* U026 (WCAG 1.4.10 Reflow): on a phone-width window (or 400% zoom) the top bar takes two rows, the workspace links
+   on the second, so nothing scrolls sideways at 320 px. Wider windows are unchanged. */
+@media (max-width: 640px) {
+  .cf-top { flex-wrap: wrap; height: auto; min-height: 56px; padding: 8px 16px; row-gap: 6px; }
+  .cf-brand { min-width: 0; }
+  .cf-nav { order: 3; flex: 1 0 100%; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .cf-nav-link { flex: none; white-space: nowrap; }
 }
 
 /* ---------- Tablet (U021): looking, deciding and approving by touch ---------- */

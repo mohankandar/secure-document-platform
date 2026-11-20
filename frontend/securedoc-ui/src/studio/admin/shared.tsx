@@ -8,6 +8,8 @@ import { LoadErrorCard, checked, isRecord } from '../failure';
 import { useToast } from '../toast';
 import { useUnsavedWork } from '../unsavedWork';
 import { durationText, pickUnit, toBase, type Unit } from './adminRules';
+import { HelpTip } from './HelpTip';
+import type { HelpKey } from './helpTexts';
 
 export function useBusinessAdmin() {
   return useSWR<BusinessAdminConfiguration>('business-admin', () => checked('GET /business-admin/configuration', apiClient.getBusinessAdminConfiguration(), isBusinessAdminConfiguration), { revalidateOnFocus: false });
@@ -35,8 +37,10 @@ export function Loading({ error, retry, label, request }: { error?: unknown; ret
 /** What a card's own footer gets (U023): the draft, whether it changed, and the card's save and reset. */
 export interface SettingsCardFooter<T> { draft: T; dirty: boolean; saving: boolean; save: () => Promise<void>; reset: () => void }
 
-export function SettingsCard<T>({ title, description, value, children, onSave, savedMessage, footer, invalid }: {
+export function SettingsCard<T>({ title, help, description, value, children, onSave, savedMessage, footer, invalid }: {
   title: string;
+  /** U026: the "?" note next to the title (helpTexts.ts). */
+  help?: HelpKey;
   description?: string;
   value: T;
   children: (draft: T, set: (next: T) => void) => ReactNode;
@@ -80,7 +84,7 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
     <section className="cf-ad-card" aria-label={title}>
       <header className="cf-ad-card-head">
         <div>
-          <h2>{title}</h2>
+          <div className="cf-ad-title"><h2>{title}</h2>{help && <HelpTip topic={help} />}</div>
           {description && <p>{description}</p>}
         </div>
         {dirty && <span className="cf-ad-dirty">Unsaved</span>}
@@ -101,8 +105,8 @@ export function SettingsCard<T>({ title, description, value, children, onSave, s
   );
 }
 
-export function Toggle({ label, checked, onChange, hint, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string; disabled?: boolean }) {
-  return (
+export function Toggle({ label, checked, onChange, hint, disabled, help }: { label: string; checked: boolean; onChange: (v: boolean) => void; hint?: string; disabled?: boolean; help?: HelpKey }) {
+  const toggle = (
     <label className="cf-ad-toggle">
       <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="cf-ad-toggle-track" aria-hidden="true" />
@@ -112,20 +116,23 @@ export function Toggle({ label, checked, onChange, hint, disabled }: { label: st
       </span>
     </label>
   );
+  // The "?" sits beside the switch, outside its label, so it does not toggle it.
+  return help ? <div className="cf-ad-toggle-help">{toggle}<HelpTip topic={help} /></div> : toggle;
 }
 
 export function NumberField({ label, value, onChange, min, max, step = 1, suffix, hint }: {
   label: string; value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string; hint?: string;
 }) {
+  const id = useId();
   const invalid = Number.isNaN(value) || (min !== undefined && value < min) || (max !== undefined && value > max);
   return (
     <div className="cf-field cf-ad-number" data-invalid={invalid || undefined}>
-      <label>
+      <label htmlFor={id}>
         <span>{label}</span>
         {suffix && <span className="cf-field-opt">{suffix}</span>}
       </label>
-      <input type="number" inputMode="decimal" value={Number.isNaN(value) ? '' : value} min={min} max={max} step={step} onChange={(e) => onChange(e.target.valueAsNumber)} aria-invalid={invalid || undefined} />
-      <span className="cf-field-hint">{invalid ? `Enter a value${min !== undefined ? ` from ${min}` : ''}${max !== undefined ? ` to ${max}` : ''}.` : hint}</span>
+      <input id={id} type="number" inputMode="decimal" value={Number.isNaN(value) ? '' : value} min={min} max={max} step={step} onChange={(e) => onChange(e.target.valueAsNumber)} aria-invalid={invalid || undefined} aria-describedby={`${id}-hint`} />
+      <span id={`${id}-hint`} className="cf-field-hint">{invalid ? `Enter a value${min !== undefined ? ` from ${min}` : ''}${max !== undefined ? ` to ${max}` : ''}.` : hint}</span>
     </div>
   );
 }
@@ -135,9 +142,9 @@ export function NumberField({ label, value, onChange, min, max, step = 1, suffix
  * largest unit the stored value is a whole number of, and the person can change the unit. What is typed must be a
  * whole number of the stored unit; anything else is marked, never rounded.
  */
-export function DurationField({ label, value, onChange, units, min, max, hint, fixedUnit, inline }: {
+export function DurationField({ label, value, onChange, units, min, max, hint, fixedUnit, inline, help }: {
   label: string; value: number; onChange: (base: number) => void; units: readonly Unit[];
-  min?: number; max?: number; hint?: string; fixedUnit?: string; inline?: boolean;
+  min?: number; max?: number; hint?: string; fixedUnit?: string; inline?: boolean; help?: HelpKey;
 }) {
   const id = useId();
   const [unit, setUnit] = useState<Unit>(() => units.find((u) => u.name === fixedUnit) ?? pickUnit(value, units));
@@ -154,7 +161,7 @@ export function DurationField({ label, value, onChange, units, min, max, hint, f
   const control = (
     <span className="cf-ad-duration">
       <input id={id} type="number" inputMode="decimal" min={0} step="any" value={Number.isNaN(typed) ? '' : typed}
-        aria-label={inline ? label : undefined} aria-invalid={invalid || undefined} aria-describedby={`${id}-hint`}
+        aria-label={inline ? label : undefined} aria-invalid={invalid || undefined} aria-describedby={!inline || invalid ? `${id}-hint` : undefined}
         onChange={(e) => change(e.target.valueAsNumber, unit)} />
       {fixedUnit || units.length === 1
         ? <span className="cf-ad-duration-unit">{unitName(unit)}</span>
@@ -172,7 +179,7 @@ export function DurationField({ label, value, onChange, units, min, max, hint, f
   if (inline) return <>{control}{invalid && <span id={`${id}-hint`} className="cf-ad-sentence-error">{label}: {message}</span>}</>;
   return (
     <div className="cf-field cf-ad-number" data-invalid={invalid || undefined}>
-      <label htmlFor={id}><span>{label}</span></label>
+      <div className="cf-ad-title"><label htmlFor={id}><span>{label}</span></label>{help && <HelpTip topic={help} />}</div>
       {control}
       <span id={`${id}-hint`} className="cf-field-hint">{message}</span>
     </div>
@@ -251,8 +258,9 @@ export function TextField({ label, value, onChange, hint, placeholder, required,
     <div className="cf-field" data-invalid={invalid || undefined}>
       <label htmlFor={id}><span>{label}</span>{!required && <span className="cf-field-opt">Optional</span>}</label>
       <input id={id} type={type} value={value} placeholder={placeholder} maxLength={maxLength} disabled={disabled} aria-invalid={invalid || undefined}
+        aria-required={required || undefined} aria-describedby={hint ? `${id}-hint` : undefined}
         className={mono ? 'cf-ad-mono' : undefined} onChange={(e) => onChange(e.target.value)} />
-      {hint && <span className="cf-field-hint">{hint}</span>}
+      {hint && <span id={`${id}-hint`} className="cf-field-hint">{hint}</span>}
     </div>
   );
 }
@@ -264,10 +272,10 @@ export function SelectField<T extends string>({ label, value, options, onChange,
   return (
     <div className="cf-field">
       <label htmlFor={id}><span>{label}</span></label>
-      <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>
+      <select id={id} value={value} disabled={disabled} aria-describedby={hint ? `${id}-hint` : undefined} onChange={(e) => onChange(e.target.value as T)}>
         {options.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, humanize(o)]; return <option key={v} value={v}>{l}</option>; })}
       </select>
-      {hint && <span className="cf-field-hint">{hint}</span>}
+      {hint && <span id={`${id}-hint`} className="cf-field-hint">{hint}</span>}
     </div>
   );
 }
@@ -280,9 +288,9 @@ export function OptionalInt({ label, value, onChange, min, max, disabled, hint }
   return (
     <div className="cf-field">
       <label htmlFor={id}><span>{label}</span><span className="cf-field-opt">Optional</span></label>
-      <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value ?? ''}
+      <input id={id} type="number" inputMode="numeric" min={min} max={max} disabled={disabled} value={value ?? ''} aria-describedby={hint ? `${id}-hint` : undefined}
         onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
-      {hint && <span className="cf-field-hint">{hint}</span>}
+      {hint && <span id={`${id}-hint`} className="cf-field-hint">{hint}</span>}
     </div>
   );
 }

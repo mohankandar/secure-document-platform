@@ -21,6 +21,29 @@ export const NAV = {
   support: 'Support',
 } as const;
 
+/**
+ * U026 (WCAG 2.4.2 Page titled): the browser tab names the screen first, then the product, for example
+ * "Review · LexaVault". The admin area comes from the address (/admin/<area>).
+ */
+const ADMIN_TITLES: Record<string, string> = {
+  policy: 'Redaction & retention', fields: 'Case fields', integrations: 'Integrations', identity: 'Sign-in', health: 'Platform operations', audit: 'Audit trail',
+};
+export function screenTitle(pathname: string, product: string): string {
+  const [first, second, third] = pathname.split('/').filter(Boolean);
+  let screen: string;
+  if (!first) screen = NAV.cases;
+  else if (first === 'case') screen = `Case · ${NAV.cases}`;
+  else if (first === 'intake') screen = NAV.newCase;
+  else if (first === 'review') screen = NAV.review;
+  else if (first === 'reports') screen = NAV.reports;
+  else if (first === 'admin') screen = second && ADMIN_TITLES[second] ? `${ADMIN_TITLES[second]} · ${NAV.admin}` : NAV.admin;
+  else if (first === 'support') screen = second === 'incidents' && third ? `Problem · ${NAV.support}` : NAV.support;
+  else if (first === 'technical-exceptions') screen = `Problem · ${NAV.support}`;
+  else if (first === 'packages' && third === 'manual-processing') screen = 'Continue manually';
+  else screen = '';
+  return screen ? `${screen} · ${product}` : product;
+}
+
 /* ---------- Stages ---------- */
 
 export type StageWordKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';

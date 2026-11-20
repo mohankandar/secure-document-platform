@@ -476,7 +476,7 @@ test('Admin › Redaction & retention (Business Administrator): the Sensitive da
   await expect(card.getByRole('radio', { name: /^Balanced In use/ })).toBeChecked();
 });
 
-test('Reports (Business Administrator): U024 "What LexaVault did for you" wraps its tiles, and the panel opens and closes by tap', async ({ page }) => {
+test('Reports (Business Administrator): U024 "What LexaVault did for you" wraps its tiles (2 + 2 on a portrait tablet), and the panel opens and closes by tap', async ({ page }, info) => {
   await signInAs(page, ['BUSINESS_ADMIN'], '/reports');
   const section = page.getByRole('region', { name: 'What LexaVault did for you' });
   await expect(section).toBeVisible();
@@ -489,6 +489,18 @@ test('Reports (Business Administrator): U024 "What LexaVault did for you" wraps 
   });
   expect(outside).toBe(0);
   expect(await sideways(page)).toBe(0);
+  // U026 step 0 (owner's answer to U024): on a portrait tablet the four tiles sit 2 + 2, each row filled.
+  const { width, height } = info.project.use.viewport!;
+  if (width <= 1024 && height > width) {
+    const rows = await section.evaluate((s) => {
+      const tops = new Map<number, number>();
+      for (const t of s.querySelectorAll('.cf-rp-did-tile')) { const k = Math.round(t.getBoundingClientRect().top); tops.set(k, (tops.get(k) ?? 0) + 1); }
+      return [...tops.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n);
+    });
+    expect(rows).toEqual([2, 2]);
+    // U026 proof picture (not committed): U026_PROOF=1 npm run test:tablet
+    if (process.env.U026_PROOF) await section.screenshot({ path: `../../compare/U026/ipad-tiles-2x2-${width}x${height}.png` });
+  }
   const link = section.getByRole('button', { name: 'How is this worked out?' });
   await expectTappable(link);
   await link.tap();
@@ -528,4 +540,36 @@ test('Admin (Business Administrator): U024 the minutes per page field in Report 
   await card.getByRole('button', { name: 'Reset' }).tap();
   await expect(field).toHaveValue('1');
   expect(await sideways(page)).toBe(0);
+});
+
+test('Admin (Business Administrator): U026 the "?" help opens by tap, has a 44 px tap area, and closes by a tap outside', async ({ page }) => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await signInAs(page, ['BUSINESS_ADMIN'], '/admin/policy', async () => {
+    await page.route('**/api/v1/business-admin/configuration', (route) => route.fulfill(json({
+      identifiers: [], dashboardColumns: [],
+      sensitiveDataPolicy: { enabledEntityTypes: ['SSN'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true },
+      lifecyclePolicy: { originalRetentionHours: 72, redactedCacheHours: 24, neverExportedHoldHours: 168, finalApprovalRequired: false, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 72 },
+      documentIntelligence: { mode: 'OFF', activeBundleVersion: null, lastKnownGoodBundleVersion: null, configurationVersion: 1, baselineDiscoveryRequired: false, availableBundles: [] },
+      reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, minutesPerPage: 1 },
+    })));
+  });
+  const button = page.getByRole('button', { name: 'About Keeping and deleting', exact: true });
+  await expect(button).toBeVisible();
+  // The ring stays 20 px; on a coarse pointer its tap area grows to 44 px.
+  const hit = await button.evaluate((el) => { const r = el.getBoundingClientRect(); const a = getComputedStyle(el, '::after'); return Math.min(r.width - 2 * parseFloat(a.left), r.height - 2 * parseFloat(a.top)); });
+  expect(hit).toBeGreaterThanOrEqual(44);
+  await button.tap();
+  const note = page.locator(`[id="${await button.getAttribute("aria-controls")}"]`);
+  await expect(note).toContainText('How long LexaVault keeps each copy');
+  if (process.env.U026_PROOF) await page.screenshot({ path: `../../compare/U026/ipad-help-open-${page.viewportSize()!.width}x${page.viewportSize()!.height}.png` });
+  const box = (await note.locator('.cf-help-note').boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(await sideways(page)).toBe(0);
+  await page.getByRole('heading', { name: 'Administration', level: 1 }).tap();
+  await expect(note).toBeEmpty();
+  await button.tap();
+  await expect(note).not.toBeEmpty();
+  await button.tap();
+  await expect(note).toBeEmpty();
 });
