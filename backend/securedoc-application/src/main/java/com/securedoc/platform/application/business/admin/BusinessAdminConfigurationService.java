@@ -10,6 +10,7 @@ import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
 import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
+import com.securedoc.platform.domain.business.PolicyPreset;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -189,17 +191,35 @@ public final class BusinessAdminConfigurationService {
             throw new ValidationException("Review mode is required");
         }
 
+        Optional<TenantRedactionPolicy> previous = policyRepository.findByTenantId(tenantId);
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now());
         policyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId,
                 AuditAction.SENSITIVE_DATA_POLICY_CHANGED,
                 "SensitiveDataPolicy", tenantId.toString(), correlationId,
-                "Sensitive-data policy changed: enabledCount=" + enabledTypes.size()
-                        + ", threshold=" + String.format(Locale.ROOT, "%.2f", autoRedactThreshold)
-                        + ", reviewMode=" + reviewMode
-                        + ", maskSsnLastFour=" + maskSsnLastFour);
+                sensitiveDataPolicyChangeDetail(policy, previous.orElse(null)));
         return policy;
+    }
+
+    /**
+     * The policy-change audit detail. The first four keys keep their order and format (Admin › Audit trail reads
+     * {@code threshold=}); task 0016 appends the type names, the preset worked out here from the saved values, and
+     * the same keys for the policy before the change. Type names are category names, never found values.
+     */
+    static String sensitiveDataPolicyChangeDetail(TenantRedactionPolicy policy, TenantRedactionPolicy previous) {
+        return "Sensitive-data policy changed: " + policyKeys(policy)
+                + ", previous=" + (previous == null ? "none" : "[" + policyKeys(previous) + "]");
+    }
+
+    private static String policyKeys(TenantRedactionPolicy policy) {
+        return "enabledCount=" + policy.enabledEntityTypes().size()
+                + ", threshold=" + String.format(Locale.ROOT, "%.2f", policy.autoRedactThreshold())
+                + ", reviewMode=" + policy.reviewMode()
+                + ", maskSsnLastFour=" + policy.maskSsnLastFour()
+                + ", enabledTypes=" + policy.enabledEntityTypes().stream().map(Enum::name).sorted()
+                        .collect(java.util.stream.Collectors.joining(","))
+                + ", preset=" + PolicyPreset.of(policy);
     }
 
     public TenantLifecyclePolicy updateLifecyclePolicy(TenantId tenantId, ActorId actorId,

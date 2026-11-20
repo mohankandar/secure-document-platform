@@ -16,7 +16,7 @@
     Absolute path to the PDF fixture.
 
 .PARAMETER Roles
-    X-Actor-Roles header. Defaults to ADMIN.
+    X-Actor-Roles header. Defaults to every product role (ProductRole names); the retired ADMIN name is refused.
 
 .OUTPUTS
     PSCustomObject with the parsed JSON response (documentId, artifactId, status) when available.
@@ -28,7 +28,7 @@
 param(
     [Parameter(Mandatory = $true)][string] $PackageId,
     [Parameter(Mandatory = $true)][string] $FilePath,
-    [string] $Roles = 'ADMIN'
+    [string] $Roles = 'DOCUMENT_SUPERVISOR,BUSINESS_ADMIN,REPORT_VIEWER,TENANT_IT_ADMIN,PLATFORM_OPERATIONS_ADMIN'
 )
 
 $ErrorActionPreference = 'Stop'

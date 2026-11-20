@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.config;
 
+import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.business.service.BusinessIdentityService;
 import com.securedoc.platform.application.storage.ProcessingStorageConfigurationService;
 import com.securedoc.platform.application.business.admin.BusinessAdminConfigurationService;
@@ -401,9 +402,15 @@ public class ApplicationServiceConfig {
         return new CapabilityEnforcementService();
     }
 
+    /** The current request's display name for audit records (task 0016); filled by RequestContextResolver. */
     @Bean
-    public AuditService auditService(AuditPort auditPort) {
-        return new AuditService(auditPort);
+    public RequestActorDisplayName requestActorDisplayName() {
+        return new RequestActorDisplayName();
+    }
+
+    @Bean
+    public AuditService auditService(AuditPort auditPort, RequestActorDisplayName requestActorDisplayName) {
+        return new AuditService(auditPort, requestActorDisplayName);
     }
 
     @Bean

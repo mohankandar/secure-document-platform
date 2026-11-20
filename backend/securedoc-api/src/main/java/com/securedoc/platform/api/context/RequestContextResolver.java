@@ -13,6 +13,7 @@ import com.documentplatform.identity.admission.MachineEntityAdmission;
 import com.documentplatform.identity.admission.SharedIssuerPreflight;
 import com.securedoc.platform.api.security.oidc.ProductEntityRoleCatalog;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
+import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
 import com.securedoc.platform.application.observability.StructuredLogContext;
@@ -21,6 +22,7 @@ import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.api.observability.RequestCorrelationFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -64,7 +66,25 @@ public class RequestContextResolver {
     private final SharedIssuerPreflight sharedIssuerPreflight = new SharedIssuerPreflight(new ProductEntityRoleCatalog());
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
+    private final RequestActorDisplayName actorDisplayName;
 
+    /** For tests that do not look at audit display names: the name is bound to a holder nothing reads. */
+    public RequestContextResolver(
+            String demoTenantId,
+            String demoActorId,
+            SecurityProperties securityProperties,
+            OidcRoleMapper oidcRoleMapper,
+            OidcTenantResolver oidcTenantResolver,
+            OidcTenantMembershipResolver oidcTenantMembershipResolver,
+            ActiveOidcMachineTenantBindings machineTenantBindings,
+            TrustedActorResolver trustedActorResolver,
+            OidcJwtIdentityNormalizer oidcIdentityNormalizer) {
+        this(demoTenantId, demoActorId, securityProperties, oidcRoleMapper, oidcTenantResolver,
+                oidcTenantMembershipResolver, machineTenantBindings, trustedActorResolver, oidcIdentityNormalizer,
+                new RequestActorDisplayName());
+    }
+
+    @Autowired
     public RequestContextResolver(
             @Value("${securedoc.demo.tenant-id}") String demoTenantId,
             @Value("${securedoc.demo.actor-id}") String demoActorId,
@@ -74,7 +94,8 @@ public class RequestContextResolver {
             OidcTenantMembershipResolver oidcTenantMembershipResolver,
             ActiveOidcMachineTenantBindings machineTenantBindings,
             TrustedActorResolver trustedActorResolver,
-            OidcJwtIdentityNormalizer oidcIdentityNormalizer) {
+            OidcJwtIdentityNormalizer oidcIdentityNormalizer,
+            RequestActorDisplayName actorDisplayName) {
         this.demoTenantId = UUID.fromString(demoTenantId);
         this.demoActorId = UUID.fromString(demoActorId);
         this.securityProperties = securityProperties;
@@ -84,6 +105,7 @@ public class RequestContextResolver {
         this.machineTenantBindings = machineTenantBindings;
         this.trustedActorResolver = trustedActorResolver;
         this.oidcIdentityNormalizer = oidcIdentityNormalizer;
+        this.actorDisplayName = actorDisplayName;
     }
 
     public AuthenticatedPrincipal resolvePrincipal(HttpServletRequest request) {
@@ -104,6 +126,8 @@ public class RequestContextResolver {
         AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
                 ? resolveLocalIntegrationPrincipal(request)
                 : resolveOidcIntegrationPrincipal();
+        // A machine client is not a person: its audit records carry no display name.
+        actorDisplayName.clear();
         StructuredLogContext.put("tenantId", principal.tenantId());
         StructuredLogContext.put("actorId", principal.actorId());
         return principal;
@@ -154,8 +178,11 @@ public class RequestContextResolver {
         UUID tenantId = resolveLocalUuid(request, HEADER_TENANT_ID, demoTenantId);
         UUID actorId = resolveLocalUuid(request, HEADER_ACTOR_ID, demoActorId);
         Set<String> roles = resolveLocalRoles(request);
-        return AuthenticatedPrincipal.of(
+        AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(
                 ActorId.of(actorId), TenantId.of(tenantId), "demo-user", roles);
+        // LOCAL has no display-name claim: the username is recorded.
+        actorDisplayName.bind(principal.actorId(), null, principal.username());
+        return principal;
     }
 
     private AuthenticatedPrincipal resolveLocalIntegrationPrincipal(HttpServletRequest request) {
@@ -212,7 +239,10 @@ public class RequestContextResolver {
             roles = oidcRoleMapper.map(identity.groups());
         }
         ActorId actorId = trustedActorResolver.resolve(jwt);
-        return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
+        AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
+        // The display-name claim (securedoc.security.oidc.display-name-claim), or the username when there is none.
+        actorDisplayName.bind(actorId, identity.displayName(), identity.username());
+        return principal;
     }
 
 

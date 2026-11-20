@@ -113,6 +113,12 @@ public enum AuditAction {
     REPORT_CSV_EXPORTED,
     AUDIT_EXPORTED,
     REPORTING_CONFIGURATION_CHANGED,
+    /**
+     * A compliance report PDF was created. Written by build plan step 3 (compliance report backend); nothing writes
+     * it yet. Its detail will hold the period, the edition, and {@code fingerprint=} followed by the SHA-256 hex of
+     * the PDF. Never a value found in a document.
+     */
+    COMPLIANCE_REPORT_CREATED,
 
     // IT / Platform administration
     PLATFORM_HEALTH_CHECKED,

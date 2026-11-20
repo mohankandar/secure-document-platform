@@ -21,7 +21,8 @@
     Optional object serialized to JSON for POST/PUT.
 
 .PARAMETER Roles
-    X-Actor-Roles header value. Defaults to ADMIN for setup calls (all capabilities). The Playwright
+    X-Actor-Roles header value. Defaults to every product role (ProductRole names) for setup calls, which
+    together hold every tenant capability. The retired ADMIN name is refused with 403. The Playwright
     UI review workflow uses the browser default role separately.
 
 .OUTPUTS
@@ -38,7 +39,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('GET', 'POST', 'PUT', 'DELETE')][string] $Method,
     [Parameter(Mandatory = $true)][string] $Path,
     [object] $Body,
-    [string] $Roles = 'ADMIN'
+    [string] $Roles = 'DOCUMENT_SUPERVISOR,BUSINESS_ADMIN,REPORT_VIEWER,TENANT_IT_ADMIN,PLATFORM_OPERATIONS_ADMIN'
 )
 
 $ErrorActionPreference = 'Stop'

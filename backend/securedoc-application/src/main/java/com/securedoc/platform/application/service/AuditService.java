@@ -1,5 +1,7 @@
 package com.securedoc.platform.application.service;
 
+import com.securedoc.platform.application.audit.AuditCaseIds;
+import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.port.out.AuditPort;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditOutcome;
@@ -17,9 +19,20 @@ import java.util.Objects;
 public final class AuditService {
 
     private final AuditPort auditPort;
+    private final RequestActorDisplayName actorDisplayName;
 
+    /** No display names are recorded (tests and callers outside a request). */
     public AuditService(AuditPort auditPort) {
+        this(auditPort, new RequestActorDisplayName());
+    }
+
+    /**
+     * Records the current request's display name when the record's actor is the person the request is for
+     * (task 0016). The source is filled by the API layer; system work never has a name.
+     */
+    public AuditService(AuditPort auditPort, RequestActorDisplayName actorDisplayName) {
         this.auditPort = Objects.requireNonNull(auditPort, "AuditPort must not be null");
+        this.actorDisplayName = Objects.requireNonNull(actorDisplayName, "RequestActorDisplayName must not be null");
     }
 
     /**
@@ -55,9 +68,12 @@ public final class AuditService {
     private void record(TenantId tenantId, ActorId actorId, AuditAction action,
                          String resourceType, String resourceId,
                          AuditOutcome outcome, CorrelationId correlationId, String detail) {
+        String safeDetail = sanitizeDetail(detail);
         AuditRecord auditRecord = AuditRecord.create(
                 tenantId, actorId, action, resourceType, resourceId,
-                outcome, correlationId, sanitizeDetail(detail));
+                outcome, correlationId, safeDetail,
+                actorDisplayName.displayNameFor(actorId).orElse(null),
+                AuditCaseIds.caseIdFor(resourceType, resourceId, safeDetail));
         auditPort.record(auditRecord);
     }
 
