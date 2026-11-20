@@ -3,14 +3,14 @@ import { mkdirSync } from 'node:fs';
 import { APPROVAL_CASE, signInAs } from './harness';
 
 /**
- * UI task U026: the proof pictures for the report, saved to ../../compare/U026/ (not committed).
+ * UI task U026: the proof pictures for the report, saved to ../../docs/work/ui/compare/U026/ (not committed).
  * Run only on request: U026_PROOF=1 npx playwright test --config playwright.a11y.config.ts proof --project light
  *
  * "Before" pictures of the colour fixes are taken by putting the old token values back with a style tag, so the
  * rest of the screen is exactly the same as the "after" picture.
  */
 
-const OUT = '../../compare/U026';
+const OUT = '../../docs/work/ui/compare/U026';
 mkdirSync(OUT, { recursive: true });
 
 const BEFORE = `

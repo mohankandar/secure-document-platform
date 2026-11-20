@@ -252,3 +252,13 @@ Not pushed, not merged.
 ## Suggested next step
 
 Owner's answers to Q1–Q5, then the short accessibility statement written from the conformance table above.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Field and control borders: yes, the proposed darker borders (light #8a919b, dark #707680), form controls only.
+2. Single-key shortcuts: limit them to where focus is (Review: queue, page, decision panel; Cases: the case list), and Review opens with focus on the current finding. No on/off switch.
+3. Marking a place by keyboard: (a) documented exception for now; a keyboard way to draw a box goes to the backlog.
+4. Reports chart: yes, each day focusable so its value shows on focus.
+5. Sign-in and entity chooser: yes, add a `main` region and the product name, markup only, no sign-in logic.
+Also: the proof folder landed at the repo root (`compare/`); move it to `docs/work/ui/compare/U026/`, which is not committed.
+All in task U027.
