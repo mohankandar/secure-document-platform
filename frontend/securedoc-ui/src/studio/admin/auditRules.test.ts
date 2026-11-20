@@ -38,6 +38,20 @@ test('the change line uses only what is recorded (the new value)', () => {
   assert.equal(changeLine(rec('PACKAGE_APPROVED', 'threshold=0.5')), undefined);
 });
 
+test('task 0016 detail: the new keys and the previous policy do not change the change line or the sentence', () => {
+  const detail = 'Sensitive-data policy changed: enabledCount=3, threshold=0.70, reviewMode=UNCERTAIN_ONLY, '
+    + 'maskSsnLastFour=false, enabledTypes=CREDIT_SCORE,DATE_OF_BIRTH,SSN, preset=LIGHT, '
+    + 'previous=[enabledCount=2, threshold=0.80, reviewMode=UNCERTAIN_ONLY, maskSsnLastFour=true, '
+    + 'enabledTypes=CREDIT_SCORE,SSN, preset=BALANCED]';
+  assert.equal(changeLine(rec('SENSITIVE_DATA_POLICY_CHANGED', detail)), 'auto-redact level now 70%');
+  assert.equal(changeLine(rec('SENSITIVE_DATA_POLICY_CHANGED',
+    'Sensitive-data policy changed: enabledCount=1, threshold=0.85, reviewMode=REVIEW_ALL, maskSsnLastFour=true, '
+    + 'enabledTypes=SSN, preset=STRICT, previous=none')), 'auto-redact level now 85%');
+  assert.equal(whatHappened(rec('SENSITIVE_DATA_POLICY_CHANGED', detail)), 'Changed the sensitive-data settings');
+  // The new action has no sentence yet: the default sentence, never a raw code.
+  assert.equal(whatHappened(rec('COMPLIANCE_REPORT_CREATED')), 'Compliance report created');
+});
+
 test('who: the system actor by name, anyone else by a short id', () => {
   assert.equal(personName(SYSTEM_ACTOR_ID), 'LexaVault (automatic)');
   assert.equal(personName('a1b2c3d4-0000-4000-8000-000000000001'), 'Person 00000001');

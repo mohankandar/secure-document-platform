@@ -91,7 +91,9 @@ public class JpaAuditQueryPortAdapter implements AuditQueryPort {
                 entity.getOutcome(),
                 entity.getCorrelationId().toString(),
                 entity.getDetail(),
-                entity.getOccurredAt()
+                entity.getOccurredAt(),
+                entity.getActorDisplayName(),
+                entity.getCaseId()
         );
     }
 }

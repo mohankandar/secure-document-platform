@@ -23,6 +23,8 @@ public final class AuditRecordMapper {
         entity.setDetail(record.detail());
         entity.setOccurredAt(record.timestamp());
         entity.setCreatedAt(Instant.now());
+        entity.setActorDisplayName(record.actorDisplayName());
+        entity.setCaseId(record.caseId());
         return entity;
     }
 }

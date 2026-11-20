@@ -196,16 +196,23 @@ public class AuditController {
         map.put("correlationId", record.correlationId());
         if (record.detail() != null) map.put("detail", record.detail());
         map.put("occurredAt", record.occurredAt().toString());
+        // Task 0016: recorded at the time of the action; null for system work, records not about a case, and
+        // records written before the change.
+        map.put("actorDisplayName", record.actorDisplayName());
+        map.put("caseId", record.caseId());
         return map;
     }
 
     private String toCsv(List<AuditRecordSummary> records) {
-        StringBuilder csv = new StringBuilder("occurredAt,action,outcome,actorId,resourceType,resourceId,correlationId,detail\r\n");
+        // The original columns keep their order; task 0016 appends actorDisplayName and caseId.
+        StringBuilder csv = new StringBuilder(
+                "occurredAt,action,outcome,actorId,resourceType,resourceId,correlationId,detail,actorDisplayName,caseId\r\n");
         for (AuditRecordSummary r : records) {
             csv.append(csv(r.occurredAt().toString())).append(',').append(csv(r.action())).append(',')
                     .append(csv(r.outcome())).append(',').append(csv(r.actorId())).append(',')
                     .append(csv(r.resourceType())).append(',').append(csv(r.resourceId())).append(',')
-                    .append(csv(r.correlationId())).append(',').append(csv(r.detail())).append("\r\n");
+                    .append(csv(r.correlationId())).append(',').append(csv(r.detail())).append(',')
+                    .append(csv(r.actorDisplayName())).append(',').append(csv(r.caseId())).append("\r\n");
         }
         return csv.toString();
     }

@@ -46,6 +46,14 @@ public class AuditRecordEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** Recorded at the time of the action (task 0016); null for system work and for older records. */
+    @Column(name = "actor_display_name", length = 200)
+    private String actorDisplayName;
+
+    /** The case (package) id the record is about (task 0016); null when not about a case and for older records. */
+    @Column(name = "case_id", length = 100)
+    private String caseId;
+
     public AuditRecordEntity() {
     }
 
@@ -81,4 +89,10 @@ public class AuditRecordEntity {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public String getActorDisplayName() { return actorDisplayName; }
+    public void setActorDisplayName(String actorDisplayName) { this.actorDisplayName = actorDisplayName; }
+
+    public String getCaseId() { return caseId; }
+    public void setCaseId(String caseId) { this.caseId = caseId; }
 }

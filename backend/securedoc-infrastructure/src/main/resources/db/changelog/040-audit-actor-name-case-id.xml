@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0016 (owner approved 2026-11-19): the audit trail records the person's display name and the case ID
+        at the time of the action. Both columns are nullable. Old records are never changed: no backfill.
+        The case ID is the package id the Cases page shows, never a business identifier.
+    -->
+    <changeSet id="040-01-audit-records-actor-display-name-case-id" author="securedoc">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="audit_records" columnName="actor_display_name"/>
+            </not>
+            <not>
+                <columnExists tableName="audit_records" columnName="case_id"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="audit_records">
+            <column name="actor_display_name" type="VARCHAR(200)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="case_id" type="VARCHAR(100)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="audit_records" columnName="case_id"/>
+            <dropColumn tableName="audit_records" columnName="actor_display_name"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
