@@ -6,7 +6,7 @@
 .cf-rp-range { display: inline-flex; align-items: center; gap: 6px; color: var(--cf-muted); }
 .cf-rp-range input, .cf-rp-select select {
   height: 34px; padding: 0 12px; font: inherit; font-size: 14px; color: var(--cf-ink);
-  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+  background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius);
 }
 .cf-rp-range input:focus-visible, .cf-rp-select select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-rp-body { display: flex; flex-direction: column; gap: 16px; transition: opacity 120ms; }

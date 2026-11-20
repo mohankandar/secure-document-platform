@@ -318,38 +318,61 @@ function DidForYou({ r }: { r: OperationalReports }) {
 function Trend({ r }: { r: OperationalReports }) {
   const points = r.executive.trend;
   const [hover, setHover] = useState<number | null>(null);
+  const [dayFocused, setDayFocused] = useState(false);
+  const days = useRef<HTMLDivElement>(null);
   if (!points.length) return null;
   const ticks = axisTicks(Math.max(...points.map((p) => Math.max(p.received, p.delivered))));
   const top = ticks[ticks.length - 1];
   const at = (v: number) => `${(v / top) * 100}%`;
   const labelled = new Set(labelledBuckets(points.length));
   const shown = hover === null ? null : points[hover];
+  const dayLabel = (p: (typeof points)[number]) => `${bucketDate(p.bucket)}: ${p.received.toLocaleString()} received, ${p.delivered.toLocaleString()} delivered`;
+  // U027 (WCAG 2.1.1): one Tab stop for the chart (the group of days), then the arrow keys move between days. The
+  // focused day shows the same tip as on hover and is read out by its name. Esc goes back to the chart itself.
+  const focusDay = (i: number) => {
+    const next = Math.max(0, Math.min(points.length - 1, i));
+    setHover(next);
+    days.current?.querySelectorAll<HTMLElement>('.cf-rp-trend-col')[next]?.focus();
+  };
+  const onDaysKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const onDay = (event.target as HTMLElement).classList.contains('cf-rp-trend-col');
+    const current = onDay && hover !== null ? hover : null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') { event.preventDefault(); focusDay(current === null ? 0 : current + 1); }
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') { event.preventDefault(); focusDay(current === null ? points.length - 1 : current - 1); }
+    else if (event.key === 'Home') { event.preventDefault(); focusDay(0); }
+    else if (event.key === 'End') { event.preventDefault(); focusDay(points.length - 1); }
+    else if (event.key === 'Escape' && onDay) { event.preventDefault(); setHover(null); setDayFocused(false); days.current?.focus(); }
+  };
   return (
     <Section title="Received and delivered" note="Cases per day">
       <div className="cf-rp-legend" aria-hidden="true"><span data-k="received">Received</span><span data-k="delivered">Delivered</span></div>
-      <div className="cf-rp-chart" data-testid="trend-chart" aria-hidden="true">
-        <div className="cf-rp-yaxis">
+      <div className="cf-rp-chart" data-testid="trend-chart">
+        <div className="cf-rp-yaxis" aria-hidden="true">
           {ticks.map((t) => <span key={t} style={{ bottom: at(t) }}>{t.toLocaleString()}</span>)}
         </div>
-        <div className="cf-rp-plot" onMouseLeave={() => setHover(null)}>
-          {ticks.map((t) => <span key={t} className="cf-rp-gridline" style={{ bottom: at(t) }} />)}
-          <div className="cf-rp-trend">
+        <div className="cf-rp-plot" onMouseLeave={() => { if (!days.current?.contains(document.activeElement)) setHover(null); }}>
+          {ticks.map((t) => <span key={t} className="cf-rp-gridline" style={{ bottom: at(t) }} aria-hidden="true" />)}
+          <div ref={days} className="cf-rp-trend" role="group" aria-label="Received and delivered per day. Use the arrow keys to move between days."
+            tabIndex={dayFocused ? -1 : 0} onKeyDown={onDaysKey}
+            onFocus={(e) => { if (e.target !== e.currentTarget) setDayFocused(true); }}
+            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { setDayFocused(false); setHover(null); } }}>
             {points.map((p, i) => (
-              <div key={p.bucket} className="cf-rp-trend-col" data-hover={hover === i || undefined} onMouseEnter={() => setHover(i)} onClick={() => setHover(i)}>
+              <div key={p.bucket} className="cf-rp-trend-col" data-hover={hover === i || undefined} role="img" aria-label={dayLabel(p)} tabIndex={-1}
+                onMouseEnter={() => setHover(i)} onClick={() => setHover(i)} onFocus={() => setHover(i)}>
                 <span data-k="received" style={{ height: at(p.received) }} />
                 <span data-k="delivered" style={{ height: at(p.delivered) }} />
               </div>
             ))}
           </div>
           {shown && hover !== null && (
-            <div className="cf-rp-tip" data-testid="trend-tip" data-side={hover >= points.length / 2 ? 'left' : 'right'}
+            <div className="cf-rp-tip" data-testid="trend-tip" aria-hidden="true" data-side={hover >= points.length / 2 ? 'left' : 'right'}
               style={{ left: `${((hover + 0.5) / points.length) * 100}%` }}>
               <strong>{bucketDate(shown.bucket)}</strong>
               <span data-k="received">{shown.received.toLocaleString()} received</span>
               <span data-k="delivered">{shown.delivered.toLocaleString()} delivered</span>
             </div>
           )}
-          <div className="cf-rp-xaxis">
+          <div className="cf-rp-xaxis" aria-hidden="true">
             {points.map((p, i) => <span key={p.bucket}>{labelled.has(i) ? bucketDate(p.bucket) : ''}</span>)}
           </div>
         </div>

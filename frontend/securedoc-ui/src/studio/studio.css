@@ -234,7 +234,7 @@
 
 .cf-desk-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 /* Chips (canvas .chips): one white strip; the chosen chip is raised with a hairline ring. */
-.cf-segment { display: inline-flex; padding: 3px; gap: 0; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-segment { display: inline-flex; padding: 3px; gap: 0; background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius); }
 .cf-segment button {
   display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px;
   border: 0; border-radius: 4px; background: transparent; color: var(--cf-ink); cursor: pointer;
@@ -246,7 +246,7 @@
 
 .cf-search {
   display: inline-flex; align-items: center; gap: 8px; height: 36px; width: min(320px, 100%); padding: 0 12px;
-  font-size: 14px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); color: var(--cf-muted);
+  font-size: 14px; background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius); color: var(--cf-muted);
 }
 .cf-search:focus-within { border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink); } /* U026: a 2 px ring, not a 1 px border */
 /* The Cases filter is wider so the configured field names fit (owner's U019 answer 1). */
@@ -448,7 +448,7 @@
 .cf-field input, .cf-field select {
   height: 38px; padding: 0 12px; width: 100%;
   font: inherit; font-size: 14px; color: var(--cf-ink);
-  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+  background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius);
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .cf-field select { padding-right: 8px; }
@@ -461,7 +461,7 @@
 .cf-field[data-invalid] .cf-field-hint { color: var(--cf-danger); }
 
 /* Canvas .chips: the capture method is the same white strip as the Cases chips, sized to its words. */
-.cf-method { display: inline-flex; align-self: flex-start; gap: 0; padding: 3px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-method { display: inline-flex; align-self: flex-start; gap: 0; padding: 3px; background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius); }
 .cf-method button { display: inline-flex; align-items: center; padding: 6px 12px; border: 0; border-radius: 4px; background: transparent; color: var(--cf-ink); font-size: 14px; font-weight: 400; line-height: normal; cursor: pointer; }
 .cf-method button:hover:not([aria-selected='true']):not(:disabled) { background: var(--cf-raised); }
 .cf-method button[aria-selected='true'] { background: var(--cf-raised); box-shadow: 0 0 0 1px var(--cf-line); }

@@ -85,7 +85,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 
 .cf-ad-toggle { display: inline-flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; }
 .cf-ad-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.cf-ad-toggle-track { position: relative; flex: none; width: 30px; height: 18px; margin-top: 1px; border-radius: 9px; background: var(--cf-line-strong); transition: background 120ms; }
+.cf-ad-toggle-track { position: relative; flex: none; width: 30px; height: 18px; margin-top: 1px; border-radius: 9px; background: var(--cf-control-line); transition: background 120ms; }
 .cf-ad-toggle-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--cf-surface); transition: transform 120ms; }
 .cf-ad-toggle input:checked + .cf-ad-toggle-track { background: var(--cf-ink); }
 .cf-ad-toggle input:checked + .cf-ad-toggle-track::after { transform: translateX(12px); }
@@ -140,7 +140,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-audit-cats { flex-wrap: wrap; height: auto; }
 /* Audit trail (U011): one toolbar, sentence rows that open to every recorded field */
 .cf-ad-audit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.cf-ad-audit-pick select { height: 36px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-ad-audit-pick select { height: 36px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius); }
 .cf-ad-audit-find { flex: 1; min-width: 200px; display: flex; }
 .cf-ad-audit-find .cf-search { width: 100%; }
 .cf-search[data-invalid] { border-color: var(--cf-danger); }
@@ -274,7 +274,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-expiry[data-tone='warning'] { color: var(--cf-mark-ink); background: var(--cf-mark-soft); padding: 0 4px; border-radius: 3px; }
 .cf-ad-expiry[data-tone='danger'] { color: var(--cf-danger); font-weight: 600; }
 .cf-ad-fieldset h3 { font-size: 13px; font-weight: 500; margin-top: 12px; }
-.cf-ad-token textarea { width: 100%; min-height: 120px; padding: 8px 10px; font: 12px/1.5 var(--cf-font-mono); color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); resize: vertical; word-break: break-all; }
+.cf-ad-token textarea { width: 100%; min-height: 120px; padding: 8px 10px; font: 12px/1.5 var(--cf-font-mono); color: var(--cf-ink); background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius); resize: vertical; word-break: break-all; }
 .cf-ad-token textarea:focus { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-ad-token[data-invalid] textarea { border-color: var(--cf-danger); }
 
@@ -320,11 +320,11 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-duration { display: inline-flex; align-items: center; gap: 6px; }
 .cf-ad-duration input {
   width: 84px; height: 34px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--cf-ink);
-  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+  background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius);
 }
 .cf-ad-duration select {
   width: auto; height: 34px; padding: 0 8px; font: inherit; font-size: 14px; color: var(--cf-ink);
-  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+  background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius);
 }
 .cf-ad-duration input[aria-invalid='true'] { border-color: var(--cf-danger); }
 .cf-ad-duration input:focus-visible, .cf-ad-duration select:focus-visible { outline: 0; border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); }

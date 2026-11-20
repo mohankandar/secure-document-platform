@@ -11,6 +11,7 @@ import { Kbd, Notice, Spinner } from './atoms';
 import { ConfirmDialog } from './admin/shared';
 import { useToast } from './toast';
 import { useUnsavedWork } from './unsavedWork';
+import { REVIEW_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
 
 type Zoom = 'fit' | number;
 
@@ -169,10 +170,13 @@ export default function Review({ caps }: { caps: string[] }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat || confirmingBulk) return;
-      if ((event.target as HTMLElement).closest('input, textarea, select, [role="dialog"]')) return;
+      const target = event.target as HTMLElement;
+      if (target.closest(TYPING_OR_DIALOG)) return;
+      // U027 (WCAG 2.1.4): the keys work only while focus is in the queue, the page viewer or the decision panel.
+      if (!target.closest(REVIEW_KEY_ZONE) && event.key !== 'Escape') return;
       const key = event.key.toLowerCase();
       // U026: in the page viewer the arrow keys scroll the page; J and K still move through the queue.
-      const inViewer = (event.target as HTMLElement).closest('.cf-viewer-canvas') !== null;
+      const inViewer = target.closest('.cf-viewer-canvas') !== null;
       if (inViewer && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) return;
       if (key === 'r' && event.shiftKey) { event.preventDefault(); if (bulk && bulk.toRedact.length > 0 && !busy) setConfirmingBulk(true); }
       else if (key === 'r') { event.preventDefault(); decide('redact'); }
@@ -184,6 +188,24 @@ export default function Review({ caps }: { caps: string[] }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [bulk, busy, confirmingBulk, decide, draft, index, items, select]);
+
+  // U027: Review opens with focus on the current finding in the queue, so the keys work straight away. Afterwards
+  // focus follows the current finding while it is in the queue, or when it was lost (the decided finding's button
+  // left the page, or Redact was disabled while saving), so the next key still lands in the queue.
+  const openedWithFocus = useRef(false);
+  const selectedFindingId = selected?.findingId ?? null;
+  useEffect(() => {
+    if (!selectedFindingId) return;
+    const button = document.getElementById(`cf-q-${selectedFindingId}`);
+    if (!button) return;
+    const active = document.activeElement;
+    const lost = !active || active === document.body;
+    const inQueue = !!active && !!active.closest('.cf-queue');
+    if (!openedWithFocus.current || lost || inQueue) {
+      openedWithFocus.current = true;
+      if (active !== button) button.focus({ preventScroll: true });
+    }
+  }, [selectedFindingId]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, FocusedReviewItem[]>();

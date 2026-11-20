@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { getCurrentRoles, setCurrentRoles, setCurrentCapabilities } from './api/config';
 import { apiClient } from './api/client';
@@ -33,6 +33,19 @@ const NoAccess = lazy(() => import('./studio/NoAccess'));
 
 /** The server lists no organization for this account: a refusal, the same as a 403 from /me (owner's decision, U013). */
 class NoOrganizationError extends Error {}
+
+/**
+ * U027 (WCAG 1.3.1, 2.4.2): the sign-in and entity chooser screens, markup only. One `main` landmark, the product
+ * name, and a page title per screen. No sign-in or session logic lives here.
+ */
+const PRODUCT_NAME = 'LexaVault';
+const SIGN_IN_TITLE = `Sign in · ${PRODUCT_NAME}`;
+const CHOOSE_ENTITY_TITLE = `Choose an entity · ${PRODUCT_NAME}`;
+
+function AuthScreen({ title, children }: { title: string; children: ReactNode }) {
+  useEffect(() => { document.title = title; }, [title]);
+  return <main className="auth-shell"><div className="auth-card">{children}</div></main>;
+}
 
 function PermissionDenied() {
   return (
@@ -434,11 +447,11 @@ export default function App() {
   };
 
   if (!localMode && authLoading) {
-    return <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p>Verifying your session…</p></div></div>;
+    return <AuthScreen title={SIGN_IN_TITLE}><h1>{PRODUCT_NAME}</h1><p>Verifying your session…</p></AuthScreen>;
   }
 
   if (!localMode && switchingTenant && !currentUser) {
-    return <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p role="status">Switching organization…</p></div></div>;
+    return <AuthScreen title={CHOOSE_ENTITY_TITLE}><h1>{PRODUCT_NAME}</h1><p role="status">Switching organization…</p></AuthScreen>;
   }
 
   if (!localMode && !currentUser && tenantChoices.length > 1 && getAccessToken()) {
@@ -448,7 +461,7 @@ export default function App() {
       if (!entered) setAuthError('Unable to enter that tenant. Contact your administrator.');
     };
     return (
-      <div className="auth-shell"><div className="auth-card">
+      <AuthScreen title={CHOOSE_ENTITY_TITLE}>
         <h1>Select organization</h1>
         <p>Select an organization that your identity is authorized to access.</p>
         {authError && <div className="ui-alert tone-danger">{authError}</div>}
@@ -458,7 +471,7 @@ export default function App() {
             {choice.name}
           </button>
         ))}
-      </div></div>
+      </AuthScreen>
     );
   }
 
@@ -474,10 +487,10 @@ export default function App() {
 
   if (!localMode && !currentUser) {
     return (
-      <div className="auth-shell"><div className="auth-card"><h1>Secure Document Platform</h1><p>Sign in with your organization identity to continue.</p>
+      <AuthScreen title={SIGN_IN_TITLE}><h1>{PRODUCT_NAME}</h1><p>Sign in with your organization identity to continue.</p>
         {authError && <div className="ui-alert tone-danger">{authError}</div>}
         <button className="ui-button primary" onClick={() => void beginOidcLogin(authDenied)}>{authDenied ? 'Sign in with a different account' : 'Sign in'}</button>
-      </div></div>
+      </AuthScreen>
     );
   }
 

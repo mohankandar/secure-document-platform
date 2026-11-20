@@ -44,6 +44,7 @@ Measure today's accuracy on real sample documents (the testing phase). The misse
 | C1 | Bulk approve, with the four-eyes rule | Design kept in `docs/work/ui-enhancements-design.md` #5. Only matters when approval before delivery is on. |
 | C2 | Shared foundation with Vero | Fonts, spacing, button and form behaviour, top bar; own colours, no switcher. Done when Vero's UI is next touched. |
 | C3 | Strict also checks cases with nothing found (owner, 2026-11-20) | Today, under "Every case" (Strict), a case where nothing is found is delivered without a person looking (confirmed in task 0019). An option for customers who want every case checked. Changes frozen V1 processing, so it needs its own task and the owner's go-ahead. |
+| C4 | Draw a redaction box by keyboard, for WCAG 2.1.1 in Review and Continue manually (owner, 2026-11-20, U027) | Arrow keys move and size the box. Until then, marking a region by hand (a finding whose place was not found, and Continue manually) needs a pointer: the documented exception in the accessibility conformance notes (`docs/work/ui/U027-report.md`). |
 
 ## Not yet decided
 
