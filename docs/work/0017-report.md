@@ -244,3 +244,15 @@ Not pushed, not merged.
 ## Suggested next step
 
 Owner review of the diff and the two sample PDFs, then merge `feature/compliance-report`. Then U022 (the UI dialog), which calls `POST /api/v1/compliance-reports` and can show `X-Report-File-SHA256`.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Cover header: keep the canvas (no header line on the cover).
+2. Customer name: use the installed licence's `customerName` when there is one; entity name alone otherwise.
+3. Access refused: the capability interceptor records every 403 as DENIED (action and missing capability only, never request content).
+4. Rejected rows: hide "Rejected by a supervisor" and "Cases rejected" until rejecting a case exists in the product.
+5. Lifecycle history: `LIFECYCLE_POLICY_CHANGED` gets `previous=` like the sensitive-data policy.
+6. "Delivered": keep the Reports definition, and add one plain note under the table explaining it.
+7. Polling clients: record "Polling: <connection name>".
+8. Design chat review: the short fingerprint in the footer has a double space ("cacc  4c84"); fix it.
+All in task 0018, which first merges `feature/compliance-report`.
