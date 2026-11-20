@@ -61,7 +61,7 @@ const pageErrors: string[] = [];
 test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) => pageErrors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(m.text()); }); });
 test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/packages returned/.test(e))).toEqual([]); });
 
-async function openAudit(page: Page, queries: URLSearchParams[]) {
+async function openAudit(page: Page, queries: URLSearchParams[], records: Array<Record<string, unknown>> = RECORDS) {
   await mockIdentityProvider(page);
   await page.route('**/api/v1/**', async (route: Route) => {
     const url = new URL(route.request().url());
@@ -74,7 +74,7 @@ async function openAudit(page: Page, queries: URLSearchParams[]) {
     if (url.pathname === '/api/v1/audit-records') {
       queries.push(url.searchParams);
       const q = url.searchParams;
-      return json(RECORDS.filter((r) => (!q.get('actorId') || r.actorId === q.get('actorId'))
+      return json(records.filter((r) => (!q.get('actorId') || r.actorId === q.get('actorId'))
         && (!q.get('resourceId') || r.resourceId === q.get('resourceId'))
         && (!q.get('action') || r.action === q.get('action'))));
     }
@@ -177,4 +177,33 @@ test('More filters hold the exact ones; Export is one menu with CSV and JSON', a
   expect(exp.get('format')).toBe('json');
   expect(exp.get('action')).toBe('PACKAGE_FINAL_APPROVED');
   await expect(menu).toHaveCount(0);
+});
+
+test('0019 A2: Who shows the recorded name; the system and older records keep their labels; the Person filter sends the id', async ({ page }) => {
+  const named = [
+    { ...RECORDS[0], actorDisplayName: 'Dana Reviewer' },          // new record: name recorded
+    { ...RECORDS[1], actorDisplayName: null },                     // older record: no name
+    { ...RECORDS[2], actorDisplayName: null },                     // system work
+    { ...RECORDS[3], actorDisplayName: 'Dana Reviewer' },
+  ];
+  const queries: URLSearchParams[] = [];
+  await openAudit(page, queries, named);
+  await expect(row(page, 'Changed the sensitive-data settings').getByRole('cell').nth(2)).toHaveText('Dana Reviewer');
+  await expect(row(page, 'Approved delivery').getByRole('cell').nth(2)).toHaveText('Person 00000002');
+  await expect(row(page, 'Redacted a Social Security Number').getByRole('cell').nth(2)).toHaveText('LexaVault (automatic)');
+
+  // The opened record shows the recorded name next to the id.
+  await region(page).getByRole('button', { name: 'Changed the sensitive-data settings' }).click();
+  const detail = region(page).locator('.cf-ad-audit-detail');
+  await expect(detail.locator('div').filter({ has: page.locator('dt', { hasText: /^Person$/ }) }).locator('dd')).toHaveText('Dana Reviewer');
+  await expect(detail.locator('div').filter({ has: page.locator('dt', { hasText: /^Person ID$/ }) }).locator('dd')).toHaveText(DANA);
+  await region(page).getByRole('button', { name: 'Changed the sensitive-data settings' }).click();
+  await region(page).getByRole('button', { name: 'Approved delivery' }).click();
+  await expect(region(page).locator('.cf-ad-audit-detail dt', { hasText: /^Person$/ })).toHaveCount(0);
+
+  const person = page.getByRole('combobox', { name: 'Person' });
+  await expect(person.locator('option')).toHaveText(['Person: anyone', 'LexaVault (automatic)', 'Dana Reviewer', 'Person 00000002']);
+  await person.selectOption({ label: 'Dana Reviewer' });
+  await expect.poll(() => queries.at(-1)?.get('actorId')).toBe(DANA);
+  await expect(person).toHaveValue(DANA);
 });

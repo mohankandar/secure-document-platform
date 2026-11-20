@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AUDIT_TYPES, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName, recordedFields, resultWord, whatHappened,
+  AUDIT_TYPES, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName, personOptions, recordedFields, resultWord, whatHappened,
 } from './auditRules.ts';
 
 const PKG = '3f2a91c4-1111-4222-8333-444455556666';
@@ -102,4 +102,46 @@ test('the action filter lists every action by its words, none twice', () => {
   assert.equal(new Set(opts.map((o) => o[0])).size, opts.length);
   for (const [, label] of opts) assert.doesNotMatch(label, /[A-Z]{2,}_/);
   assert.ok(opts.some(([a, l]) => a === 'FINDING_DISMISSED' && l === 'Kept a finding visible'));
+});
+
+test('0019 A2: who shows the recorded name; the system and older records keep their labels', () => {
+  const id = 'a1b2c3d4-0000-4000-8000-000000000099';
+  assert.equal(personName(id, 'Dana Reviewer'), 'Dana Reviewer');
+  assert.equal(personName(id, '  Dana Reviewer  '), 'Dana Reviewer');
+  assert.equal(personName(id, null), 'Person 00000099');
+  assert.equal(personName(id, ''), 'Person 00000099');
+  assert.equal(personName(id, '   '), 'Person 00000099');
+  assert.equal(personName(SYSTEM_ACTOR_ID, 'Someone'), 'LexaVault (automatic)');
+});
+
+test('0019 A2: the record detail shows the recorded name only when there is one', () => {
+  const base = { ...rec('FINDING_CONFIRMED'), id: 'id-1', correlationId: 'c-1', occurredAt: '2026-11-20T10:00:00Z' };
+  const named = recordedFields({ ...base, actorDisplayName: 'Dana Reviewer' });
+  assert.deepEqual(named.slice(3, 5), [['Person', 'Dana Reviewer'], ['Person ID', base.actorId]]);
+  assert.equal(recordedFields({ ...base, actorDisplayName: null }).some(([k]) => k === 'Person'), false);
+  assert.equal(recordedFields(base).some(([k]) => k === 'Person'), false);
+});
+
+test('0019 A2: the Person filter keeps ids as values and shows names where it can', () => {
+  const dana = 'a1b2c3d4-0000-4000-8000-0000000000d1';
+  const old = 'a1b2c3d4-0000-4000-8000-0000000000e2';
+  const twinA = 'a1b2c3d4-0000-4000-8000-0000000000a1';
+  const twinB = 'a1b2c3d4-0000-4000-8000-0000000000b2';
+  const asked = 'a1b2c3d4-0000-4000-8000-0000000000f3';
+  const options = personOptions([
+    { actorId: dana, actorDisplayName: null, occurredAt: '2026-11-01T00:00:00Z' },
+    { actorId: dana, actorDisplayName: 'Dana Old Name', occurredAt: '2026-11-02T00:00:00Z' },
+    { actorId: dana, actorDisplayName: 'Dana Reviewer', occurredAt: '2026-11-03T00:00:00Z' },
+    { actorId: old, actorDisplayName: null, occurredAt: '2026-10-01T00:00:00Z' },
+    { actorId: twinA, actorDisplayName: 'Sam Lee', occurredAt: '2026-11-01T00:00:00Z' },
+    { actorId: twinB, actorDisplayName: 'Sam Lee', occurredAt: '2026-11-01T00:00:00Z' },
+    { actorId: SYSTEM_ACTOR_ID, actorDisplayName: null, occurredAt: '2026-11-01T00:00:00Z' },
+  ], [asked, '', SYSTEM_ACTOR_ID]);
+  assert.deepEqual(options, [
+    { id: dana, label: 'Dana Reviewer' },
+    { id: old, label: 'Person 000000e2' },
+    { id: asked, label: 'Person 000000f3' },
+    { id: twinA, label: 'Sam Lee · 000000a1' },
+    { id: twinB, label: 'Sam Lee · 000000b2' },
+  ]);
 });

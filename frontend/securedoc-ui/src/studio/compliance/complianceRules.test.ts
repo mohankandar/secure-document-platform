@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { capabilitiesFor } from '../../../e2e-oidc/policyCapabilities.ts';
 import {
   complianceEdition, DEFAULT_PERIOD, FALLBACK_FILE_NAME, PERIODS, customRangeProblem, daysInclusive, defaultCustomRange, errorText,
-  fileNameFromDisposition, localToday, presetRange, rangeLabel, requestBody,
+  countQuery, fileNameFromDisposition, localToday, presetRange, rangeLabel, recordCountWords, requestBody,
 } from './complianceRules.ts';
 
 /** UI task U022: the browser's period maths matches CompliancePeriod.java. */
@@ -112,4 +112,21 @@ test('the error words', () => {
   for (const other of [500, 503, 401, undefined]) {
     assert.equal(errorText(other), "The report couldn't be created. Try again. If it keeps failing, tell your IT Administrator.");
   }
+});
+
+test('0019 A1: the count query sends the same period values as the report request', () => {
+  const custom = { from: '2026-11-01', to: '2026-11-19' };
+  assert.deepEqual(countQuery('LAST_QUARTER', custom, 'America/New_York'), { period: 'LAST_QUARTER', timeZone: 'America/New_York' });
+  assert.deepEqual(countQuery('CUSTOM', custom, 'UTC'), { period: 'CUSTOM', from: '2026-11-01', to: '2026-11-19', timeZone: 'UTC' });
+  for (const p of ['LAST_MONTH', 'LAST_QUARTER', 'LAST_YEAR', 'CUSTOM'] as const) {
+    const { includeFullAuditTrail: _ignored, ...report } = requestBody(p, custom, 'Europe/London', 'FULL', true);
+    assert.deepEqual(countQuery(p, custom, 'Europe/London'), report, p);
+  }
+});
+
+test('0019 A1: the record count in words; anything that is not a count shows nothing', () => {
+  assert.deepEqual(recordCountWords(1204), { number: '1,204', unit: 'records' });
+  assert.deepEqual(recordCountWords(1), { number: '1', unit: 'record' });
+  assert.deepEqual(recordCountWords(0), { number: '0', unit: 'records' });
+  for (const odd of [undefined, null, '12', -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) assert.equal(recordCountWords(odd), null, String(odd));
 });

@@ -271,6 +271,9 @@ export interface AuditRecordResult {
   correlationId: string;
   detail?: string;
   occurredAt: string;
+  /** Task 0016: recorded at the time of the action; null for system work and older records. */
+  actorDisplayName?: string | null;
+  caseId?: string | null;
 }
 
 export interface ReviewBoundingBox {

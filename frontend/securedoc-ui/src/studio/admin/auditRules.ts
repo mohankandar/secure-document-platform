@@ -3,9 +3,10 @@
  * browser. What is recorded is never changed: rows only read it as a sentence, and a row opens to show every field
  * exactly as recorded.
  *
- * What the records hold today (see the U011 report): an actor id (no display name or email) and a resource type and
- * id (no loan number). So "Who" shows "LexaVault (automatic)" for the system actor and a short person id otherwise,
- * and "Case" shows a short case id where the record points at a case.
+ * What the records hold (see the U011 report and task 0016): an actor id, and since 0016 the person's display name as
+ * recorded at the time (none for system work and older records), and a resource type and id (no loan number). So
+ * "Who" shows "LexaVault (automatic)" for the system actor, the recorded name where there is one (task 0019 A2), and a
+ * short person id otherwise; "Case" shows a short case id where the record points at a case.
  */
 import { findSensitiveType, sentenceCase } from '../words.ts';
 
@@ -16,6 +17,8 @@ export interface AuditRecordLike {
   resourceId: string;
   outcome: string;
   detail?: string;
+  /** Task 0016: recorded at the time of the action; null for system work and records written before 0016. */
+  actorDisplayName?: string | null;
 }
 
 /* ---------- Toolbar ---------- */
@@ -66,11 +69,41 @@ export function caseSearch(raw: string): { caseId?: string; error?: string } {
 
 export const SYSTEM_ACTOR_NAME = 'LexaVault (automatic)';
 
-/** Who did it: "LexaVault (automatic)", or a short person id until the records carry a name. */
-export function personName(actorId: string | null | undefined): string {
+/**
+ * Who did it: "LexaVault (automatic)" for the system, the name recorded with the record when there is one, otherwise
+ * "Person <last 8 of the id>" (older records carry no name).
+ */
+export function personName(actorId: string | null | undefined, recordedName?: string | null): string {
   if (!actorId) return 'Unknown';
   if (actorId === SYSTEM_ACTOR_ID) return SYSTEM_ACTOR_NAME;
-  return `Person ${shortId(actorId)}`;
+  const name = recordedName?.trim();
+  return name ? name : `Person ${shortId(actorId)}`;
+}
+
+/**
+ * The "Person" filter: one option per person seen in the records (the filter still sends the id). Each shows the
+ * latest name recorded for that id, else "Person <last 8>"; when two ids share a name, the short id is added so the
+ * options stay apart. Sorted by what people read.
+ */
+export function personOptions(records: ReadonlyArray<Pick<AuditRecordLike, 'actorId' | 'actorDisplayName'> & { occurredAt?: string }>,
+  alsoIds: ReadonlyArray<string> = []): Array<{ id: string; label: string }> {
+  const latest = new Map<string, { name: string; at: string }>();
+  const ids = new Set<string>();
+  for (const r of records) {
+    if (!r.actorId || r.actorId === SYSTEM_ACTOR_ID) continue;
+    ids.add(r.actorId);
+    const name = r.actorDisplayName?.trim();
+    const at = r.occurredAt ?? '';
+    const seen = latest.get(r.actorId);
+    if (name && (!seen || at > seen.at)) latest.set(r.actorId, { name, at });
+  }
+  for (const id of alsoIds) if (id && id !== SYSTEM_ACTOR_ID) ids.add(id);
+  const labels = [...ids].map((id) => ({ id, label: personName(id, latest.get(id)?.name) }));
+  const uses = new Map<string, number>();
+  for (const o of labels) uses.set(o.label, (uses.get(o.label) ?? 0) + 1);
+  return labels
+    .map((o) => ((uses.get(o.label) ?? 0) > 1 && latest.has(o.id) ? { id: o.id, label: `${o.label} · ${shortId(o.id)}` } : o))
+    .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
 }
 
 /** The last 8 characters: development and system ids share their leading zeros, so the end is what tells them apart. */
@@ -262,10 +295,13 @@ export function changeLine(r: Pick<AuditRecordLike, 'action' | 'detail'>): strin
 
 /** Every recorded field, in order, exactly as recorded. */
 export function recordedFields(r: AuditRecordLike & { id: string; correlationId: string; occurredAt: string }): Array<[string, string]> {
+  const name = r.actorDisplayName?.trim();
   return [
     ['Time', r.occurredAt],
     ['Action', r.action],
     ['Result', r.outcome],
+    // Task 0019 A2: the name as recorded, only when the record has one.
+    ...(name ? [['Person', name] as [string, string]] : []),
     ['Person ID', r.actorId],
     ['Item type', r.resourceType],
     ['Item ID', r.resourceId],

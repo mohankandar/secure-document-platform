@@ -4,8 +4,8 @@ import { apiClient } from '../../api/client';
 import { Notice } from '../atoms';
 import { useToast } from '../toast';
 import {
-  DEFAULT_PERIOD, PERIODS, SUMMARY_CONTENTS, browserTimeZone, customRangeProblem, defaultCustomRange, errorText,
-  fileNameFromDisposition, localToday, presetRange, rangeLabel, requestBody, type PeriodKey,
+  DEFAULT_PERIOD, PERIODS, SUMMARY_CONTENTS, browserTimeZone, countQuery, customRangeProblem, defaultCustomRange,
+  errorText, fileNameFromDisposition, localToday, presetRange, rangeLabel, recordCountWords, requestBody, type PeriodKey,
 } from './complianceRules';
 import './compliance.css';
 
@@ -57,6 +57,21 @@ function ComplianceReportDialog({ edition, entityName, onClose }: { edition: 'SU
 
   // Focus moves into the dialog on open.
   useEffect(() => { firstFocus.current?.focus(); }, []);
+
+  // Task 0019 A1: the appendix's record count for the chosen period (full edition only). While it loads, or if it
+  // fails, the card shows without a count; an answer for an earlier period is never shown.
+  const [recordCount, setRecordCount] = useState<ReturnType<typeof recordCountWords>>(null);
+  const countFrom = range?.from ?? '';
+  const countTo = range?.to ?? '';
+  useEffect(() => {
+    setRecordCount(null);
+    if (edition !== 'FULL' || !countFrom || !countTo) return;
+    const controller = new AbortController();
+    apiClient.auditRecordCount(countQuery(period, { from: countFrom, to: countTo }, browserTimeZone()), controller.signal)
+      .then((r) => { if (!controller.signal.aborted) setRecordCount(recordCountWords(r?.count)); })
+      .catch(() => { /* no count: the card shows without it */ });
+    return () => controller.abort();
+  }, [edition, period, countFrom, countTo]);
 
   // Wherever focus is while the dialog is open (even on the page behind it), Esc and Tab belong to the dialog.
   const busyRef = useRef(busy);
@@ -175,7 +190,11 @@ function ComplianceReportDialog({ edition, entityName, onClose }: { edition: 'SU
                 <input type="checkbox" checked={fullTrail} disabled={busy} onChange={(e) => setFullTrail(e.target.checked)} />
                 <span>
                   <b>Include full audit trail</b>
-                  <span className="cf-cr-muted">Every record in the period, added as an appendix. Cases appear by case ID only.</span>
+                  <span className="cf-cr-muted" data-testid="cr-trail-note">
+                    Every record in the period, added as an appendix
+                    {recordCount && <> · <span className="cf-mono" data-testid="cr-record-count">{recordCount.number}</span> {recordCount.unit}</>}
+                    . Cases appear by case ID only.
+                  </span>
                 </span>
               </label>
             </>

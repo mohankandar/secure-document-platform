@@ -169,6 +169,22 @@ public final class ComplianceReportService {
         }
     }
 
+    /**
+     * Task 0019 A1: how many rows the full edition's appendix would print for this period: every audit record of the
+     * entity in it, read with the same period rules as {@link #create}. Read-only and not audited.
+     */
+    public long appendixRecordCount(TenantId tenantId, Request request) {
+        Objects.requireNonNull(tenantId);
+        if (request == null) throw new ValidationException("A period is required");
+        ZoneId zone = CompliancePeriod.zone(request.timeZone());
+        CompliancePeriod period = CompliancePeriod.resolve(CompliancePeriod.type(request.period()), request.from(),
+                request.to(), zone, clock);
+        return readPort.count(tenantId, ALL_RECORDS, period.start(), period.endExclusive());
+    }
+
+    /** No action, outcome, actor or resource filter: exactly the records {@code forEachRecord} reads. */
+    static final ActivityQuery ALL_RECORDS = new ActivityQuery(Set.of(), Set.of(), false, null);
+
     /** Records a refused request: the person's role does not allow {@code requested}. */
     public void recordRefused(AuthenticatedPrincipal principal, CorrelationId correlationId, ComplianceEdition requested) {
         auditService.recordDenied(principal.tenantId(), principal.actorId(), AuditAction.COMPLIANCE_REPORT_CREATED,

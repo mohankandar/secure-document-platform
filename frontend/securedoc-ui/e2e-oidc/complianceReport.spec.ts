@@ -74,7 +74,12 @@ function reports() {
 }
 
 type Answer = { status: number; delayMs?: number };
-type Mock = { bodies: unknown[]; answer: Answer; release?: () => void };
+type Mock = {
+  bodies: unknown[]; answer: Answer; release?: () => void;
+  /** Task 0019 A1: GET /audit-records/count. Each request's query, and the answer by period. */
+  countQueries?: Array<Record<string, string>>;
+  count?: (q: Record<string, string>) => { status: number; body?: unknown; delayMs?: number };
+};
 
 async function mockApi(page: Page, role: string, mock: Mock) {
   const capabilities = capabilitiesFor(role);
@@ -88,6 +93,13 @@ async function mockApi(page: Page, role: string, mock: Mock) {
     }
     if (url.pathname === '/api/v1/operations/reports') return json(reports());
     if (url.pathname === '/api/v1/audit-records') return json([]);
+    if (url.pathname === '/api/v1/audit-records/count') {
+      const q = Object.fromEntries(url.searchParams.entries());
+      mock.countQueries?.push(q);
+      const answer = mock.count ? mock.count(q) : { status: 404, body: {} };
+      if (answer.delayMs) await new Promise((resolve) => setTimeout(resolve, answer.delayMs));
+      return json(answer.body ?? {}, answer.status);
+    }
     if (url.pathname === '/api/v1/compliance-reports' && request.method() === 'POST') {
       mock.bodies.push(request.postDataJSON());
       if (mock.answer.delayMs) await new Promise<void>((resolve) => { mock.release = resolve; setTimeout(resolve, mock.answer.delayMs); });
@@ -239,6 +251,55 @@ test('IT Administrator: the full trail is ticked by default and can be unticked;
     { period: 'LAST_YEAR', timeZone: timeZone(), includeFullAuditTrail: true },
     { period: 'LAST_MONTH', timeZone: timeZone(), includeFullAuditTrail: false },
   ]);
+});
+
+test('0019 A1: the full trail card shows "· N records" for the chosen period; none while loading, on failure or for the summary', async ({ page }) => {
+  const mock: Mock = {
+    ...newMock(), countQueries: [],
+    count: (q) => q.period === 'LAST_QUARTER' ? { status: 200, body: { count: 1204 } }
+      : q.period === 'LAST_YEAR' ? { status: 200, body: { count: 1 }, delayMs: 1500 }
+      : q.period === 'LAST_MONTH' ? { status: 500, body: { message: 'x' } }
+      : { status: 200, body: { count: 37 } },
+  };
+  await openAudit(page, 'TENANT_IT_ADMIN', mock);
+  await button(page).click();
+  const d = dialog(page);
+  const note = d.getByTestId('cr-trail-note');
+  await expect(note).toHaveText('Every record in the period, added as an appendix · 1,204 records. Cases appear by case ID only.');
+  await expect(d.getByTestId('cr-record-count')).toHaveText('1,204');
+  expect(await d.getByTestId('cr-record-count').evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/mono/i);
+  expect(mock.countQueries![0]).toEqual({ period: 'LAST_QUARTER', timeZone: timeZone() });
+
+  // While the next period's count loads, the card shows without a count (never the old one).
+  await d.getByRole('button', { name: 'Last year' }).click();
+  await expect(note).toHaveText('Every record in the period, added as an appendix. Cases appear by case ID only.');
+  await expect(note).toHaveText('Every record in the period, added as an appendix · 1 record. Cases appear by case ID only.');
+
+  // A failed count: the card without it.
+  await d.getByRole('button', { name: 'Last month' }).click();
+  await expect.poll(() => mock.countQueries!.some((q) => q.period === 'LAST_MONTH')).toBe(true);
+  await expect(note).toHaveText('Every record in the period, added as an appendix. Cases appear by case ID only.');
+
+  // Custom sends from and to; an invalid range asks for nothing.
+  await d.getByRole('button', { name: 'Custom' }).click();
+  await d.getByLabel('From').fill('2024-01-01');
+  await d.getByLabel('To').fill('2024-01-31');
+  await expect(d.getByTestId('cr-record-count')).toHaveText('37');
+  expect(mock.countQueries!.at(-1)).toEqual({ period: 'CUSTOM', from: '2024-01-01', to: '2024-01-31', timeZone: timeZone() });
+  const asked = mock.countQueries!.length;
+  await d.getByLabel('To').fill('2025-06-01');
+  await expect(d.getByText('The period can be at most 366 days.')).toBeVisible();
+  await expect(note).toHaveText('Every record in the period, added as an appendix. Cases appear by case ID only.');
+  expect(mock.countQueries!.length).toBe(asked);
+});
+
+test('0019 A1: the summary edition never asks for the record count', async ({ page }) => {
+  const mock: Mock = { ...newMock(), countQueries: [], count: () => ({ status: 200, body: { count: 5 } }) };
+  await openReports(page, 'BUSINESS_ADMIN', mock);
+  await button(page).click();
+  await expect(dialog(page).getByRole('button', { name: 'Create PDF' })).toBeEnabled();
+  await page.waitForTimeout(300);
+  expect(mock.countQueries).toEqual([]);
 });
 
 test('Custom: From and To in one row; a range ending today or over 366 days says why and disables Create PDF', async ({ page }) => {

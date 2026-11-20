@@ -779,6 +779,12 @@ class ApiClient {
     return { pdf: await response.blob(), disposition: response.headers.get('content-disposition') };
   }
 
+  /** Task 0019 A1: how many records the full audit trail appendix would print for the period. */
+  async auditRecordCount(query: Record<string, string>, signal?: AbortSignal): Promise<{ count: number }> {
+    const params = new URLSearchParams(query);
+    return this.request(`/audit-records/count?${params.toString()}`, { cache: 'no-store', signal });
+  }
+
   async exportAuditRecords(filters: Record<string, string>, format: 'csv' | 'json'): Promise<Blob> {
     const params = new URLSearchParams({ ...filters, format });
     const response = await fetch(`${this.baseUrl}/audit-records/export?${params.toString()}`, { headers: await baseHeaders() });

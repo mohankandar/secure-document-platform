@@ -8,7 +8,7 @@ import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { SelectField, TextField, when } from './shared';
 import {
-  AUDIT_TYPES, PERIODS, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName,
+  AUDIT_TYPES, PERIODS, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName, personOptions,
   recordedFields, resultWord, shortId, whatHappened, type AuditTypeKey, type PeriodKey,
 } from './auditRules';
 import { ComplianceReportButton } from '../compliance/ComplianceReport';
@@ -88,13 +88,9 @@ export default function AuditArea({ caps, entityName }: { caps: string[]; entity
   const moreCount = MORE_KEYS.filter((k) => Boolean(applied[k])).length;
   const anyFilter = moreCount > 0 || Boolean(caseFilter) || type !== 'MEANINGFUL' || period !== '7d';
 
-  /* Person: the system, or anyone seen in the results (the records hold no names yet). */
-  const people = useMemo(() => {
-    const ids = new Set<string>();
-    for (const r of data ?? []) if (r.actorId && r.actorId !== SYSTEM_ACTOR_ID) ids.add(r.actorId);
-    if (applied.actorId && applied.actorId !== SYSTEM_ACTOR_ID) ids.add(applied.actorId);
-    return [...ids].sort();
-  }, [data, applied.actorId]);
+  /* Person: the system, or anyone seen in the results, by the name recorded where there is one (task 0019 A2). The
+     filter still sends the id. */
+  const people = useMemo(() => personOptions(data ?? [], [applied.actorId]), [data, applied.actorId]);
 
   function choosePerson(actorId: string) {
     setDraft((d) => ({ ...d, actorId }));
@@ -174,7 +170,7 @@ export default function AuditArea({ caps, entityName }: { caps: string[]; entity
           <select aria-label="Person" value={applied.actorId} onChange={(e) => choosePerson(e.target.value)}>
             <option value="">Person: anyone</option>
             <option value={SYSTEM_ACTOR_ID}>LexaVault (automatic)</option>
-            {people.map((id) => <option key={id} value={id}>{personName(id)}</option>)}
+            {people.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </label>
         <label className="cf-ad-audit-pick">
@@ -265,7 +261,7 @@ export default function AuditArea({ caps, entityName }: { caps: string[]; entity
                         </button>
                         {change && <span className="cf-ad-audit-change">{change}</span>}
                       </td>
-                      <td>{personName(r.actorId)}</td>
+                      <td>{personName(r.actorId, r.actorDisplayName)}</td>
                       <td>{c ? <code className="cf-mono" title={c}>{shortId(c)}</code> : <span className="cf-muted">—</span>}</td>
                       <td><span className="cf-ad-audit-result" data-tone={result.tone}>{result.word}</span></td>
                     </tr>

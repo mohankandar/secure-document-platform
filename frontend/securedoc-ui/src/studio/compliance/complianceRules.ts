@@ -145,6 +145,22 @@ export function requestBody(period: PeriodKey, custom: { from: Day; to: Day }, t
   return body;
 }
 
+/**
+ * Task 0019 A1: the query for GET /audit-records/count, the same period values the report request sends, so the
+ * count is the appendix's row count. `from` and `to` only for Custom.
+ */
+export function countQuery(period: PeriodKey, custom: { from: Day; to: Day }, timeZone: string): Record<string, string> {
+  const q: Record<string, string> = { period, timeZone };
+  if (period === 'CUSTOM') { q.from = custom.from; q.to = custom.to; }
+  return q;
+}
+
+/** The count after "added as an appendix": "1,204 records", "1 record". Anything that is not a count gives null. */
+export function recordCountWords(count: unknown): { number: string; unit: string } | null {
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) return null;
+  return { number: count.toLocaleString('en-US'), unit: count === 1 ? 'record' : 'records' };
+}
+
 export const FALLBACK_FILE_NAME = 'compliance-report.pdf';
 
 /**
