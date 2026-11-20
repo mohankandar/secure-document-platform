@@ -128,3 +128,10 @@ Not pushed, not merged.
 ## Suggested next step
 
 Owner's answers to Q1–Q4, then the short accessibility statement from the conformance table.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Light control edge: use `#828993`, so 3:1 holds against the control, the page and the period strip.
+2. "/" on Cases: scope it to the case list, like J and K.
+3. Chooser words: "Choose an entity" (heading) and "Choose an entity to continue" (text), text only.
+4. OIDC continuity script: update it for the Case File screens in U028; the owner runs it once with the test user's password, typed into the command, never into a chat.
