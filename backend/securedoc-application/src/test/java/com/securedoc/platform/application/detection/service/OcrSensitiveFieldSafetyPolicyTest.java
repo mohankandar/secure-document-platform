@@ -107,7 +107,7 @@ class OcrSensitiveFieldSafetyPolicyTest {
         int start = text.indexOf("768");
         DetectedEntity existing = new DetectedEntity(
                 "CREDIT_SCORE", 15, start, start + 3, 0.90,
-                "***", "existing-detector", "test");
+                "existing-detector", "test");
         PageText page = new PageText(15, 612, 792, text, List.of(), ExtractionSource.OCR, 0.96);
 
         var result = policy.evaluate(Map.of(15, page), List.of(existing), enabled);
@@ -151,7 +151,7 @@ class OcrSensitiveFieldSafetyPolicyTest {
         int start = text.indexOf("768");
         DetectedEntity existing = new DetectedEntity(
                 "CREDIT_SCORE", 15, start, start + 3, 0.70,
-                "***", "semantic", "test");
+                "semantic", "test");
 
         var result = policy.evaluate(Map.of(15, ocrPage(15, text)), List.of(existing), enabled);
 
@@ -332,7 +332,7 @@ class OcrSensitiveFieldSafetyPolicyTest {
     private DetectedEntity entity(String text, String type, String value) {
         int start = text.indexOf(value);
         return new DetectedEntity(type, 15, start, start + value.length(), 0.90,
-                "***", "existing-detector", "test");
+                "existing-detector", "test");
     }
 
     private PageText ocrPage(int pageNumber, String text) {

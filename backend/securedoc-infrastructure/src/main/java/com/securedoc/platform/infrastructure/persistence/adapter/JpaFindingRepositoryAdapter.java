@@ -80,7 +80,6 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
         entity.setConfidence(finding.confidence().value());
         entity.setDetectorName(finding.detectorSource().detectorName());
         entity.setDetectorVersion(finding.detectorSource().version());
-        entity.setSnippet(finding.snippet());
         persistBoundingBox(finding.location(), entity);
         entity.setStatus(finding.status().name());
         entity.setDetectedAt(finding.detectedAt());
@@ -91,7 +90,6 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
     private void updateEntity(Finding finding, FindingEntity entity) {
         entity.setStatus(finding.status().name());
         entity.setUpdatedAt(finding.updatedAt());
-        entity.setSnippet(finding.snippet());
         persistBoundingBox(finding.location(), entity);
     }
 
@@ -121,7 +119,6 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
                 location,
                 Confidence.of(entity.getConfidence()),
                 new DetectorSource(entity.getDetectorName(), entity.getDetectorVersion()),
-                entity.getSnippet(),
                 entity.getDetectedAt(),
                 FindingStatus.valueOf(entity.getStatus()),
                 List.of(), // evidence history not persisted in this table

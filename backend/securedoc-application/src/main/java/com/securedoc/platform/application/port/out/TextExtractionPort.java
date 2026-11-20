@@ -130,6 +130,13 @@ public interface TextExtractionPort {
         public PageText(int pageNumber, int width, int height, String text) {
             this(pageNumber, width, height, text, List.of());
         }
+
+        /** No page text: it holds the values being redacted (task 0015). */
+        @Override
+        public String toString() {
+            return "PageText[pageNumber=" + pageNumber + ", source=" + source
+                    + ", characters=" + text.length() + ", spans=" + spans.size() + "]";
+        }
     }
 
     /**

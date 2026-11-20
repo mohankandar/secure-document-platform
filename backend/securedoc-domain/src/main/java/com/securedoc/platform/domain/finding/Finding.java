@@ -16,6 +16,9 @@ import java.util.Objects;
  * Entity representing a detected sensitive-data finding within a document.
  * Tracks detection confidence, location, and review decisions.
  * Tenant-scoped: all findings belong to a specific tenant.
+ *
+ * <p>A finding never holds the found value, in full, masked or in part (task 0015): only its
+ * type, location, confidence, detector and review decisions.
  */
 public final class Finding {
 
@@ -26,7 +29,6 @@ public final class Finding {
     private FindingLocation location;
     private final Confidence confidence;
     private final DetectorSource detectorSource;
-    private final String snippet;
     private final Instant detectedAt;
     private FindingStatus status;
     private final List<EvidenceRecord> evidenceHistory;
@@ -34,7 +36,7 @@ public final class Finding {
 
     private Finding(FindingId id, TenantId tenantId, DocumentId documentId, EntityType entityType,
                     FindingLocation location, Confidence confidence,
-                    DetectorSource detectorSource, String snippet, Instant detectedAt) {
+                    DetectorSource detectorSource, Instant detectedAt) {
         this.id = id;
         this.tenantId = tenantId;
         this.documentId = documentId;
@@ -42,7 +44,6 @@ public final class Finding {
         this.location = location;
         this.confidence = confidence;
         this.detectorSource = detectorSource;
-        this.snippet = snippet;
         this.detectedAt = detectedAt;
         this.status = FindingStatus.DETECTED;
         this.evidenceHistory = new ArrayList<>();
@@ -51,7 +52,7 @@ public final class Finding {
 
     public static Finding create(TenantId tenantId, DocumentId documentId, EntityType entityType,
                                   FindingLocation location, Confidence confidence,
-                                  DetectorSource detectorSource, String snippet) {
+                                  DetectorSource detectorSource) {
         Objects.requireNonNull(tenantId, "TenantId must not be null");
         Objects.requireNonNull(documentId, "DocumentId must not be null");
         Objects.requireNonNull(entityType, "EntityType must not be null");
@@ -60,16 +61,16 @@ public final class Finding {
         Objects.requireNonNull(detectorSource, "DetectorSource must not be null");
 
         return new Finding(FindingId.generate(), tenantId, documentId, entityType, location,
-                confidence, detectorSource, snippet, Instant.now());
+                confidence, detectorSource, Instant.now());
     }
 
     public static Finding reconstitute(FindingId id, TenantId tenantId, DocumentId documentId,
                                         EntityType entityType, FindingLocation location,
                                         Confidence confidence, DetectorSource detectorSource,
-                                        String snippet, Instant detectedAt, FindingStatus status,
+                                        Instant detectedAt, FindingStatus status,
                                         List<EvidenceRecord> evidenceHistory, Instant updatedAt) {
         Finding finding = new Finding(id, tenantId, documentId, entityType, location, confidence,
-                detectorSource, snippet, detectedAt);
+                detectorSource, detectedAt);
         finding.status = status;
         finding.evidenceHistory.addAll(evidenceHistory);
         finding.updatedAt = updatedAt;
@@ -157,10 +158,6 @@ public final class Finding {
 
     public DetectorSource detectorSource() {
         return detectorSource;
-    }
-
-    public String snippet() {
-        return snippet;
     }
 
     public Instant detectedAt() {

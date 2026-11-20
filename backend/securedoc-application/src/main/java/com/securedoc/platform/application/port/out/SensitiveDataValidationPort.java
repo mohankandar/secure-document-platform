@@ -26,6 +26,12 @@ public interface SensitiveDataValidationPort {
                 contextText = "";
             }
         }
+
+        /** Type only: a stray log line must never print the candidate value (task 0015). */
+        @Override
+        public String toString() {
+            return "Candidate[entityType=" + entityType + "]";
+        }
     }
 
     enum ValidationOutcome {

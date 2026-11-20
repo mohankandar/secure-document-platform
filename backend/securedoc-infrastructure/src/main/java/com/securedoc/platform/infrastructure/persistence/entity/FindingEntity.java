@@ -44,9 +44,6 @@ public class FindingEntity {
     @Column(name = "detector_version")
     private String detectorVersion;
 
-    @Column(name = "snippet")
-    private String snippet;
-
     @Column(name = "bbox_left")
     private Double bboxLeft;
 
@@ -106,9 +103,6 @@ public class FindingEntity {
 
     public String getDetectorVersion() { return detectorVersion; }
     public void setDetectorVersion(String detectorVersion) { this.detectorVersion = detectorVersion; }
-
-    public String getSnippet() { return snippet; }
-    public void setSnippet(String snippet) { this.snippet = snippet; }
 
     public Double getBboxLeft() { return bboxLeft; }
     public void setBboxLeft(Double bboxLeft) { this.bboxLeft = bboxLeft; }

@@ -58,6 +58,13 @@ public interface OcrPort {
                 throw new IllegalArgumentException("OCR confidence must be between 0.0 and 1.0");
             }
         }
+
+        /** No OCR text: it holds the values being redacted (task 0015). */
+        @Override
+        public String toString() {
+            return "OcrPageOutput[characters=" + text.length() + ", spans=" + spans.size()
+                    + ", confidence=" + confidence + "]";
+        }
     }
 
     record OcrTextSpan(

@@ -230,7 +230,8 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         }
 
         try {
-            JsonNode envelope = objectMapper.readTree(response.body());
+            JsonNode envelope = SensitiveContentResponseParser.readTreeWithoutEcho(
+                    objectMapper, response.body(), "Invalid provider envelope");
             JsonNode choices = envelope.path("choices");
             String content = choices.isArray() && choices.size() > 0
                     ? choices.get(0).path("message").path("content").asText(null)
@@ -245,7 +246,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
             throw e;
         } catch (IOException e) {
             throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
-                    "AI provider response could not be processed", e);
+                    "AI provider response could not be processed", null);
         }
     }
 

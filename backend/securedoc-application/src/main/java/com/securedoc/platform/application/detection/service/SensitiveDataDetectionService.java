@@ -332,7 +332,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
             located.add(new DetectedEntity(
                     discovery.entityType(), discovery.pageNumber(), offsets[0], offsets[1],
-                    effectiveConfidence, "***", discovery.analyzerName(), analyzerVersion));
+                    effectiveConfidence, discovery.analyzerName(), analyzerVersion));
         }
         return new SemanticResolution(located, unlocated);
     }
@@ -365,8 +365,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     document.tenantId(), document.id(), candidate.entityType(),
                     FindingLocation.unlocated(candidate.pageNumber()),
                     Confidence.of(candidate.confidence()),
-                    new DetectorSource(candidate.detectorName(), candidate.detectorVersion()),
-                    "***"));
+                    new DetectorSource(candidate.detectorName(), candidate.detectorVersion())));
         }
         return findings;
     }
@@ -380,8 +379,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     document.tenantId(), document.id(), signal.entityType(),
                     FindingLocation.unlocated(signal.pageNumber()),
                     Confidence.of(signal.confidence()),
-                    new DetectorSource("ocr-sensitive-field-guard", "1.4.0;unresolved-field"),
-                    "***"));
+                    new DetectorSource("ocr-sensitive-field-guard", "1.4.0;unresolved-field")));
         }
         return findings;
     }
@@ -476,8 +474,6 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 confidence = Math.min(1.0, confidence + AGREEMENT_CONFIDENCE_BOOST);
             }
 
-            String preview = !"***".equals(existing.maskedPreview())
-                    ? existing.maskedPreview() : candidate.maskedPreview();
             String sourceName = independentAgreement
                     ? existing.detectorName() + "+" + candidate.detectorName()
                     : existing.detectorName();
@@ -486,7 +482,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     existing.entityType(), existing.pageNumber(),
                     Math.min(existing.startOffset(), candidate.startOffset()),
                     Math.max(existing.endOffset(), candidate.endOffset()),
-                    confidence, preview, sourceName, "merged-v1"));
+                    confidence, sourceName, "merged-v1"));
         }
         return merged;
     }
@@ -546,8 +542,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             findings.add(Finding.create(
                     document.tenantId(), document.id(), entityType, location,
                     Confidence.of(effectiveConfidence),
-                    new DetectorSource(entity.detectorName(), entity.detectorVersion()),
-                    entity.maskedPreview()));
+                    new DetectorSource(entity.detectorName(), entity.detectorVersion())));
         }
         return findings;
     }

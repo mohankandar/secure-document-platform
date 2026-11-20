@@ -204,7 +204,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         }
         Finding finding = Finding.create(command.tenantId(), command.documentId(), command.entityType(),
                 FindingLocation.withBounds(command.pageNumber(), 0, 0, box), Confidence.full(),
-                DetectorSource.of(MANUAL_DETECTOR, MANUAL_DETECTOR_VERSION), null);
+                DetectorSource.of(MANUAL_DETECTOR, MANUAL_DETECTOR_VERSION));
         finding.confirm(command.actorId(), "Business user selected manual redaction region");
         findingRepository.save(finding);
 

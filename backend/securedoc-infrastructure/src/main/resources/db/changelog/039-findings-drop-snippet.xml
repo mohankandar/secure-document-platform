@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0015 (owner approved 2026-11-19): no redacted value is ever saved by the application.
+        findings.snippet held a partly masked preview of the found value (for example the last 4
+        digits of an SSN or card number). Nothing read it. Clear every value first, then drop the
+        column. There is deliberately no rollback that brings values back.
+    -->
+    <changeSet id="039-01-findings-clear-snippet" author="securedoc">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="findings" columnName="snippet"/>
+        </preConditions>
+        <update tableName="findings">
+            <column name="snippet" valueComputed="NULL"/>
+            <where>snippet IS NOT NULL</where>
+        </update>
+        <rollback>
+            <!-- Cleared values are gone for good; nothing to restore. -->
+        </rollback>
+    </changeSet>
+
+    <changeSet id="039-02-findings-drop-snippet" author="securedoc">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="findings" columnName="snippet"/>
+        </preConditions>
+        <dropColumn tableName="findings" columnName="snippet"/>
+        <rollback>
+            <!-- Recreates an empty column only; no value is ever restored. -->
+            <addColumn tableName="findings">
+                <column name="snippet" type="VARCHAR(255)"/>
+            </addColumn>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

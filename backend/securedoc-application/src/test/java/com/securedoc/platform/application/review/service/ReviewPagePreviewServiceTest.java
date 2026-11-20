@@ -105,7 +105,7 @@ class ReviewPagePreviewServiceTest {
     private static Finding finding(TenantId tenantId, DocumentId documentId,
                                    EntityType type, FindingLocation location) {
         return Finding.create(tenantId, documentId, type, location, Confidence.of(0.95),
-                DetectorSource.of("test"), null);
+                DetectorSource.of("test"));
     }
 
     private static final class CapturingRenderer implements ReviewPageRenderPort {
