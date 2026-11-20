@@ -104,7 +104,8 @@ export default function Desk({ caps }: { caps: string[] }) {
         if (event.key === 'Escape' && target === searchRef.current) searchRef.current?.blur();
         return;
       }
-      if (event.key === '/') { event.preventDefault(); searchRef.current?.focus(); return; }
+      // U028 (WCAG 2.1.4): "/" works only while focus is in the case list, like J and K; it moves focus to the filter.
+      if (event.key === '/' && target.closest(CASES_KEY_ZONE)) { event.preventDefault(); searchRef.current?.focus(); return; }
       if (event.key === 'Escape' && caseId) { navigate('/'); return; }
       // U027 (WCAG 2.1.4): J and K work only while focus is in the case list; focus moves with them.
       if ((event.key === 'j' || event.key === 'k') && target.closest(CASES_KEY_ZONE)) {

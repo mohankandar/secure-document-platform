@@ -451,7 +451,7 @@ export default function App() {
   }
 
   if (!localMode && switchingTenant && !currentUser) {
-    return <AuthScreen title={CHOOSE_ENTITY_TITLE}><h1>{PRODUCT_NAME}</h1><p role="status">Switching organization…</p></AuthScreen>;
+    return <AuthScreen title={CHOOSE_ENTITY_TITLE}><h1>{PRODUCT_NAME}</h1><p role="status">Switching entity…</p></AuthScreen>;
   }
 
   if (!localMode && !currentUser && tenantChoices.length > 1 && getAccessToken()) {
@@ -462,8 +462,8 @@ export default function App() {
     };
     return (
       <AuthScreen title={CHOOSE_ENTITY_TITLE}>
-        <h1>Select organization</h1>
-        <p>Select an organization that your identity is authorized to access.</p>
+        <h1>Choose an entity</h1>
+        <p>Choose an entity to continue.</p>
         {authError && <div className="ui-alert tone-danger">{authError}</div>}
         {tenantChoices.map((choice) => (
           <button className="ui-button secondary" key={choice.tenantId} type="button"
