@@ -82,3 +82,10 @@ On `feature/ui-compliance-report`: **`844bffb`** (code, tests and this report), 
 1. **Record count.** Shall the backend get a small count endpoint (for example `GET /api/v1/audit-records/count` with the same period rules as the appendix) so the card can show "· N records" as on the canvas? It is a read-only backend change with no schema change.
 2. **Identity refusals.** `SecurityContextException` 403s (sign-in identity not admitted to the entity) are still not recorded, because there is no confirmed person or entity. Keep it that way?
 3. **Audit trail toolbar.** Export and Compliance report are now one group at the right of the toolbar, as on the canvas. At 1440 the group sits on its own line under the filters, at the right. OK?
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Record count: yes, add a small read-only backend count so the card shows "· N records" (task 0019).
+2. Identity refusals before a person or entity is known: keep them unrecorded in the audit trail.
+3. Audit trail toolbar with Export and Compliance report on their own line at the right: OK.
+4. Design chat review: the Audit trail "Who" column shows "Person 00000099" for new records. It should show the recorded display name (0016) and keep the current label for older records without one (task 0019).
