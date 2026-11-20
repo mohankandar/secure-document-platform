@@ -198,7 +198,8 @@ All are per entity, for Reports' own period and source/outcome filters. They com
 - **Docs:** this task and this report.
 
 ## Commits
-COMMIT_LINE
+- `90d1fcb` feat: 0020 safe policy follow-ups and the time saved numbers (code, tests, scripts, task and report)
+- the next commit: this hash recorded in the report
 
 Not pushed, not merged. `docs/work/0021-task.md` appeared during this task and is left untracked; it is not part of this commit.
 
