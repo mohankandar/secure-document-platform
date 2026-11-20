@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.compliance;
 
+import com.securedoc.platform.infrastructure.operations.ReportingCaseRules;
 import com.securedoc.platform.application.audit.query.AuditRecordSummary;
 import com.securedoc.platform.application.port.out.ComplianceReportReadPort;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -117,6 +118,11 @@ public class JpaComplianceReportReadAdapter implements ComplianceReportReadPort 
         return new RetentionCounts(number(due[0]), number(due[1]), number(still));
     }
 
+    /** "Finished by hand": delivered in the period, by the shared rule in {@link ReportingCaseRules}. */
+    static final String FINISHED_BY_HAND_SQL = "select count(*) from reporting_package_facts f"
+            + " where f.tenant_id=:tenant and f.first_delivered_at>=:start and f.first_delivered_at<:end"
+            + " and " + ReportingCaseRules.FINISHED_BY_HAND;
+
     @Override
     public CaseCounts cases(TenantId tenantId, Instant start, Instant endExclusive) {
         Object[] received = row(entityManager.createNativeQuery("""
@@ -127,14 +133,7 @@ public class JpaComplianceReportReadAdapter implements ComplianceReportReadPort 
                  where f.tenant_id=:tenant and f.received_at>=:start and f.received_at<:end
                 """).setParameter("tenant", tenantId.value()).setParameter("start", start)
                 .setParameter("end", endExclusive).getSingleResult());
-        Object byHand = entityManager.createNativeQuery("""
-                select count(*) from reporting_package_facts f
-                 where f.tenant_id=:tenant and f.first_delivered_at>=:start and f.first_delivered_at<:end
-                   and exists (select 1 from audit_records a
-                                where a.tenant_id=f.tenant_id and a.action='BUSINESS_MANUAL_FALLBACK_SUBMITTED'
-                                  and a.outcome='SUCCESS' and a.resource_type='DocumentPackage'
-                                  and a.resource_id=cast(f.package_id as text))
-                """).setParameter("tenant", tenantId.value()).setParameter("start", start)
+        Object byHand = entityManager.createNativeQuery(FINISHED_BY_HAND_SQL).setParameter("tenant", tenantId.value()).setParameter("start", start)
                 .setParameter("end", endExclusive).getSingleResult();
         return new CaseCounts(number(received[0]), number(received[1]), number(byHand));
     }

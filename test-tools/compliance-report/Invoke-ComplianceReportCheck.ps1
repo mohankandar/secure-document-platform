@@ -363,7 +363,7 @@ try {
 
     # --- 0020 B1: "What LexaVault did for you" on hand-made facts --------------------------------
     # Delivered in the period: C1 (no person), C2 (reviewed), C3 (reviewed, finished by hand), C6 (not reviewed but
-    # finished by hand: Reports counts it as "No review needed", the new tile does not). C4 rejected, C5 open.
+    # finished by hand: U024 step 0 leaves it out of "No review needed" too, so both count C1 only). C4 rejected, C5 open.
     Fact $cases['C1'] 'page_count=121, document_count=3'
     Fact $cases['C2'] 'page_count=40, document_count=2'
     Fact $cases['C3'] 'page_count=25, document_count=1'
@@ -399,9 +399,9 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
     $ts = (& $invokeApi -Method GET -Path "/api/v1/operations/reports?from=$($from)T00:00:00Z&to=$($today.AddDays(-30).ToString('yyyy-MM-dd'))T00:00:00Z" -Roles 'REPORT_VIEWER')
     $t = $ts.timeSaved
     Check '0020 B1: cases = Reports "Delivered"' ($t.casesDelivered -eq 4 -and $t.casesDelivered -eq $ts.executive.delivered) "cases=$($t.casesDelivered) delivered=$($ts.executive.delivered)"
-    Check '0020 B1: handled without a person = "No review needed" minus the unreviewed cases finished by hand' `
-        ($t.casesNoPerson -eq 1 -and $t.casesNoPerson -eq $ts.usage.straightThroughPackages - $unreviewedByHand) `
-        "noPerson=$($t.casesNoPerson) straight=$($ts.usage.straightThroughPackages) unreviewedByHand=$unreviewedByHand"
+    Check 'U024 step 0: "No review needed" = handled without a person, also with an unreviewed case finished by hand' `
+        ($unreviewedByHand -eq 1 -and $t.casesNoPerson -eq 1 -and $t.casesNoPerson -eq $ts.usage.straightThroughPackages -and $ts.executive.straightThroughRate -eq 25 -and $ts.serviceLevel.straightThroughActualPercent -eq 25) `
+        "noPerson=$($t.casesNoPerson) straight=$($ts.usage.straightThroughPackages) rate=$($ts.executive.straightThroughRate) target=$($ts.serviceLevel.straightThroughActualPercent) unreviewedByHand=$unreviewedByHand"
     Check '0020 B1: percent rounded down (1 of 4 = 25)' ($t.percentNoPerson -eq 25) "percent=$($t.percentNoPerson)"
     Check '0020 B1: pages and documents of the delivered cases only (121+40+25+15, 3+2+1+1)' ($t.pagesChecked -eq 201 -and $t.documentsChecked -eq 7) "pages=$($t.pagesChecked) documents=$($t.documentsChecked)"
     Check '0020 B1: sensitive items redacted = CONFIRMED or REDACTED findings in delivered cases' `
@@ -418,7 +418,7 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
         ($empty | ConvertTo-Json -Compress)
 
     # Independent expectations, straight from the seeded tables.
-    $expect = [ordered]@{ received = 6; delivered = 4; rejected = 1; open = 1; straight = 2; reviewed = 2; byHand = 2
+    $expect = [ordered]@{ received = 6; delivered = 4; rejected = 1; open = 1; straight = 1; reviewed = 2; byHand = 2
         due = 3; onTime = 1; late = 2; stillWithin = 1; policyChanges = $policyChangeCount; lifecycleChanges = 2; findings = 3
         approved = 1; originals = 2; exports = 2; compliance = 0; refused = 2 }
     $fromInstant = "$($from)T00:00:00Z"; $toInstant = "$($today.AddDays(-30).ToString('yyyy-MM-dd'))T00:00:00Z"
@@ -490,7 +490,7 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
     $s = Flat $texts['SUMMARY']
     $expectedLines = @(
         "Received $($expect.received) 100%", "Delivered $($expect.delivered) 67%",
-        "Still open on $endWords $($expect.open) 17%", "No review needed $($expect.straight) 50%", "Checked by a reviewer $($expect.reviewed) 50%",
+        "Still open on $endWords $($expect.open) 17%", "No review needed $($expect.straight) 25%", "Checked by a reviewer $($expect.reviewed) 50%",
         "Finished by hand after a processing stop $($expect.byHand) 50%",
         # 0020 B4: "What LexaVault did for you" at the end of section 3 (time saved with 2.5, the setting at the period end).
         "WHAT LEXAVAULT DID FOR YOU NUMBER SHARE", "Handled without a person 1 25%", "Pages checked (in 7 documents) 201", "Sensitive items redacted 4",

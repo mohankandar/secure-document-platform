@@ -260,7 +260,6 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         long periodIntakeDelivered = number(periodVolumes[5]);
         long reviewed = number(automation[1]);
         long deliveredSample = number(automation[0]);
-        long straightThrough = Math.max(0, deliveredSample - reviewed);
         long documents = number(periodVolumes[1]);
         long pages = number(periodVolumes[2]);
 
@@ -271,6 +270,10 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         int reviewWaitTargetMinutes = ((Number) reportingSettings[3]).intValue();
         int reviewWaitTargetPercent = ((Number) reportingSettings[4]).intValue();
         double minutesPerPage = ((Number) reportingSettings[5]).doubleValue();
+
+        // U024 step 0: "No review needed" is "Handled without a person", by the one rule in ReportingCaseRules.
+        OperationalReportSnapshot.TimeSaved timeSaved = timeSaved(tenant, from, to, source, outcome, minutesPerPage);
+        long straightThrough = timeSaved.casesNoPerson();
 
         Query deliverySlaQuery = entityManager.createNativeQuery("""
                 select count(*) filter (where f.first_delivered_at is not null and f.first_delivered_at<:to),
@@ -342,7 +345,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                         reviewWaitTargetMinutes, reviewWaitTargetPercent, percent(reviewWithinTarget, reviewEligible),
                         reviewEligible, Math.max(0, reviewEligible - reviewWithinTarget)),
                 dimensions,
-                timeSaved(tenant, from, to, source, outcome, minutesPerPage)
+                timeSaved
         );
     }
 
@@ -361,18 +364,13 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
 
     /**
      * Task 0020 B1. The delivered set is Reports' "Delivered": facts first delivered in [from, to), with the same
-     * source and outcome filters. A case was handled without a person when {@code reviewed_flag} is false and it has
-     * no {@code BUSINESS_MANUAL_FALLBACK_SUBMITTED} success (the compliance report's "Finished by hand" rule).
+     * source and outcome filters. A case was handled without a person by {@link ReportingCaseRules#NO_PERSON}; Reports'
+     * "No review needed" is the same number (U024 step 0).
      * Columns: cases, cases with no person, pages, documents, pages in cases with no person.
      */
     static final String TIME_SAVED_CASES_SQL = """
             with delivered as (
-                select f.package_id, f.page_count, f.document_count,
-                       (not f.reviewed_flag and not exists (
-                           select 1 from audit_records a
-                            where a.tenant_id=f.tenant_id and a.action='BUSINESS_MANUAL_FALLBACK_SUBMITTED'
-                              and a.outcome='SUCCESS' and a.resource_type='DocumentPackage'
-                              and a.resource_id=cast(f.package_id as text))) as no_person
+                select f.package_id, f.page_count, f.document_count, {NO_PERSON} as no_person
                   from reporting_package_facts f
                  where f.tenant_id=:tenant and f.first_delivered_at>=:from and f.first_delivered_at<:to%s%s
             )
@@ -382,7 +380,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                    coalesce(sum(document_count),0),
                    coalesce(sum(case when no_person then page_count else 0 end),0)
               from delivered
-            """;
+            """.replace("{NO_PERSON}", ReportingCaseRules.NO_PERSON);
 
     /**
      * Task 0020 B1: findings in the same delivered cases that were redacted, decided by a person or automatically:
