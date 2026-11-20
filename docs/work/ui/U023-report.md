@@ -111,3 +111,12 @@ Each suite was run once; this task does not touch entity switching or sign-in. N
 2. **The Custom line.** The task says the line under the cards "shows **Custom** in bold" when no preset matches. The everyday line already has "Custom" in bold, so I made the line change in that state: "**Custom**: these settings match no preset. Below the threshold, a finding always goes to a person; nothing is skipped." Keep this wording, or use other words?
 3. **Saving within 300 ms of a change.** If someone saves before the new estimate arrives, there is no estimate yet, so no confirm step (as the task says: "not shown when the estimate is missing"). Fine, or should Save wait for the estimate when one is on its way?
 4. **Confirm buttons for Custom.** When the new or old policy is Custom, the buttons read "Keep Custom" / "Save Custom" (the task's "<name>" rule). The card's own button says just "Save" for Custom. Keep this, or use "Save these settings" in the dialog?
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. Prove the confirm step once against real data (the 0019 throwaway environment): yes, in task 0020.
+2. The Custom line wording: keep it.
+3. Save while an estimate is on its way: Save waits for it ("Working out…"); only a failed estimate or not enough data saves without the confirm step.
+4. Confirm buttons when either side is Custom: "Keep your current settings" / "Save these settings".
+5. Design chat review: in Fine-tune, the mode button "Every case" becomes "Every finding", and the hint "Every case is reviewed regardless" is removed or corrected to match Strict's wording.
+All in task 0020.
