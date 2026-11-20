@@ -45,3 +45,8 @@ record holding the new value and `previous=[...]`, numbers only; a save with no 
 big case in the same period) the `timeSaved` block of Reports is checked number by number, against Reports' own
 "Delivered" and "No review needed"; and section 3 of the PDF prints the new table and its grey line with the minutes per
 page as it stood at the period end (2.5), while Reports uses today's setting (1.5).
+
+U024 step 0: Reports' "No review needed" (headline, its target bar, Service levels, and the compliance report's row)
+now leaves out cases finished by hand, by the same rule as `casesNoPerson` (`ReportingCaseRules`). On the hand-made
+facts "No review needed" is now 1 (25%), not 2 (50%), and the check proves it equals `casesNoPerson` with an
+unreviewed case finished by hand in the period.

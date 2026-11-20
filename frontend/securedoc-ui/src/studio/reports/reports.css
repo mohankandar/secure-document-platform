@@ -101,3 +101,33 @@
 .cf-rp-table th, .cf-rp-table td { padding: 10px 14px; text-align: right; border-top: 1px solid var(--cf-line); white-space: nowrap; }
 .cf-rp-table th:first-child { text-align: left; font-weight: 400; }
 .cf-rp-table thead th { padding: 9px 14px; border-top: 0; background: var(--cf-raised); font-size: 12px; font-weight: 600; color: var(--cf-muted); }
+
+/* U024 canvas "Reports with What LexaVault did for you": four tiles in a wrapping grid, the formula panel under them. */
+.cf-rp-did { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 20px; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 8px; min-width: 0; }
+.cf-rp-did > h2 { font-size: 16px; font-weight: 600; }
+.cf-rp-did-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.cf-rp-did-tile { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 14px 16px; border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-rp-did-tile[data-tone='ok'] { border-bottom: 4px solid var(--cf-ok); }
+.cf-rp-did-tile[data-tone='strong'] { padding: 13px 15px; border: 2px solid var(--cf-ink); }
+.cf-rp-did-label { font-size: 13px; color: var(--cf-muted); }
+.cf-rp-did-value { margin-top: 2px; font-size: 32px; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.cf-rp-did-sub { font-family: var(--cf-font-mono); font-size: 12px; color: var(--cf-muted); overflow-wrap: anywhere; }
+.cf-rp-did-how {
+  min-height: 24px; padding: 0; font: inherit; font-size: 13px; font-weight: 500; color: var(--cf-ink);
+  background: none; border: 0; text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.cf-rp-did-how:hover { color: var(--cf-muted); }
+.cf-rp-did-how:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; border-radius: 2px; }
+@media (pointer: coarse) { .cf-rp-did-how { min-height: 44px; } }
+.cf-rp-did-panel {
+  align-self: flex-end; display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 460px; padding: 18px;
+  background: var(--cf-surface); border: 1px solid var(--cf-line-strong); border-radius: 10px; box-shadow: var(--cf-shadow-pop);
+}
+.cf-rp-did-panel:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; }
+.cf-rp-did-panel > h3 { font-size: 15px; font-weight: 600; }
+.cf-rp-did-formula { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cf .cf-rp-did-formula td { padding: 5px 0; border: 0; color: color-mix(in srgb, var(--cf-ink) 82%, var(--cf-surface)); }
+.cf .cf-rp-did-formula td:last-child { padding-left: 12px; font-family: var(--cf-font-mono); text-align: right; white-space: nowrap; color: var(--cf-ink); font-variant-numeric: tabular-nums; }
+.cf .cf-rp-did-formula tr[data-result] td { padding-top: 7px; border-top: 1px solid var(--cf-line); font-weight: 500; color: var(--cf-ink); }
+.cf .cf-rp-did-note { font-size: 13px; line-height: 1.5; color: var(--cf-muted); }
+.cf-rp-did-panel > .cf-btn { align-self: flex-end; }

@@ -54,7 +54,7 @@ function configuration(policy: Policy) {
       availableBundles: [{ version: '2026.11.1', status: 'PROMOTED', modelVersion: 'qwen3.5:9b', promptVersion: 'p7', detectorVersion: 'd3', ocrRulesVersion: 'o2', profileVersion: 'none',
         validationRulesVersion: 'v5', thresholdsVersion: 't4', description: 'Improved reading.', promotedAt: '2026-11-01T15:00:00Z' }],
     },
-    reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80 },
+    reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, minutesPerPage: 1 },
   };
 }
 

@@ -44,7 +44,7 @@ async function mockIdentityProvider(page: Page) {
   });
 }
 
-async function mockApi(page: Page, roles: string[], capabilities: string[], answer = reports) {
+async function mockApi(page: Page, roles: string[], capabilities: string[], answer: (url: URL) => unknown = reports) {
   await page.route('**/api/v1/**', async (route: Route) => {
     const url = new URL(route.request().url());
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -53,7 +53,7 @@ async function mockApi(page: Page, roles: string[], capabilities: string[], answ
       return json({ username: 'reports.user@example.test', roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug,
         authenticationMode: 'OIDC', capabilities });
     }
-    if (url.pathname === '/api/v1/operations/reports') return json(answer());
+    if (url.pathname === '/api/v1/operations/reports') return json(answer(url));
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
   });
@@ -93,10 +93,11 @@ function reports() {
       reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, reviewWithinTargetRate: 83, reviewEligible: 148, reviewBreaches: 25,
     },
     dimensions: [],
+    timeSaved: { casesDelivered: 512, casesNoPerson: 348, percentNoPerson: 67, pagesChecked: 14220, documentsChecked: 1873, itemsRedacted: 3912, itemTypes: ['Social Security Number', 'Date of birth', 'Credit card number', 'Credit score'], pagesNoPerson: 9690, minutesPerPage: 1, minutesSaved: 9690 },
   };
 }
 
-async function openReports(page: Page, roles: string[], capabilities: string[], answer = reports) {
+async function openReports(page: Page, roles: string[], capabilities: string[], answer: (url: URL) => unknown = reports) {
   await mockIdentityProvider(page);
   await mockApi(page, roles, capabilities, answer);
   await page.goto('/');
@@ -207,3 +208,159 @@ test('an answer without a readable review target fails only the service levels c
   await expect(page.getByText('Typical time to delivery')).toBeVisible();
   await expect(page.getByTestId('trend-chart')).toBeVisible();
 });
+
+// --- U024: What LexaVault did for you ------------------------------------------------------------------------------
+
+const withTimeSaved = (t: Record<string, unknown>) => () => { const r = reports(); return { ...r, timeSaved: { ...r.timeSaved, ...t } }; };
+const didForYou = (page: Page) => page.getByRole('region', { name: 'What LexaVault did for you' });
+const howTitle = 'How "Review time saved" is worked out';
+const cssColour = (page: Page, token: string) => page.evaluate((t) => {
+  const d = document.createElement('span');
+  d.style.color = `var(${t})`;
+  document.querySelector('.cf')!.append(d);
+  const v = getComputedStyle(d).color;
+  d.remove();
+  return v;
+}, token);
+
+test('U024: four tiles above the headline, in the canvas words and borders', async ({ page }) => {
+  await openReports(page, ['BUSINESS_ADMIN'], ADMIN_CAPS);
+  const section = didForYou(page);
+  await expect(section.getByRole('heading', { level: 2, name: 'What LexaVault did for you' })).toBeVisible();
+  const tiles = section.locator('.cf-rp-did-tile');
+  expect(await tiles.allInnerTexts()).toEqual([
+    'Handled without a person\n67%\n348 of 512 cases',
+    'Pages checked\n14,220\nin 1,873 delivered documents',
+    'Sensitive items redacted\n3,912\nSSN, date of birth, card, credit score',
+    'Review time saved (estimate)\n≈ 161 h\nHow is this worked out?',
+  ]);
+  // Under the title row, above the existing headline tiles.
+  const sectionBox = (await section.boundingBox())!;
+  const headlineBox = (await page.locator('dl.cf-rp-stats').first().boundingBox())!;
+  expect(sectionBox.y + sectionBox.height).toBeLessThanOrEqual(headlineBox.y);
+  // First tile: a 4 px bottom border in the success colour; the time saved tile: a 2 px dark border.
+  const ok = await cssColour(page, '--cf-ok');
+  const ink = await cssColour(page, '--cf-ink');
+  const first = await tiles.nth(0).evaluate((el) => { const s = getComputedStyle(el); return [s.borderBottomWidth, s.borderBottomColor]; });
+  expect(first).toEqual(['4px', ok]);
+  const last = await tiles.nth(3).evaluate((el) => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopColor]; });
+  expect(last).toEqual(['2px', ink]);
+  const big = await tiles.nth(0).locator('.cf-rp-did-value').evaluate((el) => getComputedStyle(el).fontSize);
+  expect(big).toBe('32px');
+});
+
+test('U024: no delivered cases: 0 and "—", and the panel still opens', async ({ page }) => {
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS, withTimeSaved({ casesDelivered: 0, casesNoPerson: 0, percentNoPerson: null,
+    pagesChecked: 0, documentsChecked: 0, itemsRedacted: 0, itemTypes: [], pagesNoPerson: 0, minutesSaved: 0 }));
+  const tiles = didForYou(page).locator('.cf-rp-did-tile');
+  expect(await tiles.allInnerTexts()).toEqual([
+    'Handled without a person\n—\n0 of 0 cases',
+    'Pages checked\n0\nin 0 delivered documents',
+    'Sensitive items redacted\n0\n—',
+    'Review time saved (estimate)\n0 min\nHow is this worked out?',
+  ]);
+  await didForYou(page).getByRole('button', { name: 'How is this worked out?' }).click();
+  const panel = page.getByRole('dialog', { name: howTitle });
+  expect(await panel.getByRole('cell').allInnerTexts()).toEqual([
+    'Pages in cases that needed no person', '0', '× minutes a person would take per page', '1', '= 0 minutes, rounded down', '0 min']);
+});
+
+test('U024: under an hour the estimate reads in minutes', async ({ page }) => {
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS, withTimeSaved({ pagesNoPerson: 45, minutesSaved: 45 }));
+  await expect(didForYou(page).locator('.cf-rp-did-tile').nth(3).locator('.cf-rp-did-value')).toHaveText('≈ 45 min');
+});
+
+test('U024: "How is this worked out?": the numbers, "deliberately low" at 1 minute, focus, Esc and Close', async ({ page }) => {
+  await openReports(page, ['BUSINESS_ADMIN'], ADMIN_CAPS);
+  const section = didForYou(page);
+  const link = section.getByRole('button', { name: 'How is this worked out?' });
+  await expect(link).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('dialog', { name: howTitle })).toHaveCount(0);
+  await link.click();
+  const panel = page.getByRole('dialog', { name: howTitle });
+  await expect(panel).toBeVisible();
+  await expect(panel).toBeFocused();
+  await expect(link).toHaveAttribute('aria-expanded', 'true');
+  await expect(panel.getByRole('heading', { level: 3 })).toHaveText(howTitle);
+  expect(await panel.getByRole('cell').allInnerTexts()).toEqual([
+    'Pages in cases that needed no person', '9,690', '× minutes a person would take per page', '1', '= 9,690 minutes, rounded down', '≈ 161 h']);
+  const mono = await panel.getByRole('cell').nth(1).evaluate((el) => [getComputedStyle(el).fontFamily, getComputedStyle(el).textAlign]);
+  expect(mono[0]).toContain('IBM Plex Mono');
+  expect(mono[1]).toBe('right');
+  await expect(panel.getByText('Pages a person reviewed count as zero. The 1 minute per page is deliberately low and is set by your Business '
+    + 'Administrator in Admin › Redaction & retention › Report targets. This is an estimate, not a measurement.', { exact: true })).toBeVisible();
+  // Right-aligned under the tiles, at most 460 px wide.
+  const p = (await panel.boundingBox())!;
+  const tiles = (await section.locator('.cf-rp-did-tiles').boundingBox())!;
+  expect(p.width).toBeLessThanOrEqual(460);
+  expect(p.y).toBeGreaterThanOrEqual(tiles.y + tiles.height);
+  expect(Math.abs(p.x + p.width - (tiles.x + tiles.width))).toBeLessThanOrEqual(1);
+
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0);
+  await expect(link).toBeFocused();
+  await expect(link).toHaveAttribute('aria-expanded', 'false');
+
+  await page.keyboard.press('Enter');
+  await expect(panel).toBeFocused();
+  await panel.getByRole('button', { name: 'Close' }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(link).toBeFocused();
+});
+
+test('U024: at 2.5 minutes per page the panel names it, without "deliberately low"', async ({ page }) => {
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS, withTimeSaved({ pagesNoPerson: 121, minutesPerPage: 2.5, minutesSaved: 302 }));
+  await expect(didForYou(page).locator('.cf-rp-did-tile').nth(3).locator('.cf-rp-did-value')).toHaveText('≈ 5 h');
+  await didForYou(page).getByRole('button', { name: 'How is this worked out?' }).click();
+  const panel = page.getByRole('dialog', { name: howTitle });
+  expect(await panel.getByRole('cell').allInnerTexts()).toEqual([
+    'Pages in cases that needed no person', '121', '× minutes a person would take per page', '2.5', '= 302.5 minutes, rounded down', '≈ 5 h']);
+  await expect(panel.getByText('Pages a person reviewed count as zero. The 2.5 minutes per page is set by your Business Administrator in '
+    + 'Admin › Redaction & retention › Report targets. This is an estimate, not a measurement.', { exact: true })).toBeVisible();
+  await expect(panel).not.toContainText('deliberately low');
+});
+
+test('U024: the tiles follow the chosen period and filters', async ({ page }) => {
+  const asked: URLSearchParams[] = [];
+  await openReports(page, ['BUSINESS_ADMIN'], ADMIN_CAPS, (url) => {
+    asked.push(url.searchParams);
+    return url.searchParams.get('source') === 'API' ? withTimeSaved({ pagesChecked: 7, documentsChecked: 2 })() : reports();
+  });
+  const pages = didForYou(page).locator('.cf-rp-did-tile').nth(1);
+  await expect(pages).toContainText('14,220');
+  await page.getByLabel('Source').selectOption('API');
+  await expect(pages.locator('.cf-rp-did-value')).toHaveText('7');
+  await expect(pages).toContainText('in 2 delivered documents');
+  expect(asked.at(-1)!.get('source')).toBe('API');
+});
+
+test('U024: an answer without the block fails only this card', async ({ page }) => {
+  const missing = () => { const r: Partial<ReturnType<typeof reports>> = reports(); delete r.timeSaved; return r; };
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS, missing);
+  await expect(page.getByRole('alert', { name: "What LexaVault did for you couldn't be shown" })).toBeVisible();
+  await expect(page.getByText('Typical time to delivery')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Service levels' })).toBeVisible();
+});
+
+test('U024: the Report Viewer sees the section (the Business Administrator in the tests above)', async ({ page }) => {
+  await openReports(page, ['REPORT_VIEWER'], VIEWER_CAPS);
+  await expect(didForYou(page)).toBeVisible();
+  await expect(didForYou(page).getByRole('button', { name: 'How is this worked out?' })).toBeVisible();
+});
+
+for (const role of ['DOCUMENT_PROCESSOR', 'DOCUMENT_SUPERVISOR', 'TENANT_IT_ADMIN', 'PLATFORM_OPERATIONS_ADMIN']) {
+  test(`U024: ${role} does not see the section (no Reports at all)`, async ({ page }) => {
+    let asked = 0;
+    await mockIdentityProvider(page);
+    await mockApi(page, [role], capabilitiesFor(role), () => { asked++; return reports(); });
+    await page.goto('/');
+    await page.getByRole('button', { name: /sign in/i }).first().click();
+    const nav = page.getByRole('navigation', { name: 'Workspace' });
+    await expect(nav).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Reports' })).toHaveCount(0);
+    await page.evaluate(() => { window.history.pushState({}, '', '/reports'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await expect(page.getByRole('heading', { name: 'How the work is going' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'What LexaVault did for you' })).toHaveCount(0);
+    expect(asked).toBe(0);
+  });
+}
