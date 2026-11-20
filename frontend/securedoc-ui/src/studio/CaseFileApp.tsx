@@ -130,7 +130,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/case/:caseId" element={canDesk ? <Desk caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/intake" element={canIntake ? <Intake /> : <Navigate to={home} replace />} />
           <Route path="/review" element={canReview ? <Review caps={caps} /> : <Navigate to={home} replace />} />
-          <Route path="/reports" element={canReports ? <Reports caps={caps} /> : <Navigate to={home} replace />} />
+          <Route path="/reports" element={canReports ? <Reports caps={caps} entityName={me.tenantName} /> : <Navigate to={home} replace />} />
           <Route path="/admin" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
           <Route path="/admin/:area" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
           <Route path="/administration" element={<Navigate to={canAdmin ? '/admin' : home} replace />} />

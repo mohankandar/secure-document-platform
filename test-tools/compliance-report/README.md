@@ -16,7 +16,7 @@ What it does:
   hold markers, a Reports CSV export and an audit CSV export;
 - moves those records 35 days back (SQL, throwaway database only), then seeds deliveries, purges, review
   facts and audit rows in that past period, including audit details holding a file-name and a loan-number marker;
-- creates both editions through `POST /api/v1/compliance-reports` as each role: 2 allowed, 10 refused (403, each audited);
+- creates both editions through `POST /api/v1/compliance-reports` as each role: 3 allowed (U022: the IT Administrator may also create the summary), 9 refused (403, each audited); a tenant-boundary 403 recorded with reason=TENANT_BOUNDARY;
 - checks `X-Report-File-SHA256` against the bytes and the `COMPLIANCE_REPORT_CREATED` record, and the printed
   fingerprint against that record;
 - extracts the PDF text (`ExtractPdfText.java`, PDFBox) and checks the numbers against the seed and

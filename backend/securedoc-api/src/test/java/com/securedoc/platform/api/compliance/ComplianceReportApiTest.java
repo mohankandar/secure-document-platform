@@ -111,7 +111,8 @@ class ComplianceReportApiTest {
     void eachRoleGetsOnlyItsEditionAndEveryRefusalIsAuditedAs403() {
         for (ProductRole role : ProductRole.values()) {
             for (boolean full : new boolean[]{false, true}) {
-                boolean allowed = full ? role == ProductRole.TENANT_IT_ADMIN : role == ProductRole.BUSINESS_ADMIN;
+                // U022 step 0: the full permission also allows the summary; the summary permission only the summary.
+                boolean allowed = role == ProductRole.TENANT_IT_ADMIN || (!full && role == ProductRole.BUSINESS_ADMIN);
                 AuthenticatedPrincipal who = as(role, entityA);
                 int before = audits.size();
                 if (allowed) {
@@ -130,6 +131,27 @@ class ComplianceReportApiTest {
                 }
             }
         }
+    }
+
+    @Test
+    void theItAdministratorMayUntickTheFullAuditTrailAndStillSignsAsItAdministrator() throws Exception {
+        AuthenticatedPrincipal it = as(ProductRole.TENANT_IT_ADMIN, entityA);
+        names.bind(it.actorId(), "Robin IT", "robin");
+        byte[] pdf = controller(it).create(body(false), mock(HttpServletRequest.class)).getBody();
+        AuditRecord created = audits.get(audits.size() - 1);
+        assertEquals(AuditOutcome.SUCCESS, created.outcome());
+        assertTrue(created.detail().contains("edition=SUMMARY"), created.detail());
+        String all = text(pdf, 1, Integer.MAX_VALUE);
+        assertTrue(all.contains("Robin IT, IT Administrator"));
+        assertFalse(all.contains("Appendix"), "the summary edition has no appendix");
+    }
+
+    @Test
+    void aRefusalTheEndpointRecordsItselfIsMarkedSoItIsNeverRecordedTwice() {
+        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/compliance-reports");
+        assertThrows(AccessDeniedException.class,
+                () -> controller(as(ProductRole.BUSINESS_ADMIN, entityA)).create(body(true), request));
+        assertTrue(com.securedoc.platform.api.security.AccessDeniedAuditRecorder.isRecorded(request));
     }
 
     @Test

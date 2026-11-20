@@ -369,3 +369,71 @@ for (const [who, roles] of [['Report viewer', ['REPORT_VIEWER']], ['Business Adm
     expect(await sideways(page)).toBe(0);
   });
 }
+
+/** U022: sign in as `role` and open a page by its address, the way the Reports test above does. */
+async function signInAs(page: Page, roles: string[], path: string, routes?: () => Promise<void>) {
+  await mockIdentityProvider(page);
+  await mockApi(page, { approvals: [], confirmed: [] }, roles);
+  // Registered after the catch-all API mock, so they take precedence.
+  if (routes) await routes();
+  await page.goto('/');
+  await page.getByRole('button', { name: /sign in/i }).first().tap();
+  await page.locator('main h1').first().waitFor();
+  await page.evaluate((p) => { window.history.pushState({}, '', p); window.dispatchEvent(new PopStateEvent('popstate')); }, path);
+}
+
+test('Reports (Business Administrator): the Compliance report dialog works by tap and creates a PDF', async ({ page }) => {
+  const bodies: unknown[] = [];
+  await signInAs(page, ['BUSINESS_ADMIN'], '/reports');
+  // Registered after sign-in so it takes precedence over the catch-all API mock.
+  await page.route('**/api/v1/compliance-reports', (route) => {
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from('%PDF-1.7\n%%EOF\n', 'latin1'),
+      headers: { 'Content-Disposition': 'attachment; filename="compliance-report-tablet-entity-2026-07-01-2026-09-30.pdf"' } });
+  });
+  await expect(page.getByRole('heading', { name: 'How the work is going' })).toBeVisible();
+  const open = page.getByRole('button', { name: 'Compliance report', exact: true });
+  await expectTappable(open);
+  await open.tap();
+  const dialog = page.getByRole('dialog', { name: 'Compliance report' });
+  await expect(dialog).toBeVisible();
+  for (const name of ['Last month', 'Last quarter', 'Last year', 'Custom', 'Cancel', 'Create PDF']) {
+    await expectTappable(dialog.getByRole('button', { name, exact: true }));
+  }
+  // Custom by tap: the two date fields are 44 px too, then back to Last month.
+  await dialog.getByRole('button', { name: 'Custom' }).tap();
+  for (const label of ['From', 'To']) {
+    const box = await dialog.getByLabel(label).boundingBox();
+    expect(box!.height, `${label} is at least 44 px high`).toBeGreaterThanOrEqual(44);
+  }
+  await dialog.getByRole('button', { name: 'Last month' }).tap();
+  await expect(dialog.getByRole('button', { name: 'Last month' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await sideways(page)).toBe(0);
+
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Create PDF' }).tap();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('compliance-report-tablet-entity-2026-07-01-2026-09-30.pdf');
+  await file.delete();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Compliance report downloaded.')).toBeVisible();
+  expect(bodies).toHaveLength(1);
+  expect(bodies[0]).toMatchObject({ period: 'LAST_MONTH', includeFullAuditTrail: false });
+  expect(typeof (bodies[0] as { timeZone: unknown }).timeZone).toBe('string');
+});
+
+test('Admin › Audit trail (IT Administrator): the page and the dialog do not scroll sideways', async ({ page }) => {
+  await signInAs(page, ['TENANT_IT_ADMIN'], '/admin/audit', async () => {
+    await page.route('**/api/v1/audit-records**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    await page.route('**/api/v1/integrations', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  });
+  const open = page.getByRole('button', { name: 'Compliance report', exact: true });
+  await expect(open).toBeVisible();
+  expect(await sideways(page)).toBe(0);
+  await open.tap();
+  const dialog = page.getByRole('dialog', { name: 'Compliance report' });
+  await expect(dialog.getByRole('checkbox', { name: /Include full audit trail/ })).toBeChecked();
+  expect(await sideways(page)).toBe(0);
+  await dialog.getByRole('button', { name: 'Cancel' }).tap();
+  await expect(dialog).toBeHidden();
+});

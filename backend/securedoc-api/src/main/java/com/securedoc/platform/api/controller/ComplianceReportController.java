@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.security.AccessDeniedAuditRecorder;
 import com.securedoc.platform.api.security.ProductAuthorizationPolicy;
 import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.compliance.ComplianceEdition;
@@ -27,7 +28,8 @@ import java.time.LocalDate;
  * signed in to. The entity always comes from the request's tenant, never from the body.
  *
  * <ul>
- *   <li>{@code includeFullAuditTrail=false} needs {@code COMPLIANCE_REPORT_SUMMARY} (Business Administrator);</li>
+ *   <li>{@code includeFullAuditTrail=false} needs {@code COMPLIANCE_REPORT_SUMMARY} (Business Administrator) or
+ *       {@code COMPLIANCE_REPORT_FULL} (U022 step 0: the IT Administrator may untick the full audit trail);</li>
  *   <li>{@code includeFullAuditTrail=true} needs {@code COMPLIANCE_REPORT_FULL} (Tenant IT Administrator).</li>
  * </ul>
  * Anything else is refused with 403 and recorded as a refused {@code COMPLIANCE_REPORT_CREATED}.
@@ -65,13 +67,14 @@ public class ComplianceReportController {
             throw new ValidationException("includeFullAuditTrail is required (true or false)");
         }
         ComplianceEdition edition = body.includeFullAuditTrail() ? ComplianceEdition.FULL : ComplianceEdition.SUMMARY;
-        UserCapability required = edition == ComplianceEdition.FULL
-                ? UserCapability.COMPLIANCE_REPORT_FULL : UserCapability.COMPLIANCE_REPORT_SUMMARY;
-        if (!authorizationPolicy.has(principal, required)) {
+        if (!mayCreate(principal, edition)) {
             service.recordRefused(principal, correlationId, edition);
+            AccessDeniedAuditRecorder.markRecorded(request);
             throw new AccessDeniedException("Insufficient permissions for this operation");
         }
-        String role = edition == ComplianceEdition.FULL ? "IT Administrator" : "Business Administrator";
+        // The role printed on the report: the IT Administrator stays the IT Administrator for either edition.
+        String role = authorizationPolicy.has(principal, UserCapability.COMPLIANCE_REPORT_FULL)
+                ? "IT Administrator" : "Business Administrator";
 
         ComplianceReportService.CreatedReport report = service.create(principal, correlationId,
                 new ComplianceReportService.Request(body.period(), body.from(), body.to(), body.timeZone()),
@@ -84,5 +87,12 @@ public class ComplianceReportController {
         headers.set(FILE_SHA256_HEADER, report.fileSha256());
         headers.setContentLength(report.pdf().length);
         return ResponseEntity.ok().headers(headers).body(report.pdf());
+    }
+
+    /** {@code COMPLIANCE_REPORT_FULL} allows either edition (U022 step 0); {@code COMPLIANCE_REPORT_SUMMARY} only the summary. */
+    private boolean mayCreate(AuthenticatedPrincipal principal, ComplianceEdition edition) {
+        if (authorizationPolicy.has(principal, UserCapability.COMPLIANCE_REPORT_FULL)) return true;
+        return edition == ComplianceEdition.SUMMARY
+                && authorizationPolicy.has(principal, UserCapability.COMPLIANCE_REPORT_SUMMARY);
     }
 }
