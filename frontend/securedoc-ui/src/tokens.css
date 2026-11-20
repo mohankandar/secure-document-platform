@@ -126,6 +126,7 @@
   --cf-raised: #f7f8f9;
   --cf-line: #e1e3e6;
   --cf-line-strong: #c9cdd2;
+  --cf-control-line: #8a919b; /* U027 (WCAG 1.4.11): the edge of fields, selects and segmented controls; 3.2:1 on white */
   --cf-fill: #eceef0; /* canvas: neutral counters and track fills */
   --cf-ink: #15171a;
   --cf-muted: #626872;
@@ -171,6 +172,7 @@
   --cf-raised: #1b1e22;
   --cf-line: #262a2f;
   --cf-line-strong: #353a41;
+  --cf-control-line: #707680; /* U027: 3.9:1 on the dark surface */
   --cf-fill: #23262b;
   --cf-ink: #e8e9eb;
   --cf-muted: #959ba4;

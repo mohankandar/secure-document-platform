@@ -347,7 +347,7 @@ for (const [who, roles] of [['Report viewer', ['REPORT_VIEWER']], ['Business Adm
     await mockApi(page, { approvals: [], confirmed: [] }, [...roles]);
     await page.goto('/');
     await page.getByRole('button', { name: /sign in/i }).first().tap();
-    await page.locator('main h1').first().waitFor();
+    await page.locator('#cf-main h1').first().waitFor();
     await page.evaluate(() => { window.history.pushState({}, '', '/reports'); window.dispatchEvent(new PopStateEvent('popstate')); });
     await expect(page.getByRole('heading', { name: 'How the work is going' })).toBeVisible();
     const stats = page.locator('dl.cf-rp-stats');
@@ -379,7 +379,7 @@ async function signInAs(page: Page, roles: string[], path: string, routes?: () =
   if (routes) await routes();
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().tap();
-  await page.locator('main h1').first().waitFor();
+  await page.locator('#cf-main h1').first().waitFor();
   await page.evaluate((p) => { window.history.pushState({}, '', p); window.dispatchEvent(new PopStateEvent('popstate')); }, path);
 }
 

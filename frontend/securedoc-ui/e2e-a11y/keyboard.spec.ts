@@ -99,7 +99,7 @@ test('decide findings in Review: R redacts, V keeps visible, and Tab reaches Red
   await page.keyboard.press('Enter');
   await expect.poll(() => decisions).toEqual(['f1:confirm']);
   await expect(panel).toContainText('518-22-7741');
-  await page.locator('body').focus();
+  // U027: no mouse and no refocusing: focus stays in the Review zone after a decision, so V works straight away.
   await page.keyboard.press('v');
   await expect.poll(() => decisions).toEqual(['f1:confirm', 'f2:dismiss']);
 });

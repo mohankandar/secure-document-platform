@@ -14,8 +14,8 @@ const PORT = 15177;
 
 export default defineConfig({
   testDir: './e2e-a11y',
-  // The proof pictures for the U026 report run only on request (U026_PROOF=1).
-  testIgnore: process.env.U026_PROOF ? [] : ['**/proof.spec.ts'],
+  // The proof pictures for the U026 and U027 reports run only on request (U026_PROOF=1, U027_PROOF=before|after).
+  testIgnore: [...(process.env.U026_PROOF ? [] : ['**/proof.spec.ts']), ...(process.env.U027_PROOF ? [] : ['**/proofU027.spec.ts'])],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

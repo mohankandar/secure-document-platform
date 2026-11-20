@@ -392,7 +392,7 @@ export async function signInAs(page: Page, who: Who, path = '/', options: MockOp
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
   if (options.twoEntities) await page.getByRole('button', { name: ENTITY.name }).click();
-  await page.locator('main h1').first().waitFor();
+  await page.locator('#cf-main h1').first().waitFor();
   if (path !== '/') await go(page, path);
 }
 

@@ -120,7 +120,7 @@ async function signIn(page: Page, role: string, mock: Mock) {
   await mockApi(page, role, mock);
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
-  await page.locator('main h1').first().waitFor();
+  await page.locator('#cf-main h1').first().waitFor();
 }
 
 async function openReports(page: Page, role: string, mock: Mock) {

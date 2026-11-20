@@ -14,6 +14,7 @@ import { apiClient } from '../api/client';
 import { nextStepText, rowAction, type RowAction } from './caseRules';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { ConfirmDialog } from './admin/shared';
+import { CASES_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
 
 type Filter = 'all' | 'you' | StageKey;
 
@@ -99,19 +100,23 @@ export default function Desk({ caps }: { caps: string[] }) {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (target.closest('input, textarea, select, [role="dialog"]')) {
+      if (target.closest(TYPING_OR_DIALOG)) {
         if (event.key === 'Escape' && target === searchRef.current) searchRef.current?.blur();
         return;
       }
       if (event.key === '/') { event.preventDefault(); searchRef.current?.focus(); return; }
       if (event.key === 'Escape' && caseId) { navigate('/'); return; }
-      if (event.key === 'j' || event.key === 'k') {
+      // U027 (WCAG 2.1.4): J and K work only while focus is in the case list; focus moves with them.
+      if ((event.key === 'j' || event.key === 'k') && target.closest(CASES_KEY_ZONE)) {
         if (flat.length === 0) return;
+        event.preventDefault();
         const index = flat.findIndex((p) => p.packageId === caseId);
         const next = event.key === 'j' ? Math.min(index + 1, flat.length - 1) : Math.max(index - 1, 0);
-        const target = flat[index === -1 ? 0 : next];
-        navigate(`/case/${target.packageId}`);
-        document.getElementById(`cf-row-${target.packageId}`)?.scrollIntoView({ block: 'nearest' });
+        const chosen = flat[index === -1 ? 0 : next];
+        navigate(`/case/${chosen.packageId}`);
+        const row = document.getElementById(`cf-row-${chosen.packageId}`);
+        row?.querySelector<HTMLElement>('a.cf-case')?.focus({ preventScroll: true });
+        row?.scrollIntoView({ block: 'nearest' });
       }
     };
     window.addEventListener('keydown', onKey);
