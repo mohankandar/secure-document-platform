@@ -10,8 +10,8 @@ import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, duratio
 import { ErrorBoundary } from '../failure';
 import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
 import {
-  PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, latestOnly, needsConfirm, presetOf, previewHeadline, previewTiles,
-  reviewChanged, saveLabel, type ConfirmWords, type PolicyEstimate,
+  MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetOf, previewHeadline,
+  previewTiles, reviewChanged, saveLabel, type ConfirmWords, type EstimateRunner, type PolicyEstimate,
 } from './policyRules';
 
 /** The one name for a sensitive type (words.ts), shared with Review, the case panel and Continue manually. */
@@ -33,8 +33,12 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
   const unsupported = sdp.enabledEntityTypes.filter((t) => !SENSITIVE_TYPES.some((s) => s.key === t));
   const radioName = useId();
   const saveButton = useRef<HTMLButtonElement>(null);
-  const answered = useRef<{ key: string; estimate: PolicyEstimate } | null>(null);
+  const [runner] = useState(() => estimateRunner((query, signal) => apiClient.sensitiveDataPolicyEstimate(query, signal)));
+  useEffect(() => () => runner.drop(), [runner]);
   const [confirm, setConfirm] = useState<{ words: ConfirmWords; save: () => Promise<void>; reset: () => void } | null>(null);
+  // Task 0020 A1: Save waits for an estimate that is on its way; meanwhile the card is locked and Save does nothing.
+  const [waiting, setWaiting] = useState(false);
+  const waitingNow = useRef(false);
 
   // "Fine-tune by hand" is closed by default and opens by itself when the saved policy is Custom.
   const [fineTune, setFineTune] = useState(savedPreset === 'CUSTOM');
@@ -43,10 +47,19 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
 
   const focusSave = () => requestAnimationFrame(() => saveButton.current?.focus());
 
-  function requestSave(draft: SensitiveDataPolicy, save: () => Promise<void>, reset: () => void) {
-    const latest = answered.current;
-    const estimate = latest && latest.key === estimateKey(sdp, draft) ? latest.estimate : null;
-    if (reviewChanged(sdp, draft) && needsConfirm(estimate)) setConfirm({ words: confirmWords(sdp, draft, estimate!), save, reset });
+  async function requestSave(draft: SensitiveDataPolicy, save: () => Promise<void>, reset: () => void) {
+    if (waitingNow.current) return;
+    if (!reviewChanged(sdp, draft)) { void save(); return; }
+    const key = estimateKey(sdp, draft);
+    let result = runner.answer(key);
+    if (!result) {
+      waitingNow.current = true;
+      setWaiting(true);
+      try { result = await runner.now(key, estimateQuery(draft)); } finally { waitingNow.current = false; setWaiting(false); }
+    }
+    // Only an answer for exactly these values counts; if they changed meanwhile, nothing is saved.
+    if (result.status === 'dropped') return;
+    if (result.status === 'ready' && needsConfirm(result.estimate)) setConfirm({ words: confirmWords(sdp, draft, result.estimate), save, reset });
     else void save();
   }
 
@@ -62,14 +75,14 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
         return mutate(await apiClient.updateSensitiveDataPolicy(d));
       }}
       footer={({ draft, dirty, saving, save, reset }) => {
-        const off = !dirty || saving;
+        const off = !dirty || saving || waiting;
         return (
           <>
             <button type="button" className="cf-btn cf-sp-action" disabled={off} onClick={reset}>Reset</button>
             {/* aria-disabled, not disabled, so focus can come back here after the confirm step. */}
             <button ref={saveButton} type="button" className="cf-btn cf-sp-action" data-variant="solid" aria-disabled={off || undefined}
-              onClick={() => { if (!off) requestSave(draft, save, reset); }}>
-              {saving && <Spinner label="Saving" />}{saveLabel(sdp, draft)}
+              aria-busy={waiting || undefined} onClick={() => { if (!off) void requestSave(draft, save, reset); }}>
+              {saving && <Spinner label="Saving" />}{waiting ? 'Working out…' : saveLabel(sdp, draft)}
             </button>
           </>
         );
@@ -78,7 +91,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
       {(d, set) => {
         const chosen = presetOf(d.reviewMode, d.autoRedactThreshold);
         return (
-        <>
+        <fieldset className="cf-sp-lock" disabled={waiting}>
           <fieldset className="cf-ad-fieldset">
             <legend>How much should a person check?</legend>
             <div className="cf-sp-presets">
@@ -100,8 +113,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
             </p>
           </fieldset>
           {reviewChanged(sdp, d) && (
-            <EstimatePreview saved={sdp} draft={d} entityName={entityName}
-              onAnswer={(estimate) => { answered.current = { key: estimateKey(sdp, d), estimate }; }} />
+            <EstimatePreview runner={runner} estimateKey={estimateKey(sdp, d)} draft={d} entityName={entityName} />
           )}
           <details className="cf-disclosure cf-sp-section" open={fineTune} onToggle={(e) => setFineTune(e.currentTarget.open)}>
             <summary>Fine-tune by hand</summary>
@@ -111,7 +123,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
             <div className="cf-segment" role="radiogroup" aria-label="Review mode">
               {(['UNCERTAIN_ONLY', 'REVIEW_ALL'] as BusinessReviewMode[]).map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={d.reviewMode === m} className={d.reviewMode === m ? 'is-active' : ''} onClick={() => set({ ...d, reviewMode: m })}>
-                  {m === 'UNCERTAIN_ONLY' ? 'Only uncertain findings' : 'Every case'}
+                  {MODE_WORDS[m].button}
                 </button>
               ))}
             </div>
@@ -119,7 +131,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
           <div className="cf-ad-threshold">
             <label htmlFor="cf-threshold">Auto-redact when confidence is at least <strong>{Math.round(d.autoRedactThreshold * 100)}%</strong></label>
             <input id="cf-threshold" type="range" min={50} max={99} step={1} value={Math.round(d.autoRedactThreshold * 100)} onChange={(e) => set({ ...d, autoRedactThreshold: Number(e.target.value) / 100 })} />
-            <p className="cf-ad-hint">Findings below this go to a reviewer{d.reviewMode === 'REVIEW_ALL' ? '. Every case is reviewed regardless' : ''}.</p>
+            <p className="cf-ad-hint">{MODE_WORDS[d.reviewMode].hint}</p>
           </div>
             </div>
           </details>
@@ -152,7 +164,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
           </fieldset>
           <Toggle label="Treat labeled last-four SSNs as sensitive" hint="When on, a last-four value is also redacted, but only when it is explicitly labeled SSN." checked={d.maskSsnLastFour} disabled={!d.enabledEntityTypes.includes('SSN')} onChange={(v) => set({ ...d, maskSsnLastFour: v })} />
           </div>
-        </>
+        </fieldset>
         );
       }}
     </SettingsCard>
@@ -169,31 +181,23 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
  * The preview: what the edited review mode and threshold would have meant over the last 30 days. Asks again about
  * 300 ms after the values stop changing; only the latest answer counts; on failure it says so once, no retry loop.
  */
-function EstimatePreview({ saved, draft, entityName, onAnswer }: {
-  saved: SensitiveDataPolicy; draft: SensitiveDataPolicy; entityName: string; onAnswer: (estimate: PolicyEstimate) => void;
+function EstimatePreview({ runner, estimateKey: key, draft, entityName }: {
+  runner: EstimateRunner; estimateKey: string; draft: SensitiveDataPolicy; entityName: string;
 }) {
-  const key = estimateKey(saved, draft);
   const query = JSON.stringify(estimateQuery(draft));
   const [answer, setAnswer] = useState<{ status: 'loading' | 'ready' | 'failed'; estimate?: PolicyEstimate }>({ status: 'loading' });
-  const [latest] = useState(latestOnly);
-  const report = useRef(onAnswer);
-  report.current = onAnswer;
 
+  // The card's runner asks (only the latest values count); this box only shows what it answers for this key.
   useEffect(() => {
-    const ticket = latest.take();
     setAnswer((a) => ({ status: 'loading', estimate: a.estimate }));
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      apiClient.sensitiveDataPolicyEstimate(JSON.parse(query), controller.signal)
-        .then((estimate) => {
-          if (!latest.isLatest(ticket)) return;
-          setAnswer({ status: 'ready', estimate });
-          report.current(estimate);
-        })
-        .catch(() => { if (latest.isLatest(ticket) && !controller.signal.aborted) setAnswer({ status: 'failed' }); });
-    }, 300);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [key, query, latest]);
+    const off = runner.subscribe((k, r) => {
+      if (k !== key) return;
+      if (r.status === 'ready') setAnswer({ status: 'ready', estimate: r.estimate });
+      else if (r.status === 'failed') setAnswer({ status: 'failed' });
+    });
+    runner.request(key, JSON.parse(query));
+    return () => { off(); runner.drop(key); };
+  }, [runner, key, query]);
 
   const loading = answer.status === 'loading';
   const shown = answer.estimate;
@@ -277,14 +281,14 @@ function FewerChecksDialog({ words, anchor, onKeep, onSave }: { words: ConfirmWo
       <section ref={dialog} className="cf-sp-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-desc`} tabIndex={-1} onKeyDown={onKeyDown}>
         <h2 id={`${id}-title`}>A person would check fewer findings</h2>
         <p id={`${id}-desc`}>
-          With <b>{words.newName}</b>, about <b className="cf-sp-num">{words.fewerFindings}</b> fewer findings
+          With <b>{words.newPhrase}</b>, about <b className="cf-sp-num">{words.fewerFindings}</b> fewer findings
           {words.fewerCases && <> and <b className="cf-sp-num">{words.fewerCases}</b> fewer cases</>} in the last {words.days} days would have had a person check them.
         </p>
         <div className="cf-sp-dialog-box">Those findings are still redacted, automatically, without a person looking first. Findings below {words.threshold} confidence still go to a person.</div>
         <p className="cf-sp-dialog-note">{words.auditLine}</p>
         <div className="cf-sp-dialog-foot">
-          <button ref={keep} type="button" className="cf-btn cf-sp-action" data-variant="solid" onClick={onKeep}>Keep {words.oldName}</button>
-          <button type="button" className="cf-btn cf-sp-action" onClick={onSave}>Save {words.newName}</button>
+          <button ref={keep} type="button" className="cf-btn cf-sp-action" data-variant="solid" onClick={onKeep}>{words.keepLabel}</button>
+          <button type="button" className="cf-btn cf-sp-action" onClick={onSave}>{words.saveLabel}</button>
         </div>
       </section>
     </div>,

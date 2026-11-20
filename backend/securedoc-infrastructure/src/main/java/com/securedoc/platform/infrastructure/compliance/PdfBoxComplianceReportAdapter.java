@@ -5,6 +5,7 @@ import com.securedoc.platform.application.compliance.ComplianceReportContent;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.AppendixRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.ChangeRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.CountRow;
+import com.securedoc.platform.application.compliance.ComplianceReportContent.ValueRow;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.LabelValue;
 import com.securedoc.platform.application.port.out.ComplianceReportPdfPort;
 import org.apache.pdfbox.io.IOUtils;
@@ -411,7 +412,26 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
             }
             y -= 7.5f;
             countTable("Of the delivered cases", "Cases", c.cases().ofDelivered(), true);
+            if (!c.cases().didForYou().isEmpty()) {
+                // Task 0020 B4: "What LexaVault did for you", same table style, with its grey line.
+                y -= 7.5f;
+                valueTable("What LexaVault did for you", "Number", c.cases().didForYou());
+                if (c.cases().didForYouNote() != null && !c.cases().didForYouNote().isBlank()) {
+                    y -= 4.5f;
+                    y = paragraph(f.sans, 8.25f, MUTED, SIDE, y, CONTENT_W, c.cases().didForYouNote(), 1.5f);
+                }
+            }
             y -= 16.5f;
+        }
+
+        private void valueTable(String first, String valueLabel, List<ValueRow> rows) throws IOException {
+            float[] cols = new float[]{CONTENT_W - 165f, 82.5f, 82.5f};
+            boolean[] right = new boolean[]{false, true, true};
+            tableHeader(cols, new String[]{first, valueLabel, "Share"}, right);
+            for (ValueRow r : rows) {
+                tableRow(cols, new Cell[]{new Cell(f.sans, r.label()), new Cell(f.mono, r.value()),
+                        new Cell(f.mono, r.share() == null ? DASH : r.share())}, right, 9.75f);
+            }
         }
 
         private void sectionActivity() throws IOException {

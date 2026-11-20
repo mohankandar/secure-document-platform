@@ -483,6 +483,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-sp-change { font-family: var(--cf-font-mono); font-size: 14px; color: var(--cf-warn-ink); }
 .cf-sp-change[data-direction='none'] { color: var(--cf-muted); }
 
+.cf-sp-lock { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
 .cf-sp-section { border-top: 1px solid var(--cf-line); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
 details.cf-sp-section { display: block; }
 .cf-sp-section > summary { font-size: 15px; font-weight: 500; min-height: 32px; }

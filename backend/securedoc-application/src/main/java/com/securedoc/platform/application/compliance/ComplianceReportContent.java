@@ -71,13 +71,26 @@ public record ComplianceReportContent(
     /** Section 3. {@code share} is a whole percent ("95%"). */
     public record CountRow(String label, long count, String share) { }
 
-    /** {@code outcomesNote}: the small grey note under the first table (task 0018 A5). */
-    public record Cases(List<CountRow> outcomes, String outcomesNote, List<CountRow> ofDelivered) {
+    /**
+     * {@code outcomesNote}: the small grey note under the first table (task 0018 A5). {@code didForYou} and
+     * {@code didForYouNote}: task 0020 B4's "What LexaVault did for you" table at the end of the section, and its
+     * grey line.
+     */
+    public record Cases(List<CountRow> outcomes, String outcomesNote, List<CountRow> ofDelivered,
+                        List<ValueRow> didForYou, String didForYouNote) {
         public Cases {
             outcomes = List.copyOf(outcomes);
             ofDelivered = List.copyOf(ofDelivered);
+            didForYou = didForYou == null ? List.of() : List.copyOf(didForYou);
+        }
+
+        public Cases(List<CountRow> outcomes, String outcomesNote, List<CountRow> ofDelivered) {
+            this(outcomes, outcomesNote, ofDelivered, List.of(), null);
         }
     }
+
+    /** A row whose value is already in words ("9,690", "≈ 161 h"); {@code share} is "68%" or null. */
+    public record ValueRow(String label, String value, String share) { }
 
     /** One appendix row; {@code detail} is "—" unless the action is on {@link AppendixDetailAllowList}. */
     public record AppendixRow(String time, String action, String person, String result, String caseId,
@@ -116,6 +129,10 @@ public record ComplianceReportContent(
         for (CountRow r : cases.outcomes()) line(out, "cases.outcome", count(r));
         if (cases.outcomesNote() != null) line(out, "cases.outcomesNote", cases.outcomesNote());
         for (CountRow r : cases.ofDelivered()) line(out, "cases.ofDelivered", count(r));
+        for (ValueRow r : cases.didForYou()) {
+            line(out, "cases.didForYou", r.label() + "|" + r.value() + "|" + (r.share() == null ? "" : r.share()));
+        }
+        if (cases.didForYouNote() != null) line(out, "cases.didForYouNote", cases.didForYouNote());
         for (CountRow r : activity) line(out, "activity", count(r));
         for (AppendixRow r : appendix) {
             line(out, "appendix", r.time() + "|" + r.action() + "|" + r.person() + "|" + r.result() + "|"

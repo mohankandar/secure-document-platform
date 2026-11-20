@@ -80,6 +80,14 @@ final class ComplianceFakes {
     /** A Reports snapshot holding only the numbers the compliance report reads. */
     static OperationalReportSnapshot reports(Instant from, Instant to, long received, long delivered, long reviewed,
                                              long straightThrough) {
+        return reports(from, to, received, delivered, reviewed, straightThrough,
+                new OperationalReportSnapshot.TimeSaved(delivered, straightThrough,
+                        delivered == 0 ? null : (int) (straightThrough * 100 / delivered), 0, 0, 0, List.of(), 0, 1.0, 0));
+    }
+
+    /** The same, with task 0020's "What LexaVault did for you" numbers. */
+    static OperationalReportSnapshot reports(Instant from, Instant to, long received, long delivered, long reviewed,
+                                             long straightThrough, OperationalReportSnapshot.TimeSaved timeSaved) {
         return new OperationalReportSnapshot(Instant.now(),
                 new OperationalReportSnapshot.Period(from, to, from, from, "ALL", "ALL"),
                 new OperationalReportSnapshot.Executive(received, 0, 0, 0, 0, 0, delivered, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -92,6 +100,6 @@ final class ComplianceFakes {
                 new OperationalReportSnapshot.Backlog(0, 0, 0, 0, 0, 0),
                 new OperationalReportSnapshot.Usage(received, 0, 0, 0, 0, reviewed, straightThrough, 0),
                 new OperationalReportSnapshot.ServiceLevel(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                List.of());
+                List.of(), timeSaved);
     }
 }

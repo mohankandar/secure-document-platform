@@ -28,3 +28,19 @@ Evidence (`summary.json`, `estimate-query-plan.txt`, app logs) stays in `%TEMP%\
 container password is generated per run and never printed. Exit code 0 only when every check passes.
 
 `MakeEstimatePdf.java` writes the `plain` and `blank` PDFs (PDFBox on the class path).
+
+**Task 0020 A4 (the U023 confirm step against real data).** `-KeepRunning` leaves the container, the mock Ollama and the
+backend running after the checks (process ids in `%TEMP%\lexavault-0019\keep-running.json`). Then:
+
+```powershell
+cd frontend\securedoc-ui
+$env:VITE_SECURITY_MODE='LOCAL'; $env:VITE_CASE_FILE_UI_ENABLED='true'
+node node_modules\vite\bin\vite.js --config ..\..\test-tools\policy-estimate\vite.realdata.config.mjs   # UI on 15180
+node ..\..\test-tools\policy-estimate\Invoke-ConfirmStepRealData.mjs ..\..\docs\work\ui\compare\U023
+..\..\test-tools\policy-estimate\Stop-PolicyEstimateEnvironment.ps1   # removes lexavault-0019-pg only
+```
+
+`Invoke-ConfirmStepRealData.mjs` acts as the Business Administrator, chooses Light from the saved Custom 0.99, checks the
+confirm step's numbers against the estimate the server sent, presses Keep (nothing saved), then Save (saved), and writes
+`realdata-*.png` (git-ignored). The test UI's proxy drops the browser's Origin header, because the backend allows only
+its configured origins and port 15180 is not one.

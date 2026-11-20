@@ -4,6 +4,7 @@ import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.CountRow;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.operations.model.OperationalReportSnapshot;
 import com.securedoc.platform.application.port.in.GetOperationalReportsQuery;
 import com.securedoc.platform.application.port.out.ComplianceReportPdfPort;
 import com.securedoc.platform.application.port.out.ComplianceReportReadPort;
@@ -69,9 +70,13 @@ class ComplianceReportServiceTest {
         return (fingerprint + "\n" + content.canonicalText()).getBytes(StandardCharsets.UTF_8);
     };
 
+    /** Task 0020: the "What LexaVault did for you" numbers Reports gives for the period; null = the defaults. */
+    private final AtomicReference<OperationalReportSnapshot.TimeSaved> timeSaved = new AtomicReference<>();
+
     private final GetOperationalReportsQuery reportsQuery = (p, from, to, source, outcome) -> {
         long[] n = reportNumbers.get();
-        return ComplianceFakes.reports(from, to, n[0], n[1], n[2], n[3]);
+        return timeSaved.get() == null ? ComplianceFakes.reports(from, to, n[0], n[1], n[2], n[3])
+                : ComplianceFakes.reports(from, to, n[0], n[1], n[2], n[3], timeSaved.get());
     };
 
     private ComplianceReportService service(Clock clock) {
@@ -134,6 +139,105 @@ class ComplianceReportServiceTest {
         assertTrue(c.appendix().isEmpty());
         assertEquals("pat@example.test, Business Administrator", c.createdBy(), "no display name bound: the username");
         assertEquals("Nov 19, 2026, 7:00 AM EST", c.createdAt(), "in the requested time zone");
+    }
+
+    /** 1 of 4 delivered cases needed no person; 121 pages in it; 4 items redacted; the setting now is 1.5. */
+    private static OperationalReportSnapshot.TimeSaved didForYou() {
+        return new OperationalReportSnapshot.TimeSaved(4, 1, 25, 201, 7, 4,
+                List.of("Social Security Number", "Credit card number"), 121, 1.5, 181);
+    }
+
+    private static String targets(String now, String previous) {
+        String keys = "dimensions=0; deliveryTargetMinutes=240; deliveryTargetPercent=95.0; straightThroughTargetPercent=90.0; "
+                + "reviewWaitTargetMinutes=60; reviewWaitTargetPercent=80";
+        return "Reporting configuration changed: " + keys + (now == null ? "" : "; minutesPerPage=" + now)
+                + (previous == null ? "" : "; previous=[" + keys + "; minutesPerPage=" + previous + "]");
+    }
+
+    private void targetsSaved(String detail, Instant at) {
+        reads.records.add(record("REPORTING_CONFIGURATION_CHANGED", "SUCCESS", UUID.randomUUID().toString(), null,
+                "tenant", detail, at, null));
+    }
+
+    @Test
+    void whatLexaVaultDidForYouIsTheLastTableOfSection3WithItsGreyLine() {
+        reportNumbers.set(new long[]{6, 4, 2, 2});
+        timeSaved.set(didForYou());
+        targetsSaved(targets("2.5", "1.0"), IN_PERIOD);
+        create(ComplianceEdition.SUMMARY);
+        ComplianceReportContent.Cases cases = rendered.get().cases();
+
+        assertEquals(List.of(
+                new ComplianceReportContent.ValueRow("Handled without a person", "1", "25%"),
+                new ComplianceReportContent.ValueRow("Pages checked (in 7 documents)", "201", null),
+                new ComplianceReportContent.ValueRow("Sensitive items redacted", "4", null),
+                new ComplianceReportContent.ValueRow("Review time saved (estimate)", "≈ 5 h", null)), cases.didForYou(),
+                "121 pages × 2.5 (the setting at the period end) = 302.5 minutes, rounded down: 5 h");
+        assertEquals("Estimate: pages in cases that needed no person × 2.5 minutes per page, rounded down. "
+                + "Pages a person reviewed count as zero.", cases.didForYouNote());
+        String text = rendered.get().canonicalText();
+        assertTrue(text.contains("cases.didForYou=Handled without a person|1|25%\n"));
+        assertTrue(text.contains("cases.didForYou=Review time saved (estimate)|≈ 5 h|\n"));
+        assertTrue(text.contains("cases.didForYouNote=Estimate: pages in cases that needed no person × 2.5 minutes per page"));
+        assertTrue(text.indexOf("cases.ofDelivered=") < text.indexOf("cases.didForYou="), "after the delivered table");
+    }
+
+    @Test
+    void timeSavedChangesTheFingerprint() {
+        reportNumbers.set(new long[]{6, 4, 2, 2});
+        timeSaved.set(didForYou());
+        String first = create(ComplianceEdition.SUMMARY).fingerprint();
+        assertEquals(first, create(ComplianceEdition.SUMMARY).fingerprint(), "same content, same fingerprint");
+        timeSaved.set(new OperationalReportSnapshot.TimeSaved(4, 1, 25, 201, 7, 4, List.of(), 160, 1.5, 240));
+        assertNotEquals(first, create(ComplianceEdition.SUMMARY).fingerprint(), "more pages with no person: 4 h, not 3 h (the fingerprint covers what is printed)");
+        timeSaved.set(didForYou());
+        targetsSaved(targets("3.0", "1.0"), IN_PERIOD);
+        assertNotEquals(first, create(ComplianceEdition.SUMMARY).fingerprint(), "another minutes per page");
+    }
+
+    @Test
+    void minutesPerPageIsTheSettingAtThePeriodEndFromTheHistory() {
+        reportNumbers.set(new long[]{6, 4, 2, 2});
+        timeSaved.set(didForYou()); // the setting now: 1.5
+
+        // No record at all: no change ever, so the stored setting.
+        create(ComplianceEdition.SUMMARY);
+        assertTrue(rendered.get().cases().didForYouNote().contains("× 1.5 minutes"));
+
+        // Changed only after the period: the value that change replaced.
+        targetsSaved(targets("1.5", "4.0"), Instant.parse("2026-11-01T00:00:00Z"));
+        create(ComplianceEdition.SUMMARY);
+        assertTrue(rendered.get().cases().didForYouNote().contains("× 4 minutes"), rendered.get().cases().didForYouNote());
+        assertEquals("≈ 8 h", rendered.get().cases().didForYou().get(3).value(), "121 × 4 = 484 minutes");
+
+        // Changed in the period: that value, whatever came later.
+        targetsSaved(targets("1.0", "0.5"), IN_PERIOD);
+        create(ComplianceEdition.SUMMARY);
+        assertEquals("Estimate: pages in cases that needed no person × 1 minute per page, rounded down. "
+                + "Pages a person reviewed count as zero.", rendered.get().cases().didForYouNote());
+        assertEquals("≈ 2 h", rendered.get().cases().didForYou().get(3).value());
+    }
+
+    @Test
+    void olderReportTargetRecordsWithoutTheKeyAreSkipped() {
+        reportNumbers.set(new long[]{6, 4, 2, 2});
+        timeSaved.set(didForYou());
+        // A record from before task 0020 in the period, then a new one after it that records what it replaced.
+        targetsSaved(targets(null, null), IN_PERIOD);
+        targetsSaved(targets("1.5", "2.0"), Instant.parse("2026-10-15T00:00:00Z"));
+        create(ComplianceEdition.SUMMARY);
+        assertTrue(rendered.get().cases().didForYouNote().contains("× 2 minutes"), rendered.get().cases().didForYouNote());
+    }
+
+    @Test
+    void noDeliveredCasesGivesZerosAndADash() {
+        timeSaved.set(new OperationalReportSnapshot.TimeSaved(0, 0, null, 0, 0, 0, List.of(), 0, 1.0, 0));
+        create(ComplianceEdition.SUMMARY);
+        List<ComplianceReportContent.ValueRow> rows = rendered.get().cases().didForYou();
+        assertEquals("0", rows.get(0).value());
+        assertEquals("—", rows.get(0).share());
+        assertEquals("Pages checked (in 0 documents)", rows.get(1).label());
+        assertEquals("0 min", rows.get(3).value());
     }
 
     @Test

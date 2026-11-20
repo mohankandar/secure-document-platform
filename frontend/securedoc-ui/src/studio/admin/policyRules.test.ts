@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, latestOnly, needsConfirm, presetName, presetOf,
+  MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetName, presetOf,
   previewHeadline, previewTiles, reviewChanged, saveLabel, type PolicyEstimate, type PolicyValues,
 } from './policyRules.ts';
 
@@ -106,15 +106,100 @@ test('preview words: not enough data, loading and failure', () => {
   assert.equal(PREVIEW_WORDS.note, 'An estimate from past findings (type and confidence only). Nothing changes until you save, and only cases received after saving use it.');
 });
 
-test('only the latest estimate answer is used', () => {
-  const latest = latestOnly();
-  const first = latest.take();
-  const second = latest.take();
-  assert.equal(latest.isLatest(first), false);
-  assert.equal(latest.isLatest(second), true);
-  const third = latest.take();
-  assert.equal(latest.isLatest(second), false);
-  assert.equal(latest.isLatest(third), true);
+/** A runner with hand-driven timers and answers: nothing happens until the test says so. */
+function harness() {
+  const timers: { run: () => void; ms: number; cleared: boolean }[] = [];
+  const asked: { query: Record<string, string>; signal: AbortSignal; answer: (e: PolicyEstimate) => void; fail: () => void }[] = [];
+  const runner = estimateRunner((query, signal) => new Promise<PolicyEstimate>((resolve, reject) => {
+    asked.push({ query, signal, answer: resolve, fail: () => reject(new Error('failed')) });
+    signal.addEventListener('abort', () => reject(new Error('aborted')));
+  }), 300, {
+    set: (run, ms) => { const t = { run, ms, cleared: false }; timers.push(t); return t; },
+    clear: (h) => { (h as { cleared: boolean }).cleared = true; },
+  });
+  const tick = () => timers.filter((t) => !t.cleared).forEach((t) => { t.cleared = true; t.run(); });
+  const heard: [string, string][] = [];
+  runner.subscribe((key, r) => heard.push([key, r.status]));
+  return { runner, timers, asked, tick, heard };
+}
+const flush = () => new Promise((r) => setTimeout(r, 0));
+const Q = (t: string) => ({ reviewMode: 'UNCERTAIN_ONLY', threshold: t });
+
+test('estimate runner: asks once, 300 ms after the last change, and only the latest answer is heard', async () => {
+  const h = harness();
+  h.runner.request('a', Q('0.84'));
+  h.runner.request('b', Q('0.81'));
+  assert.equal(h.timers[0].cleared, true, 'the first wait is cancelled');
+  assert.equal(h.timers[1].ms, 300);
+  assert.equal(h.asked.length, 0, 'nothing asked before the delay');
+  h.tick();
+  assert.deepEqual(h.asked.map((a) => a.query.threshold), ['0.81']);
+  h.runner.request('b', Q('0.81'));
+  assert.equal(h.asked.length, 1, 'the same values are not asked again');
+  h.runner.request('c', Q('0.70'));
+  assert.equal(h.asked[0].signal.aborted, true, 'the old request is cancelled');
+  h.tick();
+  h.asked[1].answer(estimate([148, 340], [96, 205]));
+  await flush();
+  assert.deepEqual(h.heard, [['c', 'ready']]);
+  assert.equal(h.runner.answer('c')?.status, 'ready');
+  assert.equal(h.runner.answer('b'), null);
+});
+
+test('estimate runner: Save during the 300 ms wait asks at once and gets that answer', async () => {
+  const h = harness();
+  h.runner.request('a', Q('0.70'));
+  const waiting = h.runner.now('a', Q('0.70'));
+  assert.equal(h.timers[0].cleared, true, 'the delay is skipped');
+  assert.equal(h.asked.length, 1);
+  h.asked[0].answer(estimate([148, 340], [96, 205]));
+  const r = await waiting;
+  assert.equal(r.status, 'ready');
+  // Asked again for the same values, Save reuses the answer.
+  assert.equal((await h.runner.now('a', Q('0.70'))).status, 'ready');
+  assert.equal(h.asked.length, 1);
+});
+
+test('estimate runner: Save while the request runs waits for it; a slow or failed answer is waited for, not asked twice', async () => {
+  const h = harness();
+  h.runner.request('a', Q('0.70'));
+  h.tick();
+  const first = h.runner.now('a', Q('0.70'));
+  const second = h.runner.now('a', Q('0.70'));
+  assert.equal(h.asked.length, 1, 'one request, however often Save is pressed');
+  let done = false;
+  void first.then(() => { done = true; });
+  await flush();
+  assert.equal(done, false, 'still waiting while the answer is slow');
+  h.asked[0].fail();
+  assert.equal((await first).status, 'failed');
+  assert.equal((await second).status, 'failed');
+  h.runner.request('a', Q('0.70'));
+  assert.equal(h.asked.length, 1, 'no retry after a failure');
+});
+
+test('estimate runner: an answer for other values never answers a Save', async () => {
+  const h = harness();
+  const waiting = h.runner.now('a', Q('0.70'));
+  h.runner.request('b', Q('0.75'));
+  assert.equal((await waiting).status, 'dropped');
+  assert.equal(h.asked[0].signal.aborted, true);
+  h.asked[0].answer(estimate([148, 340], [96, 205]));
+  await flush();
+  assert.equal(h.runner.answer('a'), null);
+  assert.deepEqual(h.heard, []);
+  // Closing the card drops what is waiting.
+  const closing = h.runner.now('b', Q('0.75'));
+  h.runner.drop();
+  assert.equal((await closing).status, 'dropped');
+});
+
+test('Fine-tune words: "Every finding", with Strict’s hint; the other mode keeps its hint', () => {
+  assert.equal(MODE_WORDS.REVIEW_ALL.button, 'Every finding');
+  assert.equal(MODE_WORDS.REVIEW_ALL.hint, 'Every finding goes to a person. Cases with nothing found are delivered without a check.');
+  assert.equal(MODE_WORDS.UNCERTAIN_ONLY.button, 'Only uncertain findings');
+  assert.equal(MODE_WORDS.UNCERTAIN_ONLY.hint, 'Findings below this go to a reviewer.');
+  assert.ok(PRESETS[0].line.endsWith(MODE_WORDS.REVIEW_ALL.hint.replace('Every finding goes to a person. ', '')));
 });
 
 test('the confirm step shows only when fewer findings would go to a person', () => {
@@ -132,15 +217,24 @@ test('confirm words: names, numbers, threshold and the audit line', () => {
   const light = applyPreset(BALANCED, 'LIGHT');
   const w = confirmWords(BALANCED, light, estimate([148, 340], [96, 205]));
   assert.deepEqual(w, {
-    oldName: 'Balanced', newName: 'Light', fewerFindings: '135', fewerCases: '52', days: 30, threshold: '70%',
+    oldName: 'Balanced', newName: 'Light', newPhrase: 'Light', keepLabel: 'Keep Balanced', saveLabel: 'Save Light',
+    fewerFindings: '135', fewerCases: '52', days: 30, threshold: '70%',
     auditLine: 'This change, and who made it, is recorded in the audit trail and shown in the compliance report as Balanced → Light.',
   });
   // Cases that don't drop are left out.
   assert.equal(confirmWords(BALANCED, light, estimate([148, 340], [148, 205])).fewerCases, null);
-  // Custom on either side.
+  // Custom on either side (task 0020 A2): "your current settings" / "these settings"; the audit line keeps the names.
   const custom = confirmWords({ ...BALANCED, autoRedactThreshold: 0.9 }, { ...BALANCED, autoRedactThreshold: 0.74 }, estimate([200, 500], [150, 400]));
   assert.equal(custom.oldName, 'Custom');
   assert.equal(custom.newName, 'Custom');
   assert.equal(custom.threshold, '74%');
   assert.match(custom.auditLine, /as Custom → Custom\.$/);
+  const customWords = { newPhrase: 'these settings', keepLabel: 'Keep your current settings', saveLabel: 'Save these settings' };
+  assert.deepEqual({ newPhrase: custom.newPhrase, keepLabel: custom.keepLabel, saveLabel: custom.saveLabel }, customWords);
+  const fromCustom = confirmWords({ ...BALANCED, autoRedactThreshold: 0.85 }, light, estimate([200, 500], [150, 400]));
+  assert.deepEqual({ newPhrase: fromCustom.newPhrase, keepLabel: fromCustom.keepLabel, saveLabel: fromCustom.saveLabel }, customWords);
+  assert.match(fromCustom.auditLine, /as Custom → Light\.$/);
+  const toCustom = confirmWords(BALANCED, { ...BALANCED, autoRedactThreshold: 0.74 }, estimate([200, 500], [150, 400]));
+  assert.deepEqual({ newPhrase: toCustom.newPhrase, keepLabel: toCustom.keepLabel, saveLabel: toCustom.saveLabel }, customWords);
+  assert.match(toCustom.auditLine, /as Balanced → Custom\.$/);
 });

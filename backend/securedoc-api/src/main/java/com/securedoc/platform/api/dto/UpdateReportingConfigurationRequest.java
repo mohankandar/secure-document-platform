@@ -10,5 +10,7 @@ public record UpdateReportingConfigurationRequest(
         double straightThroughTargetPercent,
         int reviewWaitTargetMinutes,
         /** 0 to 100. Left out by older callers, in which case the stored value is kept. */
-        Integer reviewWaitTargetPercent
+        Integer reviewWaitTargetPercent,
+        /** Task 0020 B2: 0.5 to 30 in steps of 0.5. Left out by older callers, in which case the stored value is kept. */
+        Double minutesPerPage
 ) {}

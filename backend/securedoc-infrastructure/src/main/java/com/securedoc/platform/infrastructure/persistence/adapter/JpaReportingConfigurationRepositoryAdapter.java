@@ -24,7 +24,8 @@ public class JpaReportingConfigurationRepositoryAdapter implements ReportingConf
         UUID tenant = tenantId.value();
         Query settingsQuery = entityManager.createNativeQuery("""
                 select delivery_target_minutes, delivery_target_percent,
-                       straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent
+                       straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent,
+                       minutes_per_page
                   from reporting_tenant_settings where tenant_id=:tenant
                 """);
         settingsQuery.setParameter("tenant", tenant);
@@ -36,6 +37,7 @@ public class JpaReportingConfigurationRepositoryAdapter implements ReportingConf
         double straightThroughPercent = ReportingConfiguration.DEFAULT_STRAIGHT_THROUGH_TARGET_PERCENT;
         int reviewWaitMinutes = ReportingConfiguration.DEFAULT_REVIEW_WAIT_TARGET_MINUTES;
         int reviewWaitPercent = ReportingConfiguration.DEFAULT_REVIEW_WAIT_TARGET_PERCENT;
+        double minutesPerPage = ReportingConfiguration.DEFAULT_MINUTES_PER_PAGE;
         if (!settingsRows.isEmpty()) {
             Object[] row = settingsRows.get(0);
             deliveryMinutes = ((Number) row[0]).intValue();
@@ -43,6 +45,7 @@ public class JpaReportingConfigurationRepositoryAdapter implements ReportingConf
             straightThroughPercent = ((Number) row[2]).doubleValue();
             reviewWaitMinutes = ((Number) row[3]).intValue();
             reviewWaitPercent = ((Number) row[4]).intValue();
+            minutesPerPage = ((Number) row[5]).doubleValue();
         }
 
         Query dimensionsQuery = entityManager.createNativeQuery("""
@@ -62,7 +65,7 @@ public class JpaReportingConfigurationRepositoryAdapter implements ReportingConf
                     ((Number) row[4]).intValue()));
         }
         return new ReportingConfiguration(dimensions, deliveryMinutes, deliveryPercent,
-                straightThroughPercent, reviewWaitMinutes, reviewWaitPercent);
+                straightThroughPercent, reviewWaitMinutes, reviewWaitPercent, minutesPerPage);
     }
 
     @Override
@@ -72,14 +75,15 @@ public class JpaReportingConfigurationRepositoryAdapter implements ReportingConf
         Query settings = entityManager.createNativeQuery("""
                 insert into reporting_tenant_settings (
                     tenant_id, delivery_target_minutes, delivery_target_percent,
-                    straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent, updated_at
-                ) values (:tenant,:deliveryMinutes,:deliveryPercent,:straightThroughPercent,:reviewWaitMinutes,:reviewWaitPercent,now())
+                    straight_through_target_percent, review_wait_target_minutes, review_wait_target_percent, minutes_per_page, updated_at
+                ) values (:tenant,:deliveryMinutes,:deliveryPercent,:straightThroughPercent,:reviewWaitMinutes,:reviewWaitPercent,:minutesPerPage,now())
                 on conflict (tenant_id) do update set
                     delivery_target_minutes=excluded.delivery_target_minutes,
                     delivery_target_percent=excluded.delivery_target_percent,
                     straight_through_target_percent=excluded.straight_through_target_percent,
                     review_wait_target_minutes=excluded.review_wait_target_minutes,
                     review_wait_target_percent=excluded.review_wait_target_percent,
+                    minutes_per_page=excluded.minutes_per_page,
                     updated_at=now()
                 """);
         settings.setParameter("tenant", tenant);
@@ -88,6 +92,7 @@ public class JpaReportingConfigurationRepositoryAdapter implements ReportingConf
         settings.setParameter("straightThroughPercent", configuration.straightThroughTargetPercent());
         settings.setParameter("reviewWaitMinutes", configuration.reviewWaitTargetMinutes());
         settings.setParameter("reviewWaitPercent", configuration.reviewWaitTargetPercent());
+        settings.setParameter("minutesPerPage", java.math.BigDecimal.valueOf(configuration.minutesPerPage()));
         settings.executeUpdate();
 
         entityManager.createNativeQuery("delete from reporting_dimension_definitions where tenant_id=:tenant")

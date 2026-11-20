@@ -17,7 +17,8 @@ public record OperationalReportSnapshot(
         Backlog backlog,
         Usage usage,
         ServiceLevel serviceLevel,
-        List<DimensionBreakdown> dimensions
+        List<DimensionBreakdown> dimensions,
+        TimeSaved timeSaved
 ) {
     public OperationalReportSnapshot {
         Objects.requireNonNull(generatedAt);
@@ -32,6 +33,7 @@ public record OperationalReportSnapshot(
         Objects.requireNonNull(usage);
         Objects.requireNonNull(serviceLevel);
         dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        Objects.requireNonNull(timeSaved);
     }
 
     public record Period(Instant from, Instant to, Instant previousFrom, Instant previousTo,
@@ -84,6 +86,18 @@ public record OperationalReportSnapshot(
 
     public record DimensionBreakdown(String key, String label, List<DimensionValue> values) {
         public DimensionBreakdown { values = values == null ? List.of() : List.copyOf(values); }
+    }
+
+    /**
+     * Task 0020 B1: "What LexaVault did for you", for cases first delivered in the period (Reports' "Delivered", same
+     * filters). Handled without a person: not reviewed and not finished by hand. {@code percentNoPerson} is rounded
+     * down, and null with no delivered cases. {@code itemTypes} are vocabulary names. {@code minutesSaved} is
+     * {@code pagesNoPerson} × {@code minutesPerPage}, rounded down ({@link com.securedoc.platform.application.operations.TimeSavedRule}).
+     */
+    public record TimeSaved(long casesDelivered, long casesNoPerson, Integer percentNoPerson,
+                            long pagesChecked, long documentsChecked, long itemsRedacted, List<String> itemTypes,
+                            long pagesNoPerson, double minutesPerPage, long minutesSaved) {
+        public TimeSaved { itemTypes = itemTypes == null ? List.of() : List.copyOf(itemTypes); }
     }
 
     public record DimensionValue(String value, long packages, long delivered, double deliveryRate,

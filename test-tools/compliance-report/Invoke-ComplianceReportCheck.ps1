@@ -198,6 +198,19 @@ function Set-Lifecycle([int] $orig, [int] $redacted, [int] $hold, [bool] $approv
     & $invokeApi -Method PUT -Path '/api/v1/business-admin/lifecycle-policy' -Body $body -Roles 'BUSINESS_ADMIN' | Out-Null
 }
 
+function Put-Targets([object] $minutesPerPage) {
+    # Task 0020 B2: the report targets with only the minutes per page varying; returns the HTTP status.
+    $req = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Put, "$backend/api/v1/business-admin/reporting-configuration")
+    $req.Headers.Add('X-Tenant-Id', $tenantId)
+    $req.Headers.Add('X-Actor-Id', $actorId)
+    $req.Headers.Add('X-Actor-Roles', 'BUSINESS_ADMIN')
+    $req.Headers.Add('X-Correlation-Id', [guid]::NewGuid().ToString())
+    $json = @{ enabledDimensionDefinitionIds = @(); deliveryTargetMinutes = 240; deliveryTargetPercent = 95; straightThroughTargetPercent = 90
+               reviewWaitTargetMinutes = 60; reviewWaitTargetPercent = 80; minutesPerPage = $minutesPerPage } | ConvertTo-Json -Compress
+    $req.Content = New-Object System.Net.Http.StringContent($json, [System.Text.Encoding]::UTF8, 'application/json')
+    return [int]$http.SendAsync($req).GetAwaiter().GetResult().StatusCode
+}
+
 function Count-Audit([string] $where) { return [int](Sql "select count(*) from audit_records where tenant_id='$tenantId' and $where") }
 
 $app = $null
@@ -264,6 +277,30 @@ try {
         ($refusedStatus -eq 403 -and $authFailed -eq 'DENIED /api/v1/operations/reports/export capability=REPORT_EXPORT, method=GET, route=/api/v1/operations/reports/export') `
         "status=$refusedStatus record=$authFailed"
 
+    # --- 0020 B2: minutes per page, saved with the report targets ------------------------------
+    # These saves happen before the move into the past period, so their records fall in the period: the last one
+    # (2.5) is the setting at the period end. A later save (1.5) after the move is the setting Reports uses now.
+    $minutesBefore = (& $invokeApi -Method GET -Path '/api/v1/business-admin/configuration' -Roles 'BUSINESS_ADMIN').reportingConfiguration.minutesPerPage
+    Check '0020 B2: minutes per page defaults to 1.0 (migration 041)' ($minutesBefore -eq 1.0) "minutesPerPage=$minutesBefore"
+    $targetsBefore = Count-Audit "action='REPORTING_CONFIGURATION_CHANGED'"
+    foreach ($bad in @(0.4, 30.5, 1.25, 0)) {
+        $st = Put-Targets $bad
+        Check "0020 B2: minutes per page $bad is refused with 400" ($st -eq 400) "status=$st"
+    }
+    Check '0020 B2: a refused save writes no record' ((Count-Audit "action='REPORTING_CONFIGURATION_CHANGED'") -eq $targetsBefore)
+    foreach ($ok in @(30, 0.5, 2.5)) {
+        $st = Put-Targets $ok
+        Check "0020 B2: minutes per page $ok is saved" ($st -eq 200) "status=$st"
+    }
+    Check '0020 B2: each change writes one REPORTING_CONFIGURATION_CHANGED record' ((Count-Audit "action='REPORTING_CONFIGURATION_CHANGED'") -eq $targetsBefore + 3)
+    $st = Put-Targets 2.5
+    Check '0020 B2: a save with no change writes no record' ($st -eq 200 -and (Count-Audit "action='REPORTING_CONFIGURATION_CHANGED'") -eq $targetsBefore + 3)
+    $targetsDetail = Sql "select detail from audit_records where tenant_id='$tenantId' and action='REPORTING_CONFIGURATION_CHANGED' order by occurred_at desc limit 1"
+    Check '0020 B2: the record holds the new value and previous=[...]' `
+        ($targetsDetail -like '*; reviewWaitTargetPercent=80; minutesPerPage=2.5; previous=`[dimensions=0;*; minutesPerPage=0.5`]') $targetsDetail
+    $values = ($targetsDetail -replace '^Reporting configuration changed: ', '' -replace 'previous=\[', '' -replace '\]$', '') -split '; '
+    Check '0020 B2: the record holds numbers only' (@($values | Where-Object { $_ -notmatch '^[A-Za-z]+=[0-9]+(\.[0-9]+)?$' }).Count -eq 0) ($values -join ' | ')
+
     $cases = @{}
     $i = 0
     foreach ($c in 'C1', 'C2', 'C3', 'C4', 'C5', 'C6') { $i++; $cases[$c] = New-Case $c $i }
@@ -324,8 +361,64 @@ try {
     Audit 'DOCUMENT_EXPORTED' 'SUCCESS' $system 'Document' ([guid]::NewGuid()) "Document exported: destination=LOCAL_FOLDER, filename=$fileMarker-loan-file.pdf" $T $cases['C1']
     Audit 'POLLING_RUN_FAILED' 'FAILURE' $system 'IntegrationConnection' ([guid]::NewGuid()) "Polling run failed: detail=loan $loanMarker for $($idMarkers[0]) not found" $T $null
 
+    # --- 0020 B1: "What LexaVault did for you" on hand-made facts --------------------------------
+    # Delivered in the period: C1 (no person), C2 (reviewed), C3 (reviewed, finished by hand), C6 (not reviewed but
+    # finished by hand: Reports counts it as "No review needed", the new tile does not). C4 rejected, C5 open.
+    Fact $cases['C1'] 'page_count=121, document_count=3'
+    Fact $cases['C2'] 'page_count=40, document_count=2'
+    Fact $cases['C3'] 'page_count=25, document_count=1'
+    Fact $cases['C6'] 'page_count=15, document_count=1'
+    Fact $cases['C4'] 'page_count=900, document_count=9'
+    Fact $cases['C5'] 'page_count=500, document_count=5'
+    Audit 'BUSINESS_MANUAL_FALLBACK_SUBMITTED' 'SUCCESS' $actorId 'DocumentPackage' $cases['C6'] 'Business manual fallback submitted: documents=1, manualRegions=1, businessReviewAttested=true' "(timestamptz '$to' + interval '19 hours')" $cases['C6']
+    $findingsBefore = [int](Sql "select count(*) from findings where tenant_id='$tenantId' and status in ('CONFIRMED','REDACTED')")
+    $c1Doc = Sql "select id from documents where tenant_id='$tenantId' and package_id='$($cases['C1'])' limit 1"
+    foreach ($f in @(@('SSN', 'REDACTED'), @('SSN', 'REDACTED'), @('SSN', 'REDACTED'), @('CREDIT_CARD_NUMBER', 'CONFIRMED'),
+                     @('DATE_OF_BIRTH', 'DISMISSED'), @('DATE_OF_BIRTH', 'DISMISSED'), @('CREDIT_SCORE', 'DETECTED'))) {
+        Sql ("insert into findings (id, document_id, tenant_id, entity_type, page_number, start_offset, end_offset, confidence, " +
+             "detector_name, status, detected_at, updated_at, version) values (gen_random_uuid(), '$c1Doc', '$tenantId', " +
+             "'$($f[0])', 1, 0, 1, 0.95, 'seed-0020', '$($f[1])', now(), now(), 0)") | Out-Null
+    }
+    # A second entity with a big delivered, unreviewed case in the same period: never counted for this entity.
+    $otherTenant = '00000000-0000-0000-0000-0000000020ff'
+    Sql @"
+create temp table tt as select * from tenants where id='$tenantId';
+update tt set id='$otherTenant', slug='other-0020', name='Other entity 0020';
+insert into tenants select * from tt;
+insert into reporting_package_facts (tenant_id, package_id, package_type, status, received_at, last_observed_at, document_count,
+    page_count, first_delivered_at, reviewed_flag, created_at, updated_at)
+values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T, 50, 9999, $T, false, now(), now());
+"@ | Out-Null
+    # The setting now (after the period): Reports uses it; the compliance report uses the one at the period end.
+    Check '0020 B2: minutes per page 1.5 is saved after the period' ((Put-Targets 1.5) -eq 200)
+
+    $unreviewedByHand = [int](Sql ("select count(*) from reporting_package_facts f where f.tenant_id='$tenantId' and not f.reviewed_flag " +
+        "and f.first_delivered_at >= '$from' and f.first_delivered_at < date '$to' + 1 and exists (select 1 from audit_records a " +
+        "where a.tenant_id=f.tenant_id and a.action='BUSINESS_MANUAL_FALLBACK_SUBMITTED' and a.outcome='SUCCESS' " +
+        "and a.resource_id=cast(f.package_id as text))"))
+    $ts = (& $invokeApi -Method GET -Path "/api/v1/operations/reports?from=$($from)T00:00:00Z&to=$($today.AddDays(-30).ToString('yyyy-MM-dd'))T00:00:00Z" -Roles 'REPORT_VIEWER')
+    $t = $ts.timeSaved
+    Check '0020 B1: cases = Reports "Delivered"' ($t.casesDelivered -eq 4 -and $t.casesDelivered -eq $ts.executive.delivered) "cases=$($t.casesDelivered) delivered=$($ts.executive.delivered)"
+    Check '0020 B1: handled without a person = "No review needed" minus the unreviewed cases finished by hand' `
+        ($t.casesNoPerson -eq 1 -and $t.casesNoPerson -eq $ts.usage.straightThroughPackages - $unreviewedByHand) `
+        "noPerson=$($t.casesNoPerson) straight=$($ts.usage.straightThroughPackages) unreviewedByHand=$unreviewedByHand"
+    Check '0020 B1: percent rounded down (1 of 4 = 25)' ($t.percentNoPerson -eq 25) "percent=$($t.percentNoPerson)"
+    Check '0020 B1: pages and documents of the delivered cases only (121+40+25+15, 3+2+1+1)' ($t.pagesChecked -eq 201 -and $t.documentsChecked -eq 7) "pages=$($t.pagesChecked) documents=$($t.documentsChecked)"
+    Check '0020 B1: sensitive items redacted = CONFIRMED or REDACTED findings in delivered cases' `
+        ($findingsBefore -eq 0 -and $t.itemsRedacted -eq 4 -and (@($t.itemTypes) -join ',') -eq 'Social Security Number,Credit card number') `
+        "before=$findingsBefore items=$($t.itemsRedacted) types=$(@($t.itemTypes) -join ',')"
+    Check '0020 B1: pages in cases that needed no person (C1 only)' ($t.pagesNoPerson -eq 121) "pagesNoPerson=$($t.pagesNoPerson)"
+    Check '0020 B1: minutes saved = 121 x 1.5 = 181.5, rounded down' ($t.minutesPerPage -eq 1.5 -and $t.minutesSaved -eq 181) "minutesPerPage=$($t.minutesPerPage) minutesSaved=$($t.minutesSaved)"
+    # (The processor's refusal is checked at the end: it writes an AUTHORIZATION_FAILED record that 0018 A2 counts.)
+    Check '0020 B3: the Report Viewer and the Business Administrator see the block' `
+        ($null -ne $t -and $null -ne (& $invokeApi -Method GET -Path '/api/v1/operations/reports' -Roles 'BUSINESS_ADMIN').timeSaved)
+    $empty = (& $invokeApi -Method GET -Path '/api/v1/operations/reports?from=2001-01-01T00:00:00Z&to=2001-02-01T00:00:00Z' -Roles 'REPORT_VIEWER').timeSaved
+    Check '0020 B3: no delivered cases: every count 0, percent null' `
+        ($empty.casesDelivered -eq 0 -and $null -eq $empty.percentNoPerson -and $empty.pagesChecked -eq 0 -and $empty.itemsRedacted -eq 0 -and $empty.minutesSaved -eq 0) `
+        ($empty | ConvertTo-Json -Compress)
+
     # Independent expectations, straight from the seeded tables.
-    $expect = [ordered]@{ received = 6; delivered = 4; rejected = 1; open = 1; straight = 2; reviewed = 2; byHand = 1
+    $expect = [ordered]@{ received = 6; delivered = 4; rejected = 1; open = 1; straight = 2; reviewed = 2; byHand = 2
         due = 3; onTime = 1; late = 2; stillWithin = 1; policyChanges = $policyChangeCount; lifecycleChanges = 2; findings = 3
         approved = 1; originals = 2; exports = 2; compliance = 0; refused = 2 }
     $fromInstant = "$($from)T00:00:00Z"; $toInstant = "$($today.AddDays(-30).ToString('yyyy-MM-dd'))T00:00:00Z"
@@ -398,7 +491,11 @@ try {
     $expectedLines = @(
         "Received $($expect.received) 100%", "Delivered $($expect.delivered) 67%",
         "Still open on $endWords $($expect.open) 17%", "No review needed $($expect.straight) 50%", "Checked by a reviewer $($expect.reviewed) 50%",
-        "Finished by hand after a processing stop $($expect.byHand) 25%",
+        "Finished by hand after a processing stop $($expect.byHand) 50%",
+        # 0020 B4: "What LexaVault did for you" at the end of section 3 (time saved with 2.5, the setting at the period end).
+        "WHAT LEXAVAULT DID FOR YOU NUMBER SHARE", "Handled without a person 1 25%", "Pages checked (in 7 documents) 201", "Sensitive items redacted 4",
+        "Review time saved (estimate) $([char]0x2248) 5 h",
+        "Estimate: pages in cases that needed no person $([char]0x00D7) 2.5 minutes per page, rounded down. Pages a person reviewed count as zero.",
         "Originals due for deletion $($expect.due) Deleted on time $($expect.onTime) Late or failed $($expect.late)",
         "$($expect.stillWithin) case delivered in the last 48 hours of the period was still within its keep time on $endWords",
         "Redaction policy changes $($expect.policyChanges)", "Keeping and deleting changes $($expect.lifecycleChanges)",
@@ -426,6 +523,7 @@ try {
         ($f.Contains("Appendix $([char]0x00B7) Full audit trail") -and $f.Contains('Exported a document') -and $f.Contains('Could not check a connection for documents'))
     Check 'full edition: details printed only for allowed actions' `
         ($f.Contains('Business manual fallback submitted: documents=1, manualRegions=2') -and -not $f.Contains('filename='))
+    Check '0020 B2: the full edition appendix prints the report-targets record with minutesPerPage (numbers only)' ($f.Contains('minutesPerPage=2.5'))
     $periodRecords = Count-Audit "occurred_at >= '$from' and occurred_at < date '$to' + 1"
     Check 'full edition: one appendix row per record in the period' `
         (([regex]::Matches($texts['FULL'], '\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}')).Count -eq $periodRecords) "records=$periodRecords, rows=$(([regex]::Matches($texts['FULL'], '\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}')).Count)"
@@ -480,6 +578,10 @@ try {
         Check "$edition`: 0018 A1: every header line ends with the customer name" `
             ($headerLines.Count -ge 2 -and $withCustomer.Count -eq $headerLines.Count) "headers=$($headerLines.Count) withCustomer=$($withCustomer.Count)"
     }
+
+    # Task 0020 B3, last: a role without REPORT_EXECUTIVE_VIEW gets no Reports answer (and so no time-saved block).
+    $processorStatus = Invoke-Raw 'GET' '/api/v1/operations/reports' 'DOCUMENT_PROCESSOR'
+    Check '0020 B3: a document processor is refused the Reports answer (403)' ($processorStatus -eq 403) "status=$processorStatus"
 
     $failed = @($checks | Where-Object { -not $_.pass }).Count
     [pscustomobject]@{ period = "$from..$to"; cases = $cases; expect = $expect; checks = $checks } |

@@ -211,9 +211,105 @@ test('Custom: a saved Custom policy opens Fine-tune and chooses no card; a hand 
   await expect(c.locator('.cf-sp-hint')).toContainText('Custom: these settings match no preset.');
   await expect(saveButton(page)).toHaveText('Save');
   await expect(preview(page)).toContainText('If you save these settings, based on the last 30 days in Residential lending (512 cases)');
-  // Choosing "Every case" in Fine-tune is Strict.
-  await c.getByRole('radio', { name: 'Every case' }).click();
+  await expect(c.getByText('Findings below this go to a reviewer.', { exact: true })).toBeVisible();
+  // Choosing "Every finding" in Fine-tune is Strict, with Strict's words under the slider (task 0020 A3).
+  await expect(c.getByRole('radio', { name: 'Every case' })).toHaveCount(0);
+  await c.getByRole('radio', { name: 'Every finding', exact: true }).click();
   await expect(radio(page, 'Strict')).toBeChecked();
+  await expect(c.getByText('Every finding goes to a person. Cases with nothing found are delivered without a check.', { exact: true })).toBeVisible();
+  await expect(c).not.toContainText('reviewed regardless');
+});
+
+test('Save waits for an estimate still in its 300 ms delay: asks at once, then the confirm step', async ({ page }) => {
+  const h = await openPolicy(page);
+  const dialog = page.getByRole('alertdialog', { name: 'A person would check fewer findings' });
+  await radio(page, 'Light').check();
+  // Pressed straight away, inside the delay: no answer yet.
+  await saveButton(page).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAccessibleDescription('With Light, about 135 fewer findings and 52 fewer cases in the last 30 days would have had a person check them.');
+  expect(h.estimates).toHaveLength(1);
+  expect(h.writes).toEqual([]);
+});
+
+test('Save waits for a slow estimate: "Working out…", the card locked, a second press does nothing, then the confirm step', async ({ page }) => {
+  const h = await openPolicy(page, { estimate: () => ({ delayMs: 1500 }) });
+  const c = card(page);
+  const dialog = page.getByRole('alertdialog', { name: 'A person would check fewer findings' });
+  await radio(page, 'Light').check();
+  await saveButton(page).click();
+  const working = c.getByRole('button', { name: 'Working out…' });
+  await expect(working).toBeVisible();
+  await expect(working).toHaveAttribute('aria-disabled', 'true');
+  await expect(c.getByRole('button', { name: 'Reset' })).toBeDisabled();
+  for (const name of ['Strict', 'Balanced', 'Light']) await expect(radio(page, name)).toBeDisabled();
+  await expect(c.getByLabel(/Auto-redact when confidence is at least/)).toBeDisabled();
+  await expect(c.getByRole('button', { name: 'Credit score' })).toBeDisabled();
+  await working.click({ force: true });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(1);
+  expect(h.estimates).toHaveLength(1);
+  expect(h.writes).toEqual([]);
+  await dialog.getByRole('button', { name: 'Save Light' }).click();
+  await expect.poll(() => h.writes.length).toBe(1);
+  expect(h.writes[0]).toEqual({ ...BALANCED, autoRedactThreshold: 0.7 });
+  await expect(radio(page, 'Light')).toBeEnabled();
+});
+
+test('Save waits for an estimate that then fails: saves without the confirm step', async ({ page }) => {
+  const h = await openPolicy(page, { estimate: () => ({ delayMs: 1000, status: 500 }) });
+  await radio(page, 'Light').check();
+  await saveButton(page).click();
+  await expect(card(page).getByRole('button', { name: 'Working out…' })).toBeVisible();
+  await expect.poll(() => h.writes.length).toBe(1);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(h.writes[0]).toEqual({ ...BALANCED, autoRedactThreshold: 0.7 });
+  expect(h.estimates).toHaveLength(1);
+});
+
+test('Save waits for a slow estimate that says not enough data: saves without the confirm step', async ({ page }) => {
+  const h = await openPolicy(page, { estimate: (q) => ({ delayMs: 1000, body: defaultEstimate(q, 12) }) });
+  await radio(page, 'Light').check();
+  await saveButton(page).click();
+  await expect(card(page).getByRole('button', { name: 'Working out…' })).toBeVisible();
+  await expect.poll(() => h.writes.length).toBe(1);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+});
+
+test('confirm step with Custom on either side: "your current settings" / "these settings"; the audit line keeps the names', async ({ page }) => {
+  const h = await openPolicy(page, { policy: { ...BALANCED, autoRedactThreshold: 0.85 }, estimate: (q) => ({ body: {
+    ...defaultEstimate(q), current: { ...defaultEstimate(q).current, casesToPerson: 170, findingsToPerson: 410 } } }) });
+  const dialog = page.getByRole('alertdialog', { name: 'A person would check fewer findings' });
+  // Custom → Light.
+  await radio(page, 'Light').check();
+  await expect(preview(page).locator('.cf-sp-tile')).toHaveCount(2);
+  await saveButton(page).click();
+  await expect(dialog).toHaveAccessibleDescription('With these settings, about 205 fewer findings and 74 fewer cases in the last 30 days would have had a person check them.');
+  await expect(dialog.getByRole('button')).toHaveText(['Keep your current settings', 'Save these settings']);
+  await expect(dialog).toContainText('shown in the compliance report as Custom → Light.');
+  await dialog.getByRole('button', { name: 'Keep your current settings' }).click();
+  expect(h.writes).toEqual([]);
+  // Custom → Custom (77%).
+  await card(page).getByLabel(/Auto-redact when confidence is at least/).fill('77');
+  await expect(preview(page).locator('.cf-sp-tile')).toHaveCount(2);
+  await saveButton(page).click();
+  await expect(dialog.getByRole('button')).toHaveText(['Keep your current settings', 'Save these settings']);
+  await expect(dialog).toContainText('as Custom → Custom.');
+  await dialog.getByRole('button', { name: 'Save these settings' }).click();
+  await expect.poll(() => h.writes.length).toBe(1);
+  expect(h.writes[0].autoRedactThreshold).toBe(0.77);
+});
+
+test('confirm step from a preset to Custom uses the Custom wording', async ({ page }) => {
+  await openPolicy(page);
+  await card(page).locator('summary').click();
+  await card(page).getByLabel(/Auto-redact when confidence is at least/).fill('77');
+  await expect(preview(page).locator('.cf-sp-tile')).toHaveCount(2);
+  await saveButton(page).click();
+  const dialog = page.getByRole('alertdialog', { name: 'A person would check fewer findings' });
+  await expect(dialog).toHaveAccessibleDescription(/^With these settings, about 40 fewer findings/);
+  await expect(dialog.getByRole('button')).toHaveText(['Keep your current settings', 'Save these settings']);
+  await expect(dialog).toContainText('as Balanced → Custom.');
 });
 
 test('only types or the switch changed: "Save", no preview, no estimate asked', async ({ page }) => {

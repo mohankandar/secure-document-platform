@@ -139,7 +139,8 @@ public class BusinessAdminController {
         service.updateReportingConfiguration(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), body.enabledDimensionDefinitionIds(),
                 body.deliveryTargetMinutes(), body.deliveryTargetPercent(),
-                body.straightThroughTargetPercent(), body.reviewWaitTargetMinutes(), body.reviewWaitTargetPercent());
+                body.straightThroughTargetPercent(), body.reviewWaitTargetMinutes(), body.reviewWaitTargetPercent(),
+                body.minutesPerPage());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -229,7 +230,7 @@ public class BusinessAdminController {
                         d.definitionId(), d.key(), d.label(), d.enabled(), d.displayOrder())).toList(),
                 reporting.deliveryTargetMinutes(), reporting.deliveryTargetPercent(),
                 reporting.straightThroughTargetPercent(), reporting.reviewWaitTargetMinutes(),
-                reporting.reviewWaitTargetPercent());
+                reporting.reviewWaitTargetPercent(), reporting.minutesPerPage());
         return new BusinessAdminConfigurationResponse(identifiers, dashboardColumns, policyResponse, lifecycleResponse, intelligenceResponse, reportingResponse);
     }
 }

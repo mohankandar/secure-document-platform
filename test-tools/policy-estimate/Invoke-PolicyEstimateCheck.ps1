@@ -30,7 +30,10 @@ param(
     [int] $BlankCases = 6,
     [int] $PerfCases = 2000,
     [int] $PerfFindings = 50000,
-    [int] $ProcessingTimeoutSeconds = 900
+    [int] $ProcessingTimeoutSeconds = 900,
+    # Task 0020 A4: leave the container, mock Ollama and backend running for the UI check; stop them with
+    # Stop-PolicyEstimateEnvironment.ps1 (the process ids are written to keep-running.json in -RunRoot).
+    [switch] $KeepRunning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -401,6 +404,12 @@ analyze document_packages; analyze documents; analyze findings;
 } finally {
     $summary.checks = $checks
     ($summary | ConvertTo-Json -Depth 8) | Set-Content -Encoding utf8 (Join-Path $runDir 'summary.json')
+    if ($KeepRunning -and $containerStarted) {
+        $keep = [ordered]@{ container = $Container; backend = $backend; appPid = $(if ($appProcess) { $appProcess.Id }); ollamaPid = $(if ($ollamaProcess) { $ollamaProcess.Id }); runDir = $runDir }
+        ($keep | ConvertTo-Json) | Set-Content -Encoding utf8 (Join-Path $RunRoot 'keep-running.json')
+        Write-Host "Left running for the UI check: $backend (stop with Stop-PolicyEstimateEnvironment.ps1)"
+        $appProcess = $null; $ollamaProcess = $null; $containerStarted = $false
+    }
     if ($appProcess -and -not $appProcess.HasExited) { Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue }
     if ($ollamaProcess -and -not $ollamaProcess.HasExited) { Stop-Process -Id $ollamaProcess.Id -Force -ErrorAction SilentlyContinue }
     if ($containerStarted) { docker rm -f $Container | Out-Null }
