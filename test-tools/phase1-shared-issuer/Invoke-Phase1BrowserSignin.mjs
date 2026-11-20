@@ -43,7 +43,7 @@ const redact = (s) => String(s)
 // inWorkspace: the signed-in workspace is on screen (its account button, which holds Sign out since UI task U002).
 function classify(text, sawChooser, inWorkspace) {
   const entity = /Phase1 Entity [AB]/.exec(text)?.[0];
-  if (text.includes('Select organization')) return 'CHOOSER';
+  if (text.includes('Choose an entity')) return 'CHOOSER';
   if ((inWorkspace || text.includes('Sign out')) && entity) return `WORKSPACE ${entity}${sawChooser ? ' (after the chooser)' : ''}`;
   // UI task U013: the refusal is the Case File no-access screen (it replaces "does not have access" and, for no entity, "Sign-in could not be completed").
   if (text.includes("You don't have access to anything in LexaVault yet")) return 'REFUSED';
@@ -118,7 +118,7 @@ try {
       await page.waitForTimeout(6000);
       let text = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
       let sawChooser = false;
-      if (text.includes('Select organization') && expected[user]?.choose) {
+      if (text.includes('Choose an entity') && expected[user]?.choose) {
         sawChooser = true;
         await page.getByRole('button', { name: expected[user].choose }).click();
         await page.waitForTimeout(6000);

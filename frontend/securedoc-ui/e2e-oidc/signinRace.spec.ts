@@ -101,7 +101,7 @@ test('two-entity user still gets the chooser', async ({ page }) => {
 
   await signIn(page);
 
-  await expect(page.getByRole('heading', { name: 'Select organization' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose an entity' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Race Entity A' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Race Entity B' })).toBeVisible();
   await page.getByRole('button', { name: 'Race Entity B' }).click();

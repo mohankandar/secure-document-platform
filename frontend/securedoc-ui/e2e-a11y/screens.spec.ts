@@ -44,7 +44,7 @@ test.describe('sign-in', () => {
     await mockApi(page, 'supervisor', { twoEntities: true });
     await page.goto('/');
     await page.getByRole('button', { name: /sign in/i }).first().click();
-    await expect(page.getByRole('heading', { name: 'Select organization' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Choose an entity' })).toBeVisible();
     await scan(page, 'Entity chooser');
   });
 

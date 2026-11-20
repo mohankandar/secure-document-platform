@@ -8,6 +8,7 @@ import { ENTITY, mockApi, mockIdentityProvider, signInAs } from './harness';
  * current finding; Ctrl K stays page-wide.
  * A5 (WCAG 2.1.1): the Reports chart is one Tab stop; the arrow keys move between days and show the tip.
  * A4 (WCAG 1.3.1, 2.4.2): the sign-in and entity chooser screens have one main landmark, the product name and a title.
+ * U028: "/" on Cases is scoped to the case list too; the chooser says "Choose an entity".
  */
 
 async function openReview(page: Page) {
@@ -145,6 +146,38 @@ test.describe('Cases shortcuts (A2)', () => {
     await expect(page).not.toHaveURL(/\/case\//);
     expect(await activeId(page)).toBe('');
   });
+
+  // U028 A2: "/" is scoped like J and K.
+
+  test('"/" in the case list moves focus to the filter (U028)', async ({ page }) => {
+    await signInAs(page, 'supervisor');
+    const filter = page.getByRole('textbox', { name: 'Filter cases' });
+    const rows = page.locator('li.cf-case-row a.cf-case');
+    await expect(rows.first()).toBeVisible();
+    await rows.first().focus();
+    await page.keyboard.press('/');
+    await expect(filter).toBeFocused();
+    await expect(filter).toHaveValue('');
+    await expect(page).not.toHaveURL(/\/case\//);
+  });
+
+  test('"/" does nothing outside the case list, and types in a field (U028)', async ({ page }) => {
+    await signInAs(page, 'supervisor');
+    const filter = page.getByRole('textbox', { name: 'Filter cases' });
+    await expect(page.locator('li.cf-case-row').first()).toBeVisible();
+    await toBody(page);
+    await page.keyboard.press('/');
+    await expect(filter).not.toBeFocused();
+    await page.getByRole('button', { name: /^All/ }).focus();
+    await page.keyboard.press('/');
+    await expect(page.getByRole('button', { name: /^All/ })).toBeFocused();
+    await page.getByRole('button', { name: /account menu/i }).focus();
+    await page.keyboard.press('/');
+    await expect(filter).not.toBeFocused();
+    await filter.focus();
+    await page.keyboard.type('a/b');
+    await expect(filter).toHaveValue('a/b');
+  });
 });
 
 test.describe('Reports chart by keyboard (A5)', () => {
@@ -212,7 +245,9 @@ test.describe('Sign-in and entity chooser markup (A4)', () => {
     const choice = page.getByRole('button', { name: ENTITY.name });
     await expect(choice).toBeVisible();
     await expect(page.getByRole('main')).toHaveCount(1);
-    await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Choose an entity' })).toBeVisible();
+    await expect(page.getByText('Choose an entity to continue.')).toBeVisible();
+    await expect(page.getByText(/organization/i)).toHaveCount(0);
     await expect(page).toHaveTitle('Choose an entity · LexaVault');
     await expect(page.getByText('Secure Document Platform')).toHaveCount(0);
   });
