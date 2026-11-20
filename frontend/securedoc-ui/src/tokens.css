@@ -140,6 +140,7 @@
   --cf-ok: #1d7a4e;
   --cf-paper: #fdfdfc;
   --cf-scrim: rgb(10 11 13 / 0.48);
+  --cf-scrim-dialog: rgb(21 23 26 / 0.32); /* U022 canvas: the page stays readable behind a form dialog */
   --cf-shadow: 0 1px 2px rgb(10 11 13 / 0.06), 0 8px 24px rgb(10 11 13 / 0.06);
   --cf-shadow-pop: 0 24px 64px rgb(10 11 13 / 0.22), 0 2px 6px rgb(10 11 13 / 0.08);
   --cf-radius: 6px;
@@ -182,6 +183,7 @@
   --cf-ok: #6fcf97;
   --cf-paper: #f4f5f6;
   --cf-scrim: rgb(0 0 0 / 0.6);
+  --cf-scrim-dialog: rgb(0 0 0 / 0.55);
   --cf-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
   --cf-shadow-pop: 0 24px 64px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
   --cf-stage-new: #8a919b;

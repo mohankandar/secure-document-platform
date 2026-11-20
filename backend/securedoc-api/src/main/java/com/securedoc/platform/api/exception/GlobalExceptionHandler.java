@@ -2,6 +2,8 @@ package com.securedoc.platform.api.exception;
 
 import com.securedoc.platform.api.context.SecurityContextException;
 import com.securedoc.platform.api.dto.ApiErrorResponse;
+import com.securedoc.platform.api.security.AccessDeniedAuditRecorder;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.application.exception.ApplicationException;
 import com.securedoc.platform.application.exception.CapabilityNotEnabledException;
@@ -35,6 +37,18 @@ import java.util.UUID;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /** Records 403s not already recorded (task U022 step 0); absent in plain unit tests. */
+    private final AccessDeniedAuditRecorder accessDeniedAuditRecorder;
+
+    public GlobalExceptionHandler() {
+        this(null);
+    }
+
+    @Autowired
+    public GlobalExceptionHandler(AccessDeniedAuditRecorder accessDeniedAuditRecorder) {
+        this.accessDeniedAuditRecorder = accessDeniedAuditRecorder;
+    }
 
 
     @ExceptionHandler(LicenseEnforcementException.class)
@@ -119,6 +133,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        if (accessDeniedAuditRecorder != null) accessDeniedAuditRecorder.recordIfNotYet(request, ex);
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
     }

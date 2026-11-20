@@ -111,9 +111,9 @@ function New-Report([string] $roles, [bool] $full, [string] $from, [string] $to)
         contentType = "$($res.Content.Headers.ContentType)" }
 }
 
-function Invoke-Raw([string] $method, [string] $path, [string] $roles) {
+function Invoke-Raw([string] $method, [string] $path, [string] $roles, [string] $tenant = $tenantId) {
     $req = New-Object System.Net.Http.HttpRequestMessage((New-Object System.Net.Http.HttpMethod($method)), "$backend$path")
-    $req.Headers.Add('X-Tenant-Id', $tenantId)
+    $req.Headers.Add('X-Tenant-Id', $tenant)
     $req.Headers.Add('X-Actor-Id', $actorId)
     $req.Headers.Add('X-Actor-Roles', $roles)
     $req.Headers.Add('X-Correlation-Id', [guid]::NewGuid().ToString())
@@ -344,11 +344,13 @@ try {
     $made = @{}
     foreach ($role in $roles) {
         foreach ($full in $false, $true) {
-            $allowed = if ($full) { $role -eq 'TENANT_IT_ADMIN' } else { $role -eq 'BUSINESS_ADMIN' }
+            # U022 step 0: COMPLIANCE_REPORT_FULL also allows the summary edition.
+            $allowed = ($role -eq 'TENANT_IT_ADMIN') -or (-not $full -and $role -eq 'BUSINESS_ADMIN')
             $r = New-Report $role $full $from $to
             $label = "$role $(if ($full) { 'full' } else { 'summary' })"
             if ($allowed) {
                 Check "allowed: $label gets a PDF" ($r.status -eq 200 -and $r.contentType -eq 'application/pdf' -and $r.bytes.Length -gt 1000) "status=$($r.status)"
+                # The last one made per edition, so it matches the newest COMPLIANCE_REPORT_CREATED record below.
                 $made[$(if ($full) { 'FULL' } else { 'SUMMARY' })] = $r
             } else {
                 Check "refused: $label gets 403" ($r.status -eq 403) "status=$($r.status)"
@@ -356,9 +358,16 @@ try {
         }
     }
     $deniedAfter = Count-Audit "action='COMPLIANCE_REPORT_CREATED' and outcome='DENIED'"
-    Check 'every refusal is audited as a refused COMPLIANCE_REPORT_CREATED' (($deniedAfter - $deniedBefore) -eq 10) "denied=$($deniedAfter - $deniedBefore)"
+    Check 'every refusal is audited as a refused COMPLIANCE_REPORT_CREATED' (($deniedAfter - $deniedBefore) -eq 9) "denied=$($deniedAfter - $deniedBefore)"
     Check '0018 A2: compliance report refusals are not recorded twice (no AUTHORIZATION_FAILED for them)' `
         ((Count-Audit "action='AUTHORIZATION_FAILED'") -eq 1)
+    # U022 step 0: a tenant-boundary 403 (an entity that is not provisioned) is recorded once, reason=TENANT_BOUNDARY.
+    $otherEntity = [guid]::NewGuid().ToString()
+    $boundaryStatus = Invoke-Raw 'GET' '/api/v1/packages' 'DOCUMENT_PROCESSOR' $otherEntity
+    $boundary = Sql "select coalesce(string_agg(outcome || ' ' || detail, ' | '), '') from audit_records where tenant_id='$otherEntity' and action='AUTHORIZATION_FAILED'"
+    Check 'U022: a tenant-boundary 403 is recorded once as DENIED AUTHORIZATION_FAILED, reason=TENANT_BOUNDARY' `
+        ($boundaryStatus -eq 403 -and $boundary -eq 'DENIED capability=none, method=GET, route=/api/v1/packages, reason=TENANT_BOUNDARY') `
+        "status=$boundaryStatus record=$boundary"
     $bad = New-Report 'BUSINESS_ADMIN' $false $today.ToString('yyyy-MM-dd') $today.ToString('yyyy-MM-dd')
     Check 'a period that does not end before today is refused with 400' ($bad.status -eq 400) "status=$($bad.status)"
     Check 'the failure is audited by category only' ((Count-Audit "action='COMPLIANCE_REPORT_CREATED' and outcome='FAILURE' and detail='period=invalid, edition=SUMMARY, failure=VALIDATION'") -eq 1)

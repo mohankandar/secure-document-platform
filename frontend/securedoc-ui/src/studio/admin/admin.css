@@ -409,7 +409,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-audit-pick:nth-of-type(1) select { width: 220px; }
 .cf-ad-audit-pick:nth-of-type(2) select { width: 200px; }
 .cf-ad-audit-find { flex: 0 1 260px; min-width: 200px; }
-.cf-ad-audit-export { margin-left: auto; }
+.cf-ad-audit-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 .cf-ad-audit-when { font-family: var(--cf-font-mono); font-size: 13px; }
 .cf-ad-audit-table td code.cf-mono { font-size: 14px; color: var(--cf-ink); }
 .cf-ad-audit-result { font-size: 14px; color: var(--cf-ink); }

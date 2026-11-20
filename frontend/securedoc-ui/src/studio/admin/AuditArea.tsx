@@ -11,6 +11,8 @@ import {
   AUDIT_TYPES, PERIODS, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName,
   recordedFields, resultWord, shortId, whatHappened, type AuditTypeKey, type PeriodKey,
 } from './auditRules';
+import { ComplianceReportButton } from '../compliance/ComplianceReport';
+import { complianceEdition } from '../compliance/complianceRules';
 
 /** UI task U011 (finding 29): rows read as sentences; everyday filters up front, exact ones under More filters. */
 
@@ -39,8 +41,9 @@ function loadError(e: unknown) {
     : errorMessage(e, 'Failed to load audit records.');
 }
 
-export default function AuditArea() {
+export default function AuditArea({ caps, entityName }: { caps: string[]; entityName: string }) {
   const toast = useToast();
+  const compliance = complianceEdition('audit', caps);
   const [type, setType] = useState<AuditTypeKey>('MEANINGFUL');
   const [period, setPeriod] = useState<PeriodKey>('7d');
   const [anchor, setAnchor] = useState(() => Date.now());
@@ -190,7 +193,10 @@ export default function AuditArea() {
               onChange={(e) => { setCaseText(e.target.value); setCaseError(''); if (!e.target.value.trim()) setCaseFilter(''); }} />
           </label>
         </form>
-        <ExportMenu busy={exporting} disabled={Boolean(error)} onPick={exportRecords} />
+        <div className="cf-ad-audit-actions">
+          <ExportMenu busy={exporting} disabled={Boolean(error)} onPick={exportRecords} />
+          {compliance && <ComplianceReportButton edition={compliance} entityName={entityName} />}
+        </div>
       </div>
       {caseError && <p id="cf-audit-case-error" className="cf-ad-audit-error" role="alert">{caseError}</p>}
 

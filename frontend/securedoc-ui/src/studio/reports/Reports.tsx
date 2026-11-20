@@ -8,6 +8,8 @@ import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ErrorBoundary, LoadErrorCard, checked, isRecord } from '../failure';
 import { axisTicks, bucketDate, hours, labelledBuckets, pct, ratio } from './reportRules';
+import { ComplianceReportButton } from '../compliance/ComplianceReport';
+import { complianceEdition } from '../compliance/complianceRules';
 import './reports.css';
 
 type Preset = 'TODAY' | '7D' | '30D' | 'THIS_MONTH' | 'THIS_QUARTER' | 'CUSTOM';
@@ -69,10 +71,11 @@ function delta(current: number, previous: number) {
   return { text: `${change >= 0 ? '+' : ''}${Math.round(change)}%`, up: change >= 0 };
 }
 
-export default function Reports({ caps }: { caps: string[] }) {
+export default function Reports({ caps, entityName }: { caps: string[]; entityName: string }) {
   const toast = useToast();
   const canOperational = caps.includes(CAP.reportOperational);
   const canExport = caps.includes(CAP.reportExport);
+  const compliance = complianceEdition('reports', caps);
 
   const [preset, setPreset] = useState<Preset>('30D');
   const [customFrom, setCustomFrom] = useState(() => toDateInput(addDays(new Date(), -13)));
@@ -121,11 +124,16 @@ export default function Reports({ caps }: { caps: string[] }) {
             {isValidating && data && <> · refreshing</>}
           </p>
         </div>
-        {canExport && (
-          <button type="button" className="cf-btn" onClick={exportCsv} disabled={!data || exporting}>
-            {exporting ? <Spinner label="Exporting" /> : null}
-            Export CSV
-          </button>
+        {(canExport || compliance) && (
+          <div className="cf-rp-actions">
+            {canExport && (
+              <button type="button" className="cf-btn" onClick={exportCsv} disabled={!data || exporting}>
+                {exporting ? <Spinner label="Exporting" /> : null}
+                Export CSV
+              </button>
+            )}
+            {compliance && <ComplianceReportButton edition={compliance} entityName={entityName} />}
+          </div>
         )}
       </header>
 

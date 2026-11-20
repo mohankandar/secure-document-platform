@@ -768,6 +768,17 @@ class ApiClient {
     return this.request(`/audit-records${query}`);
   }
 
+  /**
+   * U022: POST /compliance-reports. Returns the PDF and the server's Content-Disposition only; the caller downloads it
+   * and keeps nothing (no file, response or hash) afterwards.
+   */
+  async createComplianceReport(body: object): Promise<{ pdf: Blob; disposition: string | null }> {
+    const response = await this.request<Response>('/compliance-reports', {
+      method: 'POST', headers: { Accept: 'application/pdf' }, body: JSON.stringify(body), cache: 'no-store',
+    });
+    return { pdf: await response.blob(), disposition: response.headers.get('content-disposition') };
+  }
+
   async exportAuditRecords(filters: Record<string, string>, format: 'csv' | 'json'): Promise<Blob> {
     const params = new URLSearchParams({ ...filters, format });
     const response = await fetch(`${this.baseUrl}/audit-records/export?${params.toString()}`, { headers: await baseHeaders() });

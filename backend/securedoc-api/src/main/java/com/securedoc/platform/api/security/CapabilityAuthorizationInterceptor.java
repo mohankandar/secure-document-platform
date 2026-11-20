@@ -59,6 +59,7 @@ public class CapabilityAuthorizationInterceptor implements HandlerInterceptor {
         auditService.recordDenied(principal.tenantId(), principal.actorId(), AuditAction.AUTHORIZATION_FAILED,
                 RESOURCE_TYPE, routePattern(request), contextResolver.resolveCorrelationId(request),
                 detail(annotation.value(), request));
+        AccessDeniedAuditRecorder.markRecorded(request);
         throw new AccessDeniedException("Insufficient permissions for this operation");
     }
 

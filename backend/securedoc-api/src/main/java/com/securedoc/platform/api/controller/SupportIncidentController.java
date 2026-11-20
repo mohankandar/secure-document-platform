@@ -10,6 +10,7 @@ import com.securedoc.platform.application.support.model.SupportIncidentSearchPag
 import com.securedoc.platform.application.support.service.SupportIncidentQueryService;
 import com.securedoc.platform.application.support.service.SupportIncidentActionService;
 import com.securedoc.platform.application.exception.AccessDeniedException;
+import com.securedoc.platform.application.exception.TenantBoundaryDeniedException;
 import com.securedoc.platform.domain.identity.TenantId;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -116,7 +117,7 @@ public class SupportIncidentController {
 
     private TenantId resolveTenantForMutation(TenantId principalTenant, UUID requestedTenant) {
         if (requestedTenant == null || requestedTenant.equals(principalTenant.value())) return principalTenant;
-        throw new AccessDeniedException("Cross-tenant support incident actions are not permitted");
+        throw new TenantBoundaryDeniedException("Cross-tenant support incident actions are not permitted");
     }
 
     private TenantId resolveTenant(TenantId principalTenant,
@@ -124,7 +125,7 @@ public class SupportIncidentController {
                                    com.securedoc.platform.application.context.AuthenticatedPrincipal principal) {
         if (requestedTenant == null || requestedTenant.equals(principalTenant.value())) return principalTenant;
         if (!authorizationPolicy.has(principal, UserCapability.PLATFORM_OPERATIONS)) {
-            throw new AccessDeniedException("Cross-tenant support search requires Platform Operations capability");
+            throw new TenantBoundaryDeniedException("Cross-tenant support search requires Platform Operations capability");
         }
         return TenantId.of(requestedTenant);
     }

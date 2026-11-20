@@ -61,7 +61,7 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
           {current.key === 'integrations' && <IntegrationsArea />}
           {current.key === 'identity' && <IdentityArea />}
           {current.key === 'health' && <HealthArea canOperate={caps.includes(CAP.platformOps)} />}
-          {current.key === 'audit' && <AuditArea />}
+          {current.key === 'audit' && <AuditArea caps={caps} entityName={me.tenantName} />}
         </ErrorBoundary>
       </section>
     </div>

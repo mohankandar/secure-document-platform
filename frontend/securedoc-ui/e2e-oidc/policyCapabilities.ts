@@ -5,6 +5,10 @@
  * Every e2e persona takes its capabilities from here, so a test never signs in with a list
  * the server would not send. `src/security/policyCapabilities.test.ts` reads the Java file and
  * fails if this copy drifts from it.
+ *
+ * Compliance report (U022): COMPLIANCE_REPORT_FULL creates either edition (the IT Administrator may untick
+ * "Include full audit trail"); COMPLIANCE_REPORT_SUMMARY creates the summary only. The server checks this in
+ * ComplianceReportController, not by granting the IT Administrator a second capability.
  */
 const PROCESSOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW', 'FINDING_DECISION', 'REDACTION_ADJUST', 'REVIEW_SUBMIT'];
 const REPORT_READ = ['REPORT_EXECUTIVE_VIEW', 'REPORT_OPERATIONAL_VIEW'];

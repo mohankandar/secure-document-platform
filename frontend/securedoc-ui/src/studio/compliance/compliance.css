@@ -1,0 +1,69 @@
+/* UI task U022: the Compliance report dialog, as on the canvas. Colours come from tokens.css only. */
+
+.cf-cr-scrim {
+  position: fixed; inset: 0; z-index: 40; overflow-y: auto;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 96px 16px 32px; background: var(--cf-scrim-dialog); animation: cf-fade 120ms ease-out;
+}
+.cf-cr {
+  width: 100%; max-width: 560px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 18px; padding: 24px;
+  background: var(--cf-surface); color: var(--cf-ink); border-radius: 10px; box-shadow: var(--cf-shadow-pop);
+}
+.cf-cr:focus { outline: none; }
+.cf-cr-title { margin: 0; font-size: 22px; font-weight: 600; line-height: normal; }
+.cf-cr-sub { margin-top: 4px; font-size: 14px; color: var(--cf-muted); }
+
+.cf-cr-period { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.cf-cr-period legend { padding: 0; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+.cf-cr-segment { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--cf-raised); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-cr-segment button {
+  flex: 1; min-height: 40px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent;
+  color: var(--cf-ink); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.cf-cr-segment button:hover:not([aria-pressed='true']):not(:disabled) { background: var(--cf-fill); }
+.cf-cr-segment button[aria-pressed='true'] { background: var(--cf-surface); box-shadow: 0 0 0 1px var(--cf-line); font-weight: 500; }
+.cf-cr-segment button:disabled { cursor: not-allowed; }
+.cf-cr-range { font-family: var(--cf-font-mono); font-size: 13px; color: var(--cf-muted); min-height: 1lh; }
+.cf-cr-problem { margin: 0; font-size: 13px; color: var(--cf-danger); }
+
+.cf-cr-dates { display: flex; gap: 12px; }
+.cf-cr-dates label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--cf-muted); }
+.cf-cr-dates input {
+  height: 40px; padding: 0 10px; box-sizing: border-box; width: 100%;
+  font: inherit; font-size: 14px; color: var(--cf-ink); background: var(--cf-surface);
+  border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius);
+}
+.cf-cr-dates input[aria-invalid='true'] { border-color: var(--cf-danger); }
+
+.cf-cr-contents { display: flex; flex-direction: column; gap: 8px; }
+.cf-cr-label { font-size: 14px; font-weight: 500; }
+.cf-cr-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.cf-cr-list li { display: flex; gap: 10px; }
+.cf-cr-list li > span { color: var(--cf-ok); flex: none; }
+.cf-cr-muted { font-size: 14px; color: var(--cf-muted); }
+.cf-cr-note { font-size: 13px; color: var(--cf-muted); }
+.cf-cr-check {
+  display: flex; gap: 12px; align-items: flex-start; padding: 12px; cursor: pointer;
+  border: 1px solid var(--cf-line-strong); border-radius: var(--cf-radius); font-size: 14px;
+}
+.cf-cr-check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--cf-ink); }
+.cf-cr-check b { font-weight: 500; }
+.cf-cr-check .cf-cr-muted { display: block; margin-top: 2px; }
+.cf-cr .cf-notice { font-size: 14px; }
+
+.cf-cr-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cf-cr-foot .cf-cr-note { flex: 1 1 220px; }
+.cf-btn.cf-cr-action { height: 44px; padding: 0 16px; }
+
+.cf-rp-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .cf-cr-scrim { padding-top: 32px; }
+  .cf-cr-dates { flex-direction: column; }
+}
+
+@media (pointer: coarse) {
+  .cf-cr-segment button, .cf-cr-dates input { min-height: 44px; }
+  .cf-cr-check { min-height: 44px; }
+}
