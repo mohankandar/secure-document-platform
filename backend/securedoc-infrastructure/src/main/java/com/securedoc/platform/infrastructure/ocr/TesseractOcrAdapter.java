@@ -278,6 +278,12 @@ public class TesseractOcrAdapter implements OcrPort {
         double verticalCenter() {
             return top + (height / 2.0);
         }
+
+        /** Position only: the OCR word may be a found value (task 0015). */
+        @Override
+        public String toString() {
+            return "WordRow[block=" + block + ", line=" + line + ", word=" + word + "]";
+        }
     }
 
     private static final class VisualLine {

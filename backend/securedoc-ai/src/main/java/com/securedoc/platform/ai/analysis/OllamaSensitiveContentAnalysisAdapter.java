@@ -408,7 +408,8 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         }
 
         try {
-            JsonNode envelope = objectMapper.readTree(response.body());
+            JsonNode envelope = SensitiveContentResponseParser.readTreeWithoutEcho(
+                    objectMapper, response.body(), "Invalid provider envelope");
             String content = envelope.path("message").path("content").asText(null);
             if (content == null || content.isBlank()) {
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
@@ -426,7 +427,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             throw e;
         } catch (IOException e) {
             throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
-                    "Local AI provider response could not be processed", e);
+                    "Local AI provider response could not be processed", null);
         }
     }
 

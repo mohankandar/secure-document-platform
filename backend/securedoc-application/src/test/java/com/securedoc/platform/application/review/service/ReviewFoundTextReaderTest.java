@@ -205,6 +205,50 @@ class ReviewFoundTextReaderTest {
         assertEquals(only.findingId().equals(first.id()) ? "agreement" : SSN, only.foundText().text());
     }
 
+    @Test
+    void afterTheStoredTextIsGoneTheQueueShowsTypeAndPageOnly() {
+        // Task 0015: no value is saved with the finding, so once the extracted-text artifact is
+        // deleted (or its file is gone) nothing can bring the found text back.
+        DocumentPackage pkg = DocumentPackage.create(tenantId, PackageType.MANUAL_UPLOAD,
+                ActorId.of(UUID.randomUUID()), PackageMetadata.empty());
+        Document document = Document.reconstitute(DocumentId.of(UUID.randomUUID()), tenantId, pkg.id(),
+                FileName.of("loan.pdf"), MimeType.pdf(), 100, Checksum.sha256("d"), DocumentType.PDF,
+                Instant.now(), DocumentStatus.PROCESSED, pages(2), Instant.now());
+        pkg.addDocument(document);
+        pkg.submit();
+        pkg.startProcessing();
+        pkg.completeProcessing();
+        int start = PAGE_2.indexOf(SSN);
+        Finding ssn = finding(document, FindingLocation.withBounds(2, start, start + SSN.length(), box()));
+
+        Artifact deleted = textArtifact(document);
+        deleted.delete();
+        ReviewQueueResult artifactDeleted = queue(pkg, document, ssn,
+                new ReviewFoundTextReader(new FakeArtifactRepository(List.of(deleted)),
+                        new FakeStoragePort(joined(PAGE_1, PAGE_2))));
+        ReviewQueueResult fileGone = queue(pkg, document, ssn,
+                new ReviewFoundTextReader(new FakeArtifactRepository(List.of(textArtifact(document))),
+                        new FakeStoragePort(null)));
+
+        for (ReviewQueueResult result : List.of(artifactDeleted, fileGone)) {
+            assertEquals(1, result.items().size());
+            ReviewItemSummary item = result.items().get(0);
+            assertNull(item.foundText(), "no found text once the original is gone");
+            assertEquals(EntityType.SSN, item.entityType());
+            assertEquals(2, item.pageNumber());
+            assertTrue(!item.toString().contains("0193"), "no part of the value in the item");
+        }
+    }
+
+    private ReviewQueueResult queue(DocumentPackage pkg, Document document, Finding finding,
+                                    ReviewFoundTextReader reader) {
+        FocusedReviewService service = new FocusedReviewService(
+                new FakePackageRepository(pkg), new FakeDocumentRepository(document),
+                new FakeFindingRepository(List.of(finding)), new FakePolicyRepository(),
+                command -> { }, new AuditService(record -> { }), reader);
+        return service.execute(tenantId, Optional.of(pkg.id()), 50);
+    }
+
     // --- helpers ------------------------------------------------------------------------------
 
     private Document document(int pageCount) {
@@ -223,7 +267,7 @@ class ReviewFoundTextReaderTest {
 
     private Finding finding(Document document, FindingLocation location) {
         return Finding.create(tenantId, document.id(), EntityType.SSN, location, Confidence.of(0.62),
-                DetectorSource.of("test"), "***-**-0193");
+                DetectorSource.of("test"));
     }
 
     private static FindingLocation.BoundingBox box() {

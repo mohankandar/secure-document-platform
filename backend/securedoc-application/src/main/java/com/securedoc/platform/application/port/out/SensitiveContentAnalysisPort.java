@@ -78,6 +78,12 @@ public interface SensitiveContentAnalysisPort {
                 text = "";
             }
         }
+
+        /** Page number and length only: page text holds the values being redacted (task 0015). */
+        @Override
+        public String toString() {
+            return "PageContent[pageNumber=" + pageNumber + ", characters=" + text.length() + "]";
+        }
     }
 
     /**
@@ -119,6 +125,12 @@ public interface SensitiveContentAnalysisPort {
             if (analyzerName == null || analyzerName.isBlank()) {
                 analyzerName = "semantic-analyzer";
             }
+        }
+
+        /** Type and page only: a stray log line must never print the found value (task 0015). */
+        @Override
+        public String toString() {
+            return "DiscoveredSensitiveContent[entityType=" + entityType + ", pageNumber=" + pageNumber + "]";
         }
     }
 

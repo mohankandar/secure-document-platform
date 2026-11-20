@@ -209,7 +209,7 @@ final class OcrSensitiveFieldSafetyPolicy {
         return new DetectedEntity(
                 EntityType.CREDIT_SCORE.name(), pageNumber,
                 scoreStart, scoreEnd, LOCATED_SCORE_CONFIDENCE,
-                "***", DETECTOR_NAME, DETECTOR_VERSION);
+                DETECTOR_NAME, DETECTOR_VERSION);
     }
 
     /**
@@ -267,7 +267,7 @@ final class OcrSensitiveFieldSafetyPolicy {
                                         candidate.startOffset() + digits.start(),
                                         candidate.startOffset() + digits.end(),
                                         LOCATED_SCORE_CONFIDENCE,
-                                        "***", DETECTOR_NAME, DETECTOR_VERSION),
+                                        DETECTOR_NAME, DETECTOR_VERSION),
                                 true, true, false);
                     }
                 }
@@ -594,6 +594,12 @@ final class OcrSensitiveFieldSafetyPolicy {
 
         double verticalCenter() {
             return top + (height / 2.0);
+        }
+
+        /** Offsets only: the token text may be a found value (task 0015). */
+        @Override
+        public String toString() {
+            return "OcrToken[startOffset=" + startOffset + ", endOffset=" + endOffset + "]";
         }
     }
 

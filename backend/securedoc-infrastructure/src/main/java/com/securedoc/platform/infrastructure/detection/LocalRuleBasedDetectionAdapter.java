@@ -251,8 +251,8 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         String text = page.text();
 
         detectSsns(text, page.pageNumber(), results);
-        detectPattern(text, EMAIL_PATTERN, "EMAIL_ADDRESS", 0.90, page.pageNumber(), results, this::maskEmail);
-        detectPattern(text, PHONE_PATTERN, "PHONE_NUMBER", 0.85, page.pageNumber(), results, this::maskPhone);
+        detectPattern(text, EMAIL_PATTERN, "EMAIL_ADDRESS", 0.90, page.pageNumber(), results);
+        detectPattern(text, PHONE_PATTERN, "PHONE_NUMBER", 0.85, page.pageNumber(), results);
         detectDatesOfBirth(text, page.pageNumber(), results);
         detectCreditCards(text, page.pageNumber(), results);
         detectCreditScores(text, page.pageNumber(), results);
@@ -287,10 +287,9 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
                 continue;
             }
 
-            String rawMatch = matcher.group(1);
             results.add(new DetectedEntity(
                     "DATE_OF_BIRTH", pageNumber, matcher.start(1), matcher.end(1), 0.90,
-                    maskDob(rawMatch), DETECTOR_NAME, DETECTOR_VERSION));
+                    DETECTOR_NAME, DETECTOR_VERSION));
         }
     }
 
@@ -319,7 +318,7 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
             }
             results.add(new DetectedEntity(
                     "SSN", pageNumber, matcher.start(), matcher.end(), 0.95,
-                    maskSsn(rawMatch), DETECTOR_NAME, DETECTOR_VERSION));
+                    DETECTOR_NAME, DETECTOR_VERSION));
         }
     }
 
@@ -340,7 +339,7 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
             }
             results.add(new DetectedEntity(
                     "CREDIT_CARD_NUMBER", pageNumber, matcher.start(), matcher.end(), 0.95,
-                    maskCreditCard(digits), DETECTOR_NAME, DETECTOR_VERSION));
+                    DETECTOR_NAME, DETECTOR_VERSION));
         }
     }
 
@@ -408,7 +407,7 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         if (!duplicate) {
             results.add(new DetectedEntity(
                     "CREDIT_SCORE", pageNumber, start, end, confidence,
-                    "***", DETECTOR_NAME, DETECTOR_VERSION));
+                    DETECTOR_NAME, DETECTOR_VERSION));
         }
     }
 
@@ -479,64 +478,14 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         return sum % 10 == 0;
     }
 
+    /** Only the match offsets are kept; the matched text itself is never carried out (task 0015). */
     private void detectPattern(String text, Pattern pattern, String entityType, double confidence,
-                               int pageNumber, List<DetectedEntity> results, MaskFunction maskFunction) {
+                               int pageNumber, List<DetectedEntity> results) {
         Matcher matcher = pattern.matcher(text);
         while (matcher.find()) {
-            String rawMatch = matcher.group();
             results.add(new DetectedEntity(
                     entityType, pageNumber, matcher.start(), matcher.end(), confidence,
-                    maskFunction.mask(rawMatch), DETECTOR_NAME, DETECTOR_VERSION));
+                    DETECTOR_NAME, DETECTOR_VERSION));
         }
-    }
-
-    private String maskSsn(String raw) {
-        if (raw.length() >= 4) {
-            return "***-**-" + raw.substring(raw.length() - 4);
-        }
-        return "***-**-****";
-    }
-
-    private String maskEmail(String raw) {
-        int atIndex = raw.indexOf('@');
-        if (atIndex > 0) {
-            String localPart = raw.substring(0, atIndex);
-            String domainPart = raw.substring(atIndex + 1);
-            String maskedLocal = localPart.charAt(0) + "***";
-            int dotIndex = domainPart.lastIndexOf('.');
-            if (dotIndex > 0) {
-                String maskedDomain = domainPart.charAt(0) + "***" + domainPart.substring(dotIndex);
-                return maskedLocal + "@" + maskedDomain;
-            }
-            return maskedLocal + "@***";
-        }
-        return "***@***";
-    }
-
-    private String maskPhone(String raw) {
-        String digits = raw.replaceAll("[^0-9]", "");
-        if (digits.length() >= 4) {
-            return "***-***-" + digits.substring(digits.length() - 4);
-        }
-        return "***-***-****";
-    }
-
-    private String maskDob(String raw) {
-        if (raw.length() >= 4) {
-            return "**/**/" + raw.substring(raw.length() - 4);
-        }
-        return "**/**/****";
-    }
-
-    private String maskCreditCard(String digits) {
-        if (digits.length() >= 4) {
-            return "****-****-****-" + digits.substring(digits.length() - 4);
-        }
-        return "****-****-****-****";
-    }
-
-    @FunctionalInterface
-    private interface MaskFunction {
-        String mask(String raw);
     }
 }

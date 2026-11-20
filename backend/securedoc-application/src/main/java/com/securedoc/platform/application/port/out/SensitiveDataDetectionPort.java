@@ -31,6 +31,12 @@ public interface SensitiveDataDetectionPort {
                 text = "";
             }
         }
+
+        /** Page number and length only: page text holds the values being redacted (task 0015). */
+        @Override
+        public String toString() {
+            return "PageInput[pageNumber=" + pageNumber + ", characters=" + text.length() + "]";
+        }
     }
 
     /**
@@ -56,7 +62,8 @@ public interface SensitiveDataDetectionPort {
 
     /**
      * A single detected sensitive entity.
-     * Contains safe metadata only — maskedPreview is a masked representation, never the raw value.
+     * Contains safe metadata only: type, page, offsets, confidence and detector. It never carries
+     * the found value, in full, masked or in part (task 0015).
      */
     record DetectedEntity(
             String entityType,
@@ -64,7 +71,6 @@ public interface SensitiveDataDetectionPort {
             int startOffset,
             int endOffset,
             double confidence,
-            String maskedPreview,
             String detectorName,
             String detectorVersion
     ) {
@@ -77,9 +83,6 @@ public interface SensitiveDataDetectionPort {
             }
             if (confidence < 0.0 || confidence > 1.0) {
                 throw new IllegalArgumentException("Confidence must be between 0.0 and 1.0");
-            }
-            if (maskedPreview == null) {
-                maskedPreview = "***";
             }
         }
     }

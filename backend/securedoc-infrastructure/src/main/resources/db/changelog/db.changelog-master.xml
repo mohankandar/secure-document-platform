@@ -42,4 +42,5 @@
     <include file="db/changelog/034-enterprise-identity-activation.xml"/>
     <include file="db/changelog/036-r1b-tenant-oidc-group-grants.xml"/>
     <include file="db/changelog/038-reporting-review-target-percent.xml"/>
+    <include file="db/changelog/039-findings-drop-snippet.xml"/>
 </databaseChangeLog>

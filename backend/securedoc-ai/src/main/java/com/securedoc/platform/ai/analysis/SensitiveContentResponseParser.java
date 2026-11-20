@@ -37,7 +37,7 @@ final class SensitiveContentResponseParser {
                                            String model,
                                            String analyzerName,
                                            String analyzerVersion) throws IOException {
-        JsonNode root = objectMapper.readTree(content);
+        JsonNode root = readTreeWithoutEcho(objectMapper, content, "Invalid findings payload");
         JsonNode findings = root.path("findings");
         if (!findings.isArray()) {
             throw new IOException("Invalid findings payload");
@@ -83,6 +83,32 @@ final class SensitiveContentResponseParser {
                     analyzerName, analyzerVersion));
         }
         return result;
+    }
+
+    /**
+     * Parses AI provider JSON without letting the answer's text travel on in an exception.
+     *
+     * <p>Jackson's parse errors quote the offending token (for example
+     * {@code Unrecognized token '123-45-6789'}) and, when source-in-location is on, part of the
+     * input. The answer can hold found values, so the Jackson exception is dropped here and a
+     * fixed message with no cause is thrown instead (task 0015). Source-in-location is also
+     * switched off on the parser, in case a caller passes a mapper that has it on.
+     */
+    static JsonNode readTreeWithoutEcho(ObjectMapper objectMapper, String json, String fixedMessage)
+            throws IOException {
+        if (json == null) {
+            throw new IOException(fixedMessage);
+        }
+        try (com.fasterxml.jackson.core.JsonParser parser = objectMapper.getFactory().createParser(json)) {
+            parser.disable(com.fasterxml.jackson.core.JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION);
+            JsonNode node = objectMapper.readTree(parser);
+            if (node == null) {
+                throw new IOException(fixedMessage);
+            }
+            return node;
+        } catch (IOException | RuntimeException parseFailure) {
+            throw new IOException(fixedMessage);
+        }
     }
 
     /**
