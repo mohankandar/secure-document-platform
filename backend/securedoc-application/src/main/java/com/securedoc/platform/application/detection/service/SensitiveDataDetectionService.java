@@ -256,7 +256,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         auditService.recordSuccess(
                 command.tenantId(), SYSTEM_ACTOR,
                 AuditAction.DOCUMENT_DETECTION_COMPLETED,
-                "Document", command.documentId().toString(), correlationId,
+                "Document", command.documentId().toString(), command.packageId(), correlationId,
                 "Detection completed: findings=" + findings.size()
                         + ", autoConfirmed=" + findings.stream().filter(f -> f.status() == FindingStatus.CONFIRMED).count()
                         + ", requiresReview=" + requiresReview
@@ -690,7 +690,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             auditService.recordFailure(
                     command.tenantId(), SYSTEM_ACTOR,
                     AuditAction.DOCUMENT_PROCESSING_FAILED,
-                    "Document", command.documentId().toString(), correlationId, safeReason);
+                    "Document", command.documentId().toString(), command.packageId(), correlationId, safeReason);
         } catch (Exception ignored) {
             // best effort
         }

@@ -97,7 +97,7 @@ public final class ManualFallbackPagePreviewService implements GetManualFallback
         try (InputStream content = storagePort.retrieve(original.storageReference())) {
             ReviewPageRenderPort.RenderedPage rendered = reviewPageRenderPort.render(content, pageNumber, masks);
             auditService.recordSuccess(tenantId, actorId, AuditAction.REVIEW_PAGE_PREVIEWED,
-                    "Document", documentId.toString(), correlationId,
+                    "Document", documentId.toString(), packageId, correlationId,
                     "Business manual fallback page preview rendered: page=" + pageNumber
                             + ", previewMasks=" + masks.size());
             return new ManualFallbackPagePreviewResult(rendered.content(), rendered.mimeType(), pageNumber,

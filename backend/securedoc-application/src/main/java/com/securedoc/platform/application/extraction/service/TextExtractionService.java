@@ -220,7 +220,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 SYSTEM_ACTOR,
                 AuditAction.DOCUMENT_EXTRACTION_COMPLETED,
                 "Document",
-                command.documentId().toString(),
+                command.documentId().toString(), command.packageId(),
                 command.correlationId(),
                 "Extraction completed: pages=" + extractionOutput.pageCount()
                         + ", chars=" + extractionOutput.totalCharacterCount()
@@ -260,7 +260,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 SYSTEM_ACTOR,
                 AuditAction.DOCUMENT_PROCESSING_FAILED,
                 "Document",
-                command.documentId().toString(),
+                command.documentId().toString(), command.packageId(),
                 command.correlationId(),
                 "Text extraction failed: " + NO_READABLE_TEXT_REASON
         );
@@ -300,7 +300,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                     SYSTEM_ACTOR,
                     AuditAction.DOCUMENT_PROCESSING_FAILED,
                     "Document",
-                    command.documentId().toString(),
+                    command.documentId().toString(), command.packageId(),
                     command.correlationId(),
                     safeReason
             );

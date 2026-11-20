@@ -178,7 +178,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
                 principal.actorId(),
                 AuditAction.DOCUMENT_UPLOADED,
                 "Document",
-                document.id().toString(),
+                document.id().toString(), document.packageId(),
                 correlationId,
                 "Document uploaded: mimeType=" + command.mimeType() + ", sizeBytes=" + command.contentLength()
         );

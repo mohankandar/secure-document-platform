@@ -18,6 +18,7 @@ import com.securedoc.platform.domain.finding.Finding;
 import com.securedoc.platform.domain.finding.FindingLocation;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.FindingId;
+import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.ReviewTaskId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.review.ReviewStatus;
@@ -53,7 +54,7 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
     public void execute(ConfirmFindingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
 
-        validateReviewContext(command.reviewTaskId(), command.tenantId(), command.actorId(), command.findingId());
+        PackageId caseId = validateReviewContext(command.reviewTaskId(), command.tenantId(), command.actorId(), command.findingId());
 
         Finding finding = findingRepository
                 .findByIdAndTenantId(command.findingId(), command.tenantId())
@@ -64,7 +65,7 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
         findingRepository.save(finding);
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.FINDING_CONFIRMED, "Finding", command.findingId().toString(),
+                AuditAction.FINDING_CONFIRMED, "Finding", command.findingId().toString(), caseId,
                 command.correlationId(), "Finding confirmed: type=" + finding.entityType());
     }
 
@@ -72,7 +73,7 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
     public void execute(DismissFindingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
 
-        validateReviewContext(command.reviewTaskId(), command.tenantId(), command.actorId(), command.findingId());
+        PackageId caseId = validateReviewContext(command.reviewTaskId(), command.tenantId(), command.actorId(), command.findingId());
 
         Finding finding = findingRepository
                 .findByIdAndTenantId(command.findingId(), command.tenantId())
@@ -83,7 +84,7 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
         findingRepository.save(finding);
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.FINDING_DISMISSED, "Finding", command.findingId().toString(),
+                AuditAction.FINDING_DISMISSED, "Finding", command.findingId().toString(), caseId,
                 command.correlationId(), "Finding dismissed: type=" + finding.entityType());
     }
 
@@ -91,7 +92,7 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
     public void execute(UpdateFindingBoundingBoxCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
 
-        validateReviewContext(command.reviewTaskId(), command.tenantId(), command.actorId(), command.findingId());
+        PackageId caseId = validateReviewContext(command.reviewTaskId(), command.tenantId(), command.actorId(), command.findingId());
 
         Finding finding = findingRepository
                 .findByIdAndTenantId(command.findingId(), command.tenantId())
@@ -108,14 +109,14 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
         findingRepository.save(finding);
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", command.findingId().toString(),
+                AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", command.findingId().toString(), caseId,
                 command.correlationId(), "Bounding box updated for finding on page " + currentLocation.pageNumber());
     }
 
     /**
      * Validates that the actor has an active IN_PROGRESS review task that covers the finding's document.
      */
-    private void validateReviewContext(ReviewTaskId reviewTaskId, TenantId tenantId,
+    private PackageId validateReviewContext(ReviewTaskId reviewTaskId, TenantId tenantId,
                                        ActorId actorId, FindingId findingId) {
         // 1. Load review task
         ReviewTask task = reviewTaskRepository
@@ -144,5 +145,6 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
         if (!document.packageId().equals(task.packageId())) {
             throw new ValidationException("Finding does not belong to the review task's package");
         }
+        return task.packageId();
     }
 }

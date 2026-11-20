@@ -186,13 +186,13 @@ public final class VaultService implements RegisterVaultEntryUseCase, DownloadAr
 
             if (approvedRequests.isEmpty()) {
                 auditService.recordDenied(command.tenantId(), command.actorId(),
-                        AuditAction.DOCUMENT_DOWNLOADED, "Artifact", vaultEntry.artifactId().toString(),
+                        AuditAction.DOCUMENT_DOWNLOADED, "Artifact", vaultEntry.artifactId().toString(), vaultEntry.packageId(),
                         command.correlationId(), "Original artifact access denied: no approved request");
                 throw new ValidationException("Access to original artifact requires an approved access request");
             }
             if (!hasValidAccess) {
                 auditService.recordDenied(command.tenantId(), command.actorId(),
-                        AuditAction.DOCUMENT_DOWNLOADED, "Artifact", vaultEntry.artifactId().toString(),
+                        AuditAction.DOCUMENT_DOWNLOADED, "Artifact", vaultEntry.artifactId().toString(), vaultEntry.packageId(),
                         command.correlationId(), "Original artifact access denied: all approved requests have expired");
                 throw new ValidationException("Access to original artifact denied: approved request has expired");
             }
@@ -204,7 +204,7 @@ public final class VaultService implements RegisterVaultEntryUseCase, DownloadAr
                 .findByIdAndTenantId(vaultEntry.artifactId(), command.tenantId());
         if (artifactOpt.isEmpty()) {
             auditService.recordDenied(command.tenantId(), command.actorId(),
-                    AuditAction.DOCUMENT_DOWNLOADED, "Artifact", vaultEntry.artifactId().toString(),
+                    AuditAction.DOCUMENT_DOWNLOADED, "Artifact", vaultEntry.artifactId().toString(), vaultEntry.packageId(),
                     command.correlationId(),
                     "Artifact download denied: artifact not found for artifactId=" + vaultEntry.artifactId());
             throw new ValidationException("Artifact not found");
@@ -213,7 +213,7 @@ public final class VaultService implements RegisterVaultEntryUseCase, DownloadAr
 
         if (!artifact.isAvailable() || artifact.storageReference() == null) {
             auditService.recordDenied(command.tenantId(), command.actorId(),
-                    AuditAction.DOCUMENT_DOWNLOADED, "Artifact", artifact.id().toString(),
+                    AuditAction.DOCUMENT_DOWNLOADED, "Artifact", artifact.id().toString(), vaultEntry.packageId(),
                     command.correlationId(),
                     "Artifact download denied: artifact unavailable, type=" + artifact.artifactType());
             throw new ValidationException("Artifact content is not available");
@@ -230,7 +230,7 @@ public final class VaultService implements RegisterVaultEntryUseCase, DownloadAr
 
         // 6. Audit successful access
         auditService.recordSuccess(command.tenantId(), command.actorId(),
-                AuditAction.DOCUMENT_DOWNLOADED, "Artifact", artifact.id().toString(),
+                AuditAction.DOCUMENT_DOWNLOADED, "Artifact", artifact.id().toString(), vaultEntry.packageId(),
                 command.correlationId(),
                 "Artifact downloaded: type=" + artifact.artifactType()
                         + ", documentId=" + command.documentId());

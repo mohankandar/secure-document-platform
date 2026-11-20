@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.csv.CsvCells;
 import com.securedoc.platform.api.dto.DashboardColumnResponse;
 import com.securedoc.platform.api.dto.DashboardIdentifierResponse;
 import com.securedoc.platform.api.dto.DashboardItemResponse;
@@ -112,50 +113,50 @@ public class OperationsController {
         var principal = contextResolver.resolvePrincipal(request);
         var report = reportsQuery.execute(principal, from, to, source, outcome);
         String csv = "metric,value\r\n" +
-                "Generated at," + report.generatedAt() + "\r\n" +
-                "Period from," + report.period().from() + "\r\n" +
-                "Period to," + report.period().to() + "\r\n" +
-                "Source filter," + report.period().source() + "\r\n" +
-                "Outcome filter," + report.period().outcome() + "\r\n" +
-                "Period batches," + report.executive().batches() + "\r\n" +
-                "Documents," + report.executive().documents() + "\r\n" +
-                "Pages," + report.executive().pages() + "\r\n" +
-                "Manual upload packages," + report.intake().manual() + "\r\n" +
-                "API packages," + report.intake().api() + "\r\n" +
-                "Watched folder packages," + report.intake().watchedFolder() + "\r\n" +
-                "Scanner intake packages," + report.intake().scanner() + "\r\n" +
-                "Completed packages," + report.executive().completed() + "\r\n" +
-                "Delivered during period," + report.executive().delivered() + "\r\n" +
-                "Selected-period intake delivered by period end," + report.executive().periodIntakeDelivered() + "\r\n" +
-                "Completion rate," + report.executive().completionRate() + "%\r\n" +
-                "Delivery throughput vs intake," + report.executive().deliveryRate() + "%\r\n" +
-                "Selected-period intake delivery conversion," + report.executive().periodIntakeDeliveryRate() + "%\r\n" +
-                "Straight-through rate," + report.executive().straightThroughRate() + "%\r\n" +
-                "Review rate," + report.executive().reviewRate() + "%\r\n" +
-                "Median turnaround hours," + report.timing().medianTurnaroundHours() + "\r\n" +
-                "P95 turnaround hours," + report.timing().p95TurnaroundHours() + "\r\n" +
-                "Median active processing hours," + report.timing().medianActiveProcessingHours() + "\r\n" +
-                "P95 active processing hours," + report.timing().p95ActiveProcessingHours() + "\r\n" +
-                "Median review wait hours," + report.timing().medianReviewWaitHours() + "\r\n" +
-                "Median review handling hours," + report.timing().medianReviewHandlingHours() + "\r\n" +
-                "Turnaround samples," + report.timing().turnaroundSamples() + "\r\n" +
-                "Active processing samples," + report.timing().activeProcessingSamples() + "\r\n" +
-                "Current backlog," + report.executive().currentBacklog() + "\r\n" +
-                "Backlog under 1 hour," + report.backlog().underOneHour() + "\r\n" +
-                "Backlog 1-4 hours," + report.backlog().oneToFourHours() + "\r\n" +
-                "Backlog 4-24 hours," + report.backlog().fourToTwentyFourHours() + "\r\n" +
-                "Backlog 1-3 days," + report.backlog().oneToThreeDays() + "\r\n" +
-                "Backlog over 3 days," + report.backlog().overThreeDays() + "\r\n" +
-                "Current attention," + report.executive().currentAttention() + "\r\n" +
-                "Reprocessed packages," + report.usage().reprocessedPackages() + "\r\n" +
-                "Delivery SLA target minutes," + report.serviceLevel().deliveryTargetMinutes() + "\r\n" +
-                "Delivery within target rate," + report.serviceLevel().deliveryWithinTargetRate() + "%\r\n" +
-                "Delivery SLA target percent," + report.serviceLevel().deliveryTargetPercent() + "%\r\n" +
-                "Delivery SLA breaches," + report.serviceLevel().deliveryBreaches() + "\r\n" +
-                "Straight-through target percent," + report.serviceLevel().straightThroughTargetPercent() + "%\r\n" +
-                "Review wait target minutes," + report.serviceLevel().reviewWaitTargetMinutes() + "\r\n" +
-                "Review wait target percent," + report.serviceLevel().reviewWaitTargetPercent() + "%\r\n" +
-                "Review wait within target rate," + report.serviceLevel().reviewWithinTargetRate() + "%\r\n";
+                row("Generated at", report.generatedAt(), "") +
+                row("Period from", report.period().from(), "") +
+                row("Period to", report.period().to(), "") +
+                row("Source filter", report.period().source(), "") +
+                row("Outcome filter", report.period().outcome(), "") +
+                row("Period batches", report.executive().batches(), "") +
+                row("Documents", report.executive().documents(), "") +
+                row("Pages", report.executive().pages(), "") +
+                row("Manual upload packages", report.intake().manual(), "") +
+                row("API packages", report.intake().api(), "") +
+                row("Watched folder packages", report.intake().watchedFolder(), "") +
+                row("Scanner intake packages", report.intake().scanner(), "") +
+                row("Completed packages", report.executive().completed(), "") +
+                row("Delivered during period", report.executive().delivered(), "") +
+                row("Selected-period intake delivered by period end", report.executive().periodIntakeDelivered(), "") +
+                row("Completion rate", report.executive().completionRate(), "%") +
+                row("Delivery throughput vs intake", report.executive().deliveryRate(), "%") +
+                row("Selected-period intake delivery conversion", report.executive().periodIntakeDeliveryRate(), "%") +
+                row("Straight-through rate", report.executive().straightThroughRate(), "%") +
+                row("Review rate", report.executive().reviewRate(), "%") +
+                row("Median turnaround hours", report.timing().medianTurnaroundHours(), "") +
+                row("P95 turnaround hours", report.timing().p95TurnaroundHours(), "") +
+                row("Median active processing hours", report.timing().medianActiveProcessingHours(), "") +
+                row("P95 active processing hours", report.timing().p95ActiveProcessingHours(), "") +
+                row("Median review wait hours", report.timing().medianReviewWaitHours(), "") +
+                row("Median review handling hours", report.timing().medianReviewHandlingHours(), "") +
+                row("Turnaround samples", report.timing().turnaroundSamples(), "") +
+                row("Active processing samples", report.timing().activeProcessingSamples(), "") +
+                row("Current backlog", report.executive().currentBacklog(), "") +
+                row("Backlog under 1 hour", report.backlog().underOneHour(), "") +
+                row("Backlog 1-4 hours", report.backlog().oneToFourHours(), "") +
+                row("Backlog 4-24 hours", report.backlog().fourToTwentyFourHours(), "") +
+                row("Backlog 1-3 days", report.backlog().oneToThreeDays(), "") +
+                row("Backlog over 3 days", report.backlog().overThreeDays(), "") +
+                row("Current attention", report.executive().currentAttention(), "") +
+                row("Reprocessed packages", report.usage().reprocessedPackages(), "") +
+                row("Delivery SLA target minutes", report.serviceLevel().deliveryTargetMinutes(), "") +
+                row("Delivery within target rate", report.serviceLevel().deliveryWithinTargetRate(), "%") +
+                row("Delivery SLA target percent", report.serviceLevel().deliveryTargetPercent(), "%") +
+                row("Delivery SLA breaches", report.serviceLevel().deliveryBreaches(), "") +
+                row("Straight-through target percent", report.serviceLevel().straightThroughTargetPercent(), "%") +
+                row("Review wait target minutes", report.serviceLevel().reviewWaitTargetMinutes(), "") +
+                row("Review wait target percent", report.serviceLevel().reviewWaitTargetPercent(), "%") +
+                row("Review wait within target rate", report.serviceLevel().reviewWithinTargetRate(), "%");
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.REPORT_CSV_EXPORTED,
                 "OperationalReport", report.period().from() + "/" + report.period().to(),
                 contextResolver.resolveCorrelationId(request), "Aggregate report CSV exported; source="
@@ -164,6 +165,11 @@ public class OperationsController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=secure-document-report.csv")
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .body(csv.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** One "label,value" line; the value is neutralised so a spreadsheet never reads it as a formula (task 0017). */
+    static String row(String label, Object value, String suffix) {
+        return label + "," + CsvCells.neutralise(String.valueOf(value) + suffix) + "\r\n";
     }
 
     private OperationalReportsResponse toResponse(com.securedoc.platform.application.operations.model.OperationalReportSnapshot report,

@@ -226,7 +226,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
             }
             auditService.recordSuccess(
                     command.tenantId(), SYSTEM_ACTOR,
-                    AuditAction.DOCUMENT_REDACTION_VERIFIED, "Document", command.documentId().toString(),
+                    AuditAction.DOCUMENT_REDACTION_VERIFIED, "Document", command.documentId().toString(), command.packageId(),
                     correlationId,
                     "Redaction verified: pages=" + verification.pageCount()
                             + ", expectedRedactions=" + verification.expectedRedactionCount()
@@ -290,7 +290,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     SYSTEM_ACTOR,
                     AuditAction.DOCUMENT_REDACTION_COMPLETED,
                     "Document",
-                    command.documentId().toString(),
+                    command.documentId().toString(), command.packageId(),
                     correlationId,
                     "Redaction completed: redactions=" + redactionOutput.redactionsApplied()
                             + ", pages=" + redactionOutput.pagesRendered()
@@ -366,7 +366,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     SYSTEM_ACTOR,
                     AuditAction.DOCUMENT_PROCESSING_FAILED,
                     "Document",
-                    command.documentId().toString(),
+                    command.documentId().toString(), command.packageId(),
                     correlationId,
                     "Redaction failed: " + reason
             );

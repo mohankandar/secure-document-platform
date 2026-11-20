@@ -166,7 +166,7 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
             finding.updateLocation(FindingLocation.withBounds(
                     current.pageNumber(), current.startOffset(), current.endOffset(), box));
             auditService.recordSuccess(command.tenantId(), command.actorId(),
-                    AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", finding.id().toString(),
+                    AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", finding.id().toString(), pkg.id(),
                     command.correlationId(), "Finding location adjusted during focused review");
         }
 
@@ -177,12 +177,12 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
             }
             finding.confirm(command.actorId(), safeReason);
             auditService.recordSuccess(command.tenantId(), command.actorId(),
-                    AuditAction.FINDING_CONFIRMED, "Finding", finding.id().toString(),
+                    AuditAction.FINDING_CONFIRMED, "Finding", finding.id().toString(), pkg.id(),
                     command.correlationId(), "Focused review confirmed finding: type=" + finding.entityType());
         } else {
             finding.dismiss(command.actorId(), safeReason);
             auditService.recordSuccess(command.tenantId(), command.actorId(),
-                    AuditAction.FINDING_DISMISSED, "Finding", finding.id().toString(),
+                    AuditAction.FINDING_DISMISSED, "Finding", finding.id().toString(), pkg.id(),
                     command.correlationId(), "Focused review dismissed finding: type=" + finding.entityType());
         }
         findingRepository.save(finding);

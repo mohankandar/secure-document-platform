@@ -108,7 +108,8 @@ public class SecurityConfig {
                 "X-Correlation-Id",
                 "X-Review-Page-Number",
                 "X-Review-Image-Width",
-                "X-Review-Image-Height"));
+                "X-Review-Image-Height",
+                "X-Report-File-SHA256"));
         configuration.setAllowCredentials(false);
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
