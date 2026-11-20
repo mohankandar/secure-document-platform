@@ -75,7 +75,7 @@ Not covered by step 4: `SecurityContextException` (sign-in/identity refusals bef
 
 ## Commit
 
-On `feature/ui-compliance-report`: see "Commit hash" below. Not pushed or merged.
+On `feature/ui-compliance-report`: **`844bffb`** (code, tests and this report), then this hash line. The step 0 merge is `aef363d` on `feature/lexavault-r1b-tenant-identity`. Nothing pushed or merged further.
 
 ## Questions for the owner
 
