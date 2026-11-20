@@ -56,7 +56,7 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
         <p className="cf-ad-context">{current.hint}</p>
         {/* A failing area shows its own card; the tabs, the top bar and the other areas keep working. */}
         <ErrorBoundary title={`${current.label} couldn't be shown`} request={`/admin/${current.key}`} resetKey={current.key}>
-          {current.key === 'policy' && <PolicyArea />}
+          {current.key === 'policy' && <PolicyArea entityName={me.tenantName} />}
           {current.key === 'fields' && <FieldsArea canIdentifiers={caps.includes(CAP.identifiers)} canColumns={caps.includes(CAP.policy)} />}
           {current.key === 'integrations' && <IntegrationsArea />}
           {current.key === 'identity' && <IdentityArea />}

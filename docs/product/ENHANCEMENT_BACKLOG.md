@@ -37,6 +37,14 @@ Order is the suggested value order. The final order is set after accuracy has be
 
 Measure today's accuracy on real sample documents (the testing phase). The misses decide which enhancement is built first.
 
+## C. UI enhancement backlog (from `docs/work/ui-enhancements-design.md`)
+
+| # | Item | Note |
+|---|---|---|
+| C1 | Bulk approve, with the four-eyes rule | Design kept in `docs/work/ui-enhancements-design.md` #5. Only matters when approval before delivery is on. |
+| C2 | Shared foundation with Vero | Fonts, spacing, button and form behaviour, top bar; own colours, no switcher. Done when Vero's UI is next touched. |
+| C3 | Strict also checks cases with nothing found (owner, 2026-11-20) | Today, under "Every case" (Strict), a case where nothing is found is delivered without a person looking (confirmed in task 0019). An option for customers who want every case checked. Changes frozen V1 processing, so it needs its own task and the owner's go-ahead. |
+
 ## Not yet decided
 
 - Whether to survey competing redaction products before committing to the order.

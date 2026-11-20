@@ -2,6 +2,7 @@ import { API_BASE_URL, defaultHeaders, baseHeaders } from './config';
 import { expireOidcSession, isOidcSecurityMode } from './auth';
 import { selectedOidcTenant, oidcTenantContextRevision } from './tenantContext';
 import { beginWrite } from './pendingWork';
+import type { PolicyEstimate } from '../studio/admin/policyRules';
 import type {
   PackageSummary,
   PackageDetail,
@@ -213,6 +214,12 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(policy),
     });
+  }
+
+  /** Task 0019 B2 / UI task U023: cases and findings a person would check in the last 30 days, saved vs proposed. */
+  async sensitiveDataPolicyEstimate(query: Record<string, string>, signal?: AbortSignal): Promise<PolicyEstimate> {
+    const params = new URLSearchParams(query);
+    return this.request(`/business-admin/sensitive-data-policy/estimate?${params.toString()}`, { cache: 'no-store', signal });
   }
 
   async updateLifecyclePolicy(policy: Pick<LifecyclePolicyConfiguration, 'originalRetentionHours' | 'redactedCacheHours' | 'neverExportedHoldHours' | 'finalApprovalRequired'>): Promise<BusinessAdminConfiguration> {

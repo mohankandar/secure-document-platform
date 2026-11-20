@@ -437,3 +437,40 @@ test('Admin › Audit trail (IT Administrator): the page and the dialog do not s
   await dialog.getByRole('button', { name: 'Cancel' }).tap();
   await expect(dialog).toBeHidden();
 });
+
+test('Admin › Redaction & retention (Business Administrator): the Sensitive data card, its preview and the confirm step do not scroll sideways', async ({ page }) => {
+  const policy = { enabledEntityTypes: ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true };
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await signInAs(page, ['BUSINESS_ADMIN'], '/admin/policy', async () => {
+    await page.route('**/api/v1/business-admin/configuration', (route) => route.fulfill(json({
+      identifiers: [], dashboardColumns: [], sensitiveDataPolicy: policy,
+      lifecyclePolicy: { originalRetentionHours: 72, redactedCacheHours: 168, neverExportedHoldHours: 336, finalApprovalRequired: false, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 720 },
+      documentIntelligence: { mode: 'OBSERVE', activeBundleVersion: 'b1', lastKnownGoodBundleVersion: 'b1', configurationVersion: 1, baselineDiscoveryRequired: false,
+        availableBundles: [{ version: 'b1', status: 'PROMOTED', modelVersion: 'm', promptVersion: 'p', detectorVersion: 'd', ocrRulesVersion: 'o', profileVersion: 'none', validationRulesVersion: 'v', thresholdsVersion: 't', description: '', promotedAt: '2026-11-01T15:00:00Z' }] },
+      reportingConfiguration: { dimensions: [], deliveryTargetMinutes: 240, deliveryTargetPercent: 95, straightThroughTargetPercent: 70, reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80 },
+    })));
+    await page.route('**/api/v1/business-admin/sensitive-data-policy/estimate**', (route) => route.fulfill(json({
+      windowDays: 30, cases: 512, enoughData: true,
+      current: { reviewMode: 'UNCERTAIN_ONLY', threshold: 0.8, preset: 'BALANCED', casesToPerson: 148, findingsToPerson: 340 },
+      proposed: { reviewMode: 'UNCERTAIN_ONLY', threshold: 0.7, preset: 'LIGHT', casesToPerson: 96, findingsToPerson: 205 },
+    })));
+  });
+  const card = page.getByRole('region', { name: 'Sensitive data' });
+  await expect(card.getByRole('radio', { name: /^Balanced In use/ })).toBeChecked();
+  expect(await sideways(page)).toBe(0);
+  await card.getByText('Light', { exact: true }).tap();
+  await expect(card.getByRole('status').locator('.cf-sp-change')).toHaveText(['▼ 52 fewer', '▼ 135 fewer']);
+  await card.getByText('Fine-tune by hand').tap();
+  await expect(card.getByLabel(/Auto-redact when confidence is at least/)).toBeVisible();
+  expect(await sideways(page)).toBe(0);
+  const save = card.getByRole('button', { name: 'Save Light' });
+  await expectTappable(save);
+  await save.tap();
+  const dialog = page.getByRole('alertdialog', { name: 'A person would check fewer findings' });
+  await expect(dialog).toBeVisible();
+  for (const name of ['Keep Balanced', 'Save Light']) await expectTappable(dialog.getByRole('button', { name }));
+  expect(await sideways(page)).toBe(0);
+  await dialog.getByRole('button', { name: 'Keep Balanced' }).tap();
+  await expect(dialog).toBeHidden();
+  await expect(card.getByRole('radio', { name: /^Balanced In use/ })).toBeChecked();
+});
