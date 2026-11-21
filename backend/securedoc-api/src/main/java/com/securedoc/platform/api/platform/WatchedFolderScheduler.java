@@ -41,6 +41,7 @@ public class WatchedFolderScheduler {
     private final AtomicReference<WatchedFolderLeasePort.LeaseSnapshot> lastLease = new AtomicReference<>();
     private final AtomicReference<String> scannerRole = new AtomicReference<>("UNKNOWN");
     private final AtomicLong takeoverCount = new AtomicLong();
+    private final AtomicReference<String> configurationState = new AtomicReference<>("UNKNOWN");
 
     public WatchedFolderScheduler(WatchedFolderIntakeService intakeService,
                                   WatchedFolderProperties watchedFolder,
@@ -63,7 +64,12 @@ public class WatchedFolderScheduler {
             last.set(new Snapshot(Instant.now(), "NOT_CONFIGURED", null));
             return;
         }
-        scan(principal, CorrelationId.generate(), "SCHEDULED");
+        try {
+            scan(principal, CorrelationId.generate(), "SCHEDULED");
+        } catch (RuntimeException alreadyRecorded) {
+            // Task 0023 #57: scan(...) has audited and logged the failure (code and type). Not rethrown, so Spring's
+            // scheduler does not print the exception and its cause, which can name filesystem paths.
+        }
     }
 
     public WatchedFolderScanResponse scanManual(AuthenticatedPrincipal principal, CorrelationId correlationId) {
@@ -117,15 +123,20 @@ public class WatchedFolderScheduler {
     private WatchedFolderScanResponse scan(AuthenticatedPrincipal principal, CorrelationId correlationId, String mode) {
         Optional<WatchedFolderScanLease> scanLease = acquireScanLease(principal);
         if (scanLease.isEmpty()) {
-            WatchedFolderScanResponse response = emptyResponse();
+            // Task 0023 #340: say why nothing was scanned (STANDBY, NOT_CONFIGURED, COORDINATION_DEGRADED) instead of
+            // returning counts that look like a successful empty scan.
+            WatchedFolderScanResponse response = emptyResponse(scannerRole.get());
             last.set(new Snapshot(Instant.now(), scannerRole.get(), response));
+            if ("MANUAL".equals(mode)) {
+                log.warn("WATCHED_FOLDER_SCAN_SKIPPED mode={} nodeId={} reasonCode={}", mode, logicalNodeId(), scannerRole.get());
+            }
             return response;
         }
 
         try {
             var result = intakeService.scan(principal, correlationId, scanLease.get());
             var response = new WatchedFolderScanResponse(result.discovered(), result.waitingForTrigger(),
-                    result.accepted(), result.rejected(), result.duplicates());
+                    result.accepted(), result.rejected(), result.duplicates(), WatchedFolderScanResponse.SCANNED);
             last.set(new Snapshot(Instant.now(), "SUCCESS", response));
             boolean meaningfulActivity = result.discovered() > 0 || result.accepted() > 0
                     || result.rejected() > 0 || result.duplicates() > 0;
@@ -140,10 +151,13 @@ public class WatchedFolderScheduler {
             return response;
         } catch (RuntimeException e) {
             last.set(new Snapshot(Instant.now(), "FAILED", null));
+            String exceptionType = e.getClass().getSimpleName();
             auditService.recordFailure(principal.tenantId(), principal.actorId(), AuditAction.WATCHED_FOLDER_SCAN_TRIGGERED,
-                    "WatchedFolder", mode, correlationId, "Watched-folder scan failed: mode=" + mode);
-            log.warn("WATCHED_FOLDER_SCAN_FAILED mode={} nodeId={} fencingToken={} reasonCode=SCAN_FAILED",
-                    mode, logicalNodeId(), scanLease.get().fencingToken());
+                    "WatchedFolder", mode, correlationId, "Watched-folder scan failed: mode=" + mode
+                            + ", reasonCode=SCAN_FAILED, exceptionType=" + exceptionType);
+            // The type only: the message and the cause of a folder failure can name filesystem paths.
+            log.warn("WATCHED_FOLDER_SCAN_FAILED mode={} nodeId={} fencingToken={} reasonCode=SCAN_FAILED exceptionType={}",
+                    mode, logicalNodeId(), scanLease.get().fencingToken(), exceptionType);
             throw e;
         }
     }
@@ -232,22 +246,46 @@ public class WatchedFolderScheduler {
         return (logical == null ? "unconfigured" : logical) + "/" + processInstanceId;
     }
 
-    private WatchedFolderScanResponse emptyResponse() {
-        return new WatchedFolderScanResponse(0, 0, 0, 0, 0);
+    private WatchedFolderScanResponse emptyResponse(String outcome) {
+        return new WatchedFolderScanResponse(0, 0, 0, 0, 0, outcome);
     }
 
     private AuthenticatedPrincipal scheduledPrincipal() {
-        try {
-            if (platformAdmin.getWatchedFolderTenantId() == null || platformAdmin.getWatchedFolderTenantId().isBlank()
-                    || platformAdmin.getWatchedFolderActorId() == null || platformAdmin.getWatchedFolderActorId().isBlank()) {
-                return null;
-            }
-            return AuthenticatedPrincipal.of(
-                    ActorId.of(UUID.fromString(platformAdmin.getWatchedFolderActorId())),
-                    TenantId.of(UUID.fromString(platformAdmin.getWatchedFolderTenantId())),
-                    platformAdmin.getWatchedFolderActorUsername(), Set.of("PLATFORM_OPERATIONS_ADMIN"));
-        } catch (RuntimeException invalidConfiguration) {
+        String tenant = platformAdmin.getWatchedFolderTenantId();
+        String actor = platformAdmin.getWatchedFolderActorId();
+        if (tenant == null || tenant.isBlank() || actor == null || actor.isBlank()) {
+            reportConfiguration(tenant == null || tenant.isBlank() ? "watched-folder-tenant-id" : "watched-folder-actor-id",
+                    "WATCHED_FOLDER_NOT_CONFIGURED");
             return null;
+        }
+        TenantId tenantId;
+        ActorId actorId;
+        try {
+            tenantId = TenantId.of(UUID.fromString(tenant.trim()));
+        } catch (RuntimeException invalid) {
+            reportConfiguration("watched-folder-tenant-id", "WATCHED_FOLDER_CONFIGURATION_INVALID");
+            return null;
+        }
+        try {
+            actorId = ActorId.of(UUID.fromString(actor.trim()));
+        } catch (RuntimeException invalid) {
+            reportConfiguration("watched-folder-actor-id", "WATCHED_FOLDER_CONFIGURATION_INVALID");
+            return null;
+        }
+        reportConfiguration(null, null);
+        return AuthenticatedPrincipal.of(actorId, tenantId,
+                platformAdmin.getWatchedFolderActorUsername(), Set.of("PLATFORM_OPERATIONS_ADMIN"));
+    }
+
+    /**
+     * Task 0023 #296/#340: a missing or invalid scheduled identity is logged (the setting's name and a code, never its
+     * value), once per change rather than on every interval.
+     */
+    private void reportConfiguration(String setting, String reasonCode) {
+        String state = setting == null ? "OK" : reasonCode + ":" + setting;
+        String before = configurationState.getAndSet(state);
+        if (setting != null && !state.equals(before)) {
+            log.warn("{} setting=securedoc.platform-admin.{} reasonCode={}", reasonCode, setting, reasonCode);
         }
     }
 

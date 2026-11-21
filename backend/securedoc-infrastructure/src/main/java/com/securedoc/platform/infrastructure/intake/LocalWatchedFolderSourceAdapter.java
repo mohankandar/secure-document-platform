@@ -16,6 +16,7 @@ import java.util.*;
 
 @Component
 public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LocalWatchedFolderSourceAdapter.class);
     static final String CLAIM_FILE = ".lexavault-claim.json";
 
     private final WatchedFolderProperties properties;
@@ -198,8 +199,26 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
                     .toList();
             return new WatchedFolderCandidate(sourceReference, true, true, null, identifiers, metadata, documents);
         } catch (Exception e) {
-            return rejected(sourceReference, IntakeRejectionCode.MALFORMED_TRIGGER);
+            // Task 0023 C2/#61: keep the real reason; log the drop reference, the code and the type, never the
+            // message (it names the folder, a file or an absolute path).
+            IntakeRejectionCode code = readFailureCode(e);
+            log.warn("WATCHED_FOLDER_DROP_UNREADABLE drop={} reasonCode={} exceptionType={}",
+                    WatchedFolderDropReference.of(sourceReference), code, e.getClass().getSimpleName());
+            return rejected(sourceReference, code);
         }
+    }
+
+    /** A trigger that is not valid JSON, or a listed file that escapes the drop, is malformed; any other I/O fault is I/O. */
+    static IntakeRejectionCode readFailureCode(Exception failure) {
+        if (failure instanceof com.fasterxml.jackson.core.JacksonException
+                || failure instanceof IllegalArgumentException
+                || failure instanceof InvalidPathException) {
+            return IntakeRejectionCode.MALFORMED_TRIGGER;
+        }
+        if (failure instanceof IOException || failure instanceof UncheckedIOException) {
+            return IntakeRejectionCode.SOURCE_IO_ERROR;
+        }
+        return IntakeRejectionCode.MALFORMED_TRIGGER;
     }
 
     private void writeClaim(Path folder, WatchedFolderScanLease lease, Instant claimedAt) throws IOException {

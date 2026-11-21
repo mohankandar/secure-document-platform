@@ -31,6 +31,7 @@ import java.util.*;
 
 /** Canonical manifest-first push API intake facade. */
 public final class ExternalIntakeService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ExternalIntakeService.class);
     private final IntegrationConnectionService integrationConnectionService;
     private final ExternalIntakeRepository externalIntakeRepository;
     private final PackageRepository packageRepository;
@@ -280,6 +281,7 @@ public final class ExternalIntakeService {
         } catch (IllegalArgumentException e) {
             throw new ValidationException(e.getMessage());
         }
+        validateManifest(manifest);
         String requestFingerprint = requestFingerprint(input, manifest);
         Optional<ExternalIntake> existing = externalIntakeRepository.findBySourceIdentity(principal.tenantId(), source.id(),
                 normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId"),
@@ -404,7 +406,10 @@ public final class ExternalIntakeService {
         } catch (IllegalStateException e) {
             throw new IntakeConflictException("INVALID_INTAKE_STATE", e.getMessage());
         }
-        if (content.contentLength() < 1 || content.contentLength() > source.maxPdfSizeBytes()) {
+        if (content.contentLength() < 1) {
+            throw new ValidationException("The file is empty");
+        }
+        if (content.contentLength() > source.maxPdfSizeBytes()) {
             throw new ValidationException("PDF size exceeds the configured source limit");
         }
         if (channel == ExternalIntakeChannel.SCANNER) {
@@ -422,8 +427,8 @@ public final class ExternalIntakeService {
         Checksum actual;
         try (InputStream checksumStream = content.openStream()) {
             actual = checksumPort.compute(checksumStream);
-        } catch (IOException e) {
-            throw new ValidationException("Unable to validate uploaded document");
+        } catch (IOException | java.io.UncheckedIOException e) {
+            throw receivedCopyUnreadable(packageId, e);
         }
         if (!actual.value().equalsIgnoreCase(normalizedSourceSha)) {
             throw new IntakeConflictException("CONTENT_CHECKSUM_MISMATCH",
@@ -435,8 +440,8 @@ public final class ExternalIntakeService {
             if (pageCount > source.maxPdfPages()) {
                 throw new ValidationException("PDF page count exceeds the configured source limit");
             }
-        } catch (IOException e) {
-            throw new ValidationException("Unable to validate uploaded PDF");
+        } catch (IOException | java.io.UncheckedIOException e) {
+            throw receivedCopyUnreadable(packageId, e);
         }
 
         var uploadResult = uploadDocumentUseCase.execute(UploadDocumentCommand.of(packageId,
@@ -538,6 +543,35 @@ public final class ExternalIntakeService {
 
     private void expireForRequestIfDue(ExternalIntake intake, ActorId actorId, CorrelationId correlationId) {
         maintenanceService.expireIfDue(intake, actorId, correlationId);
+    }
+
+    /**
+     * Task 0023 #357: the server could not read its own spooled copy of a received file. That is a server-side storage
+     * fault (503, retryable), not the client's mistake; logged with the type and a code, never the message.
+     */
+    private static TechnicalDependencyException receivedCopyUnreadable(PackageId packageId, Exception cause) {
+        log.warn("EXTERNAL_DOCUMENT_COPY_UNREADABLE packageId={} reasonCode=STORAGE_IO exceptionType={}",
+                packageId, cause.getClass().getSimpleName());
+        return new TechnicalDependencyException(TechnicalDependency.STORAGE, TechnicalFailureCode.STORAGE_IO, true,
+                "The received document could not be read on the server; send it again", cause);
+    }
+
+    /**
+     * Task 0023 #49, #55: refuse a manifest that repeats a document id or names a file that could never be stored,
+     * before the case is created, and say what is wrong without repeating the value.
+     */
+    private static void validateManifest(List<ExternalManifestDocument> manifest) {
+        Set<String> ids = new HashSet<>();
+        for (ExternalManifestDocument document : manifest) {
+            if (!ids.add(document.externalSourceDocumentId())) {
+                throw new ValidationException("Document manifest lists the same externalSourceDocumentId more than once");
+            }
+            try {
+                com.securedoc.platform.domain.vo.FileName.of(document.originalFileName());
+            } catch (IllegalArgumentException e) {
+                throw new ValidationException("Document manifest fileName is not valid: " + e.getMessage());
+            }
+        }
     }
 
     private void validateCreateInput(PushIntakeCreateInput input, IntegrationConnection source) {

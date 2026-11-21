@@ -329,6 +329,118 @@ class ExternalIntakeServiceTest {
         return new PushIntakeCreateInput.ManifestDocumentInput(id, id + ".pdf", null, level);
     }
 
+    /* Task 0023 B2 (#49, #55): say what is wrong without the value, and before the case is created. */
+
+    @Test
+    void aRepeatedDocumentIdIsRefusedBeforeTheCaseIsMadeWithoutEchoingIt() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        ValidationException refused = assertThrows(ValidationException.class, () -> h.service.createPushIntake(
+                new PushIntakeCreateInput("SRC-D1", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                        List.of(doc("JANE-DOE-0042", null), doc("JANE-DOE-0042", null))), h.principal, CorrelationId.generate()));
+        assertEquals("Document manifest lists the same externalSourceDocumentId more than once", refused.getMessage());
+        assertTrue(h.creates.isEmpty(), "no case is created for a refused manifest");
+    }
+
+    @Test
+    void aFileNameWithAPathIsRefusedBeforeTheCaseIsMadeWithoutEchoingIt() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        ValidationException refused = assertThrows(ValidationException.class, () -> h.service.createPushIntake(
+                new PushIntakeCreateInput("SRC-D2", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                        List.of(new PushIntakeCreateInput.ManifestDocumentInput("DOC-1", "clients/Jane Doe.pdf", null, null))),
+                h.principal, CorrelationId.generate()));
+        assertEquals("Document manifest fileName is not valid: FileName must not contain path separators", refused.getMessage());
+        assertFalse(refused.getMessage().contains("Jane"));
+        assertTrue(h.creates.isEmpty());
+    }
+
+    /* Task 0023 D3 (#22) and #357. */
+
+    @Test
+    void anEmptyFileIsSaidToBeEmpty() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        ExternalIntakeSnapshot created = h.service.createPushIntake(new PushIntakeCreateInput("SRC-E1", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null))), h.principal, CorrelationId.generate());
+        ValidationException refused = assertThrows(ValidationException.class, () -> h.service.receivePushDocument(
+                PackageId.of(created.packageId()), "DOC-1", "key-1", "a".repeat(64), "application/pdf",
+                bytes(new byte[0]), h.principal, CorrelationId.generate()));
+        assertEquals("The file is empty", refused.getMessage());
+    }
+
+    @Test
+    void theServerFailingToReadItsOwnCopyIsAStorageFaultNotTheClientsMistake() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        ExternalIntakeSnapshot created = h.service.createPushIntake(new PushIntakeCreateInput("SRC-E2", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null))), h.principal, CorrelationId.generate());
+        UploadContent unreadable = new UploadContent() {
+            @Override public InputStream openStream() { throw new java.io.UncheckedIOException(new java.io.IOException("C:\\spool\\x.tmp")); }
+            @Override public long contentLength() { return 10; }
+        };
+        var failure = assertThrows(com.securedoc.platform.application.exception.TechnicalDependencyException.class, () ->
+                h.service.receivePushDocument(PackageId.of(created.packageId()), "DOC-1", "key-1", "a".repeat(64),
+                        "application/pdf", unreadable, h.principal, CorrelationId.generate()));
+        assertEquals(com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO, failure.failureCode());
+        assertTrue(failure.retryable());
+        assertFalse(failure.getMessage().contains("spool"));
+    }
+
+    /* Task 0023 A4: no value sent and an unknown value give Standard on the scanner and polling paths too. */
+
+    @Test
+    void scannerIntakeWithNoLevelOrAnUnknownLevelIsStandard() {
+        for (String sent : Arrays.asList(null, "TOP_SECRET", " confidential ")) {
+            LevelHarness h = new LevelHarness(IntegrationProviderType.SCANNER);
+            ExternalIntakeSnapshot created = h.service.createScannerIntake(new PushIntakeCreateInput(UUID.randomUUID().toString(), "1",
+                    Map.of("contract_number", "1"), scannerMetadata(), List.of(new PushIntakeCreateInput.ManifestDocumentInput(
+                            UUID.randomUUID().toString(), "scan.pdf", "a".repeat(64))), false, sent), h.principal, CorrelationId.generate());
+            assertEquals(SensitivityLevel.STANDARD, h.creates.get(0).caseSensitivity().level(), String.valueOf(sent));
+            assertEquals(sent != null, h.creates.get(0).caseSensitivity().unknown(), "an unknown value carries LV-INT-005");
+            assertEquals(sent == null ? 0 : 1, created.warnings().size());
+        }
+    }
+
+    @Test
+    void pollingIntakeWithNoLevelOrAnUnknownLevelIsStandard() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        IntegrationConnection polling = IntegrationConnection.create(h.tenant, "Polling", null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
+                IntegrationAuthenticationType.NONE, null, "https://source.example.test", null, null,
+                30, 0, 24, 10, 10_000_000L, 100,
+                IntegrationPollingScheduleType.INTERVAL, 60, null, null, 10,
+                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, Instant.parse("2026-09-10T11:00:00Z"));
+        ExternalIntakeSnapshot created = h.service.createPollingIntake(new PushIntakeCreateInput("SRC-P1", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null), doc("DOC-2", "SECRET")), false, null),
+                polling, h.principal, CorrelationId.generate());
+        assertEquals(SensitivityLevel.Received.standard(), h.creates.get(0).caseSensitivity(), "nothing sent: Standard, no warning");
+        assertEquals(1, created.warnings().size(), "the unknown document level is warned");
+        ExternalIntakeSnapshot unknownCase = h.service.createPollingIntake(new PushIntakeCreateInput("SRC-P2", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null)), false, "Restricted"),
+                polling, h.principal, CorrelationId.generate());
+        assertEquals(SensitivityLevel.STANDARD, h.creates.get(1).caseSensitivity().level());
+        assertTrue(h.creates.get(1).caseSensitivity().unknown());
+        assertEquals("LV-INT-005", unknownCase.warnings().get(0).code());
+    }
+
+    private static Map<String, String> scannerMetadata() {
+        Map<String, String> metadata = new LinkedHashMap<>();
+        metadata.put("scannerCaptureMode", "SIMULATOR");
+        metadata.put("bridgeId", "BRIDGE-LAS-01");
+        metadata.put("siteId", "LAS-01");
+        metadata.put("scannerId", "SCANNER-01");
+        metadata.put("scanSessionId", UUID.randomUUID().toString());
+        metadata.put("scanStartedAt", "2026-09-10T11:59:00Z");
+        metadata.put("scanCompletedAt", "2026-09-10T12:00:00Z");
+        metadata.put("scannerSubmittedAt", "2026-09-10T12:00:01Z");
+        metadata.put("sourceFileSizeBytes", "23");
+        return metadata;
+    }
+
+    private static UploadContent bytes(byte[] bytes) {
+        return new UploadContent() {
+            @Override public InputStream openStream() { return new java.io.ByteArrayInputStream(bytes); }
+            @Override public long contentLength() { return bytes.length; }
+        };
+    }
+
     @Test
     void pushIntakeKeepsTheLevelsSentAndNothingSentIsStandard() {
         LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);

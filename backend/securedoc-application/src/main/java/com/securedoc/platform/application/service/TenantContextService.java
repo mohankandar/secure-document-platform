@@ -2,6 +2,7 @@ package com.securedoc.platform.application.service;
 
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.NotFoundException;
+import com.securedoc.platform.application.exception.TenantInactiveException;
 import com.securedoc.platform.application.port.out.TenantRepository;
 import com.securedoc.platform.domain.tenant.Tenant;
 
@@ -32,7 +33,7 @@ public final class TenantContextService {
                 .orElseThrow(() -> new NotFoundException("Tenant", principal.tenantId().toString()));
 
         if (!tenant.isActive()) {
-            throw new IllegalStateException(
+            throw new TenantInactiveException(
                     "Tenant is not active: " + tenant.id() + " (status: " + tenant.status() + ")");
         }
 

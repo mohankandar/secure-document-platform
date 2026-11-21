@@ -12,6 +12,8 @@ import com.securedoc.platform.application.port.out.ChecksumPort;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.PdfIntakeValidationPort;
+import com.securedoc.platform.domain.document.PackageType;
 import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.domain.artifact.Artifact;
 import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
@@ -55,6 +57,8 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
     private final ChecksumPort checksumPort;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
+    /** Task 0023 D4: the readable-PDF check machine intake uses. */
+    private final PdfIntakeValidationPort pdfValidationPort;
 
     public UploadDocumentService(TenantContextService tenantContextService,
                                   CapabilityEnforcementService capabilityEnforcement,
@@ -65,7 +69,9 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
                                   StoragePort storagePort,
                                   ChecksumPort checksumPort,
                                   DomainEventPublisher eventPublisher,
-                                  AuditService auditService) {
+                                  AuditService auditService,
+                                  PdfIntakeValidationPort pdfValidationPort) {
+        this.pdfValidationPort = Objects.requireNonNull(pdfValidationPort);
         this.tenantContextService = Objects.requireNonNull(tenantContextService);
         this.capabilityEnforcement = Objects.requireNonNull(capabilityEnforcement);
         this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
@@ -93,10 +99,30 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
                 .findByIdAndTenantId(command.packageId(), principal.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
-        // 3. Validate MIME type and file name
+        // 3. Validate MIME type and file name (task 0023 #55: the messages never repeat the name or type sent)
         validateMimeType(command.mimeType());
-        FileName fileName = FileName.of(command.fileName());
-        MimeType mimeType = MimeType.of(command.mimeType());
+        FileName fileName;
+        MimeType mimeType;
+        try {
+            fileName = FileName.of(command.fileName());
+            mimeType = MimeType.of(command.mimeType());
+        } catch (IllegalArgumentException invalid) {
+            throw new ValidationException(invalid.getMessage());
+        }
+        if (command.contentLength() < 1) {
+            throw new ValidationException("The file is empty");
+        }
+
+        // 3b. Task 0023 D4 (#45): a manual or watched-folder file must be a PDF the server can open, the same check
+        // machine intake makes before acknowledging (push, scanner and polling files were checked before this point).
+        if (documentPackage.packageType() == PackageType.MANUAL_UPLOAD
+                || documentPackage.packageType() == PackageType.FOLDER_INTAKE) {
+            try (InputStream pdfStream = command.content().openStream()) {
+                pdfValidationPort.inspect(pdfStream);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to read uploaded content", e);
+            }
+        }
 
         // 4. Compute checksum from a fresh stream (stream 1) — safely closed
         Checksum checksum;
@@ -191,8 +217,8 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
 
     private void validateMimeType(String mimeType) {
         if (!ALLOWED_MIME_TYPES.contains(mimeType)) {
-            throw new ValidationException("Unsupported MIME type: " + mimeType
-                    + ". V1 supports PDF uploads only: application/pdf");
+            // Task 0023 #45/#55: the type sent is not repeated.
+            throw new ValidationException("Only PDF files can be uploaded (application/pdf)");
         }
     }
 

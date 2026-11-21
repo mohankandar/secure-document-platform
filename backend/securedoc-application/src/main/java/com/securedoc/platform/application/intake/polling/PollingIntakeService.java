@@ -4,6 +4,7 @@ import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.application.intake.external.*;
+import com.securedoc.platform.application.intake.model.IntakeFailure;
 import com.securedoc.platform.application.integration.IntegrationConnectionService;
 import com.securedoc.platform.application.port.out.PollingRunRepository;
 import com.securedoc.platform.application.port.out.PollingSourcePort;
@@ -19,6 +20,9 @@ import java.util.*;
 
 /** Scheduled/manual coordinator for LexaVault-owned pull ingestion. */
 public final class PollingIntakeService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PollingIntakeService.class);
+    /** polling_runs.failure_detail is VARCHAR(500). */
+    static final int MAX_FAILURE_DETAIL = 500;
     private final IntegrationConnectionService connectionService;
     private final PollingRunRepository runRepository;
     private final PollingSourcePort sourcePort;
@@ -84,7 +88,9 @@ public final class PollingIntakeService {
             auditService.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_TESTED,
                     "IntegrationConnection", source.id().toString(), correlationId, "Polling connection test succeeded without document retrieval");
         } catch (RuntimeException e) {
-            String category = categorize(e);
+            String category = IntakeFailure.of(e).code();
+            log.warn("POLLING_CONNECTION_TEST_FAILED connectionId={} code={} exceptionType={}",
+                    source.id(), category, e.getClass().getSimpleName());
             connectionService.recordOperationalFailure(source, category);
             auditService.recordFailure(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_TESTED,
                     "IntegrationConnection", source.id().toString(), correlationId, "Polling connection test failed: category=" + category);
@@ -114,48 +120,88 @@ public final class PollingIntakeService {
         auditService.recordSuccess(source.tenantId(), actorId, AuditAction.POLLING_RUN_STARTED,
                 "IntegrationConnection", source.id().toString(), correlationId, "Polling run started: trigger=" + trigger);
 
-        int discovered = 0, expected = 0, retrieved = 0, acknowledged = 0, packageFailures = 0;
-        String lastFailureCategory = null, lastFailureDetail = null;
+        int discovered = 0, expected = 0, retrieved = 0, acknowledged = 0;
+        // Task 0023 B1: every failed package of the run is kept (code and exception type only, never the message).
+        List<PackageFailure> failures = new ArrayList<>();
         try {
             List<PollingSourcePackage> packages = sourcePort.discoverAvailable(source, effectiveBatchLimit(source));
             discovered = packages.size();
+            int position = 0;
             for (PollingSourcePackage sourcePackage : packages) {
+                position++;
                 expected += sourcePackage.documents().size();
                 try {
                     PackageOutcome outcome = processPackage(source, sourcePackage, principal, correlationId);
                     retrieved += outcome.retrieved();
                     if (outcome.acknowledged()) acknowledged++;
                 } catch (RuntimeException packageFailure) {
-                    packageFailures++;
                     if (packageFailure instanceof PackageProcessingFailure processingFailure) {
                         retrieved += processingFailure.retrieved();
                         packageFailure = processingFailure.original();
                     }
-                    lastFailureCategory = categorize(packageFailure);
-                    lastFailureDetail = safeDetail(packageFailure);
+                    PackageFailure failure = new PackageFailure(position, IntakeFailure.of(packageFailure));
+                    failures.add(failure);
+                    log.warn("POLLING_PACKAGE_FAILED connectionId={} package=#{} code={} exceptionType={}",
+                            source.id(), position, failure.failure().code(), failure.failure().exceptionType());
+                    auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_PACKAGE_FAILED,
+                            "IntegrationConnection", source.id().toString(), correlationId,
+                            "package=#" + position + ",code=" + failure.failure().code()
+                                    + ",exceptionType=" + failure.failure().exceptionType());
                 }
             }
-            PollingRunStatus finalStatus = packageFailures == 0 ? PollingRunStatus.SUCCESS : PollingRunStatus.PARTIAL;
+            PollingRunStatus finalStatus = failures.isEmpty() ? PollingRunStatus.SUCCESS : PollingRunStatus.PARTIAL;
+            String category = failures.isEmpty() ? null : failures.get(0).failure().code();
+            String detail = failures.isEmpty() ? null : failureDetail(failures);
             PollingRun completed = run.complete(finalStatus, discovered, expected, retrieved, acknowledged,
-                    lastFailureCategory, lastFailureDetail, Instant.now(clock));
+                    category, detail, Instant.now(clock));
             runRepository.save(completed);
-            if (packageFailures == 0) connectionService.recordOperationalSuccess(source);
-            else connectionService.recordOperationalFailure(source, lastFailureCategory);
-            auditService.recordSuccess(source.tenantId(), actorId, AuditAction.POLLING_RUN_COMPLETED,
-                    "IntegrationConnection", source.id().toString(), correlationId,
-                    "Polling run completed: status=" + finalStatus + ",discovered=" + discovered + ",retrieved=" + retrieved + ",acknowledged=" + acknowledged);
+            String summary = "Polling run completed: status=" + finalStatus + ",discovered=" + discovered
+                    + ",retrieved=" + retrieved + ",acknowledged=" + acknowledged;
+            if (failures.isEmpty()) {
+                connectionService.recordOperationalSuccess(source);
+                auditService.recordSuccess(source.tenantId(), actorId, AuditAction.POLLING_RUN_COMPLETED,
+                        "IntegrationConnection", source.id().toString(), correlationId, summary);
+            } else {
+                // A partly failed run is not a success (task 0023 B1).
+                connectionService.recordOperationalFailure(source, category);
+                auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_RUN_COMPLETED,
+                        "IntegrationConnection", source.id().toString(), correlationId,
+                        summary + ",failedPackages=" + failures.size() + ",failures=" + detail);
+            }
             return Optional.of(snapshot(completed));
-        } catch (RuntimeException failure) {
-            String category = categorize(failure);
+        } catch (RuntimeException runFailure) {
+            IntakeFailure failure = IntakeFailure.of(runFailure);
+            log.warn("POLLING_RUN_FAILED connectionId={} code={} exceptionType={}",
+                    source.id(), failure.code(), failure.exceptionType());
             PollingRun failed = run.complete(PollingRunStatus.FAILED, discovered, expected, retrieved, acknowledged,
-                    category, safeDetail(failure), Instant.now(clock));
+                    failure.code(), failure.compact(), Instant.now(clock));
             runRepository.save(failed);
-            connectionService.recordOperationalFailure(source, category);
+            connectionService.recordOperationalFailure(source, failure.code());
             auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_RUN_FAILED,
                     "IntegrationConnection", source.id().toString(), correlationId,
-                    "category=" + category + ",detail=" + safeDetail(failure));
+                    "category=" + failure.code() + ",exceptionType=" + failure.exceptionType());
             return Optional.of(snapshot(failed));
         }
+    }
+
+    /**
+     * "#position CODE:ExceptionType" per failed package, joined by ';', within the 500 characters the run row keeps.
+     * Packages are named by their position in the run, never by the source's own package id.
+     */
+    static String failureDetail(List<PackageFailure> failures) {
+        StringBuilder detail = new StringBuilder();
+        for (int i = 0; i < failures.size(); i++) {
+            String entry = (detail.length() == 0 ? "" : ";") + "#" + failures.get(i).position() + " "
+                    + failures.get(i).failure().compact();
+            String more = ";+" + (failures.size() - i) + " more";
+            boolean last = i == failures.size() - 1;
+            if (detail.length() + entry.length() + (last ? 0 : more.length()) > MAX_FAILURE_DETAIL) {
+                detail.append(more);
+                break;
+            }
+            detail.append(entry);
+        }
+        return detail.toString();
     }
 
     private PackageOutcome processPackage(IntegrationConnection source, PollingSourcePackage sourcePackage,
@@ -218,19 +264,15 @@ public final class PollingIntakeService {
     private String idempotencyKey(IntegrationConnection source, PollingSourcePackage pkg, PollingSourceDocument doc) {
         return "poll:" + source.id() + ":" + pkg.externalSourcePackageId() + ":" + pkg.sourceRevision() + ":" + doc.externalSourceDocumentId();
     }
-    private String categorize(RuntimeException e){
-        if (e instanceof PollingSourceException sourceFailure) return sourceFailure.category();
-        return e.getClass().getSimpleName().replaceAll("Exception$", "").toUpperCase(Locale.ROOT);
-    }
-    private String safeDetail(Throwable e){String m=e.getMessage(); return m==null?e.getClass().getSimpleName():(m.length()>500?m.substring(0,500):m);}
     private PollingRunSnapshot snapshot(PollingRun r){return new PollingRunSnapshot(r.id(), r.integrationConnectionId().value(), r.trigger(), r.status(), r.startedAt(), r.completedAt(), r.packagesDiscovered(), r.documentsExpected(), r.documentsRetrieved(), r.packagesAcknowledged(), r.failureCategory(), r.failureDetail());}
     public record PollingSourceRef(TenantId tenantId, IntegrationConnectionId connectionId) {}
     private record PackageOutcome(int retrieved, boolean acknowledged) {}
+    record PackageFailure(int position, IntakeFailure failure) {}
     private static final class PackageProcessingFailure extends RuntimeException {
         private final int retrieved;
         private final RuntimeException original;
         private PackageProcessingFailure(int retrieved, RuntimeException original) {
-            super(original.getMessage(), original);
+            super("Polling package failed", original);
             this.retrieved = Math.max(0, retrieved);
             this.original = Objects.requireNonNull(original);
         }

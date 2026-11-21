@@ -21,7 +21,7 @@ public record FileName(String value) {
                     "FileName must not exceed " + MAX_LENGTH + " characters, got: " + value.length());
         }
         if (value.contains("/") || value.contains("\\")) {
-            throw new IllegalArgumentException("FileName must not contain path separators: " + value);
+            throw new IllegalArgumentException("FileName must not contain path separators");
         }
     }
 

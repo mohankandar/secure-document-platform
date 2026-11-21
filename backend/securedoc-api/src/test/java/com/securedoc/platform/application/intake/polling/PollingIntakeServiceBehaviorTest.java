@@ -180,6 +180,92 @@ class PollingIntakeServiceBehaviorTest {
         }
     }
 
+    /* Task 0023 B1: every failure of a run is kept as a code and an exception type, never its message. */
+
+    @Test
+    void everyFailedPackageIsKeptAsCodeAndTypeAndThePartialRunIsNotASuccess() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        var first = new PollingSourcePackage("SRC-SECRET-1", "1", false, Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(new PollingSourceDocument("DOC-A", "Jane Doe payslip.pdf", "a".repeat(64))));
+        var second = new PollingSourcePackage("SRC-SECRET-2", "1", false, Map.of("contractNumber", "C-2"), Map.of(),
+                List.of(new PollingSourceDocument("DOC-B", "b.pdf", "a".repeat(64))));
+        var third = new PollingSourcePackage("SRC-OK-3", "1", false, Map.of("contractNumber", "C-3"), Map.of(),
+                List.of(new PollingSourceDocument("DOC-C", "c.pdf", "a".repeat(64))));
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of(first, second, third));
+        when(external.createPollingIntake(argThat(i -> i != null && i.externalSourcePackageId().equals("SRC-SECRET-1")), eq(source), any(), any()))
+                .thenThrow(new com.securedoc.platform.application.exception.IntakeValidationException(
+                        com.securedoc.platform.application.intake.model.IntakeRejectionCode.UNKNOWN_IDENTIFIER,
+                        "Unknown business identifier: secret-key for Jane Doe"));
+        when(external.createPollingIntake(argThat(i -> i != null && i.externalSourcePackageId().equals("SRC-SECRET-2")), eq(source), any(), any()))
+                .thenThrow(new com.securedoc.platform.application.exception.IntakeConflictException("SOURCE_REVISION_REUSED",
+                        "Package SRC-SECRET-2 already exists"));
+        when(external.createPollingIntake(argThat(i -> i != null && i.externalSourcePackageId().equals("SRC-OK-3")), eq(source), any(), any()))
+                .thenReturn(snapshot(UUID.randomUUID(), ExternalIntakeStatus.INCOMPLETE_EXPIRED, 0, List.of()));
+
+        PollingRunSnapshot result = namedService.runNow(tenant, source.id(), ActorId.generate()).orElseThrow();
+
+        assertEquals(PollingRunStatus.PARTIAL, result.status());
+        assertEquals("INTAKE_UNKNOWN_IDENTIFIER", result.failureCategory(), "the stable intake code, not a class name");
+        assertEquals("#1 INTAKE_UNKNOWN_IDENTIFIER:IntakeValidationException;#2 SOURCE_REVISION_REUSED:IntakeConflictException",
+                result.failureDetail(), "both failures are kept, not only the last");
+        var packageAudits = records.stream()
+                .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_PACKAGE_FAILED).toList();
+        assertEquals(2, packageAudits.size(), "one audit row per failed package");
+        assertEquals("package=#1,code=INTAKE_UNKNOWN_IDENTIFIER,exceptionType=IntakeValidationException", packageAudits.get(0).detail());
+        assertEquals("package=#2,code=SOURCE_REVISION_REUSED,exceptionType=IntakeConflictException", packageAudits.get(1).detail());
+        var completed = records.stream()
+                .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_COMPLETED).findFirst().orElseThrow();
+        assertEquals(com.securedoc.platform.domain.audit.AuditOutcome.FAILURE, completed.outcome(), "a partly failed run is not SUCCESS");
+        assertTrue(completed.detail().contains("status=PARTIAL") && completed.detail().contains("failedPackages=2"));
+        for (String leaked : List.of("secret-key", "Jane Doe", "SRC-SECRET", "payslip")) {
+            assertFalse(result.failureDetail().contains(leaked), leaked);
+            records.forEach(r -> assertFalse(r.detail() != null && r.detail().contains(leaked), r.action() + " " + leaked));
+        }
+        verify(connections).recordOperationalFailure(source, "INTAKE_UNKNOWN_IDENTIFIER");
+    }
+
+    @Test
+    void aFailedRunKeepsOnlyTheCodeAndTheExceptionType() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit()))
+                .thenThrow(new IllegalStateException("Could not reach https://user:secret@source.example.test/Jane-Doe"));
+
+        PollingRunSnapshot result = namedService.runNow(tenant, source.id(), ActorId.generate()).orElseThrow();
+
+        assertEquals(PollingRunStatus.FAILED, result.status());
+        assertEquals("INVALID_STATE", result.failureCategory());
+        assertEquals("INVALID_STATE:IllegalStateException", result.failureDetail());
+        var failed = records.stream()
+                .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_FAILED).findFirst().orElseThrow();
+        assertEquals("category=INVALID_STATE,exceptionType=IllegalStateException", failed.detail());
+    }
+
+    @Test
+    void aSourceFailureKeepsItsOwnCategory() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit()))
+                .thenThrow(new PollingSourceException("SOURCE_UNAVAILABLE", "host source.example.test refused"));
+        PollingRunSnapshot result = service.runNow(tenant, source.id(), ActorId.generate()).orElseThrow();
+        assertEquals("SOURCE_UNAVAILABLE", result.failureCategory());
+        assertEquals("SOURCE_UNAVAILABLE:PollingSourceException", result.failureDetail());
+    }
+
+    @Test
+    void theFailureListStaysWithinTheStoredLength() {
+        List<PollingIntakeService.PackageFailure> many = new ArrayList<>();
+        for (int i = 1; i <= 100; i++) {
+            many.add(new PollingIntakeService.PackageFailure(i,
+                    new com.securedoc.platform.application.intake.model.IntakeFailure("INTAKE_UNKNOWN_IDENTIFIER", "IntakeValidationException")));
+        }
+        String detail = PollingIntakeService.failureDetail(many);
+        assertTrue(detail.length() <= PollingIntakeService.MAX_FAILURE_DETAIL, "length " + detail.length());
+        assertTrue(detail.startsWith("#1 INTAKE_UNKNOWN_IDENTIFIER:IntakeValidationException;#2 "));
+        assertTrue(detail.matches(".*;\\+\\d+ more$"), detail);
+    }
+
     private IntegrationConnection pollingSource() {
         return IntegrationConnection.create(tenant, "Polling", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,

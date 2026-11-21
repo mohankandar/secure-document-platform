@@ -54,7 +54,7 @@ public final class ExternalIntake {
             Objects.requireNonNull(document);
             String key = document.externalSourceDocumentId();
             if (this.documents.putIfAbsent(key, document) != null) {
-                throw new IllegalArgumentException("Duplicate external source document id in manifest: " + key);
+                throw new IllegalArgumentException("Document manifest lists the same externalSourceDocumentId more than once");
             }
         }
         this.status = Objects.requireNonNull(status);

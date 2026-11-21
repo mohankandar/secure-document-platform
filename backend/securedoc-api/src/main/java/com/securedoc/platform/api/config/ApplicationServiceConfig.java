@@ -494,11 +494,12 @@ public class ApplicationServiceConfig {
             StoragePort storagePort,
             ChecksumPort checksumPort,
             DomainEventPublisher eventPublisher,
-            AuditService auditService) {
+            AuditService auditService,
+            PdfIntakeValidationPort pdfIntakeValidationPort) {
         return new UploadDocumentService(
                 tenantContextService, capabilityEnforcementService, tenantLicensingService,
                 packageRepository, documentRepository, artifactRepository,
-                storagePort, checksumPort, eventPublisher, auditService);
+                storagePort, checksumPort, eventPublisher, auditService, pdfIntakeValidationPort);
     }
 
     @Bean

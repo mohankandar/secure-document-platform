@@ -31,7 +31,20 @@ public class JpaWatchedFolderSettingsRepositoryAdapter implements WatchedFolderS
                 .setParameter("tenant", tenantId.value())
                 .setParameter("folder", folderKey)
                 .getResultList();
-        return rows.isEmpty() ? Optional.empty() : Optional.of(SensitivityLevel.valueOf(String.valueOf(rows.get(0))));
+        return rows.isEmpty() ? Optional.empty() : Optional.of(storedLevel(rows.get(0)));
+    }
+
+    /**
+     * Task 0023 A4: the column has no check constraint, so a value that is not a level (or null) is read as Standard,
+     * the same rule as every intake path, instead of failing every drop from the folder.
+     */
+    static SensitivityLevel storedLevel(Object stored) {
+        SensitivityLevel.Received received = SensitivityLevel.fromSource(stored == null ? null : String.valueOf(stored));
+        if (received.unknown()) {
+            org.slf4j.LoggerFactory.getLogger(JpaWatchedFolderSettingsRepositoryAdapter.class)
+                    .warn("WATCHED_FOLDER_SETTING_LEVEL_UNKNOWN reasonCode={} takenAs=STANDARD", SensitivityLevel.UNKNOWN_LEVEL_WARNING);
+        }
+        return received.level();
     }
 
     @Override

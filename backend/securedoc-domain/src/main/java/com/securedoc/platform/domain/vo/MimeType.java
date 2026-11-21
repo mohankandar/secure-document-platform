@@ -14,7 +14,7 @@ public record MimeType(String value) {
             throw new IllegalArgumentException("MimeType must not be blank");
         }
         if (!value.contains("/")) {
-            throw new IllegalArgumentException("MimeType must contain type/subtype format: " + value);
+            throw new IllegalArgumentException("MimeType must contain type/subtype format");
         }
     }
 
