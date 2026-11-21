@@ -164,3 +164,9 @@ A frontend check found one real problem: the frontend test that mirrors the Java
 
 ## Suggested next step
 The design chat reviews `feature/0028-export-followups`, updates section 5 and section 10 of `staged-pipeline-design.md` to these rules, and writes task 0029 (the screens). Before turning `job` on anywhere: one run with `export-mode=job` against Vero R7, with Vero stopped mid-run and then a 429 from a test proxy.
+
+## Owner's answers (2026-11-21, recorded by the design chat)
+
+1. **Retention limits per destination:** keep 1 to 72 hours for now. Nothing is deleted while a copy's export job is open, so a long pause can't lose a split copy; a wider limit can come later if a customer needs it.
+2. **Inline mode and split copies:** acceptable. Each copy following its own clock is the agreed rule; inline mode is on its way out.
+3. The design chat updated `staged-pipeline-design.md` sections 5 and 10 to these rules (committed with these answers).
