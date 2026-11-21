@@ -75,6 +75,7 @@ release-readiness-results/
 
 # UI proof pictures (scratch)
 docs/work/ui/compare/
+docs/work/compare/
 
 # Task 0017 compliance report samples (end-to-end script output)
 test-tools/compliance-report/output/
