@@ -39,7 +39,7 @@ public final class PackageDashboardVisibilityService implements HidePackageFromD
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (pkg.status() != PackageStatus.COMPLETED) {
-            throw new ValidationException("Only a completed/exported package can be removed from the Dashboard");
+            throw new ValidationException(com.securedoc.platform.domain.error.LvErrorCode.CFG_011, "Only a completed/exported package can be removed from the Dashboard");
         }
 
         Instant hiddenAt = Instant.now();

@@ -212,11 +212,11 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         }
         DocumentPackage pkg = ensurePackageExists(command.packageId(), command.tenantId());
         if (pkg.status() != PackageStatus.FAILED) {
-            throw new ValidationException("Technical hold can only be extended for a failed package");
+            throw new ValidationException(LvErrorCode.CFG_011, "Technical hold can only be extended for a failed package");
         }
         PackageLifecycle lifecycle = lifecycleFor(command.packageId(), command.tenantId());
         if (lifecycle.successfulExportCycles() > 0) {
-            throw new ValidationException("Technical hold extension applies only before the first successful export");
+            throw new ValidationException(LvErrorCode.CFG_011, "Technical hold extension applies only before the first successful export");
         }
         Instant now = Instant.now();
         Instant requestedUntil = now.plus(command.holdHoursFromNow(), ChronoUnit.HOURS);
@@ -351,7 +351,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                                    ActorId actorId, CorrelationId correlationId) {
         DocumentPackage pkg = ensurePackageExists(packageId, tenantId);
         if (pkg.status() != PackageStatus.FAILED) {
-            throw new ValidationException("Technical Attention retention can only be restarted for a failed package");
+            throw new ValidationException(LvErrorCode.CFG_011, "Technical Attention retention can only be restarted for a failed package");
         }
         PackageLifecycle lifecycle = lifecycleFor(packageId, tenantId);
         lifecycle.restartTechnicalHold(Instant.now(), policyFor(tenantId));

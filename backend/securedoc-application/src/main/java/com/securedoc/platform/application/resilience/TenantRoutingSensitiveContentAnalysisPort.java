@@ -53,7 +53,9 @@ public final class TenantRoutingSensitiveContentAnalysisPort implements Sensitiv
                     TechnicalDependency.AI,
                     TechnicalFailureCode.AI_UNAVAILABLE,
                     false,
-                    "No AI provider profile is configured for this tenant");
+                    "No AI provider profile is configured for this tenant")
+                    // Task 0026 (#135): no AI settings for this entity is LV-AI-006, not "AI model not available".
+                    .withLvCode(com.securedoc.platform.domain.error.LvErrorCode.AI_006);
         }
         return defaultProvider.analyze(request);
     }

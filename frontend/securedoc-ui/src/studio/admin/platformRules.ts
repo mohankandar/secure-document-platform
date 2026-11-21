@@ -71,6 +71,12 @@ export function serviceStatus(status: string): StatusLine {
   }
 }
 
+/** Task 0026: the status line of a service, with the code when its check failed ("Down · LV-SYS-006"). */
+export function serviceStatusText(status: string, lvCode?: string | null): string {
+  const s = serviceStatus(status);
+  return [s.word, ...s.rest, ...(lvCode ? [lvCode] : [])].join(' · ');
+}
+
 export const needsAttention = (s: StatusLine) => s.tone === 'warn' || s.tone === 'danger';
 
 /** The card title: "All services working", "1 service needs attention", "No problems found · 2 not checked yet". */

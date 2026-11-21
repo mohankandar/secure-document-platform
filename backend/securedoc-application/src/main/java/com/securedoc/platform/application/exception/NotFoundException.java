@@ -5,7 +5,8 @@ import java.util.Set;
 /**
  * Thrown when a requested resource does not exist in the caller's tenant.
  *
- * <p>Task 0025: a case (package or intake) not found is {@code LV-INT-025} "Case not found".
+ * <p>Task 0025: a case (package or intake) not found is {@code LV-INT-025} "Case not found". Task 0026: anything
+ * else not found is {@code LV-SYS-008} "Item not found", unless the thrower gives its own code.
  */
 public class NotFoundException extends ApplicationException {
 
@@ -16,6 +17,12 @@ public class NotFoundException extends ApplicationException {
 
     public NotFoundException(String resourceType, String resourceId) {
         super("NOT_FOUND", resourceType + " not found: " + resourceId);
+        this.resourceType = resourceType;
+    }
+
+    /** Task 0026: with its own code, for example LV-PRC-007 when the original is missing at processing. */
+    public NotFoundException(String resourceType, String resourceId, com.securedoc.platform.domain.error.LvErrorCode lvCode) {
+        super("NOT_FOUND", resourceType + " not found: " + resourceId, lvCode);
         this.resourceType = resourceType;
     }
 

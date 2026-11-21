@@ -33,6 +33,8 @@ public final class BridgeLvCodes {
     private static final Set<String> TRANSIENT_DELIVERY_CODES = Set.of(
             "LEXAVAULT_UNAVAILABLE", "LEXAVAULT_REQUEST_INTERRUPTED", "LEXAVAULT_INVALID_RESPONSE");
     /** The same identifier means something else when it is a delivery item's code (row #90) than a refusal (#95). */
+    /** Delivery item codes that describe the item's state rather than a failure. */
+    private static final Set<String> STATE_CODES = Set.of("LEXAVAULT_ACCEPTANCE_PENDING", "RECOVERED_AFTER_RESTART");
     private static final Map<String, BridgeLvCode> DELIVERY_OVERRIDES = Map.of(
             "LOCAL_SCAN_ARTIFACT_MISSING", BridgeLvCode.LV_SCN_013);
 
@@ -51,17 +53,19 @@ public final class BridgeLvCodes {
         // #79, #80, #275: origin not allowed, request token missing or stale.
         m.put("BRIDGE_ORIGIN_NOT_ALLOWED", BridgeLvCode.LV_SCN_012);
         m.put("BRIDGE_REQUEST_TOKEN_INVALID", BridgeLvCode.LV_SCN_012);
-        // #82, #276: LexaVault unreachable, interrupted, bad answer, request not serialisable, not yet accepted.
+        // #82, #276: LexaVault unreachable, interrupted, bad answer, request not serialisable.
         m.put("LEXAVAULT_UNAVAILABLE", BridgeLvCode.LV_SCN_015);
         m.put("LEXAVAULT_REQUEST_INTERRUPTED", BridgeLvCode.LV_SCN_015);
         m.put("LEXAVAULT_INVALID_RESPONSE", BridgeLvCode.LV_SCN_015);
         m.put("LEXAVAULT_REQUEST_SERIALIZATION_FAILED", BridgeLvCode.LV_SCN_015);
-        m.put("LEXAVAULT_ACCEPTANCE_PENDING", BridgeLvCode.LV_SCN_015);
+        // Task 0026: sent, LexaVault has not confirmed it yet (still within the wait limit).
+        m.put("LEXAVAULT_ACCEPTANCE_PENDING", BridgeLvCode.LV_SCN_021);
         // Task 0024: LexaVault did not accept within the wait limit.
         m.put("LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED", BridgeLvCode.LV_SCN_017);
-        // #84, #97: inbox already holds a PDF or can't be listed; a session already waiting.
+        // #84, #97: inbox already holds a PDF; a session already waiting.
         m.put("SCANNER_INBOX_NOT_EMPTY", BridgeLvCode.LV_SCN_006);
-        m.put("SCANNER_INBOX_UNAVAILABLE", BridgeLvCode.LV_SCN_006);
+        // Task 0026: the inbox can't be listed is the bridge's working files, not a busy scanner.
+        m.put("SCANNER_INBOX_UNAVAILABLE", BridgeLvCode.LV_SCN_013);
         m.put("SCANNER_BUSY", BridgeLvCode.LV_SCN_006);
         // #85, #97: wrong mode, bridge disabled.
         m.put("SIMULATOR_NOT_ENABLED", BridgeLvCode.LV_SCN_007);
@@ -74,9 +78,9 @@ public final class BridgeLvCodes {
         m.put("LEXAVAULT_PACKAGE_RECONCILIATION_MISMATCH", BridgeLvCode.LV_SCN_013);
         m.put("SCANNER_DELIVERY_INTERNAL_ERROR", BridgeLvCode.LV_SCN_013);
         m.put("LEXAVAULT_ENDPOINT_NOT_CONFIGURED", BridgeLvCode.LV_SCN_014);
-        // #92: cancel refused while queued or needing attention. The design places these under no code.
-        m.put("SUBMISSION_ALREADY_QUEUED", BridgeLvCode.LV_SYS_001);
-        m.put("ATTENTION_REQUIRED_CANNOT_CANCEL", BridgeLvCode.LV_SYS_001);
+        // #92 (task 0026): cancel refused while queued or needing attention.
+        m.put("SUBMISSION_ALREADY_QUEUED", BridgeLvCode.LV_SCN_019);
+        m.put("ATTENTION_REQUIRED_CANNOT_CANCEL", BridgeLvCode.LV_SCN_019);
         // #93, #94, #95: session unknown or not waiting, scan not ready, nothing to retry.
         m.put("SCAN_SESSION_NOT_FOUND", BridgeLvCode.LV_SCN_010);
         m.put("SCAN_SESSION_NOT_WAITING", BridgeLvCode.LV_SCN_010);
@@ -93,13 +97,14 @@ public final class BridgeLvCodes {
         m.put("PHYSICAL_SCAN_MAX_PAGES_REACHED", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_SCANNER_NO_PAGES", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_CAPTURE_DIRECTORY_NOT_EMPTY", BridgeLvCode.LV_SCN_009);
-        m.put("PHYSICAL_SCANNER_DEVICE_NOT_FOUND", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_SCAN_ACQUISITION_FAILED", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_SCANNER_IO_FAILED", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_SCAN_PDF_ASSEMBLY_FAILED", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_SCAN_FINALIZATION_FAILED", BridgeLvCode.LV_SCN_009);
         m.put("PHYSICAL_SCAN_ARTIFACT_ALREADY_EXISTS", BridgeLvCode.LV_SCN_009);
         // #99: no usable physical scanner.
+        // Task 0026: the device isn't there is "Scanner not found", not "Scan didn't finish".
+        m.put("PHYSICAL_SCANNER_DEVICE_NOT_FOUND", BridgeLvCode.LV_SCN_008);
         m.put("PHYSICAL_SCANNER_PROVIDER_UNSUPPORTED", BridgeLvCode.LV_SCN_008);
         m.put("PHYSICAL_SCANNER_WINDOWS_REQUIRED", BridgeLvCode.LV_SCN_008);
         m.put("PHYSICAL_SCANNER_NOT_AVAILABLE", BridgeLvCode.LV_SCN_008);
@@ -111,8 +116,8 @@ public final class BridgeLvCodes {
         m.put("PHYSICAL_SCANNER_DPI_INVALID", BridgeLvCode.LV_CFG_009);
         m.put("PHYSICAL_SCANNER_MAX_PAGES_INVALID", BridgeLvCode.LV_CFG_009);
         m.put("PHYSICAL_SCANNER_TIMEOUT_INVALID", BridgeLvCode.LV_CFG_009);
-        // After a restart mid-delivery the item goes back to the queue; not a failure the design names.
-        m.put("RECOVERED_AFTER_RESTART", BridgeLvCode.LV_SYS_001);
+        // Task 0026: after a restart mid-delivery the item goes back to the queue (a warning).
+        m.put("RECOVERED_AFTER_RESTART", BridgeLvCode.LV_SCN_020);
         CODES = Collections.unmodifiableMap(m);
     }
 
@@ -155,6 +160,9 @@ public final class BridgeLvCodes {
      */
     public static BridgeLvCode forDelivery(String errorCode, Integer httpStatus, ScanSessionStatus status) {
         if (errorCode == null) return null;
+        // Task 0026: a state, not LexaVault's answer: waiting for acceptance (LV-SCN-021), resumed after a restart
+        // (LV-SCN-020). An HTTP status kept from an earlier attempt doesn't change that.
+        if (STATE_CODES.contains(errorCode)) return CODES.get(errorCode);
         boolean needsPerson = status == ScanSessionStatus.ATTENTION_REQUIRED;
         Integer answered = httpStatus != null ? httpStatus : statusOfLexaVaultHttpCode(errorCode);
         if (answered != null) {

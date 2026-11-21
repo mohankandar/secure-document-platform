@@ -44,10 +44,23 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
             return new TextExtractionOutput(List.of(), 0, false);
         }
 
-        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(content, "lexavault-native-text-")) {
+        try (PdfBoxTempFileSupport.StagedPdf staged = stageForProcessing(content, "lexavault-native-text-")) {
             return extractDocument(staged.document());
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to extract text from PDF", e);
+        }
+    }
+
+    /**
+     * Task 0026 (#113): stages the PDF for processing; a PDF that can't be opened is {@code LV-PRC-001}
+     * ({@link PdfUnreadableException}). Shared with the hybrid adapter.
+     */
+    static PdfBoxTempFileSupport.StagedPdf stageForProcessing(InputStream content, String prefix) {
+        try {
+            return PdfBoxTempFileSupport.stage(content, prefix);
+        } catch (IOException e) {
+            throw com.securedoc.platform.infrastructure.pdf.PdfUnreadableException.forStageFailure(e,
+                    "Failed to extract text from PDF");
         }
     }
 

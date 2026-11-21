@@ -109,7 +109,8 @@ class LvErrorCodesTest {
         assertEquals(LvErrorCode.INT_018, LvErrorCodes.of(new IntakeConflictException("SOURCE_REVISION_REUSED", "x")));
         assertEquals(LvErrorCode.INT_023, LvErrorCodes.of(new IntakeExpiredException("x")));
         assertEquals(LvErrorCode.INT_025, LvErrorCodes.of(new NotFoundException("DocumentPackage", "id")));
-        assertEquals(LvErrorCode.SYS_001, LvErrorCodes.of(new NotFoundException("RoutingRule", "id")));
+        // Task 0026: anything not found that is not a case is LV-SYS-008 "Item not found".
+        assertEquals(LvErrorCode.SYS_008, LvErrorCodes.of(new NotFoundException("RoutingRule", "id")));
         assertEquals(LvErrorCode.AUT_006, LvErrorCodes.of(new AccessDeniedException("x")));
         assertEquals(LvErrorCode.AUT_008, LvErrorCodes.of(new AccessDeniedException(LvErrorCode.AUT_008, "x")));
         assertEquals(LvErrorCode.AUT_003, LvErrorCodes.of(new TenantBoundaryDeniedException("x")));
@@ -171,5 +172,59 @@ class LvErrorCodesTest {
         assertEquals(LvErrorCode.CFG_003, LvErrorCodes.forDetail("ADDRESS_NOT_ALLOWED").orElseThrow());
         assertEquals(LvErrorCode.SYS_002, LvErrorCodes.forDetail("STORAGE_IO").orElseThrow());
         assertEquals(LvErrorCode.DLV_002, LvErrorCodes.forDetail("LV-DLV-002").orElseThrow());
+    }
+
+    // ---------- task 0026 ----------
+
+    @Test
+    void task0026ResumedDropThatNoLongerMatchesItsCaseIsInt035() {
+        assertEquals(LvErrorCode.INT_035, LvErrorCodes.forIntakeRejection(IntakeRejectionCode.RECOVERY_CONFLICT));
+        assertEquals(LvErrorCode.INT_035, LvErrorCodes.forDetail("INTAKE_RECOVERY_CONFLICT").orElseThrow());
+    }
+
+    @Test
+    void task0026NotFoundIsCaseOrItemOrTheThrowersOwnCode() {
+        assertEquals(LvErrorCode.INT_025, LvErrorCodes.of(new NotFoundException("ExternalIntake", "id")));
+        assertEquals(LvErrorCode.SYS_008, LvErrorCodes.of(new NotFoundException("IntegrationConnection", "id")));
+        assertEquals(LvErrorCode.SYS_008, LvErrorCodes.optional(new NotFoundException("Artifact", "id")).orElseThrow());
+        // #355, #363: the original missing at processing or redaction.
+        assertEquals(LvErrorCode.PRC_007, LvErrorCodes.of(new NotFoundException("Original artifact for document",
+                "id", LvErrorCode.PRC_007)));
+        assertEquals(LvErrorCode.PRC_007, TechnicalFailureClassifier.classify(new RuntimeException("wrapped",
+                new NotFoundException("Original artifact for document", "id", LvErrorCode.PRC_007))).lvCode());
+    }
+
+    @Test
+    void task0026UnknownAddressAndWrongMethodAreSys009() {
+        assertEquals(LvErrorCode.SYS_009, LvErrorCodes.forDetail("NO_SUCH_ENDPOINT").orElseThrow());
+        assertEquals(LvErrorCode.SYS_009, LvErrorCodes.forDetail("METHOD_NOT_ALLOWED").orElseThrow());
+    }
+
+    @Test
+    void task0026DatabaseAndQueueFullByType() {
+        assertEquals(LvErrorCode.SYS_003, LvErrorCodes.forPlatformFailure(new java.sql.SQLException("down")));
+        assertEquals(LvErrorCode.SYS_003, LvErrorCodes.forPlatformFailure(
+                new RuntimeException("wrapped", new java.sql.SQLTransientConnectionException("down"))));
+        assertEquals(LvErrorCode.SYS_004, LvErrorCodes.forPlatformFailure(
+                new java.util.concurrent.RejectedExecutionException("full")));
+        assertEquals(LvErrorCode.SYS_001, LvErrorCodes.forPlatformFailure(new IllegalStateException("other")));
+        assertEquals(LvErrorCode.SYS_001, LvErrorCodes.forPlatformFailure(null));
+    }
+
+    @Test
+    void task0026NoAiSettingsForTheEntityIsAi006() {
+        TechnicalDependencyException noProfile = new TechnicalDependencyException(TechnicalDependency.AI,
+                TechnicalFailureCode.AI_UNAVAILABLE, false, "No AI provider profile is configured for this tenant")
+                .withLvCode(LvErrorCode.AI_006);
+        assertEquals(LvErrorCode.AI_006, LvErrorCodes.of(noProfile));
+        assertEquals(LvErrorCode.AI_006, TechnicalFailureClassifier.classify(noProfile).lvCode());
+        // The internal code stays AI_UNAVAILABLE (the detail).
+        assertEquals(TechnicalFailureCode.AI_UNAVAILABLE, noProfile.failureCode());
+    }
+
+    @Test
+    void task0026EmptyLicenceTokenIsLic001() {
+        assertEquals(LvErrorCode.LIC_001, LvErrorCodes.of(new ValidationException(LvErrorCode.LIC_001,
+                "Signed license token is required")));
     }
 }

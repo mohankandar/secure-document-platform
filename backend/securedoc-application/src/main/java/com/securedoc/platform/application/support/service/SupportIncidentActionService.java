@@ -64,7 +64,7 @@ public final class SupportIncidentActionService {
         String normalized = action == null ? "" : action.trim().toUpperCase(Locale.ROOT);
         if (incident.status() == com.securedoc.platform.domain.processing.ProcessingIncidentStatus.RESOLVED
                 || incident.status() == com.securedoc.platform.domain.processing.ProcessingIncidentStatus.AUTO_CLOSED) {
-            throw new ValidationException("This support incident is historical/closed; active package actions are unavailable");
+            throw new ValidationException(LvErrorCode.CFG_011, "This support incident is historical/closed; active package actions are unavailable");
         }
 
         switch (normalized) {
@@ -97,7 +97,7 @@ public final class SupportIncidentActionService {
                 incidentService.resolveNoReprocess(incident.packageId(), tenantId, correlationId,
                         normalizeResolution(resolutionCode, normalized), true);
             }
-            default -> throw new ValidationException(LvErrorCode.CFG_001, "Unsupported support incident action: " + action);
+            default -> throw new ValidationException(LvErrorCode.CFG_001, "Unsupported support incident action; use one of the actions Support offers");
         }
 
         auditService.recordSuccess(tenantId, actorId, AuditAction.SUPPORT_INCIDENT_ACTION_RECORDED,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  SECTION_LABELS, USAGE_MODES, eventText, intervalText, latestChecks, neverText, serviceName, serviceProduct, serviceStatus, servicesTitle,
+  SECTION_LABELS, USAGE_MODES, eventText, intervalText, latestChecks, neverText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle,
   storageKind, storageReadiness, storageReason, storageStatus, storageUsedBy, storageValidated, usageMode, usageSummary,
 } from './platformRules.ts';
 import type { ProcessingStorageNodeValidation, ProcessingStorageOverview } from '../../types';
@@ -118,4 +118,10 @@ test('usage data: modes and plain words', () => {
   assert.deepEqual(usageSummary(t).never, ['Who did what: user names']);
   assert.equal(usageSummary({ ...t, mode: 'OFF' }).sends, 'Nothing is being sent.');
   assert.equal(usageSummary({ ...t, enabled: false }).sends, 'Nothing is being sent.');
+});
+
+test('task 0026: a failed health check shows its code, LV-SYS-006; other statuses show none', () => {
+  assert.equal(serviceStatusText('UNHEALTHY', 'LV-SYS-006'), 'Down · LV-SYS-006');
+  assert.equal(serviceStatusText('HEALTHY', null), 'Working');
+  assert.equal(serviceStatusText('CONFIGURED'), 'Set up · not checked yet');
 });

@@ -13,7 +13,7 @@ import LicensingSection from './LicensingSection';
 import BrandingSection from './BrandingSection';
 import TelemetrySection from './TelemetrySection';
 import { watchedFolderStatus } from './integrationRules';
-import { SECTION_LABELS, intervalText, serviceName, serviceProduct, serviceStatus, servicesTitle } from './platformRules';
+import { SECTION_LABELS, intervalText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle } from './platformRules';
 
 type Section = 'overview' | 'storage' | 'licensing' | 'branding' | 'telemetry';
 const SECTIONS = (Object.keys(SECTION_LABELS) as Section[]).map((k) => [k, SECTION_LABELS[k]] as const);
@@ -91,7 +91,7 @@ function Overview({ canOperate }: { canOperate: boolean }) {
                 <span className="cf-ad-health" data-h={s.tone} aria-hidden="true" />
                 <span className="cf-ad-service-name">{serviceName(p)}</span>
                 {product && <span className="cf-ad-service-product">{product}</span>}
-                <span className="cf-ad-status" data-tone={s.tone}>{[s.word, ...s.rest].join(' · ')}</span>
+                <span className="cf-ad-status" data-tone={s.tone}>{serviceStatusText(p.status, p.lvCode)}</span>
               </li>
             );
           })}

@@ -31,6 +31,8 @@ import java.util.Objects;
 public final class OllamaModelPreloader {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaModelPreloader.class);
+    /** Task 0026 (#133, #329): loading the AI model at start failed, LV-AI-007. */
+    static final String LV_CODE = com.securedoc.platform.domain.error.LvErrorCode.AI_007.code();
 
     private final AiRuntimeProperties properties;
     private final ObjectMapper objectMapper;
@@ -65,21 +67,21 @@ public final class OllamaModelPreloader {
             } catch (Exception e) {
                 failed++;
                 lastFailure = e;
-                log.warn("AI_MODEL_PRELOAD_NODE_FAILED provider=ollama model={} inferenceNodeId={} reason={}",
-                        model, target.id(), safeReason(e));
+                log.warn("AI_MODEL_PRELOAD_NODE_FAILED provider=ollama model={} inferenceNodeId={} reason={} code={}",
+                        model, target.id(), safeReason(e), LV_CODE);
             }
         }
 
         if (succeeded == 0 && properties.isOllamaPreloadFailOnError()) {
             String reason = lastFailure == null ? "NO_READY_NODE" : safeReason(lastFailure);
-            log.error("AI_MODEL_PRELOAD_FAILED provider=ollama model={} configuredNodes={} readyNodes=0 reason={} failClosed=true",
-                    model, targets.size(), reason);
+            log.error("AI_MODEL_PRELOAD_FAILED provider=ollama model={} configuredNodes={} readyNodes=0 reason={} failClosed=true code={}",
+                    model, targets.size(), reason, LV_CODE);
             throw new IllegalStateException("Configured Ollama model preload failed on every inference node: " + reason, lastFailure);
         }
 
         if (succeeded == 0) {
-            log.warn("AI_MODEL_PRELOAD_FAILED provider=ollama model={} configuredNodes={} readyNodes=0 failClosed=false",
-                    model, targets.size());
+            log.warn("AI_MODEL_PRELOAD_FAILED provider=ollama model={} configuredNodes={} readyNodes=0 failClosed=false code={}",
+                    model, targets.size(), LV_CODE);
         } else {
             log.info("AI_MODEL_PRELOAD_POOL_READY provider=ollama model={} configuredNodes={} readyNodes={} failedNodes={}",
                     model, targets.size(), succeeded, failed);

@@ -148,14 +148,44 @@ public final class LvErrorCodes {
         if (failure instanceof ReviewAlreadyDecidedException) return REV_001;
         if (failure instanceof IntakeExpiredException) return INT_023;
         if (failure instanceof IntakeConflictException conflict) return forDetail(conflict.errorCode()).orElse(null);
-        if (failure instanceof NotFoundException notFound) return notFound.caseNotFound() ? INT_025 : null;
+        // Task 0026: a case is LV-INT-025; anything else not found (a rule, a connection, a file) is LV-SYS-008.
+        if (failure instanceof NotFoundException notFound) return notFound.caseNotFound() ? INT_025 : SYS_008;
         if (failure instanceof AccessDeniedException) return AUT_006;
         if (failure instanceof PollingSourceException polling) return forDetail(polling.category()).orElse(null);
         if (failure instanceof ApplicationException application && !"VALIDATION_ERROR".equals(application.errorCode())) {
             return forDetail(application.errorCode()).orElse(null);
         }
+        return infrastructure(failure);
+    }
+
+    /**
+     * Task 0026: failures of the platform underneath, recognised by type name (the application module does not depend
+     * on Spring's data or task libraries): the database (LV-SYS-003) and a full work queue (LV-SYS-004).
+     */
+    static LvErrorCode infrastructure(Throwable failure) {
+        for (Class<?> type = failure.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
+            String name = type.getName();
+            if (QUEUE_FULL_TYPES.contains(name)) return SYS_004;
+            if (DATABASE_TYPES.contains(name)) return SYS_003;
+        }
         return null;
     }
+
+    /** The code a database or queue failure logs with: LV-SYS-003, LV-SYS-004, otherwise LV-SYS-001 (nothing logged). */
+    public static LvErrorCode forPlatformFailure(Throwable failure) {
+        LvErrorCode code = failure == null ? null : find(failure);
+        return code == null ? FALLBACK : code;
+    }
+
+    private static final java.util.Set<String> DATABASE_TYPES = java.util.Set.of(
+            "java.sql.SQLException",
+            "org.springframework.dao.DataAccessException",
+            "org.springframework.transaction.TransactionException",
+            "jakarta.persistence.PersistenceException",
+            "liquibase.exception.LiquibaseException");
+    private static final java.util.Set<String> QUEUE_FULL_TYPES = java.util.Set.of(
+            "java.util.concurrent.RejectedExecutionException",
+            "org.springframework.core.task.TaskRejectedException");
 
     private static LvErrorCode unmapped(String context, String identifier) {
         log.warn("LV_CODE_UNMAPPED context={} type={} code={}", context, safe(identifier), FALLBACK.code());
@@ -255,8 +285,8 @@ public final class LvErrorCodes {
                 case STORAGE_UNAVAILABLE -> SYS_002;
                 case INVALID_FILE -> INT_007;
                 case ACCESS_DENIED -> CFG_007;
-                // No code fits a resumed drop that no longer matches its case (reported for the design chat).
-                case RECOVERY_CONFLICT -> SYS_001;
+                // Task 0026: a resumed drop that no longer matches its case.
+                case RECOVERY_CONFLICT -> INT_035;
                 case INTERNAL_ERROR -> SYS_001;
             });
         }
@@ -296,6 +326,9 @@ public final class LvErrorCodes {
         m.put("TENANT_INACTIVE", AUT_005);
         m.put("REVIEW_ALREADY_DECIDED", REV_001);
         m.put("INTERNAL_ERROR", SYS_001);
+        // Task 0026: an address or method LexaVault doesn't offer.
+        m.put("NO_SUCH_ENDPOINT", SYS_009);
+        m.put("METHOD_NOT_ALLOWED", SYS_009);
         // Intake conflicts and expiry (#15, #16, #20, #21, #24, #25, #28, #51, #52, #74).
         m.put("INTAKE_EXPIRED", INT_023);
         m.put("SOURCE_REVISION_REUSED", INT_018);

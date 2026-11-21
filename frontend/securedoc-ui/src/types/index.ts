@@ -677,6 +677,8 @@ export interface PlatformHealthItem {
   status: string;
   configured: boolean;
   detail: string;
+  /** Task 0026: LV-SYS-006 when the check failed; absent or null otherwise. */
+  lvCode?: string | null;
 }
 
 export interface TechnicalExceptionItem {

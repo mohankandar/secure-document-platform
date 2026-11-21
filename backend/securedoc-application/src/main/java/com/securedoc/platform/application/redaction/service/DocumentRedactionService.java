@@ -188,8 +188,9 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 .stream()
                 .filter(a -> a.artifactType() == ArtifactType.ORIGINAL && a.isAvailable())
                 .findFirst()
+                // Task 0026 (#363): the original is missing from storage, LV-PRC-007.
                 .orElseThrow(() -> new NotFoundException("Original artifact for document",
-                        command.documentId().toString()));
+                        command.documentId().toString(), com.securedoc.platform.domain.error.LvErrorCode.PRC_007));
 
         // 10. Read original PDF content
         InputStream pdfContent = storagePort.retrieve(originalArtifact.storageReference());

@@ -144,6 +144,28 @@ At expiry:
 - cleanup failures remain retryable by the maintenance scheduler;
 - an identical retry may explicitly request `retry=true`, creating a new internal attempt while preserving history.
 
+## Error body
+
+Every refusal has the same JSON body:
+
+```json
+{
+  "errorCode": "MISSING_HEADER",
+  "code": "LV-INT-002",
+  "message": "Required header or part missing",
+  "detail": "Header X-Content-SHA256 is missing",
+  "correlationId": "c0ffee00-0000-4000-8000-000000000001",
+  "timestamp": "2026-11-21T10:15:30Z"
+}
+```
+
+- `code` is the LexaVault error code; `message` is its title. The customer error code guide (`docs/api/error-codes.md`) explains each code and what to do.
+- `errorCode` is the older internal identifier, kept for API version 1.
+- `detail` (task 0026) is optional and left out when there is none. For intake and settings refusals it names **what** is wrong: the field, header or part, and the allowed range (for example `"Case field Loan number is required"`, `"Content-Type must be one of: multipart/form-data"`, `"The upload is larger than the limit of 52428800 bytes"`). It never repeats a value you sent; for a case field whose value breaks its rule it names only the field.
+- `correlationId` is the reference number to give IT.
+
+An address LexaVault doesn't offer answers `404` and a wrong method `405`, both with `code` `LV-SYS-009` and the same body (a request without valid sign-in gets `401` `LV-AUT-001` first).
+
 ## Error classes
 
 - `400` — request/PDF/limit/identifier validation failure;

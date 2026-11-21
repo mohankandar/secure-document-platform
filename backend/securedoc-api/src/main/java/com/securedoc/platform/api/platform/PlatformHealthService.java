@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.platform;
 
 import com.securedoc.platform.api.config.AiRuntimeProperties;
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.config.OllamaInferencePoolConfiguration;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
@@ -52,8 +53,9 @@ public class PlatformHealthService {
      * only (never a message, URL or key): {@code PLATFORM_HEALTH_CHECK_FAILED component=<c> code=<CODE> type=<T>}.
      */
     private static void logProbeFailure(String component, String code, Exception cause) {
-        log.warn("PLATFORM_HEALTH_CHECK_FAILED component={} code={} type={}", component, code,
-                cause == null ? "none" : cause.getClass().getSimpleName());
+        // Task 0026: and the LexaVault code, LV-SYS-006 "Health check failed".
+        log.warn("PLATFORM_HEALTH_CHECK_FAILED component={} code={} type={} lvCode={}", component, code,
+                cause == null ? "none" : cause.getClass().getSimpleName(), LvErrorCode.SYS_006.code());
     }
 
     private final DataSource dataSource;
@@ -411,7 +413,9 @@ public class PlatformHealthService {
 
     private static PlatformHealthItem item(String key, String label, String category, String provider,
                                            String status, boolean configured, String detail) {
-        return new PlatformHealthItem(key, label, category, safe(provider), status, configured, detail);
+        // Task 0026: a failed check shows its code, LV-SYS-006.
+        String lvCode = "UNHEALTHY".equals(status) ? LvErrorCode.SYS_006.code() : null;
+        return new PlatformHealthItem(key, label, category, safe(provider), status, configured, detail, lvCode);
     }
 
     private static boolean notBlank(String value) { return value != null && !value.isBlank(); }

@@ -65,7 +65,9 @@ public final class TenantLicensingService {
                                        CorrelationId correlationId) {
         Tenant tenant = requireTenant(tenantId);
         if (signedToken == null || signedToken.isBlank()) {
-            throw new IllegalArgumentException("Signed license token is required");
+            // Task 0026: a missing or empty token is "No licence installed" (LV-LIC-001).
+            throw new com.securedoc.platform.domain.error.CodedArgumentException(
+                    com.securedoc.platform.domain.error.LvErrorCode.LIC_001, "Signed license token is required");
         }
         Instant now = Instant.now(clock);
         LicenseVerificationResult verification = verifier.verify(signedToken.trim(), tenantId, now);

@@ -33,7 +33,7 @@ class LvErrorCodeRegistryTest {
             "Set-up", LvErrorCode.Kind.SET_UP, "System", LvErrorCode.Kind.SYSTEM);
 
     record DesignRow(String code, String title, String description, LvErrorCode.Kind kind, String whoActs,
-                     Integer http, boolean reserved) {
+                     List<Integer> http, boolean reserved) {
     }
 
     static Path design() {
@@ -57,7 +57,9 @@ class LvErrorCodeRegistryTest {
             description = RESERVED.matcher(description).replaceAll("").trim();
             LvErrorCode.Kind kind = KINDS.get(cells.get(3));
             assertTrue(kind != null, "unknown kind in the design: " + cells.get(3));
-            Integer http = "—".equals(cells.get(5)) ? null : Integer.valueOf(cells.get(5));
+            // Task 0026: a cell can hold more than one status ("404 / 405" for LV-SYS-009).
+            List<Integer> http = "—".equals(cells.get(5)) ? List.of()
+                    : Arrays.stream(cells.get(5).split("/")).map(String::trim).map(Integer::valueOf).toList();
             DesignRow previous = rows.put(cells.get(0), new DesignRow(cells.get(0), cells.get(1), description, kind,
                     cells.get(4), http, reserved));
             assertTrue(previous == null, "the design lists " + cells.get(0) + " twice");
@@ -81,7 +83,9 @@ class LvErrorCodeRegistryTest {
             assertEquals(row.description(), code.description(), code.code() + " description");
             assertEquals(row.kind(), code.kind(), code.code() + " kind");
             assertEquals(row.whoActs(), code.whoActs(), code.code() + " who acts");
-            assertEquals(row.http(), code.httpStatus().orElse(null), code.code() + " HTTP status");
+            assertEquals(row.http(), code.httpStatuses(), code.code() + " HTTP status");
+            assertEquals(row.http().isEmpty() ? null : row.http().get(0), code.httpStatus().orElse(null),
+                    code.code() + " first HTTP status");
             assertEquals(row.reserved(), code.reserved(), code.code() + " reserved");
         }
     }
@@ -113,25 +117,25 @@ class LvErrorCodeRegistryTest {
         assertEquals(LvErrorCode.AUT_002, LvErrorCode.fromCode(" LV-AUT-002 ").orElseThrow());
         assertTrue(LvErrorCode.fromCode("LV-AUT-999").isEmpty());
         assertTrue(LvErrorCode.fromCode(null).isEmpty());
-        assertEquals(37, LvErrorCode.inArea(LvErrorCode.Area.INT).size());
+        assertEquals(38, LvErrorCode.inArea(LvErrorCode.Area.INT).size());
     }
 
     @Test
     void areaCountsMatchTheDesignTables() {
         Map<LvErrorCode.Area, Integer> expected = new LinkedHashMap<>();
-        expected.put(LvErrorCode.Area.INT, 37);
-        expected.put(LvErrorCode.Area.SCN, 18);
+        expected.put(LvErrorCode.Area.INT, 38);
+        expected.put(LvErrorCode.Area.SCN, 21);
         expected.put(LvErrorCode.Area.PRC, 9);
         expected.put(LvErrorCode.Area.AI, 7);
         expected.put(LvErrorCode.Area.RED, 4);
-        expected.put(LvErrorCode.Area.REV, 8);
+        expected.put(LvErrorCode.Area.REV, 9);
         expected.put(LvErrorCode.Area.DLV, 15);
         expected.put(LvErrorCode.Area.AUT, 10);
         expected.put(LvErrorCode.Area.LIC, 4);
-        expected.put(LvErrorCode.Area.CFG, 10);
-        expected.put(LvErrorCode.Area.SYS, 7);
+        expected.put(LvErrorCode.Area.CFG, 11);
+        expected.put(LvErrorCode.Area.SYS, 9);
         expected.forEach((area, count) -> assertEquals(count, LvErrorCode.inArea(area).size(), area.name()));
-        // The design's per-area totals add up to 129 (its "124 codes" line is a sum error, reported in 0025).
-        assertEquals(129, LvErrorCode.values().length);
+        // Task 0026: 129 codes after 0025, plus the 8 added on 2026-11-21.
+        assertEquals(137, LvErrorCode.values().length);
     }
 }

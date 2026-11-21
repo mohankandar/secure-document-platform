@@ -161,4 +161,93 @@ class ClientMistakeResponsesTest {
                         java.util.Collections.singletonMap("k", null), null, null));
         assertEquals("businessIdentifiers must not contain null values", error.getMessage());
     }
+
+    // ---------- task 0026: the API detail field; unknown address and wrong method ----------
+
+    private static com.fasterxml.jackson.databind.JsonNode body(MvcResult result) throws Exception {
+        return new com.fasterxml.jackson.databind.ObjectMapper().readTree(result.getResponse().getContentAsString());
+    }
+
+    @Test
+    void task0026DetailNamesTheMissingHeaderNeverAValue() throws Exception {
+        MvcResult result = mvc.perform(multipart(PUSH_UPLOAD).file(pdf()).header("Idempotency-Key", "k-secret-key-value"))
+                .andReturn();
+        assertEquals(400, result.getResponse().getStatus());
+        assertEquals("LV-INT-002", body(result).path("code").asText());
+        assertEquals("Header X-Content-SHA256 is missing", body(result).path("detail").asText());
+        assertFalse(result.getResponse().getContentAsString().contains("k-secret-key-value"));
+    }
+
+    @Test
+    void task0026DetailNamesTheMissingPartAndTheAcceptedTypes() throws Exception {
+        MvcResult part = mvc.perform(multipart(PUSH_UPLOAD).header("Idempotency-Key", "k-1")
+                .header("X-Content-SHA256", SHA)).andReturn();
+        assertEquals("Part file is missing", body(part).path("detail").asText());
+
+        MvcResult type = mvc.perform(post(SCANNER_UPLOAD).contentType("text/x-secret-value").content("x")
+                .header("Idempotency-Key", "k-1").header("X-Content-SHA256", SHA)).andReturn();
+        String detail = body(type).path("detail").asText();
+        assertTrue(detail.startsWith("Content-Type must be one of: "), detail);
+        assertFalse(type.getResponse().getContentAsString().contains("x-secret-value"));
+    }
+
+    @Test
+    void task0026UnknownAddressIs404Sys009WithTheStandardBody() throws Exception {
+        MvcResult result = mvc.perform(post("/api/v1/no-such-endpoint-secret-path")).andReturn();
+        assertEquals(404, result.getResponse().getStatus());
+        var json = body(result);
+        assertEquals("LV-SYS-009", json.path("code").asText());
+        assertEquals("Unknown request", json.path("message").asText());
+        assertEquals("NOT_FOUND", json.path("errorCode").asText());
+        assertEquals("No endpoint at this address", json.path("detail").asText());
+        assertFalse(json.path("correlationId").asText().isBlank());
+        assertFalse(json.path("timestamp").asText().isBlank());
+        assertFalse(result.getResponse().getContentAsString().contains("secret-path"));
+        saveForProof("404-unknown-endpoint.json", result);
+    }
+
+    /**
+     * The proof picture of task 0026 ("a 404 body for an unknown endpoint") is made from this body. Only with
+     * {@code -Dp0026.proof=<folder>}; normal runs write nothing.
+     */
+    private static void saveForProof(String name, MvcResult result) throws Exception {
+        String folder = System.getProperty("p0026.proof");
+        if (folder == null || folder.isBlank()) return;
+        java.nio.file.Path dir = java.nio.file.Path.of(folder);
+        java.nio.file.Files.createDirectories(dir);
+        String pretty = new com.fasterxml.jackson.databind.ObjectMapper().writerWithDefaultPrettyPrinter()
+                .writeValueAsString(body(result));
+        java.nio.file.Files.writeString(dir.resolve(name), "HTTP " + result.getResponse().getStatus() + " "
+                + result.getRequest().getMethod() + " " + result.getRequest().getRequestURI() + "\n" + pretty);
+    }
+
+    @Test
+    void task0026WrongMethodIs405Sys009NamingTheAcceptedMethods() throws Exception {
+        MvcResult result = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .delete(SCANNER_UPLOAD)).andReturn();
+        assertEquals(405, result.getResponse().getStatus());
+        var json = body(result);
+        assertEquals("LV-SYS-009", json.path("code").asText());
+        assertEquals("METHOD_NOT_ALLOWED", json.path("errorCode").asText());
+        assertTrue(json.path("detail").asText().startsWith("This address accepts only "), json.toString());
+        saveForProof("405-wrong-method.json", result);
+    }
+
+    @Test
+    void task0026NoDetailFieldWhenThereIsNone() throws Exception {
+        MvcResult result = mvc.perform(post("/api/v1/external-intakes").contentType(MediaType.APPLICATION_JSON)
+                .content("{not json")).andReturn();
+        assertEquals(400, result.getResponse().getStatus());
+        assertEquals("LV-INT-001", body(result).path("code").asText());
+        assertFalse(body(result).has("detail"), "no detail key when there is none");
+    }
+
+    @Test
+    void task0026RequestValueRefusalNamesTheFieldNotTheValue() throws Exception {
+        String nullIdentifier = "{\"externalSourcePackageId\":\"S-1\",\"sourceRevision\":\"1\","
+                + "\"businessIdentifiers\":{\"loanNumber\":null},\"documents\":[{\"externalSourceDocumentId\":\"D-1\"}]}";
+        MvcResult result = mvc.perform(post("/api/v1/external-intakes").contentType(MediaType.APPLICATION_JSON)
+                .content(nullIdentifier)).andReturn();
+        assertEquals("businessIdentifiers must not contain null values", body(result).path("detail").asText());
+    }
 }
