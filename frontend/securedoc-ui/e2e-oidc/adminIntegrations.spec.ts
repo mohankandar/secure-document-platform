@@ -299,3 +299,17 @@ test('Edit a saved connection: Test connection tests the saved settings, and aft
   await expect(sheet.getByRole('button', { name: 'Save' })).toBeEnabled();
   expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 });
+
+// Task 0022 (A4): proof picture, saved to ../../docs/work/compare/0022/ (not committed). Registered only with P0022_PROOF=1.
+if (process.env.P0022_PROOF) {
+  test('proof: Admin › Integrations, the watched-folder "Sensitivity of files from this folder" setting', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openIntegrations(page, [], CONNECTIONS.filter((c) => c.connectionId !== 'c-folder'));
+    const folder = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Watched folder' });
+    await expect(folder.getByLabel('Sensitivity of files from this folder')).toHaveValue('STANDARD');
+    await folder.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: '../../docs/work/compare/0022/a4-integrations-watched-folder-level-light-1440.png' });
+    await folder.screenshot({ path: '../../docs/work/compare/0022/a4-integrations-watched-folder-level-card-light-1440.png' });
+  });
+}

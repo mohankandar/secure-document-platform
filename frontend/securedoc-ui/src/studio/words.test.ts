@@ -180,7 +180,7 @@ test('0021: each level has its plain name, and nothing sent is Standard', () => 
   assert.equal(sensitivityName(''), 'Standard');
 });
 
-test('0021: the case panel line is the owner’s wording with the effective level', () => {
+test('0021/0022: the case panel line is the owner’s wording with the case’s own level, Standard when none was sent', () => {
   assert.equal(caseSensitivityLine('HIGHLY_CONFIDENTIAL'), 'Sensitivity: Highly Confidential, as sent by the source system');
   assert.equal(caseSensitivityLine('CONFIDENTIAL'), 'Sensitivity: Confidential, as sent by the source system');
   assert.equal(caseSensitivityLine(undefined), 'Sensitivity: Standard, as sent by the source system');

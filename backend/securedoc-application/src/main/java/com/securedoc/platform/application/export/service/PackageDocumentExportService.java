@@ -192,7 +192,10 @@ public final class PackageDocumentExportService implements ExportPackageDocument
             auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_EXPORTED,
                     "Document", document.id().toString(), command.packageId(), command.correlationId(),
                     "Document acknowledged by master delivery destination=" + submission.destinationType()
-                            + ", cycle=" + exportCycle + ", filename=" + document.fileName().value());
+                            + ", cycle=" + exportCycle + ", filename=" + document.fileName().value()
+                            // Task 0022 (A2): a destination that cannot receive a level (local folder) still records it here.
+                            + ", sensitivityLevel=" + document.sensitivityLevel().name()
+                            + ", caseSensitivityLevel=" + pkg.sensitivityLevel().name());
         }
 
         // This is the only point that starts the post-export retention clock.
