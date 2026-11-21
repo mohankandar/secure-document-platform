@@ -14,7 +14,7 @@ Recorded 2026-11-21 by the LexaVault design chat, from the capabilities thread's
 | 7 | **Vision-based redaction with page routing** (V1 headline) | Not built. Requirement file `docs/work/vision-routing-requirement.md` (committed with this file) | After pipeline P2 |
 | 8 | **Performance target and benchmark**: under 60 s per document (30 better); benchmark on 20–30 first-customer samples, text vs vision path | Not started | Benchmark B1 now (public samples, owner's GPU), B2 with the customer's samples |
 | 9 | **Later AI ideas (V2)**: IT Admin operations assistant (logs/metrics only), AI-suggested tuning from reviewer corrections, AI-generated test documents | Not built | Backlog, V2 |
-| 10 | **Unreadable or corrupt pages always go to review**, never passed through; one case can hold several PDFs; LexaVault does not split a PDF into documents | **Partly.** Several PDFs per case: yes. Unreadable pages: today the **case stops** (OCR failure, `LV-PRC-002/003/006`) instead of the page going to review. Not splitting: true for documents in the case; the **split-by-barcode export** to split destinations exists and is a separate, approved feature (taken as not meant by this rule unless the owner says otherwise) | Task R2 |
+| 10 | **Unreadable or corrupt pages always go to review**, never passed through; one case can hold several PDFs; LexaVault does not split a PDF into documents | **Partly.** Several PDFs per case: yes. Unreadable pages: today the **case stops** (OCR failure, `LV-PRC-002/003/006`) instead of the page going to review. Not splitting: true for documents in the case; the **split-by-barcode export** to split destinations exists and is a separate, approved feature (taken as not meant by this rule unless the owner says otherwise) | Stopping the case is fine (capabilities thread, 2026-11-21). **Backlog:** let the Processor continue an unreadable-page case manually (today "Continue manually" is offered only for cases stopped at the AI step) |
 
 ## Design decision for item 6 (searchable text on redacted pages): **B chosen by the owner, 2026-11-21**
 
@@ -24,5 +24,19 @@ Today a page with a redaction becomes an image with no text, which is the safest
 
 ## Order (LexaVault, **confirmed by the owner 2026-11-21**)
 
-1. 0031 live run against Vero · 2. P1b job clean-up · 3. **R1** catalog, packs, locked items, styles and new pattern types · 4. **R2** true redaction hardening, searchable output, unreadable pages to review, signed PDFs recorded · 5. **R3** password-protected PDFs through the API · 6. Pipeline P2 · 7. Vision-based redaction · 8. Switch-over to platform-core (identity, licensing, notifications, case fields, integration standards round 1) · 9. Reports build, P2b, P3–P6.
+1. 0031 live run against Vero · 2. P1b job clean-up · 3. **R1** catalog, packs, locked items, styles and new pattern types · 4. **R2** true redaction hardening, searchable output, signed PDFs recorded · 5. **R3** password-protected PDFs through the API · 6. Pipeline P2 · 7. Vision-based redaction · 8. Switch-over to platform-core (identity, licensing, notifications, case fields, integration standards round 1) · 9. Reports build, P2b, P3–P6.
 Alongside: benchmark B1 now. V2 backlog: item 9.
+
+## Backlog (not development yet), recorded 2026-11-21
+
+| # | Item | Notes |
+|---|---|---|
+| BL1 | Continue manually for a case stopped on an unreadable page (item 10) | Extends today's Continue manually (AI-step stops only) |
+| BL2 | Security testing: SOC 2 readiness, penetration test, encryption details, data residency for hosting | Planning (capabilities doc §11–12, business readiness) |
+| BL3 | Disaster recovery plan: backups and recovery | Planning |
+| BL4 | On-prem upgrade and rollback procedure: supported versions, upgrades keep settings and data, tested rollback | Planning; the contract depends on it |
+| BL5 | **Per-entity time zone** | **Does not exist today** (checked 2026-11-21): time zones exist only per polling connection (daily schedule) and per compliance report request. The shared part is platform-core's (`docs/design/integration-standards.md`); LexaVault must use it for the Bulk window, Reports' "today" and retention timers. Needed before P5 (Bulk window) |
+| BL6 | V2 AI ideas (item 9) | V2 |
+
+## Benchmark
+Task 0033 (written 2026-11-21): vision benchmark, no product code.
