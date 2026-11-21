@@ -86,9 +86,10 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 
           {pkg.status === 'FAILED' && caps.includes(CAP.technicalView) && <TechnicalDetail data={technical.data} error={technical.error} isLoading={technical.isLoading} />}
 
-          {/* Task 0021: one read-only line. The level limits nothing here and nobody can change it in LexaVault. */}
+          {/* Task 0021: one read-only line. The level limits nothing here and nobody can change it in LexaVault.
+              Task 0022 (A1): the case's own level as sent, not the highest level in the case. */}
           <p className="cf-muted cf-small" data-testid="case-sensitivity">
-            {caseSensitivityLine(pkg.effectiveSensitivityLevel ?? pkg.sensitivityLevel)}
+            {caseSensitivityLine(pkg.sensitivityLevel)}
           </p>
 
           <DocumentsSection pkg={pkg} openFindings={openFindings} />

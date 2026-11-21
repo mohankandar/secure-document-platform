@@ -251,4 +251,33 @@ test.describe('Sign-in and entity chooser markup (A4)', () => {
     await expect(page).toHaveTitle('Choose an entity · LexaVault');
     await expect(page.getByText('Secure Document Platform')).toHaveCount(0);
   });
+
+  // Task 0022 (A3): before sign-in the chooser follows the computer's setting (the U028 "dark" picture was the light one).
+  // --cf-surface in each theme (tokens.css): the chooser's background.
+  for (const [scheme, surface] of [['dark', 'rgb(21, 23, 26)'], ['light', 'rgb(255, 255, 255)']] as const) {
+    test(`entity chooser: ${scheme} when the computer is set to ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await mockIdentityProvider(page);
+      await mockApi(page, 'supervisor', { twoEntities: true });
+      await page.goto('/');
+      await page.getByRole('button', { name: /sign in/i }).click();
+      await expect(page.getByRole('heading', { level: 1, name: 'Choose an entity' })).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
+      expect(await page.locator('.cf-boot').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(surface);
+    });
+  }
+
+  test('entity chooser: the line above the buttons has room, and the buttons do not touch', async ({ page }) => {
+    await mockIdentityProvider(page);
+    await mockApi(page, 'supervisor', { twoEntities: true });
+    await page.goto('/');
+    await page.getByRole('button', { name: /sign in/i }).click();
+    const buttons = page.getByRole('main').getByRole('button');
+    await expect(buttons).toHaveCount(2);
+    const line = await page.getByText('Choose an entity to continue.').boundingBox();
+    const first = await buttons.nth(0).boundingBox();
+    const second = await buttons.nth(1).boundingBox();
+    expect(first!.y - (line!.y + line!.height)).toBeGreaterThanOrEqual(16);
+    expect(second!.y - (first!.y + first!.height)).toBeGreaterThanOrEqual(8);
+  });
 });

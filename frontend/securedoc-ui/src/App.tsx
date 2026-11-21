@@ -30,6 +30,8 @@ import Button from './components/ui/Button';
 const CaseFileApp = lazy(() => import('./studio/CaseFileApp'));
 // The "no access" screen in the Case File design (UI task U013); loaded only when someone is refused.
 const NoAccess = lazy(() => import('./studio/NoAccess'));
+// The entity chooser in the Case File design, so it follows the dark setting before sign-in (task 0022 A3).
+const EntityChooser = lazy(() => import('./studio/EntityChooser'));
 
 /** The server lists no organization for this account: a refusal, the same as a 403 from /me (owner's decision, U013). */
 class NoOrganizationError extends Error {}
@@ -461,17 +463,10 @@ export default function App() {
       if (!entered) setAuthError('Unable to enter that tenant. Contact your administrator.');
     };
     return (
-      <AuthScreen title={CHOOSE_ENTITY_TITLE}>
-        <h1>Choose an entity</h1>
-        <p>Choose an entity to continue.</p>
-        {authError && <div className="ui-alert tone-danger">{authError}</div>}
-        {tenantChoices.map((choice) => (
-          <button className="ui-button secondary" key={choice.tenantId} type="button"
-            onClick={() => void chooseTenant(choice.tenantId)}>
-            {choice.name}
-          </button>
-        ))}
-      </AuthScreen>
+      <Suspense fallback={<AuthScreen title={CHOOSE_ENTITY_TITLE}><h1>{PRODUCT_NAME}</h1><p>Loading…</p></AuthScreen>}>
+        <EntityChooser title={CHOOSE_ENTITY_TITLE} choices={tenantChoices} error={authError}
+          onChoose={(tenantId) => void chooseTenant(tenantId)} />
+      </Suspense>
     );
   }
 

@@ -108,11 +108,13 @@ async function signIn(page: Page, sent: Sent[] = []) {
 
 const row = (page: Page) => page.locator('li.cf-case-row').filter({ hasText: 'LN-7001' });
 
-test('the case panel shows one read-only line with the effective level, and a document level that differs', async ({ page }) => {
+test('the case panel shows one read-only line with the case’s own level (not the highest), and a document level that differs', async ({ page }) => {
   await signIn(page);
   await row(page).getByRole('link').click();
   const panel = page.getByRole('complementary', { name: 'Case panel' });
-  await expect(panel.getByTestId('case-sensitivity')).toHaveText('Sensitivity: Highly Confidential, as sent by the source system');
+  // Task 0022 (A1): the case was sent as Confidential; one document is Highly Confidential. The line shows the case's
+  // own level as sent, not the highest level in the case.
+  await expect(panel.getByTestId('case-sensitivity')).toHaveText('Sensitivity: Confidential, as sent by the source system');
   await expect(panel.getByText(/^Sensitivity:/)).toHaveCount(1);
   const docs = panel.locator('li.cf-doc');
   // Note.pdf has the case's own level, so nothing is added; Medical.pdf differs, so its level is shown next to it.
@@ -121,6 +123,22 @@ test('the case panel shows one read-only line with the effective level, and a do
   // Read-only: nothing in the panel lets anyone change a level.
   await expect(panel.getByRole('combobox', { name: /sensitivity/i })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: /sensitivity/i })).toHaveCount(0);
+});
+
+test('a case sent with no level reads Standard, even when a document in it is Confidential (task 0022 A1)', async ({ page }) => {
+  await signIn(page);
+  const noLevel = {
+    ...CASE, sensitivityLevel: undefined, effectiveSensitivityLevel: 'CONFIDENTIAL',
+    documents: [{ ...CASE.documents[0], sensitivityLevel: 'CONFIDENTIAL', effectiveSensitivityLevel: 'CONFIDENTIAL' }],
+  };
+  // Registered after signIn, so it answers the case detail ahead of the shared mock.
+  await page.route(`**/api/v1/packages/${CASE.packageId}`, (route) => route.request().method() === 'OPTIONS'
+    ? route.fulfill({ status: 204, headers: cors })
+    : route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(noLevel) }));
+  await row(page).getByRole('link').click();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await expect(panel.getByTestId('case-sensitivity')).toHaveText('Sensitivity: Standard, as sent by the source system');
+  await expect(panel.locator('li.cf-doc').filter({ hasText: 'Note.pdf' }).getByTestId('document-sensitivity')).toHaveText('Confidential');
 });
 
 test('no badge in the Cases list: the level limits nothing in LexaVault', async ({ page }) => {
@@ -157,3 +175,56 @@ test('Scan paper sends the Sensitivity choice to the scan bridge', async ({ page
     caseSensitivityLevel: 'HIGHLY_CONFIDENTIAL',
   });
 });
+
+/*
+ * Task 0022 (A4): proof pictures, saved to ../../docs/work/compare/0022/ (not committed). Registered only on request:
+ *   $env:P0022_PROOF='1'; npx playwright test --config playwright.oidc-signin.config.ts sensitivity adminIntegrations
+ */
+if (process.env.P0022_PROOF) {
+  const OUT = '../../docs/work/compare/0022';
+
+  test('proof: case panel, a Confidential case with one Highly Confidential document', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signIn(page);
+    await row(page).getByRole('link').click();
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await expect(panel.getByTestId('case-sensitivity')).toHaveText('Sensitivity: Confidential, as sent by the source system');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: `${OUT}/a4-case-panel-confidential-light-1440.png` });
+  });
+
+  test('proof: case panel, a case with no level sent (Standard)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signIn(page);
+    const noLevel = {
+      ...CASE, sensitivityLevel: undefined, effectiveSensitivityLevel: 'STANDARD',
+      documents: CASE.documents.map((d) => ({ ...d, sensitivityLevel: undefined, effectiveSensitivityLevel: 'STANDARD' })),
+    };
+    await page.route(`**/api/v1/packages/${CASE.packageId}`, (route) => route.request().method() === 'OPTIONS'
+      ? route.fulfill({ status: 204, headers: cors })
+      : route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(noLevel) }));
+    await row(page).getByRole('link').click();
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await expect(panel.getByTestId('case-sensitivity')).toHaveText('Sensitivity: Standard, as sent by the source system');
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: `${OUT}/a4-case-panel-standard-light-1440.png` });
+  });
+
+  test('proof: New case with the Sensitivity choice open', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signIn(page);
+    await page.goto('/intake');
+    const choice = page.getByLabel('Sensitivity');
+    await expect(choice).toHaveValue('STANDARD');
+    await choice.focus();
+    // A native select's open list is drawn by the browser outside the page, so a headless screenshot cannot show it.
+    // For this picture only, the list is shown in place (size = number of options); the app itself is unchanged.
+    await choice.evaluate((el) => {
+      const select = el as HTMLSelectElement;
+      select.size = select.options.length;
+      select.style.height = 'auto';
+    });
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: `${OUT}/a4-new-case-sensitivity-open-light-1440.png` });
+  });
+}

@@ -355,9 +355,13 @@ export function sensitivityName(raw: string | null | undefined): string {
   return (SENSITIVITY_NAMES as Record<string, string>)[raw] ?? sentenceCase(raw);
 }
 
-/** The case panel's one line: "Sensitivity: Confidential, as sent by the source system". */
-export function caseSensitivityLine(effectiveLevel: string | null | undefined): string {
-  return `Sensitivity: ${sensitivityName(effectiveLevel)}, as sent by the source system`;
+/**
+ * The case panel's one line: "Sensitivity: Confidential, as sent by the source system". It shows the case's own level
+ * as sent (nothing sent = Standard), not the highest level in the case (owner's answer, task 0022 A1). A document whose
+ * own level differs is marked next to its name instead (documentSensitivityNote).
+ */
+export function caseSensitivityLine(caseLevel: string | null | undefined): string {
+  return `Sensitivity: ${sensitivityName(caseLevel)}, as sent by the source system`;
 }
 
 /** A document's own level, shown next to it only when it differs from the case's level; otherwise null. */
