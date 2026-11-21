@@ -71,7 +71,8 @@ public final class TenantLicensingService {
         LicenseVerificationResult verification = verifier.verify(signedToken.trim(), tenantId, now);
         if (verification.status() != LicenseValidationStatus.ACTIVE
                 && verification.status() != LicenseValidationStatus.NOT_YET_VALID) {
-            auditService.recordFailure(tenantId, actorId, AuditAction.LICENSE_VALIDATION_FAILED,
+            // Task 0023 C6: its own transaction, so the record survives the refused request's rollback.
+            auditService.recordFailureIndependently(tenantId, actorId, AuditAction.LICENSE_VALIDATION_FAILED,
                     "TenantLicense", tenantId.toString(), correlationId,
                     "License install rejected: status=" + verification.status());
             throw new LicenseEnforcementException(errorCode(verification.status()),
@@ -154,7 +155,8 @@ public final class TenantLicensingService {
         if (!enforcementEnabled) return;
         TenantLicenseStatus state = status(tenantId);
         if (state.processingAllowed()) return;
-        auditService.recordDenied(tenantId, actorId, AuditAction.LICENSE_ENFORCEMENT_DENIED,
+        // Task 0023 C6: its own transaction, so the record survives the refused request's rollback.
+        auditService.recordDeniedIndependently(tenantId, actorId, AuditAction.LICENSE_ENFORCEMENT_DENIED,
                 "Tenant", tenantId.toString(), correlationId,
                 "Document processing denied by tenant license: status=" + state.status()
                         + ", reason=" + state.reasonCode());

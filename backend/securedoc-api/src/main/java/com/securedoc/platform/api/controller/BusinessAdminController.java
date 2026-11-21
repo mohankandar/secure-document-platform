@@ -186,7 +186,7 @@ public class BusinessAdminController {
             try {
                 types.add(EntityType.valueOf(raw.trim().toUpperCase(Locale.ROOT)));
             } catch (Exception e) {
-                throw new ValidationException("Unsupported sensitive-data category: " + raw);
+                throw new ValidationException("Unsupported sensitive-data category"); // 0023 B7: never echo the value sent
             }
         }
         return Set.copyOf(types);

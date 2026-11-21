@@ -6,6 +6,8 @@ import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +37,7 @@ import java.util.UUID;
 @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "local")
 public class LocalFolderDeliveryAdapter implements DeliveryPort {
 
+    private static final Logger log = LoggerFactory.getLogger(LocalFolderDeliveryAdapter.class);
     private static final String DESTINATION_TYPE = "local-folder";
     private static final String STAGING_DIRECTORY = ".staging";
 
@@ -96,8 +99,11 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
                 if (!finalFile.startsWith(finalPackageDir)) {
                     throw new IllegalArgumentException("Resolved final delivery file escapes package directory");
                 }
+                // Task 0023 (B4, #200/#201): the recorded location is relative and names no file:
+                // no absolute path and no original file name in the export record or any response.
                 finalReferences.add(new DeliveryReference(
-                        item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE, null, finalFile.toString()));
+                        item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE, null,
+                        recordedLocation(packageId, exportCycle, item.documentId())));
             }
 
             Files.createDirectories(packageDir);
@@ -107,10 +113,10 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
             }
             return new BatchDeliveryReference(DESTINATION_TYPE, null, finalReferences);
         } catch (IOException e) {
-            deleteRecursivelyQuietly(stagingPackageDir);
+            deleteStagingBestEffort(stagingPackageDir, packageId, exportCycle);
             throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Failed to deliver package to local folder", e);
         } catch (RuntimeException e) {
-            deleteRecursivelyQuietly(stagingPackageDir);
+            deleteStagingBestEffort(stagingPackageDir, packageId, exportCycle);
             throw e;
         }
     }
@@ -148,20 +154,34 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
         return name;
     }
 
-    private void deleteRecursivelyQuietly(Path root) {
+    /** The relative location kept in the delivery and export records: ids only, no root path and no file name. */
+    static String recordedLocation(PackageId packageId, int exportCycle, com.securedoc.platform.domain.identity.DocumentId documentId) {
+        return DESTINATION_TYPE + ":" + packageId.value() + "/cycle-" + exportCycle + "/" + documentId.value();
+    }
+
+    /**
+     * Best-effort cleanup of private staging. A failed delete is logged (task 0023 #200) with the package id, the
+     * cycle and the count only: the staging folder holds redacted output, so IT can find it by those ids.
+     */
+    private void deleteStagingBestEffort(Path root, PackageId packageId, int exportCycle) {
         if (root == null || !Files.exists(root)) {
             return;
         }
+        int[] failed = {0};
         try (var paths = Files.walk(root)) {
             paths.sorted(Comparator.reverseOrder()).forEach(path -> {
                 try {
                     Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                    // Best effort cleanup of private staging only.
+                } catch (IOException e) {
+                    failed[0]++;
                 }
             });
-        } catch (IOException ignored) {
-            // Best effort cleanup of private staging only.
+        } catch (IOException e) {
+            failed[0]++;
+        }
+        if (failed[0] > 0) {
+            log.warn("LOCAL_DELIVERY_STAGING_CLEANUP_FAILED package={} cycle={} failedEntries={}",
+                    packageId.value(), exportCycle, failed[0]);
         }
     }
 }

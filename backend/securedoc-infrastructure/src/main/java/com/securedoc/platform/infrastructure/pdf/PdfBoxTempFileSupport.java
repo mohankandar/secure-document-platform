@@ -27,7 +27,8 @@ public final class PdfBoxTempFileSupport {
             return new StagedPdf(path, document);
         } finally {
             if (!success) {
-                Files.deleteIfExists(path);
+                // Task 0023 B9: never mask the load failure; a failed delete is logged with a temp id.
+                TempFileCleanup.deleteQuietly(path, "PDF_STAGE");
             }
         }
     }
@@ -59,6 +60,11 @@ public final class PdfBoxTempFileSupport {
             return document;
         }
 
+        /**
+         * Closes the document and deletes the staged copy. Task 0023 B9 (#372): a failed delete no
+         * longer fails the document (the work already succeeded); it is logged with a temp id so IT
+         * can remove the copy. A failure to close the PDF document itself is still reported.
+         */
         @Override
         public void close() throws IOException {
             IOException failure = null;
@@ -66,13 +72,15 @@ public final class PdfBoxTempFileSupport {
                 document.close();
             } catch (IOException e) {
                 failure = e;
-            }
-            try {
-                Files.deleteIfExists(path);
-            } catch (IOException e) {
-                if (failure == null) failure = e; else failure.addSuppressed(e);
+            } finally {
+                TempFileCleanup.deleteQuietly(path, "PDF_STAGE");
             }
             if (failure != null) throw failure;
+        }
+
+        /** Test seam: the staged copy's location. */
+        Path path() {
+            return path;
         }
     }
 }

@@ -165,6 +165,43 @@ class LocalWatchedFolderSourceAdapterTest {
         assertFalse(Files.exists(configured));
     }
 
+    /* Task 0023 C2/#61: a bad trigger is MALFORMED_TRIGGER, a real read fault is SOURCE_IO_ERROR. */
+
+    @Test
+    void aTriggerThatIsNotJsonIsMalformed() throws Exception {
+        var adapter = adapter("LEAVE", "LEAVE");
+        Path source = candidate("Jane Doe drop");
+        Files.writeString(source.resolve("manifest.json"), "{not json");
+
+        var discovered = adapter.discover();
+
+        assertEquals(1, discovered.size());
+        assertFalse(discovered.get(0).manifestValid());
+        assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.MALFORMED_TRIGGER,
+                discovered.get(0).rejectionCode());
+    }
+
+    @Test
+    void aListedFileOutsideTheDropIsMalformed() throws Exception {
+        var adapter = adapter("LEAVE", "LEAVE");
+        Path source = candidate("escape-drop");
+        Files.writeString(source.resolve("manifest.json"), """
+                {"files":["../other/document.pdf"]}
+                """);
+        assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.MALFORMED_TRIGGER,
+                adapter.discover().get(0).rejectionCode());
+    }
+
+    @Test
+    void aReadFaultIsAnIoErrorNotAMalformedTrigger() {
+        assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.SOURCE_IO_ERROR,
+                LocalWatchedFolderSourceAdapter.readFailureCode(new java.nio.file.AccessDeniedException("C:\\drops\\x")));
+        assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.SOURCE_IO_ERROR,
+                LocalWatchedFolderSourceAdapter.readFailureCode(new java.io.UncheckedIOException(new java.io.IOException())));
+        assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.MALFORMED_TRIGGER,
+                LocalWatchedFolderSourceAdapter.readFailureCode(new com.fasterxml.jackson.core.JsonParseException(null, "x")));
+    }
+
     private LocalWatchedFolderSourceAdapter adapter(String acceptedBehavior, String rejectedBehavior) {
         return new LocalWatchedFolderSourceAdapter(properties(tempDir, acceptedBehavior, rejectedBehavior));
     }

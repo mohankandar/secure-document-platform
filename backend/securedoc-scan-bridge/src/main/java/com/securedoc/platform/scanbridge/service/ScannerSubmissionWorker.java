@@ -19,6 +19,8 @@ import java.util.UUID;
 @Service
 public class ScannerSubmissionWorker {
     private static final Logger log = LoggerFactory.getLogger(ScannerSubmissionWorker.class);
+    /** Automatic retries after the first attempt, counted since the item was last queued by a person. */
+    static final int MAX_AUTOMATIC_RETRIES = 3;
     private final ScanBridgeProperties properties;
     private final ScanSessionService sessions;
     private final ScanArtifactService artifacts;
@@ -43,7 +45,12 @@ public class ScannerSubmissionWorker {
     @Scheduled(fixedDelayString = "${securedoc.scan-bridge.delivery.poll-interval-ms:1000}")
     public void deliverDue() {
         if (!properties.isEnabled()) return;
-        sessions.purgeExpiredTerminalSessions(clock.instant());
+        try {
+            sessions.purgeExpiredTerminalSessions(clock.instant());
+        } catch (RuntimeException ex) {
+            // Housekeeping must never stop delivery of the durable queue.
+            log.warn("SCAN_BRIDGE_TERMINAL_PURGE_FAILED exceptionType={}", ex.getClass().getSimpleName());
+        }
         for (ScanSession queued : sessions.dueForDelivery(clock.instant())) {
             try {
                 deliverOne(queued.sessionId());
@@ -119,6 +126,15 @@ public class ScannerSubmissionWorker {
     }
 
     private void scheduleRetry(ScanSession current, String reasonCode) {
+        // Task 0023 D2 (#82): retries are capped. After the first attempt and MAX_AUTOMATIC_RETRIES spaced
+        // retries the item goes to ATTENTION_REQUIRED with its last code, where the scanner screen and the
+        // delivery-items list show it to a person (manual retry: POST /delivery-items/{id}/retry).
+        if (current.deliveryAttemptCount() > MAX_AUTOMATIC_RETRIES) {
+            log.warn("SCAN_BRIDGE_DELIVERY_RETRIES_EXHAUSTED sessionId={} submissionId={} reasonCode={} attempts={}",
+                    current.sessionId(), current.submissionId(), reasonCode, current.deliveryAttemptCount());
+            sessions.markAttentionRequired(current.sessionId(), reasonCode);
+            return;
+        }
         int exponent = Math.min(20, Math.max(0, current.deliveryAttemptCount() - 1));
         long initial = Math.max(250, properties.getDelivery().getRetryInitialDelayMs());
         long max = Math.max(initial, properties.getDelivery().getRetryMaxDelayMs());

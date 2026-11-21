@@ -15,6 +15,8 @@ public record CreatePackageRequest(
         JsonNode sensitivityLevel
 ) {
     public CreatePackageRequest {
+        RequestValues.requireNoNullValues(businessIdentifiers, "businessIdentifiers");
+        RequestValues.requireNoNullValues(metadata, "metadata");
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     }

@@ -24,10 +24,18 @@ public class PollingScheduler {
             for (var source : due) {
                 executor.execute(() -> {
                     try { service.runScheduled(source.tenantId(), source.connectionId()); }
-                    catch (RuntimeException e) { log.warn("Polling source execution failed; run record retains retry evidence"); }
+                    catch (RuntimeException e) {
+                        // Task 0023 #333: the type and a code only. A failure before the run started leaves no run record.
+                        log.warn("POLLING_SOURCE_RUN_FAILED connectionId={} reasonCode=POLLING_RUN_ERROR exceptionType={}",
+                                source.connectionId(), e.getClass().getSimpleName());
+                    }
                 });
             }
             if(!due.isEmpty()) log.info("Polling scheduler dispatched {} due source(s)", due.size());
-        } catch(RuntimeException e){ log.warn("Polling scheduler discovery cycle failed; sources will be reconsidered on the next cycle"); }
+        } catch(RuntimeException e){
+            // Task 0023 #334.
+            log.warn("POLLING_DISCOVERY_FAILED reasonCode=POLLING_DISCOVERY_ERROR exceptionType={}; sources will be reconsidered on the next cycle",
+                    e.getClass().getSimpleName());
+        }
     }
 }

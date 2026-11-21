@@ -45,6 +45,17 @@ import java.util.UUID;
  */
 @Service
 public class PlatformHealthService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PlatformHealthService.class);
+
+    /**
+     * Task 0023 C7 (#336-#338): a failed health probe is logged with the component, a code and the exception type
+     * only (never a message, URL or key): {@code PLATFORM_HEALTH_CHECK_FAILED component=<c> code=<CODE> type=<T>}.
+     */
+    private static void logProbeFailure(String component, String code, Exception cause) {
+        log.warn("PLATFORM_HEALTH_CHECK_FAILED component={} code={} type={}", component, code,
+                cause == null ? "none" : cause.getClass().getSimpleName());
+    }
+
     private final DataSource dataSource;
     private final AiRuntimeProperties ai;
     private final TesseractOcrProperties ocr;
@@ -184,9 +195,11 @@ public class PlatformHealthService {
                 "Datasource configured");
         try (var connection = dataSource.getConnection()) {
             boolean ok = connection.isValid(2);
+            if (!ok) logProbeFailure("database", "CONNECTION_INVALID", null);
             return item("database", "PostgreSQL", "Database", "postgresql", ok ? "HEALTHY" : "UNHEALTHY", true,
                     ok ? "Connection valid" : "Connection validation failed");
         } catch (Exception e) {
+            logProbeFailure("database", "CONNECTION_UNAVAILABLE", e);
             return item("database", "PostgreSQL", "Database", "postgresql", "UNHEALTHY", true,
                     "Connection unavailable");
         }
@@ -223,9 +236,11 @@ public class PlatformHealthService {
             var request = requestBuilder.timeout(Duration.ofSeconds(3)).GET().build();
             int status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
             boolean ok = status >= 200 && status < 300;
+            if (!ok) logProbeFailure("ai", "HTTP_" + status, null);
             return item("ai", "Sensitive-content AI", "AI", provider, ok ? "HEALTHY" : "UNHEALTHY", configured,
                     aiDetail());
         } catch (Exception e) {
+            logProbeFailure("ai", e instanceof IllegalArgumentException ? "CONFIGURATION_INVALID" : "UNREACHABLE", e);
             return item("ai", "Sensitive-content AI", "AI", provider, "UNHEALTHY", configured, aiDetail());
         }
     }
@@ -245,10 +260,15 @@ public class PlatformHealthService {
                     reachable++;
                     if (ollamaResponseContainsModel(response.body(), ai.getModel())) {
                         ready++;
+                    } else {
+                        logNodeFailure(node.id(), "MODEL_MISSING", null);
                     }
+                } else {
+                    logNodeFailure(node.id(), "HTTP_" + response.statusCode(), null);
                 }
-            } catch (Exception ignored) {
-                // Aggregate health deliberately tolerates individual-node failure.
+            } catch (Exception failure) {
+                // Aggregate health deliberately tolerates individual-node failure; the node and reason are logged.
+                logNodeFailure(node.id(), "UNREACHABLE", failure);
             }
         }
         boolean ok = ready > 0;
@@ -256,6 +276,11 @@ public class PlatformHealthService {
                 + "; reachable nodes: " + reachable + "/" + nodes.size();
         return item("ai", "Sensitive-content AI", "AI", "ollama",
                 ok ? "HEALTHY" : "UNHEALTHY", configured, detail);
+    }
+
+    private static void logNodeFailure(String nodeId, String code, Exception cause) {
+        log.warn("PLATFORM_HEALTH_CHECK_FAILED component=ai-node node={} code={} type={}", nodeId, code,
+                cause == null ? "none" : cause.getClass().getSimpleName());
     }
 
     private boolean ollamaResponseContainsModel(String responseBody, String requiredModel) {
@@ -284,7 +309,10 @@ public class PlatformHealthService {
             int configuredNodes;
             try {
                 configuredNodes = OllamaInferencePoolConfiguration.parse(ai.getPoolNodeUrls()).size();
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException invalid) {
+                // The pool parser writes its own fixed messages (no raw entry or URL user info, task 0023 B8).
+                log.warn("AI_POOL_CONFIGURATION_INVALID type={} detail={}", invalid.getClass().getSimpleName(),
+                        com.securedoc.platform.application.exception.AuthoredMessages.messageOr(invalid, "none"));
                 configuredNodes = 0;
             }
             base += "; inference pool: enabled; configured nodes: " + configuredNodes;
@@ -315,9 +343,11 @@ public class PlatformHealthService {
             boolean finished = process.waitFor(3, TimeUnit.SECONDS);
             boolean ok = finished && process.exitValue() == 0;
             if (!finished) process.destroyForcibly();
+            if (!ok) logProbeFailure("ocr", finished ? "EXIT_" + process.exitValue() : "TIMEOUT", null);
             return item("ocr", "OCR", "OCR", "tesseract", ok ? "HEALTHY" : "UNHEALTHY", configured,
                     "Language: " + safe(ocr.getLanguage()));
         } catch (Exception e) {
+            logProbeFailure("ocr", "EXECUTABLE_UNAVAILABLE", e);
             return item("ocr", "OCR", "OCR", "tesseract", "UNHEALTHY", configured,
                     "Tesseract executable unavailable");
         }
@@ -345,6 +375,7 @@ public class PlatformHealthService {
                         : "Configured but not healthy on every active node";
             return item("storage", "Processing storage", "Storage", providerType, status, true, detail);
         } catch (Exception e) {
+            logProbeFailure("storage", "CONFIGURATION_UNAVAILABLE", e);
             return item("storage", "Processing storage", "Storage", "managed", "UNHEALTHY", false,
                     "Processing storage configuration unavailable");
         }
@@ -372,6 +403,7 @@ public class PlatformHealthService {
             return item("delivery", "Final delivery", "Delivery", "local", ok ? "HEALTHY" : "UNHEALTHY", true,
                     "Local filesystem destination");
         } catch (Exception e) {
+            logProbeFailure("delivery", "LOCAL_DESTINATION_UNAVAILABLE", e);
             return item("delivery", "Final delivery", "Delivery", "local", "UNHEALTHY", true,
                     "Local destination unavailable");
         }

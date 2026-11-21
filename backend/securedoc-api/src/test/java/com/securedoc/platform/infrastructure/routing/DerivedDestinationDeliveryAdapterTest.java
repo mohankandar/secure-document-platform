@@ -8,6 +8,8 @@ import com.securedoc.platform.domain.integration.*;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -82,11 +84,44 @@ class DerivedDestinationDeliveryAdapterTest {
     void fileShareWritesOnlyBeneathConfiguredRoot() throws Exception {
         var root = Files.createTempDirectory("derived-destination-");
         var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), mock(HttpClient.class));
-        var receipt = adapter.deliver(fileConnection(root.toString()), request());
+        adapter.deliver(fileConnection(root.toString()), request());
 
-        var written = root.resolve(receipt.destinationReference()).normalize();
+        // Task 0023 (B4): the receipt no longer carries the file name, so the written file is found on the share.
+        // The file on the share is still named "<derived id>__<file name>".
+        var written = root.resolve("derived-123__routed.pdf").normalize();
         assertTrue(written.startsWith(root.toAbsolutePath().normalize()));
         assertArrayEquals("PDF-CONTENT".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(written));
+    }
+
+    /** Task 0023 (B4, #222): the receipt kept in the delivery row and returned by the API names no file and no path. */
+    @Test
+    void fileShareReceiptCarriesTheDerivedIdOnly() throws Exception {
+        var root = Files.createTempDirectory("derived-destination-");
+        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), mock(HttpClient.class));
+        var receipt = adapter.deliver(fileConnection(root.toString()), request());
+
+        assertEquals("derived-123", receipt.destinationReference());
+        assertEquals("file-share:derived-123", receipt.location());
+        assertFalse(receipt.location().contains(root.toString()));
+        assertFalse(receipt.destinationReference().contains("routed"));
+    }
+
+    /** Task 0023 (#222): a failed write no longer leaves a temp file with redacted content on the share. */
+    @Test
+    void aFailedFileShareWriteLeavesNoTempFile() throws Exception {
+        var root = Files.createTempDirectory("derived-destination-");
+        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), mock(HttpClient.class));
+        var failing = new DerivedDestinationDeliveryPort.DeliveryRequest("derived-123", "routed.pdf", "application/pdf",
+                3, "a".repeat(64), null, Map.of(), () -> new InputStream() {
+                    @Override public int read() throws IOException { throw new IOException("disk"); }
+                });
+
+        TechnicalDependencyException ex = assertThrows(TechnicalDependencyException.class,
+                () -> adapter.deliver(fileConnection(root.toString()), failing));
+        assertEquals("DELIVERY_IO", ex.failureCode().name());
+        try (var left = Files.list(root)) {
+            assertEquals(0, left.count());
+        }
     }
 
     private DerivedDestinationDeliveryPort.DeliveryRequest request() {

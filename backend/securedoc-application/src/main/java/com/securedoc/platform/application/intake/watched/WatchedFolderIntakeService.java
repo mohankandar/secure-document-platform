@@ -2,6 +2,7 @@ package com.securedoc.platform.application.intake.watched;
 
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.command.*;
+import com.securedoc.platform.application.intake.model.IntakeFailure;
 import com.securedoc.platform.application.intake.model.IntakeRejectionCode;
 import com.securedoc.platform.application.port.in.*;
 import com.securedoc.platform.application.port.out.*;
@@ -31,6 +32,7 @@ import java.util.*;
  * metadata plus SHA-256 before a CREATED package is submitted.
  */
 public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCase, ListIntakeObservationsQuery {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(WatchedFolderIntakeService.class);
     private final WatchedFolderSourcePort sourcePort;
     private final WatchedFolderLeasePort leasePort;
     private final IntakeObservationRepository observationRepository;
@@ -114,7 +116,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                 rejected++;
                 reject(principal,candidate,
                         candidate.rejectionCode()==null?IntakeRejectionCode.MALFORMED_TRIGGER:candidate.rejectionCode(),
-                        null,correlationId,scanLease);
+                        null,correlationId,scanLease,null);
                 continue;
             }
 
@@ -122,17 +124,25 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             try {
                 fingerprint = fingerprint(principal, candidate);
             } catch (Exception e) {
+                // The drop could not be read while hashing: a real I/O fault. The type is kept, never the message.
                 rejected++;
-                reject(principal,candidate,IntakeRejectionCode.SOURCE_IO_ERROR,null,correlationId,scanLease);
+                reject(principal,candidate,IntakeRejectionCode.SOURCE_IO_ERROR,null,correlationId,scanLease,
+                        new IntakeFailure("SOURCE_IO_ERROR", e.getClass().getSimpleName()));
                 continue;
             }
 
-            Optional<IntakeObservation> prior = observationRepository.findByTenantAndSource(
-                    principal.tenantId(), candidate.sourceReference());
-            if (prior.isPresent() && prior.get().status() == IntakeObservationStatus.ACCEPTED
-                    && fingerprint.equals(prior.get().fingerprint())) {
+            Optional<IntakeObservation> prior = priorObservation(principal, candidate);
+            if (prior.isPresent() && fingerprint.equals(prior.get().fingerprint())
+                    && (prior.get().status() == IntakeObservationStatus.ACCEPTED
+                        || prior.get().status() == IntakeObservationStatus.DUPLICATE)) {
                 if (!leaseStillCurrent(scanLease)) continue;
                 duplicates++;
+                // Task 0023 C2/#41: the same content was taken in before. Record it once (a drop left in place is
+                // seen again on every scan, and is not recorded again while its latest record is this duplicate).
+                if (prior.get().status() == IntakeObservationStatus.ACCEPTED) {
+                    record(principal,candidate,IntakeObservationStatus.DUPLICATE,IntakeRejectionCode.DUPLICATE_INTAKE,
+                            fingerprint,prior.get().packageId(),correlationId,null);
+                }
                 applyDispositionBestEffort(candidate.sourceReference(), IntakeDisposition.DUPLICATE, scanLease);
                 continue;
             }
@@ -145,7 +155,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                 if (!leaseStillCurrent(scanLease)) continue;
                 duplicates++;
                 record(principal,candidate,IntakeObservationStatus.DUPLICATE,IntakeRejectionCode.DUPLICATE_INTAKE,
-                        fingerprint,null,correlationId);
+                        fingerprint,null,correlationId,null);
                 applyDispositionBestEffort(candidate.sourceReference(), IntakeDisposition.DUPLICATE, scanLease);
                 continue;
             } catch (LostScanLeaseException lostLease) {
@@ -155,11 +165,18 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             } catch (RuntimeException e) {
                 if (!leaseStillCurrent(scanLease)) continue;
                 rejected++;
-                reject(principal,candidate,IntakeRejectionCode.SOURCE_IO_ERROR,fingerprint,correlationId,scanLease);
+                // Task 0023 C2: the real reason (identifier, licence, capability, inactive tenant, storage, file, ...).
+                boolean recoveryConflict = e instanceof RecoveryConflictException;
+                IntakeRejectionCode reason = recoveryConflict
+                        ? IntakeRejectionCode.RECOVERY_CONFLICT : IntakeFailure.rejectionCodeOf(e);
+                IntakeFailure cause = recoveryConflict
+                        ? new IntakeFailure(IntakeRejectionCode.RECOVERY_CONFLICT.name(), e.getClass().getSimpleName())
+                        : IntakeFailure.of(e);
+                reject(principal,candidate,reason,fingerprint,correlationId,scanLease,cause);
                 continue;
             }
 
-            record(principal,candidate,IntakeObservationStatus.ACCEPTED,null,fingerprint,packageId,correlationId);
+            record(principal,candidate,IntakeObservationStatus.ACCEPTED,null,fingerprint,packageId,correlationId,null);
             accepted++;
             applyDispositionBestEffort(candidate.sourceReference(), IntakeDisposition.ACCEPTED, scanLease);
             triggerProcessingIfSubmitted(packageId, principal, correlationId);
@@ -183,7 +200,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         try {
             createdPackageId = createPackageUseCase.execute(
                     CreatePackageCommand.watchedFolder(candidate.businessIdentifiers(), candidate.metadata(), fingerprint,
-                            candidate.sourceReference(), correlationId,
+                            dropReference(candidate), correlationId,
                             com.securedoc.platform.domain.document.SensitivityLevel.Received.of(
                                     folderSensitivityLevel.apply(principal.tenantId()))), principal).packageId();
         } catch (RuntimeException createFailure) {
@@ -248,8 +265,24 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     }
 
     private boolean sameWatchedSource(DocumentPackage existing, WatchedFolderCandidate candidate) {
+        // A case made before task 0023 holds the drop folder's own name; later cases hold the drop reference.
         return existing.packageType() == PackageType.FOLDER_INTAKE
-                && existing.sourceReference().filter(candidate.sourceReference()::equals).isPresent();
+                && existing.sourceReference()
+                        .filter(ref -> ref.equals(dropReference(candidate)) || ref.equals(candidate.sourceReference()))
+                        .isPresent();
+    }
+
+    /** Task 0023 B3: the folder key plus a short hash of the drop folder name; the name itself is never stored. */
+    private static String dropReference(WatchedFolderCandidate candidate) {
+        return WatchedFolderDropReference.of(candidate.sourceReference());
+    }
+
+    /** The drop's latest observation; one recorded before task 0023 is found under the drop folder's own name. */
+    private Optional<IntakeObservation> priorObservation(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate) {
+        Optional<IntakeObservation> current = observationRepository.findByTenantAndSource(
+                principal.tenantId(), dropReference(candidate));
+        return current.isPresent() ? current
+                : observationRepository.findByTenantAndSource(principal.tenantId(), candidate.sourceReference());
     }
 
     private List<WatchedFolderDocument> missingDocumentsOrThrow(DocumentPackage existing,
@@ -339,8 +372,10 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             if (current.isEmpty() || current.get().status() != PackageStatus.SUBMITTED) return;
             processingDispatcher.dispatch(TriggerPackageProcessingCommand.of(packageId, principal.tenantId(),
                     principal.actorId(), correlationId));
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException dispatchFailure) {
             // Processing owns its technical failure state; do not rewrite an accepted intake as rejected.
+            log.warn("WATCHED_FOLDER_DISPATCH_FAILED packageId={} reasonCode=DISPATCH_FAILED exceptionType={}",
+                    packageId, dispatchFailure.getClass().getSimpleName());
         }
     }
 
@@ -389,13 +424,12 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     }
 
     private void recordWaiting(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate, CorrelationId cid) {
-        Optional<IntakeObservation> existing=observationRepository.findByTenantAndSource(
-                principal.tenantId(),candidate.sourceReference());
+        Optional<IntakeObservation> existing=priorObservation(principal,candidate);
         if(existing.isPresent() && existing.get().status()==IntakeObservationStatus.WAITING_FOR_TRIGGER) return;
         Instant now=Instant.now();
         UUID id=UUID.randomUUID();
         Instant firstSeen=now;
-        IntakeObservation observation=new IntakeObservation(id,principal.tenantId(),candidate.sourceReference(),
+        IntakeObservation observation=new IntakeObservation(id,principal.tenantId(),dropReference(candidate),
                 IntakeObservationStatus.WAITING_FOR_TRIGGER,null,null,null,firstSeen,firstSeen.plus(incompleteVisibility),now);
         observationRepository.save(observation);
         auditService.recordSuccess(principal.tenantId(),principal.actorId(),AuditAction.INTAKE_WAITING_FOR_TRIGGER,
@@ -407,21 +441,25 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                         IntakeRejectionCode code,
                         String fingerprint,
                         CorrelationId cid,
-                        WatchedFolderScanLease scanLease) {
-        record(principal,candidate,IntakeObservationStatus.REJECTED,code,fingerprint,null,cid);
+                        WatchedFolderScanLease scanLease,
+                        IntakeFailure cause) {
+        // Logged with the drop reference, the code and the exception type only (task 0023 C2, B3).
+        log.warn("WATCHED_FOLDER_DROP_REJECTED drop={} reasonCode={}{}", dropReference(candidate), code,
+                cause == null ? "" : " causeCode=" + cause.code() + " exceptionType=" + cause.exceptionType());
+        record(principal,candidate,IntakeObservationStatus.REJECTED,code,fingerprint,null,cid,cause);
         applyDispositionBestEffort(candidate.sourceReference(), IntakeDisposition.REJECTED, scanLease);
     }
 
     private void record(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate, IntakeObservationStatus status,
-                        IntakeRejectionCode code, String fingerprint, PackageId packageId, CorrelationId cid) {
+                        IntakeRejectionCode code, String fingerprint, PackageId packageId, CorrelationId cid,
+                        IntakeFailure cause) {
         Instant now=Instant.now();
-        Optional<IntakeObservation> latest=observationRepository.findByTenantAndSource(
-                principal.tenantId(),candidate.sourceReference());
+        Optional<IntakeObservation> latest=priorObservation(principal,candidate);
         Optional<IntakeObservation> waiting=latest.filter(o -> o.status() == IntakeObservationStatus.WAITING_FOR_TRIGGER);
         Instant first=waiting.map(IntakeObservation::firstSeenAt).orElse(now);
         Instant visible=waiting.map(IntakeObservation::visibleAfter).orElse(now);
         UUID id=waiting.map(IntakeObservation::id).orElse(UUID.randomUUID());
-        observationRepository.save(new IntakeObservation(id,principal.tenantId(),candidate.sourceReference(),
+        observationRepository.save(new IntakeObservation(id,principal.tenantId(),dropReference(candidate),
                 status,code,fingerprint,packageId,first,visible,now));
         AuditAction action=switch(status){
             case ACCEPTED->AuditAction.INTAKE_ACCEPTED;
@@ -429,7 +467,9 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             case DUPLICATE->AuditAction.INTAKE_DUPLICATE;
             default->AuditAction.INTAKE_WAITING_FOR_TRIGGER;
         };
-        String detail="Intake status="+status+(code==null?"":", reasonCode="+code);
+        String detail="Intake status="+status+(code==null?"":", reasonCode="+code)
+                +(cause==null?"":", causeCode="+cause.code()+", exceptionType="+cause.exceptionType())
+                +", drop="+dropReference(candidate);
         auditService.recordSuccess(principal.tenantId(),principal.actorId(),action,
                 "WatchedFolderIntake",id.toString(),cid,detail);
     }
@@ -439,9 +479,11 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                                             WatchedFolderScanLease scanLease) {
         try {
             sourcePort.applyDisposition(sourceReference, disposition, scanLease);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException dispositionFailure) {
             // Acceptance/rejection/duplicate is already durably recorded. Source post-processing failure must not
             // rewrite the business intake outcome; operational health exposes source/storage failures separately.
+            log.warn("WATCHED_FOLDER_DISPOSITION_FAILED drop={} disposition={} reasonCode=DISPOSITION_FAILED exceptionType={}",
+                    WatchedFolderDropReference.of(sourceReference), disposition, dispositionFailure.getClass().getSimpleName());
         }
     }
 

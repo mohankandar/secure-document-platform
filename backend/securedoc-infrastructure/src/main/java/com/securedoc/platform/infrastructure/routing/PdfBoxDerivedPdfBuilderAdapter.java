@@ -3,6 +3,7 @@ package com.securedoc.platform.infrastructure.routing;
 import com.securedoc.platform.application.port.out.DerivedPdfBuilderPort;
 import com.securedoc.platform.application.port.out.ReplayableContent;
 import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
+import com.securedoc.platform.infrastructure.pdf.TempFileCleanup;
 import com.securedoc.platform.infrastructure.pdf.TempFileReplayableContent;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -24,6 +24,7 @@ public class PdfBoxDerivedPdfBuilderAdapter implements DerivedPdfBuilderPort {
         }
         List<Integer> ordered = pageNumbers.stream().distinct().sorted().toList();
         Path outputPath = null;
+        TempFileReplayableContent result = null;
         try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(redactedPdf, "lexavault-derived-source-");
              PDDocument output = PdfBoxTempFileSupport.newDiskBackedDocument()) {
             PDDocument source = staged.document();
@@ -35,14 +36,19 @@ public class PdfBoxDerivedPdfBuilderAdapter implements DerivedPdfBuilderPort {
             }
             outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-derived-output-");
             output.save(outputPath.toFile());
-            TempFileReplayableContent result = TempFileReplayableContent.owned(outputPath);
+            result = TempFileReplayableContent.owned(outputPath);
             outputPath = null;
             return result;
         } catch (IOException e) {
+            // Task 0023 B9: also reached when closing the source fails after the output exists.
+            if (result != null) result.close();
             throw new UncheckedIOException("Failed to build derived redacted PDF", e);
+        } catch (RuntimeException e) {
+            if (result != null) result.close();
+            throw e;
         } finally {
             if (outputPath != null) {
-                try { Files.deleteIfExists(outputPath); } catch (IOException ignored) { }
+                TempFileCleanup.deleteQuietly(outputPath, "DERIVED_OUTPUT");
             }
         }
     }

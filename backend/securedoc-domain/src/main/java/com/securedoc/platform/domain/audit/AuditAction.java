@@ -135,6 +135,8 @@ public enum AuditAction {
     POLLING_RUN_COMPLETED,
     POLLING_RUN_FAILED,
     POLLING_SOURCE_ACKNOWLEDGED,
+    /** Task 0023 B1: one pickup package of a polling run was not taken in; detail holds the package position, code and exception type. */
+    POLLING_PACKAGE_FAILED,
     INTEGRATION_CONNECTION_TESTED,
     ENTERPRISE_IDENTITY_DRAFT_SAVED,
     ENTERPRISE_IDENTITY_CONNECTION_TESTED,

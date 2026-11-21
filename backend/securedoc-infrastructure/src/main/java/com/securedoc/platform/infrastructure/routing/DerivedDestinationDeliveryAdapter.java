@@ -23,6 +23,7 @@ import java.util.*;
 public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeliveryPort {
     static final String SENSITIVITY_HEADER="X-LexaVault-Sensitivity-Level";
     static final String CASE_SENSITIVITY_HEADER="X-LexaVault-Case-Sensitivity-Level";
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(DerivedDestinationDeliveryAdapter.class);
     private final ObjectMapper mapper; private final HttpClient client;
     @Autowired
     public DerivedDestinationDeliveryAdapter(ObjectMapper mapper){this(mapper,HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build());}
@@ -66,9 +67,10 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
         return new DeliveryReceipt(ref,c.endpoint());});}
     private DeliveryReceipt deliverFile(IntegrationConnection c,DeliveryRequest r){
         Path root=safeRoot(c);String name=r.sourceDerivedDocumentId()+"__"+sanitize(r.fileName());Path target=root.resolve(name).normalize();if(!target.startsWith(root))throw invalid("Derived file path escaped configured root",null);
+        Path temp=null;
         try{
             Files.createDirectories(root);
-            Path temp=Files.createTempFile(root,"derived-",".tmp");
+            temp=Files.createTempFile(root,"derived-",".tmp");
             try(InputStream in=r.contentSource().open();
                 FileChannel channel=FileChannel.open(temp,StandardOpenOption.WRITE,StandardOpenOption.TRUNCATE_EXISTING);
                 OutputStream out=Channels.newOutputStream(channel)){
@@ -78,12 +80,21 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
             }
             try{Files.move(temp,target,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
             catch(AtomicMoveNotSupportedException e){Files.move(temp,target,StandardCopyOption.REPLACE_EXISTING);}
-            forceDirectory(root);
-            return new DeliveryReceipt(target.getFileName().toString(),target.toString());
+            temp=null;
+            forceDirectory(c,root);
+            // Task 0023 (B4, #222): the receipt names the delivery by its id only. The file name and the share
+            // path stay on the share; they are not stored in the delivery row or returned by the API.
+            return new DeliveryReceipt(r.sourceDerivedDocumentId(),"file-share:"+r.sourceDerivedDocumentId());
         }catch(IOException e){throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived file-share delivery failed",e);}
+        finally{if(temp!=null)deleteTempBestEffort(c,r,temp);}
+    }
+    /** A temp file left after a failure holds redacted output: remove it, and log the delivery id (never the path) if that fails. */
+    private void deleteTempBestEffort(IntegrationConnection c,DeliveryRequest r,Path temp){
+        try{Files.deleteIfExists(temp);}
+        catch(IOException e){log.warn("DERIVED_FILE_SHARE_TEMP_CLEANUP_FAILED connection={} derivedDocument={} type={}",c.id(),r.sourceDerivedDocumentId(),e.getClass().getSimpleName());}
     }
     private void addMetadataHeader(HttpRequest.Builder b,String name,String value){if(value!=null&&!value.isBlank())b.header(name,safeHeader(value));}
-    private void forceDirectory(Path root){try(FileChannel dir=FileChannel.open(root,StandardOpenOption.READ)){dir.force(true);}catch(IOException|UnsupportedOperationException ignored){/* best-effort directory metadata sync after file fsync + move */}}
+    private void forceDirectory(IntegrationConnection c,Path root){try(FileChannel dir=FileChannel.open(root,StandardOpenOption.READ)){dir.force(true);}catch(IOException|UnsupportedOperationException e){/* best-effort directory metadata sync after file fsync + move (Windows cannot open a directory) */log.debug("DERIVED_FILE_SHARE_DIRECTORY_SYNC_SKIPPED connection={} type={}",c.id(),e.getClass().getSimpleName());}}
     private void validate(IntegrationConnection c){if(c==null||!c.enabled()||c.purpose()!=IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY||c.direction()!=IntegrationDirection.OUTBOUND)throw invalid("Connection is not an enabled derived-document destination",null);if(c.providerType()!=IntegrationProviderType.HTTP_API&&c.providerType()!=IntegrationProviderType.FILE_SHARE)throw invalid("Unsupported derived-document provider",null);}
     private URI endpoint(IntegrationConnection c){try{URI u=URI.create(c.endpoint());if(!"http".equalsIgnoreCase(u.getScheme())&&!"https".equalsIgnoreCase(u.getScheme()))throw new IllegalArgumentException();return u;}catch(Exception e){throw invalid("Derived HTTP endpoint is invalid",e);}}
     private Path safeRoot(IntegrationConnection c){try{return Path.of(c.fileShareRoot()).toAbsolutePath().normalize();}catch(Exception e){throw invalid("Derived file-share root is invalid",e);}}

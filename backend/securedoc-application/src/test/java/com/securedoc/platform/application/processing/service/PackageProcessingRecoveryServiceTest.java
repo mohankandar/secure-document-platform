@@ -114,6 +114,105 @@ class PackageProcessingRecoveryServiceTest {
         assertTrue(lifecycles.value.isEmpty());
     }
 
+    // ---- Task 0023 C1 (#346, #358) ----
+
+    @Test
+    void submittedCaseIsStoppedAfterRepeatedDispatchFailuresWithCodeIncidentAndOneAudit() {
+        Fixture f = new Fixture(false);
+        RuntimeException failure = new IllegalStateException("text that must never be stored: Jane Doe 123-45-6789");
+
+        assertTrue(f.service.stopAfterDispatchFailure(f.pkg.id(), f.tenantId, failure, 3, 3, CorrelationId.generate()));
+
+        assertEquals(PackageStatus.FAILED, f.pkg.status());
+        ProcessingIncident incident = f.incidents.latest.orElseThrow();
+        assertEquals("PROCESSING_DISPATCH_EXHAUSTED", incident.reasonCode());
+        assertEquals("PROCESSING", incident.component());
+        assertEquals("DISPATCH_EXHAUSTED", incident.failureCategory());
+        assertEquals(3, incident.attempts());
+        assertFalse(incident.retryable());
+        assertEquals("IllegalStateException", incident.safeMetadata().get("failureType"));
+        List<AuditRecord> failed = f.audits.stream()
+                .filter(a -> a.action() == AuditAction.DOCUMENT_PROCESSING_FAILED).toList();
+        assertEquals(1, failed.size());
+        assertEquals("Package processing stopped: dependency=PROCESSING, code=PROCESSING_DISPATCH_EXHAUSTED, retryable=false, attempts=3",
+                failed.get(0).detail());
+        assertTrue(f.lifecycles.value.flatMap(PackageLifecycle::technicalHoldUntil).isPresent());
+        String everything = f.audits.toString() + incident;
+        assertFalse(everything.contains("Jane Doe"), "No exception message may reach the incident or audit");
+        assertFalse(everything.contains("123-45-6789"));
+    }
+
+    @Test
+    void licenceDenialStopsSubmittedAndProcessingCasesWithItsOwnCode() {
+        for (boolean processing : new boolean[]{false, true}) {
+            Fixture f = new Fixture(processing);
+            var denial = new com.securedoc.platform.application.licensing.LicenseEnforcementException(
+                    "LICENSE_EXPIRED", "denied", com.securedoc.platform.domain.licensing.LicenseValidationStatus.EXPIRED);
+
+            assertTrue(f.service.stopAfterDispatchFailure(f.pkg.id(), f.tenantId, denial, 1, 3, CorrelationId.generate()));
+
+            assertEquals(PackageStatus.FAILED, f.pkg.status());
+            ProcessingIncident incident = f.incidents.latest.orElseThrow();
+            assertEquals("PROCESSING_LICENSE_DENIED", incident.reasonCode());
+            assertEquals("LICENSE", incident.failureCategory());
+            assertEquals("EXPIRED", incident.safeMetadata().get("licenceStatus"));
+            assertEquals(1, f.audits.stream().filter(a -> a.action() == AuditAction.DOCUMENT_PROCESSING_FAILED).count());
+        }
+    }
+
+    @Test
+    void processingCaseWithOrdinaryFailureKeepsTheDurableRecoveryBudget() {
+        Fixture f = new Fixture(true);
+
+        assertFalse(f.service.stopAfterDispatchFailure(f.pkg.id(), f.tenantId,
+                new IllegalStateException("x"), 3, 3, CorrelationId.generate()));
+
+        assertEquals(PackageStatus.PROCESSING, f.pkg.status());
+        assertTrue(f.incidents.latest.isEmpty());
+        assertTrue(f.audits.isEmpty());
+    }
+
+    @Test
+    void reviewContinuationIsNeverStoppedByTheDispatchCap() {
+        Fixture f = new Fixture(true);
+        f.pkg.completeProcessing(); // PROCESSING -> PENDING_REVIEW
+        var denial = new com.securedoc.platform.application.licensing.LicenseEnforcementException(
+                "LICENSE_MISSING", "denied", com.securedoc.platform.domain.licensing.LicenseValidationStatus.MISSING);
+
+        assertFalse(f.service.stopAfterDispatchFailure(f.pkg.id(), f.tenantId, denial, 1, 3, CorrelationId.generate()));
+        assertEquals(PackageStatus.PENDING_REVIEW, f.pkg.status());
+    }
+
+    private static final class Fixture {
+        final TenantId tenantId = TenantId.generate();
+        final DocumentPackage pkg;
+        final MutableLifecycleRepository lifecycles = new MutableLifecycleRepository();
+        final CapturingIncidents incidents = new CapturingIncidents();
+        final List<AuditRecord> audits = new ArrayList<>();
+        final PackageProcessingRecoveryService service;
+
+        Fixture(boolean processing) {
+            pkg = DocumentPackage.create(tenantId, PackageType.MANUAL_UPLOAD, ActorId.generate(), PackageMetadata.empty());
+            Document document = Document.create(tenantId, pkg.id(), FileName.of("dispatch.pdf"), MimeType.pdf(),
+                    64, Checksum.sha256("dispatch-document"), DocumentType.PDF);
+            pkg.addDocument(document);
+            pkg.submit();
+            if (processing) pkg.startProcessing();
+            MutablePackageRepository packages = new MutablePackageRepository(pkg);
+            ProcessingIncidentService incidentService = new ProcessingIncidentService(
+                    incidents, ProcessingFingerprintProvider.empty());
+            List<AuditRecord> lifecycleAudits = new ArrayList<>();
+            PackageLifecycleService lifecycleService = new PackageLifecycleService(
+                    new DefaultPolicyRepository(), lifecycles, new EmptyExportRepository(), packages,
+                    (packageId, tenant, actor, hiddenAt) -> { }, new EmptyDocumentRepository(),
+                    new EmptyArtifactRepository(), new EmptyStorage(), new AuditService(lifecycleAudits::add),
+                    incidentService, ProductTelemetryService.noop());
+            service = new PackageProcessingRecoveryService(
+                    packages, lifecycleService, incidentService, new AuditService(audits::add),
+                    ProductTelemetryService.noop());
+        }
+    }
+
     private static final class MutablePackageRepository implements PackageRepository {
         private DocumentPackage value;
         private MutablePackageRepository(DocumentPackage value) { this.value = value; }

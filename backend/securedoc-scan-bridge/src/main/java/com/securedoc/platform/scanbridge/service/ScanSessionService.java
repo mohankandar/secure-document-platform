@@ -36,6 +36,8 @@ public class ScanSessionService {
     private final Map<UUID, ScanSession> sessions = new ConcurrentHashMap<>();
     /** The one operator-actionable package for this scanner: WAITING_FOR_SCAN or READY. */
     private final AtomicReference<UUID> actionableSessionId = new AtomicReference<>();
+    /** Sessions whose failed local delete has already been logged in this process (see reportCleanupFailureOnce). */
+    private final java.util.Set<UUID> cleanupFailureReported = ConcurrentHashMap.newKeySet();
 
     @Autowired
     public ScanSessionService(ScanBridgeProperties properties, FileScanSessionStore store, ScanArtifactService artifacts) {
@@ -257,9 +259,10 @@ public class ScanSessionService {
                 artifacts.deletePdfIfPresent(submitted.preparedScan());
                 submitted = persistSanitizedTerminalArtifact(submitted);
             } catch (RuntimeException ex) {
-                // Keep the original workReference if cleanup fails so startup recovery can retry disposal.
-                log.warn("SCAN_BRIDGE_ACCEPTED_PDF_CLEANUP_FAILED sessionId={} packageId={} exceptionType={}",
-                        submitted.sessionId(), packageId, ex.getClass().getSimpleName());
+                // Keep the original workReference if cleanup fails so the next worker cycle can retry disposal.
+                cleanupFailureReported.add(submitted.sessionId());
+                log.warn("SCAN_BRIDGE_ACCEPTED_PDF_CLEANUP_FAILED sessionId={} sourceDocumentId={} packageId={} exceptionType={}",
+                        submitted.sessionId(), submitted.preparedScan().sourceDocumentId(), packageId, ex.getClass().getSimpleName());
             }
         }
         log.info("SCAN_BRIDGE_SUBMISSION_ACCEPTED bridgeId={} siteId={} scannerId={} sessionId={} submissionId={} packageId={} attempts={}",
@@ -288,7 +291,8 @@ public class ScanSessionService {
             artifacts.deletePdfIfPresent(cancelled.preparedScan());
             cancelled = persistSanitizedTerminalArtifact(cancelled);
         } catch (RuntimeException ex) {
-            // Keep the original workReference if cleanup fails so startup recovery can retry disposal.
+            // Keep the original workReference if cleanup fails so the next worker cycle can retry disposal.
+            cleanupFailureReported.add(cancelled.sessionId());
             log.warn("SCAN_BRIDGE_CANCELLED_PDF_CLEANUP_FAILED sessionId={} exceptionType={}",
                     cancelled.sessionId(), ex.getClass().getSimpleName());
         }
@@ -337,8 +341,10 @@ public class ScanSessionService {
         }
 
         Instant now = clock.instant();
+        // Task 0023 D2 (#82): the attempt count restarts so the person's retry gets a fresh, capped set of
+        // automatic retries (the count shown in delivery-items is "attempts since last queued").
         ScanSession queued = copy(existing, ScanSessionStatus.QUEUED, existing.businessIdentifiers(),
-                existing.preparedScan(), existing.lexavaultPackageId(), existing.deliveryAttemptCount(),
+                existing.preparedScan(), existing.lexavaultPackageId(), 0,
                 existing.queuedAt() == null ? now : existing.queuedAt(), now,
                 existing.lastDeliveryErrorCode(), existing.lastDeliveryErrorAt(), existing.submittedAt());
         store.save(queued);
@@ -370,6 +376,9 @@ public class ScanSessionService {
      * that can still own a PDF are intentionally excluded.
      */
     public synchronized void purgeExpiredTerminalSessions(Instant now) {
+        // Task 0023 B9 (#91): a PDF whose delete failed after acceptance or cancel is retried every cycle,
+        // not only at the next bridge start.
+        cleanupTerminalArtifacts();
         long retentionHours = Math.max(1, properties.getDelivery().getTerminalStateRetentionHours());
         Instant cutoff = now.minusSeconds(Math.multiplyExact(retentionHours, 3600L));
         for (ScanSession session : List.copyOf(sessions.values())) {
@@ -377,7 +386,14 @@ public class ScanSessionService {
             Instant terminalAt = session.status() == ScanSessionStatus.SUBMITTED && session.submittedAt() != null
                     ? session.submittedAt() : session.updatedAt();
             if (terminalAt == null || terminalAt.isAfter(cutoff)) continue;
-            store.deleteSession(session.sessionId());
+            try {
+                store.deleteSession(session.sessionId());
+            } catch (RuntimeException ex) {
+                // Keep the record so the next cycle tries again; one failing directory must not stop the rest.
+                reportCleanupFailureOnce(session.sessionId(), "SCAN_BRIDGE_TERMINAL_STATE_PURGE_FAILED", ex);
+                continue;
+            }
+            cleanupFailureReported.remove(session.sessionId());
             sessions.remove(session.sessionId());
             actionableSessionId.compareAndSet(session.sessionId(), null);
             log.info("SCAN_BRIDGE_TERMINAL_STATE_PURGED sessionId={} status={}", session.sessionId(), session.status());
@@ -392,11 +408,26 @@ public class ScanSessionService {
             try {
                 artifacts.deletePdfIfPresent(session.preparedScan());
                 persistSanitizedTerminalArtifact(session);
+                if (cleanupFailureReported.remove(session.sessionId())) {
+                    log.info("SCAN_BRIDGE_TERMINAL_ARTIFACT_CLEANUP_RECOVERED sessionId={} status={}",
+                            session.sessionId(), session.status());
+                }
             } catch (RuntimeException ex) {
-                log.warn("SCAN_BRIDGE_TERMINAL_ARTIFACT_CLEANUP_FAILED sessionId={} status={} exceptionType={}",
-                        session.sessionId(), session.status(), ex.getClass().getSimpleName());
+                reportCleanupFailureOnce(session.sessionId(), "SCAN_BRIDGE_TERMINAL_ARTIFACT_CLEANUP_FAILED", ex);
             }
         }
+    }
+
+    /**
+     * Logs a failed local delete once per session and process with ids only (the work folder is named by the
+     * session id, so IT can find it); the next cycles keep retrying quietly instead of logging every second.
+     */
+    private void reportCleanupFailureOnce(UUID sessionId, String event, RuntimeException ex) {
+        if (!cleanupFailureReported.add(sessionId)) return;
+        ScanSession session = sessions.get(sessionId);
+        UUID sourceDocumentId = session == null || session.preparedScan() == null ? null : session.preparedScan().sourceDocumentId();
+        log.warn("{} sessionId={} sourceDocumentId={} status={} exceptionType={}", event, sessionId, sourceDocumentId,
+                session == null ? null : session.status(), ex.getClass().getSimpleName());
     }
 
     /**

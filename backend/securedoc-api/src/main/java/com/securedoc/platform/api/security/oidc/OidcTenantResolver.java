@@ -33,15 +33,15 @@ public class OidcTenantResolver {
 
     public TenantId resolve(Jwt jwt) {
         if (persistentEnabled) {
-            if (jwt.getIssuer() == null || audience.isBlank()) throw new SecurityContextException("Persistent OIDC connection lookup is not fully configured");
+            if (jwt.getIssuer() == null || audience.isBlank()) throw new SecurityContextException("Persistent OIDC connection lookup is not fully configured", "CONNECTION_LOOKUP_NOT_CONFIGURED");
             var binding = connections.findActive(providerId, URI.create(jwt.getIssuer().toString()), audience);
             if (binding.isPresent()) return TenantId.of(binding.get().tenantId());
-            throw new SecurityContextException("No ACTIVE persisted OIDC connection matches the authenticated issuer/provider/audience");
+            throw new SecurityContextException("No ACTIVE persisted OIDC connection matches the authenticated issuer/provider/audience", "NO_ACTIVE_CONNECTION");
         }
         if (configuredTenantId != null) return configuredTenantId;
         String rawTenant = jwt.getClaimAsString(legacyTenantClaim);
         try { return TenantId.of(UUID.fromString(rawTenant == null ? "" : rawTenant.trim())); }
-        catch (IllegalArgumentException ex) { throw new SecurityContextException("No trusted ACTIVE OIDC connection or valid compatibility tenant binding is available"); }
+        catch (IllegalArgumentException ex) { throw new SecurityContextException("No trusted ACTIVE OIDC connection or valid compatibility tenant binding is available", "NO_TRUSTED_TENANT_BINDING"); }
     }
 
     private TenantId parseConfiguredTenant(String rawTenant) {

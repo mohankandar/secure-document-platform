@@ -1,51 +1,86 @@
 package com.securedoc.platform.api.controller;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.observability.RequestCorrelationFilter;
+import com.securedoc.platform.api.security.SecurityContextRefusalRecorder;
 import com.securedoc.platform.application.port.out.TenantRepository;
+import com.securedoc.platform.domain.identity.ActorId;
+import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.tenant.Tenant;
 import com.securedoc.platform.domain.tenant.TenantStatus;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.context.SecurityContextException;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * Bootstrap endpoint for shared-issuer users before selecting a tenant.
  * SecurityConfig still requires valid OIDC JWT. RequestContextResolver performs
  * ACTIVE connection and tenant-scoped group authorization.
+ *
+ * <p>Task 0023 C5 (#236): an entity the person is admitted to but that is left out because it is not ACTIVE (or its
+ * row is missing) is logged and audited in that entity's log with reason {@code TENANT_NOT_ACTIVE} or
+ * {@code TENANT_MISSING}, instead of disappearing without a trace.
  */
 @RestController
 @RequestMapping("/api/v1/me/tenants")
 public class OidcTenantDiscoveryController {
+    static final String TENANT_NOT_ACTIVE = "TENANT_NOT_ACTIVE";
+    static final String TENANT_MISSING = "TENANT_MISSING";
+
     private final RequestContextResolver context;
     private final TenantRepository tenantRepository;
+    private final SecurityContextRefusalRecorder refusals;
 
     public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository) {
+        this(context, tenantRepository, null);
+    }
+
+    @Autowired
+    public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository,
+                                         SecurityContextRefusalRecorder refusals) {
         this.context = context;
         this.tenantRepository = tenantRepository;
+        this.refusals = refusals;
     }
 
     @GetMapping
-    public ResponseEntity<List<TenantChoice>> list() {
+    public ResponseEntity<List<TenantChoice>> list(HttpServletRequest request) {
         if (context.securityMode() != SecurityMode.OIDC) {
-            throw new SecurityContextException("Tenant discovery requires OIDC authentication");
+            throw new SecurityContextException("Tenant discovery requires OIDC authentication", "TENANT_DISCOVERY_REQUIRES_OIDC");
         }
         var memberships = context.resolveAvailableOidcTenants();
-        List<TenantChoice> choices = memberships.entrySet().stream()
-                .map(e -> tenantRepository.findById(e.getKey())
-                        .filter(t -> t.status() == TenantStatus.ACTIVE)
-                        .map(t -> new TenantChoice(t.id().value().toString(), t.name(), t.slug(), e.getValue()))
-                        .orElse(null))
-                .filter(java.util.Objects::nonNull)
-                .sorted(Comparator.comparing(TenantChoice::tenantId))
-                .toList();
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(choices);
+        List<TenantChoice> choices = new ArrayList<>();
+        for (Map.Entry<TenantId, Set<String>> membership : memberships.entrySet()) {
+            Optional<Tenant> tenant = tenantRepository.findById(membership.getKey());
+            if (tenant.isPresent() && tenant.get().status() == TenantStatus.ACTIVE) {
+                Tenant t = tenant.get();
+                choices.add(new TenantChoice(t.id().value().toString(), t.name(), t.slug(), membership.getValue()));
+            } else {
+                recordLeftOut(request, membership.getKey(), tenant.isPresent() ? TENANT_NOT_ACTIVE : TENANT_MISSING);
+            }
+        }
+        choices.sort(Comparator.comparing(TenantChoice::tenantId));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(List.copyOf(choices));
+    }
+
+    private void recordLeftOut(HttpServletRequest request, TenantId tenantId, String reason) {
+        if (refusals == null || request == null) return;
+        ActorId actor = context.currentOidcActor().orElse(null);
+        Object correlation = request.getAttribute(RequestCorrelationFilter.REQUEST_ATTRIBUTE_CORRELATION_ID);
+        refusals.recordLeftOutEntity(request, reason, tenantId, actor, correlation == null ? null : correlation.toString());
     }
 
     public record TenantChoice(String tenantId, String name, String slug, Set<String> roles) {}

@@ -49,6 +49,14 @@ final class SensitiveContentResponseParser {
         }
 
         List<DiscoveredSensitiveContent> result = new ArrayList<>();
+        // Task 0023 C7 (#131): count each reason a model finding is dropped, so a silent loss
+        // (for example an OCR whitespace mismatch) is visible. Counts only: the answer text, the
+        // matched text and the unknown type string can all hold document content.
+        int pageNotInBatch = 0;
+        int unknownType = 0;
+        int blankText = 0;
+        int confidenceOutOfRange = 0;
+        int textNotOnPage = 0;
         for (JsonNode finding : findings) {
             int pageNumber = finding.path("pageNumber").asInt(-1);
             if (pageNumber < 1 && pages.size() == 1) {
@@ -56,6 +64,7 @@ final class SensitiveContentResponseParser {
             }
             PageContent page = pagesByNumber.get(pageNumber);
             if (page == null) {
+                pageNotInBatch++;
                 continue;
             }
 
@@ -63,11 +72,21 @@ final class SensitiveContentResponseParser {
             String matchedText = finding.path("matchedText").asText("");
             String contextText = finding.path("contextText").asText("");
             double confidence = finding.path("confidence").asDouble(-1.0);
-            if (type.isBlank() || matchedText.isBlank() || confidence < 0.0 || confidence > 1.0) {
+            if (type.isBlank()) {
+                unknownType++;
+                continue;
+            }
+            if (matchedText.isBlank()) {
+                blankText++;
+                continue;
+            }
+            if (confidence < 0.0 || confidence > 1.0) {
+                confidenceOutOfRange++;
                 continue;
             }
             // Fail closed against model fabrication: only accept exact text present on its declared page.
             if (!page.text().contains(matchedText)) {
+                textNotOnPage++;
                 continue;
             }
             if (!contextText.isBlank() && (!page.text().contains(contextText) || !contextText.contains(matchedText))) {
@@ -81,6 +100,12 @@ final class SensitiveContentResponseParser {
             result.add(new DiscoveredSensitiveContent(
                     type, page.pageNumber(), matchedText, contextText, confidence,
                     analyzerName, analyzerVersion));
+        }
+        int dropped = pageNotInBatch + unknownType + blankText + confidenceOutOfRange + textNotOnPage;
+        if (dropped > 0) {
+            log.info("AI_FINDINGS_DROPPED provider={} model={} pages={} received={} accepted={} pageNotInBatch={} unknownType={} blankText={} confidenceOutOfRange={} textNotOnPage={}",
+                    provider, model, pages.size(), findings.size(), result.size(),
+                    pageNotInBatch, unknownType, blankText, confidenceOutOfRange, textNotOnPage);
         }
         return result;
     }

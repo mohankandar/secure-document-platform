@@ -18,7 +18,7 @@ public class TrustedActorResolver {
         String issuer = jwt.getIssuer() == null ? null : jwt.getIssuer().toString();
         String subject = jwt.getSubject();
         if (issuer == null || issuer.isBlank() || subject == null || subject.isBlank()) {
-            throw new SecurityContextException("Authenticated identity is missing issuer or subject");
+            throw new SecurityContextException("Authenticated identity is missing issuer or subject", "MISSING_ISSUER_OR_SUBJECT");
         }
         return ActorId.of(StableIdentityId.fromIssuerAndSubject(issuer, subject));
     }

@@ -9,7 +9,7 @@ import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
 import { useUnsavedWork } from './unsavedWork';
 import { prefillIdentifier } from './intakeRules';
-import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, type SensitivityLevelCode } from './words';
+import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, type SensitivityLevelCode } from './words';
 
 type Method = 'upload' | 'scan';
 
@@ -59,10 +59,8 @@ export default function Intake() {
     if (identity) {
       setValues(identity);
       setLockedBy(reason);
-      // A resumed scan session shows the level it was started with.
-      if (sensitivityLevel && (SENSITIVITY_LEVELS as readonly string[]).includes(sensitivityLevel)) {
-        setSensitivity(sensitivityLevel as SensitivityLevelCode);
-      }
+      // A resumed scan session shows the level it was started with; Standard when it carries none (task 0023 A4).
+      setSensitivity(sensitivityChoice(sensitivityLevel));
     } else {
       setLockedBy(null);
     }

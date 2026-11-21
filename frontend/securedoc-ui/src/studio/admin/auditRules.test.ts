@@ -145,3 +145,9 @@ test('0019 A2: the Person filter keeps ids as values and shows names where it ca
     { id: twinB, label: 'Sam Lee · 000000b2' },
   ]);
 });
+
+test('0023 B1: a case a connection run could not take in has its own sentence and filter entry', () => {
+  assert.equal(whatHappened(rec('POLLING_PACKAGE_FAILED')), 'Could not take in a case from a connection');
+  assert.ok(actionOptions().some(([code, words]) => code === 'POLLING_PACKAGE_FAILED' && words === 'Could not take in a case from a connection'));
+  assert.notEqual(whatHappened(rec('POLLING_PACKAGE_FAILED')), whatHappened(rec('POLLING_RUN_FAILED')));
+});

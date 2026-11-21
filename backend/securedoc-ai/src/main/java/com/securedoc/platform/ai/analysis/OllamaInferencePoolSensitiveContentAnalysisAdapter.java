@@ -330,6 +330,7 @@ public final class OllamaInferencePoolSensitiveContentAnalysisAdapter implements
             HttpResponse<String> response = healthClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 node.markProbeFailure(circuitOpenDuration);
+                logProbeFailure(node, "AI_NODE_PROBE_HTTP_STATUS", "HTTP_" + response.statusCode(), startedNanos);
                 return;
             }
             JsonNode root = objectMapper.readTree(response.body());
@@ -354,9 +355,21 @@ public final class OllamaInferencePoolSensitiveContentAnalysisAdapter implements
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             node.markProbeFailure(circuitOpenDuration);
+            logProbeFailure(node, "AI_NODE_PROBE_INTERRUPTED", e.getClass().getSimpleName(), startedNanos);
         } catch (IOException | RuntimeException e) {
             node.markProbeFailure(circuitOpenDuration);
+            // Task 0023 C7 (#118): the exception message can hold the node URL (with user info) or
+            // response text, so only its type is logged, with the configured node id.
+            String reasonCode = e instanceof com.fasterxml.jackson.core.JsonProcessingException
+                    ? "AI_NODE_PROBE_UNREADABLE"
+                    : e instanceof IOException ? "AI_NODE_PROBE_IO" : "AI_NODE_PROBE_FAILED";
+            logProbeFailure(node, reasonCode, e.getClass().getSimpleName(), startedNanos);
         }
+    }
+
+    private void logProbeFailure(NodeState node, String reasonCode, String detailCode, long startedNanos) {
+        log.warn("AI_INFERENCE_NODE_PROBE_FAILED provider=ollama model={} inferenceNodeId={} reasonCode={} detail={} durationMs={} circuitOpenMs={}",
+                model, node.id, reasonCode, detailCode, elapsedMillis(startedNanos), circuitOpenDuration.toMillis());
     }
 
     private boolean isNodeFailoverEligible(TechnicalDependencyException failure) {

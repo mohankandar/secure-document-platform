@@ -3,6 +3,7 @@ package com.securedoc.platform.api.processing;
 import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.out.PackageProcessingDispatcher;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
+import com.securedoc.platform.application.processing.service.PackageProcessingRecoveryService;
 import com.securedoc.platform.application.observability.StructuredLogContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -35,6 +38,26 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
     private final TriggerPackageProcessingUseCase triggerPackageProcessingUseCase;
     private final PackageProcessingDispatchLease processingLease;
     private final Predicate<TenantId> processingStorageReady;
+    private final DispatchFailureStop dispatchFailureStop;
+    private final int maxDispatchAttempts;
+    /**
+     * Task 0023 C1: failed dispatches per package in this JVM. In memory on purpose (no schema
+     * change): a restart or another node starts its own count, so a case is stopped after at most
+     * {@code maxDispatchAttempts} failures per process lifetime per node. Entries are removed on
+     * success and when the case is stopped (or the stop does not apply).
+     */
+    private final Map<UUID, Integer> dispatchFailures = new ConcurrentHashMap<>();
+
+    /** Task 0023 C1: stops a case after repeated dispatch failures. Returns true when it stopped the case. */
+    @FunctionalInterface
+    public interface DispatchFailureStop {
+        boolean stop(TriggerPackageProcessingCommand command, RuntimeException failure,
+                     int failedAttempts, int maxAttempts);
+
+        static DispatchFailureStop none() {
+            return (command, failure, failedAttempts, maxAttempts) -> false;
+        }
+    }
 
     public InProcessPackageProcessingDispatcher(TaskExecutor taskExecutor,
                                                 TriggerPackageProcessingUseCase triggerPackageProcessingUseCase) {
@@ -51,10 +74,22 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
                                                 TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
                                                 PackageProcessingDispatchLease processingLease,
                                                 Predicate<TenantId> processingStorageReady) {
+        this(taskExecutor, triggerPackageProcessingUseCase, processingLease, processingStorageReady,
+                DispatchFailureStop.none(), 3);
+    }
+
+    public InProcessPackageProcessingDispatcher(TaskExecutor taskExecutor,
+                                                TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
+                                                PackageProcessingDispatchLease processingLease,
+                                                Predicate<TenantId> processingStorageReady,
+                                                DispatchFailureStop dispatchFailureStop,
+                                                int maxDispatchAttempts) {
         this.taskExecutor = Objects.requireNonNull(taskExecutor);
         this.triggerPackageProcessingUseCase = Objects.requireNonNull(triggerPackageProcessingUseCase);
         this.processingLease = Objects.requireNonNull(processingLease);
         this.processingStorageReady = Objects.requireNonNull(processingStorageReady);
+        this.dispatchFailureStop = Objects.requireNonNull(dispatchFailureStop);
+        this.maxDispatchAttempts = Math.max(1, maxDispatchAttempts);
     }
 
     @Override
@@ -126,6 +161,7 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
                                 "Package processing dispatch started");
                         try {
                             triggerPackageProcessingUseCase.execute(command);
+                            dispatchFailures.remove(command.packageId().value());
                             StructuredLogContext.info(log, "PACKAGE_PROCESSING_DISPATCH_COMPLETED", executorSnapshot(),
                                     "Package processing dispatch completed");
                         } catch (RuntimeException ex) {
@@ -136,6 +172,7 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
                             failedFields.put("recovery", command.recovery());
                             StructuredLogContext.error(log, "PACKAGE_PROCESSING_DISPATCH_FAILED", failedFields,
                                     "Package processing dispatch failed");
+                            handleDispatchFailure(command, ex);
                         }
                     }
                 } finally {
@@ -148,6 +185,39 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
         }
         log.info("PACKAGE_PROCESSING_DISPATCH_SCHEDULED package={} tenant={} correlation={} recovery={}",
                 command.packageId(), command.tenantId(), command.correlationId(), command.recovery());
+    }
+
+    /**
+     * Task 0023 C1: counts the failure and, after {@code maxDispatchAttempts} failures of the same
+     * case (or at once for a licence denial), asks the application to stop the case as FAILED with a
+     * code and a Support incident. Runs while this node still holds the processing lease.
+     */
+    private void handleDispatchFailure(TriggerPackageProcessingCommand command, RuntimeException failure) {
+        UUID key = command.packageId().value();
+        boolean licenceDenial = PackageProcessingRecoveryService.isLicenceDenial(failure);
+        int failures = dispatchFailures.merge(key, 1, Integer::sum);
+        String failureType = failure.getClass().getSimpleName();
+        if (!licenceDenial && failures < maxDispatchAttempts) {
+            log.warn("PACKAGE_PROCESSING_DISPATCH_RETRY_PENDING package={} tenant={} failureType={} failedAttempts={} maxAttempts={}",
+                    command.packageId(), command.tenantId(), failureType, failures, maxDispatchAttempts);
+            return;
+        }
+        dispatchFailures.remove(key);
+        try {
+            boolean stopped = dispatchFailureStop.stop(command, failure, failures, maxDispatchAttempts);
+            if (stopped) {
+                log.error("PACKAGE_PROCESSING_DISPATCH_STOPPED package={} tenant={} reasonCode={} failureType={} failedAttempts={} maxAttempts={}",
+                        command.packageId(), command.tenantId(),
+                        licenceDenial ? "PROCESSING_LICENSE_DENIED" : "PROCESSING_DISPATCH_EXHAUSTED",
+                        failureType, failures, maxDispatchAttempts);
+            } else {
+                log.warn("PACKAGE_PROCESSING_DISPATCH_STOP_NOT_APPLICABLE package={} tenant={} failureType={} failedAttempts={}",
+                        command.packageId(), command.tenantId(), failureType, failures);
+            }
+        } catch (RuntimeException stopFailure) {
+            log.error("PACKAGE_PROCESSING_DISPATCH_STOP_FAILED package={} tenant={} failureType={} stopFailureType={}",
+                    command.packageId(), command.tenantId(), failureType, stopFailure.getClass().getSimpleName());
+        }
     }
 
     /**

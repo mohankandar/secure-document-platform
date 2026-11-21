@@ -267,6 +267,19 @@ test.describe('Sign-in and entity chooser markup (A4)', () => {
     });
   }
 
+  // Task 0023 (A2): the sign-in screen itself follows the computer's setting too (same approach as the chooser).
+  for (const [scheme, surface] of [['dark', 'rgb(21, 23, 26)'], ['light', 'rgb(255, 255, 255)']] as const) {
+    test(`sign-in: ${scheme} when the computer is set to ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await mockIdentityProvider(page);
+      await mockApi(page, 'supervisor');
+      await page.goto('/');
+      await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
+      expect(await page.locator('.cf-boot').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(surface);
+    });
+  }
+
   test('entity chooser: the line above the buttons has room, and the buttons do not touch', async ({ page }) => {
     await mockIdentityProvider(page);
     await mockApi(page, 'supervisor', { twoEntities: true });

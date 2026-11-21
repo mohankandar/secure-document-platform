@@ -1,6 +1,7 @@
 package com.securedoc.platform.application.business.admin;
 
 import com.securedoc.platform.application.operations.TimeSavedRule;
+import com.securedoc.platform.application.exception.AuthoredMessages;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
@@ -138,7 +139,8 @@ public final class BusinessAdminConfigurationService {
                                 parseValidationType(input.validationType()), input.exactLength(), input.minLength(), input.maxLength(),
                                 requestedCase, requestedStripSeparators, safeAllowedValues(input.allowedValues()), input.customPattern()));
                     } catch (IllegalArgumentException e) {
-                        throw new ValidationException("Invalid validation configuration for " + input.label() + ": " + e.getMessage());
+                        throw new ValidationException("Invalid validation configuration for " + input.label() + ": "
+                                + AuthoredMessages.messageOr(e, "the validation settings are not valid"));
                     }
                 }
             } else {
@@ -152,7 +154,8 @@ public final class BusinessAdminConfigurationService {
                             parseCaseNormalization(input.caseNormalization()), Boolean.TRUE.equals(input.stripSeparators()),
                             safeAllowedValues(input.allowedValues()), input.customPattern()));
                 } catch (IllegalArgumentException e) {
-                    throw new ValidationException("Invalid validation configuration for " + input.label() + ": " + e.getMessage());
+                    throw new ValidationException("Invalid validation configuration for " + input.label() + ": "
+                                + AuthoredMessages.messageOr(e, "the validation settings are not valid"));
                 }
             }
         }
@@ -239,7 +242,7 @@ public final class BusinessAdminConfigurationService {
             policy = new TenantLifecyclePolicy(tenantId, originalRetentionHours, redactedCacheHours,
                     neverExportedHoldHours, finalApprovalRequired, Instant.now());
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(AuthoredMessages.messageOr(e, "The settings are not valid"));
         }
         Optional<TenantLifecyclePolicy> previousLifecycle = lifecyclePolicyRepository.findByTenantId(tenantId);
         if (previousLifecycle.isPresent() && sameLifecyclePolicy(previousLifecycle.get(), policy)) {
@@ -365,7 +368,7 @@ public final class BusinessAdminConfigurationService {
             configuration = new ReportingConfiguration(dimensions, deliveryTargetMinutes, deliveryTargetPercent,
                     straightThroughTargetPercent, reviewWaitTargetMinutes, reviewPercent, perPage);
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(AuthoredMessages.messageOr(e, "The settings are not valid"));
         }
         if (sameReportingConfiguration(stored, configuration)) {
             // Task 0020 B2: a save that changes nothing writes no audit record (and nothing is saved), as task 0017.

@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 class ScanSessionServiceTest {
     @TempDir Path temp;
@@ -240,6 +242,7 @@ class ScanSessionServiceTest {
         assertEquals(sourceDocumentId, retried.preparedScan().sourceDocumentId());
         assertEquals("LEXAVAULT_ACCESS_DENIED", retried.lastDeliveryErrorCode());
         assertEquals(now, retried.nextDeliveryAttemptAt());
+        assertEquals(0, retried.deliveryAttemptCount(), "task 0023 D2: a person's retry restarts the capped retries");
         assertTrue(Files.exists(pdf));
         assertEquals(1, fixture.service.dueForDelivery(now).size());
     }
@@ -310,6 +313,50 @@ class ScanSessionServiceTest {
         assertFalse(json.contains("customer-"));
         assertFalse(json.contains("workReference"));
         assertFalse(json.contains("businessIdentifiers"));
+    }
+
+    /** Task 0023 B9 (#91): a failed delete used to be retried only at the next bridge start. */
+    @Test
+    void aCancelledPdfWhoseDeleteFailedIsDeletedOnALaterCycle() throws Exception {
+        Fixture fixture = fixture();
+        var waiting = fixture.service.start(new StartScanSessionRequest(Map.of()));
+        // A non-empty directory in place of the PDF makes the delete fail the way a locked file does.
+        Path pdf = fixture.store.sessionDirectory(waiting.sessionId()).resolve("scan.pdf");
+        Files.createDirectories(pdf);
+        Path blocker = pdf.resolve("lock");
+        Files.write(blocker, minimalPdf());
+        fixture.service.markReady(waiting.sessionId(), new PreparedScan(UUID.randomUUID(), "scan.pdf", 1,
+                "abc", now, waiting.sessionId() + "/scan.pdf"));
+
+        var cancelled = fixture.service.cancel(waiting.sessionId());
+        assertEquals(ScanSessionStatus.CANCELLED, cancelled.status());
+        assertNotNull(cancelled.preparedScan().workReference(), "the reference stays so the delete can be retried");
+
+        Files.delete(blocker);
+        fixture.service.purgeExpiredTerminalSessions(now);
+
+        assertFalse(Files.exists(pdf));
+        assertNull(fixture.service.get(waiting.sessionId()).preparedScan().workReference());
+    }
+
+    @Test
+    void aPurgeThatCannotDeleteOneSessionKeepsItAndCarriesOnWithTheOthers() throws Exception {
+        ScanBridgeProperties props = properties();
+        FileScanSessionStore store = spy(new FileScanSessionStore(props, new ObjectMapper().findAndRegisterModules()));
+        ScanArtifactService artifacts = new ScanArtifactService(store);
+        ScanSessionService service = new ScanSessionService(props, store, artifacts, clock);
+        service.recoverDurableState();
+        var first = service.start(new StartScanSessionRequest(Map.of()));
+        service.cancel(first.sessionId());
+        var second = service.start(new StartScanSessionRequest(Map.of()));
+        service.cancel(second.sessionId());
+        doThrow(new IllegalStateException("Unable to remove expired Scanner Bridge state"))
+                .when(store).deleteSession(first.sessionId());
+
+        assertDoesNotThrow(() -> service.purgeExpiredTerminalSessions(now.plusSeconds(365L * 24 * 3600)));
+
+        assertEquals(ScanSessionStatus.CANCELLED, service.get(first.sessionId()).status(), "kept for the next cycle");
+        assertThrows(ScanBridgeException.class, () -> service.get(second.sessionId()));
     }
 
     private Fixture fixture() {

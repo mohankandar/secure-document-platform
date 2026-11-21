@@ -34,7 +34,7 @@ const emptyDraft = (): Draft => ({
   retryMaxAttempts: 2,
   incompleteWindowHours: 24,
   maxDocumentsPerIntake: 100,
-  maxPdfSizeBytes: 262144000,
+  maxPdfSizeBytes: 52428800, // 50 MB, the backend default (task 0023 D3)
   maxPdfPages: 2000,
   pollingScheduleType: undefined,
   pollingIntervalMinutes: undefined,
@@ -449,7 +449,7 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
             {draft.purpose === 'INGESTION_SOURCE' && <>
               <label><span>Incomplete window (hours)</span><input type="number" min={1} max={168} value={draft.incompleteWindowHours ?? 24} onChange={(e) => update('incompleteWindowHours', Number(e.target.value))} /></label>
               <label><span>Max documents / intake</span><input type="number" min={1} max={1000} disabled={isScannerSource} value={isScannerSource ? 1 : (draft.maxDocumentsPerIntake ?? 100)} onChange={(e) => update('maxDocumentsPerIntake', Number(e.target.value))} />{isScannerSource && <small>Scanner Intake is one consolidated PDF per physical package.</small>}</label>
-              <label><span>Max PDF size (MB)</span><input type="number" min={1} max={2048} value={Math.round((draft.maxPdfSizeBytes ?? 262144000) / 1048576)} onChange={(e) => update('maxPdfSizeBytes', Number(e.target.value) * 1048576)} /></label>
+              <label><span>Max PDF size (MB)</span><input type="number" min={1} max={2048} value={Math.round((draft.maxPdfSizeBytes ?? 52428800) / 1048576)} onChange={(e) => update('maxPdfSizeBytes', Number(e.target.value) * 1048576)} /></label>
               <label><span>Max PDF pages</span><input type="number" min={1} max={10000} value={draft.maxPdfPages ?? 2000} onChange={(e) => update('maxPdfPages', Number(e.target.value))} /></label>
             </>}
             {isPollingSource && <>

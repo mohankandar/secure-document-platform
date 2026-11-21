@@ -1,6 +1,7 @@
 package com.securedoc.platform.application.review.service;
 
 import com.securedoc.platform.application.exception.NotFoundException;
+import com.securedoc.platform.application.exception.ReviewAlreadyDecidedException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.ListReviewItemsQuery;
 import com.securedoc.platform.application.port.in.ResolveReviewItemUseCase;
@@ -141,6 +142,15 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                 .toList();
     }
 
+    /**
+     * Task 0023 (D5, #160): two reviewers deciding the same item. The repository saves the decision only while the
+     * stored item is still pending (and refuses a save that meets another in the database, instead of a 500), so
+     * the second reviewer gets the same code as above.
+     */
+    private void saveDecision(Finding decided) {
+        if (!findingRepository.saveDecisionIfPending(decided)) throw new ReviewAlreadyDecidedException();
+    }
+
     @Override
     public ResolveReviewItemResult execute(ResolveReviewItemCommand command) {
         Objects.requireNonNull(command);
@@ -148,7 +158,8 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         Finding finding = findingRepository.findByIdAndTenantId(command.findingId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("Finding", command.findingId().toString()));
         if (finding.status() != FindingStatus.DETECTED) {
-            throw new ValidationException("Review item is no longer pending");
+            // Task 0023 (D5, #160): one code for "already decided by someone else" (409 REVIEW_ALREADY_DECIDED).
+            throw new ReviewAlreadyDecidedException();
         }
 
         Document document = documentRepository.findByIdAndTenantId(finding.documentId(), command.tenantId())
@@ -165,9 +176,6 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                     command.left(), command.top(), command.width(), command.height());
             finding.updateLocation(FindingLocation.withBounds(
                     current.pageNumber(), current.startOffset(), current.endOffset(), box));
-            auditService.recordSuccess(command.tenantId(), command.actorId(),
-                    AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", finding.id().toString(), pkg.id(),
-                    command.correlationId(), "Finding location adjusted during focused review");
         }
 
         String safeReason = ReviewTextSanitizer.sanitizeReason(command.reason());
@@ -176,16 +184,26 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                 throw new ValidationException("Finding location must be adjusted before confirmation");
             }
             finding.confirm(command.actorId(), safeReason);
+        } else {
+            finding.dismiss(command.actorId(), safeReason);
+        }
+        // Task 0023 (D5): the decision is saved before it is audited, so a refused (already decided) decision
+        // leaves no audit row that claims it was made.
+        saveDecision(finding);
+        if (command.hasBoundingBoxAdjustment()) {
+            auditService.recordSuccess(command.tenantId(), command.actorId(),
+                    AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", finding.id().toString(), pkg.id(),
+                    command.correlationId(), "Finding location adjusted during focused review");
+        }
+        if (command.resolution() == ReviewResolution.CONFIRM) {
             auditService.recordSuccess(command.tenantId(), command.actorId(),
                     AuditAction.FINDING_CONFIRMED, "Finding", finding.id().toString(), pkg.id(),
                     command.correlationId(), "Focused review confirmed finding: type=" + finding.entityType());
         } else {
-            finding.dismiss(command.actorId(), safeReason);
             auditService.recordSuccess(command.tenantId(), command.actorId(),
                     AuditAction.FINDING_DISMISSED, "Finding", finding.id().toString(), pkg.id(),
                     command.correlationId(), "Focused review dismissed finding: type=" + finding.entityType());
         }
-        findingRepository.save(finding);
 
         boolean processingResumed = false;
         if (!packageHasPendingFindings(pkg.id(), command.tenantId())) {

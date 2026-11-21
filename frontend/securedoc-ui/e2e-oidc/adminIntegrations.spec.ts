@@ -88,7 +88,7 @@ test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) 
 // The Cases screen loads first and gets an empty mock answer; only errors from the Admin screens count here.
 test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/packages returned/.test(e))).toEqual([]); });
 
-async function openIntegrations(page: Page, calls: Call[], connections: readonly unknown[] = CONNECTIONS) {
+async function openIntegrations(page: Page, calls: Call[], connections: readonly unknown[] = CONNECTIONS, folderSettings: unknown = { folderKey: 'installed', sensitivityLevel: 'STANDARD' }) {
   await mockIdentityProvider(page);
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
@@ -104,7 +104,7 @@ async function openIntegrations(page: Page, calls: Call[], connections: readonly
     if (url.pathname === '/api/v1/platform-admin/overview') return json(OVERVIEW);
     // Task 0021: the watched folder's level (Standard until Tenant IT changes it).
     if (url.pathname === '/api/v1/platform-admin/watched-folder/settings') {
-      return json({ folderKey: 'installed', sensitivityLevel: request.method() === 'PUT' ? (calls.at(-1)!.body as { sensitivityLevel: string }).sensitivityLevel : 'STANDARD' });
+      return json(request.method() === 'PUT' ? { folderKey: 'installed', sensitivityLevel: (calls.at(-1)!.body as { sensitivityLevel: string }).sensitivityLevel } : folderSettings);
     }
     if (url.pathname === '/api/v1/derived-deliveries/attention') return json(ATTENTION);
     if (url.pathname === '/api/v1/derived-deliveries/dd-1/technical-retry') return json({ ...ATTENTION[0], status: 'DELIVERED' });
@@ -208,6 +208,24 @@ test('0021: the folder shown on its connection has the level choice too', async 
   await expect(folderConnection.getByLabel('Sensitivity of files from this folder')).toHaveValue('STANDARD');
 });
 
+// Task 0023 (A4): Standard by default whether or not anything is saved. No setting row saved (no level, null, empty)
+// or an unknown value: the choice shows Standard and nothing looks unsaved.
+for (const [what, settings] of [
+  ['no level in the answer', { folderKey: 'installed' }],
+  ['a null level', { folderKey: 'installed', sensitivityLevel: null }],
+  ['an empty level', { folderKey: 'installed', sensitivityLevel: '' }],
+  ['an unknown level', { folderKey: 'installed', sensitivityLevel: 'TOP_SECRET' }],
+] as const) {
+  test(`0023 A4: the watched folder with ${what} shows Standard preselected, with no Save`, async ({ page }) => {
+    await openIntegrations(page, [], CONNECTIONS.filter((c) => c.connectionId !== 'c-folder'), settings);
+    const folder = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Watched folder' });
+    const choice = folder.getByLabel('Sensitivity of files from this folder');
+    await expect(choice).toHaveValue('STANDARD');
+    await expect(choice.locator('option:checked')).toHaveText('Standard');
+    await expect(folder.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  });
+}
+
 test('Sending by barcode: rules as a sentence, failed files by loan number, Retry', async ({ page }) => {
   const calls: Call[] = [];
   await openIntegrations(page, calls);
@@ -222,6 +240,11 @@ test('Sending by barcode: rules as a sentence, failed files by loan number, Retr
   await expect(failed).toContainText("1 file couldn't be sent");
   await expect(failed.locator('.cf-ad-conn-status')).toHaveText("LN204812 · pages 3–4 → Title pages · couldn't reach it · tried 5 times");
   expect(await mainText(failed)).not.toContain(PACKAGE_ID);
+  // Task 0023 B4: Technical details give the document id, never a file name (even if an older server still sends one).
+  await failed.locator('summary', { hasText: 'Technical details' }).click();
+  await expect(failed.locator('dl')).toContainText('Documentdoc-1');
+  await expect(failed).not.toContainText('title-pages.pdf');
+  await expect(failed.locator('dt', { hasText: /^File$/ })).toHaveCount(0);
   await expect(card.getByRole('button', { name: 'Technical retry' })).toHaveCount(0);
   await failed.getByRole('button', { name: 'Retry' }).click();
   await expect.poll(() => calls.some((c) => c.path === '/api/v1/derived-deliveries/dd-1/technical-retry')).toBe(true);
@@ -265,6 +288,8 @@ test('Add a connection: three steps, plain labels, Advanced closed, and what is 
   await expect.poll(() => calls.find((c) => c.method === 'POST' && c.path === '/api/v1/integrations')?.body).toMatchObject({
     name: 'Servicing outbox 2', purpose: 'INGESTION_SOURCE', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'API_KEY',
     endpoint: 'https://servicing.northwind.example/api/outbox', pollingScheduleType: 'INTERVAL', pollingIntervalMinutes: 15, acknowledgementMode: 'SOURCE_PICKUP_ACK', enabled: false,
+    // Task 0023 D3: a new connection's size limit is the backend's 50 MB, not 250 MB.
+    maxPdfSizeBytes: 52428800,
   });
 });
 

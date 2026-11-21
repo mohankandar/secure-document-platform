@@ -4,7 +4,7 @@
  * enforces every rule, the row only hides what would be refused. Imports only pure modules (words.ts and
  * supportRules.ts), so node's test runner can check it directly.
  */
-import { ACTION_WORDS, NEXT_STEP, findingsToReview } from './words.ts';
+import { ACTION_WORDS, NEXT_STEP, findingsToReview, sentenceCase } from './words.ts';
 import { canContinueManually } from './support/supportRules.ts';
 
 export const CAPS = {
@@ -61,4 +61,18 @@ export function rowAction(status: string, caps: readonly string[], openFindings:
     default:
       return null;
   }
+}
+
+/**
+ * Task 0023 B4: the name of a split delivery in the case panel. Its destination's label; without one, the document's
+ * type, then a short document id. Never the file name: file names often hold a person's name.
+ */
+export function deliveryLabel(delivery: { destinationLabel?: string | null; sourceDocumentId?: string | null }, documentType?: string | null): string {
+  const destination = delivery.destinationLabel?.trim();
+  if (destination) return destination;
+  const type = documentType?.trim();
+  if (type) return sentenceCase(type);
+  const id = delivery.sourceDocumentId?.trim();
+  if (id) return `Document ${id.slice(0, 8)}`;
+  return 'Destination';
 }

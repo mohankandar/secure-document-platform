@@ -200,15 +200,27 @@ public class ApplicationServiceConfig {
                 && !licensingProperties.getDevelopmentPublicKey().isBlank()) {
             publicKey = licensingProperties.getDevelopmentPublicKey();
         } else {
+            String problem = null;
             try {
                 var resource = resourceLoader.getResource(licensingProperties.getVerificationKeyResource());
                 if (resource.exists()) {
                     try (var in = resource.getInputStream()) {
                         publicKey = new String(in.readAllBytes(), StandardCharsets.US_ASCII);
                     }
+                    if (publicKey.isBlank()) problem = "EMPTY";
+                } else {
+                    problem = "MISSING";
                 }
-            } catch (Exception ignored) {
+            } catch (Exception unreadable) {
                 // Missing/unreadable vendor key is represented as CONFIGURATION_ERROR by the verifier.
+                problem = "UNREADABLE (" + unreadable.getClass().getSimpleName() + ")";
+            }
+            if (problem != null) {
+                // Task 0023 C7 (#325): say so at start-up instead of only at the first refused intake.
+                org.slf4j.LoggerFactory.getLogger(ApplicationServiceConfig.class).warn(
+                        "LICENSE_VERIFICATION_KEY_UNAVAILABLE reason={} enforcement={} setting=securedoc.licensing."
+                                + "verification-key-resource: licences cannot be verified", problem,
+                        licensingProperties.enforcementEnabled());
             }
         }
         return new Ed25519LicenseTokenVerifier(publicKey);
@@ -494,11 +506,12 @@ public class ApplicationServiceConfig {
             StoragePort storagePort,
             ChecksumPort checksumPort,
             DomainEventPublisher eventPublisher,
-            AuditService auditService) {
+            AuditService auditService,
+            PdfIntakeValidationPort pdfIntakeValidationPort) {
         return new UploadDocumentService(
                 tenantContextService, capabilityEnforcementService, tenantLicensingService,
                 packageRepository, documentRepository, artifactRepository,
-                storagePort, checksumPort, eventPublisher, auditService);
+                storagePort, checksumPort, eventPublisher, auditService, pdfIntakeValidationPort);
     }
 
     @Bean
@@ -1154,10 +1167,18 @@ public class ApplicationServiceConfig {
             @Qualifier("reviewResumeTaskExecutor") TaskExecutor reviewResumeTaskExecutor,
             TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
             PackageProcessingDispatchLease packageProcessingDispatchLease,
-            ProcessingStorageNodeReadiness processingStorageNodeReadiness) {
+            ProcessingStorageNodeReadiness processingStorageNodeReadiness,
+            PackageProcessingRecoveryService packageProcessingRecoveryService) {
+        // Task 0023 C1: after 3 failed dispatches of the same case (at once for a licence denial),
+        // the case is stopped as FAILED with a code and a Support incident instead of looping.
         return new InProcessPackageProcessingDispatcher(
                 reviewResumeTaskExecutor, triggerPackageProcessingUseCase, packageProcessingDispatchLease,
-                processingStorageNodeReadiness::readyFor);
+                processingStorageNodeReadiness::readyFor,
+                (command, failure, failedAttempts, maxAttempts) ->
+                        packageProcessingRecoveryService.stopAfterDispatchFailure(
+                                command.packageId(), command.tenantId(), failure, failedAttempts, maxAttempts,
+                                command.correlationId()),
+                3);
     }
 
     @Bean

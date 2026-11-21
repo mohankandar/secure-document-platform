@@ -33,7 +33,9 @@ public class ExternalIntakeExpiryScheduler {
                         result.expiredIntakes(), result.cleanedIntakes());
             }
         } catch (RuntimeException e) {
-            log.warn("External intake maintenance cycle failed; pending work will be retried");
+            // Task 0023 #335: the type and a code, never the message.
+            log.warn("EXTERNAL_INTAKE_MAINTENANCE_FAILED reasonCode=MAINTENANCE_CYCLE_FAILED exceptionType={}; pending work will be retried",
+                    e.getClass().getSimpleName());
         }
     }
 }

@@ -86,11 +86,32 @@ export function bulkConfirmBody(plan: BulkPlan<ReviewItemLike>): string {
 }
 
 /** The sentence after a bulk run: what was redacted, what was skipped, what failed. */
-export function bulkResultText(redacted: number, skipped: number, failed: number): string {
+export function bulkResultText(redacted: number, skipped: number, failed: number, alreadyDecided = 0): string {
   const parts = [`Redacted ${redacted} ${redacted === 1 ? 'finding' : 'findings'}.`];
   if (skipped > 0) parts.push(`${skipped} skipped because ${skipped === 1 ? 'its place was' : 'their place was'} not found; ${skipped === 1 ? 'it stays' : 'they stay'} in the queue.`);
   if (failed > 0) parts.push(`${failed} could not be saved and ${failed === 1 ? 'stays' : 'stay'} in the queue.`);
+  if (alreadyDecided > 0) parts.push(`${alreadyDecided} ${alreadyDecided === 1 ? 'was' : 'were'} already decided by someone else.`);
   return parts.join(' ');
+}
+
+/* ---------- Already decided by someone else (task 0023 D5, inventory #160) ---------- */
+
+/** The one code the backend sends when a finding was already decided by someone else (with HTTP 409). */
+export const REVIEW_ALREADY_DECIDED = 'REVIEW_ALREADY_DECIDED';
+
+/**
+ * True only for HTTP 409 with errorCode exactly REVIEW_ALREADY_DECIDED. Anything else is an ordinary failure and the
+ * finding stays in the queue (fail closed). The old check looked for a "CONFLICT" code no backend sends.
+ */
+export function isAlreadyDecided(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { httpStatus, errorCode } = error as { httpStatus?: unknown; errorCode?: unknown };
+  return httpStatus === 409 && errorCode === REVIEW_ALREADY_DECIDED;
+}
+
+/** Fixed words, never the server's message. */
+export function alreadyDecidedText(movedToNext: boolean): string {
+  return movedToNext ? 'Someone else already decided this finding. Moved to the next one.' : 'Someone else already decided this finding.';
 }
 
 /* ---------- Zoom ---------- */

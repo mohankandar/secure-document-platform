@@ -55,7 +55,7 @@ public final class IdentityAdmissionMapping {
         try {
             return call.get();
         } catch (IdentityAdmissionException refused) {
-            throw new SecurityContextException(refused.getMessage());
+            throw new SecurityContextException(refused.getMessage(), refused.reason().name());
         }
     }
 

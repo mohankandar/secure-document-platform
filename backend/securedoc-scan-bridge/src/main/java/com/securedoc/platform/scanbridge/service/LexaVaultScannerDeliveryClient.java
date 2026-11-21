@@ -22,6 +22,7 @@ import java.util.UUID;
 @Component
 public class LexaVaultScannerDeliveryClient {
     public static final String ACCEPTED_FOR_PROCESSING = "ACCEPTED_FOR_PROCESSING";
+    private static final java.util.regex.Pattern SAFE_ERROR_CODE = java.util.regex.Pattern.compile("[A-Z][A-Z0-9_]{0,79}");
 
     private final ScanBridgeProperties properties;
     private final ObjectMapper objectMapper;
@@ -74,7 +75,8 @@ public class LexaVaultScannerDeliveryClient {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(json));
             return parseIntake(send(builder.build()));
         } catch (IOException ex) {
-            throw DeliveryException.retryable("LEXAVAULT_REQUEST_SERIALIZATION_FAILED", ex);
+            // Task 0023 D2 (#82): serialising our own request fails the same way every time; do not retry it.
+            throw DeliveryException.terminal("LEXAVAULT_REQUEST_SERIALIZATION_FAILED", ex);
         }
     }
 
@@ -140,18 +142,28 @@ public class LexaVaultScannerDeliveryClient {
     }
 
     private DeliveryException toDeliveryException(HttpResponse<byte[]> response) {
-        String code = "LEXAVAULT_HTTP_" + response.statusCode();
+        int status = response.statusCode();
+        String code = "LEXAVAULT_HTTP_" + status;
         try {
             JsonNode json = objectMapper.readTree(response.body());
-            if (json.hasNonNull("errorCode") && !json.get("errorCode").asText().isBlank()) {
-                code = json.get("errorCode").asText().trim();
+            if (json.hasNonNull("errorCode")) {
+                String candidate = json.get("errorCode").asText().trim();
+                // Only a code-shaped value reaches the screen and the log; free text could hold content.
+                if (SAFE_ERROR_CODE.matcher(candidate).matches()) code = candidate;
             }
         } catch (Exception ignored) {
             // Never include response body in logs/errors; keep only safe status-derived code.
         }
-        int status = response.statusCode();
-        boolean retryable = status == 408 || status == 425 || status == 429 || status >= 500;
-        return retryable ? DeliveryException.retryable(code, null) : DeliveryException.terminal(code, null);
+        return retryableStatus(status) ? DeliveryException.retryable(code, null) : DeliveryException.terminal(code, null);
+    }
+
+    /**
+     * Task 0023 D2 (#82): a 4xx is LexaVault refusing this request and the same request gets the same answer,
+     * so every 4xx (408, 425 and 429 included) goes straight to a person. Only 5xx is retried, and
+     * {@link ScannerSubmissionWorker} caps those retries.
+     */
+    static boolean retryableStatus(int status) {
+        return status >= 500;
     }
 
     private HttpRequest.Builder requestBuilder(String path) {

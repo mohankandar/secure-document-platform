@@ -13,11 +13,19 @@ final class TechnicalFailureTaxonomy {
         if (dependency == TechnicalDependency.OCR || code.name().startsWith("OCR_")) return ProcessingStage.OCR;
         if (dependency == TechnicalDependency.DELIVERY || code.name().startsWith("DELIVERY_")) return ProcessingStage.DELIVERY;
         if (dependency == TechnicalDependency.STORAGE || code.name().startsWith("STORAGE_")) return ProcessingStage.STORAGE;
+        if (code == TechnicalFailureCode.REDACTION_LOCATION_MISSING
+                || code == TechnicalFailureCode.REDACTION_TARGETS_NOT_APPLIED) return ProcessingStage.REDACTION;
+        if (code.name().startsWith("REDACTION_")) return ProcessingStage.VERIFICATION;
+        if (dependency == TechnicalDependency.PROCESSING) return ProcessingStage.DOCUMENT_PROCESSING;
         return preferred == null ? ProcessingStage.UNKNOWN : preferred;
     }
 
     static String category(String code, String dependency) {
         if (code == null) return "TECHNICAL_PROCESSING_FAILURE";
+        // Task 0023: checked before the substring rules ("REDACTION" contains "IO").
+        if (code.equals("PROCESSING_LICENSE_DENIED")) return "LICENSE";
+        if (code.equals("PROCESSING_DISPATCH_EXHAUSTED")) return "DISPATCH_EXHAUSTED";
+        if (code.startsWith("REDACTION_")) return "REDACTION_SAFETY";
         if (code.contains("TIMEOUT")) return "DEPENDENCY_TIMEOUT";
         if (code.contains("UNAVAILABLE")) return "DEPENDENCY_UNAVAILABLE";
         if (code.contains("RATE_LIMITED")) return "DEPENDENCY_RATE_LIMITED";
@@ -44,6 +52,13 @@ final class TechnicalFailureTaxonomy {
             case "DELIVERY_DESTINATION_INVALID" -> "The configured delivery destination is not valid for this package.";
             case "DELIVERY_SENSITIVITY_REFUSED" -> "Destination refused the sensitivity level (LV-DLV-003). LexaVault sends the level it was given and never changes it; the destination's set-up needs checking.";
             case "STORAGE_IO" -> "Internal document storage was temporarily unavailable.";
+            case "PROCESSING_DISPATCH_EXHAUSTED" -> "Processing could not be started after 3 tries, so the case was stopped. Automatic retries have ended.";
+            case "PROCESSING_LICENSE_DENIED" -> "The tenant licence does not allow document processing, so the case was stopped. Check the licence, then retry.";
+            case "REDACTION_LOCATION_MISSING" -> "A confirmed finding has no location on the page, so it could not be covered. Locate or dismiss the finding.";
+            case "REDACTION_SOURCE_PAGES_UNKNOWN", "REDACTION_PAGE_COUNT_MISMATCH", "REDACTION_TARGETS_NOT_APPLIED",
+                 "REDACTION_OUTPUT_EMPTY", "REDACTION_TEXT_LAYER_REMAINS", "REDACTION_ANNOTATIONS_REMAIN",
+                 "REDACTION_REGION_NOT_COVERED", "REDACTION_OUTPUT_UNPARSABLE" ->
+                    "The redacted output failed its safety check, so it was not delivered. The code says which check failed.";
             default -> "Processing stopped because of a technical failure. Use the incident or correlation ID for support diagnostics.";
         };
         if (!packageFailed) {

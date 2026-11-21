@@ -2,6 +2,7 @@ package com.securedoc.platform.application.intake.watched;
 
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.command.*;
+import com.securedoc.platform.application.intake.model.IntakeRejectionCode;
 import com.securedoc.platform.application.port.in.*;
 import com.securedoc.platform.application.port.out.*;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
@@ -107,6 +108,7 @@ class WatchedFolderIntakeServiceRecoveryTest {
         assertEquals(PackageStatus.CREATED, repository.current.status());
         assertEquals(IntakeDisposition.REJECTED, harness.source.disposition);
         assertEquals(IntakeObservationStatus.REJECTED, harness.observations.latest.status());
+        assertEquals(IntakeRejectionCode.RECOVERY_CONFLICT, harness.observations.latest.reasonCode(), "task 0023 C2");
     }
 
     @Test
@@ -120,7 +122,8 @@ class WatchedFolderIntakeServiceRecoveryTest {
         assertEquals(1, result.accepted());
         assertEquals(0, result.duplicates());
         assertNotNull(repository.current);
-        assertEquals("case-race", repository.current.sourceReference().orElseThrow());
+        // Task 0023 B3: the case holds the drop reference, not the drop folder's name.
+        assertEquals(WatchedFolderDropReference.of("case-race"), repository.current.sourceReference().orElseThrow());
         assertEquals(PackageStatus.SUBMITTED, repository.current.status());
         assertEquals(1, repository.current.documentCount());
     }
@@ -205,6 +208,179 @@ class WatchedFolderIntakeServiceRecoveryTest {
         @Override public void saveSensitivityLevel(TenantId tenantId, String folderKey, SensitivityLevel level,
                                                    ActorId updatedBy, Instant updatedAt) {
             values.put(tenantId + "|" + folderKey, level);
+        }
+    }
+
+    /* Task 0023 B3: no drop folder name on screen, in audit records or in the case; the folder key plus a short id. */
+
+    @Test
+    void theObservationTheCaseAndTheAuditNameTheDropByReferenceNeverByFolderName() {
+        String folderName = "Jane Doe - loan 42";
+        Fresh fresh = fresh(candidate(folderName, doc("Jane Doe payslip.pdf", "one")), (command, p) -> null);
+
+        assertEquals(1, fresh.service.scan(principal, correlationId).accepted());
+
+        String expected = "installed/" + sha256Hex(folderName).substring(0, 12);
+        assertEquals(expected, WatchedFolderDropReference.of(folderName));
+        assertEquals(expected, fresh.observations.latest.sourceReference());
+        assertEquals(expected, fresh.repository.current.sourceReference().orElseThrow());
+        assertTrue(fresh.audits.stream().anyMatch(r -> r.detail() != null && r.detail().contains("drop=" + expected)));
+        fresh.audits.forEach(r -> assertFalse(r.detail() != null && r.detail().contains("Jane"), r.action().name()));
+    }
+
+    @Test
+    void aCaseMadeBeforeTheDropReferenceStillResumesUnderTheFolderName() {
+        // existingPackage(...) holds the raw folder name, as cases made before task 0023 do.
+        var candidate = candidate("case-legacy", doc("one.pdf", "one"));
+        var repository = new MemoryPackageRepository(existingPackage("case-legacy"));
+        var harness = harness(repository, candidate, false);
+        assertEquals(1, harness.service.scan(principal, correlationId).accepted());
+        assertEquals(WatchedFolderDropReference.of("case-legacy"), harness.observations.latest.sourceReference());
+    }
+
+    /* Task 0023 C2: the real reason for each refused drop, as a code in the observation and the audit. */
+
+    @Test
+    void eachRefusedDropRecordsItsRealReasonNotAnIoError() {
+        record Case(RuntimeException thrown, IntakeRejectionCode reason, String causeCode) {}
+        List<Case> cases = List.of(
+                new Case(new com.securedoc.platform.application.exception.IntakeValidationException(
+                        IntakeRejectionCode.UNKNOWN_IDENTIFIER, "Unknown identifier key Secret-Key"),
+                        IntakeRejectionCode.UNKNOWN_IDENTIFIER, "INTAKE_UNKNOWN_IDENTIFIER"),
+                new Case(new com.securedoc.platform.application.licensing.LicenseEnforcementException("LICENSE_EXPIRED",
+                        "Tenant license has expired", com.securedoc.platform.domain.licensing.LicenseValidationStatus.EXPIRED),
+                        IntakeRejectionCode.LICENSE_DENIED, "LICENSE_EXPIRED"),
+                new Case(new com.securedoc.platform.application.exception.CapabilityNotEnabledException(
+                        com.securedoc.platform.domain.tenant.Capability.DOCUMENT_UPLOAD),
+                        IntakeRejectionCode.CAPABILITY_DISABLED, "CAPABILITY_DISABLED"),
+                new Case(new com.securedoc.platform.application.exception.TenantInactiveException(
+                        "Tenant is not active: " + tenantId), IntakeRejectionCode.TENANT_INACTIVE, "TENANT_INACTIVE"),
+                new Case(new com.securedoc.platform.application.exception.TechnicalDependencyException(
+                        com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
+                        com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO, true,
+                        "Failed to store artifact"), IntakeRejectionCode.STORAGE_UNAVAILABLE, "STORAGE_IO"),
+                new Case(new com.securedoc.platform.application.exception.ValidationException(
+                        "Uploaded content is not a valid readable PDF"), IntakeRejectionCode.INVALID_FILE, "VALIDATION_ERROR"),
+                new Case(new java.io.UncheckedIOException(new java.io.IOException("C:\\drops\\Jane Doe\\a.pdf")),
+                        IntakeRejectionCode.SOURCE_IO_ERROR, "SOURCE_IO_ERROR"),
+                new Case(new NullPointerException("Jane Doe"), IntakeRejectionCode.INTERNAL_ERROR, "INTERNAL_ERROR"));
+        for (Case c : cases) {
+            Fresh fresh = fresh(candidate("Jane Doe drop", doc("one.pdf", "one")), (command, p) -> { throw c.thrown(); });
+
+            assertEquals(1, fresh.service.scan(principal, correlationId).rejected(), c.reason().name());
+
+            assertEquals(IntakeObservationStatus.REJECTED, fresh.observations.latest.status());
+            assertEquals(c.reason(), fresh.observations.latest.reasonCode(), c.thrown().getClass().getSimpleName());
+            var rejected = fresh.audits.stream().filter(r -> r.action()
+                    == com.securedoc.platform.domain.audit.AuditAction.INTAKE_REJECTED).findFirst().orElseThrow();
+            assertEquals("Intake status=REJECTED, reasonCode=" + c.reason() + ", causeCode=" + c.causeCode()
+                    + ", exceptionType=" + c.thrown().getClass().getSimpleName()
+                    + ", drop=" + WatchedFolderDropReference.of("Jane Doe drop"), rejected.detail());
+            fresh.audits.forEach(r -> assertFalse(r.detail() != null
+                    && (r.detail().contains("Jane") || r.detail().contains("Secret-Key") || r.detail().contains("expired")),
+                    r.detail()));
+        }
+    }
+
+    @Test
+    void aDropThatCannotBeReadWhileHashingIsAnIoErrorWithItsType() {
+        UploadContent unreadable = new UploadContent() {
+            @Override public InputStream openStream() { throw new java.io.UncheckedIOException(new java.io.IOException("C:\\drops\\x")); }
+            @Override public long contentLength() { return 3; }
+        };
+        var candidate = candidate("drop-unreadable", new WatchedFolderDocument("one.pdf", "application/pdf", unreadable));
+        Fresh fresh = fresh(candidate, (command, p) -> fail("not created"));
+
+        assertEquals(1, fresh.service.scan(principal, correlationId).rejected());
+        assertEquals(IntakeRejectionCode.SOURCE_IO_ERROR, fresh.observations.latest.reasonCode());
+        assertTrue(fresh.audits.get(fresh.audits.size() - 1).detail()
+                .contains("causeCode=SOURCE_IO_ERROR, exceptionType=UncheckedIOException"));
+    }
+
+    /* Task 0023 C2 / #41: a duplicate drop always writes a record. */
+
+    @Test
+    void theSameContentDroppedAgainIsRecordedAsADuplicateOnce() {
+        Fresh fresh = fresh(candidate("drop-again", doc("one.pdf", "one")), (command, p) -> null);
+        assertEquals(1, fresh.service.scan(principal, correlationId).accepted());
+        PackageId accepted = fresh.observations.latest.packageId();
+
+        ScanWatchedFolderResult again = fresh.service.scan(principal, correlationId);
+        assertEquals(1, again.duplicates());
+        assertEquals(IntakeObservationStatus.DUPLICATE, fresh.observations.latest.status());
+        assertEquals(IntakeRejectionCode.DUPLICATE_INTAKE, fresh.observations.latest.reasonCode());
+        assertEquals(accepted, fresh.observations.latest.packageId(), "the duplicate points at the case already made");
+        long duplicateAudits = fresh.audits.stream().filter(r -> r.action()
+                == com.securedoc.platform.domain.audit.AuditAction.INTAKE_DUPLICATE).count();
+        assertEquals(1, duplicateAudits);
+
+        // A drop left in place is seen on every scan: counted, but not recorded again.
+        assertEquals(1, fresh.service.scan(principal, correlationId).duplicates());
+        assertEquals(1, fresh.audits.stream().filter(r -> r.action()
+                == com.securedoc.platform.domain.audit.AuditAction.INTAKE_DUPLICATE).count());
+    }
+
+    /* Task 0023 A4: a watched folder with no setting row saved gives Standard, end to end. */
+
+    @Test
+    void aFolderWithNoSettingSavedTakesFilesInAsStandard() {
+        WatchedFolderSettingsService settings = new WatchedFolderSettingsService(new MemorySettings(),
+                new AuditService(r -> { }), null);
+        Fresh fresh = fresh(candidate("drop-standard", doc("one.pdf", "one"), doc("two.pdf", "two")), (command, p) -> null,
+                tenant -> settings.sensitivityLevel(tenant, WatchedFolderSettingsService.INSTALLED_FOLDER));
+
+        assertEquals(1, fresh.service.scan(principal, correlationId).accepted());
+        assertEquals(SensitivityLevel.STANDARD, fresh.creates.get(0).caseSensitivity().level());
+        assertFalse(fresh.creates.get(0).caseSensitivity().unknown());
+        assertEquals(List.of(SensitivityLevel.STANDARD, SensitivityLevel.STANDARD), fresh.uploadLevels);
+    }
+
+    private final class Fresh {
+        final MemoryPackageRepository repository = new MemoryPackageRepository(null);
+        final ObservationStub observations = new ObservationStub();
+        final List<com.securedoc.platform.domain.audit.AuditRecord> audits = new ArrayList<>();
+        final List<CreatePackageCommand> creates = new ArrayList<>();
+        final List<SensitivityLevel> uploadLevels = new ArrayList<>();
+        WatchedFolderIntakeService service;
+    }
+
+    /** A harness with no package yet; {@code failure} may throw from create, or return null to create normally. */
+    private Fresh fresh(WatchedFolderCandidate candidate, CreatePackageUseCase failure) {
+        return fresh(candidate, failure, tenant -> SensitivityLevel.STANDARD);
+    }
+
+    private Fresh fresh(WatchedFolderCandidate candidate, CreatePackageUseCase failure,
+                        java.util.function.Function<TenantId, SensitivityLevel> folderLevel) {
+        Fresh fresh = new Fresh();
+        CreatePackageUseCase create = (command, p) -> {
+            fresh.creates.add(command);
+            failure.execute(command, p);
+            DocumentPackage pkg = DocumentPackage.createIntake(tenantId, PackageType.FOLDER_INTAKE,
+                    BusinessRecordId.generate(), command.intakeFingerprint(), command.sourceReference(), actorId,
+                    PackageMetadata.empty(), command.caseSensitivity().level());
+            fresh.repository.current = pkg;
+            return CreatePackageResult.of(pkg.id(), BusinessRecordId.generate(), pkg.status(), pkg.createdAt());
+        };
+        UploadDocumentUseCase upload = (command, p) -> {
+            fresh.uploadLevels.add(command.sensitivityLevel());
+            DocumentPackage pkg = fresh.repository.findByIdAndTenantId(command.packageId(), tenantId).orElseThrow();
+            Document document = persisted(pkg.id(), new WatchedFolderDocument(command.fileName(), command.mimeType(), command.content()));
+            pkg.addDocument(document);
+            return UploadDocumentResult.of(document.id(), ArtifactId.generate(), document.status());
+        };
+        SubmitPackageUseCase submit = (command, p) -> fresh.repository.current.submit();
+        fresh.service = new WatchedFolderIntakeService(new SourceStub(candidate), new LeaseStub(), fresh.observations,
+                fresh.repository, create, upload, submit, command -> { }, new AuditService(fresh.audits::add),
+                Duration.ofMinutes(15), Duration.ofSeconds(10), folderLevel);
+        return fresh;
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 

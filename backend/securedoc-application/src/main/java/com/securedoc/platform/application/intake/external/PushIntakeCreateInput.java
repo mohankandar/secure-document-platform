@@ -17,6 +17,11 @@ public record PushIntakeCreateInput(
         boolean retry,
         String caseSensitivityLevel) {
     public PushIntakeCreateInput {
+        // Task 0023 D1 (#32): a null value is the source's mistake (400), not a NullPointerException (500).
+        requireNoNull(businessIdentifiers == null ? null : businessIdentifiers.values(),
+                "businessIdentifiers must not contain null values");
+        requireNoNull(metadata == null ? null : metadata.values(), "metadata must not contain null values");
+        requireNoNull(documents, "documents must not contain null entries");
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         documents = documents == null ? List.of() : List.copyOf(documents);
@@ -32,6 +37,12 @@ public record PushIntakeCreateInput(
                                  Map<String, String> businessIdentifiers, Map<String, String> metadata,
                                  List<ManifestDocumentInput> documents) {
         this(externalSourcePackageId, sourceRevision, businessIdentifiers, metadata, documents, false, null);
+    }
+
+    private static void requireNoNull(java.util.Collection<?> values, String message) {
+        if (values != null && values.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new com.securedoc.platform.application.exception.ValidationException(message);
+        }
     }
 
     public record ManifestDocumentInput(String externalSourceDocumentId, String fileName, String sha256,

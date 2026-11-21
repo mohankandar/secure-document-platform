@@ -13,6 +13,7 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.stereotype.Component;
 import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
+import com.securedoc.platform.infrastructure.pdf.TempFileCleanup;
 import com.securedoc.platform.infrastructure.pdf.TempFileReplayableContent;
 
 import java.awt.Color;
@@ -60,6 +61,7 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
         Map<Integer, List<RedactionTarget>> targetsByPage = safeTargets.stream()
                 .collect(Collectors.groupingBy(RedactionTarget::pageNumber));
         Path outputPath = null;
+        TempFileReplayableContent content = null;
 
         try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(originalPdf, "lexavault-redaction-source-");
              PDDocument outputDoc = PdfBoxTempFileSupport.newDiskBackedDocument()) {
@@ -91,14 +93,22 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
 
             outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-redaction-output-");
             outputDoc.save(outputPath.toFile());
-            TempFileReplayableContent content = TempFileReplayableContent.owned(outputPath);
+            content = TempFileReplayableContent.owned(outputPath);
             outputPath = null;
             return new RedactionOutput(content, pageCount, totalRedactions);
         } catch (IOException e) {
+            // Task 0023 B9 (#373): also reached when closing the staged source fails after the
+            // output was created; the caller never receives it, so remove it here.
+            if (content != null) content.close();
             throw new UncheckedIOException("Failed to perform PDF redaction", e);
+        } catch (RuntimeException e) {
+            if (content != null) content.close();
+            throw e;
         } finally {
+            // Task 0023 B9 (#373): the redacted temp output is removed on every failure path.
+            // A failed delete is logged with a temp id, never a name or path.
             if (outputPath != null) {
-                try { Files.deleteIfExists(outputPath); } catch (IOException ignored) { }
+                TempFileCleanup.deleteQuietly(outputPath, "REDACTION_OUTPUT");
             }
         }
     }

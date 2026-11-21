@@ -32,6 +32,8 @@ const CaseFileApp = lazy(() => import('./studio/CaseFileApp'));
 const NoAccess = lazy(() => import('./studio/NoAccess'));
 // The entity chooser in the Case File design, so it follows the dark setting before sign-in (task 0022 A3).
 const EntityChooser = lazy(() => import('./studio/EntityChooser'));
+// The sign-in screen in the Case File design, so it follows the dark setting too (task 0023 A2).
+const SignIn = lazy(() => import('./studio/SignIn'));
 
 /** The server lists no organization for this account: a refusal, the same as a 403 from /me (owner's decision, U013). */
 class NoOrganizationError extends Error {}
@@ -449,11 +451,19 @@ export default function App() {
   };
 
   if (!localMode && authLoading) {
-    return <AuthScreen title={SIGN_IN_TITLE}><h1>{PRODUCT_NAME}</h1><p>Verifying your session…</p></AuthScreen>;
+    return (
+      <Suspense fallback={<AuthScreen title={SIGN_IN_TITLE}><h1>{PRODUCT_NAME}</h1><p>Verifying your session…</p></AuthScreen>}>
+        <SignIn title={SIGN_IN_TITLE} message="Verifying your session…" />
+      </Suspense>
+    );
   }
 
   if (!localMode && switchingTenant && !currentUser) {
-    return <AuthScreen title={CHOOSE_ENTITY_TITLE}><h1>{PRODUCT_NAME}</h1><p role="status">Switching entity…</p></AuthScreen>;
+    return (
+      <Suspense fallback={<AuthScreen title={CHOOSE_ENTITY_TITLE}><h1>{PRODUCT_NAME}</h1><p role="status">Switching entity…</p></AuthScreen>}>
+        <SignIn title={CHOOSE_ENTITY_TITLE} message="Switching entity…" status />
+      </Suspense>
+    );
   }
 
   if (!localMode && !currentUser && tenantChoices.length > 1 && getAccessToken()) {
@@ -482,10 +492,10 @@ export default function App() {
 
   if (!localMode && !currentUser) {
     return (
-      <AuthScreen title={SIGN_IN_TITLE}><h1>{PRODUCT_NAME}</h1><p>Sign in with your organization identity to continue.</p>
-        {authError && <div className="ui-alert tone-danger">{authError}</div>}
-        <button className="ui-button primary" onClick={() => void beginOidcLogin(authDenied)}>{authDenied ? 'Sign in with a different account' : 'Sign in'}</button>
-      </AuthScreen>
+      <Suspense fallback={<AuthScreen title={SIGN_IN_TITLE}><h1>{PRODUCT_NAME}</h1><p>Loading…</p></AuthScreen>}>
+        <SignIn title={SIGN_IN_TITLE} message="Sign in with your organization identity to continue." error={authError || undefined}
+          action={{ label: authDenied ? 'Sign in with a different account' : 'Sign in', onClick: () => void beginOidcLogin(authDenied) }} />
+      </Suspense>
     );
   }
 

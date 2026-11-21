@@ -57,7 +57,8 @@ public record IntegrationConnection(
     public static final int MAX_INCOMPLETE_WINDOW_HOURS = 7 * 24;
     public static final int DEFAULT_MAX_DOCUMENTS_PER_INTAKE = 100;
     public static final int MAX_DOCUMENTS_PER_INTAKE = 1000;
-    public static final long DEFAULT_MAX_PDF_SIZE_BYTES = 250L * 1024L * 1024L;
+    /** Task 0023 D3: the push API takes files as multipart uploads, capped at 50 MB (spring.servlet.multipart.max-file-size), so the default promises no more. */
+    public static final long DEFAULT_MAX_PDF_SIZE_BYTES = 50L * 1024L * 1024L;
     public static final long MAX_PDF_SIZE_BYTES = 2L * 1024L * 1024L * 1024L;
     public static final int DEFAULT_MAX_PDF_PAGES = 2000;
     public static final int MAX_PDF_PAGES = 10000;

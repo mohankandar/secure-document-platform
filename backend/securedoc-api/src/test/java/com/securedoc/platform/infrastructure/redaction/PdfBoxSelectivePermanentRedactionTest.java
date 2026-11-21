@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.redaction;
 
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionOutput;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
@@ -124,6 +125,27 @@ class PdfBoxSelectivePermanentRedactionTest {
 
         assertFalse(result.safe());
         assertTrue(result.hasExtractableText());
+        // Task 0023 C3 (#142): the exact check is kept as a code.
+        assertEquals(
+                TechnicalFailureCode.REDACTION_TEXT_LAYER_REMAINS,
+                result.failureCode());
+    }
+
+    @Test
+    void verifierGivesEachFailedCheckItsOwnCode() throws Exception {
+        // Task 0023 C3 (#142)
+        RedactionTarget target = RedactionTarget.of(1, 0.10, 0.08, 0.36, 0.09);
+        assertEquals(TechnicalFailureCode.REDACTION_OUTPUT_EMPTY,
+                verification.verify((java.io.InputStream) null, 1, List.of(target)).failureCode());
+        assertEquals(TechnicalFailureCode.REDACTION_SOURCE_PAGES_UNKNOWN,
+                verification.verify(new byte[]{1}, 0, List.of(target)).failureCode());
+        assertEquals(TechnicalFailureCode.REDACTION_OUTPUT_UNPARSABLE,
+                verification.verify("not a pdf".getBytes(java.nio.charset.StandardCharsets.UTF_8), 1, List.of(target))
+                        .failureCode());
+        assertEquals(TechnicalFailureCode.REDACTION_PAGE_COUNT_MISMATCH,
+                verification.verify(pageWithBlackTargetAndRemainingText(), 2, List.of(target)).failureCode());
+        assertTrue(verification.verify(pageWithBlackTargetAndRemainingText(), 1, List.of(target)).failureReason()
+                .startsWith("A redacted page"), "the fixed sentence is unchanged");
     }
 
     private byte[] threePageTextPdf(boolean annotateThirdPage) throws Exception {

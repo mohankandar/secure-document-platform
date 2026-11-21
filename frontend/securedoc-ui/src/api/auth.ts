@@ -15,6 +15,20 @@ function oidcDebug(message: string, details?: Record<string, unknown>): void {
   else console.info(`[LexaVault OIDC] ${message}`);
 }
 
+/**
+ * Task 0023 B6 (#277): the identity provider's error body is never put in an Error or the console, in any build (it can
+ * echo the code, client details or user names). Only the OAuth "error" code is kept (RFC 6749 5.2: a short fixed word
+ * such as "invalid_grant"), and only when it looks like one; anything else reads "unknown".
+ */
+async function idpErrorCode(response: Response): Promise<string> {
+  try {
+    const parsed = JSON.parse(await response.text()) as { error?: unknown };
+    return typeof parsed.error === 'string' && /^[a-z_]{1,64}$/.test(parsed.error) ? parsed.error : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 export function isLocalSecurityMode(): boolean {
   return MODE === 'LOCAL';
 }
@@ -110,10 +124,10 @@ async function completeOidcCallback(url: URL): Promise<boolean> {
     body,
   });
   if (!response.ok) {
-    const errorText = (await response.text()).slice(0, 500);
-    oidcDebug('Authorization-code exchange failed.', { status: response.status, statusText: response.statusText, response: errorText });
+    const idpError = await idpErrorCode(response);
+    oidcDebug('Authorization-code exchange failed.', { status: response.status, idpError });
     clearOidcSession();
-    throw new Error(`OIDC_TOKEN_EXCHANGE_FAILED HTTP ${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ''}`);
+    throw new Error(`OIDC_TOKEN_EXCHANGE_FAILED HTTP ${response.status} idpError=${idpError}`);
   }
   oidcDebug('Authorization-code exchange succeeded.', { status: response.status });
   const token = await response.json() as OidcTokenResponse;
@@ -185,13 +199,13 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   }
 
   if (!response.ok) {
-    const errorText = (await response.text()).slice(0, 300);
-    oidcDebug('Access-token refresh was rejected.', { status: response.status, statusText: response.statusText, response: errorText });
+    const idpError = await idpErrorCode(response);
+    oidcDebug('Access-token refresh was rejected.', { status: response.status, idpError });
     if (response.status === 400 || response.status === 401) {
       expireOidcSession();
       return null;
     }
-    throw new Error(`OIDC_TOKEN_REFRESH_FAILED HTTP ${response.status} ${response.statusText}`);
+    throw new Error(`OIDC_TOKEN_REFRESH_FAILED HTTP ${response.status} idpError=${idpError}`);
   }
 
   const token = await response.json() as OidcTokenResponse;

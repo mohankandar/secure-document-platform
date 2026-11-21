@@ -79,7 +79,10 @@ public class FileScanSessionStore {
                     validateStateLocation(stateFile, session);
                     sessions.add(session);
                 } catch (Exception ex) {
-                    throw new IllegalStateException("Scanner Bridge durable state is unreadable: " + stateFile, ex);
+                    // Name only the session folder (a UUID), never the absolute work path, which can hold a user name.
+                    // The cause is not chained: a JSON parser message can quote state content (business identifiers).
+                    throw new IllegalStateException("Scanner Bridge durable state is unreadable for session folder "
+                            + sessionFolderId(stateFile) + " (" + ex.getClass().getSimpleName() + ")");
                 }
             }
             return List.copyOf(sessions);
@@ -92,13 +95,31 @@ public class FileScanSessionStore {
     public synchronized void deleteSession(UUID sessionId) {
         Path directory = sessionDirectory(sessionId);
         if (!Files.exists(directory)) return;
+        int failed = deleteTreeBestEffort(directory);
+        if (failed > 0) throw new IllegalStateException("Unable to remove expired Scanner Bridge state");
+    }
+
+    /**
+     * Task 0023 B9 (#91): deletes everything it can under {@code directory} (deepest first) and returns how
+     * many entries could not be deleted, instead of stopping at the first failure and leaving the rest.
+     */
+    static int deleteTreeBestEffort(Path directory) {
+        if (directory == null || !Files.exists(directory)) return 0;
+        List<Path> entries;
         try (var paths = Files.walk(directory)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
-                Files.deleteIfExists(path);
-            }
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to remove expired Scanner Bridge state", ex);
+            entries = paths.sorted(Comparator.reverseOrder()).toList();
+        } catch (IOException | java.io.UncheckedIOException ex) {
+            return 1;
         }
+        int failed = 0;
+        for (Path path : entries) {
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException ex) {
+                failed++;
+            }
+        }
+        return failed;
     }
 
     public Path sessionDirectory(UUID sessionId) {
@@ -111,6 +132,16 @@ public class FileScanSessionStore {
 
     public Path workRoot() {
         return workRoot;
+    }
+
+    static String sessionFolderId(Path stateFile) {
+        Path parent = stateFile.getParent();
+        if (parent == null || parent.getFileName() == null) return "(unknown)";
+        try {
+            return UUID.fromString(parent.getFileName().toString()).toString();
+        } catch (IllegalArgumentException ex) {
+            return "(not a session id)";
+        }
     }
 
     private void validateStateLocation(Path stateFile, ScanSession session) {

@@ -4,11 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.documentplatform.identity.IdentityClaimConfig;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.documentplatform.identity.spring.RequiredAudienceValidator;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -28,6 +26,29 @@ import java.util.List;
 
 @Configuration
 public class SecurityConfig {
+
+    private static final org.slf4j.Logger CORS_LOG = org.slf4j.LoggerFactory.getLogger("com.securedoc.platform.api.security.Cors");
+    /** What a browser sends as Origin: scheme, host and port only. Anything else is not logged. */
+    private static final java.util.regex.Pattern SAFE_ORIGIN =
+            java.util.regex.Pattern.compile("https?://[A-Za-z0-9.\\-\\[\\]:]{1,253}");
+
+    /**
+     * Task 0023 C7 (#327): a refused origin is logged ({@code CORS_ORIGIN_REJECTED origin=<scheme://host:port>}),
+     * so IT can see why a browser call fails with "Invalid CORS request". The origin is logged only when it has that
+     * plain form; otherwise {@code origin=unrecognised}.
+     */
+    static final class LoggingCorsConfiguration extends CorsConfiguration {
+        @Override
+        public String checkOrigin(String requestOrigin) {
+            String accepted = super.checkOrigin(requestOrigin);
+            if (accepted == null && requestOrigin != null) {
+                String origin = SAFE_ORIGIN.matcher(requestOrigin).matches() ? requestOrigin : "unrecognised";
+                CORS_LOG.warn("CORS_ORIGIN_REJECTED origin={} allowedOrigins={}", origin,
+                        getAllowedOrigins() == null ? 0 : getAllowedOrigins().size());
+            }
+            return accepted;
+        }
+    }
 
     @Bean
     @ConditionalOnProperty(name = "securedoc.security.mode", havingValue = "LOCAL")
@@ -52,13 +73,8 @@ public class SecurityConfig {
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(resource -> resource
                         .jwt(Customizer.withDefaults())
-                        .authenticationEntryPoint((request, response, ex) -> {
-                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            objectMapper.writeValue(response.getOutputStream(), java.util.Map.of(
-                                    "errorCode", "AUTHENTICATION_REQUIRED",
-                                    "message", "Authentication is required"));
-                        }))
+                        // Task 0023 C5 (#252): same 401 code and text, plus correlationId; the reason is logged.
+                        .authenticationEntryPoint(new BearerTokenRefusalEntryPoint(objectMapper)))
                 .build();
     }
 
@@ -92,13 +108,18 @@ public class SecurityConfig {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource(SecurityProperties properties) {
-        CorsConfiguration configuration = new CorsConfiguration();
+        CorsConfiguration configuration = new LoggingCorsConfiguration();
         String allowed = properties.getCors().getAllowedOrigins();
         if (allowed != null && !allowed.isBlank()) {
             configuration.setAllowedOrigins(Arrays.stream(allowed.split(",")).map(String::trim)
                     .filter(value -> !value.isBlank()).toList());
         } else {
             configuration.setAllowedOrigins(List.of());
+            // Task 0023 C7 (#327): a browser sign-in cannot work from another origin; say so at start-up.
+            if (properties.getMode() == SecurityMode.OIDC) {
+                CORS_LOG.warn("CORS_ALLOWED_ORIGINS_EMPTY mode=OIDC: browser calls from another origin will be "
+                        + "refused (securedoc.security.cors.allowed-origins)");
+            }
         }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(properties.getMode() == SecurityMode.LOCAL

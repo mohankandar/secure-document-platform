@@ -13,6 +13,7 @@ import { Notice, Spinner } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import { CASE_SECTIONS, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
+import { deliveryLabel } from './caseRules';
 
 export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   packageId: string; caps: string[]; openFindings: FocusedReviewItem[]; onClose: () => void;
@@ -103,7 +104,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
             </details>
           )}
 
-          {caps.includes(CAP.approve) && life && life.successfulExportCycles > 0 && <DeliveriesSection packageId={packageId} />}
+          {caps.includes(CAP.approve) && life && life.successfulExportCycles > 0 && <DeliveriesSection packageId={packageId} documents={pkg.documents} />}
 
           {life && <RetentionSection life={life} />}
 
@@ -331,7 +332,7 @@ function DocumentsSection({ pkg, openFindings }: { pkg: PackageDetail; openFindi
   );
 }
 
-function DeliveriesSection({ packageId }: { packageId: string }) {
+function DeliveriesSection({ packageId, documents }: { packageId: string; documents: PackageDetail['documents'] }) {
   const { data, error } = useDerivedDeliveries(packageId, true);
   if (error || !data || data.length === 0) return null;
   const attention = data.filter((d) => d.status === 'ATTENTION_REQUIRED').length;
@@ -342,7 +343,8 @@ function DeliveriesSection({ packageId }: { packageId: string }) {
         {data.map((d) => (
           <li key={d.derivedDeliveryId} className="cf-doc">
             <span className="cf-doc-name">
-              <span>{d.destinationLabel || d.fileName || 'Destination'}</span>
+              {/* Task 0023 B4: never the file name; the document type or a short document id instead. */}
+              <span>{deliveryLabel(d, documents.find((doc) => doc.documentId === d.sourceDocumentId)?.documentType)}</span>
               <span className="cf-doc-meta">
                 {humanize(d.status)} · run {d.exportCycle}
                 {d.deliveredAt && <> · <time dateTime={d.deliveredAt}>{relativeTime(d.deliveredAt)}</time></>}

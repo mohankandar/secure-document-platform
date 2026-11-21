@@ -18,7 +18,6 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -125,17 +124,19 @@ public class PhysicalScannerAcquisitionAdapter implements ScannerAcquisitionAdap
             throw new ScanBridgeException("PHYSICAL_SCAN_FINALIZATION_FAILED",
                     "The physical scan could not be finalized safely.", HttpStatus.INTERNAL_SERVER_ERROR);
         } finally {
+            // Task 0023 B9 (#91): runs on every path; failures are logged with ids only (the folder is named by
+            // the session id), and the page-image delete carries on past a file it cannot remove.
             if (!ready) {
                 try { Files.deleteIfExists(finalPdf); }
                 catch (IOException ex) {
-                    log.warn("SCAN_BRIDGE_PHYSICAL_FAILED_PDF_CLEANUP_FAILED scannerId={} sessionId={}",
-                            properties.getScannerId(), session.sessionId());
+                    log.warn("SCAN_BRIDGE_PHYSICAL_FAILED_PDF_CLEANUP_FAILED scannerId={} sessionId={} exceptionType={}",
+                            properties.getScannerId(), session.sessionId(), ex.getClass().getSimpleName());
                 }
             }
-            try { deleteTree(captureDirectory); }
-            catch (RuntimeException ex) {
-                log.warn("SCAN_BRIDGE_PHYSICAL_TEMP_CLEANUP_FAILED scannerId={} sessionId={} exceptionType={}",
-                        properties.getScannerId(), session.sessionId(), ex.getClass().getSimpleName());
+            int notDeleted = FileScanSessionStore.deleteTreeBestEffort(captureDirectory);
+            if (notDeleted > 0) {
+                log.warn("SCAN_BRIDGE_PHYSICAL_TEMP_CLEANUP_FAILED scannerId={} sessionId={} entriesNotDeleted={}",
+                        properties.getScannerId(), session.sessionId(), notDeleted);
             }
         }
     }
@@ -219,11 +220,8 @@ public class PhysicalScannerAcquisitionAdapter implements ScannerAcquisitionAdap
     }
 
     private void deleteTree(Path directory) {
-        if (directory == null || !Files.exists(directory)) return;
-        try (var paths = Files.walk(directory)) {
-            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Unable to remove physical scanner temporary files", ex);
+        if (FileScanSessionStore.deleteTreeBestEffort(directory) > 0) {
+            throw new IllegalStateException("Unable to remove physical scanner temporary files");
         }
     }
 }

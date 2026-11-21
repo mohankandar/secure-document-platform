@@ -34,7 +34,7 @@ public class EnterpriseIdentityAdminController {
     public ResponseEntity<Overview> activateDraft(@RequestBody ActivationRequest body,HttpServletRequest request){
         if(body==null||!"ACTIVATE".equals(body.confirmation()))throw new IllegalArgumentException("Activation requires the exact confirmation value ACTIVATE.");
         var p=context.resolvePrincipal(request); ConnectionAdminView staged=repository.findStagedForTenant(p.tenantId().value()).orElseThrow(()->new IllegalArgumentException("No staged identity configuration is available to activate."));
-        if(!staged.connectionId().equals(body.connectionId()))throw new IllegalStateException("Activation target is not the current staged identity configuration.");
+        if(!staged.connectionId().equals(body.connectionId()))throw new com.securedoc.platform.application.exception.PersonFacingStateException("Activation target is not the current staged identity configuration.");
         try{
             var result=repository.activateValidated(p.tenantId().value(),body.connectionId(),body.expectedConfigurationVersion(),p.username());
             audit.recordSuccess(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ACTIVATED,"EnterpriseIdentityConnection",result.active().connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity connection activated: newVersion="+result.active().configurationVersion()+", previousConnection="+result.previousActive().connectionId()+", previousVersion="+result.previousActive().configurationVersion());
