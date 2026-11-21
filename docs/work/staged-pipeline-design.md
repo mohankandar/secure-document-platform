@@ -1,6 +1,6 @@
 # LexaVault staged processing pipeline (design)
 
-**Status:** approved 2026-11-21; updated the same day with the owner's later decisions (evidence-based pausing, retry schedule, retention per destination). Built so far: P1 (tasks 0027, 0028).
+**Status:** draft by the LexaVault design chat, 2026-11-21, for the owner's go-ahead.
 **Owner's approval:** approved (owner, 2026-11-21), all six decisions in section 12 as recommended.
 **Builds on:** the decisions recorded in `claude/Reports-Redesign.md` (export and retries, staged pipeline, priority and migration, all agreed 2026-11-20) and the error codes in `claude/LV-Error-Codes.md`.
 
@@ -53,13 +53,16 @@ When every document is redacted, the case is **Ready for export**, and one expor
 
 | Answer from the destination | Code | What LexaVault does |
 |---|---|---|
-| Can't connect, timeout, 429, 500, 502, 503 | LV-DLV-001, LV-DLV-002 | Try again **up to 3 times, 5 minutes apart**. If the destination keeps failing (**3 failures in a row across its cases**), **pause** that destination: its cases wait as Ready for export, consuming no attempts. LexaVault checks it every **5 minutes** and resumes **in order** when it answers. |
+| Can't connect, timeout, 500, 502, 503 | LV-DLV-001, LV-DLV-002 | **Decided by evidence, not by counting** (owner, 2026-11-21): LexaVault runs the destination's **health check** at once. **Check fails:** the destination is down: **pause** it, check every **5 minutes**, and **resume on its own, in order**, when it answers (no click needed). **Check passes:** it's this case: it retries on its own about **5 min, 15 min, 1 h, 4 h, 12 h** apart, is **rebuilt once** from the stored redacted copies before a later retry, and only then goes to IT. **Every destination fails its check at once:** it's LexaVault's own network; one alert "LexaVault can't reach its destinations", nothing paused or blamed. **Backup only:** several different cases failing in a short time while the check passes ("answering but failing", for example their storage is full) pauses the destination too. |
+| "Slow down" (429) | LV-DLV-002 | Not down: wait as long as it asks (Retry-After) and send fewer at once to that destination (learned, like the AI limit). No attempt used, no pause. |
 | "Already have it" (duplicate, 409 with the destination's duplicate code) | LV-DLV-009 | **Counts as exported.** Never retried. |
 | Refused the file or the level (other 4xx) | LV-DLV-004, LV-DLV-003 | No automatic retry. The case goes to **"Waiting for you"**. |
 | Refused LexaVault's sign-in (401, 403, missing credential) | LV-DLV-005 | Pause the destination (every case would fail) and put it in the **IT error queue**. |
 | Answer not understood, not every document confirmed | LV-DLV-007, LV-DLV-008 | Up to 3 tries, 5 minutes apart, then the IT error queue. |
 
-- **"Waiting for you":** a **Processor or Supervisor** resends, selecting many cases at once. **A resend is one attempt.** If it fails, the case goes to the **IT Administrator's error queue** (`LV-DLV-015`) with a **notification**. Notifications come from the shared notifications module; until it exists, Reports' "Needs attention" shows them.
+- **Resume:** automatic when the health check passes. IT presses "Set back to working" only after fixing LexaVault's sign-in to the destination (Needs IT), or to resume early.
+- **IT alerts are grouped:** one alert per destination and problem ("4 cases failing to Vero since 10:00") with one "Retry all", never one alert per case.
+- **"Waiting for you":** a **Processor** (and Supervisor) resends: one case from the case itself, or **"Resend all"** for a destination, which puts them back in the export queue to go out one by one. No per-row buttons. **Refusals are not retried automatically** (they'd be refused again until the destination is fixed). The exact screens are being designed (owner wants to see the UX first). **A resend is one attempt.** If it fails, the case goes to the **IT Administrator's error queue** (`LV-DLV-015`) with a **notification**. Notifications come from the shared notifications module; until it exists, Reports' "Needs attention" shows them.
 - **The same request each time:** every export carries a stable request id (case, run, destination), so a retry after a lost answer is recognised by the destination as the same request, not a second copy.
 - **Pause and resume** are audited, and Support shows a destination's state (Working / Paused since 10:42 / Needs IT).
 
@@ -119,6 +122,8 @@ When every document is redacted, the case is **Ready for export**, and one expor
 - **State** on the destination (Working / Paused / Needs IT) and when it was paused.
 - **Workers per stage** settings.
 - The existing package claim (the "lease") is replaced by the per-job claim. Existing cases are carried over at upgrade.
+- **Retention per destination** (owner, 2026-11-21): the main export and each split destination have their own retention period, set by the Business Admin (for example main copy 24 h, title company split copies 48 h). Each clock starts when that destination confirms receipt; nothing is deleted while its export job is open; the case is fully closed only when all its exports are done. Reports and audit keep the counts.
+- **Case status while exporting:** name to be chosen with the UX ("Exporting · ready / destination paused / waiting for you / needs IT" proposed).
 - **Clean-up** (owner, 2026-11-21): finished jobs are removed automatically after a set time (default 90 days, as long as Reports needs them). The audit trail keeps the permanent record.
 
 ## 11. How it's built (one task each, each proven end to end before the next)
