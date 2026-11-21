@@ -125,3 +125,9 @@ Nothing pushed.
 ## Suggested next step
 
 - Owner: run the step 0 merge, review, then merge `feature/0024-scan-bridge-retries` into R1B.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. **Spacing while waiting:** keep the growing interval (2 s up to 60 s, about 15 checks in 10 minutes).
+2. **What the person sees after the limit:** a dedicated sentence comes with the error codes: `LV-SCN-017` "Scan waiting too long for LexaVault" (task 0025).
+3. **`acceptancePendingSince` in the bridge's session response:** fine as is.
