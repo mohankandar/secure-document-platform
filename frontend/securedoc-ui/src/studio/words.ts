@@ -57,7 +57,7 @@ export const STAGE_NAMES: Record<StageWordKey, string> = {
   redacting: 'Redacting',
   review: 'Review',
   approval: 'Approval',
-  delivered: 'Delivered',
+  delivered: 'Exported',
   stopped: 'Stopped',
   unknown: 'Unrecognized',
 };

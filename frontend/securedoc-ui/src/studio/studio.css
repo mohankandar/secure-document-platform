@@ -273,11 +273,19 @@
 .cf-case {
   position: relative;
   display: grid; align-items: center; gap: 0;
-  /* Canvas .row: identifier 220, source 90, docs 80, next step (the rest), stage 150, time 80; the action column is 170. */
-  grid-template-columns: 220px 90px 80px minmax(0, 1fr) 150px 80px;
+  /* Canvas .row: identifier 220, source 90, docs 80, next step (the rest), stage, time 80; the action column is 170.
+     Task 0030: the stage column fits the longest status chip ("Exporting · destination paused") on one line; the next
+     step gives way (it ends in "…"). */
+  grid-template-columns: 220px 90px 80px minmax(0, 1fr) var(--cf-stage-col) 80px;
   padding: 8px 0 8px 22px; min-height: 64px; font-size: 14px;
 }
 .cf-case > * { min-width: 0; padding-right: 12px; }
+/* Task 0030: a status chip is never wrapped or cut; its column is wide enough for the longest one. */
+.cf-case { --cf-stage-col: 236px; }
+.cf-case-stage .cf-stage { white-space: nowrap; }
+/* With the case panel open the list is narrower: the source and docs columns give way to the stage. */
+.cf-desk.has-drawer .cf-case { grid-template-columns: 220px minmax(0, 1fr) var(--cf-stage-col) 80px; }
+.cf-desk.has-drawer .cf-case-source, .cf-desk.has-drawer .cf-case-docs { display: none; }
 .cf-case > .cf-case-flag { padding: 0; }
 .cf-case-flag { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
 .cf-case[data-you] .cf-case-flag { background: var(--cf-mark); }
@@ -611,7 +619,7 @@
   .cf-queue-case ul { flex-direction: row; }
   .cf-queue-item { white-space: nowrap; }
   .cf-drawer { width: 360px; }
-  .cf-case { grid-template-columns: 200px 80px minmax(0, 1fr) 140px 76px; }
+  .cf-case { grid-template-columns: 200px 80px minmax(0, 1fr) var(--cf-stage-col) 76px; }
   .cf-case-docs { display: none; }
   .cf-case-row { grid-template-columns: minmax(0, 1fr) 150px; }
   /* Below 1200 px (the documented breakpoint covering the spec's "below 1100 px") the find box is an icon button. */
@@ -824,7 +832,11 @@
 @media (pointer: coarse) {
   :is(.cf-wy, .cf-sx, .cf-ad-sheet) .cf-btn, .cf-sp-tabs a { min-height: 44px; }
 }
-/* The Cases stage column is 150 px: a long export status wraps inside its chip instead of running into the time. */
-.cf-case-stage .cf-stage[data-export] { white-space: normal; max-width: 100%; line-height: 1.25; align-items: flex-start; }
-.cf-case-stage .cf-stage[data-export] .cf-stage-dot { margin-top: 4px; }
 .cf-ad-sheet .cf-wy-reasons { padding: 12px 14px; margin: 0 0 12px; }
+/* Task 0030: at 1200 px and below, with the case panel open, a row is the identifier and the stage chip (the next step
+   under them), as below 1024 px, so the chip stays on one line and whole. */
+@media (max-width: 1200px) {
+  .cf-desk.has-drawer .cf-case { grid-template-columns: minmax(0, 1fr) auto; }
+  .cf-desk.has-drawer .cf-case-time { display: none; }
+  .cf-desk.has-drawer .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
+}

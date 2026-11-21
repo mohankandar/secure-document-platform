@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page, type Route } from '@playwright/test';
 import { crc32, deflateSync } from 'node:zlib';
 import { capabilitiesFor } from '../e2e-oidc/policyCapabilities';
-import { VAULT, exportApi, exportCases } from '../e2e-oidc/exportFixtures';
+import { VAULT, chipProblems, exportApi, exportCases, panelLineProblems } from '../e2e-oidc/exportFixtures';
 
 /**
  * UI task U021: the tablet-friendly screens work by touch in WebKit (Safari's engine) with iPad settings, at the five
@@ -619,4 +619,23 @@ test('Waiting for you (Supervisor): rows open the case by tap, Resend all asks a
   await expect(panel).toContainText('Document vault refused this case');
   await expectTappable(panel.getByRole('button', { name: 'Resend this case' }));
   expect(full.length).toBeGreaterThan(0);
+});
+
+/* ---------- Task 0030: status chips on one line; "Exported" for finished cases ---------- */
+
+test('Cases (Supervisor): every status chip is on one line and whole, with and without the case panel; finished cases read Exported', async ({ page }) => {
+  let full: Awaited<ReturnType<typeof exportRoutes>> = [];
+  await signInAs(page, ENTITY.roles, '/', async () => { full = await exportRoutes(page); });
+  const paused = full.find((c) => c.exportState === 'DESTINATION_PAUSED')!;
+  await expect(page.locator(`#cf-row-${paused.packageId} .cf-case-stage`)).toHaveText('Exporting · destination paused');
+  expect(await chipProblems(page)).toEqual([]);
+  expect(await sideways(page)).toBe(0);
+  await expect(page.locator('.cf-desk-main')).not.toContainText('Delivered');
+
+  await page.locator(`#cf-row-${paused.packageId} a.cf-case`).tap();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await expect(panel.locator('.cf-export-step .cf-eyebrow')).toHaveText('Exporting · destination paused');
+  expect(await chipProblems(page)).toEqual([]);
+  expect(await panelLineProblems(page)).toEqual([]);
+  expect(await sideways(page)).toBe(0);
 });

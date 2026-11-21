@@ -192,7 +192,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-CFG-002 | Case fields not set up | The entity needs active case fields with exactly one Primary. | Set-up | Business Admin | 400 | 301 |
 | LV-CFG-003 | Connection settings not valid | A connection's settings are missing, duplicated or not allowed (for example a private address). | Refused | IT Admin | 400 | 298, 305, 306, 311, 312 |
 | LV-CFG-004 | Connection test failed | Testing the connection failed; the details say at which step. | Set-up | IT Admin | — | 35, 179, 304, 307, 319 |
-| LV-CFG-005 | More than one Vero connection | Only one enabled Vero connection is allowed per entity. | Set-up | IT Admin | 409 | 313 |
+| LV-CFG-005 | More than one main export destination | Only one enabled main export destination is allowed per entity. | Set-up | IT Admin | 409 | 313 |
 | LV-CFG-006 | Split rule not valid | A split rule is incomplete, duplicated or points to a missing destination. | Refused | IT Admin | 400 | 299 |
 | LV-CFG-007 | Watched folder not set up for this entity | The watched folder belongs to another entity or isn't set up. | Set-up | IT Admin | 403 | 296, 297, 340 |
 | LV-CFG-008 | Login system settings not valid | The draft login settings are incomplete or failed their test. | Set-up | IT Admin | 400 | 240, 241 |

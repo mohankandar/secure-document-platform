@@ -10,14 +10,14 @@ import {
   usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
 } from './data';
 import {
-  CASE_EXPORT_WORDS, exportStateOf, exportStatusLabel, isExporting, jobForState, pausedHeading, refusedHeading,
+  CASE_EXPORT_WORDS, DESTINATION_CODE_LABEL, destinationCodeOf, exportStateOf, internalReasonOf, exportStatusLabel, isExporting, jobForState, pausedHeading, refusedHeading,
   refusedWhen, type ExportJobView, type ExportState,
 } from './exportRules';
 import { useToast } from './toast';
 import { CodeLabel, Notice, Spinner } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
-import { CASE_SECTIONS, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
+import { CASE_SECTIONS, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 import { deliveryLabel } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
 import { technicalProblemText, technicalReasonCode } from './support/supportRules';
@@ -150,7 +150,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 
 /**
  * The stage bar. Every label is a full stage name ("Stopped", "Rejected"), never a technical status. Task 0029: the bar
- * ends with an Exporting step; it reads "Delivered" once the case is delivered.
+ * ends with an Exporting step; it reads "Exported" once the case is exported (task 0030: one word for finished cases).
  */
 function Timeline({ stage, status, exporting }: { stage: StageKey; status: string; exporting: boolean }) {
   const stopped = stage === 'stopped';
@@ -318,7 +318,8 @@ function ExportStep({ state, jobs, caps, onChanged }: { state: ExportState; jobs
       {job && (
         <TechnicalDetails>
           <dl className="cf-tech-defs" data-testid="export-technical">
-            {job.detail && <div><dt>Destination’s answer</dt><dd className="cf-mono">{job.detail}</dd></div>}
+            {internalReasonOf(job.detail) && <div><dt>Reason</dt><dd className="cf-mono">{internalReasonOf(job.detail)}</dd></div>}
+            {destinationCodeOf(job.detail) && <div data-testid="export-destination-code"><dt>{DESTINATION_CODE_LABEL}</dt><dd className="cf-mono">{destinationCodeOf(job.detail)}</dd></div>}
             <div><dt>Attempts</dt><dd>{job.attempts}</dd></div>
             <div><dt>Export job</dt><dd className="cf-mono">{job.jobId}</dd></div>
           </dl>
@@ -361,7 +362,7 @@ function headingFor(stage: StageKey, status: string, openFindings: number, actio
       if (openFindings > 0) return `${openFindings} ${openFindings === 1 ? 'finding needs' : 'findings need'} a decision`;
       return 'No open findings in the current queue';
     case 'approval': return actionable ? 'Ready for your sign-off' : 'Waiting for sign-off';
-    case 'delivered': return life?.lastExportedAt ? `Delivered to ${destinationName(life.lastDestinationType)}` : 'Delivered';
+    case 'delivered': return life?.lastExportedAt ? `${STAGE_NAMES.delivered} to ${destinationName(life.lastDestinationType)}` : STAGE_NAMES.delivered;
     case 'stopped': return status === 'REJECTED' ? 'Not accepted at intake' : 'Processing stopped';
     default: return 'Status not recognised';
   }

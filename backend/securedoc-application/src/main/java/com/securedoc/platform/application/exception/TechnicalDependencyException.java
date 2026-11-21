@@ -22,6 +22,14 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     private final boolean rateLimited;
     /** Task 0028: the wait a 429 asked for (Retry-After); null when it gave none. */
     private final Duration retryAfter;
+    /**
+     * Task 0030: the destination's own error code from its answer (for example {@code SDV-SEN-006}), or null. Only a
+     * code that matches {@link #SAFE_DESTINATION_CODE} is kept; anything else is dropped, never stored or shown.
+     */
+    private final String destinationCode;
+
+    /** Task 0030: letters, digits, '-' and '_', 1 to 40 characters. */
+    public static final java.util.regex.Pattern SAFE_DESTINATION_CODE = java.util.regex.Pattern.compile("[A-Za-z0-9_-]{1,40}");
 
     public TechnicalDependencyException(TechnicalDependency dependency,
                                         TechnicalFailureCode failureCode,
@@ -45,7 +53,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                            String safeMessage,
                                            Throwable cause,
                                            LvErrorCode lvCode) {
-        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode, false, null);
+        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode, false, null, null);
     }
 
     private TechnicalDependencyException(TechnicalDependency dependency,
@@ -54,7 +62,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                          String safeMessage,
                                          Throwable cause,
                                          int attempts) {
-        this(dependency, failureCode, retryable, safeMessage, cause, attempts, null, false, null);
+        this(dependency, failureCode, retryable, safeMessage, cause, attempts, null, false, null, null);
     }
 
     private TechnicalDependencyException(TechnicalDependency dependency,
@@ -65,9 +73,11 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                          int attempts,
                                          LvErrorCode lvCode,
                                          boolean rateLimited,
-                                         Duration retryAfter) {
+                                         Duration retryAfter,
+                                         String destinationCode) {
         super(safeMessage, cause);
         this.lvCode = lvCode;
+        this.destinationCode = safeDestinationCode(destinationCode);
         this.dependency = Objects.requireNonNull(dependency);
         this.failureCode = Objects.requireNonNull(failureCode);
         this.retryable = retryable;
@@ -94,7 +104,8 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
 
     public TechnicalDependencyException withAttempts(int attemptCount) {
         return new TechnicalDependencyException(
-                dependency, failureCode, retryable, getMessage(), this, attemptCount, lvCode, rateLimited, retryAfter);
+                dependency, failureCode, retryable, getMessage(), this, attemptCount, lvCode, rateLimited, retryAfter,
+                destinationCode);
     }
 
     /**
@@ -103,7 +114,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
      */
     public TechnicalDependencyException withLvCode(LvErrorCode code) {
         return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
-                code, rateLimited, retryAfter);
+                code, rateLimited, retryAfter, destinationCode);
     }
 
     /**
@@ -113,7 +124,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     public TechnicalDependencyException asRateLimited(Duration wait) {
         Duration safeWait = wait == null || wait.isNegative() ? null : wait;
         return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
-                lvCode, true, safeWait);
+                lvCode, true, safeWait, destinationCode);
     }
 
     /** The precise LexaVault code, or {@code null}: then the code follows from {@link #failureCode()}. */
@@ -130,5 +141,24 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     /** Task 0028: the wait a 429 asked for (Retry-After), or null. */
     public Duration retryAfter() {
         return retryAfter;
+    }
+
+    /**
+     * Task 0030: the same failure with the destination's own error code from its answer. A code that is not safe
+     * (see {@link #SAFE_DESTINATION_CODE}) is dropped. The code, retry and message are unchanged.
+     */
+    public TechnicalDependencyException withDestinationCode(String code) {
+        return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
+                lvCode, rateLimited, retryAfter, code);
+    }
+
+    /** Task 0030: the destination's own code (safe pattern only), or null. */
+    public String destinationCode() {
+        return destinationCode;
+    }
+
+    /** Task 0030: the code when it matches the safe pattern, else null. */
+    public static String safeDestinationCode(String raw) {
+        return raw != null && SAFE_DESTINATION_CODE.matcher(raw).matches() ? raw : null;
     }
 }

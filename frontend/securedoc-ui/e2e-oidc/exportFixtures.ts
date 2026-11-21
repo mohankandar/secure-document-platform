@@ -37,8 +37,9 @@ const job = (jobId: string, c: ExportCase, over: Record<string, unknown>) => ({
 export function exportApi(cases: ExportCase[]) {
   const by = (loan: string) => cases.find((c) => c.loan === loan) as ExportCase;
   const vaultJobs = [
-    job('j-7004', by('LN-7004'), { since: minsAgo(50) }),
-    job('j-7011', by('LN-7011'), { since: minsAgo(35) }),
+    // Task 0030: the destination's own code after LexaVault's reason; j-7011's is not a safe code, so no screen shows it.
+    job('j-7004', by('LN-7004'), { since: minsAgo(50), detail: 'DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006' }),
+    job('j-7011', by('LN-7011'), { since: minsAgo(35), detail: 'DELIVERY_SENSITIVITY_REFUSED; destination=<b>SDV SEN 006</b>' }),
     job('j-6987', by('LN-6987'), { lvCode: 'LV-DLV-004', detail: 'DELIVERY_REJECTED', since: minsAgo(60 * 22) }),
   ];
   const split = by('LN-7002');
@@ -58,7 +59,7 @@ export function exportApi(cases: ExportCase[]) {
     total: 13,
     groups: [
       { destinationId: VAULT, destinationName: 'Document vault', lvCode: 'LV-DLV-007', count: 1, firstFailedAt: minsAgo(90), caseIds: [it.packageId],
-        jobs: [job('j-6990', it, { status: 'NEEDS_IT', lvCode: 'LV-DLV-007', detail: 'DELIVERY_IO', attempts: 6 })] },
+        jobs: [job('j-6990', it, { status: 'NEEDS_IT', lvCode: 'LV-DLV-007', detail: 'DELIVERY_IO; destination=SDV-SUB-017', attempts: 6 })] },
       { destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005', count: 1, firstFailedAt: minsAgo(30), caseIds: [split.packageId],
         jobs: [job('j-title-auth', split, { stage: 'SPLIT_EXPORT', status: 'NEEDS_IT', destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005' })] },
     ],
@@ -102,4 +103,36 @@ export function retentionSettings(master: number | null = null, title: number | 
       { destinationId: ARCHIVE, name: 'Archive service', setHours: null, hours: masterHours },
     ],
   };
+}
+
+/**
+ * Task 0030: every visible status chip in the Cases list is on one line and whole (not wrapped, not cut, inside its
+ * column), and no row scrolls sideways. Returns what is wrong, so a test can show it; empty when all is well.
+ */
+export async function chipProblems(page: import('@playwright/test').Page): Promise<string[]> {
+  return page.$$eval('.cf-case-stage .cf-stage', (chips) => chips.filter((c) => (c as HTMLElement).offsetParent !== null).flatMap((c) => {
+    const chip = c as HTMLElement;
+    const box = chip.getBoundingClientRect();
+    const style = getComputedStyle(chip);
+    const oneLine = parseFloat(style.fontSize) * 1.5 + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + 2;
+    const cell = chip.parentElement!.getBoundingClientRect();
+    const row = chip.closest('.cf-case') as HTMLElement;
+    const problems: string[] = [];
+    if (box.height > oneLine) problems.push(`"${chip.textContent}" is ${Math.round(box.height)} px high (one line is up to ${Math.round(oneLine)})`);
+    if (chip.scrollWidth > chip.clientWidth + 1) problems.push(`"${chip.textContent}" is cut`);
+    if (box.right > cell.right + 0.5) problems.push(`"${chip.textContent}" runs out of its column`);
+    if (row.scrollWidth > row.clientWidth + 1) problems.push(`the row of "${chip.textContent}" scrolls sideways`);
+    return problems;
+  }));
+}
+
+/** Task 0030: the case panel's export eyebrow and stage names are each on one line. */
+export async function panelLineProblems(page: import('@playwright/test').Page): Promise<string[]> {
+  return page.$$eval('.cf-drawer .cf-export-step .cf-eyebrow, .cf-drawer .cf-timeline-label', (els) => els.flatMap((e) => {
+    const el = e as HTMLElement;
+    const style = getComputedStyle(el);
+    const line = style.lineHeight === 'normal' ? parseFloat(style.fontSize) * 1.5 : parseFloat(style.lineHeight) * 1.2;
+    const h = el.getBoundingClientRect().height;
+    return h > line + 1 ? [`"${el.textContent}" is ${Math.round(h)} px high (one line is up to ${Math.round(line)})`] : [];
+  }));
 }

@@ -134,7 +134,7 @@ test('Columns on Cases: LexaVault columns by key in sentence case, case fields a
 
 test('Cases groups and case actions take their words from words.ts, not their own spelling (U018 follow-up)', () => {
   const desk = readFileSync(resolve(here, 'Desk.tsx'), 'utf8');
-  for (const word of ['Needs you', 'Stopped', 'Delivered']) {
+  for (const word of ['Needs you', 'Stopped', 'Delivered', 'Exported']) {
     assert.doesNotMatch(desk, new RegExp(`'${word}'|>${word}\b`), `Desk.tsx spells "${word}" itself`);
   }
   const data = readFileSync(resolve(here, 'data.ts'), 'utf8');

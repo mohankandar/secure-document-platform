@@ -4,8 +4,9 @@ import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { LV_CODES } from './lvErrorCodes.generated.ts';
+import { STAGE_NAMES } from './words.ts';
 import {
-  CASE_EXPORT_WORDS, EXPORT_STATES, RESEND_WORDS, SUPPORT_EXPORT_WORDS, WAITING_WORDS, dayAndTime, destinationKind,
+  CASE_EXPORT_WORDS, DESTINATION_CODE_LABEL, EXPORT_STATES, RESEND_WORDS, destinationCodeLine, destinationCodeOf, destinationCodesOf, internalReasonOf, SUPPORT_EXPORT_WORDS, WAITING_WORDS, dayAndTime, destinationKind,
   destinationStateWords, exportNeedsYou, exportStateOf, exportStatusLabel, exportTone, groupCount, groupKind, isExporting,
   itGroupTitle, jobForState, mostFrequentCode, reasonLabel, refusedHeading, refusedWhen, resendAllLabel, resendConfirmLabel,
   resendReasonLines, resendTitle, resendToast, retentionPlaceholder, retentionValueError, retryAllLabel, showWaitingNav,
@@ -150,9 +151,9 @@ test('0029: retention per destination: the default reads "Same as …"; 1 to 72 
 });
 
 test('0029: no screen says "Vero" (the destination is named by its connection)', () => {
-  // Known and pinned, so anything new fails: the registry title of LV-CFG-005 (generated from the backend; a question for
-  // the owner in report 0029) and a pattern in supportRules.ts that keeps a reason's leading product name (not words).
-  const known: Record<string, number> = { [join('studio', 'lvErrorCodes.generated.ts')]: 1, [join('studio', 'support', 'supportRules.ts')]: 1 };
+  // No screen word says "Vero" (0030: LV-CFG-005 is "More than one main export destination"). The one line pinned is a
+  // pattern in supportRules.ts that recognises a reason's leading product name; it is code, not a word on screen.
+  const known: Record<string, number> = { [join('studio', 'support', 'supportRules.ts')]: 1 };
   const root = resolve(here, '..');
   const found: Record<string, number> = {};
   const walk = (dir: string) => {
@@ -166,5 +167,44 @@ test('0029: no screen says "Vero" (the destination is named by its connection)',
   };
   walk(root);
   assert.deepEqual(found, known);
-  assert.match(readFileSync(join(here, 'lvErrorCodes.generated.ts'), 'utf8').split('\n').find((l) => /\bVero\b/.test(l)) ?? '', /'LV-CFG-005'/);
+  assert.equal(LV_CODES['LV-CFG-005'].title, 'More than one main export destination');
+  assert.equal(LV_CODES['LV-CFG-005'].description, 'Only one enabled main export destination is allowed per entity.');
+});
+
+test('0030: the destination’s own code is read from the job’s detail; only a safe code is shown', () => {
+  assert.equal(internalReasonOf('DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006'), 'DELIVERY_SENSITIVITY_REFUSED');
+  assert.equal(destinationCodeOf('DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006'), 'SDV-SEN-006');
+  assert.equal(destinationCodeLine('SDV-SEN-006'), 'Destination code SDV-SEN-006');
+  assert.equal(DESTINATION_CODE_LABEL, 'Destination code');
+  // No code, or a detail from before task 0030: the reason alone.
+  assert.equal(internalReasonOf('DELIVERY_IO'), 'DELIVERY_IO');
+  assert.equal(destinationCodeOf('DELIVERY_IO'), null);
+  for (const empty of [null, undefined, '']) {
+    assert.equal(internalReasonOf(empty), null);
+    assert.equal(destinationCodeOf(empty), null);
+  }
+  // Not a safe code (letters, digits, '-', '_', up to 40): dropped.
+  for (const unsafe of ['<b>SDV</b>', 'SDV SEN 006', 'SDV-SEN-006;x', 'A'.repeat(41), '', 'ÄBC', 'a/b']) {
+    assert.equal(destinationCodeOf(`DELIVERY_SENSITIVITY_REFUSED; destination=${unsafe}`), null, unsafe);
+    assert.equal(internalReasonOf(`DELIVERY_SENSITIVITY_REFUSED; destination=${unsafe}`), 'DELIVERY_SENSITIVITY_REFUSED', unsafe);
+  }
+  assert.equal(destinationCodeOf(`R; destination=${'A'.repeat(40)}`), 'A'.repeat(40));
+  // A group's codes, each once, in the order met.
+  assert.deepEqual(destinationCodesOf([
+    job({ detail: 'DELIVERY_IO; destination=SDV-SUB-017' }), job({ detail: 'DELIVERY_IO' }),
+    job({ detail: 'DELIVERY_IO; destination=SDV-SUB-017' }), job({ detail: 'DELIVERY_IO; destination=SDV-SUB-018' }),
+    job({ detail: 'DELIVERY_IO; destination=<x>' }),
+  ]), ['SDV-SUB-017', 'SDV-SUB-018']);
+});
+
+test('0030: one word for finished cases: "Exported" (the stage, the chip, the stage tile, the Cases groups)', () => {
+  assert.equal(STAGE_NAMES.delivered, 'Exported');
+  assert.equal(exportStatusLabel('EXPORTED'), 'Exported');
+  const studio = resolve(here);
+  const data = readFileSync(join(studio, 'data.ts'), 'utf8');
+  assert.doesNotMatch(data, /label: 'Delivered'/);
+  for (const file of ['Desk.tsx', 'CaseDrawer.tsx', 'atoms.tsx', 'data.ts']) {
+    const text = readFileSync(join(studio, file), 'utf8');
+    assert.doesNotMatch(text, /'Delivered|`Delivered|>Delivered|\bdelivered<\/|\} delivered\b/, `${file} still names a finished case "Delivered"`);
+  }
 });

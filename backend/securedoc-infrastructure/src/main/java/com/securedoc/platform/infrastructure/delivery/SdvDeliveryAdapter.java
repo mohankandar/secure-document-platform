@@ -321,16 +321,31 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             return;
         }
         if (code != null && code.startsWith(SDV_SENSITIVITY_CODE_PREFIX)) {
-            throw failure(TechnicalFailureCode.DELIVERY_SENSITIVITY_REFUSED, false, message, null);
+            // Task 0030: the destination's own code goes with the failure (dropped when not a safe code).
+            throw failure(TechnicalFailureCode.DELIVERY_SENSITIVITY_REFUSED, false, message, null)
+                    .withDestinationCode(code);
         }
     }
 
-    /** Task 0028: as below, and a 429 is marked with its Retry-After (behaviour otherwise unchanged). */
+    /**
+     * Task 0028: as below, and a 429 is marked with its Retry-After (behaviour otherwise unchanged). Task 0030: the
+     * destination's own code from the answer's {@code code} field goes with the failure.
+     */
     private void require2xx(HttpResponse<?> response, boolean retryable, String message) {
         try {
             require2xx(response.statusCode(), retryable, message);
         } catch (TechnicalDependencyException e) {
-            throw RetryAfter.mark(e, response);
+            throw RetryAfter.mark(e, response).withDestinationCode(destinationCode(response));
+        }
+    }
+
+    /** Task 0030: the {@code code} field of a JSON answer, or null when there is none or it can't be read. */
+    private String destinationCode(HttpResponse<?> response) {
+        if (!(response.body() instanceof String body) || body.isBlank()) return null;
+        try {
+            return text(mapper.readTree(body), "code");
+        } catch (Exception unreadable) {
+            return null;
         }
     }
 

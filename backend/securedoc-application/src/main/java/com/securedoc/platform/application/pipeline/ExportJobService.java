@@ -622,10 +622,28 @@ public final class ExportJobService {
         return Outcome.done(false);
     }
 
+    /** Task 0030: what {@code last_detail} holds after the internal reason: "; destination=" and the destination's code. */
+    public static final String DESTINATION_CODE_PREFIX = "; destination=";
+    /** {@code pipeline_jobs.last_detail} is VARCHAR(80). */
+    static final int LAST_DETAIL_MAX = 80;
+
+    /**
+     * Task 0030: LexaVault's internal reason, then the destination's own code (for example
+     * {@code DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006}). The code is checked again against the safe
+     * pattern; it is dropped (the reason alone is kept) when it is not safe or the whole would not fit the column.
+     */
+    static String withDestinationCode(String reason, String destinationCode) {
+        String safe = TechnicalDependencyException.safeDestinationCode(destinationCode);
+        if (safe == null) return reason;
+        String detail = reason + DESTINATION_CODE_PREFIX + safe;
+        return detail.length() <= LAST_DETAIL_MAX ? detail : reason;
+    }
+
     static Outcome classify(Throwable failure) {
         LvErrorCode code = LvErrorCodes.of(failure);
         String detail = failure instanceof TechnicalDependencyException technical
-                ? technical.failureCode().name() : failure.getClass().getSimpleName();
+                ? withDestinationCode(technical.failureCode().name(), technical.destinationCode())
+                : failure.getClass().getSimpleName();
         if (failure instanceof TechnicalDependencyException technical && technical.rateLimited()) {
             return new Outcome(Kind.RATE_LIMITED, code, RATE_LIMITED, failure, false, technical.retryAfter());
         }

@@ -228,6 +228,8 @@ final class ExportJobFixture {
     static final class FakeDestination implements DeliveryPort {
         final IntegrationConnectionId id = IntegrationConnectionId.generate();
         volatile LvErrorCode failWith;
+        /** Task 0030: the destination's own code its refusal carries (null: none). */
+        volatile String destinationCode;
         volatile boolean answerAlreadyReceived;
         volatile boolean stopServerOnNextCall;
         volatile boolean probeAnswers = true;
@@ -265,7 +267,7 @@ final class ExportJobFixture {
                 rateLimitCalls--;
                 throw failure(LvErrorCode.DLV_002).asRateLimited(retryAfter);
             }
-            if (failWith != null) throw failure(failWith);
+            if (failWith != null) throw failure(failWith).withDestinationCode(destinationCode);
             if (stored.add(batch.sourceSubmissionId())) deliveredInOrder.add(batch.packageId());
             List<DeliveryReference> refs = batch.items().stream().map(item -> new DeliveryReference(item.documentId(),
                     item.sourceDocumentId(), "sdv", "remote-" + item.sourceDocumentId(), "sdv://remote")).toList();

@@ -255,6 +255,47 @@ export const CASE_EXPORT_WORDS = {
   refusedAgain: 'The destination refused it again, so it went to IT',
 } as const;
 
+/* ---------- Task 0030: the destination's own code, under Technical details ---------- */
+
+/** The job's stored detail is LexaVault's reason, then "; destination=" and the destination's code (backend task 0030). */
+const DESTINATION_CODE_PREFIX = '; destination=';
+/** The same safe pattern as the backend: letters, digits, '-' and '_', 1 to 40 characters. */
+const SAFE_DESTINATION_CODE = /^[A-Za-z0-9_-]{1,40}$/;
+
+/** LexaVault's internal reason (for example DELIVERY_SENSITIVITY_REFUSED), or null. */
+export function internalReasonOf(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  const at = detail.indexOf(DESTINATION_CODE_PREFIX);
+  const reason = (at < 0 ? detail : detail.slice(0, at)).trim();
+  return reason || null;
+}
+
+/** The destination's own code (for example SDV-SEN-006), or null when there is none or it is not a safe code. */
+export function destinationCodeOf(detail: string | null | undefined): string | null {
+  if (!detail) return null;
+  const at = detail.indexOf(DESTINATION_CODE_PREFIX);
+  if (at < 0) return null;
+  const code = detail.slice(at + DESTINATION_CODE_PREFIX.length);
+  return SAFE_DESTINATION_CODE.test(code) ? code : null;
+}
+
+export const DESTINATION_CODE_LABEL = 'Destination code';
+
+/** "Destination code SDV-SEN-006". */
+export function destinationCodeLine(code: string): string {
+  return `${DESTINATION_CODE_LABEL} ${code}`;
+}
+
+/** The distinct destination codes of a group's jobs, in the order first met. */
+export function destinationCodesOf(jobs: readonly ExportJobView[]): string[] {
+  const codes: string[] = [];
+  for (const job of jobs) {
+    const code = destinationCodeOf(job.detail);
+    if (code && !codes.includes(code)) codes.push(code);
+  }
+  return codes;
+}
+
 export function refusedHeading(destination: string | null | undefined): string {
   return `${destinationLabel(destination)} refused this case`;
 }
