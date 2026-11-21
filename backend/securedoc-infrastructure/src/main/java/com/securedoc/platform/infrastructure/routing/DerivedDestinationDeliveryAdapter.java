@@ -59,7 +59,8 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
         addMetadataHeader(b,SENSITIVITY_HEADER,r.metadata().get(DerivedDestinationDeliveryPort.SENSITIVITY_LEVEL));
         addMetadataHeader(b,CASE_SENSITIVITY_HEADER,r.metadata().get(DerivedDestinationDeliveryPort.CASE_SENSITIVITY_LEVEL));
         HttpResponse<String> resp=send(b.POST(HttpRequest.BodyPublishers.ofInputStream(r.contentSource()::open)).build(),HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        require2xx(resp.statusCode(),"Derived HTTP delivery failed");
+        try{ require2xx(resp.statusCode(),"Derived HTTP delivery failed"); }
+        catch(TechnicalDependencyException e){ throw com.securedoc.platform.infrastructure.delivery.RetryAfter.mark(e,resp); } // task 0028: a 429 keeps its Retry-After
         String ref=null;
         try{
             if(resp.body()!=null&&!resp.body().isBlank()){

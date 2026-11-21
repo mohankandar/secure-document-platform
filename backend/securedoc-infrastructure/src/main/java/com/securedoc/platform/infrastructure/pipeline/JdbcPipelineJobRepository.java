@@ -18,6 +18,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -34,7 +35,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     static final String COLUMNS = """
             id, tenant_id, stage, package_id, document_id, destination_id, item_id, export_cycle, priority, status,
             attempts, next_attempt_at, claim_owner, claim_until, claim_token, last_lv_code, last_detail,
-            created_at, updated_at""";
+            created_at, updated_at, resend, rebuilt, claim_expiries, first_failed_at, last_failed_at""";
 
     private static final String ENQUEUE_SQL = """
             INSERT INTO pipeline_jobs
@@ -56,9 +57,11 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                    AND j.status IN ('READY', 'WAITING_RETRY')
                    AND j.next_attempt_at <= clock_timestamp()
                    AND (d.state IS NULL OR d.state = 'WORKING')
+                   AND (d.rate_limited_until IS NULL OR d.rate_limited_until <= clock_timestamp())
                    AND (j.destination_id IS NULL OR (
                         SELECT count(*) FROM pipeline_jobs r
-                         WHERE r.destination_id = j.destination_id AND r.status = 'RUNNING') < :perDestination)
+                         WHERE r.destination_id = j.destination_id AND r.status = 'RUNNING')
+                        < GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)))
                  ORDER BY CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
                           j.created_at, j.id
                  LIMIT 1
@@ -108,15 +111,21 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                    claim_until = NULL,
                    last_lv_code = :lvCode,
                    last_detail = :detail,
+                   resend = :resend,
+                   rebuilt = rebuilt OR :rebuilt,
+                   first_failed_at = CASE WHEN :failed THEN COALESCE(first_failed_at, clock_timestamp())
+                                          ELSE first_failed_at END,
+                   last_failed_at = CASE WHEN :failed THEN clock_timestamp() ELSE last_failed_at END,
                    updated_at = clock_timestamp()
              WHERE id = :id AND claim_token = :token AND status = 'RUNNING' AND claim_until > clock_timestamp()
             """;
 
     static final String RELEASE_EXPIRED_SQL = """
             UPDATE pipeline_jobs
-               SET status = CASE WHEN attempts + 1 >= :maxAttempts THEN 'NEEDS_IT' ELSE 'READY' END,
+               SET status = CASE WHEN claim_expiries + 1 >= :maxAttempts THEN 'NEEDS_IT' ELSE 'READY' END,
                    attempts = attempts + 1,
-                   last_lv_code = CASE WHEN attempts + 1 >= :maxAttempts THEN :exhaustedCode ELSE last_lv_code END,
+                   claim_expiries = claim_expiries + 1,
+                   last_lv_code = CASE WHEN claim_expiries + 1 >= :maxAttempts THEN :exhaustedCode ELSE last_lv_code END,
                    last_detail = 'CLAIM_EXPIRED',
                    claim_owner = NULL,
                    claim_until = NULL,
@@ -136,6 +145,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                    attempts = :attempts,
                    last_lv_code = :lvCode,
                    last_detail = :detail,
+                   resend = false,
                    next_attempt_at = clock_timestamp(),
                    claim_owner = NULL,
                    claim_until = NULL,
@@ -147,6 +157,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             UPDATE pipeline_jobs
                SET status = 'READY', next_attempt_at = clock_timestamp(), updated_at = clock_timestamp()
              WHERE tenant_id = :tenantId AND destination_id = :destinationId AND status = 'WAITING_RETRY'
+               AND last_detail IN ('DESTINATION_PAUSED', 'DESTINATIONS_UNREACHABLE')
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -233,16 +244,18 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     }
 
     @Override
-    public boolean finish(UUID id, long claimToken, PipelineJobStatus status, int attempts, Duration retryDelay,
-                          String lastLvCode, String lastDetail) {
+    public boolean finish(UUID id, long claimToken, Finish result) {
         var params = new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("token", claimToken)
-                .addValue("status", status.name())
-                .addValue("attempts", attempts)
-                .addValue("delayMillis", retryDelay == null ? 0L : Math.max(0L, retryDelay.toMillis()))
-                .addValue("lvCode", lastLvCode)
-                .addValue("detail", lastDetail);
+                .addValue("status", result.status().name())
+                .addValue("attempts", result.attempts())
+                .addValue("delayMillis", result.retryDelay() == null ? 0L : Math.max(0L, result.retryDelay().toMillis()))
+                .addValue("lvCode", result.lastLvCode())
+                .addValue("detail", result.lastDetail())
+                .addValue("resend", result.resend())
+                .addValue("rebuilt", result.rebuilt())
+                .addValue("failed", result.failed());
         return jdbc.update(FINISH_SQL, params) == 1;
     }
 
@@ -276,6 +289,73 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
         return jdbc.update(MAKE_DUE_SQL, params);
     }
 
+    private static final String NETWORK_DUE_SQL = """
+            UPDATE pipeline_jobs
+               SET status = 'READY', next_attempt_at = clock_timestamp(), updated_at = clock_timestamp()
+             WHERE tenant_id = :tenantId AND status = 'WAITING_RETRY' AND last_detail = 'DESTINATIONS_UNREACHABLE'
+            """;
+
+    static final String RESEND_ALL_SQL = """
+            UPDATE pipeline_jobs
+               SET status = 'READY', resend = true, next_attempt_at = clock_timestamp(), updated_at = clock_timestamp()
+             WHERE tenant_id = :tenantId AND destination_id = :destinationId AND status = 'WAITING_FOR_YOU'
+            RETURNING id, created_at
+            """;
+
+    static final String RECENT_FAILING_CASES_SQL = """
+            SELECT count(DISTINCT package_id) FROM pipeline_jobs
+             WHERE tenant_id = :tenantId AND destination_id = :destinationId
+               AND last_failed_at >= clock_timestamp() - (:withinMillis * interval '1 millisecond')
+            """;
+
+    @Override
+    public List<PipelineJob> findExportJobsByPackageIds(TenantId tenantId, Collection<PackageId> packageIds) {
+        if (packageIds == null || packageIds.isEmpty()) return List.of();
+        var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
+                .addValue("packageIds", packageIds.stream().map(PackageId::value).distinct().toList());
+        return jdbc.query("SELECT " + COLUMNS + " FROM pipeline_jobs WHERE tenant_id = :tenantId"
+                + " AND package_id IN (:packageIds) AND stage IN ('EXPORT', 'SPLIT_EXPORT')"
+                + " ORDER BY created_at, id", params, JdbcPipelineJobRepository::map);
+    }
+
+    @Override
+    public int makeNetworkWaitersDueNow(TenantId tenantId) {
+        return jdbc.update(NETWORK_DUE_SQL, new MapSqlParameterSource("tenantId", tenantId.value()));
+    }
+
+    @Override
+    public List<UUID> resendAll(TenantId tenantId, IntegrationConnectionId destinationId) {
+        var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
+                .addValue("destinationId", destinationId.value());
+        record Row(UUID id, Instant createdAt) { }
+        return jdbc.query(RESEND_ALL_SQL, params, (rs, n) -> new Row(rs.getObject("id", UUID.class),
+                        instant(rs.getTimestamp("created_at")))).stream()
+                .sorted(java.util.Comparator.comparing(Row::createdAt).thenComparing(Row::id))
+                .map(Row::id).toList();
+    }
+
+    @Override
+    public int countRecentlyFailingCases(TenantId tenantId, IntegrationConnectionId destinationId, Duration within) {
+        var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
+                .addValue("destinationId", destinationId.value())
+                .addValue("withinMillis", Math.max(0L, within.toMillis()));
+        Integer count = jdbc.queryForObject(RECENT_FAILING_CASES_SQL, params, Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    @Override
+    public int countNeedsIt(TenantId tenantId, IntegrationConnectionId destinationId, String lvCode, UUID exceptJobId) {
+        var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
+                .addValue("destinationId", destinationId == null ? null : destinationId.value())
+                .addValue("lvCode", lvCode)
+                .addValue("exceptId", exceptJobId);
+        String destination = destinationId == null ? "destination_id IS NULL" : "destination_id = :destinationId";
+        Integer count = jdbc.queryForObject("SELECT count(*) FROM pipeline_jobs WHERE tenant_id = :tenantId AND "
+                + destination + " AND status = 'NEEDS_IT' AND last_lv_code = :lvCode AND id <> :exceptId",
+                params, Integer.class);
+        return count == null ? 0 : count;
+    }
+
     private static long leaseMillis(Duration lease) {
         return Math.max(1000L, lease.toMillis());
     }
@@ -302,7 +382,12 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 rs.getString("last_lv_code"),
                 rs.getString("last_detail"),
                 instant(rs.getTimestamp("created_at")),
-                instant(rs.getTimestamp("updated_at")));
+                instant(rs.getTimestamp("updated_at")),
+                rs.getBoolean("resend"),
+                rs.getBoolean("rebuilt"),
+                rs.getInt("claim_expiries"),
+                instant(rs.getTimestamp("first_failed_at")),
+                instant(rs.getTimestamp("last_failed_at")));
     }
 
     private static Instant instant(Timestamp value) {

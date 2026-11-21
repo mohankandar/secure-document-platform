@@ -1069,11 +1069,29 @@ public class ApplicationServiceConfig {
             StoragePort storagePort,
             AuditService auditService,
             ProcessingIncidentService processingIncidentService,
-            ProductTelemetryService productTelemetryService) {
+            ProductTelemetryService productTelemetryService,
+            com.securedoc.platform.application.lifecycle.service.ExportRetentionService exportRetentionService) {
         return new PackageLifecycleService(tenantLifecyclePolicyRepository, packageLifecycleRepository,
                 packageExportRecordRepository, packageRepository, packageDashboardVisibilityPort,
                 documentRepository, artifactRepository, storagePort, auditService, processingIncidentService,
-                productTelemetryService);
+                productTelemetryService, exportRetentionService);
+    }
+
+    /** Task 0028: retention per export destination (master and each split destination), set by the Business Admin. */
+    @Bean
+    public com.securedoc.platform.application.lifecycle.service.ExportRetentionService exportRetentionService(
+            com.securedoc.platform.application.port.out.ExportRetentionRepository exportRetentionRepository,
+            com.securedoc.platform.application.port.out.PipelineJobRepository pipelineJobRepository,
+            com.securedoc.platform.application.port.out.DerivedDeliveryRepository derivedDeliveryRepository,
+            ArtifactRepository artifactRepository,
+            com.securedoc.platform.application.port.out.SplitCopyRetentionPort splitCopyRetentionPort,
+            IntegrationConnectionRepository integrationConnectionRepository,
+            TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
+            AuditService auditService) {
+        return new com.securedoc.platform.application.lifecycle.service.ExportRetentionService(
+                exportRetentionRepository, pipelineJobRepository, derivedDeliveryRepository, artifactRepository,
+                splitCopyRetentionPort, integrationConnectionRepository, tenantLifecyclePolicyRepository,
+                auditService);
     }
 
     // --- Package finalization ---
@@ -1141,12 +1159,24 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.probe-interval-ms:300000}") long probeIntervalMs,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.claim-lease-ms:120000}") long claimLeaseMs,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-per-destination:4}") int workersPerDestination,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-total:8}") int workersTotal) {
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-total:8}") int workersTotal,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.retry-schedule:5m,15m,1h,4h,12h}") String retrySchedule,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.rebuild-before-retry:3}") int rebuildBeforeRetry,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.failing-cases-to-pause:3}") int failingCasesToPause,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.failing-cases-window-ms:600000}") long failingCasesWindowMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.rate-limit-default-wait-ms:60000}") long rateLimitDefaultWaitMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.rate-limit-recovery-ms:600000}") long rateLimitRecoveryMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.all-unreachable-window-ms:120000}") long allUnreachableWindowMs) {
+        // Task 0028: retry-delay-ms and pause-after-failures are still read (and checked) but no longer used.
         return new com.securedoc.platform.application.pipeline.ExportJobSettings(
                 com.securedoc.platform.application.pipeline.ExportMode.parse(exportMode),
                 java.time.Duration.ofMillis(retryDelayMs), maxAttempts, pauseAfterFailures,
                 java.time.Duration.ofMillis(probeIntervalMs), java.time.Duration.ofMillis(claimLeaseMs),
-                workersPerDestination, workersTotal);
+                workersPerDestination, workersTotal,
+                com.securedoc.platform.application.pipeline.ExportJobSettings.parseSchedule(retrySchedule),
+                rebuildBeforeRetry, failingCasesToPause, java.time.Duration.ofMillis(failingCasesWindowMs),
+                java.time.Duration.ofMillis(rateLimitDefaultWaitMs), java.time.Duration.ofMillis(rateLimitRecoveryMs),
+                java.time.Duration.ofMillis(allUnreachableWindowMs));
     }
 
     @Bean
@@ -1159,13 +1189,22 @@ public class ApplicationServiceConfig {
                 auditService, exportJobSettings, java.time.Clock.systemUTC());
     }
 
-    /** Task 0027: a paused destination is probed with the existing connection test for its kind. */
+    /**
+     * Task 0027: a paused destination is probed with the existing connection test for its kind. Task 0028: the same
+     * check runs at once on a connection failure; the local export folder (its derived id) writes and deletes a test
+     * file.
+     */
     @Bean
     public com.securedoc.platform.application.port.out.ExportDestinationProbePort exportDestinationProbePort(
             IntegrationConnectionRepository integrationConnectionRepository,
             org.springframework.beans.factory.ObjectProvider<SdvConnectionTestPort> sdvConnectionTestPort,
-            DerivedDestinationDeliveryPort derivedDestinationDeliveryPort) {
+            DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
+            DeliveryPort deliveryPort) {
         return (tenantId, connectionId) -> {
+            if (com.securedoc.platform.domain.pipeline.ExportDestinations.isLocalFolder(tenantId, connectionId)) {
+                deliveryPort.checkDestination(tenantId);
+                return;
+            }
             var connection = integrationConnectionRepository.findByTenantIdAndId(tenantId, connectionId)
                     .orElseThrow(() -> new com.securedoc.platform.application.exception.NotFoundException(
                             "IntegrationConnection", connectionId.value().toString()));
@@ -1194,14 +1233,17 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             com.securedoc.platform.application.port.out.ExportDestinationProbePort exportDestinationProbePort,
             IntegrationConnectionRepository integrationConnectionRepository,
-            com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings) {
+            com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings,
+            com.securedoc.platform.application.port.out.ExportReachabilityAlertRepository exportReachabilityAlertRepository,
+            com.securedoc.platform.application.port.in.RebuildPackageExportUseCase rebuildPackageExportUseCase,
+            com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue) {
         return new com.securedoc.platform.application.pipeline.ExportJobService(pipelineJobRepository,
-                exportDestinationStateRepository, exportPackageDocumentsUseCase, derivedDeliveryService,
-                packageRepository, packageLifecycleService,
+                exportDestinationStateRepository, exportReachabilityAlertRepository, exportPackageDocumentsUseCase,
+                rebuildPackageExportUseCase, derivedDeliveryService, packageRepository, packageLifecycleService,
                 new com.securedoc.platform.application.pipeline.MasterExportCompletion(packageRepository,
                         processDerivedRoutingUseCase, processingIncidentService, auditService),
                 processingIncidentService, auditService, exportDestinationProbePort, integrationConnectionRepository,
-                exportJobSettings);
+                exportJobQueue, exportJobSettings, java.time.Clock.systemUTC());
     }
 
 
@@ -1268,6 +1310,16 @@ public class ApplicationServiceConfig {
             AuditService auditService) {
         return new PackageDocumentExportService(documentRepository, packageRepository, businessRecordRepository,
                 artifactRepository, storagePort, deliveryPort, deliverySubmissionRepository, packageLifecycleService, auditService);
+    }
+
+    /** Task 0028: the export job's one rebuild, done by the same export service that owns the idempotency identities. */
+    @Bean
+    public com.securedoc.platform.application.port.in.RebuildPackageExportUseCase rebuildPackageExportUseCase(
+            ExportPackageDocumentsUseCase exportPackageDocumentsUseCase) {
+        if (exportPackageDocumentsUseCase instanceof com.securedoc.platform.application.port.in.RebuildPackageExportUseCase rebuild) {
+            return rebuild;
+        }
+        throw new IllegalStateException("The export service can't rebuild an export");
     }
 
 

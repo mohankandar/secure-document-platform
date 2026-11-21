@@ -133,6 +133,19 @@ public class ExportJobWorkers {
             log.warn("EXPORT_DESTINATION_PROBE_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());
         }
+        // Task 0028: "can't reach its destinations" is checked again every probe interval; 429 workers come back.
+        try {
+            service.checkUnreachableAlerts();
+        } catch (RuntimeException failure) {
+            log.warn("EXPORT_ALERT_CHECK_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
+                    LvErrorCodes.forPlatformFailure(failure).code());
+        }
+        try {
+            service.restoreWorkers();
+        } catch (RuntimeException failure) {
+            log.warn("EXPORT_WORKER_RESTORE_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
+                    LvErrorCodes.forPlatformFailure(failure).code());
+        }
     }
 
     private void sleepQuietly() {

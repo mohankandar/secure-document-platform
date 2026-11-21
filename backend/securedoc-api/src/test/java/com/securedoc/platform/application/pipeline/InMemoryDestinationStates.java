@@ -7,6 +7,7 @@ import com.securedoc.platform.domain.pipeline.DestinationState;
 import com.securedoc.platform.domain.pipeline.ExportDestinationStatus;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,18 @@ final class InMemoryDestinationStates implements ExportDestinationStateRepositor
         return s == null ? DestinationState.WORKING : s.state();
     }
 
+    synchronized ExportDestinationStatus rowOf(IntegrationConnectionId id) {
+        return rows.get(id.value());
+    }
+
+    private static ExportDestinationStatus with(ExportDestinationStatus s, DestinationState state, Instant pausedAt,
+                                                int failures, Instant lastProbeAt, String code, Instant updatedAt,
+                                                Instant rateLimitedUntil, int reduction, Instant lastRateLimitedAt,
+                                                Instant lastCheckFailedAt) {
+        return new ExportDestinationStatus(s.tenantId(), s.connectionId(), state, pausedAt, failures, lastProbeAt, code,
+                updatedAt, rateLimitedUntil, reduction, lastRateLimitedAt, lastCheckFailedAt);
+    }
+
     @Override
     public synchronized Optional<ExportDestinationStatus> find(TenantId tenantId, IntegrationConnectionId connectionId) {
         return Optional.ofNullable(rows.get(connectionId.value())).filter(s -> s.tenantId().equals(tenantId));
@@ -41,22 +54,16 @@ final class InMemoryDestinationStates implements ExportDestinationStateRepositor
     @Override
     public synchronized TransientFailure recordTransientFailure(TenantId tenantId, IntegrationConnectionId connectionId,
                                                                 int pauseThreshold, String lvCode) {
-        ExportDestinationStatus s = row(tenantId, connectionId);
-        int failures = s.consecutiveFailures() + 1;
-        boolean pause = s.state() == DestinationState.WORKING && failures >= pauseThreshold;
-        DestinationState state = pause ? DestinationState.PAUSED : s.state();
-        rows.put(connectionId.value(), new ExportDestinationStatus(tenantId, connectionId, state,
-                pause ? clock.instant() : s.pausedAt(), failures, pause ? clock.instant() : s.lastProbeAt(), lvCode,
-                clock.instant()));
-        return new TransientFailure(failures, pause, state);
+        throw new AssertionError("task 0028 no longer pauses by counting failures in a row");
     }
 
     @Override
     public synchronized void resetFailures(TenantId tenantId, IntegrationConnectionId connectionId) {
         ExportDestinationStatus s = rows.get(connectionId.value());
         if (s == null) return;
-        rows.put(connectionId.value(), new ExportDestinationStatus(tenantId, connectionId, s.state(), s.pausedAt(), 0,
-                s.lastProbeAt(), s.lastLvCode(), clock.instant()));
+        rows.put(connectionId.value(), with(s, s.state(), s.pausedAt(), 0, s.lastProbeAt(), s.lastLvCode(),
+                clock.instant(), s.rateLimitedUntil(), s.workerReduction(), s.lastRateLimitedAt(),
+                s.lastCheckFailedAt()));
     }
 
     @Override
@@ -64,11 +71,12 @@ final class InMemoryDestinationStates implements ExportDestinationStateRepositor
                                            Set<DestinationState> from, DestinationState to, String lvCode) {
         ExportDestinationStatus s = row(tenantId, connectionId);
         if (!from.contains(s.state())) return false;
-        rows.put(connectionId.value(), new ExportDestinationStatus(tenantId, connectionId, to,
+        rows.put(connectionId.value(), with(s, to,
                 to == DestinationState.WORKING ? null : clock.instant(),
                 to == DestinationState.WORKING ? 0 : s.consecutiveFailures(),
                 to == DestinationState.PAUSED ? clock.instant() : s.lastProbeAt(),
-                lvCode == null ? s.lastLvCode() : lvCode, clock.instant()));
+                lvCode == null ? s.lastLvCode() : lvCode, clock.instant(), s.rateLimitedUntil(), s.workerReduction(),
+                s.lastRateLimitedAt(), s.lastCheckFailedAt()));
         return true;
     }
 
@@ -83,8 +91,43 @@ final class InMemoryDestinationStates implements ExportDestinationStateRepositor
     public synchronized void recordProbe(TenantId tenantId, IntegrationConnectionId connectionId) {
         ExportDestinationStatus s = rows.get(connectionId.value());
         if (s == null) return;
-        rows.put(connectionId.value(), new ExportDestinationStatus(tenantId, connectionId, s.state(), s.pausedAt(),
-                s.consecutiveFailures(), clock.instant(), s.lastLvCode(), clock.instant()));
+        rows.put(connectionId.value(), with(s, s.state(), s.pausedAt(), s.consecutiveFailures(), clock.instant(),
+                s.lastLvCode(), clock.instant(), s.rateLimitedUntil(), s.workerReduction(), s.lastRateLimitedAt(),
+                s.lastCheckFailedAt()));
+    }
+
+    @Override
+    public synchronized void recordCheckFailed(TenantId tenantId, IntegrationConnectionId connectionId) {
+        ExportDestinationStatus s = row(tenantId, connectionId);
+        rows.put(connectionId.value(), with(s, s.state(), s.pausedAt(), s.consecutiveFailures(), s.lastProbeAt(),
+                s.lastLvCode(), clock.instant(), s.rateLimitedUntil(), s.workerReduction(), s.lastRateLimitedAt(),
+                clock.instant()));
+    }
+
+    @Override
+    public synchronized void recordRateLimited(TenantId tenantId, IntegrationConnectionId connectionId, Duration wait,
+                                               int maxReduction) {
+        ExportDestinationStatus s = row(tenantId, connectionId);
+        Instant until = clock.instant().plus(wait);
+        if (s.rateLimitedUntil() != null && s.rateLimitedUntil().isAfter(until)) until = s.rateLimitedUntil();
+        rows.put(connectionId.value(), with(s, s.state(), s.pausedAt(), s.consecutiveFailures(), s.lastProbeAt(),
+                s.lastLvCode(), clock.instant(), until, Math.min(s.workerReduction() + 1, Math.max(0, maxReduction)),
+                clock.instant(), s.lastCheckFailedAt()));
+    }
+
+    @Override
+    public synchronized int restoreWorkers(Duration quietFor, int limit) {
+        int restored = 0;
+        Instant before = clock.instant().minus(quietFor);
+        for (ExportDestinationStatus s : List.copyOf(rows.values())) {
+            if (s.workerReduction() <= 0) continue;
+            if (s.lastRateLimitedAt() != null && s.lastRateLimitedAt().isAfter(before)) continue;
+            rows.put(s.connectionId().value(), with(s, s.state(), s.pausedAt(), s.consecutiveFailures(),
+                    s.lastProbeAt(), s.lastLvCode(), clock.instant(), s.rateLimitedUntil(), s.workerReduction() - 1,
+                    clock.instant(), s.lastCheckFailedAt()));
+            if (++restored >= limit) break;
+        }
+        return restored;
     }
 
     private ExportDestinationStatus row(TenantId tenantId, IntegrationConnectionId connectionId) {

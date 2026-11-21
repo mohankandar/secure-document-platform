@@ -18,6 +18,15 @@ public interface DeliveryPort {
 
     BatchDeliveryReference deliverBatch(DeliveryBatch batch);
 
+    /**
+     * Task 0028: the master destination's health check, run by an export job at once when it can't connect. Sends no
+     * case and no document; returns when the destination answers, throws when it does not. A destination type with no
+     * check fails closed (counted as down).
+     */
+    default void checkDestination(TenantId tenantId) {
+        throw new UnsupportedOperationException("This delivery destination has no health check");
+    }
+
     default DeliveryReference deliver(TenantId tenantId, PackageId packageId, DocumentId documentId,
                                       String originalFileName, InputStream content, long sizeBytes, String mimeType) {
         DeliveryDescriptor descriptor = describe(tenantId);

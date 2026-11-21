@@ -20,11 +20,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Task 0027: export jobs, API only (the screens are task 0028). Codes, ids and times only.
+ * Export jobs, API only (task 0027; task 0028 added resend all, grouped IT alerts and the network alert; the screens
+ * are task 0029). Codes, ids and times only.
  *
  * <ul>
- *   <li>"Waiting for you" and the bulk resend: the capability of today's manual send.</li>
- *   <li>The IT error queue, destination states and the IT retry: the existing technical capabilities.</li>
+ *   <li>"Waiting for you", resend and resend all: {@code EXPORT_RESEND} (Processor and Supervisor).</li>
+ *   <li>The IT error queue, destination states and the IT retries: the existing technical capabilities.</li>
  * </ul>
  */
 @RestController
@@ -38,19 +39,32 @@ public class ExportJobController {
         this.context = context;
     }
 
+    /** Grouped by destination, with the number of cases per code. */
     @GetMapping("/export-jobs/waiting-for-you")
-    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
-    public List<ExportJobService.JobView> waitingForYou(HttpServletRequest request) {
-        return service.waitingForYou(context.resolvePrincipal(request).tenantId());
+    @RequireCapability(UserCapability.EXPORT_RESEND)
+    public WaitingForYouResponse waitingForYou(HttpServletRequest request) {
+        List<ExportJobService.WaitingGroup> groups = service.waitingForYou(context.resolvePrincipal(request).tenantId());
+        return new WaitingForYouResponse(groups.stream().mapToInt(ExportJobService.WaitingGroup::total).sum(), groups);
     }
 
-    /** Resend many jobs at once; each is one attempt. */
+    /** Resend single cases now; each is one attempt. */
     @PostMapping("/export-jobs/resend")
-    @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
+    @RequireCapability(UserCapability.EXPORT_RESEND)
     public List<ExportJobService.JobResult> resend(@RequestBody JobIdsRequest body, HttpServletRequest request) {
         var principal = context.resolvePrincipal(request);
         return service.resend(principal.tenantId(), ids(body), principal.actorId(),
                 context.resolveCorrelationId(request));
+    }
+
+    /** Resend all for one destination: its waiting cases back to the queue, one attempt each, in their order. */
+    @PostMapping("/export-jobs/resend-all")
+    @RequireCapability(UserCapability.EXPORT_RESEND)
+    public ResendAllResponse resendAll(@RequestBody DestinationRequest body, HttpServletRequest request) {
+        var principal = context.resolvePrincipal(request);
+        UUID destination = destinationId(body);
+        List<UUID> queued = service.resendAll(principal.tenantId(), IntegrationConnectionId.of(destination),
+                principal.actorId(), context.resolveCorrelationId(request));
+        return new ResendAllResponse(destination, queued.size(), queued);
     }
 
     @GetMapping("/packages/{packageId}/export-jobs")
@@ -61,16 +75,25 @@ public class ExportJobController {
         return new CaseExportResponse(service.caseExportState(tenantId, id).name(), service.jobsOfCase(tenantId, id));
     }
 
+    /** The IT error queue, grouped: one alert per destination and code. */
     @GetMapping("/support/export-jobs/needs-it")
     @RequireCapability(UserCapability.TECHNICAL_EXCEPTION_VIEW)
-    public List<ExportJobService.JobView> needsIt(HttpServletRequest request) {
-        return service.needsIt(context.resolvePrincipal(request).tenantId());
+    public NeedsItResponse needsIt(HttpServletRequest request) {
+        List<ExportJobService.ItGroup> groups = service.needsItGroups(context.resolvePrincipal(request).tenantId());
+        return new NeedsItResponse(groups.stream().mapToInt(ExportJobService.ItGroup::count).sum(), groups);
     }
 
     @GetMapping("/support/export-destinations")
     @RequireCapability(UserCapability.TECHNICAL_EXCEPTION_VIEW)
     public List<ExportJobService.DestinationView> destinations(HttpServletRequest request) {
         return service.destinationStates(context.resolvePrincipal(request).tenantId());
+    }
+
+    /** "LexaVault can't reach its destinations" (LV-DLV-001, ALL_DESTINATIONS_UNREACHABLE), raised or not. */
+    @GetMapping("/support/export-destinations/alert")
+    @RequireCapability(UserCapability.TECHNICAL_EXCEPTION_VIEW)
+    public ExportJobService.AlertView alert(HttpServletRequest request) {
+        return service.reachabilityAlert(context.resolvePrincipal(request).tenantId());
     }
 
     /** IT retry: NEEDS_IT jobs back to READY (attempts reset); optionally their destinations back to WORKING. */
@@ -80,6 +103,25 @@ public class ExportJobController {
         var principal = context.resolvePrincipal(request);
         return service.itRetry(principal.tenantId(), ids(body), Boolean.TRUE.equals(body.resumeDestinations()),
                 principal.actorId(), context.resolveCorrelationId(request));
+    }
+
+    /** IT retries one group: every NEEDS_IT job of the destination with the code. 409 when there is none. */
+    @PostMapping("/support/export-jobs/retry-group")
+    @RequireCapability(UserCapability.TECHNICAL_RETRY)
+    public List<ExportJobService.JobResult> retryGroup(@RequestBody GroupRequest body, HttpServletRequest request) {
+        var principal = context.resolvePrincipal(request);
+        if (body == null || body.code() == null || !body.code().matches("LV-[A-Z]{3}-\\d{3}")) {
+            throw new ValidationException(LvErrorCode.CFG_001, "code is required");
+        }
+        UUID destination = body.destinationId() == null || body.destinationId().isBlank() ? null
+                : uuid(body.destinationId(), "Invalid destination id");
+        List<ExportJobService.JobResult> results = service.retryGroup(principal.tenantId(),
+                destination == null ? null : IntegrationConnectionId.of(destination), body.code(), principal.actorId(),
+                context.resolveCorrelationId(request));
+        if (results.isEmpty()) {
+            throw new ValidationException(LvErrorCode.CFG_011, "No export waits for IT with this destination and code");
+        }
+        return results;
     }
 
     @PostMapping("/support/export-destinations/{destinationId}/working")
@@ -102,6 +144,13 @@ public class ExportJobController {
         return body.jobIds().stream().map(v -> uuid(v, "Invalid job id")).toList();
     }
 
+    private static UUID destinationId(DestinationRequest body) {
+        if (body == null || body.destinationId() == null || body.destinationId().isBlank()) {
+            throw new ValidationException(LvErrorCode.CFG_001, "destinationId is required");
+        }
+        return uuid(body.destinationId(), "Invalid destination id");
+    }
+
     private static UUID uuid(String value, String message) {
         try {
             return UUID.fromString(value);
@@ -115,6 +164,16 @@ public class ExportJobController {
     }
 
     public record JobIdsRequest(List<String> jobIds, Boolean resumeDestinations) { }
+
+    public record DestinationRequest(String destinationId) { }
+
+    public record GroupRequest(String destinationId, String code) { }
+
+    public record WaitingForYouResponse(int total, List<ExportJobService.WaitingGroup> destinations) { }
+
+    public record ResendAllResponse(UUID destinationId, int queued, List<UUID> jobIds) { }
+
+    public record NeedsItResponse(int total, List<ExportJobService.ItGroup> groups) { }
 
     public record CaseExportResponse(String exportState, List<ExportJobService.JobView> jobs) { }
 

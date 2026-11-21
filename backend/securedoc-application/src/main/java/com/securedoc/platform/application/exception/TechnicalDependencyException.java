@@ -3,6 +3,7 @@ package com.securedoc.platform.application.exception;
 import com.securedoc.platform.domain.error.LvCoded;
 import com.securedoc.platform.domain.error.LvErrorCode;
 
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -17,6 +18,10 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     private final int attempts;
     /** Task 0025: the precise LexaVault code where one internal code covers several causes (for example DELIVERY_IO). */
     private final LvErrorCode lvCode;
+    /** Task 0028: the destination answered 429 ("slow down"). Read only by export jobs; behaviour is otherwise unchanged. */
+    private final boolean rateLimited;
+    /** Task 0028: the wait a 429 asked for (Retry-After); null when it gave none. */
+    private final Duration retryAfter;
 
     public TechnicalDependencyException(TechnicalDependency dependency,
                                         TechnicalFailureCode failureCode,
@@ -40,7 +45,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                            String safeMessage,
                                            Throwable cause,
                                            LvErrorCode lvCode) {
-        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode);
+        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode, false, null);
     }
 
     private TechnicalDependencyException(TechnicalDependency dependency,
@@ -49,7 +54,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                          String safeMessage,
                                          Throwable cause,
                                          int attempts) {
-        this(dependency, failureCode, retryable, safeMessage, cause, attempts, null);
+        this(dependency, failureCode, retryable, safeMessage, cause, attempts, null, false, null);
     }
 
     private TechnicalDependencyException(TechnicalDependency dependency,
@@ -58,13 +63,17 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                          String safeMessage,
                                          Throwable cause,
                                          int attempts,
-                                         LvErrorCode lvCode) {
+                                         LvErrorCode lvCode,
+                                         boolean rateLimited,
+                                         Duration retryAfter) {
         super(safeMessage, cause);
         this.lvCode = lvCode;
         this.dependency = Objects.requireNonNull(dependency);
         this.failureCode = Objects.requireNonNull(failureCode);
         this.retryable = retryable;
         this.attempts = Math.max(1, attempts);
+        this.rateLimited = rateLimited;
+        this.retryAfter = retryAfter;
     }
 
     public TechnicalDependency dependency() {
@@ -85,7 +94,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
 
     public TechnicalDependencyException withAttempts(int attemptCount) {
         return new TechnicalDependencyException(
-                dependency, failureCode, retryable, getMessage(), this, attemptCount, lvCode);
+                dependency, failureCode, retryable, getMessage(), this, attemptCount, lvCode, rateLimited, retryAfter);
     }
 
     /**
@@ -94,12 +103,32 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
      */
     public TechnicalDependencyException withLvCode(LvErrorCode code) {
         return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
-                code);
+                code, rateLimited, retryAfter);
+    }
+
+    /**
+     * Task 0028: the same failure marked as a 429 ("slow down"), with the wait it asked for (null when none). Only
+     * export jobs read the mark; the code, retry and message are unchanged.
+     */
+    public TechnicalDependencyException asRateLimited(Duration wait) {
+        Duration safeWait = wait == null || wait.isNegative() ? null : wait;
+        return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
+                lvCode, true, safeWait);
     }
 
     /** The precise LexaVault code, or {@code null}: then the code follows from {@link #failureCode()}. */
     @Override
     public LvErrorCode lvCode() {
         return lvCode;
+    }
+
+    /** Task 0028: true when the destination answered 429. */
+    public boolean rateLimited() {
+        return rateLimited;
+    }
+
+    /** Task 0028: the wait a 429 asked for (Retry-After), or null. */
+    public Duration retryAfter() {
+        return retryAfter;
     }
 }

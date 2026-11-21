@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0028 (owner approved 2026-11-21, one migration): export follow-ups.
+        - pipeline_jobs: the fields the long retry schedule, the rebuild, the resend and the grouped IT alerts need.
+        - export_destination_states: slowing down on 429, and when the destination's own check last failed.
+          The foreign key to integration_connections is dropped so the local export folder (which has no
+          connection) can have a state too; its id is derived from the tenant id.
+        - export_reachability_alerts: "LexaVault can't reach its destinations", one row per tenant.
+        - export_retention_periods: the retention period per export destination (master: destination_id null).
+        No content in any column: codes, ids, numbers and times only.
+    -->
+    <changeSet id="044-01-pipeline-job-retry-fields" author="lexavault">
+        <addColumn tableName="pipeline_jobs">
+            <!-- The next run of this job is a person's resend (one attempt; a failure goes to IT as LV-DLV-015). -->
+            <column name="resend" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The export was rebuilt from the stored redacted copies (once per job). -->
+            <column name="rebuilt" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Claims that ran out (a server stopped mid-job); LV-PRC-008 after the maximum. -->
+            <column name="claim_expiries" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <!-- When the job first failed, and last failed (the "answering but failing" rule counts these). -->
+            <column name="first_failed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_failed_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <sql>
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_claim_expiries check (claim_expiries &gt;= 0);
+            -- Old jobs: claims that ran out were counted in attempts only; keep that count as the floor.
+            update pipeline_jobs set claim_expiries = attempts where last_detail = 'CLAIM_EXPIRED';
+            -- Failures per destination in the last minutes, for the "answering but failing" rule.
+            create index idx_pipeline_jobs_recent_failures on pipeline_jobs (tenant_id, destination_id, last_failed_at)
+                where last_failed_at is not null;
+        </sql>
+        <rollback>
+            <sql>drop index if exists idx_pipeline_jobs_recent_failures;</sql>
+            <dropColumn tableName="pipeline_jobs" columnName="last_failed_at"/>
+            <dropColumn tableName="pipeline_jobs" columnName="first_failed_at"/>
+            <dropColumn tableName="pipeline_jobs" columnName="claim_expiries"/>
+            <dropColumn tableName="pipeline_jobs" columnName="rebuilt"/>
+            <dropColumn tableName="pipeline_jobs" columnName="resend"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="044-02-destination-rate-limit-and-check" author="lexavault">
+        <addColumn tableName="export_destination_states">
+            <!-- 429: no job of this destination is taken before this time (Retry-After). -->
+            <column name="rate_limited_until" type="TIMESTAMP WITH TIME ZONE"/>
+            <!-- 429: workers taken off this destination (never below 1 running); back by one after 10 quiet minutes. -->
+            <column name="worker_reduction" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_rate_limited_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <!-- The destination's own check last failed (the "all destinations at once" rule). -->
+            <column name="last_check_failed_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <dropForeignKeyConstraint baseTableName="export_destination_states"
+                                  constraintName="fk_export_destination_states_connection"/>
+        <sql>
+            alter table export_destination_states
+                add constraint ck_export_destination_states_reduction check (worker_reduction &gt;= 0);
+        </sql>
+        <rollback>
+            <dropColumn tableName="export_destination_states" columnName="last_check_failed_at"/>
+            <dropColumn tableName="export_destination_states" columnName="last_rate_limited_at"/>
+            <dropColumn tableName="export_destination_states" columnName="worker_reduction"/>
+            <dropColumn tableName="export_destination_states" columnName="rate_limited_until"/>
+            <addForeignKeyConstraint baseTableName="export_destination_states" baseColumnNames="connection_id"
+                                     referencedTableName="integration_connections" referencedColumnNames="id"
+                                     constraintName="fk_export_destination_states_connection" onDelete="CASCADE"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="044-03-export-reachability-alerts" author="lexavault">
+        <createTable tableName="export_reachability_alerts">
+            <column name="tenant_id" type="UUID">
+                <constraints primaryKey="true" nullable="false" primaryKeyName="pk_export_reachability_alerts"/>
+            </column>
+            <!-- RAISED while every destination fails its check; CLEARED when any check passes. -->
+            <column name="state" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="raised_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_check_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="cleared_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="export_reachability_alerts" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_export_reachability_alerts_tenant" onDelete="CASCADE"/>
+        <sql>
+            alter table export_reachability_alerts
+                add constraint ck_export_reachability_alerts_state check (state in ('RAISED', 'CLEARED'));
+        </sql>
+        <rollback>
+            <dropTable tableName="export_reachability_alerts"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="044-04-export-retention-periods" author="lexavault">
+        <createTable tableName="export_retention_periods">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false" primaryKeyName="pk_export_retention_periods"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Null: the master destination. Otherwise the split (routing) destination's connection id. -->
+            <column name="destination_id" type="UUID"/>
+            <column name="retention_hours" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="export_retention_periods" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_export_retention_periods_tenant" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="export_retention_periods" baseColumnNames="destination_id"
+                                 referencedTableName="integration_connections" referencedColumnNames="id"
+                                 constraintName="fk_export_retention_periods_connection" onDelete="CASCADE"/>
+        <sql>
+            alter table export_retention_periods
+                add constraint ck_export_retention_periods_hours check (retention_hours between 1 and 72);
+            create unique index ux_export_retention_periods_destination on export_retention_periods (
+                tenant_id, coalesce(destination_id, '00000000-0000-0000-0000-000000000000'::uuid));
+        </sql>
+        <rollback>
+            <dropTable tableName="export_retention_periods"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

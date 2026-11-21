@@ -3,7 +3,11 @@ package com.securedoc.platform.application.port.out;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import com.securedoc.platform.domain.identity.TenantId;
 
-/** Checks that a paused export destination answers again, with the existing connection test (task 0027). */
+/**
+ * A destination's health check (task 0027; task 0028 runs it at once on a connection failure). The existing connection
+ * test for SDV and the split destinations; for the local export folder (its derived id) a test file is written and
+ * deleted.
+ */
 public interface ExportDestinationProbePort {
 
     /** Returns when the destination answered; throws when it did not. Sends no case and no document. */

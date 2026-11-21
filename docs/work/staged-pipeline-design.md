@@ -1,6 +1,6 @@
 # LexaVault staged processing pipeline (design)
 
-**Status:** draft by the LexaVault design chat, 2026-11-21, for the owner's go-ahead.
+**Status:** approved 2026-11-21; updated the same day with the owner's later decisions (evidence-based pausing, retry schedule, retention per destination). Built so far: P1 (tasks 0027, 0028).
 **Owner's approval:** approved (owner, 2026-11-21), all six decisions in section 12 as recommended.
 **Builds on:** the decisions recorded in `claude/Reports-Redesign.md` (export and retries, staged pipeline, priority and migration, all agreed 2026-11-20) and the error codes in `claude/LV-Error-Codes.md`.
 
@@ -32,6 +32,12 @@ Today one worker takes a case and runs every step in one go: text reading (OCR) 
 | **Split export** | split document × destination | Sends one split document | Done |
 
 - Documents of one case run in parallel in Text, Find and Redact. The case moves on when all its documents are through (a "gate").
+- **Large documents are split into page batches** for Text and Find, gathered again before Redact, so one 500-page document spreads over the workers and can't hold one worker for hours (owner, 2026-11-21).
+- **Batches keep their context, set per redaction policy** (owner, 2026-11-21). An AI model can't read 500 pages in one request anyway; the question is what each batch sees:
+  - **Batch size and overlap** are policy settings (for example 20 pages, 2 pages shared with the next batch so nothing across a page break is missed; duplicate findings in the overlap are merged by their place on the page).
+  - **Document summary** (policy switch): one first pass writes a short summary of the document (the matter, the parties, the kind of document), and every batch gets it with its pages. **On for legal policies, off for mortgage** (faster).
+  - **Case instructions** (optional): a reviewer or the source system can add instructions for the AI, for example the parties and what to protect. Every batch gets them.
+  - The summary and instructions can hold names, so they're treated like document text: never in logs, audit or Reports, and deleted with the case.
 - A case going to two destinations gets two export jobs. One destination being down doesn't hold up the other.
 
 ## 4. How a job runs
@@ -72,7 +78,10 @@ When every document is redacted, the case is **Ready for export**, and one expor
   - **Remembered, then re-checked:** the learned ceiling is kept per AI server and tried again after a while (for example an hour, or after a restart), because the customer may upgrade their AI server.
   - **Bounds:** never below 1 and never above IT's own maximum, if IT set one. Shown in Admin, for example "AI server 1: 5 at once (learned)".
 - **Inside one server these are threads.** More threads than cores doesn't make CPU work faster, it only makes the machine thrash, so CPU stages stop at about the core count. AI and Export threads mostly wait (on the AI server, on the network), so their limit is the AI capacity and the destination's limit, not the CPU.
-- **More servers, more capacity:** every LexaVault server runs its own workers on the same queues, so adding a server adds workers. **Nothing is refused for load:** work waits in the queue.
+- **More servers, more capacity:** every LexaVault server runs its own workers on the same queues, so adding a server adds workers.
+- **Nothing is lost** (owner, 2026-11-21):
+  - **API: always accepts.** A flood only makes processing take longer. The one exception is a **safety stop**: when free disk or database space drops **below 10%**, the API answers "busy, try again" (`LV-INT-027`, with Retry-After) and takes in again on its own once free space is back **above 15%** (the gap stops it flipping on and off). The thresholds are settings, and the stop is in the API contract so integrators expect it.
+  - **Watched folder and polling slow themselves down** when the queue is long: they check less often and take fewer files per check. The files simply wait at the source.
 - **Defaults to start with:** lowest 1 per stage; highest as measured. Example (8 cores, one AI server taking 4 at once): Text up to 7, Find up to 4, Redact up to 4, Export up to 4 per destination.
 
 ## 7. Priority (agreed 2026-11-20)
@@ -85,6 +94,7 @@ When every document is redacted, the case is **Ready for export**, and one expor
 - **Order** in every stage queue and in the Review list: Urgent → Normal → Low → Bulk, oldest first within each.
 - **No starvation:** while Urgent and Normal work are both waiting, **one job in every five** taken from a stage goes to the oldest Normal job. Low gets the same guarantee against Normal.
 - Changing a case's priority moves its waiting jobs at once. A job already running finishes.
+- **Fairness between entities** (owner, 2026-11-21): within the same priority, workers take turns between entities (and between customers on hosted), so one customer's flood never pushes another customer's daily work back.
 
 ## 8. Migration: Bulk (agreed 2026-11-20)
 
@@ -109,14 +119,17 @@ When every document is redacted, the case is **Ready for export**, and one expor
 - **State** on the destination (Working / Paused / Needs IT) and when it was paused.
 - **Workers per stage** settings.
 - The existing package claim (the "lease") is replaced by the per-job claim. Existing cases are carried over at upgrade.
+- **Clean-up** (owner, 2026-11-21): finished jobs are removed automatically after a set time (default 90 days, as long as Reports needs them). The audit trail keeps the permanent record.
 
 ## 11. How it's built (one task each, each proven end to end before the next)
 
 | Step | What | Proof |
 |---|---|---|
 | **P1** | Jobs table; **export as its own job**; retries by code; pausing a destination; duplicate counts as exported; Waiting for you with bulk resend; IT error queue. Text/Find/Redact still run as today. | A destination switched off mid-run: cases wait, nothing fails, all go out in order when it's back. |
-| **P2** | Text, Find, Redact as per-document jobs with gates; the claim number (#342 fixed). | Two LexaVault servers on one database: no case processed twice; one server killed mid-case, the other finishes it. |
-| **P3** | Workers grow with the queue; the setup command measures the machine; Admin settings. | 400, 4,000 and 40,000 documents: workers rise to the highest and drop back; the machine is never overloaded. |
+| **P1b** | Job clean-up after the set time. | Old finished jobs are removed; Reports' period still works. |
+| **P2** | Text, Find, Redact as per-document jobs with gates; page batches with size and overlap per policy; fairness between entities; the claim number (#342 fixed). | Two LexaVault servers on one database: no case processed twice; one server killed mid-case, the other finishes it. |
+| **P2b** | Document summary and case instructions, switched on per policy (legal on, mortgage off). Tested on public court documents. | A 300-page court filing: findings that need the whole matter (for example a party named only on page 1) are caught on later pages with the summary, and missed without it. |
+| **P3** | Workers grow with the queue, measured at every start; the AI limit learned per AI server; intake pacing and the safety stop; Admin settings. | 400, 4,000 and 40,000 documents: workers rise to the highest and drop back; the machine is never overloaded. |
 | **P4** | Priority: intake field, source default, reviewer change, queue and Review list order, the one-in-five rule. | An Urgent case sent behind 1,000 Normal ones finishes first; Normal still moves. |
 | **P5** | Bulk sources and the window; migration progress. | A migration running at night; a live case at 2 AM finishes in normal time; Bulk stops at 6 AM. |
 | **P6** | Operations tab stage view and ETA, with the Reports build. | The ETA is within 20% on a test run. |
