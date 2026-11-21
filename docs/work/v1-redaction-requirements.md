@@ -22,10 +22,10 @@ Today a page with a redaction becomes an image with no text, which is the safest
 - **A. Keep the page's own text and remove only the redacted words** from the page's content. Best quality, but hard to do reliably (fonts, overlapping text, garbage fonts) and the riskiest: a mistake leaks a value.
 - **B. (recommended) Keep the image page, then add a text layer made by OCR of the redacted image.** The black boxes are already burned in, so the redacted values can't appear in the new text; the final check verifies it. Searchable, safe, slightly lower text quality than the original.
 
-## Order (LexaVault, **confirmed by the owner 2026-11-21**)
+## Order (LexaVault, confirmed by the owner 2026-11-21, revised the same day at the Shared thread's suggestion)
 
-1. 0031 live run against Vero · 2. P1b job clean-up · 3. **R1** catalog, packs, locked items, styles and new pattern types · 4. **R2** true redaction hardening, searchable output, signed PDFs recorded · 5. **R3** password-protected PDFs through the API · 6. Pipeline P2 · 7. Vision-based redaction · 8. Switch-over to platform-core (identity, licensing, notifications, case fields, integration standards round 1) · 9. Reports build, P2b, P3–P6.
-Alongside: benchmark B1 now. V2 backlog: item 9.
+1. 0031 live run against Vero · 2. P1b job clean-up · 3. **Switch-over to platform-core, part 1:** identity, setup, licensing, notifications · 4. **Switch-over, part 2:** case fields (when platform-core's `platform-fields` is built) · 5. **R1** catalog, packs, locked items, styles and new pattern types, built on platform-fields · 6. **R2** true redaction hardening, searchable output (option B), signed PDFs recorded · 7. **R3** password-protected PDFs through the API · 8. Pipeline P2 · 9. Vision-based redaction · 10. Reports build, P2b, P3–P6.
+Alongside: benchmark 0033 whenever the coding session is free. V2 backlog: item 9.
 
 ## Backlog (not development yet), recorded 2026-11-21
 
