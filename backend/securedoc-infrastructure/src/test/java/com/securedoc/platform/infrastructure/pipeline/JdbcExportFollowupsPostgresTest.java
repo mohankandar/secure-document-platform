@@ -210,6 +210,24 @@ class JdbcExportFollowupsPostgresTest {
     }
 
     @Test
+    void openExportJobsAreCountedPerDestinationForSupportsWaitingColumn() {
+        // Task 0029: open jobs only (DONE and STOPPED are not), per destination, this tenant only.
+        IntegrationConnectionId other = IntegrationConnectionId.generate();
+        TestRows.splitConnection(jdbc, tenant, other);
+        List<UUID> ids = new ArrayList<>();
+        for (int i = 0; i < 4; i++) ids.add(queue(newCase(), destination).id());
+        queue(newCase(), other);
+        jobs.changeStatus(tenant, ids.get(0), PipelineJobStatus.READY, PipelineJobStatus.DONE, 1, null, null);
+        jobs.changeStatus(tenant, ids.get(1), PipelineJobStatus.READY, PipelineJobStatus.NEEDS_IT, 1, "LV-DLV-005", null);
+        jobs.changeStatus(tenant, ids.get(2), PipelineJobStatus.READY, PipelineJobStatus.STOPPED, 1, null, null);
+
+        var counts = jobs.countOpenByDestination(tenant);
+        assertEquals(2, counts.get(destination.value()), "READY and NEEDS_IT are open; DONE and STOPPED are not");
+        assertEquals(1, counts.get(other.value()));
+        assertTrue(jobs.countOpenByDestination(TenantId.generate()).isEmpty(), "another tenant sees nothing");
+    }
+
+    @Test
     void needsItGroupsAreCountedPerDestinationAndCode() {
         List<UUID> ids = new ArrayList<>();
         for (int i = 0; i < 3; i++) ids.add(queue(newCase(), destination).id());

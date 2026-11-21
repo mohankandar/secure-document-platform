@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { apiClient } from '../../api/client';
 import type { BusinessAdminConfiguration, BusinessReviewMode, DocumentIntelligenceMode, ReportingConfiguration } from '../../types';
@@ -7,7 +7,9 @@ import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
 import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
-import { ErrorBoundary } from '../failure';
+import { ErrorBoundary, checked, isRecord } from '../failure';
+import useSWR from 'swr';
+import { RETENTION_WORDS, retentionPlaceholder, retentionValueError, type RetentionSettings } from '../exportRules';
 import { HelpTip } from './HelpTip';
 import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
 import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
@@ -446,6 +448,72 @@ function LifecycleCard({ data, mutate }: { data: BusinessAdminConfiguration; mut
   );
 }
 
+interface RetentionDraft { masterHours: number | null; splits: Array<{ destinationId: string; name: string; hours: number | null; effective: number }> }
+
+/**
+ * Task 0029: the retention period per export destination (GET/PUT /business-admin/export-retention), next to
+ * "Keeping and deleting". Empty means the default, shown as "Same as …". The API checks the range (LV-CFG-001) and its
+ * message is shown as it is; the field marks a value out of range as it is typed.
+ */
+function ExportRetentionCard() {
+  const { data, error, mutate } = useSWR<RetentionSettings>('export-retention',
+    () => checked('GET /business-admin/export-retention', apiClient.getExportRetention(),
+      (v) => isRecord(v) && isRecord(v.master) && Array.isArray(v.splitDestinations) && typeof v.minHours === 'number' && typeof v.maxHours === 'number'),
+    { revalidateOnFocus: false });
+  // SettingsCard starts again from `value` whenever it is a new object: one object per answer.
+  const value = useMemo<RetentionDraft | null>(() => (data ? {
+    masterHours: data.master.setHours ?? null,
+    splits: data.splitDestinations.filter((s) => s.destinationId).map((s) => ({ destinationId: s.destinationId as string, name: s.name ?? 'Split destination', hours: s.setHours ?? null, effective: s.hours })),
+  } : null), [data]);
+  if (!data || !value) return <Loading error={error} retry={() => mutate()} label="Keeping exported copies" request="GET /business-admin/export-retention" />;
+  const masterEffective = value.masterHours ?? data.masterDefaultHours;
+  return (
+    <SettingsCard
+      title={RETENTION_WORDS.title}
+      description={RETENTION_WORDS.description}
+      value={value}
+      savedMessage={RETENTION_WORDS.saved}
+      onSave={async (d) => mutate(await apiClient.updateExportRetention({
+        masterHours: d.masterHours,
+        splitDestinations: d.splits.map((s) => ({ destinationId: s.destinationId, hours: s.hours })),
+      }), { revalidate: false })}
+    >
+      {(d, set) => (
+        <div className="cf-ad-grid" data-testid="export-retention">
+          <HoursField label={`${RETENTION_WORDS.master}${data.master.name ? ` (${data.master.name})` : ''}`} value={d.masterHours} min={data.minHours} max={data.maxHours}
+            defaultHours={data.masterDefaultHours} defaultText={retentionPlaceholder('master', data.masterDefaultHours)} onChange={(v) => set({ ...d, masterHours: v })} />
+          {d.splits.map((s, i) => (
+            <HoursField key={s.destinationId} label={s.name} value={s.hours} min={data.minHours} max={data.maxHours}
+              defaultHours={d.masterHours ?? masterEffective} defaultText={retentionPlaceholder('split', d.masterHours ?? masterEffective)}
+              onChange={(v) => set({ ...d, splits: d.splits.map((x, j) => (j === i ? { ...x, hours: v } : x)) })} />
+          ))}
+        </div>
+      )}
+    </SettingsCard>
+  );
+}
+
+/** Empty is the default: the box shows its hours greyed and the line under it says "Same as …". */
+function HoursField({ label, value, min, max, defaultHours, defaultText, onChange }: {
+  label: string; value: number | null; min: number; max: number; defaultHours: number; defaultText: string; onChange: (v: number | null) => void;
+}) {
+  const id = useId();
+  const problem = retentionValueError(value, min, max);
+  const hint = problem ?? (value === null ? `${defaultText}. ${min} to ${max} hours.` : `${min} to ${max} hours. Leave empty for the default.`);
+  return (
+    <div className="cf-field cf-ad-number" data-invalid={problem ? true : undefined}>
+      <label htmlFor={id}><span>{label}</span></label>
+      <span className="cf-ad-duration">
+        <input id={id} type="number" inputMode="numeric" step={1} value={value ?? ''} placeholder={String(defaultHours)}
+          aria-invalid={problem ? true : undefined} aria-describedby={`${id}-hint`}
+          onChange={(e) => onChange(e.target.value === '' ? null : e.target.valueAsNumber)} />
+        <span className="cf-ad-duration-unit">hours</span>
+      </span>
+      <span id={`${id}-hint`} className="cf-field-hint">{hint}</span>
+    </div>
+  );
+}
+
 /** Production rule: identifiers with 1–100 allowed values are the only eligible reporting dimensions. */
 function eligibleDimensions(data: BusinessAdminConfiguration, rc: ReportingConfiguration) {
   const current = new Map(rc.dimensions.map((x) => [x.definitionId, x]));
@@ -568,6 +636,7 @@ export default function PolicyArea({ entityName }: { entityName: string }) {
         <ErrorBoundary title="Keeping and deleting couldn't be shown" request="GET /business-admin/configuration"><LifecycleCard data={data} mutate={apply} /></ErrorBoundary>
         <ErrorBoundary title="Report targets couldn't be shown" request="GET /business-admin/configuration"><ReportingCard data={data} mutate={apply} /></ErrorBoundary>
       </div>
+      <ErrorBoundary title="Keeping exported copies couldn't be shown" request="GET /business-admin/export-retention"><ExportRetentionCard /></ErrorBoundary>
     </div>
   );
 }

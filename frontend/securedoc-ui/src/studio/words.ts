@@ -17,6 +17,8 @@ export const NAV = {
   cases: 'Cases',
   newCase: 'New case',
   review: 'Review',
+  /** Task 0029: the cases a destination refused (EXPORT_RESEND). */
+  waiting: 'Waiting for you',
   reports: 'Reports',
   admin: 'Admin',
   support: 'Support',
@@ -36,9 +38,10 @@ export function screenTitle(pathname: string, product: string): string {
   else if (first === 'case') screen = `Case · ${NAV.cases}`;
   else if (first === 'intake') screen = NAV.newCase;
   else if (first === 'review') screen = NAV.review;
+  else if (first === 'waiting') screen = NAV.waiting;
   else if (first === 'reports') screen = NAV.reports;
   else if (first === 'admin') screen = second && ADMIN_TITLES[second] ? `${ADMIN_TITLES[second]} · ${NAV.admin}` : NAV.admin;
-  else if (first === 'support') screen = second === 'incidents' && third ? `Problem · ${NAV.support}` : NAV.support;
+  else if (first === 'support') screen = second === 'incidents' && third ? `Problem · ${NAV.support}` : second === 'export' ? `Export · ${NAV.support}` : NAV.support;
   else if (first === 'technical-exceptions') screen = `Problem · ${NAV.support}`;
   else if (first === 'packages' && third === 'manual-processing') screen = 'Continue manually';
   else screen = '';

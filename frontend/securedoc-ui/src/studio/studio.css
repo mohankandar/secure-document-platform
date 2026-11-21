@@ -769,3 +769,62 @@
 .cf-acct-row .cf-acct-item[data-compact] { min-height: 0; padding: 5px; border-radius: 4px; font-size: 13px; }
 .cf-acct-row .cf-acct-item[data-compact] .cf-acct-check { display: none; }
 .cf-acct-row .cf-acct-item[data-compact][aria-checked='true'] { background: var(--cf-surface); box-shadow: 0 0 0 1px var(--cf-line); font-weight: 400; }
+
+/* ---------- Task 0029: export screens ---------- */
+
+.cf-nav-count[data-tone='danger'] { background: var(--cf-danger); color: var(--cf-surface); }
+
+/* The "Exporting" status: one colour per export state (exportRules.exportTone). */
+.cf-stage[data-export] { --stage: var(--cf-muted); --stage-soft: var(--cf-fill); }
+.cf-stage[data-export='paused'] { --stage: var(--cf-stage-review); --stage-soft: var(--cf-stage-review-soft); }
+.cf-stage[data-export='you'] { --stage: var(--cf-mark); --stage-soft: var(--cf-ink); color: var(--cf-surface); }
+.cf-stage[data-export='it'] { --stage: var(--cf-danger); --stage-soft: var(--cf-danger-soft); }
+.cf-stage[data-export='done'] { --stage: var(--cf-stage-delivered); --stage-soft: var(--cf-stage-delivered-soft); }
+.cf-timeline li[data-exporting] .cf-timeline-label { color: var(--cf-ink); font-weight: 600; }
+
+/* A code in a sentence: "Destination refused the file · LV-DLV-004". */
+.cf-code { font-family: var(--cf-font-mono, 'IBM Plex Mono', monospace); font-size: 12px; background: var(--cf-fill); color: var(--cf-ink); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+
+.cf-export-step .cf-next-reason { font-size: 14px; }
+.cf-export-step[data-tone='mark'] .cf-eyebrow { color: var(--cf-ink); }
+
+/* Waiting for you */
+.cf-wy { display: flex; flex-direction: column; gap: 18px; max-width: 1100px; margin: 0 auto; width: 100%; }
+.cf-wy-intro { max-width: 72ch; }
+.cf-wy-group { background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: 8px; overflow: hidden; }
+.cf-wy-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; }
+.cf-wy-head-text { flex: 1 1 320px; min-width: 0; }
+.cf-wy-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.cf-wy-kind { color: var(--cf-muted); font-weight: 400; font-size: 14px; }
+.cf-wy-often { margin: 2px 0 0; color: var(--cf-muted); font-size: 13px; }
+.cf-wy-rows { list-style: none; margin: 0; padding: 0; }
+.cf-wy-row {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr) minmax(0, 1fr) 24px; gap: 16px; align-items: center;
+  padding: 14px 16px; border-top: 1px solid var(--cf-line); font-size: 14px; color: var(--cf-ink); text-decoration: none;
+}
+.cf-wy-cols { color: var(--cf-muted); font-size: 12px; font-weight: 500; padding-top: 8px; padding-bottom: 8px; }
+.cf-wy-link { min-height: 44px; }
+.cf-wy-link:hover { background: var(--cf-raised); }
+.cf-wy-link:focus-visible { outline: 2px solid var(--cf-focus, var(--cf-ink)); outline-offset: -2px; }
+.cf-wy-case { font-weight: 500; }
+.cf-wy-foot { color: var(--cf-muted); font-size: 13px; max-width: 80ch; }
+.cf-wy-dialog-text { margin: 0 0 12px; font-size: 15px; line-height: 1.5; }
+.cf-wy-reasons { list-style: none; margin: 0 0 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; background: var(--cf-raised); border: 1px solid var(--cf-line); border-radius: 8px; font-size: 14px; }
+.cf-wy-reasons strong { font-weight: 600; }
+@media (max-width: 768px) {
+  .cf-wy-row { grid-template-columns: minmax(0, 1fr) 24px; gap: 4px 12px; }
+  .cf-wy-row > :nth-child(2), .cf-wy-row > :nth-child(3) { grid-column: 1; }
+  .cf-wy-row > :nth-child(4) { grid-column: 2; grid-row: 1 / span 3; }
+  .cf-wy-cols { display: none; }
+}
+/* 11px danger on the danger tint is 4.4:1; the export step's eyebrow stays ink (the box border carries the tone). */
+.cf-export-step[data-tone='danger'] .cf-eyebrow { color: var(--cf-ink); }
+
+/* Task 0029: the export screens by touch: buttons and the Support tabs at 44 px, like Cases and Review. */
+@media (pointer: coarse) {
+  :is(.cf-wy, .cf-sx, .cf-ad-sheet) .cf-btn, .cf-sp-tabs a { min-height: 44px; }
+}
+/* The Cases stage column is 150 px: a long export status wraps inside its chip instead of running into the time. */
+.cf-case-stage .cf-stage[data-export] { white-space: normal; max-width: 100%; line-height: 1.25; align-items: flex-start; }
+.cf-case-stage .cf-stage[data-export] .cf-stage-dot { margin-top: 4px; }
+.cf-ad-sheet .cf-wy-reasons { padding: 12px 14px; margin: 0 0 12px; }

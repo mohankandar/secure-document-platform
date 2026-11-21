@@ -151,3 +151,22 @@ test('0023 B1: a case a connection run could not take in has its own sentence an
   assert.ok(actionOptions().some(([code, words]) => code === 'POLLING_PACKAGE_FAILED' && words === 'Could not take in a case from a connection'));
   assert.notEqual(whatHappened(rec('POLLING_PACKAGE_FAILED')), whatHappened(rec('POLLING_RUN_FAILED')));
 });
+
+test('0029: every export action of tasks 0027 and 0028 has its own sentence and filter entry, none twice', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { dirname, resolve } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const java = readFileSync(resolve(here, '..', '..', '..', '..', '..', 'backend', 'securedoc-domain', 'src', 'main', 'java', 'com', 'securedoc',
+    'platform', 'domain', 'audit', 'AuditAction.java'), 'utf8');
+  const actions = [...java.matchAll(/^\s*((?:EXPORT|SPLIT_COPY)_[A-Z_]+)\s*[,}\n]/gm)].map((m) => m[1]);
+  assert.equal(actions.length, 16, 'the 8 actions of 0027 and the 8 of 0028');
+  const words = actions.map((a) => whatHappened(rec(a)));
+  for (const [i, a] of actions.entries()) {
+    assert.doesNotMatch(words[i], /_|^Export (job|destination)/, `${a} has its own sentence, not its code`);
+    assert.ok(actionOptions().some(([code]) => code === a), `${a} is in the Action filter`);
+  }
+  assert.equal(new Set(words).size, words.length, 'no two actions read the same');
+  assert.equal(whatHappened(rec('EXPORT_JOB_RESEND_ALL_REQUESTED')), 'Sent again every case a destination refused');
+  assert.equal(whatHappened(rec('EXPORT_RETENTION_PERIOD_CHANGED')), 'Changed how long exported copies are kept');
+});

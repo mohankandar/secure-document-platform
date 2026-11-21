@@ -7,7 +7,8 @@ import {
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
 import { CASE_GROUPS, NAV, caseSearchPlaceholders, firstThatFits } from './words';
-import { Kbd, Notice, Spinner, StageChip } from './atoms';
+import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
+import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
 import CaseDrawer from './CaseDrawer';
 import { LoadErrorCard } from './failure';
 import { apiClient } from '../api/client';
@@ -241,8 +242,13 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
   const title = caseTitle(pkg.businessIdentifiers);
   const stage = stageOf(pkg.status);
   const you = needsYou(pkg, caps);
-  const action = rowAction(pkg.status, caps, open);
-  const next = nextStepText(pkg.status, caps.includes(CAP.review) ? open : undefined);
+  // Task 0029: a case with an open export job shows "Exporting · …" instead of its review status, and offers no row
+  // action (a refused case is resent from its panel or from Waiting for you).
+  const exportState = exportStateOf(pkg.exportState);
+  const exporting = isExporting(exportState);
+  const exportLabel = exportStatusLabel(exportState);
+  const action = exporting ? null : rowAction(pkg.status, caps, open);
+  const next = exportNextStep(exportState) ?? nextStepText(pkg.status, caps.includes(CAP.review) ? open : undefined);
   return (
     <li id={`cf-row-${pkg.packageId}`} className="cf-case-row" data-selected={selected || undefined} data-you={you || undefined}>
       <Link to={`/case/${pkg.packageId}`} className="cf-case" aria-current={selected ? 'true' : undefined} data-you={you || undefined}>
@@ -254,7 +260,9 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
         <span className="cf-case-source">{SOURCE_LABEL[pkg.packageType] ?? pkg.packageType}</span>
         <span className="cf-case-docs">{pkg.documentCount} {pkg.documentCount === 1 ? 'doc' : 'docs'}</span>
         <span className="cf-case-next" data-stage={stage}>{next}</span>
-        <span className="cf-case-stage"><StageChip stage={stage} status={pkg.status} /></span>
+        <span className="cf-case-stage">
+          {exportLabel ? <ExportChip state={exportState} /> : <StageChip stage={stage} status={pkg.status} />}
+        </span>
         <time className="cf-case-time" dateTime={pkg.updatedAt}>{relativeTime(pkg.updatedAt)}</time>
       </Link>
       <span className="cf-case-act">{action && <RowActionButton pkg={pkg} action={action} caseLabel={title.primary} />}</span>

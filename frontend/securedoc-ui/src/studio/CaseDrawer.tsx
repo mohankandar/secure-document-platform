@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { ArrowRight, Check, FileText, X } from 'lucide-react';
@@ -6,10 +6,15 @@ import { apiClient } from '../api/client';
 import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary, TechnicalExceptionDetail } from '../types';
 import {
   CAP, LIFECYCLE, SOURCE_LABEL, caseActions, caseTitle, formatBytes, humanize, isReprocessing,
-  relativeTime, stageLabel, stageOf, statusInfo, useDerivedDeliveries, usePackage,
+  errorMessage, relativeTime, stageLabel, stageOf, statusInfo, useCaseExport, useDerivedDeliveries, usePackage,
   usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
 } from './data';
-import { Notice, Spinner } from './atoms';
+import {
+  CASE_EXPORT_WORDS, exportStateOf, exportStatusLabel, isExporting, jobForState, pausedHeading, refusedHeading,
+  refusedWhen, type ExportJobView, type ExportState,
+} from './exportRules';
+import { useToast } from './toast';
+import { CodeLabel, Notice, Spinner } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import { CASE_SECTIONS, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
@@ -36,9 +41,14 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
     if (await runner.run(kind)) setConfirming(null);
   };
 
+  // Task 0029: the case's export jobs; while one is open the case shows "Exporting · …" instead of its review status.
+  const caseExport = useCaseExport(packageId, canDesk);
+  const exportState = exportStateOf(caseExport.data?.exportState);
+  const exporting = isExporting(exportState);
+
   const title = pkg ? caseTitle(pkg.businessIdentifiers) : null;
   const reprocessing = pkg ? isReprocessing(pkg.status, life) : false;
-  const stage: StageKey | null = pkg ? (reprocessing ? 'redacting' : stageOf(pkg.status)) : null;
+  const stage: StageKey | null = pkg ? (exporting ? 'delivered' : reprocessing ? 'redacting' : stageOf(pkg.status)) : null;
   const actions = pkg ? caseActions(pkg.status, caps, life, reprocessing, openFindings.length)
     .filter(action => action.kind !== 'manual-fallback' || manualEligibility.data?.eligible === true) : [];
 
@@ -60,9 +70,11 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 
       {pkg && stage && (
         <div className="cf-drawer-body">
-          {stage !== 'unknown' && <Timeline stage={stage} status={pkg.status} />}
+          {stage !== 'unknown' && <Timeline stage={stage} status={pkg.status} exporting={exporting} />}
 
-          <NextStep
+          {exporting && caseExport.data ? (
+            <ExportStep state={exportState} jobs={caseExport.data.jobs} caps={caps} onChanged={() => Promise.all([caseExport.mutate(), mutate()])} />
+          ) : <NextStep
             pkg={pkg}
             life={life}
             technical={technical.data}
@@ -78,7 +90,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
             onAction={(a) => (CONFIRM_COPY[a.kind] ? setConfirming(a.kind) : run(a.kind))}
             onConfirm={() => confirming && run(confirming)}
             onCancel={() => setConfirming(null)}
-          />
+          />}
           {runner.error && <Notice tone="danger">{runner.error}</Notice>}
           {pkg.status === 'FAILED' && caps.includes(CAP.review) && manualEligibility.data?.eligible === false && (
             <Notice tone="neutral">Continuing manually is not possible: {manualEligibility.data.reason}</Notice>
@@ -136,18 +148,24 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   );
 }
 
-/** The stage bar. Every label is a full stage name ("Stopped", "Rejected"), never a technical status. */
-function Timeline({ stage, status }: { stage: StageKey; status: string }) {
+/**
+ * The stage bar. Every label is a full stage name ("Stopped", "Rejected"), never a technical status. Task 0029: the bar
+ * ends with an Exporting step; it reads "Delivered" once the case is delivered.
+ */
+function Timeline({ stage, status, exporting }: { stage: StageKey; status: string; exporting: boolean }) {
   const stopped = stage === 'stopped';
   const currentIndex = stopped ? (status === 'REJECTED' ? 0 : 1) : LIFECYCLE.indexOf(stage);
+  const delivered = stage === 'delivered' && !exporting;
   return (
     <ol className="cf-timeline" aria-label="Stages">
       {LIFECYCLE.map((key, index) => {
-        const state = index < currentIndex ? 'done' : index === currentIndex ? (stopped ? 'stopped' : key === 'delivered' ? 'done' : 'current') : 'next';
+        const state = index < currentIndex ? 'done' : index === currentIndex ? (stopped ? 'stopped' : key === 'delivered' && !exporting ? 'done' : 'current') : 'next';
+        const label = index === currentIndex && stopped ? statusInfo(status).label
+          : key === 'delivered' && !delivered ? CASE_EXPORT_WORDS.stage : stageLabel(key);
         return (
-          <li key={key} data-stage={key} data-state={state} aria-current={index === currentIndex ? 'step' : undefined}>
+          <li key={key} data-stage={key} data-state={state} data-exporting={key === 'delivered' && exporting ? 'true' : undefined} aria-current={index === currentIndex ? 'step' : undefined}>
             <span className="cf-timeline-dot" aria-hidden="true">{state === 'done' && <Check size={11} strokeWidth={3} />}</span>
-            <span className="cf-timeline-label">{index === currentIndex && stopped ? statusInfo(status).label : stageLabel(key)}</span>
+            <span className="cf-timeline-label">{label}</span>
           </li>
         );
       })}
@@ -225,6 +243,88 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Task 0029: the next step while the case is exporting. Waiting for you: who refused it, why ("Title · code"), when, and
+ * one "Resend this case" (EXPORT_RESEND only); the destination's own answer stays under Technical details.
+ */
+function ExportStep({ state, jobs, caps, onChanged }: { state: ExportState; jobs: ExportJobView[]; caps: string[]; onChanged: () => Promise<unknown> }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const job = jobForState(jobs, state);
+  const destination = job?.destinationName;
+  const waiting = state === 'WAITING_FOR_YOU';
+  const tone = waiting ? 'mark' : state === 'NEEDS_IT' ? 'danger' : 'neutral';
+  const canResend = waiting && caps.includes(CAP.exportResend);
+
+  async function resend() {
+    const ids = jobs.filter((j) => j.status === 'WAITING_FOR_YOU').map((j) => j.jobId);
+    if (!ids.length) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      const results = await apiClient.resendExportJobs(ids);
+      const again = results.find((r) => r.status === 'NEEDS_IT');
+      const refused = results.find((r) => !r.saved);
+      if (again) setProblem(`${CASE_EXPORT_WORDS.refusedAgain} · ${again.lvCode ?? 'LV-DLV-015'}`);
+      else if (refused) setProblem(errorMessage({ code: refused.lvCode, message: 'This case is no longer waiting to be sent again' }));
+      else toast(CASE_EXPORT_WORDS.resent);
+      await onChanged();
+    } catch (e) {
+      setProblem(errorMessage(e, 'The case could not be sent again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  let heading: string;
+  let body: ReactNode;
+  if (waiting) {
+    heading = refusedHeading(destination);
+    body = <>{refusedWhen(job?.since)} {CASE_EXPORT_WORDS.afterRefusal}</>;
+  } else if (state === 'DESTINATION_PAUSED') {
+    heading = pausedHeading(destination);
+    body = CASE_EXPORT_WORDS.pausedBody;
+  } else if (state === 'NEEDS_IT') {
+    heading = CASE_EXPORT_WORDS.itHeading;
+    body = CASE_EXPORT_WORDS.itBody;
+  } else {
+    heading = CASE_EXPORT_WORDS.readyHeading;
+    body = CASE_EXPORT_WORDS.readyBody;
+  }
+
+  return (
+    <>
+      <section className="cf-next cf-export-step" data-tone={tone} aria-label="Next step">
+        <div className="cf-next-text">
+          <span className="cf-eyebrow">{waiting ? CASE_EXPORT_WORDS.waitingEyebrow : exportStatusLabel(state)}</span>
+          <p className="cf-next-heading">{heading}</p>
+          {(waiting || state === 'NEEDS_IT') && job?.lvCode && <p className="cf-next-reason" data-testid="export-reason"><CodeLabel code={job.lvCode} /></p>}
+          <p className="cf-next-body">{body}</p>
+        </div>
+        {state === 'READY' && <span className="cf-next-pulse" aria-hidden="true" />}
+        {canResend && (
+          <div className="cf-next-action">
+            <button type="button" className="cf-btn" data-variant="solid" onClick={resend} disabled={busy}>
+              {busy && <Spinner label="Sending" />}{CASE_EXPORT_WORDS.resendThis}
+            </button>
+          </div>
+        )}
+      </section>
+      {problem && <Notice tone="danger">{problem}</Notice>}
+      {job && (
+        <TechnicalDetails>
+          <dl className="cf-tech-defs" data-testid="export-technical">
+            {job.detail && <div><dt>Destination’s answer</dt><dd className="cf-mono">{job.detail}</dd></div>}
+            <div><dt>Attempts</dt><dd>{job.attempts}</dd></div>
+            <div><dt>Export job</dt><dd className="cf-mono">{job.jobId}</dd></div>
+          </dl>
+        </TechnicalDetails>
+      )}
+    </>
   );
 }
 

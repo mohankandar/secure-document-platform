@@ -248,3 +248,49 @@ test.describe('Platform operations (Platform Operations)', () => {
     });
   }
 });
+
+/* ---------- Task 0029: export screens ---------- */
+
+test.describe('Export screens (task 0029)', () => {
+  test('Waiting for you', async ({ page }) => {
+    await signInAs(page, 'processor', '/waiting', { exports: true });
+    await expect(page.getByTestId('waiting-row').first()).toContainText('LN-');
+    await scan(page, 'Waiting for you');
+  });
+
+  test('Resend all: confirmation', async ({ page }) => {
+    await signInAs(page, 'processor', '/waiting', { exports: true });
+    await page.getByRole('button', { name: 'Resend all 3' }).click();
+    await expect(page.getByRole('dialog', { name: 'Resend 3 cases to Document vault?' })).toBeVisible();
+    await scan(page, 'Resend all: confirmation');
+  });
+
+  test('Cases with every export state', async ({ page }) => {
+    await signInAs(page, 'supervisor', '/', { exports: true });
+    await expect(page.getByTestId('export-status').first()).toBeVisible();
+    await scan(page, 'Cases: Exporting');
+  });
+
+  for (const [state, n] of [['waiting for you', '7004'], ['ready', '7020'], ['destination paused', '7015'], ['needs IT', '6990']] as const) {
+    test(`case panel: Exporting · ${state}`, async ({ page }) => {
+      await signInAs(page, 'supervisor', `/case/c9c9c9c9-0000-4000-8000-00000000${n}`, { exports: true });
+      await expect(page.getByRole('complementary', { name: 'Case panel' }).getByRole('region', { name: 'Next step' }).locator('.cf-eyebrow')).toHaveText(`Exporting · ${state}`);
+      await scan(page, `Case panel: Exporting · ${state}`);
+    });
+  }
+
+  test('Support: export (with the alert)', async ({ page }) => {
+    await signInAs(page, 'it', '/support/export', { exports: true });
+    await expect(page.getByTestId('export-destination').first()).toBeVisible();
+    await expect(page.getByTestId('it-group').first()).toContainText('LN-6990');
+    await scan(page, 'Support: export');
+  });
+
+  test('Business Admin: keeping exported copies (out of range)', async ({ page }) => {
+    await signInAs(page, 'business', '/admin/policy');
+    const card = page.getByRole('region', { name: 'Keeping exported copies' });
+    await card.getByLabel('Archive service').fill('80');
+    await expect(card).toContainText('from 1 to 72');
+    await scan(page, 'Admin: keeping exported copies');
+  });
+});

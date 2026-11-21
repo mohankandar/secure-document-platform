@@ -19,7 +19,9 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -354,6 +356,17 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 + destination + " AND status = 'NEEDS_IT' AND last_lv_code = :lvCode AND id <> :exceptId",
                 params, Integer.class);
         return count == null ? 0 : count;
+    }
+
+    @Override
+    public Map<UUID, Integer> countOpenByDestination(TenantId tenantId) {
+        Map<UUID, Integer> counts = new HashMap<>();
+        jdbc.query("SELECT destination_id, count(*) AS open_jobs FROM pipeline_jobs WHERE tenant_id = :tenantId"
+                        + " AND destination_id IS NOT NULL AND status NOT IN ('DONE', 'STOPPED')"
+                        + " AND stage IN ('EXPORT', 'SPLIT_EXPORT') GROUP BY destination_id",
+                new MapSqlParameterSource("tenantId", tenantId.value()),
+                rs -> { counts.put(rs.getObject("destination_id", UUID.class), rs.getInt("open_jobs")); });
+        return counts;
     }
 
     private static long leaseMillis(Duration lease) {

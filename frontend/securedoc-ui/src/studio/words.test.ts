@@ -167,6 +167,9 @@ test('U026: every screen has its own page title, the product name last', () => {
   assert.equal(screenTitle('/technical-exceptions/x', 'LexaVault'), 'Problem · Support · LexaVault');
   assert.equal(screenTitle('/packages/x/manual-processing', 'LexaVault'), 'Continue manually · LexaVault');
   assert.equal(screenTitle('/somewhere', 'LexaVault'), 'LexaVault');
+  // Task 0029
+  assert.equal(screenTitle('/waiting', 'LexaVault'), 'Waiting for you · LexaVault');
+  assert.equal(screenTitle('/support/export', 'LexaVault'), 'Export · Support · LexaVault');
 });
 
 /* ---------- Task 0021: sensitivity levels ---------- */

@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page, type Route } from '@playwright/test';
 import { crc32, deflateSync } from 'node:zlib';
 import { capabilitiesFor } from '../e2e-oidc/policyCapabilities';
+import { VAULT, exportApi, exportCases } from '../e2e-oidc/exportFixtures';
 
 /**
  * UI task U021: the tablet-friendly screens work by touch in WebKit (Safari's engine) with iPad settings, at the five
@@ -572,4 +573,50 @@ test('Admin (Business Administrator): U026 the "?" help opens by tap, has a 44 p
   await expect(note).not.toBeEmpty();
   await button.tap();
   await expect(note).toBeEmpty();
+});
+
+/* ---------- Task 0029: Waiting for you and the case panel's resend, by tap ---------- */
+
+async function exportRoutes(page: Page) {
+  const cases = exportCases('c5c5c5c5');
+  const api = exportApi(cases);
+  const full = cases.map((c) => ({ ...caseFor(c.loan, c.status, c.packageId.slice(-4), 'Borrower'), packageId: c.packageId, exportState: c.exportState,
+    documents: (c.documents ?? []).map((d, i) => ({ documentId: d, fileName: `Document_${i + 1}.pdf` })) }));
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/v1/export-jobs/waiting-for-you', (route) => route.fulfill(json(api.waiting)));
+  await page.route('**/api/v1/export-jobs/resend-all', (route) => route.fulfill(json({ destinationId: VAULT, queued: 3, jobIds: [] })));
+  await page.route(/\/api\/v1\/packages\/[^/]+\/export-jobs$/, (route) => route.fulfill(json(api.caseExport(new URL(route.request().url()).pathname.split('/')[4]))));
+  await page.route(/\/api\/v1\/packages(\/[^/]+)?$/, (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v1/packages') return route.fulfill(json([...full, ...CASES]));
+    const one = full.find((c) => path.endsWith(c.packageId));
+    return one ? route.fulfill(json(one)) : route.fallback();
+  });
+  return full;
+}
+
+test('Waiting for you (Supervisor): rows open the case by tap, Resend all asks and queues by tap; 44 px; nothing scrolls sideways', async ({ page }) => {
+  let full: Awaited<ReturnType<typeof exportRoutes>> = [];
+  await signInAs(page, ENTITY.roles, '/', async () => { full = await exportRoutes(page); });
+  const item = page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: /^Waiting for you/ });
+  await item.tap();
+  await expect(page.getByRole('heading', { level: 1, name: 'Waiting for you' })).toBeVisible();
+  await expect(page.getByTestId('waiting-row').first()).toContainText('LN-7004');
+  expect(await smallControls(page)).toEqual([]);
+  expect(await sideways(page)).toBe(0);
+
+  await page.getByRole('button', { name: 'Resend all 3' }).tap();
+  const dialog = page.getByRole('dialog', { name: 'Resend 3 cases to Document vault?' });
+  await expect(dialog).toBeVisible();
+  await expectTappable(dialog.getByRole('button', { name: 'Resend 3 cases' }));
+  await expectTappable(dialog.getByRole('button', { name: 'Not now' }));
+  expect(await sideways(page)).toBe(0);
+  await dialog.getByRole('button', { name: 'Resend 3 cases' }).tap();
+  await expect(page.locator('.cf-toast')).toContainText('3 cases queued for Document vault.');
+
+  await page.getByTestId('waiting-row').first().tap();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await expect(panel).toContainText('Document vault refused this case');
+  await expectTappable(panel.getByRole('button', { name: 'Resend this case' }));
+  expect(full.length).toBeGreaterThan(0);
 });

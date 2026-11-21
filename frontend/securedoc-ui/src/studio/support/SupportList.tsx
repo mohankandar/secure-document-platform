@@ -12,6 +12,7 @@ import {
   STATUS_CHIPS, SUPPORT_CAPS, SUPPORT_PAGE_SIZE, blockingCount, chipCounts, impactChip, inChip, lastSeen, mergeSupportPages,
   reasonFilterOptions, rowWhat, rowWhere, searchPlaceholder, statusWord, supportSearch, type StatusChip,
 } from './supportRules';
+import { SupportTabs } from './SupportExport';
 import './support.css';
 
 /** UI task U012 (finding 10): Support as Case File rows; Open / Resolved / All and one search box; the rest under More filters. */
@@ -130,6 +131,7 @@ export default function SupportList({ caps, entityName }: { caps: string[]; enti
             {blocking > 0 && <> · <mark className="cf-mark-text">{blocking} {blocking === 1 ? 'is' : 'are'} blocking a case</mark></>}
           </p>
         </div>
+        <SupportTabs caps={caps} />
       </header>
 
       <div className="cf-sp-bar">

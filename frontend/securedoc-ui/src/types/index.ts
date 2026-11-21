@@ -194,6 +194,8 @@ export interface PackageSummary {
   documentCount: number;
   createdAt: string;
   updatedAt: string;
+  /** Task 0029: the case's export state (GET /packages); absent from an older server and on the detail (= NONE). */
+  exportState?: string;
 }
 
 export interface PackageDetail extends PackageSummary {

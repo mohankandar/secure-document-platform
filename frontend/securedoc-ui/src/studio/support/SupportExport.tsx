@@ -1,0 +1,180 @@
+import { useState } from 'react';
+import { useSWRConfig } from 'swr';
+import { NavLink } from 'react-router-dom';
+import { apiClient } from '../../api/client';
+import { CAP, caseTitle, errorMessage, useCaseBrief, useExportAlert, useExportDestinations, useExportNeedsIt } from '../data';
+import { Notice, Spinner } from '../atoms';
+import { LoadErrorCard } from '../failure';
+import { useToast } from '../toast';
+import {
+  SUPPORT_EXPORT_WORDS as W, destinationKind, destinationLabel, destinationStateWords, isSignInGroup, itGroupTitle, reasonLabel,
+  retryAllLabel, signInBody, signInTitle, supportBadgeCount, triedLine, waitingText, type DestinationView, type ItGroup,
+} from '../exportRules';
+import './support.css';
+
+/** Support's two places: the processing problems and the export (task 0029). */
+export function SupportTabs({ caps }: { caps: string[] }) {
+  const { data } = useExportNeedsIt(caps.includes(CAP.technicalView), true);
+  const groups = supportBadgeCount(data);
+  return (
+    <nav className="cf-segment cf-sp-tabs" aria-label="Support">
+      <NavLink to="/support/incidents" end className={({ isActive }) => (isActive ? 'is-active' : '')}>{W.tabProblems}</NavLink>
+      <NavLink to="/support/export" className={({ isActive }) => (isActive ? 'is-active' : '')}>
+        {W.tabExport}{groups > 0 && <span className="cf-sp-tab-count" aria-label={`${groups} need IT`}>{groups}</span>}
+      </NavLink>
+    </nav>
+  );
+}
+
+/**
+ * Task 0029, board "Support (IT Admin): destinations and export errors". The IT alerts grouped per destination and
+ * code with one "Retry all N" (a sign-in failure: "Set back to working"), the destinations with their state and
+ * "Check now" for a paused one, and the "LexaVault can't reach its destinations" alert when it is raised.
+ */
+export default function SupportExport({ caps }: { caps: string[] }) {
+  const canRetry = caps.includes(CAP.technicalRetry);
+  const needsIt = useExportNeedsIt(true);
+  const destinations = useExportDestinations(true);
+  const alert = useExportAlert(true);
+  const [now] = useState(() => Date.now());
+  const { mutate: refreshKey } = useSWRConfig();
+  const refresh = () => Promise.all([needsIt.mutate(), destinations.mutate(), alert.mutate(), refreshKey('export-needs-it-badge')]);
+  const openOf = (id: string | null) => destinations.data?.find((d) => d.destinationId === id)?.openJobs ?? 0;
+
+  return (
+    <div className="cf-sp cf-sx">
+      <header className="cf-page-head">
+        <div><h1 className="cf-title">{W.title}</h1></div>
+        <SupportTabs caps={caps} />
+      </header>
+
+      {alert.data?.raised && (
+        <section className="cf-sx-alert" role="alert" aria-labelledby="cf-sx-alert">
+          <h2 id="cf-sx-alert">{W.alertTitle}</h2>
+          <p>{W.alertLine}</p>
+          <p className="cf-muted">{reasonLabel(alert.data.lvCode ?? 'LV-DLV-001')}</p>
+        </section>
+      )}
+
+      <section className="cf-sx-section" aria-labelledby="cf-sx-it">
+        <h2 id="cf-sx-it" className="cf-sx-h2">{W.needsIt}</h2>
+        {needsIt.error && !needsIt.data && <LoadErrorCard title="The export errors couldn't be loaded" error={needsIt.error} request="GET /support/export-jobs/needs-it" onRetry={() => void needsIt.mutate()} />}
+        {!needsIt.data && !needsIt.error && <Spinner label="Loading export errors" />}
+        {needsIt.data && needsIt.data.groups.length === 0 && <p className="cf-muted">{W.nothingForIt}</p>}
+        {needsIt.data?.groups.map((group) => (
+          <ItCard key={`${group.destinationId}|${group.lvCode}`} group={group} now={now} canRetry={canRetry} waiting={openOf(group.destinationId)} onDone={refresh} />
+        ))}
+      </section>
+
+      <section className="cf-sx-section cf-sx-card" aria-labelledby="cf-sx-dest">
+        <div className="cf-sx-card-head">
+          <h2 id="cf-sx-dest" className="cf-sx-h2">{W.destinations}</h2>
+          <p className="cf-muted">{W.destinationsNote}</p>
+        </div>
+        {destinations.error && !destinations.data && <LoadErrorCard title="The destinations couldn't be loaded" error={destinations.error} request="GET /support/export-destinations" onRetry={() => void destinations.mutate()} />}
+        {destinations.data && (
+          <table className="cf-sx-table">
+            <thead><tr><th scope="col">{W.columnDestination}</th><th scope="col">{W.columnState}</th><th scope="col">{W.columnWaiting}</th><th scope="col"><span className="cf-sr">Action</span></th></tr></thead>
+            <tbody>
+              {destinations.data.map((d) => <DestinationRow key={d.destinationId} d={d} now={now} canRetry={canRetry} onDone={refresh} />)}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CaseName({ packageId }: { packageId: string }) {
+  const { data } = useCaseBrief(packageId);
+  return <span className="cf-mono">{data ? caseTitle(data.businessIdentifiers).primary : packageId.slice(0, 8)}</span>;
+}
+
+function ItCard({ group, now, canRetry, waiting, onDone }: { group: ItGroup; now: number; canRetry: boolean; waiting: number; onDone: () => Promise<unknown> }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const signIn = isSignInGroup(group);
+  const tried = triedLine(group.lvCode);
+
+  async function act() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      if (signIn && group.destinationId) {
+        await apiClient.setExportDestinationWorking(group.destinationId);
+        // Its jobs that went to IT with the code go back in the queue as well.
+        await apiClient.retryExportGroup(group.destinationId, group.lvCode).catch(() => undefined);
+        toast(`${destinationLabel(group.destinationName)} is set back to working.`);
+      } else {
+        const results = await apiClient.retryExportGroup(group.destinationId, group.lvCode);
+        toast(`${results.length} ${results.length === 1 ? 'case' : 'cases'} queued again for ${destinationLabel(group.destinationName)}.`);
+      }
+      await onDone();
+    } catch (e) {
+      setProblem(errorMessage(e, 'This could not be done.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const label = reasonLabel(group.lvCode);
+  return (
+    <article className="cf-sx-it" aria-label={signIn ? signInTitle(group.destinationName) : itGroupTitle(group, now)} data-testid="it-group">
+      <div className="cf-sx-it-text">
+        <p className="cf-sx-it-title">{signIn ? signInTitle(group.destinationName) : itGroupTitle(group, now)}</p>
+        <p>{label.slice(0, label.lastIndexOf(' · '))} · <code className="cf-code">{group.lvCode}</code></p>
+        <p className="cf-muted cf-small">
+          {signIn ? signInBody(Math.max(waiting, group.count)) : tried}
+          {!signIn && <>{tried ? ' ' : ''}Cases {group.caseIds.map((id, i) => <span key={id}>{i > 0 && ', '}<CaseName packageId={id} /></span>)}.</>}
+        </p>
+        {problem && <Notice tone="danger">{problem}</Notice>}
+      </div>
+      {canRetry && (
+        <button type="button" className="cf-btn" data-variant="solid" onClick={act} disabled={busy}>
+          {busy && <Spinner label="Working" />}{signIn ? W.setBackToWorking : retryAllLabel(group.count)}
+        </button>
+      )}
+    </article>
+  );
+}
+
+function DestinationRow({ d, now, canRetry, onDone }: { d: DestinationView; now: number; canRetry: boolean; onDone: () => Promise<unknown> }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const words = destinationStateWords(d, now);
+
+  async function checkNow() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const result = await apiClient.checkExportDestinationNow(d.destinationId);
+      toast(`${d.name} ${result.passed ? W.checkPassed : W.checkStillFailing}`, result.passed ? 'neutral' : 'danger');
+      await onDone();
+    } catch (e) {
+      setProblem(errorMessage(e, 'The check could not be run.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <tr data-tone={words.tone} data-testid="export-destination">
+      <th scope="row"><span className="cf-sx-name">{d.name}</span> <span className="cf-sx-kind">· {destinationKind(d.purpose)}</span></th>
+      <td>
+        <span className="cf-sx-state"><span className="cf-sx-dot" aria-hidden="true" />{words.state}</span>
+        {words.detail && <span className="cf-sx-detail">{words.detail}</span>}
+        {problem && <Notice tone="danger">{problem}</Notice>}
+      </td>
+      <td>{waitingText(d.state, d.openJobs)}</td>
+      <td>
+        {canRetry && d.state === 'PAUSED' && (
+          <button type="button" className="cf-btn" data-size="sm" onClick={checkNow} disabled={busy} aria-label={`${W.checkNow}: ${d.name}`}>
+            {busy && <Spinner label="Checking" />}{W.checkNow}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
