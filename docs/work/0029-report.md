@@ -110,3 +110,13 @@ Found and fixed while testing (not test changes):
 
 ## Suggested next step
 The owner reviews the proof pictures and the screens on `feature/0029-export-screens`; then one run with `export-mode=job` against Vero R7 (Vero stopped mid-run, then a refusal) to see the screens with real answers.
+
+## Owner's answers and design chat review (2026-11-21, recorded by the design chat)
+
+Proposed by the design chat; the owner is asked to confirm in the chat. Task 0030 carries them out.
+1. **LV-CFG-005:** rename the title to "More than one main export destination" (description: "Only one enabled main export destination is allowed per entity."). The code number stays. Then the "no Vero on screen" test has no exception.
+2. **The destination's own code:** yes, store it with the job (in `last_detail`, no schema change) and show it under Technical details.
+3. **"Set back to working" re-queues that group's jobs too:** yes, keep it. That's the less-manual-work behaviour the owner wants.
+4. **Review of the proof pictures:**
+   - The status chips wrap onto two or three lines in the Cases list ("Exporting · destination paused"). Keep each chip on one line (widen the column or shorten to fit; never cut the words).
+   - The Cases list shows both "Exported" and "Delivered" for finished cases, and the stage tile says "Delivered". Use one word everywhere: **"Exported"** (it matches Reports and the "Exporting" step).
