@@ -172,7 +172,6 @@ export interface DerivedDelivery {
   markerType?: RoutingMarkerType;
   markerValue?: string;
   pageNumbers: number[];
-  fileName?: string;
   status: 'PENDING' | 'DELIVERING' | 'RETRY_PENDING' | 'DELIVERED' | 'ATTENTION_REQUIRED' | string;
   attemptCount: number;
   failureCategory?: string;
@@ -684,7 +683,8 @@ export interface TechnicalExceptionItem {
 /** Task 0021: the watched folder's settings (Tenant IT). */
 export interface WatchedFolderSettings {
   folderKey: string;
-  sensitivityLevel: string;
+  /** Task 0023 A4: null or missing when nothing is saved; the screen shows Standard. */
+  sensitivityLevel?: string | null;
 }
 
 export interface WatchedFolderAdminStatus {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextStepText, rowAction } from './caseRules.ts';
+import { deliveryLabel, nextStepText, rowAction } from './caseRules.ts';
 import { canContinueManually } from './support/supportRules.ts';
 
 // Capabilities as the backend grants them (ProductAuthorizationPolicy), per role.
@@ -58,4 +58,19 @@ test('the next step in words', () => {
   assert.equal(nextStepText('REJECTED', 0), 'Not accepted at intake');
   assert.equal(nextStepText('COMPLETED', 0), 'Redacted and sent');
   assert.equal(nextStepText('SOMETHING_NEW', 0), 'Status not recognised');
+});
+
+/* ---------- Task 0023 B4: the case panel's delivery line never shows a file name ---------- */
+
+test('0023 B4: a delivery is named by its destination, else the document type, else a short document id; never the file name', () => {
+  const base = { sourceDocumentId: '3f2a9c1e-0000-4000-8000-000000000001', fileName: 'Maria_Alvarez_title.pdf' };
+  assert.equal(deliveryLabel({ ...base, destinationLabel: 'Title pages' }, 'DEED'), 'Title pages');
+  assert.equal(deliveryLabel({ ...base, destinationLabel: '' }, 'TITLE_COMMITMENT'), 'Title commitment');
+  assert.equal(deliveryLabel({ ...base }, undefined), 'Document 3f2a9c1e');
+  assert.equal(deliveryLabel({ ...base, destinationLabel: '   ' }, '  '), 'Document 3f2a9c1e');
+  assert.equal(deliveryLabel({ sourceDocumentId: '', fileName: 'Maria_Alvarez_title.pdf' }, undefined), 'Destination');
+  for (const label of [deliveryLabel(base, undefined), deliveryLabel(base, 'DEED'), deliveryLabel({ ...base, sourceDocumentId: '' }, undefined)]) {
+    assert.equal(label.includes('Maria'), false);
+    assert.equal(label.includes('.pdf'), false);
+  }
 });

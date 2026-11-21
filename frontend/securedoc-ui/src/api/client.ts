@@ -396,7 +396,8 @@ class ApiClient {
     return this.request('/platform-admin/watched-folder/settings', { method: 'PUT', body: JSON.stringify({ sensitivityLevel }) });
   }
 
-  async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number }> {
+  /** Task 0023: outcome says whether this server checked the folder (SCANNED) or why not. */
+  async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number; outcome?: string | null }> {
     return this.request('/platform-admin/watched-folder/scan', { method: 'POST' });
   }
 
@@ -608,8 +609,9 @@ class ApiClient {
           // Some container/security failures may return a non-JSON 4xx body.
         }
       }
-      if (parsed?.message) throw parsed;
-      throw { message: `HTTP ${response.status}: ${response.statusText}` } as ApiError;
+      // Task 0023 D5: keep the HTTP status with the body, as request() does, so REVIEW_ALREADY_DECIDED (409) is recognised.
+      if (parsed?.message || parsed?.errorCode) throw { ...parsed, httpStatus: response.status };
+      throw { message: `HTTP ${response.status}: ${response.statusText}`, httpStatus: response.status };
     }
     const pageNumber = Number(response.headers.get('X-Review-Page-Number'));
     return {
@@ -669,8 +671,9 @@ class ApiClient {
       if (raw) {
         try { parsed = JSON.parse(raw) as ApiError; } catch { /* non-JSON security/container response */ }
       }
-      if (parsed?.message) throw parsed;
-      throw { message: `HTTP ${response.status}: ${response.statusText}` } as ApiError;
+      // Task 0023 D5: keep the HTTP status with the body, as request() does, so REVIEW_ALREADY_DECIDED (409) is recognised.
+      if (parsed?.message || parsed?.errorCode) throw { ...parsed, httpStatus: response.status };
+      throw { message: `HTTP ${response.status}: ${response.statusText}`, httpStatus: response.status };
     }
     const resolvedPage = Number(response.headers.get('X-Manual-Page-Number'));
     return {

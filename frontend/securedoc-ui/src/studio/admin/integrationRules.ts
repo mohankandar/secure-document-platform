@@ -109,6 +109,23 @@ export function failureReason(code: string | null | undefined): string {
       return "SDV testing isn't set up in this installation";
     case 'DERIVED_DESTINATION_DISABLED':
       return 'the place it goes to is switched off';
+    // Task 0023 C4: split routing and split delivery refusals, each with its own reason.
+    case 'ROUTING_MASTER_UNAVAILABLE':
+      return "the delivered document couldn't be found to take the pages from";
+    case 'ROUTING_FAILED':
+      return "the pages couldn't be sorted by the rules";
+    case 'DERIVED_ROUTING_POST_EXPORT_FAILED':
+      return 'sorting the pages after delivery failed';
+    case 'DERIVED_DOCUMENT_BUILD_FAILED':
+      return "the file with these pages couldn't be made";
+    case 'DERIVED_DESTINATION_NOT_FOUND':
+      return 'the place it goes to no longer exists';
+    case 'DERIVED_DESTINATION_WRONG_PURPOSE':
+      return "the place it goes to isn't set up to receive these pages";
+    case 'DERIVED_ARTIFACT_UNAVAILABLE':
+      return 'the file with these pages is no longer available';
+    case 'DERIVED_SOURCE_NOT_FOUND':
+      return 'the original document is no longer available';
     case 'ROUTING_MARKER_AMBIGUOUS':
       return 'the page matched more than one rule';
     case 'ROUTING_DETECTION_FAILED':
@@ -160,6 +177,25 @@ export function connectionStatus(c: Pick<IntegrationConnection, 'enabled' | 'hea
       // A system that sends to LexaVault is not checked by LexaVault; it is ready as soon as it is switched on.
       return waitsToBeSentTo ? { tone: 'ok', word: 'Ready to receive', rest } : { tone: 'warn', word: 'Not checked yet', rest };
     default: return { tone: 'warn', word: 'Status not recognised', rest };
+  }
+}
+
+/**
+ * Task 0023: the toast after "Check now" on the watched folder. The counts when this server checked it (SCANNED, or no
+ * outcome from an older server); otherwise a plain line for why it did not. An unknown outcome is never read as checked.
+ */
+export function folderCheckResult(r: { accepted: number; rejected: number; duplicates: number; outcome?: string | null }): { text: string; tone: 'neutral' | 'danger' } {
+  switch (r.outcome ?? 'SCANNED') {
+    case 'SCANNED':
+      return { text: `Folder checked: ${r.accepted} accepted, ${r.rejected} refused, ${r.duplicates} already received.`, tone: 'neutral' };
+    case 'STANDBY':
+      return { text: 'Not checked here: this LexaVault server is on standby, and another one checks the folder.', tone: 'neutral' };
+    case 'NOT_CONFIGURED':
+      return { text: 'Not checked: the watched folder isn’t set up in this installation.', tone: 'danger' };
+    case 'COORDINATION_DEGRADED':
+      return { text: 'Not checked: the LexaVault servers couldn’t agree which one checks the folder. Try again in a minute.', tone: 'danger' };
+    default:
+      return { text: 'The folder wasn’t checked.', tone: 'danger' };
   }
 }
 
@@ -271,12 +307,15 @@ export const ACK_NAMES: [IntegrationAcknowledgementMode, string][] = [
 export const authName = (a: string) => AUTH_NAMES.find(([k]) => k === a)?.[1] ?? a;
 export const ackName = (a: string) => ACK_NAMES.find(([k]) => k === a)?.[1] ?? a;
 
+/** Task 0023 D3: the push and polling file size limit when none is saved, the same 50 MB as the backend (and its multipart limit). */
+export const DEFAULT_MAX_PDF_SIZE_BYTES = 52_428_800;
+
 /** "wait 30 s · try 5 times · finish incomplete cases within 24 h · up to 50 files, 50 MB, 500 pages · confirm pickup to the source" */
 export function advancedSummary(d: { timeoutSeconds?: number; retryMaxAttempts?: number; incompleteWindowHours?: number; maxDocumentsPerIntake?: number; maxPdfSizeBytes?: number; maxPdfPages?: number; acknowledgementMode: IntegrationAcknowledgementMode; purpose: IntegrationPurpose }): string {
   const parts = [`wait ${d.timeoutSeconds ?? 60} s`, `try again up to ${d.retryMaxAttempts ?? 2} time${d.retryMaxAttempts === 1 ? '' : 's'}`];
   if (d.purpose === 'INGESTION_SOURCE') {
     parts.push(`finish incomplete cases within ${d.incompleteWindowHours ?? 24} h`);
-    parts.push(`up to ${d.maxDocumentsPerIntake ?? 100} files, ${Math.round((d.maxPdfSizeBytes ?? 262144000) / 1048576)} MB, ${d.maxPdfPages ?? 2000} pages`);
+    parts.push(`up to ${d.maxDocumentsPerIntake ?? 100} files, ${Math.round((d.maxPdfSizeBytes ?? DEFAULT_MAX_PDF_SIZE_BYTES) / 1048576)} MB, ${d.maxPdfPages ?? 2000} pages`);
   }
   parts.push(ackName(d.acknowledgementMode).toLowerCase());
   return parts.join(' · ');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom, fitWidth, FIT_MAX_PERCENT } from './reviewRules.ts';
+import { alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth, FIT_MAX_PERCENT } from './reviewRules.ts';
 import { whyAsked } from './words.ts';
 
 const item = (findingId: string, packageId: string, entityType: string, hasBoundingBox = true) =>
@@ -97,4 +97,31 @@ test('"Fit" fills the viewer width, up to 150% of the page (U020)', () => {
   assert.equal(fitWidth(816), 'min(100%, 1224px)');
   assert.equal(fitWidth(0), null);
   assert.equal(fitWidth(Number.NaN), null);
+});
+
+/* ---------- Task 0023 D5 (#160): "already decided by someone else" ---------- */
+
+test('0023 D5: only HTTP 409 with errorCode REVIEW_ALREADY_DECIDED counts as already decided', () => {
+  assert.equal(isAlreadyDecided({ httpStatus: 409, errorCode: 'REVIEW_ALREADY_DECIDED', message: 'x' }), true);
+  // The old check looked for code "CONFLICT", which no backend sends: never again a match.
+  assert.equal(isAlreadyDecided({ httpStatus: 409, code: 'CONFLICT' }), false);
+  assert.equal(isAlreadyDecided({ httpStatus: 409, errorCode: 'CONFLICT' }), false);
+  assert.equal(isAlreadyDecided({ httpStatus: 409 }), false);
+  assert.equal(isAlreadyDecided({ httpStatus: 400, errorCode: 'REVIEW_ALREADY_DECIDED' }), false);
+  assert.equal(isAlreadyDecided({ httpStatus: 409, errorCode: 'review_already_decided' }), false);
+  assert.equal(isAlreadyDecided({ httpStatus: 400, errorCode: 'VALIDATION_ERROR' }), false);
+  assert.equal(isAlreadyDecided(new Error('REVIEW_ALREADY_DECIDED')), false);
+  assert.equal(isAlreadyDecided(null), false);
+  assert.equal(isAlreadyDecided(undefined), false);
+});
+
+test('0023 D5: the message is fixed wording (never the server text)', () => {
+  assert.equal(alreadyDecidedText(true), 'Someone else already decided this finding. Moved to the next one.');
+  assert.equal(alreadyDecidedText(false), 'Someone else already decided this finding.');
+});
+
+test('0023 D5: Redact all like this counts findings someone else already decided on their own', () => {
+  assert.equal(bulkResultText(2, 0, 0, 1), 'Redacted 2 findings. 1 was already decided by someone else.');
+  assert.equal(bulkResultText(1, 1, 1, 2), 'Redacted 1 finding. 1 skipped because its place was not found; it stays in the queue. 1 could not be saved and stays in the queue. 2 were already decided by someone else.');
+  assert.equal(bulkResultText(3, 0, 0, 0), 'Redacted 3 findings.');
 });

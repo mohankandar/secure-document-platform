@@ -234,6 +234,7 @@ const SENTENCES: Record<string, string> = {
   POLLING_RUN_STARTED: 'Started checking a connection for documents',
   POLLING_RUN_COMPLETED: 'Checked a connection for documents',
   POLLING_RUN_FAILED: 'Could not check a connection for documents',
+  POLLING_PACKAGE_FAILED: 'Could not take in a case from a connection', // task 0023 B1: one row per failed case in a run
   POLLING_SOURCE_ACKNOWLEDGED: 'Confirmed receipt to a connection',
   WATCHED_FOLDER_SCAN_TRIGGERED: 'Checked the watched folder',
   WATCHED_FOLDER_SETTINGS_CHANGED: 'Changed the watched folder’s sensitivity level',

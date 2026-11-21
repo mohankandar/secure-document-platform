@@ -349,6 +349,14 @@ export const SENSITIVITY_NAMES: Record<SensitivityLevelCode, string> = {
   HIGHLY_CONFIDENTIAL: 'Highly Confidential',
 };
 
+/**
+ * Task 0023 A4: the value a level dropdown starts at. Standard by default everywhere: nothing saved, nothing sent, or a
+ * value this screen does not know all preselect Standard (the server treats them the same way).
+ */
+export function sensitivityChoice(raw: string | null | undefined): SensitivityLevelCode {
+  return raw && (SENSITIVITY_LEVELS as readonly string[]).includes(raw) ? raw as SensitivityLevelCode : 'STANDARD';
+}
+
 /** The plain name of a level code. Nothing sent means Standard. */
 export function sensitivityName(raw: string | null | undefined): string {
   if (!raw) return SENSITIVITY_NAMES.STANDARD;
@@ -421,6 +429,19 @@ export const PROBLEM_REASONS: Record<string, Omit<ProblemReason, 'known'>> = {
   // Task 0021: LV-DLV-003. Never retried: LexaVault would only send the same level again.
   DELIVERY_SENSITIVITY_REFUSED: { title: 'Destination refused the sensitivity level', sentence: 'The place this case is sent to wouldn’t accept the sensitivity level sent with it (LV-DLV-003). Sending it again won’t help: the destination’s set-up needs checking.' },
   STORAGE_IO: { title: 'Document storage wasn’t available', sentence: 'LexaVault’s document storage didn’t answer for a while.' },
+  // Task 0023 C1: a case that could not be started is stopped, not retried for ever.
+  PROCESSING_DISPATCH_EXHAUSTED: { title: 'Processing couldn’t be started', sentence: 'LexaVault tried to start processing this case 3 times and couldn’t, so it stopped.' },
+  PROCESSING_LICENSE_DENIED: { title: 'The licence doesn’t allow processing', sentence: 'The licence doesn’t allow this case to be processed, so it stopped at once without retrying.' },
+  // Task 0023 C3: a confirmed finding with no place, and each reason the redaction check refuses the output.
+  REDACTION_LOCATION_MISSING: { title: 'A confirmed finding has no place on the page', sentence: 'A finding was confirmed for redaction, but its place on the page isn’t known, so it couldn’t be redacted.' },
+  REDACTION_SOURCE_PAGES_UNKNOWN: { title: 'Redaction check: the pages couldn’t be counted', sentence: 'The redaction check couldn’t tell how many pages the original document has. The document was not delivered.' },
+  REDACTION_PAGE_COUNT_MISMATCH: { title: 'Redaction check: pages are missing or extra', sentence: 'The redacted document doesn’t have the same number of pages as the original. The document was not delivered.' },
+  REDACTION_TARGETS_NOT_APPLIED: { title: 'Redaction check: not every redaction was made', sentence: 'Not every value marked for redaction was redacted. The document was not delivered.' },
+  REDACTION_OUTPUT_EMPTY: { title: 'Redaction check: the redacted document is empty', sentence: 'Redaction produced an empty document. The document was not delivered.' },
+  REDACTION_TEXT_LAYER_REMAINS: { title: 'Redaction check: hidden text remained', sentence: 'Text that should have been removed could still be read in the redacted document. The document was not delivered.' },
+  REDACTION_ANNOTATIONS_REMAIN: { title: 'Redaction check: notes or comments remained', sentence: 'Notes, comments or form content remained in the redacted document. The document was not delivered.' },
+  REDACTION_REGION_NOT_COVERED: { title: 'Redaction check: an area wasn’t fully covered', sentence: 'An area marked for redaction wasn’t fully covered in the redacted document. The document was not delivered.' },
+  REDACTION_OUTPUT_UNPARSABLE: { title: 'Redaction check: the redacted document couldn’t be read', sentence: 'The redaction check couldn’t open the redacted document. The document was not delivered.' },
 };
 
 export const UNKNOWN_PROBLEM: Omit<ProblemReason, 'known'> = {

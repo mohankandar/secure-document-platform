@@ -13,14 +13,14 @@ import type {
   WatchedFolderSettings,
 } from '../../types';
 import { errorMessage } from '../data';
-import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityName, type SensitivityLevelCode } from '../words';
+import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, sensitivityName, type SensitivityLevelCode } from '../words';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
 import { MINUTE_UNITS } from './adminRules';
 import {
-  ACK_NAMES, AUTH_NAMES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
-  connectionStatus, connectionTag, draftTestResult, isPolling, methodOf, slashParts, watchedFolderStatus,
+  ACK_NAMES, AUTH_NAMES, DEFAULT_MAX_PDF_SIZE_BYTES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
+  connectionStatus, connectionTag, draftTestResult, folderCheckResult, isPolling, methodOf, slashParts, watchedFolderStatus,
   type Method, type StatusLine, type View,
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
@@ -35,7 +35,7 @@ const MB = 1048576;
 const baseDraft = (): Draft => ({
   name: '', description: '', purpose: 'INGESTION_SOURCE', direction: 'INBOUND', providerType: 'PUSH_API', authenticationType: 'NONE',
   clientPrincipal: '', endpoint: '', fileShareRoot: '', secretReference: '', timeoutSeconds: 60, retryMaxAttempts: 2,
-  incompleteWindowHours: 24, maxDocumentsPerIntake: 100, maxPdfSizeBytes: 262144000, maxPdfPages: 2000,
+  incompleteWindowHours: 24, maxDocumentsPerIntake: 100, maxPdfSizeBytes: DEFAULT_MAX_PDF_SIZE_BYTES, maxPdfPages: 2000,
   pollingScheduleType: undefined, pollingIntervalMinutes: undefined, pollingLocalTime: undefined, pollingTimeZone: undefined, pollingBatchLimit: undefined,
   acknowledgementMode: 'NONE', enabled: false,
 });
@@ -242,7 +242,8 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
     setBusy('check');
     try {
       const r = await apiClient.scanPlatformWatchedFolder();
-      toast(`Folder checked: ${r.accepted} accepted, ${r.rejected} refused, ${r.duplicates} already received.`);
+      const result = folderCheckResult(r);
+      toast(result.text, result.tone);
       await onChanged();
     } catch (e) {
       toast(errorMessage(e, "The folder couldn't be checked."), 'danger');
@@ -299,7 +300,8 @@ function FolderSensitivity() {
   const [draft, setDraft] = useState<SensitivityLevelCode | null>(null);
   const [saving, setSaving] = useState(false);
   if (!settings.data) return null;
-  const saved = settings.data.sensitivityLevel as SensitivityLevelCode;
+  // Task 0023 A4: no setting saved, or a level this screen does not know, shows Standard.
+  const saved = sensitivityChoice(settings.data.sensitivityLevel);
   const value = draft ?? saved;
   async function save() {
     if (draft === null || draft === saved) return;
@@ -342,7 +344,8 @@ function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; on
     setBusy(true);
     try {
       const r = await apiClient.scanPlatformWatchedFolder();
-      toast(`Folder checked: ${r.accepted} accepted, ${r.rejected} refused, ${r.duplicates} already received.`);
+      const result = folderCheckResult(r);
+      toast(result.text, result.tone);
       await onChanged();
     } catch (e) {
       toast(errorMessage(e, "The folder couldn't be checked."), 'danger');
@@ -460,7 +463,8 @@ function FailedFiles({ items, onChanged }: { items: DerivedDelivery[]; onChanged
                   <div><dt>Package</dt><dd className="cf-mono">{d.packageId}</dd></div>
                   <div><dt>Status</dt><dd>{d.status}</dd></div>
                   {d.failureCategory && <div><dt>Reason code</dt><dd>{d.failureCategory}</dd></div>}
-                  {d.fileName && <div><dt>File</dt><dd className="cf-mono">{d.fileName}</dd></div>}
+                  {/* Task 0023 B4: the document id, never the file name. */}
+                  {d.sourceDocumentId && <div><dt>Document</dt><dd className="cf-mono">{d.sourceDocumentId}</dd></div>}
                   <div><dt>Delivery run</dt><dd>{d.exportCycle}</dd></div>
                 </dl>
               </details>
@@ -658,7 +662,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
                   hint="A case still missing documents after this is refused." />
                 <NumberField label="Files per case, at most" min={1} max={1000} value={method === 'SCANNER' ? 1 : (d.maxDocumentsPerIntake ?? 100)} onChange={(v) => { if (method !== 'SCANNER') set('maxDocumentsPerIntake', v); }}
                   hint={method === 'SCANNER' ? 'A scanner sends one PDF per case.' : undefined} />
-                <NumberField label="File size, at most" suffix="MB" min={1} max={2048} value={Math.round((d.maxPdfSizeBytes ?? 262144000) / MB)} onChange={(v) => set('maxPdfSizeBytes', v * MB)} />
+                <NumberField label="File size, at most" suffix="MB" min={1} max={2048} value={Math.round((d.maxPdfSizeBytes ?? DEFAULT_MAX_PDF_SIZE_BYTES) / MB)} onChange={(v) => set('maxPdfSizeBytes', v * MB)} />
                 <NumberField label="Pages per file, at most" min={1} max={10000} value={d.maxPdfPages ?? 2000} onChange={(v) => set('maxPdfPages', v)} />
               </>}
               {method === 'POLL' && <NumberField label="Cases per collection, at most" min={1} max={1000} value={d.pollingBatchLimit || 100} onChange={(v) => set('pollingBatchLimit', v)} />}

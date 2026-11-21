@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { SENSITIVITY_LEVELS, caseSensitivityLine, documentSensitivityNote, problemReason, sensitivityName } from './words.ts';
+import { SENSITIVITY_LEVELS, caseSensitivityLine, documentSensitivityNote, problemReason, sensitivityChoice, sensitivityName } from './words.ts';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName, screenTitle } from './words.ts';
@@ -180,6 +180,17 @@ test('0021: each level has its plain name, and nothing sent is Standard', () => 
   assert.equal(sensitivityName(''), 'Standard');
 });
 
+test('0023 A4: a level choice starts at Standard when nothing (or nothing known) is saved', () => {
+  assert.equal(sensitivityChoice(null), 'STANDARD');
+  assert.equal(sensitivityChoice(undefined), 'STANDARD');
+  assert.equal(sensitivityChoice(''), 'STANDARD');
+  assert.equal(sensitivityChoice('TOP_SECRET'), 'STANDARD');
+  assert.equal(sensitivityChoice('confidential'), 'STANDARD');
+  assert.equal(sensitivityChoice('STANDARD'), 'STANDARD');
+  assert.equal(sensitivityChoice('CONFIDENTIAL'), 'CONFIDENTIAL');
+  assert.equal(sensitivityChoice('HIGHLY_CONFIDENTIAL'), 'HIGHLY_CONFIDENTIAL');
+});
+
 test('0021/0022: the case panel line is the owner’s wording with the case’s own level, Standard when none was sent', () => {
   assert.equal(caseSensitivityLine('HIGHLY_CONFIDENTIAL'), 'Sensitivity: Highly Confidential, as sent by the source system');
   assert.equal(caseSensitivityLine('CONFIDENTIAL'), 'Sensitivity: Confidential, as sent by the source system');
@@ -218,4 +229,32 @@ test('0021: the level appears only in the case panel, New case and the watched-f
   walk(studio, '');
   // UploadCapture and ScanCapture only pass the New case choice on (gate.sensitivity); they show nothing.
   assert.deepEqual(offenders.filter((f) => f !== 'UploadCapture.tsx' && f !== 'ScanCapture.tsx'), []);
+});
+
+/* ---------- Task 0023 C1/C3: new processing and redaction-check codes ---------- */
+
+test('0023 C1/C3: each new processing and redaction-check code has a plain title and sentence, with no code or content', () => {
+  const expected: Record<string, [string, string]> = {
+    PROCESSING_DISPATCH_EXHAUSTED: ['Processing couldn’t be started', 'LexaVault tried to start processing this case 3 times and couldn’t, so it stopped.'],
+    PROCESSING_LICENSE_DENIED: ['The licence doesn’t allow processing', 'The licence doesn’t allow this case to be processed, so it stopped at once without retrying.'],
+    REDACTION_LOCATION_MISSING: ['A confirmed finding has no place on the page', 'A finding was confirmed for redaction, but its place on the page isn’t known, so it couldn’t be redacted.'],
+    REDACTION_SOURCE_PAGES_UNKNOWN: ['Redaction check: the pages couldn’t be counted', 'The redaction check couldn’t tell how many pages the original document has. The document was not delivered.'],
+    REDACTION_PAGE_COUNT_MISMATCH: ['Redaction check: pages are missing or extra', 'The redacted document doesn’t have the same number of pages as the original. The document was not delivered.'],
+    REDACTION_TARGETS_NOT_APPLIED: ['Redaction check: not every redaction was made', 'Not every value marked for redaction was redacted. The document was not delivered.'],
+    REDACTION_OUTPUT_EMPTY: ['Redaction check: the redacted document is empty', 'Redaction produced an empty document. The document was not delivered.'],
+    REDACTION_TEXT_LAYER_REMAINS: ['Redaction check: hidden text remained', 'Text that should have been removed could still be read in the redacted document. The document was not delivered.'],
+    REDACTION_ANNOTATIONS_REMAIN: ['Redaction check: notes or comments remained', 'Notes, comments or form content remained in the redacted document. The document was not delivered.'],
+    REDACTION_REGION_NOT_COVERED: ['Redaction check: an area wasn’t fully covered', 'An area marked for redaction wasn’t fully covered in the redacted document. The document was not delivered.'],
+    REDACTION_OUTPUT_UNPARSABLE: ['Redaction check: the redacted document couldn’t be read', 'The redaction check couldn’t open the redacted document. The document was not delivered.'],
+  };
+  for (const [code, [title, sentence]] of Object.entries(expected)) {
+    const reason = problemReason(code);
+    assert.equal(reason.known, true, code);
+    assert.equal(reason.title, title, code);
+    assert.equal(reason.sentence, sentence, code);
+    assert.doesNotMatch(`${reason.title} ${reason.sentence}`, /[A-Z]{3,}_/, code);
+    assert.equal(problemReason(code.toLowerCase()).known, true, `${code} in lower case`);
+  }
+  // Each redaction-check refusal keeps its own reason (no catch-all).
+  assert.equal(new Set(Object.values(expected).map(([title]) => title)).size, Object.keys(expected).length);
 });

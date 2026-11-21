@@ -6,7 +6,7 @@ import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
 import { NAV, REVIEW_WORDS, sensitiveTypeName, whyAsked } from './words';
-import { PREVIEW_PIXELS_PER_CSS_PIXEL, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, maskFoundText, nextZoom, fitWidth } from './reviewRules';
+import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
 import { ConfirmDialog } from './admin/shared';
 import { useToast } from './toast';
@@ -14,10 +14,6 @@ import { useUnsavedWork } from './unsavedWork';
 import { REVIEW_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
 
 type Zoom = 'fit' | number;
-
-function errorCode(err: unknown): string | undefined {
-  return err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
-}
 
 /** The found text only when the server sent a usable one; anything else hides the row (fail closed). */
 function foundTextOf(item: FocusedReviewItem): ReviewFoundText | null {
@@ -95,6 +91,15 @@ export default function Review({ caps }: { caps: string[] }) {
     return later ?? [...items.slice(0, Math.max(0, index))].reverse().find((i) => !gone.has(i.findingId));
   }, [index, items]);
 
+  /** Task 0023 D5: the page preview says someone else already decided this finding. Take it off and move on. */
+  const alreadyDecidedOnPreview = useCallback(async (findingId: string) => {
+    const gone = new Set([findingId]);
+    const next = nextAfter(gone);
+    await removeFromQueue(gone);
+    toast(alreadyDecidedText(!!next));
+    if (next) { setSelectedId(next.findingId); setDraft(null); }
+  }, [nextAfter, removeFromQueue, toast]);
+
   const announceResumed = useCallback((packageId: string) => {
     mutateGlobal('packages');
     toast(`${titles.get(packageId) ?? 'Case'} is fully reviewed and back in processing.`, 'mark');
@@ -119,9 +124,10 @@ export default function Review({ caps }: { caps: string[] }) {
       if (result.processingResumed) announceResumed(result.packageId);
       if (next) { setSelectedId(next.findingId); setDraft(null); }
     } catch (err) {
-      if (errorCode(err) === 'CONFLICT') {
+      // Task 0023 D5 (#160): someone else already decided it (409 REVIEW_ALREADY_DECIDED). Move on, in fixed words.
+      if (isAlreadyDecided(err)) {
         await removeFromQueue(gone);
-        toast(`${errorMessage(err, 'This finding was already resolved.')} Moved to the next one.`);
+        toast(alreadyDecidedText(!!next));
         if (next) { setSelectedId(next.findingId); setDraft(null); }
       } else {
         setFailure(errorMessage(err, 'The decision could not be saved. Nothing was changed — try again.'));
@@ -142,6 +148,7 @@ export default function Review({ caps }: { caps: string[] }) {
     const gone = new Set<string>();
     let redacted = 0;
     let failed = 0;
+    let alreadyDecided = 0;
     const resumed = new Set<string>();
     try {
       for (const item of bulk.toRedact) {
@@ -152,7 +159,7 @@ export default function Review({ caps }: { caps: string[] }) {
           gone.add(item.findingId);
           if (result.processingResumed) resumed.add(result.packageId);
         } catch (err) {
-          if (errorCode(err) === 'CONFLICT') gone.add(item.findingId); // already decided by someone else
+          if (isAlreadyDecided(err)) { gone.add(item.findingId); alreadyDecided += 1; } // decided by someone else (0023 D5)
           else failed += 1;
         }
       }
@@ -161,7 +168,7 @@ export default function Review({ caps }: { caps: string[] }) {
       const next = gone.has(selected.findingId) ? nextAfter(gone) : selected;
       if (gone.size > 0) await removeFromQueue(gone);
       resumed.forEach(announceResumed);
-      toast(bulkResultText(redacted, bulk.skipped.length, failed), failed > 0 ? undefined : 'mark');
+      toast(bulkResultText(redacted, bulk.skipped.length, failed, alreadyDecided), failed > 0 ? undefined : 'mark');
       if (next && next.findingId !== selected.findingId) { setSelectedId(next.findingId); setDraft(null); }
       setBusy(false);
     }
@@ -290,7 +297,8 @@ export default function Review({ caps }: { caps: string[] }) {
             ))}
           </nav>
 
-          <PageStage key={selected.findingId} item={selected} draft={draft} onDraft={setDraft} zoom={zoom} onZoom={setZoom} />
+          <PageStage key={selected.findingId} item={selected} draft={draft} onDraft={setDraft} zoom={zoom} onZoom={setZoom}
+            onAlreadyDecided={() => void alreadyDecidedOnPreview(selected.findingId)} />
 
           <aside className="cf-decision" aria-label="Decision">
             <span className="cf-eyebrow">Finding {index + 1} of {remaining}</span>
@@ -360,16 +368,25 @@ export default function Review({ caps }: { caps: string[] }) {
   );
 }
 
-function PageStage({ item, draft, onDraft, zoom, onZoom }: {
+function PageStage({ item, draft, onDraft, zoom, onZoom, onAlreadyDecided }: {
   item: FocusedReviewItem;
   draft: ReviewBoundingBox | null;
   onDraft: (box: ReviewBoundingBox | null) => void;
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
+  onAlreadyDecided: () => void;
 }) {
   const { data, error } = useSWR(['review-preview', item.findingId], () => apiClient.getReviewPagePreview(item.findingId), { revalidateOnFocus: false });
   const url = useMemo(() => (data ? URL.createObjectURL(data.blob) : null), [data]);
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  // Task 0023 D5: the preview answers 409 REVIEW_ALREADY_DECIDED when someone else decided this finding. Once only.
+  const goneReported = useRef(false);
+  useEffect(() => {
+    if (!goneReported.current && isAlreadyDecided(error)) {
+      goneReported.current = true;
+      onAlreadyDecided();
+    }
+  }, [error, onAlreadyDecided]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);

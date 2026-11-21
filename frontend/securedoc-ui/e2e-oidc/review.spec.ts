@@ -89,7 +89,7 @@ function queueItems() {
   ];
 }
 
-async function mockApi(page: Page, confirmed: string[], dismissed: string[], initial = queueItems()) {
+async function mockApi(page: Page, confirmed: string[], dismissed: string[], initial = queueItems(), refused: Record<string, { status: number; body: object }> = {}) {
   let items = initial;
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
@@ -102,12 +102,21 @@ async function mockApi(page: Page, confirmed: string[], dismissed: string[], ini
     if (url.pathname === '/api/v1/packages') return json([CASE_A, CASE_B]);
     const decision = url.pathname.match(/^\/api\/v1\/review-items\/([^/]+)\/(confirm|dismiss)$/);
     if (decision && request.method() === 'POST') {
+      const refusal = refused[decision[1]];
+      if (refusal) {
+        // Someone else's decision took the finding off the server's queue; any other refusal leaves it there.
+        if ((refusal.body as { errorCode?: string }).errorCode === 'REVIEW_ALREADY_DECIDED') items = items.filter((i) => i.findingId !== decision[1]);
+        return json(refusal.body, refusal.status);
+      }
       (decision[2] === 'confirm' ? confirmed : dismissed).push(decision[1]);
       const item = items.find((i) => i.findingId === decision[1])!;
       items = items.filter((i) => i.findingId !== decision[1]);
       return json({ findingId: decision[1], packageId: item.packageId, status: decision[2] === 'confirm' ? 'CONFIRMED' : 'DISMISSED', processingResumed: false });
     }
     if (url.pathname.endsWith('/page-preview')) {
+      const previewOf = url.pathname.split('/')[4]; // /api/v1/review-items/<id>/page-preview
+      const previewRefusal = refused[`preview:${previewOf}`];
+      if (previewRefusal) { items = items.filter((i) => i.findingId !== previewOf); return json(previewRefusal.body, previewRefusal.status); }
       return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'X-Review-Page-Number': '1' }, body: PAGE_PNG });
     }
     if (url.pathname === '/api/v1/review-items') return json({ totalItems: items.length, items, autoRedactThreshold: 0.85 });
@@ -115,9 +124,9 @@ async function mockApi(page: Page, confirmed: string[], dismissed: string[], ini
   });
 }
 
-async function openReview(page: Page, confirmed: string[] = [], dismissed: string[] = [], items = queueItems()) {
+async function openReview(page: Page, confirmed: string[] = [], dismissed: string[] = [], items = queueItems(), refused: Record<string, { status: number; body: object }> = {}) {
   await mockIdentityProvider(page);
-  await mockApi(page, confirmed, dismissed, items);
+  await mockApi(page, confirmed, dismissed, items, refused);
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
   await page.getByRole('link', { name: /^Review/ }).first().click();
@@ -226,4 +235,63 @@ test('zoom: minus, percentage, plus and Fit', async ({ page }) => {
   await expect(value).not.toHaveText(`${zoomed}%`);
   await page.getByRole('button', { name: 'Fit' }).click();
   await expect(value).toHaveText(`${fit}%`);
+});
+
+/*
+ * Task 0023 D5 (inventory #160): the backend answers a decision someone else already made with HTTP 409 and errorCode
+ * REVIEW_ALREADY_DECIDED. The person moves on with fixed words (never the server's text); any other refusal keeps the
+ * finding and shows the failure line.
+ */
+const ALREADY = { status: 409, body: { errorCode: 'REVIEW_ALREADY_DECIDED', message: 'SERVER-TEXT-MARKER', correlationId: 'c-1' } };
+
+test('0023 D5: a finding someone else already decided moves the person to the next one with a clear message', async ({ page }) => {
+  await openReview(page, [], [], queueItems(), { f1: ALREADY });
+  await expect(queue(page).locator('.cf-queue-item[aria-current="true"]')).toContainText('0193');
+  await page.keyboard.press('r');
+  await expect(page.locator('.cf-toast')).toHaveText('Someone else already decided this finding. Moved to the next one.');
+  await expect(queue(page).locator('.cf-queue-item')).toHaveCount(5);
+  await expect(queue(page).locator('.cf-queue-item[aria-current="true"]')).toContainText('7741');
+  await expect(page.getByText('SERVER-TEXT-MARKER')).toHaveCount(0);
+  await expect(panel(page).getByText(/could not be saved/)).toHaveCount(0);
+});
+
+test('0023 D5: Keep visible on an already decided finding moves on the same way', async ({ page }) => {
+  const dismissed: string[] = [];
+  await openReview(page, [], dismissed, queueItems(), { f1: ALREADY });
+  await page.keyboard.press('v');
+  await expect(page.locator('.cf-toast')).toHaveText('Someone else already decided this finding. Moved to the next one.');
+  await expect(queue(page).locator('.cf-queue-item')).toHaveCount(5);
+  expect(dismissed).toEqual([]);
+});
+
+for (const [what, refusal] of [
+  ['a 409 with another code', { status: 409, body: { errorCode: 'CONFLICT', message: 'Review item is no longer pending' } }],
+  ['a 400 validation error', { status: 400, body: { errorCode: 'VALIDATION_ERROR', message: 'Review item is no longer pending' } }],
+] as const) {
+  test(`0023 D5: ${what} is not "already decided": the finding stays and the failure is shown`, async ({ page }) => {
+    await openReview(page, [], [], queueItems(), { f1: refusal });
+    await page.keyboard.press('r');
+    await expect(panel(page).getByRole('alert').or(panel(page).locator('.cf-notice[data-tone="danger"]')).first()).toBeVisible();
+    await expect(page.getByText('Someone else already decided this finding.', { exact: false })).toHaveCount(0);
+    await expect(queue(page).locator('.cf-queue-item')).toHaveCount(6);
+    await expect(queue(page).locator('.cf-queue-item[aria-current="true"]')).toContainText('0193');
+  });
+}
+
+test('0023 D5: Redact all like this counts a finding someone else already decided and takes it off the queue', async ({ page }) => {
+  const confirmed: string[] = [];
+  await openReview(page, confirmed, [], queueItems(), { f2: ALREADY });
+  await panel(page).getByRole('button', { name: /Redact all 3 like this/ }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Redact', exact: true }).click();
+  await expect(page.locator('.cf-toast')).toContainText('Redacted 1 finding. 1 skipped because its place was not found; it stays in the queue. 1 was already decided by someone else.');
+  expect(confirmed).toEqual(['f1']);
+  await expect(queue(page).locator('.cf-queue-item')).toHaveCount(4);
+});
+
+test('0023 D5: a page preview answered with REVIEW_ALREADY_DECIDED moves the person on with the same message', async ({ page }) => {
+  await openReview(page, [], [], queueItems(), { 'preview:f1': ALREADY });
+  await expect(page.locator('.cf-toast')).toHaveText('Someone else already decided this finding. Moved to the next one.');
+  await expect(queue(page).locator('.cf-queue-item')).toHaveCount(5);
+  await expect(queue(page).locator('.cf-queue-item[aria-current="true"]')).toContainText('7741');
+  await expect(page.getByText('SERVER-TEXT-MARKER')).toHaveCount(0);
 });

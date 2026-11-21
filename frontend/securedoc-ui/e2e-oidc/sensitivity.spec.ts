@@ -65,7 +65,7 @@ const CASE = {
 
 type Sent = { method: string; path: string; body: Record<string, unknown> };
 
-async function mockApi(page: Page, sent: Sent[]) {
+async function mockApi(page: Page, sent: Sent[], currentSession?: Record<string, unknown>) {
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -82,6 +82,7 @@ async function mockApi(page: Page, sent: Sent[]) {
         });
       }
       if (url.pathname.endsWith('/scan-sessions') && request.method() === 'POST') return json({ code: 'TEST_STOP', message: 'stopped by the test' }, 503);
+      if (currentSession && url.pathname.endsWith('/scan-sessions/current')) return json(currentSession);
       return route.fulfill({ status: 204, headers: cors });
     }
     if (url.pathname === '/api/v1/me/tenants') return json([ENTITY]);
@@ -98,9 +99,9 @@ async function mockApi(page: Page, sent: Sent[]) {
   });
 }
 
-async function signIn(page: Page, sent: Sent[] = []) {
+async function signIn(page: Page, sent: Sent[] = [], currentSession?: Record<string, unknown>) {
   await mockIdentityProvider(page);
-  await mockApi(page, sent);
+  await mockApi(page, sent, currentSession);
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
   await expect(page.getByRole('link', { name: /^New case/ }).first()).toBeVisible();
@@ -175,6 +176,52 @@ test('Scan paper sends the Sensitivity choice to the scan bridge', async ({ page
     caseSensitivityLevel: 'HIGHLY_CONFIDENTIAL',
   });
 });
+
+// Task 0023 (B4): a split delivery without a destination label is named by its document's type, or a short document
+// id, never by its file name.
+test('0023 B4: the case panel names a delivery without a destination label by document type or id, never the file name', async ({ page }) => {
+  await signIn(page);
+  const delivery = (n: string, sourceDocumentId: string) => ({
+    derivedDeliveryId: `dd-${n}`, packageId: CASE.packageId, sourceDocumentId, exportCycle: 1, pageNumbers: [1],
+    fileName: `Maria_Alvarez_${n}.pdf`, status: 'DELIVERED', attemptCount: 1, retryable: false, deliveredAt: '2026-11-20T12:00:00Z',
+  });
+  await page.route(`**/api/v1/packages/${CASE.packageId}/lifecycle`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    packageId: CASE.packageId, successfulExportCycles: 1, maximumExportCycles: 3, canReprocess: false, finalApprovalRequired: true, finalApprovalGranted: false,
+  }) }));
+  await page.route(`**/api/v1/packages/${CASE.packageId}/derived-deliveries`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+    { ...delivery('1', 'd-1'), destinationLabel: 'Title pages' },
+    delivery('2', 'd-2'),
+    delivery('3', '9e8d7c6b-0000-4000-8000-000000000003'),
+  ]) }));
+  await page.route(`**/api/v1/packages/${CASE.packageId}`, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    ...CASE, documents: CASE.documents.map((d) => d.documentId === 'd-2' ? { ...d, documentType: 'TITLE_COMMITMENT' } : d),
+  }) }));
+  await row(page).getByRole('link').click();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  const deliveries = panel.locator('details').filter({ has: page.locator('summary', { hasText: 'Deliveries' }) });
+  await expect(deliveries.locator('li.cf-doc')).toHaveCount(3);
+  await expect(deliveries.locator('li.cf-doc .cf-doc-name > span:first-child')).toHaveText(['Title pages', 'Title commitment', 'Document 9e8d7c6b']);
+  await expect(deliveries).not.toContainText('Maria_Alvarez');
+});
+
+// Task 0023 (A4): a scan session already open on the bridge shows its own level, and Standard when it carries none,
+// even if a different level was picked before the session was found.
+const OPEN_SESSION = {
+  sessionId: 's-1', submissionId: 'sub-1', tenantId: ENTITY.tenantId, bridgeId: 'BRIDGE-LOCAL-01', siteId: 'HOME-LAB',
+  scannerId: 'SCANNER-SIM-01', captureMode: 'SIMULATOR', status: 'WAITING_FOR_SCAN', businessIdentifiers: { loan_number: 'LN204903' },
+  createdAt: '2026-11-20T12:00:00Z', updatedAt: '2026-11-20T12:00:00Z', deliveryAttemptCount: 0,
+};
+for (const [what, level, expected] of [['no level', undefined, 'STANDARD'], ['a null level', null, 'STANDARD'], ['Confidential', 'CONFIDENTIAL', 'CONFIDENTIAL']] as const) {
+  test(`0023 A4: an open scan session with ${what} shows ${expected === 'STANDARD' ? 'Standard' : 'its level'} in Sensitivity`, async ({ page }) => {
+    await signIn(page, [], { ...OPEN_SESSION, ...(level === undefined ? {} : { caseSensitivityLevel: level }) });
+    await page.goto('/intake');
+    await page.getByLabel('Sensitivity').selectOption({ label: 'Highly Confidential' });
+    await page.getByRole('tab', { name: 'Scan paper' }).click();
+    const choice = page.getByLabel('Sensitivity');
+    await expect(choice).toBeDisabled();
+    await expect(choice).toHaveValue(expected);
+  });
+}
 
 /*
  * Task 0022 (A4): proof pictures, saved to ../../docs/work/compare/0022/ (not committed). Registered only on request:

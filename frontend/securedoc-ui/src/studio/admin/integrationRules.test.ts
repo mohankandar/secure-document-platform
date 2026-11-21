@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  VIEWS, advancedSummary, ago, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
+  DEFAULT_MAX_PDF_SIZE_BYTES, VIEWS, advancedSummary, ago, folderCheckResult, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
   methodOf, pagesText, ruleSentence, slashParts, statusText, watchedFolderStatus,
 } from './integrationRules.ts';
 
@@ -113,4 +113,57 @@ test('an address wraps only after a slash, never inside "://" (U020)', () => {
   assert.deepEqual(slashParts('/data/inbox/'), ['/', 'data/', 'inbox/']);
   assert.deepEqual(slashParts('plain'), ['plain']);
   assert.deepEqual(slashParts(''), []);
+});
+
+/* ---------- Task 0023 C4: split-delivery routing codes in plain words ---------- */
+
+test('0023 C4: each split routing and delivery code has its own plain reason, with no code in it', () => {
+  const expected: Record<string, string> = {
+    ROUTING_MASTER_UNAVAILABLE: "the delivered document couldn't be found to take the pages from",
+    ROUTING_FAILED: "the pages couldn't be sorted by the rules",
+    DERIVED_ROUTING_POST_EXPORT_FAILED: 'sorting the pages after delivery failed',
+    DERIVED_DOCUMENT_BUILD_FAILED: "the file with these pages couldn't be made",
+    DERIVED_DESTINATION_NOT_FOUND: 'the place it goes to no longer exists',
+    DERIVED_DESTINATION_WRONG_PURPOSE: "the place it goes to isn't set up to receive these pages",
+    DERIVED_DESTINATION_DISABLED: 'the place it goes to is switched off',
+    DERIVED_ARTIFACT_UNAVAILABLE: 'the file with these pages is no longer available',
+    DERIVED_SOURCE_NOT_FOUND: 'the original document is no longer available',
+  };
+  for (const [code, words] of Object.entries(expected)) {
+    assert.equal(failureReason(code), words, code);
+    assert.equal(failureReason(code.toLowerCase()), words, `${code} in lower case`);
+    assert.doesNotMatch(failureReason(code), /[A-Z]{3,}_|not recognised/, code);
+  }
+  // Each reason is told apart from the others (no catch-all).
+  assert.equal(new Set(Object.values(expected)).size, Object.keys(expected).length);
+  // In the attention list line.
+  assert.equal(attentionLine({ primaryIdentifierValue: 'LN204812', pageNumbers: [3, 4], destinationLabel: 'Title pages', markerType: 'BARCODE', failureCategory: 'DERIVED_DOCUMENT_BUILD_FAILED', attemptCount: 1 } as never),
+    "LN204812 · pages 3–4 → Title pages · the file with these pages couldn't be made · tried 1 time");
+});
+
+/* ---------- Task 0023 D3: the size limit default matches the backend ---------- */
+
+test('0023 D3: with no size saved, a receiving connection reads 50 MB (the backend default and multipart limit)', () => {
+  assert.equal(DEFAULT_MAX_PDF_SIZE_BYTES, 52428800);
+  assert.equal(advancedSummary({ acknowledgementMode: 'SOURCE_PICKUP_ACK', purpose: 'INGESTION_SOURCE' }),
+    'wait 60 s · try again up to 2 times · finish incomplete cases within 24 h · up to 100 files, 50 MB, 2000 pages · confirm pickup to the source');
+});
+
+/* ---------- Task 0023: "Check now" on the watched folder says when this server did not check it ---------- */
+
+test('0023: the folder check toast gives the counts when checked, and a plain line for each other outcome', () => {
+  const counts = { discovered: 3, waitingForTrigger: 0, accepted: 2, rejected: 1, duplicates: 0 };
+  const checked = 'Folder checked: 2 accepted, 1 refused, 0 already received.';
+  assert.deepEqual(folderCheckResult({ ...counts, outcome: 'SCANNED' }), { text: checked, tone: 'neutral' });
+  // An older server sends no outcome: it did check.
+  assert.deepEqual(folderCheckResult(counts), { text: checked, tone: 'neutral' });
+  assert.deepEqual(folderCheckResult({ ...counts, outcome: 'STANDBY' }),
+    { text: 'Not checked here: this LexaVault server is on standby, and another one checks the folder.', tone: 'neutral' });
+  assert.deepEqual(folderCheckResult({ ...counts, outcome: 'NOT_CONFIGURED' }),
+    { text: 'Not checked: the watched folder isn’t set up in this installation.', tone: 'danger' });
+  assert.deepEqual(folderCheckResult({ ...counts, outcome: 'COORDINATION_DEGRADED' }),
+    { text: 'Not checked: the LexaVault servers couldn’t agree which one checks the folder. Try again in a minute.', tone: 'danger' });
+  // An outcome this screen does not know is not read as "checked", and the code is not shown.
+  const unknown = folderCheckResult({ ...counts, outcome: 'SOMETHING_NEW' });
+  assert.deepEqual(unknown, { text: 'The folder wasn’t checked.', tone: 'danger' });
 });
