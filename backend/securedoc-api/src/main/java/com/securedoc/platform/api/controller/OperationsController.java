@@ -37,17 +37,20 @@ public class OperationsController {
     private final RequestContextResolver contextResolver;
     private final AuditService auditService;
     private final ProductAuthorizationPolicy authorizationPolicy;
+    private final com.securedoc.platform.application.pipeline.ExportJobService exportJobs;
 
     public OperationsController(GetOperationsDashboardQuery dashboardQuery,
                                 GetOperationalReportsQuery reportsQuery,
                                 RequestContextResolver contextResolver,
                                 AuditService auditService,
-                                ProductAuthorizationPolicy authorizationPolicy) {
+                                ProductAuthorizationPolicy authorizationPolicy,
+                                com.securedoc.platform.application.pipeline.ExportJobService exportJobs) {
         this.dashboardQuery = dashboardQuery;
         this.reportsQuery = reportsQuery;
         this.contextResolver = contextResolver;
         this.auditService = auditService;
         this.authorizationPolicy = authorizationPolicy;
+        this.exportJobs = exportJobs;
     }
 
     @GetMapping("/dashboard")
@@ -71,6 +74,10 @@ public class OperationsController {
         var page = dashboardQuery.execute(principal, parsedStage, search, offset, limit, sort,
                 !"asc".equalsIgnoreCase(direction));
         var overview = page.overview();
+        // Task 0028: the page's export states in two queries (its cases' export jobs, the tenant's destination states).
+        var exportStates = exportJobs.caseExportStates(principal.tenantId(),
+                page.items().stream().map(item -> com.securedoc.platform.domain.identity.PackageId.of(item.packageId()))
+                        .toList());
         return ResponseEntity.ok(new OperationsDashboardResponse(
                 new DashboardOverviewResponse(overview.total(), overview.processing(), overview.needsReview(),
                         overview.needsApproval(), overview.exported(), overview.technicalAttention(), overview.rejected()),
@@ -81,7 +88,10 @@ public class OperationsController {
                         item.identifiers().stream().map(i -> new DashboardIdentifierResponse(
                                 i.key(), i.label(), i.value(), i.primary(), i.displayOrder())).toList(),
                         item.documentCount(), item.successfulExportCycles(), item.lastExportedAt(), item.originalDeleteAt(),
-                        item.technicalHoldUntil(), item.createdAt(), item.updatedAt())).toList(),
+                        item.technicalHoldUntil(), item.createdAt(), item.updatedAt(),
+                        exportStates.getOrDefault(com.securedoc.platform.domain.identity.PackageId.of(item.packageId()),
+                                com.securedoc.platform.application.pipeline.ExportJobService.CaseExportState.NONE).name()))
+                        .toList(),
                 page.totalItems(), page.offset(), page.limit()));
     }
 

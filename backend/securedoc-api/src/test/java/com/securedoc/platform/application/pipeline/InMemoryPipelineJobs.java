@@ -13,6 +13,7 @@ import com.securedoc.platform.domain.pipeline.PipelineStage;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,6 +53,16 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
         return found.get(0);
     }
 
+    /** A copy of the row with what the SQL changes. */
+    private static PipelineJob row(PipelineJob j, PipelineJobStatus status, int attempts, Instant nextAttemptAt,
+                                   String owner, Instant claimUntil, long token, String code, String detail,
+                                   Instant updatedAt, boolean resend, boolean rebuilt, int claimExpiries,
+                                   Instant firstFailedAt, Instant lastFailedAt) {
+        return new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(), j.destinationId(),
+                j.itemId(), j.exportCycle(), j.priority(), status, attempts, nextAttemptAt, owner, claimUntil, token,
+                code, detail, j.createdAt(), updatedAt, resend, rebuilt, claimExpiries, firstFailedAt, lastFailedAt);
+    }
+
     @Override
     public synchronized boolean enqueue(PipelineJob job) {
         boolean exists = rows.values().stream().anyMatch(j -> j.tenantId().equals(job.tenantId())
@@ -79,6 +90,13 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
     }
 
     @Override
+    public synchronized List<PipelineJob> findExportJobsByPackageIds(TenantId tenantId,
+                                                                     Collection<PackageId> packageIds) {
+        return rows.values().stream().filter(j -> j.tenantId().equals(tenantId) && packageIds.contains(j.packageId())
+                && j.stage().isExport()).sorted(Comparator.comparing(PipelineJob::createdAt)).toList();
+    }
+
+    @Override
     public synchronized List<PipelineJob> findByTenantIdAndStatus(TenantId tenantId, PipelineJobStatus status, int limit) {
         return rows.values().stream().filter(j -> j.tenantId().equals(tenantId) && j.status() == status)
                 .sorted(Comparator.comparing(PipelineJob::updatedAt).thenComparing(PipelineJob::createdAt))
@@ -93,14 +111,27 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
                 .filter(j -> stages.contains(j.stage()))
                 .filter(j -> j.status() == PipelineJobStatus.READY || j.status() == PipelineJobStatus.WAITING_RETRY)
                 .filter(j -> !j.nextAttemptAt().isAfter(now))
-                .filter(j -> j.destinationId() == null || states.find(j.tenantId(), j.destinationId())
-                        .map(ExportDestinationStatus::state).orElse(DestinationState.WORKING) == DestinationState.WORKING)
-                .filter(j -> j.destinationId() == null || rows.values().stream()
-                        .filter(r -> j.destinationId().equals(r.destinationId())
-                                && r.status() == PipelineJobStatus.RUNNING).count() < perDestinationLimit)
+                .filter(j -> j.destinationId() == null || takes(j, now, perDestinationLimit))
                 .min(Comparator.comparingInt((PipelineJob j) -> j.priority().rank())
                         .thenComparing(PipelineJob::createdAt).thenComparing(PipelineJob::id));
         return next.map(j -> claimed(j, owner, lease));
+    }
+
+    /** The destination is WORKING, not waiting for a 429's Retry-After, and below its worker limit. */
+    private boolean takes(PipelineJob j, Instant now, int perDestinationLimit) {
+        ExportDestinationStatus s = states.find(j.tenantId(), j.destinationId())
+                .orElse(ExportDestinationStatus.working(j.tenantId(), j.destinationId()));
+        if (s.state() != DestinationState.WORKING) return false;
+        if (s.rateLimitedUntil() != null && s.rateLimitedUntil().isAfter(now)) return false;
+        long running = rows.values().stream().filter(r -> j.destinationId().equals(r.destinationId())
+                && r.status() == PipelineJobStatus.RUNNING).count();
+        return running < s.workerLimit(perDestinationLimit);
+    }
+
+    /** How many jobs of the destination are running now (the worker limit). */
+    synchronized long running(IntegrationConnectionId destinationId) {
+        return rows.values().stream().filter(r -> destinationId.equals(r.destinationId())
+                && r.status() == PipelineJobStatus.RUNNING).count();
     }
 
     @Override
@@ -113,10 +144,9 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
 
     private PipelineJob claimed(PipelineJob j, String owner, Duration lease) {
         Instant now = clock.instant();
-        PipelineJob c = new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(),
-                j.destinationId(), j.itemId(), j.exportCycle(), j.priority(), PipelineJobStatus.RUNNING, j.attempts(),
-                j.nextAttemptAt(), owner, now.plus(lease), j.claimToken() + 1, j.lastLvCode(), j.lastDetail(),
-                j.createdAt(), now);
+        PipelineJob c = row(j, PipelineJobStatus.RUNNING, j.attempts(), j.nextAttemptAt(), owner, now.plus(lease),
+                j.claimToken() + 1, j.lastLvCode(), j.lastDetail(), now, j.resend(), j.rebuilt(), j.claimExpiries(),
+                j.firstFailedAt(), j.lastFailedAt());
         rows.put(j.id(), c);
         return c;
     }
@@ -125,10 +155,9 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
     public synchronized boolean renew(UUID id, long claimToken, Duration lease) {
         if (!claimIsCurrent(id, claimToken)) return false;
         PipelineJob j = rows.get(id);
-        rows.put(id, new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(), j.destinationId(),
-                j.itemId(), j.exportCycle(), j.priority(), j.status(), j.attempts(), j.nextAttemptAt(), j.claimOwner(),
-                clock.instant().plus(lease), j.claimToken(), j.lastLvCode(), j.lastDetail(), j.createdAt(),
-                clock.instant()));
+        rows.put(id, row(j, j.status(), j.attempts(), j.nextAttemptAt(), j.claimOwner(), clock.instant().plus(lease),
+                j.claimToken(), j.lastLvCode(), j.lastDetail(), clock.instant(), j.resend(), j.rebuilt(),
+                j.claimExpiries(), j.firstFailedAt(), j.lastFailedAt()));
         return true;
     }
 
@@ -140,30 +169,29 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
     }
 
     @Override
-    public synchronized boolean finish(UUID id, long claimToken, PipelineJobStatus status, int attempts,
-                                       Duration retryDelay, String lastLvCode, String lastDetail) {
+    public synchronized boolean finish(UUID id, long claimToken, Finish result) {
         if (!claimIsCurrent(id, claimToken)) return false;
         PipelineJob j = rows.get(id);
         Instant now = clock.instant();
-        rows.put(id, new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(), j.destinationId(),
-                j.itemId(), j.exportCycle(), j.priority(), status, attempts,
-                retryDelay == null ? now : now.plus(retryDelay), null, null, j.claimToken(), lastLvCode, lastDetail,
-                j.createdAt(), now));
+        rows.put(id, row(j, result.status(), result.attempts(),
+                result.retryDelay() == null ? now : now.plus(result.retryDelay()), null, null, j.claimToken(),
+                result.lastLvCode(), result.lastDetail(), now, result.resend(), j.rebuilt() || result.rebuilt(),
+                j.claimExpiries(), result.failed() && j.firstFailedAt() == null ? now : j.firstFailedAt(),
+                result.failed() ? now : j.lastFailedAt()));
         return true;
     }
 
     @Override
-    public synchronized List<PipelineJob> releaseExpiredClaims(int maxAttempts, String exhaustedLvCode, int limit) {
+    public synchronized List<PipelineJob> releaseExpiredClaims(int maxClaimExpiries, String exhaustedLvCode, int limit) {
         Instant now = clock.instant();
         List<PipelineJob> released = new ArrayList<>();
         for (PipelineJob j : List.copyOf(rows.values())) {
             if (j.status() != PipelineJobStatus.RUNNING || j.claimUntil().isAfter(now)) continue;
-            int attempts = j.attempts() + 1;
-            boolean exhausted = attempts >= maxAttempts;
-            PipelineJob r = new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(),
-                    j.destinationId(), j.itemId(), j.exportCycle(), j.priority(),
-                    exhausted ? PipelineJobStatus.NEEDS_IT : PipelineJobStatus.READY, attempts, now, null, null,
-                    j.claimToken(), exhausted ? exhaustedLvCode : j.lastLvCode(), "CLAIM_EXPIRED", j.createdAt(), now);
+            int expiries = j.claimExpiries() + 1;
+            boolean exhausted = expiries >= maxClaimExpiries;
+            PipelineJob r = row(j, exhausted ? PipelineJobStatus.NEEDS_IT : PipelineJobStatus.READY, j.attempts() + 1,
+                    now, null, null, j.claimToken(), exhausted ? exhaustedLvCode : j.lastLvCode(), "CLAIM_EXPIRED",
+                    now, j.resend(), j.rebuilt(), expiries, j.firstFailedAt(), j.lastFailedAt());
             rows.put(j.id(), r);
             released.add(r);
             if (released.size() >= limit) break;
@@ -177,24 +205,64 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
         PipelineJob j = rows.get(id);
         if (j == null || !j.tenantId().equals(tenantId) || j.status() != from) return false;
         Instant now = clock.instant();
-        rows.put(id, new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(), j.destinationId(),
-                j.itemId(), j.exportCycle(), j.priority(), to, attempts, now, null, null, j.claimToken(), lastLvCode,
-                lastDetail, j.createdAt(), now));
+        rows.put(id, row(j, to, attempts, now, null, null, j.claimToken(), lastLvCode, lastDetail, now, false,
+                j.rebuilt(), j.claimExpiries(), j.firstFailedAt(), j.lastFailedAt()));
         return true;
     }
 
     @Override
     public synchronized int makeDueNow(TenantId tenantId, IntegrationConnectionId destinationId) {
+        return makeDue(j -> destinationId.equals(j.destinationId()) && (WAITING_FOR_DESTINATION.equals(j.lastDetail())
+                || WAITING_FOR_NETWORK.equals(j.lastDetail())), tenantId);
+    }
+
+    @Override
+    public synchronized int makeNetworkWaitersDueNow(TenantId tenantId) {
+        return makeDue(j -> WAITING_FOR_NETWORK.equals(j.lastDetail()), tenantId);
+    }
+
+    private int makeDue(java.util.function.Predicate<PipelineJob> which, TenantId tenantId) {
         int changed = 0;
         Instant now = clock.instant();
         for (PipelineJob j : List.copyOf(rows.values())) {
-            if (!j.tenantId().equals(tenantId) || !destinationId.equals(j.destinationId())
-                    || j.status() != PipelineJobStatus.WAITING_RETRY) continue;
-            rows.put(j.id(), new PipelineJob(j.id(), j.tenantId(), j.stage(), j.packageId(), j.documentId(),
-                    j.destinationId(), j.itemId(), j.exportCycle(), j.priority(), PipelineJobStatus.READY, j.attempts(),
-                    now, null, null, j.claimToken(), j.lastLvCode(), j.lastDetail(), j.createdAt(), now));
+            if (!j.tenantId().equals(tenantId) || j.status() != PipelineJobStatus.WAITING_RETRY || !which.test(j)) continue;
+            rows.put(j.id(), row(j, PipelineJobStatus.READY, j.attempts(), now, null, null, j.claimToken(),
+                    j.lastLvCode(), j.lastDetail(), now, j.resend(), j.rebuilt(), j.claimExpiries(), j.firstFailedAt(),
+                    j.lastFailedAt()));
             changed++;
         }
         return changed;
+    }
+
+    @Override
+    public synchronized List<UUID> resendAll(TenantId tenantId, IntegrationConnectionId destinationId) {
+        Instant now = clock.instant();
+        List<PipelineJob> waiting = rows.values().stream().filter(j -> j.tenantId().equals(tenantId)
+                        && destinationId.equals(j.destinationId()) && j.status() == PipelineJobStatus.WAITING_FOR_YOU)
+                .sorted(Comparator.comparing(PipelineJob::createdAt).thenComparing(PipelineJob::id)).toList();
+        for (PipelineJob j : waiting) {
+            rows.put(j.id(), row(j, PipelineJobStatus.READY, j.attempts(), now, null, null, j.claimToken(),
+                    j.lastLvCode(), j.lastDetail(), now, true, j.rebuilt(), j.claimExpiries(), j.firstFailedAt(),
+                    j.lastFailedAt()));
+        }
+        return waiting.stream().map(PipelineJob::id).toList();
+    }
+
+    @Override
+    public synchronized int countRecentlyFailingCases(TenantId tenantId, IntegrationConnectionId destinationId,
+                                                      Duration within) {
+        Instant since = clock.instant().minus(within);
+        return (int) rows.values().stream().filter(j -> j.tenantId().equals(tenantId)
+                        && destinationId.equals(j.destinationId()) && j.lastFailedAt() != null
+                        && !j.lastFailedAt().isBefore(since))
+                .map(PipelineJob::packageId).distinct().count();
+    }
+
+    @Override
+    public synchronized int countNeedsIt(TenantId tenantId, IntegrationConnectionId destinationId, String lvCode,
+                                         UUID exceptJobId) {
+        return (int) rows.values().stream().filter(j -> j.tenantId().equals(tenantId)
+                && Objects.equals(destinationId, j.destinationId()) && j.status() == PipelineJobStatus.NEEDS_IT
+                && lvCode.equals(j.lastLvCode()) && !j.id().equals(exceptJobId)).count();
     }
 }

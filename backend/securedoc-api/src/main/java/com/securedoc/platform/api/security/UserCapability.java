@@ -9,6 +9,8 @@ public enum UserCapability {
     REDACTION_ADJUST,
     REVIEW_SUBMIT,
     PACKAGE_APPROVE_DELIVERY,
+    /** Task 0028: resend exports waiting for a person. Processor and Supervisor; approving delivery stays Supervisor only. */
+    EXPORT_RESEND,
     PACKAGE_REPROCESS,
     PACKAGE_REMOVE_FROM_DASHBOARD,
     REPORT_EXECUTIVE_VIEW,

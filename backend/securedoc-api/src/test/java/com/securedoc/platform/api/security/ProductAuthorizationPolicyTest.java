@@ -19,7 +19,9 @@ class ProductAuthorizationPolicyTest {
                 UserCapability.MANUAL_REVIEW,
                 UserCapability.FINDING_DECISION,
                 UserCapability.REDACTION_ADJUST,
-                UserCapability.REVIEW_SUBMIT), caps);
+                UserCapability.REVIEW_SUBMIT,
+                // Task 0028 (owner's decision): the Processor resends exports waiting for a person.
+                UserCapability.EXPORT_RESEND), caps);
         assertFalse(caps.contains(UserCapability.PACKAGE_APPROVE_DELIVERY));
         assertFalse(caps.contains(UserCapability.PACKAGE_REPROCESS));
         assertFalse(caps.contains(UserCapability.PACKAGE_REMOVE_FROM_DASHBOARD));

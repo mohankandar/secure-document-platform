@@ -19,12 +19,56 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/** PostgreSQL export destination states (task 0027). A destination with no row is WORKING. Database time. */
+/**
+ * PostgreSQL export destination states (task 0027; 429 slow-down and failed-check time task 0028). A destination with
+ * no row is WORKING. Database time. Since task 0028 a row may belong to the local export folder (its derived id),
+ * which has no integration connection.
+ */
 @Repository
 public class JdbcExportDestinationStateRepository implements ExportDestinationStateRepository {
 
     private static final String COLUMNS =
-            "connection_id, tenant_id, state, paused_at, consecutive_failures, last_probe_at, last_lv_code, updated_at";
+            "connection_id, tenant_id, state, paused_at, consecutive_failures, last_probe_at, last_lv_code, updated_at,"
+                    + " rate_limited_until, worker_reduction, last_rate_limited_at, last_check_failed_at";
+
+    private static final String CHECK_FAILED_SQL = """
+            INSERT INTO export_destination_states
+                (connection_id, tenant_id, state, consecutive_failures, last_check_failed_at, updated_at)
+            VALUES (:connectionId, :tenantId, 'WORKING', 0, clock_timestamp(), clock_timestamp())
+            ON CONFLICT (connection_id) DO UPDATE SET
+                last_check_failed_at = clock_timestamp(),
+                updated_at = clock_timestamp()
+            WHERE export_destination_states.tenant_id = EXCLUDED.tenant_id
+            """;
+
+    private static final String RATE_LIMITED_SQL = """
+            INSERT INTO export_destination_states
+                (connection_id, tenant_id, state, consecutive_failures, rate_limited_until, worker_reduction,
+                 last_rate_limited_at, updated_at)
+            VALUES (:connectionId, :tenantId, 'WORKING', 0,
+                    clock_timestamp() + (:waitMillis * interval '1 millisecond'), LEAST(1, :maxReduction),
+                    clock_timestamp(), clock_timestamp())
+            ON CONFLICT (connection_id) DO UPDATE SET
+                rate_limited_until = GREATEST(COALESCE(export_destination_states.rate_limited_until, clock_timestamp()),
+                                              clock_timestamp() + (:waitMillis * interval '1 millisecond')),
+                worker_reduction = LEAST(export_destination_states.worker_reduction + 1, :maxReduction),
+                last_rate_limited_at = clock_timestamp(),
+                updated_at = clock_timestamp()
+            WHERE export_destination_states.tenant_id = EXCLUDED.tenant_id
+            """;
+
+    private static final String RESTORE_WORKERS_SQL = """
+            UPDATE export_destination_states
+               SET worker_reduction = worker_reduction - 1,
+                   last_rate_limited_at = clock_timestamp(),
+                   updated_at = clock_timestamp()
+             WHERE connection_id IN (SELECT connection_id FROM export_destination_states
+                                      WHERE worker_reduction > 0
+                                        AND (last_rate_limited_at IS NULL OR last_rate_limited_at
+                                             <= clock_timestamp() - (:quietMillis * interval '1 millisecond'))
+                                      LIMIT :limit
+                                      FOR UPDATE SKIP LOCKED)
+            """;
 
     private static final String ADD_FAILURE_SQL = """
             INSERT INTO export_destination_states
@@ -142,6 +186,26 @@ public class JdbcExportDestinationStateRepository implements ExportDestinationSt
                 + " WHERE connection_id = :connectionId AND tenant_id = :tenantId", key(tenantId, connectionId));
     }
 
+    @Override
+    public void recordCheckFailed(TenantId tenantId, IntegrationConnectionId connectionId) {
+        jdbc.update(CHECK_FAILED_SQL, key(tenantId, connectionId));
+    }
+
+    @Override
+    public void recordRateLimited(TenantId tenantId, IntegrationConnectionId connectionId, Duration wait,
+                                  int maxReduction) {
+        jdbc.update(RATE_LIMITED_SQL, key(tenantId, connectionId)
+                .addValue("waitMillis", wait == null ? 0L : Math.max(0L, wait.toMillis()))
+                .addValue("maxReduction", Math.max(0, maxReduction)));
+    }
+
+    @Override
+    public int restoreWorkers(Duration quietFor, int limit) {
+        return jdbc.update(RESTORE_WORKERS_SQL, new MapSqlParameterSource()
+                .addValue("quietMillis", Math.max(0L, quietFor.toMillis()))
+                .addValue("limit", Math.max(1, limit)));
+    }
+
     private static MapSqlParameterSource key(TenantId tenantId, IntegrationConnectionId connectionId) {
         return new MapSqlParameterSource().addValue("tenantId", tenantId.value())
                 .addValue("connectionId", connectionId.value());
@@ -156,7 +220,11 @@ public class JdbcExportDestinationStateRepository implements ExportDestinationSt
                 rs.getInt("consecutive_failures"),
                 instant(rs.getTimestamp("last_probe_at")),
                 rs.getString("last_lv_code"),
-                instant(rs.getTimestamp("updated_at")));
+                instant(rs.getTimestamp("updated_at")),
+                instant(rs.getTimestamp("rate_limited_until")),
+                rs.getInt("worker_reduction"),
+                instant(rs.getTimestamp("last_rate_limited_at")),
+                instant(rs.getTimestamp("last_check_failed_at")));
     }
 
     private static Instant instant(Timestamp value) {

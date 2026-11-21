@@ -172,5 +172,22 @@ public enum AuditAction {
     EXPORT_JOB_NEEDS_IT_NOTIFICATION,
     EXPORT_DESTINATION_PAUSED,
     EXPORT_DESTINATION_RESUMED,
-    EXPORT_DESTINATION_NEEDS_IT
+    EXPORT_DESTINATION_NEEDS_IT,
+
+    // Export follow-ups (task 0028). Codes, ids and numbers only.
+    /** Resend all for one destination: its WAITING_FOR_YOU jobs back to READY, one attempt each. */
+    EXPORT_JOB_RESEND_ALL_REQUESTED,
+    /** The export was rebuilt once from the stored redacted copies, before the 3rd retry. */
+    EXPORT_JOB_REBUILT,
+    /** IT retried a group (one destination, one code) of NEEDS_IT jobs. */
+    EXPORT_JOB_IT_GROUP_RETRY_REQUESTED,
+    /** A destination answered 429: it waits for Retry-After and gets one worker less. */
+    EXPORT_DESTINATION_RATE_LIMITED,
+    /** "LexaVault can't reach its destinations": every destination failed its check within the same minutes. */
+    EXPORT_DESTINATIONS_UNREACHABLE_ALERT,
+    EXPORT_DESTINATIONS_UNREACHABLE_ALERT_CLEARED,
+    /** The Business Admin set or cleared a retention period per export destination. */
+    EXPORT_RETENTION_PERIOD_CHANGED,
+    /** A split destination's copy was purged after its own retention period from receipt. */
+    SPLIT_COPY_PURGED
 }

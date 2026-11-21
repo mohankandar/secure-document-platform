@@ -33,7 +33,8 @@ import java.util.*;
  * the active provider reaches its durable-success boundary (local atomic write or SDV COMPLETE ACK).
  * Delivery submission/document identities survive technical retries without rerunning redaction.
  */
-public final class PackageDocumentExportService implements ExportPackageDocumentsUseCase {
+public final class PackageDocumentExportService implements ExportPackageDocumentsUseCase,
+        com.securedoc.platform.application.port.in.RebuildPackageExportUseCase {
     private static final Logger log = LoggerFactory.getLogger(PackageDocumentExportService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
     private static final String PDF_MIME_TYPE = "application/pdf";
@@ -213,6 +214,68 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 command.packageId(), documents.size(), submission.destinationType(), exportCycle, elapsedMillis(startedNanos));
         return ExportPackageDocumentsResult.of(command.packageId(), documents.size(), submission.destinationType(), exportCycle,
                 alreadyReceived);
+    }
+
+    /**
+     * Task 0028: the case run's submission rebuilt from the stored redacted copies (see
+     * {@link DeliverySubmission#rebuild}). Each copy is read back and must match its stored checksum, so a damaged or
+     * missing copy is found here and not by the destination. The identities are kept: the next attempt sends the same
+     * {@code Idempotency-Key}s, so the destination answers a repeat as a replay, not a second copy.
+     */
+    @Override
+    public boolean rebuild(com.securedoc.platform.domain.identity.TenantId tenantId,
+                           com.securedoc.platform.domain.identity.PackageId packageId,
+                           com.securedoc.platform.domain.identity.CorrelationId correlationId) {
+        int exportCycle;
+        try { exportCycle = lifecycleService.nextExportCycle(packageId, tenantId); }
+        catch (IllegalStateException e) { throw new ValidationException(LvErrorCode.REV_007, e.getMessage()); }
+        DeliverySubmission submission = deliverySubmissionRepository
+                .findByTenantIdAndPackageIdAndExportCycle(tenantId, packageId, exportCycle).orElse(null);
+        if (submission == null || submission.status() == DeliverySubmissionStatus.DELIVERED) return false;
+        List<DeliverySubmission.NewDocument> copies = new ArrayList<>();
+        for (Document document : documentRepository.findByPackageIdAndTenantId(packageId, tenantId)) {
+            Artifact artifact = artifactRepository.findByDocumentIdAndTenantId(document.id(), tenantId).stream()
+                    .filter(a -> a.artifactType() == ArtifactType.REDACTED && a.isAvailable())
+                    .max(Comparator.comparing(Artifact::createdAt))
+                    .orElseThrow(() -> new NotFoundException("Redacted artifact for document", document.id().toString()));
+            verifyStoredCopy(artifact);
+            copies.add(new DeliverySubmission.NewDocument(document.id(), document.fileName().value(),
+                    artifact.sizeBytes(), artifact.checksum()));
+        }
+        DeliverySubmission rebuilt;
+        try {
+            rebuilt = submission.rebuild(copies, Instant.now());
+        } catch (IllegalStateException differs) {
+            throw new ValidationException(LvErrorCode.DLV_011, "The stored copies are not the documents of this case run");
+        }
+        deliverySubmissionRepository.save(rebuilt);
+        log.info("PACKAGE_DELIVERY_REBUILT package={} cycle={} documents={}", packageId, exportCycle, copies.size());
+        return true;
+    }
+
+    /** Reads a stored redacted copy back and compares it with its checksum. Nothing of its content is kept. */
+    private void verifyStoredCopy(Artifact artifact) {
+        String algorithm = artifact.checksum().algorithm();
+        java.security.MessageDigest digest;
+        try {
+            digest = java.security.MessageDigest.getInstance(algorithm);
+        } catch (java.security.NoSuchAlgorithmException unknown) {
+            throw new ValidationException(LvErrorCode.DLV_011, "The stored copy's checksum can't be checked");
+        }
+        try (java.io.InputStream in = storagePort.retrieve(artifact.storageReference())) {
+            byte[] buffer = new byte[8192];
+            for (int read; (read = in.read(buffer)) != -1; ) digest.update(buffer, 0, read);
+        } catch (java.io.IOException | RuntimeException unreadable) {
+            throw new TechnicalDependencyException(com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
+                    com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO, true,
+                    "Stored redacted copy could not be read", null);
+        }
+        String actual = java.util.HexFormat.of().formatHex(digest.digest());
+        if (!actual.equalsIgnoreCase(artifact.checksum().value())) {
+            throw new TechnicalDependencyException(com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
+                    com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO, false,
+                    "Stored redacted copy does not match its checksum", null);
+        }
     }
 
     private Map<String,String> businessIdentifiers(DocumentPackage pkg) {

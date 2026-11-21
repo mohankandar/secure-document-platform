@@ -16,5 +16,8 @@ public record DashboardItemResponse(
         Instant originalDeleteAt,
         Instant technicalHoldUntil,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // Task 0028: the export state for the "Exporting" status (task 0029): NONE, READY, DESTINATION_PAUSED,
+        // WAITING_FOR_YOU, NEEDS_IT or EXPORTED. NONE in inline export mode (there are no export jobs).
+        String exportState
 ) {}

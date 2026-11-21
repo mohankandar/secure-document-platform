@@ -86,8 +86,14 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
         HttpRequest request = authorized(c, HttpRequest.newBuilder(resolve(c, "/api/v1/health")).GET())
                 .timeout(Duration.ofSeconds(c.timeoutSeconds())).build();
         HttpResponse<String> response = send(c, request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        require2xx(response.statusCode(), response.statusCode() >= 500 || response.statusCode() == 429,
+        require2xx(response, response.statusCode() >= 500 || response.statusCode() == 429,
                 "SDV connection health check failed");
+    }
+
+    /** Task 0028: the master destination's health check for an export job: the same safe connection test. */
+    @Override
+    public void checkDestination(TenantId tenantId) {
+        testConnection(connection(tenantId));
     }
 
     @Override
@@ -151,7 +157,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(bytes)).build();
             HttpResponse<String> response = send(c, request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             refuseIfSensitivityRefused(response, "SDV refused the case sensitivity level");
-            require2xx(response.statusCode(), false, "SDV submission creation failed");
+            require2xx(response, false, "SDV submission creation failed");
             JsonNode json = mapper.readTree(response.body());
             String id = text(json, "submissionId");
             if (id == null) throw failure(TechnicalFailureCode.DELIVERY_IO, true,
@@ -195,7 +201,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             HttpResponse<String> response = send(c, builder.POST(HttpRequest.BodyPublishers.ofInputStream(item.contentSource()::open)).build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             refuseIfSensitivityRefused(response, "SDV refused the document sensitivity level");
-            require2xx(response.statusCode(), response.statusCode() >= 500 || response.statusCode() == 429,
+            require2xx(response, response.statusCode() >= 500 || response.statusCode() == 429,
                     "SDV document upload failed");
             try {
                 JsonNode json = mapper.readTree(response.body());
@@ -218,7 +224,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
         HttpRequest request = authorized(c, HttpRequest.newBuilder(resolve(c, path)).GET())
                 .timeout(Duration.ofSeconds(c.timeoutSeconds())).build();
         HttpResponse<String> response = send(c, request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        require2xx(response.statusCode(), true, "SDV submission status check failed");
+        require2xx(response, true, "SDV submission status check failed");
         try {
             JsonNode json = mapper.readTree(response.body());
             return new SubmissionStatus(text(json, "status"));
@@ -316,6 +322,15 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
         }
         if (code != null && code.startsWith(SDV_SENSITIVITY_CODE_PREFIX)) {
             throw failure(TechnicalFailureCode.DELIVERY_SENSITIVITY_REFUSED, false, message, null);
+        }
+    }
+
+    /** Task 0028: as below, and a 429 is marked with its Retry-After (behaviour otherwise unchanged). */
+    private void require2xx(HttpResponse<?> response, boolean retryable, String message) {
+        try {
+            require2xx(response.statusCode(), retryable, message);
+        } catch (TechnicalDependencyException e) {
+            throw RetryAfter.mark(e, response);
         }
     }
 

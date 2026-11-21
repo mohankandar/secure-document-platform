@@ -10,7 +10,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-/** The state of each export destination (task 0027). A destination with no row is WORKING. */
+/**
+ * The state of each export destination (task 0027; task 0028 added slowing down on 429 and the failed-check time). A
+ * destination with no row is WORKING.
+ */
 public interface ExportDestinationStateRepository {
 
     Optional<ExportDestinationStatus> find(TenantId tenantId, IntegrationConnectionId connectionId);
@@ -18,8 +21,8 @@ public interface ExportDestinationStateRepository {
     List<ExportDestinationStatus> findByTenantId(TenantId tenantId);
 
     /**
-     * Adds one to the destination's failures in a row. When that reaches {@code pauseThreshold} while it is WORKING,
-     * the destination becomes PAUSED (once: only one caller sees {@code pausedNow}).
+     * Task 0027: adds one to the destination's failures in a row and pauses it at {@code pauseThreshold}. Task 0028
+     * no longer calls this (destinations are paused by evidence); kept for the stored counter.
      */
     TransientFailure recordTransientFailure(TenantId tenantId, IntegrationConnectionId connectionId, int pauseThreshold,
                                             String lvCode);
@@ -40,6 +43,21 @@ public interface ExportDestinationStateRepository {
     List<ExportDestinationStatus> findPausedDueForProbe(Duration probeInterval, int limit);
 
     void recordProbe(TenantId tenantId, IntegrationConnectionId connectionId);
+
+    /** The destination's own check failed now (the "all destinations at once" rule reads this time). */
+    void recordCheckFailed(TenantId tenantId, IntegrationConnectionId connectionId);
+
+    /**
+     * A 429: none of the destination's jobs is taken for {@code wait}, and it gets one worker less, at most
+     * {@code maxReduction} in all (so it always keeps one).
+     */
+    void recordRateLimited(TenantId tenantId, IntegrationConnectionId connectionId, Duration wait, int maxReduction);
+
+    /**
+     * Destinations slowed down by a 429 with no 429 for {@code quietFor} get one worker back (and the quiet time
+     * starts again). Returns how many got one back.
+     */
+    int restoreWorkers(Duration quietFor, int limit);
 
     record TransientFailure(int consecutiveFailures, boolean pausedNow, DestinationState state) { }
 }

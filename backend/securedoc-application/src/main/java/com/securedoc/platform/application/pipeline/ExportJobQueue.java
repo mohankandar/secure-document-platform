@@ -10,6 +10,7 @@ import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.pipeline.ExportDestinations;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import org.slf4j.Logger;
@@ -21,8 +22,8 @@ import java.util.UUID;
 
 /**
  * Queues export jobs (task 0027). The master destination is the one the delivery port is set up with: LexaVault has
- * one master destination per tenant (SDV, or the local export folder, which has no connection id and so is never
- * paused). Split documents are queued one job per derived delivery.
+ * one master destination per tenant (SDV, or the local export folder, which has no connection and is given a
+ * derived id, see {@link ExportDestinations}). Split documents are queued one job per derived delivery.
  */
 public final class ExportJobQueue implements ExportJobScheduler, SplitExportScheduler {
     private static final Logger log = LoggerFactory.getLogger(ExportJobQueue.class);
@@ -81,16 +82,18 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
     }
 
     static String destinationText(IntegrationConnectionId destination) {
-        return destination == null ? "local" : destination.value().toString();
+        return destination == null ? "none" : destination.value().toString();
     }
 
     /**
-     * The master destination's connection id; null for the local folder. When the destination is not set up the job
-     * is still queued with none: its run then fails with the set-up code (LV-DLV-006) and goes to the IT queue.
+     * The master destination: its connection id, or for the local export folder its derived id (task 0028, so it is
+     * checked and paused like any destination). When the destination is not set up the job is still queued with none:
+     * its run then fails with the set-up code (LV-DLV-006) and goes to the IT queue.
      */
-    private IntegrationConnectionId masterDestination(TenantId tenantId) {
+    public IntegrationConnectionId masterDestination(TenantId tenantId) {
         try {
-            return deliveryPort.describe(tenantId).connectionId();
+            IntegrationConnectionId id = deliveryPort.describe(tenantId).connectionId();
+            return id == null ? ExportDestinations.localFolder(tenantId) : id;
         } catch (RuntimeException notSetUp) {
             log.warn("EXPORT_JOB_DESTINATION_NOT_RESOLVED tenant={} type={}", tenantId,
                     notSetUp.getClass().getSimpleName());

@@ -51,6 +51,33 @@ public final class DerivedDeliveryService {
     public DerivedDelivery technicalRetry(TenantId tenantId, UUID id, ActorId actorId, CorrelationId correlationId){return attempt(tenantId,id,actorId,correlationId,true);}
     public DerivedDelivery autoSend(TenantId tenantId, UUID id, CorrelationId correlationId){return attempt(tenantId,id,ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000")),correlationId,true);}
 
+    /**
+     * Task 0028: the rebuild of a split export before a later retry. The split document's identity
+     * ({@code sourceDerivedDocumentId}, its idempotency key) never changes, so there is nothing to reset: its stored
+     * redacted copy is read back and must match its checksum. Sends nothing; keeps nothing of the content.
+     */
+    public void verifyStoredCopy(TenantId tenantId, UUID id){
+        DerivedDelivery d=get(tenantId,id);
+        if(d.artifactId()==null) throw new ValidationException(LvErrorCode.DLV_006, "Routing-attention item has no stored copy");
+        Artifact artifact=artifacts.findByIdAndTenantId(d.artifactId(),tenantId)
+                .orElseThrow(()->new NotFoundException("Derived artifact",d.artifactId().toString()));
+        if(!artifact.isAvailable()) throw new ValidationException(LvErrorCode.DLV_011, "Derived redacted artifact is not available");
+        java.security.MessageDigest digest;
+        try{ digest=java.security.MessageDigest.getInstance(artifact.checksum().algorithm()); }
+        catch(java.security.NoSuchAlgorithmException unknown){ throw new ValidationException(LvErrorCode.DLV_011, "The stored copy's checksum can't be checked"); }
+        try(java.io.InputStream in=storage.retrieve(artifact.storageReference())){
+            byte[] buffer=new byte[8192];
+            for(int read;(read=in.read(buffer))!=-1;) digest.update(buffer,0,read);
+        }catch(java.io.IOException|RuntimeException unreadable){
+            throw new TechnicalDependencyException(com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
+                    com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO,true,"Stored split copy could not be read",null);
+        }
+        if(!java.util.HexFormat.of().formatHex(digest.digest()).equalsIgnoreCase(artifact.checksum().value())){
+            throw new TechnicalDependencyException(com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
+                    com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO,false,"Stored split copy does not match its checksum",null);
+        }
+    }
+
     private DerivedDelivery attempt(TenantId tenantId, UUID id, ActorId actorId, CorrelationId correlationId, boolean technical){
         DerivedDelivery d=get(tenantId,id);
         if(d.artifactId()==null || d.destinationConnectionId()==null) throw new ValidationException(LvErrorCode.DLV_006, "Routing-attention item has no approved destination to send");

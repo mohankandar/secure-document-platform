@@ -242,14 +242,22 @@ class JdbcPipelineJobRepositoryPostgresTest {
     }
 
     @Test
-    void resumingADestinationMakesItsWaitingJobsDueNow() {
-        PackageId pkg = queueCase(1);
+    void resumingADestinationMakesTheJobsThatWaitedForItDueNowButNotTheOnesOnTheirOwnSchedule() {
+        // Task 0028: only jobs that waited because of the destination are made due; a case on its own retry schedule
+        // keeps it.
+        PackageId waited = queueCase(1);
+        PackageId ownSchedule = queueCase(1);
         PipelineJob job = claim("w").orElseThrow();
         jobs.finish(job.id(), job.claimToken(), PipelineJobStatus.WAITING_RETRY, 1, Duration.ofHours(1), "LV-DLV-001",
-                "DELIVERY_IO");
+                "DESTINATION_PAUSED");
+        PipelineJob other = claim("w").orElseThrow();
+        jobs.finish(other.id(), other.claimToken(), PipelineJobStatus.WAITING_RETRY, 1, Duration.ofHours(1),
+                "LV-DLV-002", "DELIVERY_IO");
         assertTrue(claim("w").isEmpty());
         assertEquals(1, jobs.makeDueNow(tenant, destination));
-        assertEquals(pkg, claim("w").orElseThrow().packageId());
+        assertEquals(waited, claim("w").orElseThrow().packageId());
+        assertTrue(claim("w").isEmpty(), "the case on its own schedule still waits");
+        assertNotEquals(waited, ownSchedule);
     }
 
     @Test

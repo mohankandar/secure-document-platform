@@ -52,6 +52,31 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
         return new DeliveryDescriptor(DESTINATION_TYPE, null, null);
     }
 
+    /**
+     * Task 0028: the local folder's health check. A small test file is written under the tenant's staging folder and
+     * deleted again; nothing of a case is touched. Fails (LV-DLV-001) when the folder can't be written.
+     */
+    @Override
+    public void checkDestination(TenantId tenantId) {
+        Path tenantDir = safeChild(outputRoot, tenantId.value().toString(), "tenant");
+        Path stagingRoot = safeChild(tenantDir, STAGING_DIRECTORY, "staging root");
+        Path probe = safeChild(stagingRoot, "lexavault-check-" + UUID.randomUUID() + ".tmp", "check file");
+        try {
+            Files.createDirectories(stagingRoot);
+            Files.write(probe, new byte[] {'o', 'k'});
+            Files.delete(probe);
+        } catch (IOException | RuntimeException e) {
+            try {
+                Files.deleteIfExists(probe);
+            } catch (IOException ignored) {
+                // The check failed already; a left-over check file holds no case data.
+            }
+            throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO,
+                    true, "Local export folder can't be written", e)
+                    .withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_001);
+        }
+    }
+
     @Override
     public BatchDeliveryReference deliverBatch(DeliveryBatch batch) {
         TenantId tenantId = batch.tenantId();

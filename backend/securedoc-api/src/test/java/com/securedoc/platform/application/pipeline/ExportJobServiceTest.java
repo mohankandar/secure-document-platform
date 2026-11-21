@@ -43,7 +43,7 @@ class ExportJobServiceTest {
         DocumentPackage pkg = f.caseReadyForExport();
 
         assertEquals(PackageStatus.PROCESSING, pkg.status());
-        assertEquals(ExportJobService.CaseExportState.READY_FOR_EXPORT, f.service.caseExportState(f.tenant, pkg.id()));
+        assertEquals(ExportJobService.CaseExportState.READY, f.service.caseExportState(f.tenant, pkg.id()));
         assertEquals(f.destination.id, f.jobOf(pkg).destinationId(), "one EXPORT job for the case's destination");
 
         assertEquals(1, f.drain());
@@ -128,13 +128,16 @@ class ExportJobServiceTest {
         // The first case goes out; then the destination goes down mid-run.
         assertTrue(f.step("worker-1").isPresent());
         f.destination.down();
-        for (int i = 0; i < 3; i++) assertTrue(f.step("worker-1").isPresent());
+        assertTrue(f.step("worker-1").isPresent());
 
-        // 3 failures in a row across the destination's cases: paused.
+        // Task 0028: the failure runs the destination's check at once; it fails, so the destination is paused at the
+        // first failure, and the case that met it used no attempt.
         assertEquals(DestinationState.PAUSED, f.states.stateOf(f.destination.id));
         Map<UUID, Integer> attemptsWhenPaused = attempts(f);
+        assertTrue(attemptsWhenPaused.entrySet().stream().filter(e -> !e.getKey().equals(f.jobOf(cases.get(0)).id()))
+                .allMatch(e -> e.getValue() == 0), "no case used an attempt because the destination was down");
         verify(f.audit).recordFailure(eq(f.tenant), any(), eq(AuditAction.EXPORT_DESTINATION_PAUSED), anyString(),
-                anyString(), any(), contains("code=LV-DLV-001"));
+                anyString(), any(), contains("code=LV-DLV-001, reason=CHECK_FAILED"));
 
         // While paused, nothing is taken and no attempt is used, however long it takes; nothing fails.
         for (int i = 0; i < 4; i++) {
@@ -181,60 +184,24 @@ class ExportJobServiceTest {
 
     // ------------------------------------------------------------------ retries by code (section 3 table)
 
-    @Test
-    void unreachableOrBusyWaitsFiveMinutesThenNeedsItAfterTheThirdTry() {
-        for (LvErrorCode code : List.of(LvErrorCode.DLV_001, LvErrorCode.DLV_002)) {
-            // A lone job: pausing is set higher here so the row "after the 3rd try, NEEDS_IT" is seen on its own.
-            ExportJobFixture f = new ExportJobFixture(settings(10));
-            DocumentPackage pkg = f.caseReadyForExport();
-            f.destination.failWith = code;
-
-            f.step("w");
-            assertJob(f, pkg, PipelineJobStatus.WAITING_RETRY, 1, code.code());
-            f.clock.advance(minutes(4));
-            assertTrue(f.step("w").isEmpty(), code + ": the next try is 5 minutes later");
-            f.clock.advance(minutes(1));
-            f.step("w");
-            assertJob(f, pkg, PipelineJobStatus.WAITING_RETRY, 2, code.code());
-            f.clock.advance(minutes(5));
-            f.step("w");
-
-            assertJob(f, pkg, PipelineJobStatus.NEEDS_IT, 3, code.code());
-            assertEquals(PackageStatus.PROCESSING, pkg.status(), "the case is not failed");
-            assertEquals(ExportJobService.CaseExportState.NEEDS_IT, f.service.caseExportState(f.tenant, pkg.id()));
-            assertItQueue(f, pkg, code);
-        }
-    }
+    // Task 0028 replaced "3 tries 5 minutes apart" and "pause after 3 failures in a row": the single-case schedule,
+    // the rebuild and the pausing by evidence are proven in ExportFollowupsTest.
 
     @Test
-    void withTheDefaultsALoneFailingJobPausesItsDestinationAtItsThirdTry() {
+    void aJobWhoseDestinationCanNotBeResolvedFollowsTheCaseScheduleWithoutACheck() {
         ExportJobFixture f = new ExportJobFixture();
         DocumentPackage pkg = f.caseReadyForExport();
-        f.destination.down();
-        for (int i = 0; i < 3; i++) {
-            f.step("w");
-            f.clock.advance(minutes(5));
-        }
-        assertJob(f, pkg, PipelineJobStatus.WAITING_RETRY, 3, "LV-DLV-001");
-        assertEquals(DestinationState.PAUSED, f.states.stateOf(f.destination.id));
-    }
-
-    @Test
-    void theLocalFolderHasNoDestinationStateSoAJobGoesToItAfterThreeTries() {
-        ExportJobFixture f = new ExportJobFixture();
-        DocumentPackage pkg = f.caseReadyForExport();
-        // Re-queue the same case as a local-folder job (no connection id).
+        // Re-queue the same case with no destination (it could not be resolved when queued).
         f.jobs.all().forEach(j -> f.jobs.changeStatus(f.tenant, j.id(), j.status(), PipelineJobStatus.STOPPED, 0, null, null));
         f.jobs.enqueue(PipelineJob.ready(f.tenant, PipelineStage.EXPORT, pkg.id(), null, null, null, 2,
                 f.clock.instant()));
         f.nextCycle.put(pkg.id(), 2);
         f.destination.failWith = LvErrorCode.DLV_001;
-        for (int i = 0; i < 3; i++) {
-            f.step("w");
-            f.clock.advance(minutes(5));
-        }
+        f.step("w");
         PipelineJob job = f.jobs.all().stream().filter(j -> j.exportCycle() == 2).findFirst().orElseThrow();
-        assertEquals(PipelineJobStatus.NEEDS_IT, job.status());
+        assertEquals(PipelineJobStatus.WAITING_RETRY, job.status());
+        assertEquals(1, job.attempts());
+        assertTrue(f.checked.isEmpty(), "no destination to check");
     }
 
     @Test
@@ -305,18 +272,19 @@ class ExportJobServiceTest {
     }
 
     @Test
-    void answerNotUnderstoodOrNotAllConfirmedIsTriedThreeTimesThenNeedsIt() {
+    void answerNotUnderstoodOrNotAllConfirmedFollowsTheCaseScheduleThenNeedsIt() {
         for (LvErrorCode code : List.of(LvErrorCode.DLV_007, LvErrorCode.DLV_008)) {
             ExportJobFixture f = new ExportJobFixture();
             DocumentPackage pkg = f.caseReadyForExport();
             f.destination.failWith = code;
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 6; i++) {
                 f.step("w");
-                f.clock.advance(minutes(5));
+                f.clock.advance(Duration.ofHours(13));
             }
-            assertJob(f, pkg, PipelineJobStatus.NEEDS_IT, 3, code.code());
+            assertJob(f, pkg, PipelineJobStatus.NEEDS_IT, 6, code.code());
             assertEquals(DestinationState.WORKING, f.states.stateOf(f.destination.id),
                     code + ": the destination answered, so it is not paused");
+            assertTrue(f.checked.isEmpty(), code + ": the destination answered, so it is not checked");
         }
     }
 
@@ -349,7 +317,8 @@ class ExportJobServiceTest {
         List<DocumentPackage> cases = List.of(f.caseReadyForExport(), f.caseReadyForExport(), f.caseReadyForExport());
         f.destination.failWith = LvErrorCode.DLV_004;
         f.drain();
-        List<UUID> waiting = f.service.waitingForYou(f.tenant).stream().map(ExportJobService.JobView::jobId).toList();
+        List<UUID> waiting = f.service.waitingForYou(f.tenant).stream().flatMap(g -> g.jobs().stream())
+                .map(ExportJobService.JobView::jobId).toList();
         assertEquals(3, waiting.size());
         int callsBefore = f.destination.keys.size();
 
@@ -525,12 +494,6 @@ class ExportJobServiceTest {
     }
 
     // ------------------------------------------------------------------ helpers
-
-    private static ExportJobSettings settings(int pauseAfterFailures) {
-        ExportJobSettings d = ExportJobSettings.defaults(ExportMode.JOB);
-        return new ExportJobSettings(d.mode(), d.retryDelay(), d.maxAttempts(), pauseAfterFailures, d.probeInterval(),
-                d.claimLease(), d.workersPerDestination(), d.workersTotal());
-    }
 
     private static DerivedDelivery split(UUID id) {
         DerivedDelivery d = mock(DerivedDelivery.class);

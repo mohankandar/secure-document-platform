@@ -11,13 +11,15 @@ import java.util.Set;
 @Component
 public class ProductAuthorizationPolicy {
 
+    /** Task 0028: EXPORT_RESEND, the Processor resends exports waiting for a person (the Supervisor has it from here). */
     private static final EnumSet<UserCapability> DOCUMENT_PROCESSOR_CAPABILITIES = EnumSet.of(
             UserCapability.DASHBOARD_ACCESS,
             UserCapability.DOCUMENT_INTAKE,
             UserCapability.MANUAL_REVIEW,
             UserCapability.FINDING_DECISION,
             UserCapability.REDACTION_ADJUST,
-            UserCapability.REVIEW_SUBMIT);
+            UserCapability.REVIEW_SUBMIT,
+            UserCapability.EXPORT_RESEND);
 
     private static final EnumSet<UserCapability> DOCUMENT_SUPERVISOR_CAPABILITIES = EnumSet.of(
             UserCapability.PACKAGE_APPROVE_DELIVERY,

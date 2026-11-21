@@ -111,6 +111,37 @@ public final class DeliverySubmission {
         this.updatedAt = Objects.requireNonNull(now);
     }
 
+    /**
+     * Task 0028: the same case run rebuilt from the stored redacted copies, for one last fresh start before IT. The
+     * identities are kept, so the destination still recognises a repeat (SDV_DELIVERY_V1.md): the same id, the same
+     * {@code sourceSubmissionId} (the Idempotency-Key) and each document's {@code sourceDocumentId}. Everything learned
+     * from the destination is dropped: its submission reference and every acknowledgement, so the next attempt creates
+     * (idempotently) and uploads again. Sizes and checksums are read again from the stored copies. The documents must be
+     * exactly the ones of this run.
+     */
+    public DeliverySubmission rebuild(List<NewDocument> storedCopies, Instant now) {
+        Objects.requireNonNull(now);
+        if (status == DeliverySubmissionStatus.DELIVERED) {
+            throw new IllegalStateException("A delivered submission is not rebuilt");
+        }
+        Map<DocumentId, NewDocument> byDocument = new LinkedHashMap<>();
+        for (NewDocument copy : storedCopies == null ? List.<NewDocument>of() : storedCopies) {
+            byDocument.put(copy.documentId(), copy);
+        }
+        if (byDocument.size() != documents.size()) {
+            throw new IllegalStateException("The stored copies are not the documents of this case run");
+        }
+        List<DocumentState> rebuilt = new ArrayList<>(documents.size());
+        for (DocumentState state : documents) {
+            NewDocument copy = byDocument.get(state.documentId());
+            if (copy == null) throw new IllegalStateException("The stored copies are not the documents of this case run");
+            rebuilt.add(new DocumentState(state.documentId(), state.sourceDocumentId(), state.fileName(),
+                    copy.sizeBytes(), copy.checksum(), false, null, null, null));
+        }
+        return new DeliverySubmission(id, tenantId, packageId, exportCycle, sourceSubmissionId, destinationType,
+                DeliverySubmissionStatus.RETRY_PENDING, attemptCount, null, null, createdAt, now, null, rebuilt);
+    }
+
     public boolean allAcknowledged() { return documents.stream().allMatch(DocumentState::acknowledged); }
     public List<DocumentState> pendingDocuments() { return documents.stream().filter(d -> !d.acknowledged()).toList(); }
     public Optional<DocumentState> findDocument(DocumentId id) { return documents.stream().filter(d -> d.documentId().equals(id)).findFirst(); }

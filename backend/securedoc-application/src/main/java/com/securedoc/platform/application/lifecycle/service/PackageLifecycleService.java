@@ -30,6 +30,7 @@ import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.identity.ActorId;
+import com.securedoc.platform.domain.identity.ArtifactId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -42,6 +43,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Owns package export-cycle accounting, temporary-artifact retention, purge and final-approval state.
@@ -61,6 +63,8 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
     private final AuditService auditService;
     private final ProcessingIncidentService processingIncidentService;
     private final ProductTelemetryService productTelemetryService;
+    /** Task 0028: retention per export destination; {@link ExportCopyRetention#none()} keeps the rules from before. */
+    private final ExportCopyRetention exportRetention;
 
     public PackageLifecycleService(TenantLifecyclePolicyRepository policyRepository,
                                    PackageLifecycleRepository lifecycleRepository,
@@ -102,6 +106,23 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                    AuditService auditService,
                                    ProcessingIncidentService processingIncidentService,
                                    ProductTelemetryService productTelemetryService) {
+        this(policyRepository, lifecycleRepository, exportRecordRepository, packageRepository, dashboardVisibilityPort,
+                documentRepository, artifactRepository, storagePort, auditService, processingIncidentService,
+                productTelemetryService, ExportCopyRetention.none());
+    }
+
+    public PackageLifecycleService(TenantLifecyclePolicyRepository policyRepository,
+                                   PackageLifecycleRepository lifecycleRepository,
+                                   PackageExportRecordRepository exportRecordRepository,
+                                   PackageRepository packageRepository,
+                                   PackageDashboardVisibilityPort dashboardVisibilityPort,
+                                   DocumentRepository documentRepository,
+                                   ArtifactRepository artifactRepository,
+                                   StoragePort storagePort,
+                                   AuditService auditService,
+                                   ProcessingIncidentService processingIncidentService,
+                                   ProductTelemetryService productTelemetryService,
+                                   ExportCopyRetention exportRetention) {
         this.policyRepository = Objects.requireNonNull(policyRepository);
         this.lifecycleRepository = Objects.requireNonNull(lifecycleRepository);
         this.exportRecordRepository = Objects.requireNonNull(exportRecordRepository);
@@ -113,6 +134,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         this.auditService = Objects.requireNonNull(auditService);
         this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
         this.productTelemetryService = Objects.requireNonNull(productTelemetryService);
+        this.exportRetention = Objects.requireNonNull(exportRetention);
     }
 
     public TenantLifecyclePolicy policyFor(TenantId tenantId) {
@@ -158,7 +180,13 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         Instant exportedAt = Instant.now();
         PackageLifecycle lifecycle = lifecycleFor(packageId, tenantId);
         TenantLifecyclePolicy policy = policyFor(tenantId);
-        lifecycle.recordSuccessfulExport(cycleNumber, exportedAt, policy);
+        // Task 0028: the master copy is kept for the master destination's period from its receipt (now); by default
+        // that is the redacted-copy retention, as before.
+        int masterCopyHours = exportRetention.masterCopyHours(policy);
+        TenantLifecyclePolicy clockPolicy = masterCopyHours == policy.redactedCacheHours() ? policy
+                : new TenantLifecyclePolicy(policy.tenantId(), policy.originalRetentionHours(), masterCopyHours,
+                        policy.neverExportedHoldHours(), policy.finalApprovalRequired(), policy.updatedAt());
+        lifecycle.recordSuccessfulExport(cycleNumber, exportedAt, clockPolicy);
         PackageExportRecord record = PackageExportRecord.create(
                 tenantId, packageId, cycleNumber, destinationType, exportedAt, correlationId, documents);
         exportRecordRepository.save(record);
@@ -239,9 +267,13 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
 
         for (PackageLifecycle lifecycle : lifecycleRepository.findDueRedactedPurge(command.now(), command.limit())) {
             if (!isTerminalForPurge(lifecycle)) continue;
+            // Task 0028: the master copy stays while the case's master export job is open.
+            if (exportRetention.masterExportOpen(lifecycle.tenantId(), lifecycle.packageId())) continue;
             try {
-                purgeArtifactType(lifecycle, ArtifactType.REDACTED);
-                purgeArtifactType(lifecycle, ArtifactType.DERIVED_REDACTED);
+                purgeArtifactType(lifecycle, ArtifactType.REDACTED, Set.of());
+                // Split copies follow their own destination's clock; one never received follows the master copy.
+                purgeArtifactType(lifecycle, ArtifactType.DERIVED_REDACTED,
+                        exportRetention.splitCopiesToKeep(lifecycle.tenantId(), lifecycle.packageId(), command.now()));
                 lifecycle.markRedactedPurged(command.now());
                 lifecycleRepository.save(lifecycle);
                 redactedPurged++;
@@ -257,13 +289,16 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
 
         for (PackageLifecycle lifecycle : lifecycleRepository.findDueFinalPurge(command.now(), command.limit())) {
             if (!isTerminalForPurge(lifecycle)) continue;
+            // Task 0028: the original stays while any export job of the case is open (a rebuild needs the case).
+            if (exportRetention.anyExportOpen(lifecycle.tenantId(), lifecycle.packageId())) continue;
             try {
                 DocumentPackage retainedPackage = packageRepository
                         .findByIdAndTenantId(lifecycle.packageId(), lifecycle.tenantId()).orElse(null);
                 boolean technicalAttention = retainedPackage != null
                         && retainedPackage.status() == PackageStatus.FAILED
                         && lifecycle.successfulExportCycles() == 0;
-                purgeAllInternalArtifacts(lifecycle);
+                purgeAllInternalArtifacts(lifecycle,
+                        exportRetention.splitCopiesToKeep(lifecycle.tenantId(), lifecycle.packageId(), command.now()));
                 hidePackageFromDashboardAfterFinalRetention(lifecycle, command.actorId(), command.now());
                 lifecycle.markFinalPurged(command.now());
                 lifecycleRepository.save(lifecycle);
@@ -297,6 +332,16 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                         "DocumentPackage", lifecycle.packageId().toString(), command.correlationId(),
                         TechnicalFailureClassifier.safeAuditDetail(e, "Package artifact purge failed"));
             }
+        }
+
+        // Task 0028: split copies whose own period from their destination's receipt has run out.
+        // Each copy is audited on its own (SPLIT_COPY_PURGED); a failure of the whole sweep is logged and retried next time.
+        try {
+            exportRetention.purgeDueSplitCopies(command.now(), command.limit(), command.actorId(),
+                    command.correlationId(), this::deleteArtifact);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(PackageLifecycleService.class)
+                    .warn("SPLIT_COPY_PURGE_SWEEP_FAILED type={}", e.getClass().getSimpleName());
         }
 
         // Upgrade reconciliation: older packages may have completed final retention purge before
@@ -370,20 +415,23 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         };
     }
 
-    private void purgeArtifactType(PackageLifecycle lifecycle, ArtifactType artifactType) {
+    /** Deletes the case's artifacts of this type, except the split copies that must stay ({@code keep}). */
+    private void purgeArtifactType(PackageLifecycle lifecycle, ArtifactType artifactType, Set<ArtifactId> keep) {
         for (Document document : documentRepository.findByPackageIdAndTenantId(lifecycle.packageId(), lifecycle.tenantId())) {
             for (Artifact artifact : artifactRepository.findByDocumentIdAndTenantId(document.id(), lifecycle.tenantId())) {
-                if (artifact.artifactType() == artifactType && artifact.status() != ArtifactStatus.DELETED) {
+                if (artifact.artifactType() == artifactType && artifact.status() != ArtifactStatus.DELETED
+                        && !keep.contains(artifact.id())) {
                     deleteArtifact(artifact);
                 }
             }
         }
     }
 
-    private void purgeAllInternalArtifacts(PackageLifecycle lifecycle) {
+    /** Deletes every internal artifact of the case, except the split copies still inside their own period. */
+    private void purgeAllInternalArtifacts(PackageLifecycle lifecycle, Set<ArtifactId> keep) {
         for (Document document : documentRepository.findByPackageIdAndTenantId(lifecycle.packageId(), lifecycle.tenantId())) {
             for (Artifact artifact : artifactRepository.findByDocumentIdAndTenantId(document.id(), lifecycle.tenantId())) {
-                if (artifact.status() != ArtifactStatus.DELETED) deleteArtifact(artifact);
+                if (artifact.status() != ArtifactStatus.DELETED && !keep.contains(artifact.id())) deleteArtifact(artifact);
             }
         }
     }

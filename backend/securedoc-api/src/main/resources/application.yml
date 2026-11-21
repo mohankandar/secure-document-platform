@@ -159,9 +159,23 @@ securedoc:
     # export job with retries by code. Rollout stays inline until P2 is proven.
     export-mode: ${SECUREDOC_PROCESSING_EXPORT_MODE:inline}
     export-jobs:
+      # Task 0028: retry-delay-ms and pause-after-failures are still read but no longer used (destinations are
+      # paused by their own check; a single failing case follows retry-schedule).
       retry-delay-ms: ${SECUREDOC_EXPORT_JOBS_RETRY_DELAY_MS:300000}
+      # Claims that may run out (a server stopping mid-job) before LV-PRC-008.
       max-attempts: ${SECUREDOC_EXPORT_JOBS_MAX_ATTEMPTS:3}
       pause-after-failures: ${SECUREDOC_EXPORT_JOBS_PAUSE_AFTER_FAILURES:3}
+      # A single failing case: the delays between tries (s, m, h), then IT. Rebuilt once before this retry.
+      retry-schedule: ${SECUREDOC_EXPORT_JOBS_RETRY_SCHEDULE:5m,15m,1h,4h,12h}
+      rebuild-before-retry: ${SECUREDOC_EXPORT_JOBS_REBUILD_BEFORE_RETRY:3}
+      # "Answering but failing": failures from this many different cases within the window pause the destination.
+      failing-cases-to-pause: ${SECUREDOC_EXPORT_JOBS_FAILING_CASES_TO_PAUSE:3}
+      failing-cases-window-ms: ${SECUREDOC_EXPORT_JOBS_FAILING_CASES_WINDOW_MS:600000}
+      # 429: the wait without Retry-After, and the quiet time before a destination gets a worker back.
+      rate-limit-default-wait-ms: ${SECUREDOC_EXPORT_JOBS_RATE_LIMIT_DEFAULT_WAIT_MS:60000}
+      rate-limit-recovery-ms: ${SECUREDOC_EXPORT_JOBS_RATE_LIMIT_RECOVERY_MS:600000}
+      # Every destination failing its check within this window: one "can't reach its destinations" alert.
+      all-unreachable-window-ms: ${SECUREDOC_EXPORT_JOBS_ALL_UNREACHABLE_WINDOW_MS:120000}
       probe-interval-ms: ${SECUREDOC_EXPORT_JOBS_PROBE_INTERVAL_MS:300000}
       claim-lease-ms: ${SECUREDOC_EXPORT_JOBS_CLAIM_LEASE_MS:120000}
       workers-per-destination: ${SECUREDOC_EXPORT_JOBS_WORKERS_PER_DESTINATION:4}
