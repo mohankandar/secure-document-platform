@@ -99,6 +99,18 @@ public class JdbcPackageProcessingLeaseAdapter implements PackageProcessingLease
             """;
 
 
+    /**
+     * Task 0027: a case whose processing is done and that waits for its EXPORT job (export-mode job) stays PROCESSING
+     * as "Ready for export". It is not interrupted work: recovery leaves it alone, so it is never re-run or stopped
+     * after 3 recoveries while its destination is paused. With export-mode inline there are no jobs, so nothing
+     * changes.
+     */
+    static final String WAITING_FOR_EXPORT_JOB_EXCLUSION = """
+               AND NOT EXISTS (SELECT 1 FROM pipeline_jobs j
+                                WHERE j.package_id = p.id AND j.stage = 'EXPORT'
+                                  AND j.status NOT IN ('DONE', 'STOPPED'))
+            """;
+
     private static final String EXPIRED_SQL = """
             SELECT l.package_id, l.tenant_id, l.owner_id, l.fencing_token, l.attempt_count,
                    l.acquired_at, l.heartbeat_at, l.lease_expires_at
@@ -107,6 +119,7 @@ public class JdbcPackageProcessingLeaseAdapter implements PackageProcessingLease
                 ON p.id = l.package_id AND p.tenant_id = l.tenant_id
              WHERE l.lease_expires_at <= clock_timestamp()
                AND p.status = 'PROCESSING'
+            """ + WAITING_FOR_EXPORT_JOB_EXCLUSION + """
              ORDER BY l.lease_expires_at ASC
              LIMIT :limit
             """;
@@ -118,6 +131,7 @@ public class JdbcPackageProcessingLeaseAdapter implements PackageProcessingLease
              WHERE p.status = 'PROCESSING'
                AND l.package_id IS NULL
                AND p.updated_at <= clock_timestamp() - (:staleMillis * interval '1 millisecond')
+            """ + WAITING_FOR_EXPORT_JOB_EXCLUSION + """
              ORDER BY p.updated_at ASC
              LIMIT :limit
             """;

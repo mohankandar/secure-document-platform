@@ -136,7 +136,9 @@ public class GlobalExceptionHandler {
         StructuredLogContext.warn(log, "REQUEST_VALIDATION_REJECTED",
                 Map.of("reasonCode", ex.errorCode()), "Request validation rejected");
         LvErrorCode code = LvErrorCodes.of(ex);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        // Task 0027 (owner, 2026-11-21): "support action not possible now" is a state conflict, 409 as the code says.
+        HttpStatus status = code == LvErrorCode.CFG_011 ? HttpStatus.CONFLICT : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
                 .body(ApiErrorResponse.of(ex.errorCode(), code, ex.getMessage(), correlationId)
                         .withDetail(validationDetail(ex, code)));
     }

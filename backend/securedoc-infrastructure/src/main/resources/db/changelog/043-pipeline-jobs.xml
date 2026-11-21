@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0027 (owner approved 2026-11-21): staged pipeline P1.
+        pipeline_jobs is built for every stage but used only for EXPORT and SPLIT_EXPORT in P1.
+        export_destination_states holds each export destination's state (no row = WORKING).
+        No content in any column: codes, ids and times only.
+        With securedoc.processing.export-mode=inline (the default) both tables stay empty.
+    -->
+    <changeSet id="043-01-pipeline-jobs" author="lexavault">
+        <createTable tableName="pipeline_jobs">
+            <column name="id" type="UUID">
+                <constraints primaryKey="true" nullable="false" primaryKeyName="pk_pipeline_jobs"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="stage" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="package_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <!-- The document (SPLIT_EXPORT: the split document's source document); null for a case job. -->
+            <column name="document_id" type="UUID"/>
+            <!-- The integration connection sent to; null for the local export folder. -->
+            <column name="destination_id" type="UUID"/>
+            <!-- SPLIT_EXPORT: the derived delivery id; null otherwise. -->
+            <column name="item_id" type="UUID"/>
+            <!-- The case run (export cycle) the job belongs to. -->
+            <column name="export_cycle" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="priority" type="VARCHAR(16)" defaultValue="NORMAL">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempts" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="next_attempt_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="claim_owner" type="VARCHAR(240)"/>
+            <column name="claim_until" type="TIMESTAMP WITH TIME ZONE"/>
+            <!-- The fencing token: increased on every claim; a result is saved only with the current one. -->
+            <column name="claim_token" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_lv_code" type="VARCHAR(16)"/>
+            <!-- An internal code only (for example DELIVERY_IO). -->
+            <column name="last_detail" type="VARCHAR(80)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="pipeline_jobs" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id"
+                                 constraintName="fk_pipeline_jobs_package" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="pipeline_jobs" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_pipeline_jobs_tenant"/>
+        <sql>
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_stage
+                check (stage in ('TEXT', 'FIND', 'REDACT', 'EXPORT', 'SPLIT_EXPORT'));
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_status
+                check (status in ('READY', 'RUNNING', 'WAITING_RETRY', 'PAUSED', 'WAITING_FOR_YOU', 'NEEDS_IT',
+                                  'DONE', 'STOPPED'));
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_priority
+                check (priority in ('URGENT', 'NORMAL', 'LOW', 'BULK'));
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_attempts check (attempts &gt;= 0);
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_export_cycle check (export_cycle &gt;= 1);
+            -- One job per stage, case run, destination and item: queuing twice adds nothing.
+            create unique index ux_pipeline_jobs_identity on pipeline_jobs (
+                tenant_id, stage, package_id, export_cycle,
+                coalesce(destination_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid));
+            -- The pick-up query: due jobs of a stage, in priority order, then oldest.
+            create index idx_pipeline_jobs_pickup on pipeline_jobs (stage, next_attempt_at, created_at)
+                where status in ('READY', 'WAITING_RETRY');
+            -- Running jobs per destination (worker limit) and expired claims.
+            create index idx_pipeline_jobs_running on pipeline_jobs (destination_id, claim_until)
+                where status = 'RUNNING';
+        </sql>
+        <createIndex tableName="pipeline_jobs" indexName="idx_pipeline_jobs_tenant_status">
+            <column name="tenant_id"/>
+            <column name="status"/>
+            <column name="updated_at"/>
+        </createIndex>
+        <createIndex tableName="pipeline_jobs" indexName="idx_pipeline_jobs_package">
+            <column name="package_id"/>
+            <column name="stage"/>
+        </createIndex>
+        <createIndex tableName="pipeline_jobs" indexName="idx_pipeline_jobs_destination">
+            <column name="tenant_id"/>
+            <column name="destination_id"/>
+            <column name="status"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="pipeline_jobs"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="043-02-export-destination-states" author="lexavault">
+        <createTable tableName="export_destination_states">
+            <column name="connection_id" type="UUID">
+                <constraints primaryKey="true" nullable="false" primaryKeyName="pk_export_destination_states"/>
+            </column>
+            <column name="tenant_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state" type="VARCHAR(16)" defaultValue="WORKING">
+                <constraints nullable="false"/>
+            </column>
+            <column name="paused_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="consecutive_failures" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_probe_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_lv_code" type="VARCHAR(16)"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="export_destination_states" baseColumnNames="connection_id"
+                                 referencedTableName="integration_connections" referencedColumnNames="id"
+                                 constraintName="fk_export_destination_states_connection" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="export_destination_states" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_export_destination_states_tenant"/>
+        <sql>
+            alter table export_destination_states
+                add constraint ck_export_destination_states_state check (state in ('WORKING', 'PAUSED', 'NEEDS_IT'));
+            alter table export_destination_states
+                add constraint ck_export_destination_states_failures check (consecutive_failures &gt;= 0);
+        </sql>
+        <createIndex tableName="export_destination_states" indexName="idx_export_destination_states_tenant">
+            <column name="tenant_id"/>
+            <column name="state"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="export_destination_states"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

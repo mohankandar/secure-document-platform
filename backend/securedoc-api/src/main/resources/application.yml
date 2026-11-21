@@ -155,6 +155,18 @@ securedoc:
       max-processing-attempts: ${SECUREDOC_PROCESSING_MAX_ATTEMPTS:3}
       # Legacy/pre-HA PROCESSING rows without any lease are eligible for safe recovery after this grace.
       orphan-without-lease-grace-ms: ${SECUREDOC_PROCESSING_ORPHAN_WITHOUT_LEASE_GRACE_MS:60000}
+    # Task 0027 (staged pipeline P1): inline = today's behaviour (default); job = the case is exported by an
+    # export job with retries by code. Rollout stays inline until P2 is proven.
+    export-mode: ${SECUREDOC_PROCESSING_EXPORT_MODE:inline}
+    export-jobs:
+      retry-delay-ms: ${SECUREDOC_EXPORT_JOBS_RETRY_DELAY_MS:300000}
+      max-attempts: ${SECUREDOC_EXPORT_JOBS_MAX_ATTEMPTS:3}
+      pause-after-failures: ${SECUREDOC_EXPORT_JOBS_PAUSE_AFTER_FAILURES:3}
+      probe-interval-ms: ${SECUREDOC_EXPORT_JOBS_PROBE_INTERVAL_MS:300000}
+      claim-lease-ms: ${SECUREDOC_EXPORT_JOBS_CLAIM_LEASE_MS:120000}
+      workers-per-destination: ${SECUREDOC_EXPORT_JOBS_WORKERS_PER_DESTINATION:4}
+      workers-total: ${SECUREDOC_EXPORT_JOBS_WORKERS_TOTAL:8}
+      poll-interval-ms: ${SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS:2000}
   platform-admin:
     # Unit 24. Provider credentials remain deployment-managed and are never returned by the admin API.
     watched-folder-scheduling-enabled: ${SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED:false}

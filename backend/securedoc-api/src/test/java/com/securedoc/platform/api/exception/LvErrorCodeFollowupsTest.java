@@ -79,8 +79,8 @@ class LvErrorCodeFollowupsTest {
         ResponseEntity<ApiErrorResponse> response = handler.handleValidation(new ValidationException(LvErrorCode.CFG_011,
                 "This support incident is historical/closed; active package actions are unavailable"),
                 request("/api/v1/support/incidents/x/actions"));
-        // The status is unchanged (400); only the code is new.
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        // Task 0027 (owner, 2026-11-21): 409, as the code's table says (it was 400 in task 0026).
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals("LV-CFG-011", body(response).code());
         assertEquals("Support action not possible now", body(response).message());
     }
