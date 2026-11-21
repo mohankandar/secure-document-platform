@@ -109,6 +109,25 @@ public final class AuditService {
                 AuditOutcome.DENIED, correlationId, detail);
     }
 
+    /**
+     * Records a denied action in a transaction of its own (task 0023 C6): kept even when the request being refused
+     * then rolls back. Only for refusals recorded just before an exception (see {@link AuditPort#recordIndependently}).
+     */
+    public void recordDeniedIndependently(TenantId tenantId, ActorId actorId, AuditAction action,
+                                          String resourceType, String resourceId,
+                                          CorrelationId correlationId, String detail) {
+        auditPort.recordIndependently(build(tenantId, actorId, action, resourceType, resourceId, null,
+                AuditOutcome.DENIED, correlationId, detail));
+    }
+
+    /** As {@link #recordDeniedIndependently}, for a failed action. */
+    public void recordFailureIndependently(TenantId tenantId, ActorId actorId, AuditAction action,
+                                           String resourceType, String resourceId,
+                                           CorrelationId correlationId, String detail) {
+        auditPort.recordIndependently(build(tenantId, actorId, action, resourceType, resourceId, null,
+                AuditOutcome.FAILURE, correlationId, detail));
+    }
+
     /** What an unknown sensitivity level was sent for (task 0021). */
     public enum SensitivityScope { CASE, DOCUMENT }
 
@@ -133,16 +152,22 @@ public final class AuditService {
     private void record(TenantId tenantId, ActorId actorId, AuditAction action,
                          String resourceType, String resourceId, PackageId caseId,
                          AuditOutcome outcome, CorrelationId correlationId, String detail) {
+        auditPort.record(build(tenantId, actorId, action, resourceType, resourceId, caseId, outcome, correlationId,
+                detail));
+    }
+
+    private AuditRecord build(TenantId tenantId, ActorId actorId, AuditAction action,
+                              String resourceType, String resourceId, PackageId caseId,
+                              AuditOutcome outcome, CorrelationId correlationId, String detail) {
         String safeDetail = sanitizeDetail(detail);
         String recordedCaseId = caseId != null
                 ? caseId.value().toString()
                 : AuditCaseIds.caseIdFor(resourceType, resourceId, safeDetail);
-        AuditRecord auditRecord = AuditRecord.create(
+        return AuditRecord.create(
                 tenantId, actorId, action, resourceType, resourceId,
                 outcome, correlationId, safeDetail,
                 actorDisplayName.displayNameFor(actorId).orElse(null),
                 recordedCaseId);
-        auditPort.record(auditRecord);
     }
 
     /**

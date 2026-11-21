@@ -30,7 +30,8 @@ public class ScannerIntakeTransactionBoundary {
         return service.createScannerIntake(input, principal, correlationId);
     }
 
-    @Transactional
+    // Task 0023 C6: a 410 keeps the expiry (state and EXTERNAL_INTAKE_EXPIRED audit) it recorded in this request.
+    @Transactional(noRollbackFor = com.securedoc.platform.application.exception.IntakeExpiredException.class)
     public ExternalDocumentReceipt receive(PackageId packageId, String externalSourceDocumentId,
                                            String idempotencyKey, String sourceSha256, String mimeType,
                                            UploadContent content, AuthenticatedPrincipal principal,

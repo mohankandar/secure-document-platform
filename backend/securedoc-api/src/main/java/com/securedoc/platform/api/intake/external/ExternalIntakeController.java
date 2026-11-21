@@ -41,7 +41,8 @@ public class ExternalIntakeController {
     }
 
     @PostMapping(value = "/{packageId}/documents/{externalSourceDocumentId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Transactional
+    // Task 0023 C6: a 410 keeps the expiry (state and EXTERNAL_INTAKE_EXPIRED audit) it recorded in this request.
+    @Transactional(noRollbackFor = com.securedoc.platform.application.exception.IntakeExpiredException.class)
     public ResponseEntity<ExternalDocumentReceiptResponse> uploadDocument(
             @PathVariable UUID packageId,
             @PathVariable String externalSourceDocumentId,
