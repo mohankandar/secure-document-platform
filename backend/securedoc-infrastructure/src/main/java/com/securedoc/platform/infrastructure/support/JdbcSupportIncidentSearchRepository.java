@@ -40,7 +40,7 @@ public class JdbcSupportIncidentSearchRepository implements SupportIncidentSearc
     private static final String SELECT = """
             SELECT pi.id, pi.tenant_id, pi.package_id, pi.document_id,
                    dp.status AS package_status, bid.label AS primary_label, bri.identifier_value AS primary_value,
-                   pi.stage, pi.component, pi.reason_code, pi.status, pi.business_outcome,
+                   pi.stage, pi.component, pi.reason_code, pi.safe_metadata ->> 'lvCode' AS lv_code, pi.status, pi.business_outcome,
                    pi.business_continuity_used, pi.retryable, pi.attempt_count, pi.correlation_id,
                    pi.first_observed_at, pi.last_observed_at, pi.resolved_at
             """;
@@ -154,7 +154,8 @@ public class JdbcSupportIncidentSearchRepository implements SupportIncidentSearc
                 impact,
                 instant(rs, "first_observed_at"),
                 instant(rs, "last_observed_at"),
-                instant(rs, "resolved_at"));
+                instant(rs, "resolved_at"),
+                rs.getString("lv_code"));
     }
 
     private Instant instant(ResultSet rs, String column) throws SQLException {

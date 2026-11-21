@@ -14,4 +14,10 @@ public class OcrProcessingException extends TechnicalDependencyException {
                                   String safeMessage, Throwable cause) {
         super(TechnicalDependency.OCR, code, retryable, safeMessage, cause);
     }
+
+    /** Task 0025: a page-level cause with its own LexaVault code (for example a page too poor to read, LV-PRC-003). */
+    public OcrProcessingException(TechnicalFailureCode code, boolean retryable, String safeMessage,
+                                  com.securedoc.platform.domain.error.LvErrorCode lvCode) {
+        super(TechnicalDependency.OCR, code, retryable, safeMessage, null, lvCode);
+    }
 }

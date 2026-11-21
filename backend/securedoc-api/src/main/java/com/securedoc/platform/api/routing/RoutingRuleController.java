@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.routing;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -31,8 +32,8 @@ public class RoutingRuleController {
     public ResponseEntity<RuleResponse> update(@PathVariable String ruleId,@RequestBody RuleRequest body,HttpServletRequest request){var p=context.resolvePrincipal(request);return ResponseEntity.ok(RuleResponse.of(service.update(p.tenantId(),uuid(ruleId),p.actorId(),context.resolveCorrelationId(request),input(body))));}
     @DeleteMapping("/{ruleId}") @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
     public ResponseEntity<Void> delete(@PathVariable String ruleId,HttpServletRequest request){var p=context.resolvePrincipal(request);service.delete(p.tenantId(),uuid(ruleId),p.actorId(),context.resolveCorrelationId(request));return ResponseEntity.noContent().build();}
-    private RoutingRuleInput input(RuleRequest b){if(b==null)throw new ValidationException("Routing rule request is required");try{return new RoutingRuleInput(b.destinationLabel(),RoutingMarkerType.valueOf(req(b.markerType(),"marker type")),b.markerValue(),RoutingScanRegion.valueOf(req(b.scanRegion(),"scan region")),IntegrationConnectionId.fromString(req(b.destinationConnectionId(),"destination connection")),Boolean.TRUE.equals(b.enabled()));}catch(IllegalArgumentException e){throw new ValidationException("Invalid routing rule configuration");}}
-    private String req(String v,String label){if(v==null||v.isBlank())throw new ValidationException("Routing "+label+" is required");return v.trim().toUpperCase(Locale.ROOT);}private UUID uuid(String v){try{return UUID.fromString(v);}catch(Exception e){throw new ValidationException("Invalid routing rule id");}}
+    private RoutingRuleInput input(RuleRequest b){if(b==null)throw new ValidationException(LvErrorCode.CFG_006, "Routing rule request is required");try{return new RoutingRuleInput(b.destinationLabel(),RoutingMarkerType.valueOf(req(b.markerType(),"marker type")),b.markerValue(),RoutingScanRegion.valueOf(req(b.scanRegion(),"scan region")),IntegrationConnectionId.fromString(req(b.destinationConnectionId(),"destination connection")),Boolean.TRUE.equals(b.enabled()));}catch(IllegalArgumentException e){throw new ValidationException(LvErrorCode.CFG_006, "Invalid routing rule configuration");}}
+    private String req(String v,String label){if(v==null||v.isBlank())throw new ValidationException(LvErrorCode.CFG_006, "Routing "+label+" is required");return v.trim().toUpperCase(Locale.ROOT);}private UUID uuid(String v){try{return UUID.fromString(v);}catch(Exception e){throw new ValidationException(LvErrorCode.CFG_006, "Invalid routing rule id");}}
     public record RuleRequest(String destinationLabel,String markerType,String markerValue,String scanRegion,String destinationConnectionId,Boolean enabled){}
     public record RuleResponse(String ruleId,String destinationLabel,String markerType,String markerValue,String scanRegion,String destinationConnectionId,boolean enabled){static RuleResponse of(RoutingRule r){return new RuleResponse(r.id().toString(),r.destinationLabel(),r.markerType().name(),r.markerValue(),r.scanRegion().name(),r.destinationConnectionId().toString(),r.enabled());}}
     public record DestinationResponse(String connectionId,String name,String providerType,boolean enabled,String healthStatus){}

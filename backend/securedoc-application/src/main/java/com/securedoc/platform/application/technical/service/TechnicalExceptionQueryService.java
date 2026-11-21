@@ -95,7 +95,8 @@ public final class TechnicalExceptionQueryService implements GetTechnicalExcepti
                 retention.retainedUntil(), TechnicalFailureTaxonomy.explanation(
                         incident.reasonCode(), incident.retryable(), retention.originalAvailable(), packageStatus == PackageStatus.FAILED),
                 incident.id(), incident.status().name(), incident.businessContinuityUsed(),
-                incident.businessOutcome(), incident.processingFingerprint(), events);
+                incident.businessOutcome(), incident.processingFingerprint(), events,
+                incident.safeMetadata() == null ? null : incident.safeMetadata().get("lvCode"));
     }
 
     private TechnicalExceptionDetail fromLegacyAudit(PackageId packageId,

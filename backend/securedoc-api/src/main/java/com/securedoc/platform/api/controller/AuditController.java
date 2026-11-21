@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.csv.CsvCells;
 import com.securedoc.platform.api.security.RequireCapability;
@@ -125,7 +126,7 @@ public class AuditController {
 
         String normalizedFormat = format.trim().toLowerCase(Locale.ROOT);
         if (!normalizedFormat.equals("csv") && !normalizedFormat.equals("json")) {
-            throw new ValidationException("Audit export format must be 'csv' or 'json'");
+            throw new ValidationException(LvErrorCode.CFG_001, "Audit export format must be 'csv' or 'json'");
         }
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(httpRequest);
         AuditRecordFilter filter = buildFilter(principal, category, action, outcome, resourceType, resourceId,
@@ -159,7 +160,7 @@ public class AuditController {
         Instant fromInstant = parseInstantParam(from, "from");
         Instant toInstant = parseInstantParam(to, "to");
         if (fromInstant != null && toInstant != null && fromInstant.isAfter(toInstant)) {
-            throw new ValidationException("'from' must not be after 'to'");
+            throw new ValidationException(LvErrorCode.CFG_001, "'from' must not be after 'to'");
         }
         Set<String> categoryActions = categoryActions(category);
         Set<String> categoryOutcomes = "FAILURES_DENIED".equals(normalizeCategory(category)) ? Set.of("FAILURE", "DENIED") : Set.of();
@@ -178,7 +179,7 @@ public class AuditController {
             case "EXPORTS" -> EXPORT_ACTIONS;
             case "FAILURES_DENIED" -> Set.of();
             case "SYSTEM" -> SYSTEM_ACTIONS;
-            default -> throw new ValidationException("Unknown audit category");
+            default -> throw new ValidationException(LvErrorCode.CFG_001, "Unknown audit category");
         };
     }
 
@@ -228,12 +229,12 @@ public class AuditController {
     private UUID parseUuidParam(String value, String paramName) {
         if (value == null || value.isBlank()) return null;
         try { return UUID.fromString(value.trim()); }
-        catch (IllegalArgumentException e) { throw new ValidationException("Invalid UUID for parameter '" + paramName + "'"); }
+        catch (IllegalArgumentException e) { throw new ValidationException(LvErrorCode.CFG_001, "Invalid UUID for parameter '" + paramName + "'"); }
     }
 
     private Instant parseInstantParam(String value, String paramName) {
         if (value == null || value.isBlank()) return null;
         try { return Instant.parse(value.trim()); }
-        catch (DateTimeParseException e) { throw new ValidationException("Invalid ISO-8601 timestamp for parameter '" + paramName + "'"); }
+        catch (DateTimeParseException e) { throw new ValidationException(LvErrorCode.CFG_001, "Invalid ISO-8601 timestamp for parameter '" + paramName + "'"); }
     }
 }

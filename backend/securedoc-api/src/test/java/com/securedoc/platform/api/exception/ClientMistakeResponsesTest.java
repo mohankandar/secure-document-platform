@@ -81,7 +81,7 @@ class ClientMistakeResponsesTest {
         MvcResult result = mvc.perform(multipart(PUSH_UPLOAD).file(pdf()).header("X-Content-SHA256", SHA)).andReturn();
         assertEquals(400, result.getResponse().getStatus());
         assertEquals("MISSING_HEADER", errorCode(result));
-        assertEquals("Required request header 'Idempotency-Key' is missing", message(result));
+        assertEquals("Required header or part missing", message(result));
         verifyNoInteractions(intake);
     }
 
@@ -89,7 +89,7 @@ class ClientMistakeResponsesTest {
     void aMissingContentShaIs400NamingTheHeaderOnPushAndScanner() throws Exception {
         MvcResult push = mvc.perform(multipart(PUSH_UPLOAD).file(pdf()).header("Idempotency-Key", "k-1")).andReturn();
         assertEquals(400, push.getResponse().getStatus());
-        assertEquals("Required request header 'X-Content-SHA256' is missing", message(push));
+        assertEquals("Required header or part missing", message(push));
 
         MvcResult scanner = mvc.perform(post(SCANNER_UPLOAD).contentType(MediaType.APPLICATION_PDF)
                 .content(new byte[]{1}).header("Idempotency-Key", "k-1")).andReturn();
@@ -103,7 +103,7 @@ class ClientMistakeResponsesTest {
                 .header("X-Content-SHA256", SHA)).andReturn();
         assertEquals(400, result.getResponse().getStatus());
         assertEquals("MISSING_FILE_PART", errorCode(result));
-        assertEquals("Required multipart part 'file' is missing", message(result));
+        assertEquals("Required header or part missing", message(result));
 
         MvcResult manual = mvc.perform(multipart("/api/v1/packages/" + UUID.randomUUID() + "/documents")).andReturn();
         assertEquals(400, manual.getResponse().getStatus());
@@ -116,7 +116,7 @@ class ClientMistakeResponsesTest {
                 .header("Idempotency-Key", "k-1").header("X-Content-SHA256", SHA)).andReturn();
         assertEquals(400, result.getResponse().getStatus());
         assertEquals("UNSUPPORTED_MEDIA_TYPE", errorCode(result));
-        assertTrue(message(result).contains("application/pdf"));
+        assertEquals("Required header or part missing", message(result));
         assertFalse(message(result).contains("secret"));
     }
 
@@ -128,20 +128,20 @@ class ClientMistakeResponsesTest {
                 .content(nullIdentifier)).andReturn();
         assertEquals(400, identifiers.getResponse().getStatus());
         assertEquals("VALIDATION_ERROR", errorCode(identifiers));
-        assertEquals("businessIdentifiers must not contain null values", message(identifiers));
+        assertEquals("Request couldn't be read", message(identifiers));
 
         String nullMetadata = "{\"externalSourcePackageId\":\"S-1\",\"sourceRevision\":\"1\",\"metadata\":{\"k\":null},"
                 + "\"documents\":[{\"externalSourceDocumentId\":\"D-1\"}]}";
         MvcResult metadata = mvc.perform(post("/api/v1/scanner-intakes").contentType(MediaType.APPLICATION_JSON)
                 .content(nullMetadata)).andReturn();
         assertEquals(400, metadata.getResponse().getStatus());
-        assertEquals("metadata must not contain null values", message(metadata));
+        assertEquals("Request couldn't be read", message(metadata));
 
         String nullDocument = "{\"externalSourcePackageId\":\"S-1\",\"sourceRevision\":\"1\",\"documents\":[null]}";
         MvcResult documents = mvc.perform(post("/api/v1/external-intakes").contentType(MediaType.APPLICATION_JSON)
                 .content(nullDocument)).andReturn();
         assertEquals(400, documents.getResponse().getStatus());
-        assertEquals("documents must not contain null entries", message(documents));
+        assertEquals("Request couldn't be read", message(documents));
         verifyNoInteractions(intake);
     }
 
@@ -151,7 +151,7 @@ class ClientMistakeResponsesTest {
                 .content("{\"packageType\":\"MANUAL_UPLOAD\",\"metadata\":{\"note\":null}}")).andReturn();
         assertEquals(400, result.getResponse().getStatus());
         assertEquals("VALIDATION_ERROR", errorCode(result));
-        assertEquals("metadata must not contain null values", message(result));
+        assertEquals("Request couldn't be read", message(result));
     }
 
     @Test

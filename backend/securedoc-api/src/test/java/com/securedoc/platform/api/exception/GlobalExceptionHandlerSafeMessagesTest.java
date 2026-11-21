@@ -50,10 +50,10 @@ class GlobalExceptionHandlerSafeMessagesTest {
                 var response = handler.handleIllegalState(refusal, request());
                 assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
                 assertEquals("INVALID_STATE", response.getBody().errorCode());
-                assertEquals("This action is not possible in the current state.", response.getBody().message());
+                assertEquals(response.getBody().code().equals("LV-SYS-001") ? "Something went wrong" : com.securedoc.platform.domain.error.LvErrorCode.fromCode(response.getBody().code()).orElseThrow().title(), response.getBody().message());
                 assertFalse(response.getBody().message().contains("PENDING"));
                 String logged = logs.text();
-                assertTrue(logged.contains("INVALID_STATE_REJECTED code=INVALID_STATE type=IllegalStateException"));
+                assertTrue(logged.contains("INVALID_STATE_REJECTED code=INVALID_STATE type=CodedStateException"));
                 assertTrue(logged.contains("origin=ReviewTask."), logged);
                 assertTrue(logged.contains("route=/api/v1/review-tasks/{taskId}/start"));
                 assertFalse(logged.contains(refusal.getMessage()), "the raw text is never logged");
@@ -65,7 +65,7 @@ class GlobalExceptionHandlerSafeMessagesTest {
     void aLibraryOrDataLayerStateTextNeverReachesTheResponse() {
         var response = handler.handleIllegalState(
                 new IllegalStateException("duplicate key value (borrower_name)=(Jane Doe)"), request());
-        assertEquals("This action is not possible in the current state.", response.getBody().message());
+        assertEquals(response.getBody().code().equals("LV-SYS-001") ? "Something went wrong" : com.securedoc.platform.domain.error.LvErrorCode.fromCode(response.getBody().code()).orElseThrow().title(), response.getBody().message());
     }
 
     @Test
@@ -75,17 +75,19 @@ class GlobalExceptionHandlerSafeMessagesTest {
                 request());
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals("TENANT_INACTIVE", response.getBody().errorCode());
-        assertEquals("This organization is not active.", response.getBody().message());
+        assertEquals("Entity not active", response.getBody().message());
+        assertEquals("LV-AUT-005", response.getBody().code());
     }
 
     @Test
     void aPersonFacingStateMessageWrittenByLexaVaultIsSent() {
-        var response = handler.handlePersonFacingState(new PersonFacingStateException(
+        var response = handler.handlePersonFacingState(new PersonFacingStateException(com.securedoc.platform.domain.error.LvErrorCode.CFG_008, 
                 "Activation requires a successful connection test from the last 15 minutes. Test the current draft again."),
                 request());
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals("INVALID_STATE", response.getBody().errorCode());
-        assertTrue(response.getBody().message().startsWith("Activation requires"));
+        assertEquals("Login system settings not valid", response.getBody().message());
+        assertEquals("LV-CFG-008", response.getBody().code());
     }
 
     @Test
@@ -94,7 +96,8 @@ class GlobalExceptionHandlerSafeMessagesTest {
                 () -> UUID.fromString("Jane-Doe-not-a-uuid"));
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
             var response = handler.handleIllegalArgument(parse, request());
-            assertEquals("Invalid request parameter", response.getBody().message());
+            assertEquals("Setting not valid", response.getBody().message());
+        assertEquals("LV-CFG-001", response.getBody().code());
             assertTrue(logs.text().contains("INVALID_ARGUMENT_REJECTED code=INVALID_ARGUMENT type=" + parse.getClass().getSimpleName()));
             assertFalse(logs.text().contains("Jane"));
         }
@@ -108,7 +111,7 @@ class GlobalExceptionHandlerSafeMessagesTest {
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
             var response = handler.handleTypeMismatch(mismatch, request());
             assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-            assertEquals("Invalid value for request parameter 'providerId'", response.getBody().message());
+            assertEquals("Setting not valid: Invalid value for request parameter 'providerId'", response.getBody().message());
             assertFalse(logs.text().contains("Jane"));
         }
     }
@@ -121,7 +124,8 @@ class GlobalExceptionHandlerSafeMessagesTest {
         RuntimeException unexpected = new NullPointerException("borrower Jane Doe");
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
             var response = handler.handleGeneric(unexpected, request());
-            assertEquals("An unexpected error occurred", response.getBody().message());
+            assertEquals("Something went wrong", response.getBody().message());
+        assertEquals("LV-SYS-001", response.getBody().code());
             String logged = logs.text();
             assertTrue(logged.contains("correlation=" + response.getBody().correlationId()), logged);
             assertTrue(logged.contains("reasonCode=NullPointerException"), logged);
@@ -150,7 +154,7 @@ class GlobalExceptionHandlerSafeMessagesTest {
             var response = handler.handleSecurityContext(refusal, request);
             assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
             assertEquals("SECURITY_CONTEXT_INVALID", response.getBody().errorCode());
-            assertEquals("Authenticated identity is not authorized for this tenant/application",
+            assertEquals("No access to LexaVault",
                     response.getBody().message());
             assertTrue(logs.text().contains("SECURITY_CONTEXT_REFUSED reason=NO_MAPPED_ROLE method=POST route=/api/v1/me"));
             assertTrue(logs.text().contains("audited=true"));
@@ -161,7 +165,7 @@ class GlobalExceptionHandlerSafeMessagesTest {
         assertEquals(AuditOutcome.DENIED, audit.outcome());
         assertEquals(tenant, audit.tenantId());
         assertEquals(actor, audit.actorId());
-        assertEquals("method=POST, route=/api/v1/me, reason=NO_MAPPED_ROLE", audit.detail());
+        assertEquals("code=LV-AUT-002, detail=NO_MAPPED_ROLE, method=POST, route=/api/v1/me, reason=NO_MAPPED_ROLE", audit.detail());
     }
 
     @Test

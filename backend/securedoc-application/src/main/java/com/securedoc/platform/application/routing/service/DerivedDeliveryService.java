@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.routing.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -52,15 +53,15 @@ public final class DerivedDeliveryService {
 
     private DerivedDelivery attempt(TenantId tenantId, UUID id, ActorId actorId, CorrelationId correlationId, boolean technical){
         DerivedDelivery d=get(tenantId,id);
-        if(d.artifactId()==null || d.destinationConnectionId()==null) throw new ValidationException("Routing-attention item has no approved destination to send");
-        if(!technical && d.status()==DerivedDeliveryStatus.ATTENTION_REQUIRED) throw new ValidationException("Technical attention is required before this derived document can be sent");
+        if(d.artifactId()==null || d.destinationConnectionId()==null) throw new ValidationException(LvErrorCode.DLV_006, "Routing-attention item has no approved destination to send");
+        if(!technical && d.status()==DerivedDeliveryStatus.ATTENTION_REQUIRED) throw new ValidationException(LvErrorCode.DLV_014, "Technical attention is required before this derived document can be sent");
         var c=connections.findByTenantIdAndId(tenantId,d.destinationConnectionId()).orElse(null);
-        if(c==null) throw refuse(d,DESTINATION_NOT_FOUND,tenantId,actorId,correlationId,new ValidationException("Configured derived destination no longer exists"));
-        if(c.purpose()!= IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY || c.direction()!= IntegrationDirection.OUTBOUND) throw refuse(d,DESTINATION_WRONG_PURPOSE,tenantId,actorId,correlationId,new ValidationException("Configured connection is not a derived-document destination"));
-        if(!c.enabled()) throw refuse(d,DESTINATION_DISABLED,tenantId,actorId,correlationId,new ValidationException("Derived-document destination is disabled"));
+        if(c==null) throw refuse(d,DESTINATION_NOT_FOUND,tenantId,actorId,correlationId,new ValidationException(LvErrorCode.DLV_006, "Configured derived destination no longer exists"));
+        if(c.purpose()!= IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY || c.direction()!= IntegrationDirection.OUTBOUND) throw refuse(d,DESTINATION_WRONG_PURPOSE,tenantId,actorId,correlationId,new ValidationException(LvErrorCode.DLV_006, "Configured connection is not a derived-document destination"));
+        if(!c.enabled()) throw refuse(d,DESTINATION_DISABLED,tenantId,actorId,correlationId,new ValidationException(LvErrorCode.DLV_006, "Derived-document destination is disabled"));
         Artifact artifact=artifacts.findByIdAndTenantId(d.artifactId(),tenantId).orElse(null);
         if(artifact==null) throw refuse(d,ARTIFACT_UNAVAILABLE,tenantId,actorId,correlationId,new NotFoundException("Derived artifact",d.artifactId().toString()));
-        if(!artifact.isAvailable()) throw refuse(d,ARTIFACT_UNAVAILABLE,tenantId,actorId,correlationId,new ValidationException("Derived redacted artifact is not available"));
+        if(!artifact.isAvailable()) throw refuse(d,ARTIFACT_UNAVAILABLE,tenantId,actorId,correlationId,new ValidationException(LvErrorCode.DLV_011, "Derived redacted artifact is not available"));
         // Task 0021: a split document carries its source document's level and the case level, as stored at intake.
         var pkg=packages.findByIdAndTenantId(d.packageId(),tenantId).orElse(null);
         if(pkg==null) throw refuse(d,SOURCE_NOT_FOUND,tenantId,actorId,correlationId,new NotFoundException("DocumentPackage",d.packageId().toString()));
@@ -85,11 +86,11 @@ public final class DerivedDeliveryService {
             d.markFailure(e.failureCode().name(),e.retryable(),Instant.now()); deliveries.save(d); deliveries.saveAttempt(attempt.failure(e.failureCode().name(),Instant.now()));
             connections.save(c.recordOperationalFailure(e.failureCode().name(),Instant.now()));
             audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,
-                    "Derived delivery failed: code="+e.failureCode()+",retryable="+e.retryable()); throw e;
+                    "Derived delivery failed: "+com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.of(e),e.failureCode().name(),"retryable="+e.retryable())); throw e;
         }catch(RuntimeException e){
             d.markFailure("DERIVED_DELIVERY_RUNTIME",true,Instant.now()); deliveries.save(d); deliveries.saveAttempt(attempt.failure("DERIVED_DELIVERY_RUNTIME",Instant.now()));
             connections.save(c.recordOperationalFailure("DERIVED_DELIVERY_RUNTIME",Instant.now()));
-            audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,"Derived delivery failed"); throw e;
+            audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,"Derived delivery failed: "+com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.domain.error.LvErrorCode.SYS_001,"DERIVED_DELIVERY_RUNTIME","exceptionType="+e.getClass().getSimpleName())); throw e;
         }
     }
     /**
@@ -100,7 +101,7 @@ public final class DerivedDeliveryService {
     private RuntimeException refuse(DerivedDelivery d,String code,TenantId tenantId,ActorId actorId,CorrelationId correlationId,RuntimeException toThrow){
         d.markFailure(code,false,Instant.now()); deliveries.save(d);
         audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,
-                "Derived delivery refused before sending: code="+code+",retryable=false");
+                "Derived delivery refused before sending: "+com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.forDetailOrFallback(code,"derived"),code,"retryable=false"));
         log.warn("DERIVED_DELIVERY_REFUSED derivedDelivery={} package={} code={}",d.id(),d.packageId(),code);
         return toThrow;
     }

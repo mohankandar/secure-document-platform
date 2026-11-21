@@ -1,13 +1,18 @@
 import './theme';
 import './studio.css';
+import { noAccessTitle } from './lvCodes';
 
 /**
  * Signed in, but no LexaVault role (UI spec finding 21). One screen for both places it can happen: the Case File
  * workspace (a role with no capability, U001) and sign-in itself (no organization or a refused /me, U013).
+ * Task 0025: the heading is the code's title and the code only ("No access to LexaVault · LV-AUT-002"); the exact
+ * reason stays in the server's log and audit for IT.
  */
-export default function NoAccess({ who, onSignOut, onTryAgain = () => window.location.reload() }: {
+export default function NoAccess({ who, code, onSignOut, onTryAgain = () => window.location.reload() }: {
   /** The signed-in email or user name; "your account" when it is not known. */
   who?: string | null;
+  /** The LV code from the server's 403 body; LV-AUT-002 when the server gave none. */
+  code?: string | null;
   onSignOut: () => void;
   onTryAgain?: () => void;
 }) {
@@ -21,10 +26,10 @@ export default function NoAccess({ who, onSignOut, onTryAgain = () => window.loc
         </span>
       </header>
       <div className="cf-scope" role="main">
-        <h1>You don&apos;t have access to anything in LexaVault yet</h1>
+        <h1>{noAccessTitle(code)}</h1>
         <p>
-          {who ? <>You&apos;re signed in as <span className="cf-scope-who">{who}</span>, but your account</> : <>You&apos;re signed in, but your account</>} has
-          no LexaVault role. Ask your administrator to add you to a LexaVault group, then sign in again.
+          {who ? <>You&apos;re signed in as <span className="cf-scope-who">{who}</span>.</> : <>You&apos;re signed in.</>} Ask your
+          administrator for access and give them the code above, then sign in again.
         </p>
         <div className="cf-scope-actions">
           <button type="button" className="cf-btn" data-variant="solid" onClick={onSignOut}>Sign out</button>

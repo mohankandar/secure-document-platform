@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.export.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -76,14 +77,14 @@ public final class PackageDocumentExportService implements ExportPackageDocument
 
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(command.packageId(), command.tenantId())
                 .stream().sorted(Comparator.comparing(document -> document.id().toString())).toList();
-        if (documents.isEmpty()) throw new ValidationException("Package has no documents to export");
+        if (documents.isEmpty()) throw new ValidationException(LvErrorCode.DLV_011, "Package has no documents to export");
         if (documents.stream().anyMatch(document -> document.status() != DocumentStatus.PROCESSED)) {
-            throw new ValidationException("Every package document must be PROCESSED before batch delivery");
+            throw new ValidationException(LvErrorCode.DLV_011, "Every package document must be PROCESSED before batch delivery");
         }
 
         int exportCycle;
         try { exportCycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId()); }
-        catch (IllegalStateException e) { throw new ValidationException(e.getMessage()); }
+        catch (IllegalStateException e) { throw new ValidationException(LvErrorCode.REV_007, e.getMessage()); }
 
         Map<String, Artifact> artifactByDocumentId = new HashMap<>();
         List<DeliverySubmission.NewDocument> newDocs = new ArrayList<>();
@@ -106,7 +107,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                     return created;
                 });
         if (!submission.destinationType().equals(descriptor.destinationType())) {
-            throw new ValidationException("Delivery provider cannot change within the same export cycle");
+            throw new ValidationException(LvErrorCode.DLV_011, "Delivery provider cannot change within the same export cycle");
         }
 
         DeliveryAttempt attempt = null;
@@ -166,15 +167,17 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 deliverySubmissionRepository.saveAttempt(activeAttempt.completeFailure(e.failureCode().name(), e.retryable(), Instant.now()));
             auditService.recordFailure(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_EXPORT_FAILED,
                     "DocumentPackage", command.packageId().toString(), command.correlationId(),
-                    "Package export failed: dependency=" + e.dependency() + ", code=" + e.failureCode()
-                            + ", retryable=" + e.retryable() + ", attempts=" + e.attempts());
+                    "Package export failed: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.of(e), e.failureCode().name(), "dependency="
+                            + e.dependency() + ", retryable=" + e.retryable() + ", attempts=" + e.attempts()));
                 throw e;
             } catch (Exception e) {
                 submission.markFailure("DELIVERY_RUNTIME_ERROR", true, Instant.now());
                 deliverySubmissionRepository.save(submission);
                 deliverySubmissionRepository.saveAttempt(activeAttempt.completeFailure("DELIVERY_RUNTIME_ERROR", true, Instant.now()));
                 auditService.recordFailure(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_EXPORT_FAILED,
-                        "DocumentPackage", command.packageId().toString(), command.correlationId(), "Package export failed");
+                        "DocumentPackage", command.packageId().toString(), command.correlationId(), "Package export failed: "
+                                + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.optional(e).orElse(com.securedoc.platform.domain.error.LvErrorCode.SYS_001), "DELIVERY_RUNTIME_ERROR",
+                                "exceptionType=" + e.getClass().getSimpleName()));
                 throw new RuntimeException("Failed to export redacted package", e);
             }
         }

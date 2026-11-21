@@ -73,9 +73,9 @@ class OidcTenantDiscoveryControllerTest {
         assertEquals(2, audits.size());
         assertTrue(audits.stream().allMatch(a -> a.action() == AuditAction.SECURITY_CONTEXT_INVALID
                 && a.actorId().equals(actor)));
-        assertEquals("method=GET, route=/api/v1/me/tenants, reason=TENANT_NOT_ACTIVE", audits.stream()
+        assertEquals("code=LV-AUT-005, detail=TENANT_NOT_ACTIVE, method=GET, route=/api/v1/me/tenants, reason=TENANT_NOT_ACTIVE", audits.stream()
                 .filter(a -> a.tenantId().equals(suspended.id())).findFirst().orElseThrow().detail());
-        assertEquals("method=GET, route=/api/v1/me/tenants, reason=TENANT_MISSING", audits.stream()
+        assertEquals("code=LV-AUT-005, detail=TENANT_MISSING, method=GET, route=/api/v1/me/tenants, reason=TENANT_MISSING", audits.stream()
                 .filter(a -> a.tenantId().equals(missing)).findFirst().orElseThrow().detail());
     }
 }

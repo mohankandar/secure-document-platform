@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.review;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.ReviewTaskId;
@@ -58,7 +59,7 @@ public final class ReviewTask {
     public void assign(ActorId reviewerId) {
         Objects.requireNonNull(reviewerId, "ReviewerId must not be null");
         if (status != ReviewStatus.PENDING && status != ReviewStatus.ASSIGNED) {
-            throw new IllegalStateException("Cannot assign task in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Cannot assign task in status: " + status);
         }
         this.assignedTo = reviewerId;
         this.status = ReviewStatus.ASSIGNED;
@@ -69,10 +70,10 @@ public final class ReviewTask {
     public void start(ActorId reviewerId) {
         Objects.requireNonNull(reviewerId, "ReviewerId must not be null");
         if (status != ReviewStatus.ASSIGNED) {
-            throw new IllegalStateException("Cannot start task in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Cannot start task in status: " + status);
         }
         if (!reviewerId.equals(assignedTo)) {
-            throw new IllegalStateException("Only the assigned reviewer can start the task");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_005, "Only the assigned reviewer can start the task");
         }
         this.status = ReviewStatus.IN_PROGRESS;
         feedback.add(FeedbackRecord.create(reviewerId, ReviewAction.START, null));
@@ -82,10 +83,10 @@ public final class ReviewTask {
     public void approve(ActorId reviewerId, String comment) {
         Objects.requireNonNull(reviewerId, "ReviewerId must not be null");
         if (status != ReviewStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Cannot approve task in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Cannot approve task in status: " + status);
         }
         if (!reviewerId.equals(assignedTo)) {
-            throw new IllegalStateException("Only the assigned reviewer can approve the task");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_005, "Only the assigned reviewer can approve the task");
         }
         this.status = ReviewStatus.APPROVED;
         feedback.add(FeedbackRecord.create(reviewerId, ReviewAction.APPROVE, comment));

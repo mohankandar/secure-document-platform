@@ -120,8 +120,8 @@ public class ScannerSubmissionWorker {
                 waitForAcceptance(current);
             }
         } catch (LexaVaultScannerDeliveryClient.DeliveryException ex) {
-            if (ex.retryable()) scheduleRetry(sessions.get(sessionId), ex.safeCode(), ex.retryAfter());
-            else sessions.markAttentionRequired(sessionId, ex.safeCode());
+            if (ex.retryable()) scheduleRetry(sessions.get(sessionId), ex);
+            else sessions.markAttentionRequired(sessionId, ex.safeCode(), ex.httpStatus(), ex.lexaVaultLvCode());
         } catch (RuntimeException ex) {
             // Unknown local/runtime errors are not blindly retried forever because they may indicate corrupt state.
             sessions.markAttentionRequired(sessionId, "SCANNER_DELIVERY_INTERNAL_ERROR");
@@ -129,14 +129,16 @@ public class ScannerSubmissionWorker {
         }
     }
 
-    private void scheduleRetry(ScanSession current, String reasonCode, Duration retryAfter) {
+    private void scheduleRetry(ScanSession current, LexaVaultScannerDeliveryClient.DeliveryException failure) {
+        String reasonCode = failure.safeCode();
+        Duration retryAfter = failure.retryAfter();
         // Task 0023 D2 (#82): retries are capped. After the first attempt and MAX_AUTOMATIC_RETRIES spaced
         // retries the item goes to ATTENTION_REQUIRED with its last code, where the scanner screen and the
         // delivery-items list show it to a person (manual retry: POST /delivery-items/{id}/retry).
         if (current.deliveryAttemptCount() > MAX_AUTOMATIC_RETRIES) {
             log.warn("SCAN_BRIDGE_DELIVERY_RETRIES_EXHAUSTED sessionId={} submissionId={} reasonCode={} attempts={}",
                     current.sessionId(), current.submissionId(), reasonCode, current.deliveryAttemptCount());
-            sessions.markAttentionRequired(current.sessionId(), reasonCode);
+            sessions.markAttentionRequired(current.sessionId(), reasonCode, failure.httpStatus(), failure.lexaVaultLvCode());
             return;
         }
         // Task 0024: a 429 waits as long as LexaVault's Retry-After asks, up to retry-after-max-seconds.
@@ -151,7 +153,7 @@ public class ScannerSubmissionWorker {
             delay = backoffMs(current.deliveryAttemptCount() - 1);
         }
         Instant next = clock.instant().plusMillis(delay);
-        sessions.scheduleRetry(current.sessionId(), reasonCode, next);
+        sessions.scheduleRetry(current.sessionId(), reasonCode, next, failure.httpStatus(), failure.lexaVaultLvCode());
         log.warn("SCAN_BRIDGE_DELIVERY_RETRY_SCHEDULED sessionId={} submissionId={} reasonCode={} attempt={} retryDelayMs={}",
                 current.sessionId(), current.submissionId(), reasonCode, current.deliveryAttemptCount(), delay);
     }

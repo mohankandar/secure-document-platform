@@ -95,7 +95,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             SubmissionStatus status = withRetry(c, () -> readSubmissionStatus(c, activeSubmissionId));
             if (!"COMPLETE".equalsIgnoreCase(status.status())) {
                 throw failure(TechnicalFailureCode.DELIVERY_IO, true,
-                        "SDV submission has not acknowledged all expected documents", null);
+                        "SDV submission has not acknowledged all expected documents", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_008);
             }
             connections.save(c.recordOperationalSuccess(java.time.Instant.now()));
             return new BatchDeliveryReference(DESTINATION_TYPE, activeSubmissionId, references);
@@ -137,10 +137,10 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             JsonNode json = mapper.readTree(response.body());
             String id = text(json, "submissionId");
             if (id == null) throw failure(TechnicalFailureCode.DELIVERY_IO, true,
-                    "SDV submission response did not include submissionId", null);
+                    "SDV submission response did not include submissionId", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
             return id;
         } catch (TechnicalDependencyException e) { throw e; }
-        catch (Exception e) { throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV submission creation failed", e); }
+        catch (Exception e) { throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV submission creation failed", e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007); }
     }
 
     private DeliveryReference uploadDocument(IntegrationConnection c, String sdvSubmissionId,
@@ -166,12 +166,12 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
                 String acknowledgedSourceId = text(json, "sourceDocumentId");
                 if (acknowledgedSourceId != null && !item.sourceDocumentId().equals(acknowledgedSourceId)) {
                     throw failure(TechnicalFailureCode.DELIVERY_IO, false,
-                            "SDV acknowledgement source document id mismatch", null);
+                            "SDV acknowledgement source document id mismatch", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
                 }
                 return new DeliveryReference(item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE,
                         remoteDocumentId, "sdv://" + sdvSubmissionId + "/" + (remoteDocumentId == null ? item.sourceDocumentId() : remoteDocumentId));
             } catch (TechnicalDependencyException e) { throw e; }
-            catch (Exception e) { throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV document acknowledgement was invalid", e); }
+            catch (Exception e) { throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV document acknowledgement was invalid", e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007); }
         });
     }
 
@@ -185,7 +185,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             JsonNode json = mapper.readTree(response.body());
             return new SubmissionStatus(text(json, "status"));
         } catch (Exception e) {
-            throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV submission status response was invalid", e);
+            throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV submission status response was invalid", e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
         }
     }
 
@@ -206,26 +206,26 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             case API_KEY -> builder.header("X-API-Key", secret);
             case JWT -> builder.header("Authorization", "Bearer " + secret);
             case OAUTH2_CLIENT_CREDENTIALS -> throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false,
-                    "SDV OAuth2 client-credentials requires provider-specific token configuration", null);
+                    "SDV OAuth2 client-credentials requires provider-specific token configuration", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_005);
             case MTLS -> throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false,
-                    "SDV mTLS requires deployment-managed client TLS configuration", null);
+                    "SDV mTLS requires deployment-managed client TLS configuration", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_005);
             case NONE -> builder;
         };
     }
 
     private String resolveSecret(String ref) {
-        if (ref == null || ref.isBlank()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Protected SDV secret reference is missing", null);
+        if (ref == null || ref.isBlank()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Protected SDV secret reference is missing", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_005);
         if (ref.startsWith("env:")) {
             String value = System.getenv(ref.substring(4));
-            if (value == null || value.isBlank()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Configured SDV environment secret is unavailable", null);
+            if (value == null || value.isBlank()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Configured SDV environment secret is unavailable", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_005);
             return value;
         }
         if (ref.startsWith("sys:")) {
             String value = System.getProperty(ref.substring(4));
-            if (value == null || value.isBlank()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Configured SDV system-property secret is unavailable", null);
+            if (value == null || value.isBlank()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Configured SDV system-property secret is unavailable", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_005);
             return value;
         }
-        throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Unsupported SDV protected secret reference provider", null);
+        throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Unsupported SDV protected secret reference provider", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_005);
     }
 
     private URI resolve(IntegrationConnection c, String path) {
@@ -284,9 +284,13 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
     private void require2xx(int status, boolean retryable, String message) {
         if (status < 200 || status >= 300) {
             boolean transientStatus = status == 429 || status >= 500;
+            // Task 0025: the destination's answer gives the precise code; the internal code and retry are unchanged.
+            com.securedoc.platform.domain.error.LvErrorCode lvCode = status == 401 || status == 403 ? com.securedoc.platform.domain.error.LvErrorCode.DLV_005
+                    : status >= 400 && status < 500 && status != 429 ? com.securedoc.platform.domain.error.LvErrorCode.DLV_004
+                    : transientStatus ? com.securedoc.platform.domain.error.LvErrorCode.DLV_002 : com.securedoc.platform.domain.error.LvErrorCode.DLV_007;
             throw failure(status >= 400 && status < 500 && status != 429
                             ? TechnicalFailureCode.DELIVERY_DESTINATION_INVALID : TechnicalFailureCode.DELIVERY_IO,
-                    retryable || transientStatus, message, null);
+                    retryable || transientStatus, message, null).withLvCode(lvCode);
         }
     }
     private String text(JsonNode node, String field) { JsonNode v = node == null ? null : node.get(field); return v == null || v.isNull() ? null : v.asText(); }

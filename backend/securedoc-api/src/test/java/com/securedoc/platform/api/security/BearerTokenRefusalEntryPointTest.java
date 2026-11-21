@@ -92,7 +92,8 @@ class BearerTokenRefusalEntryPointTest {
         assertEquals(correlation.toString(), response.getHeader("X-Correlation-Id"));
         JsonNode body = mapper.readTree(response.getContentAsString());
         assertEquals("AUTHENTICATION_REQUIRED", body.path("errorCode").asText());
-        assertEquals("Authentication is required", body.path("message").asText());
+        assertEquals("Please sign in again", body.path("message").asText());
+        assertEquals("LV-AUT-001", body.path("code").asText());
         assertEquals(correlation.toString(), body.path("correlationId").asText());
         assertFalse(response.getContentAsString().contains("audience"));
     }

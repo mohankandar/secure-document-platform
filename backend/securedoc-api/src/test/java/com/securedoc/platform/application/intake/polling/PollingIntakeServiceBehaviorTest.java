@@ -212,8 +212,8 @@ class PollingIntakeServiceBehaviorTest {
         var packageAudits = records.stream()
                 .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_PACKAGE_FAILED).toList();
         assertEquals(2, packageAudits.size(), "one audit row per failed package");
-        assertEquals("package=#1,code=INTAKE_UNKNOWN_IDENTIFIER,exceptionType=IntakeValidationException", packageAudits.get(0).detail());
-        assertEquals("package=#2,code=SOURCE_REVISION_REUSED,exceptionType=IntakeConflictException", packageAudits.get(1).detail());
+        assertEquals("code=LV-INT-014, detail=INTAKE_UNKNOWN_IDENTIFIER, package=#1,exceptionType=IntakeValidationException", packageAudits.get(0).detail());
+        assertEquals("code=LV-INT-018, detail=SOURCE_REVISION_REUSED, package=#2,exceptionType=IntakeConflictException", packageAudits.get(1).detail());
         var completed = records.stream()
                 .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_COMPLETED).findFirst().orElseThrow();
         assertEquals(com.securedoc.platform.domain.audit.AuditOutcome.FAILURE, completed.outcome(), "a partly failed run is not SUCCESS");
@@ -239,7 +239,7 @@ class PollingIntakeServiceBehaviorTest {
         assertEquals("INVALID_STATE:IllegalStateException", result.failureDetail());
         var failed = records.stream()
                 .filter(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.POLLING_RUN_FAILED).findFirst().orElseThrow();
-        assertEquals("category=INVALID_STATE,exceptionType=IllegalStateException", failed.detail());
+        assertEquals("code=LV-SYS-001, detail=INVALID_STATE, exceptionType=IllegalStateException", failed.detail());
     }
 
     @Test

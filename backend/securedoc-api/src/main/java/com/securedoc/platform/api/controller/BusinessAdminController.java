@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.BusinessAdminConfigurationResponse;
 import com.securedoc.platform.api.dto.UpdateBusinessIdentifiersRequest;
@@ -83,7 +84,7 @@ public class BusinessAdminController {
     public ResponseEntity<BusinessAdminConfigurationResponse> updateDashboardColumns(
             @RequestBody UpdateDashboardColumnsRequest body,
             HttpServletRequest request) {
-        if (body == null || body.columns() == null) throw new ValidationException("Dashboard column configuration is required");
+        if (body == null || body.columns() == null) throw new ValidationException(LvErrorCode.CFG_001, "Dashboard column configuration is required");
         var principal = contextResolver.resolvePrincipal(request);
         List<DashboardColumnSetting> settings = new java.util.ArrayList<>();
         for (int i = 0; i < body.columns().size(); i++) {
@@ -100,14 +101,14 @@ public class BusinessAdminController {
     public ResponseEntity<BusinessAdminConfigurationResponse> updateSensitiveDataPolicy(
             @RequestBody UpdateSensitiveDataPolicyRequest body,
             HttpServletRequest request) {
-        if (body == null) throw new ValidationException("Sensitive-data policy request is required");
+        if (body == null) throw new ValidationException(LvErrorCode.CFG_001, "Sensitive-data policy request is required");
         var principal = contextResolver.resolvePrincipal(request);
         Set<EntityType> enabled = parseTypes(body.enabledEntityTypes());
         ReviewMode reviewMode;
         try {
             reviewMode = ReviewMode.valueOf(body.reviewMode() == null ? "" : body.reviewMode().trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unsupported review mode");
+            throw new ValidationException(LvErrorCode.CFG_001, "Unsupported review mode");
         }
         boolean maskSsnLastFour = body.maskSsnLastFour() != null
                 ? body.maskSsnLastFour()
@@ -122,7 +123,7 @@ public class BusinessAdminController {
     @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateLifecyclePolicy(
             @RequestBody UpdateLifecyclePolicyRequest body, HttpServletRequest request) {
-        if (body == null) throw new ValidationException("Lifecycle policy request is required");
+        if (body == null) throw new ValidationException(LvErrorCode.CFG_001, "Lifecycle policy request is required");
         var principal = contextResolver.resolvePrincipal(request);
         service.updateLifecyclePolicy(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), body.originalRetentionHours(),
@@ -134,7 +135,7 @@ public class BusinessAdminController {
     @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateReportingConfiguration(
             @RequestBody UpdateReportingConfigurationRequest body, HttpServletRequest request) {
-        if (body == null) throw new ValidationException("Reporting configuration is required");
+        if (body == null) throw new ValidationException(LvErrorCode.CFG_001, "Reporting configuration is required");
         var principal = contextResolver.resolvePrincipal(request);
         service.updateReportingConfiguration(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), body.enabledDimensionDefinitionIds(),
@@ -148,13 +149,13 @@ public class BusinessAdminController {
     @RequireCapability(UserCapability.TENANT_POLICY_MANAGE)
     public ResponseEntity<BusinessAdminConfigurationResponse> updateDocumentIntelligence(
             @RequestBody UpdateDocumentIntelligenceRequest body, HttpServletRequest request) {
-        if (body == null) throw new ValidationException("Document intelligence configuration is required");
+        if (body == null) throw new ValidationException(LvErrorCode.CFG_001, "Document intelligence configuration is required");
         var principal = contextResolver.resolvePrincipal(request);
         DocumentIntelligenceMode mode;
         try {
             mode = DocumentIntelligenceMode.valueOf(body.mode() == null ? "" : body.mode().trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unsupported document intelligence mode");
+            throw new ValidationException(LvErrorCode.CFG_001, "Unsupported document intelligence mode");
         }
         documentIntelligenceService.update(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), mode, body.activeBundleVersion());
@@ -186,7 +187,7 @@ public class BusinessAdminController {
             try {
                 types.add(EntityType.valueOf(raw.trim().toUpperCase(Locale.ROOT)));
             } catch (Exception e) {
-                throw new ValidationException("Unsupported sensitive-data category"); // 0023 B7: never echo the value sent
+                throw new ValidationException(LvErrorCode.CFG_001, "Unsupported sensitive-data category"); // 0023 B7: never echo the value sent
             }
         }
         return Set.copyOf(types);

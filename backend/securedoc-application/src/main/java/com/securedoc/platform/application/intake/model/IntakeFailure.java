@@ -18,17 +18,27 @@ import java.util.Objects;
  * (class simple name) are ever stored, audited, logged or shown; the exception's message is never read, because
  * it can hold a source id, an identifier value, a file name or a tenant id.
  */
-public record IntakeFailure(String code, String exceptionType) {
+public record IntakeFailure(String code, String exceptionType,
+                            com.securedoc.platform.domain.error.LvErrorCode lvCode) {
 
     public IntakeFailure {
         Objects.requireNonNull(code);
         Objects.requireNonNull(exceptionType);
+        // Task 0025: the LexaVault code; without one it follows from the code (LV-SYS-001 when unknown).
+        if (lvCode == null) {
+            lvCode = com.securedoc.platform.application.error.LvErrorCodes.forDetailOrFallback(code, "intake");
+        }
+    }
+
+    public IntakeFailure(String code, String exceptionType) {
+        this(code, exceptionType, null);
     }
 
     /** Reads the throwable as given; callers unwrap their own wrappers first. */
     public static IntakeFailure of(Throwable failure) {
         Objects.requireNonNull(failure);
-        return new IntakeFailure(codeOf(failure), failure.getClass().getSimpleName());
+        return new IntakeFailure(codeOf(failure), failure.getClass().getSimpleName(),
+                com.securedoc.platform.application.error.LvErrorCodes.optional(failure).orElse(null));
     }
 
     /** A stable code: the code the exception already carries, or a fixed category for its type. */

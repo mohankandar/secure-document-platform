@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.processing.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.FinalizePackageUseCase;
@@ -60,7 +61,7 @@ public final class PackageFinalizationService implements FinalizePackageUseCase 
 
         // 2. Package must be in IN_REVIEW or PENDING_REVIEW status
         if (pkg.status() != PackageStatus.IN_REVIEW && pkg.status() != PackageStatus.PENDING_REVIEW) {
-            throw new ValidationException(
+            throw new ValidationException(LvErrorCode.REV_002, 
                     "Package must be in IN_REVIEW or PENDING_REVIEW status to finalize. Current: " + pkg.status());
         }
 
@@ -69,13 +70,13 @@ public final class PackageFinalizationService implements FinalizePackageUseCase 
                 .findByPackageIdAndTenantId(command.packageId(), command.tenantId());
 
         if (documents.isEmpty()) {
-            throw new ValidationException("Package has no documents");
+            throw new ValidationException(LvErrorCode.REV_002, "Package has no documents");
         }
 
         // 4. Verify all documents are PROCESSED
         for (Document doc : documents) {
             if (doc.status() != DocumentStatus.PROCESSED) {
-                throw new ValidationException(
+                throw new ValidationException(LvErrorCode.REV_002, 
                         "Cannot finalize: document " + doc.id() + " is in status " + doc.status()
                                 + ". All documents must be PROCESSED.");
             }
@@ -88,11 +89,11 @@ public final class PackageFinalizationService implements FinalizePackageUseCase 
 
             for (Finding finding : findings) {
                 if (finding.status() == FindingStatus.DETECTED) {
-                    throw new ValidationException(
+                    throw new ValidationException(LvErrorCode.REV_003, 
                             "Cannot finalize: finding " + finding.id() + " has not been reviewed");
                 }
                 if (finding.status() == FindingStatus.CONFIRMED) {
-                    throw new ValidationException(
+                    throw new ValidationException(LvErrorCode.REV_003, 
                             "Cannot finalize: finding " + finding.id()
                                     + " is confirmed but not yet redacted");
                 }

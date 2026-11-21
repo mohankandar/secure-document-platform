@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.manual.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.audit.query.AuditRecordFilter;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -68,28 +69,28 @@ public final class ManualFallbackPagePreviewService implements GetManualFallback
         var pkg = packageRepository.findByIdAndTenantId(packageId, tenantId)
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", packageId.toString()));
         if (pkg.status() != PackageStatus.IN_REVIEW || !manualFallbackStarted(packageId, tenantId)) {
-            throw new ValidationException("Package is not in business manual processing");
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not in business manual processing");
         }
         var document = documentRepository.findByIdAndTenantId(documentId, tenantId)
                 .orElseThrow(() -> new NotFoundException("Document", documentId.toString()));
         if (!document.packageId().equals(packageId) || document.status() != DocumentStatus.REDACTING) {
-            throw new ValidationException("Document is not part of the active manual processing session");
+            throw new ValidationException(LvErrorCode.REV_006, "Document is not part of the active manual processing session");
         }
         if (pageNumber < 1 || pageNumber > document.pageCount()) {
-            throw new ValidationException("Page number is outside the source document");
+            throw new ValidationException(LvErrorCode.REV_006, "Page number is outside the source document");
         }
 
         Artifact original = artifactRepository.findByDocumentIdAndTenantId(documentId, tenantId).stream()
                 .filter(a -> a.artifactType() == ArtifactType.ORIGINAL && a.isAvailable() && a.storageReference() != null)
                 .findFirst()
-                .orElseThrow(() -> new ValidationException("Original document is unavailable for manual processing"));
+                .orElseThrow(() -> new ValidationException(LvErrorCode.REV_007, "Original document is unavailable for manual processing"));
 
         var pageFindings = findingRepository.findByDocumentIdAndTenantId(documentId, tenantId).stream()
                 .filter(f -> f.location().pageNumber() == pageNumber)
                 .filter(f -> f.status() == FindingStatus.CONFIRMED || f.status() == FindingStatus.REDACTED)
                 .toList();
         if (pageFindings.stream().anyMatch(f -> !f.location().hasBoundingBox())) {
-            throw new ValidationException("A confirmed sensitive region cannot be safely masked in the preview");
+            throw new ValidationException(LvErrorCode.REV_006, "A confirmed sensitive region cannot be safely masked in the preview");
         }
         List<FindingLocation.BoundingBox> masks = pageFindings.stream()
                 .map(f -> f.location().boundingBox()).toList();

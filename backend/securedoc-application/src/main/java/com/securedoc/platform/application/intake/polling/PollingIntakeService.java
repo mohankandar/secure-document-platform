@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intake.polling;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.AccessDeniedException;
@@ -73,14 +74,14 @@ public final class PollingIntakeService {
     public Optional<PollingRunSnapshot> runNow(TenantId tenantId, IntegrationConnectionId connectionId, ActorId actorId) {
         IntegrationConnection source = connectionService.get(tenantId, connectionId);
         if (!source.enabled() || !source.pollingSource()) {
-            throw new AccessDeniedException("Integration connection is not an enabled polling ingestion source");
+            throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not an enabled polling ingestion source");
         }
         return runInternal(source, PollingRunTrigger.MANUAL, actorId);
     }
 
     public PollingConnectionStatus testConnection(TenantId tenantId, IntegrationConnectionId connectionId, ActorId actorId) {
         IntegrationConnection source = connectionService.get(tenantId, connectionId);
-        if (!source.enabled() || !source.pollingSource()) throw new AccessDeniedException("Integration connection is not an enabled polling source");
+        if (!source.enabled() || !source.pollingSource()) throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not an enabled polling source");
         CorrelationId correlationId = CorrelationId.generate();
         try {
             sourcePort.discoverAvailable(source, 1);
@@ -93,7 +94,8 @@ public final class PollingIntakeService {
                     source.id(), category, e.getClass().getSimpleName());
             connectionService.recordOperationalFailure(source, category);
             auditService.recordFailure(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_TESTED,
-                    "IntegrationConnection", source.id().toString(), correlationId, "Polling connection test failed: category=" + category);
+                    "IntegrationConnection", source.id().toString(), correlationId, "Polling connection test failed: "
+                            + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.forPollingCategory(category), category, "category=" + category));
             throw e;
         }
         return status(tenantId, connectionId);
@@ -101,7 +103,7 @@ public final class PollingIntakeService {
 
     public PollingConnectionStatus status(TenantId tenantId, IntegrationConnectionId connectionId) {
         IntegrationConnection source = connectionService.get(tenantId, connectionId);
-        if (!source.pollingSource()) throw new AccessDeniedException("Integration connection is not a polling source");
+        if (!source.pollingSource()) throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not a polling source");
         List<PollingRun> runs = runRepository.findRecent(tenantId, connectionId, 20);
         Instant latest = runs.isEmpty() ? null : runs.get(0).startedAt();
         Instant next = source.enabled() ? PollingScheduleCalculator.nextRunAt(source, latest, Instant.now(clock)) : null;
@@ -145,8 +147,8 @@ public final class PollingIntakeService {
                             source.id(), position, failure.failure().code(), failure.failure().exceptionType());
                     auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_PACKAGE_FAILED,
                             "IntegrationConnection", source.id().toString(), correlationId,
-                            "package=#" + position + ",code=" + failure.failure().code()
-                                    + ",exceptionType=" + failure.failure().exceptionType());
+                            com.securedoc.platform.application.error.LvErrorCodes.auditDetail(failure.failure().lvCode(), failure.failure().code(),
+                                    "package=#" + position + ",exceptionType=" + failure.failure().exceptionType()));
                 }
             }
             PollingRunStatus finalStatus = failures.isEmpty() ? PollingRunStatus.SUCCESS : PollingRunStatus.PARTIAL;
@@ -166,7 +168,8 @@ public final class PollingIntakeService {
                 connectionService.recordOperationalFailure(source, category);
                 auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_RUN_COMPLETED,
                         "IntegrationConnection", source.id().toString(), correlationId,
-                        summary + ",failedPackages=" + failures.size() + ",failures=" + detail);
+                        com.securedoc.platform.application.error.LvErrorCodes.auditDetail(failures.get(0).failure().lvCode(), category,
+                                summary + ",failedPackages=" + failures.size() + ",failures=" + detail));
             }
             return Optional.of(snapshot(completed));
         } catch (RuntimeException runFailure) {
@@ -179,7 +182,7 @@ public final class PollingIntakeService {
             connectionService.recordOperationalFailure(source, failure.code());
             auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_RUN_FAILED,
                     "IntegrationConnection", source.id().toString(), correlationId,
-                    "category=" + failure.code() + ",exceptionType=" + failure.exceptionType());
+                    com.securedoc.platform.application.error.LvErrorCodes.auditDetail(failure.lvCode(), failure.code(), "exceptionType=" + failure.exceptionType()));
             return Optional.of(snapshot(failed));
         }
     }

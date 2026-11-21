@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -52,7 +53,7 @@ public class AuditRecordCountController {
         try {
             return LocalDate.parse(raw.trim());
         } catch (DateTimeParseException e) {
-            throw new ValidationException(name + " must be a date (YYYY-MM-DD)");
+            throw new ValidationException(LvErrorCode.CFG_001, name + " must be a date (YYYY-MM-DD)");
         }
     }
 }

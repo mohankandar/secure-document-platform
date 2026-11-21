@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
+import com.securedoc.platform.scanbridge.model.BridgeLvCode;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSession;
 import com.securedoc.platform.scanbridge.model.ScanSessionStatus;
@@ -129,13 +130,13 @@ public class PhysicalScannerAcquisitionAdapter implements ScannerAcquisitionAdap
             if (!ready) {
                 try { Files.deleteIfExists(finalPdf); }
                 catch (IOException ex) {
-                    log.warn("SCAN_BRIDGE_PHYSICAL_FAILED_PDF_CLEANUP_FAILED scannerId={} sessionId={} exceptionType={}",
+                    log.warn("SCAN_BRIDGE_PHYSICAL_FAILED_PDF_CLEANUP_FAILED code={} scannerId={} sessionId={} exceptionType={}", BridgeLvCode.LV_SYS_007.code(),
                             properties.getScannerId(), session.sessionId(), ex.getClass().getSimpleName());
                 }
             }
             int notDeleted = FileScanSessionStore.deleteTreeBestEffort(captureDirectory);
             if (notDeleted > 0) {
-                log.warn("SCAN_BRIDGE_PHYSICAL_TEMP_CLEANUP_FAILED scannerId={} sessionId={} entriesNotDeleted={}",
+                log.warn("SCAN_BRIDGE_PHYSICAL_TEMP_CLEANUP_FAILED code={} scannerId={} sessionId={} entriesNotDeleted={}", BridgeLvCode.LV_SYS_007.code(),
                         properties.getScannerId(), session.sessionId(), notDeleted);
             }
         }

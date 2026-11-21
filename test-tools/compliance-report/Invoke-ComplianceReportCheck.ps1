@@ -274,7 +274,7 @@ try {
     $refusedStatus = Invoke-Raw 'GET' "/api/v1/operations/reports/export?marker=$loanMarker" 'REPORT_VIEWER'
     $authFailed = Sql "select coalesce(string_agg(outcome || ' ' || resource_id || ' ' || detail, ' | '), '') from audit_records where tenant_id='$tenantId' and action='AUTHORIZATION_FAILED'"
     Check '0018 A2: a refused export (403) is recorded once as DENIED AUTHORIZATION_FAILED, route pattern only' `
-        ($refusedStatus -eq 403 -and $authFailed -eq 'DENIED /api/v1/operations/reports/export capability=REPORT_EXPORT, method=GET, route=/api/v1/operations/reports/export') `
+        ($refusedStatus -eq 403 -and $authFailed -eq 'DENIED /api/v1/operations/reports/export code=LV-AUT-006, detail=ACCESS_DENIED, capability=REPORT_EXPORT, method=GET, route=/api/v1/operations/reports/export') `
         "status=$refusedStatus record=$authFailed"
 
     # --- 0020 B2: minutes per page, saved with the report targets ------------------------------
@@ -459,11 +459,11 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
     $boundaryStatus = Invoke-Raw 'GET' '/api/v1/packages' 'DOCUMENT_PROCESSOR' $otherEntity
     $boundary = Sql "select coalesce(string_agg(outcome || ' ' || detail, ' | '), '') from audit_records where tenant_id='$otherEntity' and action='AUTHORIZATION_FAILED'"
     Check 'U022: a tenant-boundary 403 is recorded once as DENIED AUTHORIZATION_FAILED, reason=TENANT_BOUNDARY' `
-        ($boundaryStatus -eq 403 -and $boundary -eq 'DENIED capability=none, method=GET, route=/api/v1/packages, reason=TENANT_BOUNDARY') `
+        ($boundaryStatus -eq 403 -and $boundary -eq 'DENIED code=LV-AUT-003, detail=ACCESS_DENIED, capability=none, method=GET, route=/api/v1/packages, reason=TENANT_BOUNDARY') `
         "status=$boundaryStatus record=$boundary"
     $bad = New-Report 'BUSINESS_ADMIN' $false $today.ToString('yyyy-MM-dd') $today.ToString('yyyy-MM-dd')
     Check 'a period that does not end before today is refused with 400' ($bad.status -eq 400) "status=$($bad.status)"
-    Check 'the failure is audited by category only' ((Count-Audit "action='COMPLIANCE_REPORT_CREATED' and outcome='FAILURE' and detail='period=invalid, edition=SUMMARY, failure=VALIDATION'") -eq 1)
+    Check 'the failure is audited by category only' ((Count-Audit "action='COMPLIANCE_REPORT_CREATED' and outcome='FAILURE' and detail='code=LV-CFG-001, detail=VALIDATION, period=invalid, edition=SUMMARY, failure=VALIDATION'") -eq 1)
 
     # --- 6. hashes ---------------------------------------------------------------------------
     $texts = @{}

@@ -34,13 +34,13 @@ public class EnterpriseIdentityAdminController {
     public ResponseEntity<Overview> activateDraft(@RequestBody ActivationRequest body,HttpServletRequest request){
         if(body==null||!"ACTIVATE".equals(body.confirmation()))throw new IllegalArgumentException("Activation requires the exact confirmation value ACTIVATE.");
         var p=context.resolvePrincipal(request); ConnectionAdminView staged=repository.findStagedForTenant(p.tenantId().value()).orElseThrow(()->new IllegalArgumentException("No staged identity configuration is available to activate."));
-        if(!staged.connectionId().equals(body.connectionId()))throw new com.securedoc.platform.application.exception.PersonFacingStateException("Activation target is not the current staged identity configuration.");
+        if(!staged.connectionId().equals(body.connectionId()))throw new com.securedoc.platform.application.exception.PersonFacingStateException(com.securedoc.platform.domain.error.LvErrorCode.CFG_008, "Activation target is not the current staged identity configuration.");
         try{
             var result=repository.activateValidated(p.tenantId().value(),body.connectionId(),body.expectedConfigurationVersion(),p.username());
             audit.recordSuccess(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ACTIVATED,"EnterpriseIdentityConnection",result.active().connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity connection activated: newVersion="+result.active().configurationVersion()+", previousConnection="+result.previousActive().connectionId()+", previousVersion="+result.previousActive().configurationVersion());
             return ResponseEntity.ok(overviewFor(p.tenantId().value()));
         }catch(RuntimeException ex){
-            audit.recordFailure(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ACTIVATION_FAILED,"EnterpriseIdentityConnection",body.connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity activation rejected: version="+body.expectedConfigurationVersion());
+            audit.recordFailure(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ACTIVATION_FAILED,"EnterpriseIdentityConnection",body.connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity activation rejected: code="+com.securedoc.platform.domain.error.LvErrorCode.CFG_008.code()+", detail=ACTIVATION_REJECTED, version="+body.expectedConfigurationVersion());
             throw ex;
         }
     }
@@ -54,7 +54,7 @@ public class EnterpriseIdentityAdminController {
             audit.recordSuccess(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ROLLED_BACK,"EnterpriseIdentityConnection",result.active().connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity connection rolled back: restoredVersion="+result.active().configurationVersion()+", replacedConnection="+result.previousActive().connectionId()+", replacedVersion="+result.previousActive().configurationVersion());
             return ResponseEntity.ok(overviewFor(p.tenantId().value()));
         }catch(RuntimeException ex){
-            audit.recordFailure(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ROLLBACK_FAILED,"EnterpriseIdentityConnection",body.connectionId()==null?"UNKNOWN":body.connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity rollback rejected: version="+body.expectedConfigurationVersion());
+            audit.recordFailure(p.tenantId(),p.actorId(),AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ROLLBACK_FAILED,"EnterpriseIdentityConnection",body.connectionId()==null?"UNKNOWN":body.connectionId().toString(),context.resolveCorrelationId(request),"Enterprise identity rollback rejected: code="+com.securedoc.platform.domain.error.LvErrorCode.CFG_008.code()+", detail=ROLLBACK_REJECTED, version="+body.expectedConfigurationVersion());
             throw ex;
         }
     }

@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.document;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.BusinessRecordId;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -123,7 +124,7 @@ public final class DocumentPackage {
     public void addDocument(Document document) {
         Objects.requireNonNull(document, "Document must not be null");
         if (status != PackageStatus.CREATED) {
-            throw new IllegalStateException(
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026, 
                     "Cannot add documents to package in status: " + status);
         }
         documents.add(document);
@@ -132,10 +133,10 @@ public final class DocumentPackage {
 
     public void submit() {
         if (status != PackageStatus.CREATED) {
-            throw new IllegalStateException("Cannot submit package in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026, "Cannot submit package in status: " + status);
         }
         if (documents.isEmpty()) {
-            throw new IllegalStateException("Cannot submit package with no documents");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026, "Cannot submit package with no documents");
         }
         status = PackageStatus.SUBMITTED;
         updatedAt = Instant.now();
@@ -208,7 +209,7 @@ public final class DocumentPackage {
     /** Resets a previously completed intake batch for another business-requested processing/export cycle. */
     public void prepareForReprocessing() {
         if (status != PackageStatus.COMPLETED) {
-            throw new IllegalStateException("Only a completed package can be reprocessed");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Only a completed package can be reprocessed");
         }
         status = PackageStatus.SUBMITTED;
         updatedAt = Instant.now();
@@ -217,7 +218,7 @@ public final class DocumentPackage {
     /** Returns a technically failed package to SUBMITTED so only reset/failed work is retried. */
     public void prepareForTechnicalRetry() {
         if (status != PackageStatus.FAILED) {
-            throw new IllegalStateException("Only a failed package can be retried");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Only a failed package can be retried");
         }
         status = PackageStatus.SUBMITTED;
         updatedAt = Instant.now();
@@ -229,7 +230,7 @@ public final class DocumentPackage {
      */
     public void prepareForManualFallback() {
         if (status != PackageStatus.FAILED) {
-            throw new IllegalStateException("Only a failed package can enter manual fallback");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_008, "Only a failed package can enter manual fallback");
         }
         status = PackageStatus.IN_REVIEW;
         updatedAt = Instant.now();
@@ -237,7 +238,7 @@ public final class DocumentPackage {
 
     public void startReview() {
         if (status != PackageStatus.PENDING_REVIEW) {
-            throw new IllegalStateException("Cannot start review for package in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Cannot start review for package in status: " + status);
         }
         status = PackageStatus.IN_REVIEW;
         updatedAt = Instant.now();
@@ -245,7 +246,7 @@ public final class DocumentPackage {
 
     public void approve() {
         if (status != PackageStatus.IN_REVIEW) {
-            throw new IllegalStateException("Cannot approve package in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Cannot approve package in status: " + status);
         }
         status = PackageStatus.APPROVED;
         updatedAt = Instant.now();

@@ -1,8 +1,9 @@
 /**
  * One name for everything people see in the Case File design (docs/work/ui/SPEC.md, "Vocabulary").
  * Screens take their words from here; they do not spell names of stages, places or sensitive types themselves.
- * Plain TypeScript with no imports, so node's test runner can check it directly.
+ * Plain TypeScript whose only import is the LV code registry (task 0025), so node's test runner can check it directly.
  */
+import { hasLvCode, isLvCode, lvCodeFor, lvEntry, lvLabel } from './lvCodes.ts';
 
 /** The brand link's accessible name. Branding without a name reads "LexaVault home", never "undefined home". */
 export function brandHomeName(applicationName: string | null | undefined): string {
@@ -401,57 +402,30 @@ export function runsLeft(used: number, maximum: number): string {
   return `${left} of ${maximum} run${maximum === 1 ? '' : 's'} left`;
 }
 
-/* ---------- Processing problems (UI task U012) ---------- */
+/* ---------- Processing problems (UI task U012; task 0025: words from the LV code registry) ---------- */
 
 export interface ProblemReason {
-  /** The page title and the Support row, for example "Text recognition timed out". */
+  /** The registry title of the LV code, for example "Text reading timed out". */
   title: string;
-  /** One plain sentence for "What happened". */
+  /** One plain sentence for "What happened": the registry's short description of the code. */
   sentence: string;
-  /** False when the code is not in the list: the screen shows "Processing problem" and the code only under Technical details. */
+  /** False when the reason has no LV code of its own: it reads as LV-SYS-001 and the reason stays under Technical details. */
   known: boolean;
+  /** The LexaVault error code, for example "LV-PRC-004". */
+  code: string;
+  /** "Text reading timed out · LV-PRC-004": the Support row, the problem page title and the case panel. */
+  label: string;
 }
 
-/** Reason codes as the server records them (TechnicalFailureCode), in plain words. */
-export const PROBLEM_REASONS: Record<string, Omit<ProblemReason, 'known'>> = {
-  OCR_TIMEOUT: { title: 'Text recognition timed out', sentence: 'Text recognition didn’t finish within the allowed time.' },
-  OCR_UNAVAILABLE: { title: 'Text recognition wasn’t available', sentence: 'The text recognition service didn’t answer.' },
-  OCR_PROCESS_FAILED: { title: 'Text recognition couldn’t read a document', sentence: 'Text recognition couldn’t read the document.' },
-  AI_TIMEOUT: { title: 'AI model didn’t answer in time', sentence: 'The AI model didn’t answer within the allowed time.' },
-  MODEL_TIMEOUT: { title: 'AI model didn’t answer in time', sentence: 'The AI model didn’t answer within the allowed time.' },
-  AI_UNAVAILABLE: { title: 'AI model wasn’t available', sentence: 'The AI model didn’t answer.' },
-  AI_RATE_LIMITED: { title: 'AI model asked LexaVault to slow down', sentence: 'The AI model turned requests away for a while because too many arrived.' },
-  AI_REJECTED: { title: 'AI model’s answer couldn’t be used', sentence: 'The AI model sent an answer LexaVault couldn’t safely use.' },
-  AI_INVALID_RESPONSE: { title: 'AI model’s answer couldn’t be used', sentence: 'The AI model sent an answer LexaVault couldn’t safely use.' },
-  SDV_UNAVAILABLE: { title: 'Secure Document Vault didn’t answer', sentence: 'Secure Document Vault didn’t answer when LexaVault tried to send the case.' },
-  DELIVERY_IO: { title: 'The delivery destination couldn’t be reached', sentence: 'LexaVault couldn’t reach the place the case is sent to.' },
-  DELIVERY_DESTINATION_INVALID: { title: 'The delivery destination isn’t set up for this case', sentence: 'The place this case is sent to isn’t set up correctly for it.' },
-  // Task 0021: LV-DLV-003. Never retried: LexaVault would only send the same level again.
-  DELIVERY_SENSITIVITY_REFUSED: { title: 'Destination refused the sensitivity level', sentence: 'The place this case is sent to wouldn’t accept the sensitivity level sent with it (LV-DLV-003). Sending it again won’t help: the destination’s set-up needs checking.' },
-  STORAGE_IO: { title: 'Document storage wasn’t available', sentence: 'LexaVault’s document storage didn’t answer for a while.' },
-  // Task 0023 C1: a case that could not be started is stopped, not retried for ever.
-  PROCESSING_DISPATCH_EXHAUSTED: { title: 'Processing couldn’t be started', sentence: 'LexaVault tried to start processing this case 3 times and couldn’t, so it stopped.' },
-  PROCESSING_LICENSE_DENIED: { title: 'The licence doesn’t allow processing', sentence: 'The licence doesn’t allow this case to be processed, so it stopped at once without retrying.' },
-  // Task 0023 C3: a confirmed finding with no place, and each reason the redaction check refuses the output.
-  REDACTION_LOCATION_MISSING: { title: 'A confirmed finding has no place on the page', sentence: 'A finding was confirmed for redaction, but its place on the page isn’t known, so it couldn’t be redacted.' },
-  REDACTION_SOURCE_PAGES_UNKNOWN: { title: 'Redaction check: the pages couldn’t be counted', sentence: 'The redaction check couldn’t tell how many pages the original document has. The document was not delivered.' },
-  REDACTION_PAGE_COUNT_MISMATCH: { title: 'Redaction check: pages are missing or extra', sentence: 'The redacted document doesn’t have the same number of pages as the original. The document was not delivered.' },
-  REDACTION_TARGETS_NOT_APPLIED: { title: 'Redaction check: not every redaction was made', sentence: 'Not every value marked for redaction was redacted. The document was not delivered.' },
-  REDACTION_OUTPUT_EMPTY: { title: 'Redaction check: the redacted document is empty', sentence: 'Redaction produced an empty document. The document was not delivered.' },
-  REDACTION_TEXT_LAYER_REMAINS: { title: 'Redaction check: hidden text remained', sentence: 'Text that should have been removed could still be read in the redacted document. The document was not delivered.' },
-  REDACTION_ANNOTATIONS_REMAIN: { title: 'Redaction check: notes or comments remained', sentence: 'Notes, comments or form content remained in the redacted document. The document was not delivered.' },
-  REDACTION_REGION_NOT_COVERED: { title: 'Redaction check: an area wasn’t fully covered', sentence: 'An area marked for redaction wasn’t fully covered in the redacted document. The document was not delivered.' },
-  REDACTION_OUTPUT_UNPARSABLE: { title: 'Redaction check: the redacted document couldn’t be read', sentence: 'The redaction check couldn’t open the redacted document. The document was not delivered.' },
-};
-
-export const UNKNOWN_PROBLEM: Omit<ProblemReason, 'known'> = {
-  title: 'Processing problem',
-  sentence: 'Processing stopped for a technical reason. The code is under Technical details.',
-};
-
-export function problemReason(code: string | null | undefined): ProblemReason {
-  const found = code ? PROBLEM_REASONS[code.trim().toUpperCase()] : undefined;
-  return found ? { ...found, known: true } : { ...UNKNOWN_PROBLEM, known: false };
+/**
+ * A processing problem in words. The server's lvCode wins when it sent a known one; otherwise the reason code
+ * (TechnicalFailureCode) is mapped through the generated registry; anything else reads as LV-SYS-001.
+ * There is no second hand-written list: every word comes from lvErrorCodes.generated.ts.
+ */
+export function problemReason(reasonCode: string | null | undefined, lvCode?: string | null): ProblemReason {
+  const code = lvCodeFor(reasonCode, lvCode);
+  const entry = lvEntry(code);
+  return { title: entry.title, sentence: entry.description, known: isLvCode(lvCode) || hasLvCode(reasonCode), code, label: lvLabel(code) };
 }
 
 /** Where in processing a problem happened (ProcessingStage), for "at text recognition". */

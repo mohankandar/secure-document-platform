@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.integration;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -37,10 +38,10 @@ public class PollingIntegrationController {
         var principal=contextResolver.resolvePrincipal(request);
         var result=service.runNow(principal.tenantId(), parseId(connectionId), principal.actorId());
         return result.<ResponseEntity<?>>map(v -> ResponseEntity.ok(toResponse(v)))
-                .orElseGet(() -> ResponseEntity.status(409).body(java.util.Map.of("code","POLL_ALREADY_RUNNING","message","A polling run is already active for this source")));
+                .orElseGet(() -> ResponseEntity.status(409).body(com.securedoc.platform.api.dto.ApiErrorResponse.of("POLL_ALREADY_RUNNING", com.securedoc.platform.domain.error.LvErrorCode.INT_044, java.util.UUID.randomUUID().toString())));
     }
 
     private PollingConnectionStatusResponse toResponse(PollingConnectionStatus s){return new PollingConnectionStatusResponse(s.connectionId(),s.name(),s.enabled(),s.healthStatus(),s.nextScheduledAt(),s.recentRuns().stream().map(this::toResponse).toList());}
     private PollingRunResponse toResponse(PollingRunSnapshot r){return new PollingRunResponse(r.runId(),r.connectionId(),r.trigger().name(),r.status().name(),r.startedAt(),r.completedAt(),r.packagesDiscovered(),r.documentsExpected(),r.documentsRetrieved(),r.packagesAcknowledged(),r.failureCategory(),r.failureDetail());}
-    private IntegrationConnectionId parseId(String raw){try{return IntegrationConnectionId.fromString(raw);}catch(RuntimeException e){throw new ValidationException("Invalid integration connection id");}}
+    private IntegrationConnectionId parseId(String raw){try{return IntegrationConnectionId.fromString(raw);}catch(RuntimeException e){throw new ValidationException(LvErrorCode.CFG_003, "Invalid integration connection id");}}
 }

@@ -117,7 +117,7 @@ public class SupportIncidentController {
 
     private TenantId resolveTenantForMutation(TenantId principalTenant, UUID requestedTenant) {
         if (requestedTenant == null || requestedTenant.equals(principalTenant.value())) return principalTenant;
-        throw new TenantBoundaryDeniedException("Cross-tenant support incident actions are not permitted");
+        throw new TenantBoundaryDeniedException(com.securedoc.platform.domain.error.LvErrorCode.AUT_006, "Cross-tenant support incident actions are not permitted");
     }
 
     private TenantId resolveTenant(TenantId principalTenant,
@@ -125,7 +125,7 @@ public class SupportIncidentController {
                                    com.securedoc.platform.application.context.AuthenticatedPrincipal principal) {
         if (requestedTenant == null || requestedTenant.equals(principalTenant.value())) return principalTenant;
         if (!authorizationPolicy.has(principal, UserCapability.PLATFORM_OPERATIONS)) {
-            throw new TenantBoundaryDeniedException("Cross-tenant support search requires Platform Operations capability");
+            throw new TenantBoundaryDeniedException(com.securedoc.platform.domain.error.LvErrorCode.AUT_006, "Cross-tenant support search requires Platform Operations capability");
         }
         return TenantId.of(requestedTenant);
     }

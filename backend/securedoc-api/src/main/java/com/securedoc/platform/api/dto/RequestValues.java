@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.dto;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ValidationException;
 
 import java.util.Collection;
@@ -17,13 +18,13 @@ public final class RequestValues {
 
     public static void requireNoNullValues(Map<String, String> values, String field) {
         if (values != null && values.values().stream().anyMatch(java.util.Objects::isNull)) {
-            throw new ValidationException(field + " must not contain null values");
+            throw new ValidationException(LvErrorCode.INT_001, field + " must not contain null values");
         }
     }
 
     public static void requireNoNullEntries(Collection<?> values, String field) {
         if (values != null && values.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new ValidationException(field + " must not contain null entries");
+            throw new ValidationException(LvErrorCode.INT_001, field + " must not contain null entries");
         }
     }
 }

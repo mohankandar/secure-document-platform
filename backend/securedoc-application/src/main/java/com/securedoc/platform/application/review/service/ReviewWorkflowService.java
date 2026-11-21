@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.review.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.AssignReviewTaskUseCase;
@@ -74,12 +75,12 @@ public final class ReviewWorkflowService implements CreateReviewTaskUseCase,
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
         if (pkg.status() != PackageStatus.PENDING_REVIEW) {
-            throw new ValidationException("Package is not in PENDING_REVIEW status");
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not in PENDING_REVIEW status");
         }
 
         reviewTaskRepository.findOpenByPackageIdAndTenantId(command.packageId(), command.tenantId())
                 .ifPresent(existing -> {
-                    throw new ValidationException("An open review task already exists for this package");
+                    throw new ValidationException(LvErrorCode.REV_002, "An open review task already exists for this package");
                 });
 
         ReviewTask task = ReviewTask.create(command.tenantId(), command.packageId());
@@ -183,11 +184,11 @@ public final class ReviewWorkflowService implements CreateReviewTaskUseCase,
 
             for (Finding finding : findings) {
                 if (finding.status() == FindingStatus.DETECTED) {
-                    throw new ValidationException(
+                    throw new ValidationException(LvErrorCode.REV_003, 
                             "Cannot complete review: finding " + finding.id() + " has not been reviewed");
                 }
                 if (finding.status() == FindingStatus.CONFIRMED && !finding.location().hasBoundingBox()) {
-                    throw new ValidationException(
+                    throw new ValidationException(LvErrorCode.REV_006, 
                             "Cannot complete review: confirmed finding " + finding.id()
                                     + " is missing a bounding box required for redaction");
                 }

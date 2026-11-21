@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -82,17 +83,17 @@ public class BrandingController {
         BrandingUpdate.BrandingAssetUpdate toUpdate() {
             if (clear) return new BrandingUpdate.BrandingAssetUpdate(null, null, true);
             if (dataUrl == null || dataUrl.isBlank()) return null;
-            if (dataUrl.length() > 900_000) throw new ValidationException("Branding asset exceeds the allowed request size");
+            if (dataUrl.length() > 900_000) throw new ValidationException(LvErrorCode.CFG_001, "Branding asset exceeds the allowed request size");
             int comma = dataUrl.indexOf(',');
-            if (!dataUrl.startsWith("data:image/") || comma < 0) throw new ValidationException("Branding asset must be a PNG or WebP data URL");
+            if (!dataUrl.startsWith("data:image/") || comma < 0) throw new ValidationException(LvErrorCode.CFG_001, "Branding asset must be a PNG or WebP data URL");
             String header = dataUrl.substring(5, comma);
-            if (!header.toLowerCase().endsWith(";base64")) throw new ValidationException("Branding asset must use base64 encoding");
+            if (!header.toLowerCase().endsWith(";base64")) throw new ValidationException(LvErrorCode.CFG_001, "Branding asset must use base64 encoding");
             String mediaType = header.contains(";") ? header.substring(0, header.indexOf(';')) : header;
             try {
                 byte[] bytes = Base64.getDecoder().decode(dataUrl.substring(comma + 1));
                 return new BrandingUpdate.BrandingAssetUpdate(bytes, mediaType, false);
             } catch (IllegalArgumentException e) {
-                throw new ValidationException("Branding asset is not valid base64 content");
+                throw new ValidationException(LvErrorCode.CFG_001, "Branding asset is not valid base64 content");
             }
         }
     }

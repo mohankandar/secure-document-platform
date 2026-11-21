@@ -73,7 +73,7 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
                 packageId.value() + "-cycle-" + exportCycle + "-" + UUID.randomUUID(), "staging package");
 
         if (Files.exists(finalPackageDir)) {
-            throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Package delivery destination already exists");
+            throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Package delivery destination already exists").withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_010);
         }
 
         List<DeliveryReference> finalReferences = new ArrayList<>(items.size());

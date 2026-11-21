@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.business.admin;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.PolicyEstimateReadPort;
 import com.securedoc.platform.application.port.out.PolicyEstimateReadPort.Facts;
@@ -80,11 +81,11 @@ public final class PolicyEstimateService {
     }
 
     static ReviewMode parseMode(String raw) {
-        if (raw == null || raw.isBlank()) throw new ValidationException("Review mode is required");
+        if (raw == null || raw.isBlank()) throw new ValidationException(LvErrorCode.CFG_001, "Review mode is required");
         try {
             return ReviewMode.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unsupported review mode");
+            throw new ValidationException(LvErrorCode.CFG_001, "Unsupported review mode");
         }
     }
 
@@ -94,11 +95,11 @@ public final class PolicyEstimateService {
             if (raw == null || raw.isBlank()) throw new NumberFormatException();
             value = Double.parseDouble(raw.trim());
         } catch (NumberFormatException e) {
-            throw new ValidationException("Automatic redaction threshold must be between 0.50 and 0.99");
+            throw new ValidationException(LvErrorCode.CFG_001, "Automatic redaction threshold must be between 0.50 and 0.99");
         }
         if (Double.isNaN(value) || value < BusinessAdminConfigurationService.MIN_THRESHOLD
                 || value > BusinessAdminConfigurationService.MAX_THRESHOLD) {
-            throw new ValidationException("Automatic redaction threshold must be between 0.50 and 0.99");
+            throw new ValidationException(LvErrorCode.CFG_001, "Automatic redaction threshold must be between 0.50 and 0.99");
         }
         return value;
     }

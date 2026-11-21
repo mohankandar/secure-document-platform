@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.intake;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -105,10 +106,10 @@ public final class ExternalIntake {
 
     public void ensureDocumentReceiptAllowed(String externalSourceDocumentId, String idempotencyKey, Instant now) {
         if (status != ExternalIntakeStatus.AWAITING_DOCUMENTS) {
-            throw new IllegalStateException("Cannot receive document for intake in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_022, "Cannot receive document for intake in status: " + status);
         }
         Objects.requireNonNull(now, "Receipt time is required");
-        if (!now.isBefore(expiresAt)) throw new IllegalStateException("External intake completion window has expired");
+        if (!now.isBefore(expiresAt)) throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_022, "External intake completion window has expired");
         String normalizedKey = requireText(idempotencyKey, "Idempotency key", 255);
         document(externalSourceDocumentId);
         for (ExternalManifestDocument other : documents.values()) {

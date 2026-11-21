@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.persistence.adapter;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -47,7 +48,7 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
                 tenantId.value(), IntegrationPurpose.SDV_DELIVERY.name(), IntegrationDirection.OUTBOUND.name(),
                 IntegrationProviderType.HTTP_API.name());
         if (matches.size() > 1) {
-            throw new IllegalStateException("Tenant has more than one enabled SDV delivery connection");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.CFG_005, "Tenant has more than one enabled SDV delivery connection");
         }
         return matches.stream().findFirst().map(this::toDomain);
     }

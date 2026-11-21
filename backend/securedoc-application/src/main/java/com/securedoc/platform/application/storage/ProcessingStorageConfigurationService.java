@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.storage;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.port.out.ProcessingStorageConfigurationRepository;
 import com.securedoc.platform.application.port.out.TenantRepository;
 import com.securedoc.platform.application.exception.NotFoundException;
@@ -103,7 +104,7 @@ public final class ProcessingStorageConfigurationService {
         ProcessingStorageProvider provider = requireProvider(providerId);
         if (repository.findDeploymentDefault().map(a -> a.providerId().equals(providerId)).orElse(false)
                 || repository.findTenantOverrides().stream().anyMatch(a -> a.providerId().equals(providerId))) {
-            throw new ValidationException("Active processing storage provider cannot be retired");
+            throw new ValidationException(LvErrorCode.CFG_001, "Active processing storage provider cannot be retired");
         }
         ProcessingStorageProvider retired = provider.retire(Instant.now());
         repository.saveProvider(retired);
@@ -146,7 +147,7 @@ public final class ProcessingStorageConfigurationService {
 
     private void ensureActivatable(ProcessingStorageProvider provider) {
         if (provider.status() == ProcessingStorageProviderStatus.RETIRED) {
-            throw new ValidationException("Retired processing storage provider cannot be activated");
+            throw new ValidationException(LvErrorCode.CFG_001, "Retired processing storage provider cannot be activated");
         }
     }
 
@@ -155,10 +156,10 @@ public final class ProcessingStorageConfigurationService {
         ProcessingStorageProvider provider = requireProvider(providerId);
         long activeNodes = repository.countActiveNodes(cutoff);
         if (provider.providerType() == ProcessingStorageProviderType.LOCAL_FILESYSTEM && activeNodes > 1) {
-            throw new ValidationException("LOCAL_FILESYSTEM cannot be activated while multiple application nodes are active; use SHARED_FILESYSTEM");
+            throw new ValidationException(LvErrorCode.CFG_001, "LOCAL_FILESYSTEM cannot be activated while multiple application nodes are active; use SHARED_FILESYSTEM");
         }
         if (!allActiveNodesHealthy(providerId, cutoff)) {
-            throw new ValidationException("Processing storage has not validated healthy on every active application node");
+            throw new ValidationException(LvErrorCode.CFG_001, "Processing storage has not validated healthy on every active application node");
         }
     }
 

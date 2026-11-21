@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.lifecycle.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ReprocessPackageCommand;
@@ -60,14 +61,14 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (pkg.status() != PackageStatus.COMPLETED) {
-            throw new ValidationException("Only a completed package can be reprocessed");
+            throw new ValidationException(LvErrorCode.REV_002, "Only a completed package can be reprocessed");
         }
         if (!lifecycleService.canReprocess(command.packageId(), command.tenantId())) {
-            throw new ValidationException("Reprocessing is unavailable because the original expired, was purged, or the maximum export cycles were reached");
+            throw new ValidationException(LvErrorCode.REV_007, "Reprocessing is unavailable because the original expired, was purged, or the maximum export cycles were reached");
         }
         int nextCycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId());
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(command.packageId(), command.tenantId());
-        if (documents.isEmpty()) throw new ValidationException("Package has no documents to reprocess");
+        if (documents.isEmpty()) throw new ValidationException(LvErrorCode.REV_007, "Package has no documents to reprocess");
 
         // Remove transient outputs/findings from the prior run. The ORIGINAL is intentionally retained.
         for (Document document : documents) {
@@ -80,7 +81,7 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
             try {
                 document.prepareForReprocessing();
             } catch (IllegalStateException e) {
-                throw new ValidationException(e.getMessage());
+                throw new ValidationException(LvErrorCode.REV_002, e.getMessage());
             }
             documentRepository.save(document);
         }
@@ -89,7 +90,7 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
         try {
             pkg.prepareForReprocessing();
         } catch (IllegalStateException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.REV_002, e.getMessage());
         }
         packageRepository.save(pkg);
         auditService.recordSuccess(command.tenantId(), command.actorId(), AuditAction.PACKAGE_REPROCESS_REQUESTED,

@@ -205,6 +205,9 @@ class ScannerSubmissionWorkerRetryAfterAndAcceptanceWaitTest {
         assertTrue(checks > ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES + 1, "more checks than the failure cap");
         assertTrue(f.artifacts.exists(attention.preparedScan()));
         assertEquals("LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED", f.sessions.deliveryDiagnostics().get(0).lastDeliveryErrorCode());
+        // Task 0025: the LV code beside it.
+        assertEquals("LV-SCN-017", attention.lastDeliveryLvCode());
+        assertEquals("LV-SCN-017", f.sessions.deliveryDiagnostics().get(0).lastDeliveryLvCode());
     }
 
     @Test

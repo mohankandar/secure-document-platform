@@ -30,7 +30,8 @@ class ReviewAlreadyDecidedHandlerTest {
         mvc.perform(post("/decide"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("REVIEW_ALREADY_DECIDED"))
-                .andExpect(jsonPath("$.message").value("This item was already decided by someone else."))
+                .andExpect(jsonPath("$.message").value("Someone else already decided this"))
+                .andExpect(jsonPath("$.code").value("LV-REV-001"))
                 .andExpect(jsonPath("$.correlationId").exists());
     }
 }

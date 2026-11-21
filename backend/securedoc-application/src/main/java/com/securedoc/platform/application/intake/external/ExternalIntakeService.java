@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intake.external;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.audit.RequestActorDisplayName.MachineClientKind;
@@ -152,7 +153,7 @@ public final class ExternalIntakeService {
         Objects.requireNonNull(principal, "Authenticated scanner principal is required");
         IntegrationConnection source = scannerSource(principal);
         if (input == null || input.documents().size() != 1) {
-            throw new ValidationException("Scanner intake requires exactly one consolidated PDF");
+            throw new ValidationException(LvErrorCode.SCN_001, "Scanner intake requires exactly one consolidated PDF");
         }
         Map<String, String> metadata = new LinkedHashMap<>(input.metadata());
         PushIntakeCreateInput.ManifestDocumentInput scannerDocument = input.documents().get(0);
@@ -162,7 +163,7 @@ public final class ExternalIntakeService {
         try {
             sourceSha256 = ExternalManifestDocument.normalizeSha256(scannerDocument.sha256(), true);
         } catch (IllegalArgumentException ex) {
-            throw new ValidationException(ex.getMessage());
+            throw new ValidationException(LvErrorCode.INT_003, ex.getMessage());
         }
         // These values already exist as authoritative source identity on the scanner intake request.
         // Persist server-derived copies for reporting instead of trusting duplicate metadata supplied by a client.
@@ -184,7 +185,7 @@ public final class ExternalIntakeService {
     private void validateScannerProvenance(Map<String, String> metadata) {
         String captureMode = requiredMetadata(metadata, "scannerCaptureMode");
         if (!Set.of("SIMULATOR", "PHYSICAL").contains(captureMode)) {
-            throw new ValidationException("scannerCaptureMode must be SIMULATOR or PHYSICAL");
+            throw new ValidationException(LvErrorCode.SCN_003, "scannerCaptureMode must be SIMULATOR or PHYSICAL");
         }
         requiredMetadata(metadata, "bridgeId");
         requiredMetadata(metadata, "siteId");
@@ -197,7 +198,7 @@ public final class ExternalIntakeService {
         try {
             if (Long.parseLong(size) < 1) throw new NumberFormatException();
         } catch (NumberFormatException ex) {
-            throw new ValidationException("sourceFileSizeBytes must be a positive integer");
+            throw new ValidationException(LvErrorCode.SCN_003, "sourceFileSizeBytes must be a positive integer");
         }
         Instant started;
         Instant completed;
@@ -207,13 +208,13 @@ public final class ExternalIntakeService {
             completed = Instant.parse(requiredMetadata(metadata, "scanCompletedAt"));
             submitted = Instant.parse(requiredMetadata(metadata, "scannerSubmittedAt"));
         } catch (RuntimeException ex) {
-            throw new ValidationException("Scanner timestamps must be ISO-8601 instants");
+            throw new ValidationException(LvErrorCode.SCN_003, "Scanner timestamps must be ISO-8601 instants");
         }
         if (completed.isBefore(started)) {
-            throw new ValidationException("scanCompletedAt cannot be before scanStartedAt");
+            throw new ValidationException(LvErrorCode.SCN_003, "scanCompletedAt cannot be before scanStartedAt");
         }
         if (submitted.isBefore(completed)) {
-            throw new ValidationException("scannerSubmittedAt cannot be before scanCompletedAt");
+            throw new ValidationException(LvErrorCode.SCN_003, "scannerSubmittedAt cannot be before scanCompletedAt");
         }
 
         String reportedPages = metadata.get("scannerReportedPageCount");
@@ -222,17 +223,17 @@ public final class ExternalIntakeService {
                 int pages = Integer.parseInt(reportedPages.trim());
                 if (pages < 1 || pages > IntegrationConnection.MAX_PDF_PAGES) throw new NumberFormatException();
             } catch (NumberFormatException ex) {
-                throw new ValidationException("scannerReportedPageCount must be between 1 and " + IntegrationConnection.MAX_PDF_PAGES);
+                throw new ValidationException(LvErrorCode.SCN_003, "scannerReportedPageCount must be between 1 and " + IntegrationConnection.MAX_PDF_PAGES);
             }
         }
 
         try { ExternalManifestDocument.normalizeSha256(sourceSha256, true); }
-        catch (IllegalArgumentException ex) { throw new ValidationException(ex.getMessage()); }
+        catch (IllegalArgumentException ex) { throw new ValidationException(LvErrorCode.SCN_003, ex.getMessage()); }
     }
 
     private String requiredMetadata(Map<String, String> metadata, String key) {
         String value = metadata.get(key);
-        if (value == null || value.isBlank()) throw new ValidationException("Scanner metadata is missing " + key);
+        if (value == null || value.isBlank()) throw new ValidationException(LvErrorCode.SCN_003, "Scanner metadata is missing " + key);
         return value.trim();
     }
 
@@ -241,14 +242,14 @@ public final class ExternalIntakeService {
         try {
             return UUID.fromString(value).toString();
         } catch (IllegalArgumentException ex) {
-            throw new ValidationException(key + " must be a UUID");
+            throw new ValidationException(LvErrorCode.SCN_003, key + " must be a UUID");
         }
     }
 
     public ExternalIntakeSnapshot createPollingIntake(PushIntakeCreateInput input, IntegrationConnection source,
                                                       AuthenticatedPrincipal principal, CorrelationId correlationId) {
         if (source == null || !source.enabled() || !source.pollingSource() || !source.tenantId().equals(principal.tenantId())) {
-            throw new AccessDeniedException("Polling source is not enabled for this tenant");
+            throw new AccessDeniedException(LvErrorCode.CFG_010, "Polling source is not enabled for this tenant");
         }
         return createMachineIntake(input, source, ExternalIntakeChannel.POLLING, principal, correlationId);
     }
@@ -279,7 +280,7 @@ public final class ExternalIntakeService {
                 return expected;
             }).toList();
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.INT_003, e.getMessage());
         }
         validateManifest(manifest);
         String requestFingerprint = requestFingerprint(input, manifest);
@@ -320,7 +321,7 @@ public final class ExternalIntakeService {
                     sourcePackageId, sourceRevision, attemptNumber, requestFingerprint, createdAt,
                     createdAt.plus(source.incompleteWindowHours(), ChronoUnit.HOURS), manifest);
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.INT_020, e.getMessage());
         }
         externalIntakeRepository.save(intake);
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.EXTERNAL_INTAKE_CREATED,
@@ -362,7 +363,7 @@ public final class ExternalIntakeService {
                                                            UploadContent content, IntegrationConnection source,
                                                            AuthenticatedPrincipal principal, CorrelationId correlationId) {
         if (source == null || !source.enabled() || !source.pollingSource() || !source.tenantId().equals(principal.tenantId())) {
-            throw new AccessDeniedException("Polling source is not enabled for this tenant");
+            throw new AccessDeniedException(LvErrorCode.CFG_010, "Polling source is not enabled for this tenant");
         }
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
                 source, ExternalIntakeChannel.POLLING, principal, correlationId);
@@ -384,10 +385,10 @@ public final class ExternalIntakeService {
         String normalizedIdempotency = normalizeRequired(idempotencyKey, "Idempotency-Key");
         final String normalizedSourceSha;
         try { normalizedSourceSha = ExternalManifestDocument.normalizeSha256(sourceSha256, true); }
-        catch (IllegalArgumentException e) { throw new ValidationException(e.getMessage()); }
+        catch (IllegalArgumentException e) { throw new ValidationException(LvErrorCode.INT_002, e.getMessage()); }
         ExternalManifestDocument manifestDocument;
         try { manifestDocument = intake.document(normalizedExternalId); }
-        catch (IllegalArgumentException e) { throw new ValidationException(e.getMessage()); }
+        catch (IllegalArgumentException e) { throw new ValidationException(LvErrorCode.INT_020, e.getMessage()); }
 
         if (manifestDocument.received()) {
             if (!manifestDocument.matchesReceivedContent(normalizedSourceSha)) {
@@ -407,16 +408,16 @@ public final class ExternalIntakeService {
             throw new IntakeConflictException("INVALID_INTAKE_STATE", e.getMessage());
         }
         if (content.contentLength() < 1) {
-            throw new ValidationException("The file is empty");
+            throw new ValidationException(LvErrorCode.INT_006, "The file is empty");
         }
         if (content.contentLength() > source.maxPdfSizeBytes()) {
-            throw new ValidationException("PDF size exceeds the configured source limit");
+            throw new ValidationException(LvErrorCode.INT_004, "PDF size exceeds the configured source limit");
         }
         if (channel == ExternalIntakeChannel.SCANNER) {
             validateScannerDeclaredSize(packageId, principal.tenantId(), content.contentLength());
         }
         if (!"application/pdf".equalsIgnoreCase(normalizeRequired(mimeType, "mimeType"))) {
-            throw new ValidationException("Machine intake supports application/pdf only");
+            throw new ValidationException(LvErrorCode.INT_007, "Machine intake supports application/pdf only");
         }
         if (manifestDocument.declaredSha256() != null
                 && !manifestDocument.declaredSha256().equalsIgnoreCase(normalizedSourceSha)) {
@@ -438,7 +439,7 @@ public final class ExternalIntakeService {
         try (InputStream pdfStream = content.openStream()) {
             pageCount = pdfValidationPort.inspect(pdfStream).pageCount();
             if (pageCount > source.maxPdfPages()) {
-                throw new ValidationException("PDF page count exceeds the configured source limit");
+                throw new ValidationException(LvErrorCode.INT_009, "PDF page count exceeds the configured source limit");
             }
         } catch (IOException | java.io.UncheckedIOException e) {
             throw receivedCopyUnreadable(packageId, e);
@@ -480,12 +481,12 @@ public final class ExternalIntakeService {
         var documentPackage = packageRepository.findByIdAndTenantId(packageId, tenantId)
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", packageId.toString()));
         String declared = documentPackage.metadata().get("sourceFileSizeBytes")
-                .orElseThrow(() -> new ValidationException("Scanner metadata is missing sourceFileSizeBytes"));
+                .orElseThrow(() -> new ValidationException(LvErrorCode.SCN_002, "Scanner metadata is missing sourceFileSizeBytes"));
         final long declaredSize;
         try {
             declaredSize = Long.parseLong(declared);
         } catch (NumberFormatException ex) {
-            throw new ValidationException("sourceFileSizeBytes must be a positive integer");
+            throw new ValidationException(LvErrorCode.SCN_002, "sourceFileSizeBytes must be a positive integer");
         }
         if (declaredSize != actualSizeBytes) {
             throw new IntakeConflictException("SCANNER_SOURCE_SIZE_MISMATCH",
@@ -522,7 +523,7 @@ public final class ExternalIntakeService {
     public ExternalIntakeSnapshot pollingStatus(PackageId packageId, IntegrationConnection source,
                                                 AuthenticatedPrincipal principal, CorrelationId correlationId) {
         if (source == null || !source.enabled() || !source.pollingSource() || !source.tenantId().equals(principal.tenantId())) {
-            throw new AccessDeniedException("Polling source is not enabled for this tenant");
+            throw new AccessDeniedException(LvErrorCode.CFG_010, "Polling source is not enabled for this tenant");
         }
         ExternalIntake intake = authorizedIntake(principal, source, packageId, ExternalIntakeChannel.POLLING, true);
         expireForRequestIfDue(intake, principal.actorId(), correlationId);
@@ -536,7 +537,7 @@ public final class ExternalIntakeService {
                 : externalIntakeRepository.findByTenantIdAndPackageId(principal.tenantId(), packageId);
         ExternalIntake intake = found.orElseThrow(() -> new NotFoundException("ExternalIntake", packageId.toString()));
         if (!intake.integrationConnectionId().equals(source.id()) || intake.channel() != channel) {
-            throw new AccessDeniedException("Authenticated integration source does not own this intake");
+            throw new AccessDeniedException(LvErrorCode.AUT_008, "Authenticated integration source does not own this intake");
         }
         return intake;
     }
@@ -564,12 +565,12 @@ public final class ExternalIntakeService {
         Set<String> ids = new HashSet<>();
         for (ExternalManifestDocument document : manifest) {
             if (!ids.add(document.externalSourceDocumentId())) {
-                throw new ValidationException("Document manifest lists the same externalSourceDocumentId more than once");
+                throw new ValidationException(LvErrorCode.INT_020, "Document manifest lists the same externalSourceDocumentId more than once");
             }
             try {
                 com.securedoc.platform.domain.vo.FileName.of(document.originalFileName());
             } catch (IllegalArgumentException e) {
-                throw new ValidationException("Document manifest fileName is not valid: " + e.getMessage());
+                throw new ValidationException(LvErrorCode.INT_003, "Document manifest fileName is not valid: " + e.getMessage());
             }
         }
     }
@@ -577,9 +578,9 @@ public final class ExternalIntakeService {
     private void validateCreateInput(PushIntakeCreateInput input, IntegrationConnection source) {
         normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId");
         normalizeRequired(input.sourceRevision(), "sourceRevision");
-        if (input.documents().isEmpty()) throw new ValidationException("Document manifest must contain at least one PDF");
+        if (input.documents().isEmpty()) throw new ValidationException(LvErrorCode.INT_003, "Document manifest must contain at least one PDF");
         if (input.documents().size() > source.maxDocumentsPerIntake()) {
-            throw new ValidationException("Document manifest exceeds the configured source document limit");
+            throw new ValidationException(LvErrorCode.INT_010, "Document manifest exceeds the configured source document limit");
         }
     }
 
@@ -643,7 +644,11 @@ public final class ExternalIntakeService {
     }
 
     private static String normalizeRequired(String value, String label) {
-        if (value == null || value.isBlank()) throw new ValidationException(label + " is required");
+        if (value == null || value.isBlank()) {
+            // #27: a blank Idempotency-Key header is LV-INT-002; a blank field (#31) is LV-INT-003.
+            throw new ValidationException("Idempotency-Key".equals(label) ? LvErrorCode.INT_002 : LvErrorCode.INT_003,
+                    label + " is required");
+        }
         return value.trim();
     }
 }

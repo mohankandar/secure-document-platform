@@ -86,7 +86,7 @@ class CapabilityAuthorizationInterceptorTest {
         assertEquals(AuditOutcome.DENIED, record.outcome());
         assertEquals(fixture.principal.actorId(), record.actorId());
         assertEquals(fixture.principal.tenantId(), record.tenantId());
-        assertEquals("capability=PACKAGE_REPROCESS, method=POST, route=/api/v1/packages/{packageId}/reprocess",
+        assertEquals("code=LV-AUT-006, detail=ACCESS_DENIED, capability=PACKAGE_REPROCESS, method=POST, route=/api/v1/packages/{packageId}/reprocess",
                 record.detail());
         assertEquals("/api/v1/packages/{packageId}/reprocess", record.resourceId());
         for (String leaked : List.of("secret-loan", "12345", "Jane", "borrower")) {
@@ -109,7 +109,7 @@ class CapabilityAuthorizationInterceptorTest {
                 .thenReturn("/api/v1/x?name=Jane Doe");
         assertThrows(AccessDeniedException.class, () -> fixture.interceptor.preHandle(
                 fixture.request, mock(HttpServletResponse.class), handler("policyOrIdentifiers")));
-        assertEquals("capability=TENANT_POLICY_MANAGE|TENANT_IDENTIFIER_MANAGE, method=PUT, route=unknown",
+        assertEquals("code=LV-AUT-006, detail=ACCESS_DENIED, capability=TENANT_POLICY_MANAGE|TENANT_IDENTIFIER_MANAGE, method=PUT, route=unknown",
                 fixture.audits.get(0).detail());
     }
 

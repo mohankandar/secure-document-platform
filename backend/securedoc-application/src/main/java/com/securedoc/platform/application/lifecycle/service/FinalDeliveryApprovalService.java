@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.lifecycle.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ApproveFinalDeliveryCommand;
@@ -37,7 +38,7 @@ public final class FinalDeliveryApprovalService implements ApproveFinalDeliveryU
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (pkg.status() != PackageStatus.PENDING_FINAL_APPROVAL) {
-            throw new ValidationException("Package is not waiting for final delivery approval");
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not waiting for final delivery approval");
         }
         lifecycleService.grantFinalApproval(command.packageId(), command.tenantId(), Instant.now());
         pkg.resumeAfterFinalApproval();

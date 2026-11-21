@@ -118,8 +118,9 @@ test('no-entity user still gets the refusal', async ({ page }) => {
   // UI task U013 (owner's decision): no organization is a refusal like a 403 from /me. It shows the Case File
   // no-access screen and keeps the session, so Sign out can end it at the identity provider. Before U013 this
   // test expected the generic "Sign-in could not be completed" message and a cleared access token.
-  await expect(page.getByRole('heading', { name: "You don't have access to anything in LexaVault yet" })).toBeVisible();
-  await expect(page.getByText("You're signed in as race.user@example.test, but your account has no LexaVault role.")).toBeVisible();
+  // Task 0025: the title and the code only; no organization gives no code, so LV-AUT-002.
+  await expect(page.getByRole('heading', { name: 'No access to LexaVault · LV-AUT-002' })).toBeVisible();
+  await expect(page.getByText("You're signed in as race.user@example.test.")).toBeVisible();
   await expect(page.getByText('Sign-in could not be completed')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /account menu/i })).toHaveCount(0);
   expect(api.meSelections).toHaveLength(0);
@@ -135,11 +136,13 @@ test('a refused /me shows the same no-access screen', async ({ page }) => {
   await mockIdentityProvider(page);
   await mockApi(page, [ENTITY_A]);
   // Registered last, so it answers /me before the shared mock: the server refuses this account.
-  await page.route('**/api/v1/me', (route) => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ errorCode: 'ACCESS_DENIED', message: 'Access denied' }) }));
+  await page.route('**/api/v1/me', (route) => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ errorCode: 'NOT_AUTHORIZED_FOR_ENTITY', code: 'LV-AUT-003', message: 'No access to this entity' }) }));
 
   await signIn(page);
 
-  await expect(page.getByRole('heading', { name: "You don't have access to anything in LexaVault yet" })).toBeVisible();
+  // Task 0025: the code from the server's 403 body; the internal reason never reaches the screen.
+  await expect(page.getByRole('heading', { name: 'No access to this entity · LV-AUT-003' })).toBeVisible();
+  await expect(page.getByText('NOT_AUTHORIZED_FOR_ENTITY')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   await expect(page.getByRole('button', { name: /account menu/i })).toHaveCount(0);
 });

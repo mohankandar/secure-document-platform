@@ -60,7 +60,7 @@ class WatchedFolderSchedulerFailureTest {
         assertEquals("FAILED", scheduler.status().lastScanOutcome());
         AuditRecord failed = audits.stream().filter(r -> r.action() == AuditAction.WATCHED_FOLDER_SCAN_TRIGGERED)
                 .findFirst().orElseThrow();
-        assertEquals("Watched-folder scan failed: mode=SCHEDULED, reasonCode=SCAN_FAILED, exceptionType=IllegalStateException",
+        assertEquals("Watched-folder scan failed: code=LV-INT-034, detail=SCAN_FAILED, mode=SCHEDULED, exceptionType=IllegalStateException",
                 failed.detail());
         assertTrue(logs.list.stream().anyMatch(e -> e.getFormattedMessage().contains("reasonCode=SCAN_FAILED exceptionType=IllegalStateException")));
         logs.list.forEach(e -> {

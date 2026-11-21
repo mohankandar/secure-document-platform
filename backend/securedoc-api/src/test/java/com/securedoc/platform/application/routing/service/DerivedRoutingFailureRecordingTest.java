@@ -100,7 +100,7 @@ class DerivedRoutingFailureRecordingTest {
         assertEquals(DerivedDeliveryStatus.ATTENTION_REQUIRED, d.status());
         assertEquals(DerivedDeliveryService.DESTINATION_NOT_FOUND, d.lastFailureCategory());
         verify(deliveries).save(d);
-        assertEquals("Derived delivery refused before sending: code=DERIVED_DESTINATION_NOT_FOUND,retryable=false",
+        assertEquals("Derived delivery refused before sending: code=LV-DLV-006, detail=DERIVED_DESTINATION_NOT_FOUND, retryable=false",
                 refusalAuditDetail(d));
         verify(port, never()).deliver(any(), any());
     }
@@ -116,7 +116,7 @@ class DerivedRoutingFailureRecordingTest {
 
         assertEquals(DerivedDeliveryStatus.ATTENTION_REQUIRED, d.status());
         assertEquals(DerivedDeliveryService.ARTIFACT_UNAVAILABLE, d.lastFailureCategory());
-        assertTrue(refusalAuditDetail(d).contains("code=DERIVED_ARTIFACT_UNAVAILABLE"));
+        assertTrue(refusalAuditDetail(d).contains("code=LV-DLV-011, detail=DERIVED_ARTIFACT_UNAVAILABLE"));
     }
 
     @Test
@@ -127,7 +127,7 @@ class DerivedRoutingFailureRecordingTest {
         assertThrows(NotFoundException.class, () -> deliveryService.autoSend(tenant, d.id(), CorrelationId.generate()));
 
         assertEquals(DerivedDeliveryService.SOURCE_NOT_FOUND, d.lastFailureCategory());
-        assertTrue(refusalAuditDetail(d).contains("code=DERIVED_SOURCE_NOT_FOUND"));
+        assertTrue(refusalAuditDetail(d).contains("code=LV-DLV-011, detail=DERIVED_SOURCE_NOT_FOUND"));
     }
 
     @Test
@@ -142,7 +142,7 @@ class DerivedRoutingFailureRecordingTest {
         assertThrows(ValidationException.class, () -> deliveryService.autoSend(tenant, d.id(), CorrelationId.generate()));
 
         assertEquals(DerivedDeliveryService.DESTINATION_DISABLED, d.lastFailureCategory());
-        assertTrue(refusalAuditDetail(d).contains("code=DERIVED_DESTINATION_DISABLED"));
+        assertTrue(refusalAuditDetail(d).contains("code=LV-DLV-006, detail=DERIVED_DESTINATION_DISABLED"));
     }
 
     private DerivedRoutingService routing(DocumentRepository documents, RoutingRuleRepository rules,
@@ -179,7 +179,7 @@ class DerivedRoutingFailureRecordingTest {
         assertEquals(1, attention.size());
         assertEquals(DerivedRoutingService.MASTER_UNAVAILABLE, attention.get(0).lastFailureCategory());
         assertEquals(source.id(), attention.get(0).sourceDocumentId());
-        assertTrue(attentionAuditDetail().contains("category=ROUTING_MASTER_UNAVAILABLE"));
+        assertTrue(attentionAuditDetail().contains("code=LV-DLV-011, detail=ROUTING_MASTER_UNAVAILABLE"));
     }
 
     @Test
@@ -240,7 +240,7 @@ class DerivedRoutingFailureRecordingTest {
 
         verify(audit).recordFailure(eq(tenant), any(), eq(AuditAction.ROUTING_ATTENTION_REQUIRED),
                 eq("DocumentPackage"), eq(pkg.id().toString()), any(CorrelationId.class),
-                eq("Derived routing failed after master export: cycle=2, code=DERIVED_ROUTING_POST_EXPORT_FAILED"));
+                eq("Derived routing failed after master export: code=LV-DLV-013, detail=DERIVED_ROUTING_POST_EXPORT_FAILED, cycle=2"));
         List<DerivedDelivery> attention = savedAttention();
         assertEquals(1, attention.size());
         assertEquals("DERIVED_ROUTING_POST_EXPORT_FAILED", attention.get(0).lastFailureCategory());

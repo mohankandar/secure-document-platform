@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.finding;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import java.util.Objects;
 
 /**
@@ -64,23 +65,23 @@ public record FindingLocation(
 
         public BoundingBox {
             if (left < 0.0 || left > 1.0) {
-                throw new IllegalArgumentException("Left must be 0.0-1.0, got: " + left);
+                throw new com.securedoc.platform.domain.error.CodedArgumentException(LvErrorCode.REV_006, "Left must be 0.0-1.0, got: " + left);
             }
             if (top < 0.0 || top > 1.0) {
-                throw new IllegalArgumentException("Top must be 0.0-1.0, got: " + top);
+                throw new com.securedoc.platform.domain.error.CodedArgumentException(LvErrorCode.REV_006, "Top must be 0.0-1.0, got: " + top);
             }
             if (width <= 0.0 || width > 1.0) {
-                throw new IllegalArgumentException("Width must be > 0.0 and <= 1.0, got: " + width);
+                throw new com.securedoc.platform.domain.error.CodedArgumentException(LvErrorCode.REV_006, "Width must be > 0.0 and <= 1.0, got: " + width);
             }
             if (height <= 0.0 || height > 1.0) {
-                throw new IllegalArgumentException("Height must be > 0.0 and <= 1.0, got: " + height);
+                throw new com.securedoc.platform.domain.error.CodedArgumentException(LvErrorCode.REV_006, "Height must be > 0.0 and <= 1.0, got: " + height);
             }
             if (left + width > 1.0) {
-                throw new IllegalArgumentException(
+                throw new com.securedoc.platform.domain.error.CodedArgumentException(LvErrorCode.REV_006, 
                         "left + width must be <= 1.0, got: " + left + " + " + width + " = " + (left + width));
             }
             if (top + height > 1.0) {
-                throw new IllegalArgumentException(
+                throw new com.securedoc.platform.domain.error.CodedArgumentException(LvErrorCode.REV_006, 
                         "top + height must be <= 1.0, got: " + top + " + " + height + " = " + (top + height));
             }
         }

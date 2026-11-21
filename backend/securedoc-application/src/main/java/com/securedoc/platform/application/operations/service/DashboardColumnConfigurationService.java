@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.operations.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.operations.model.DashboardColumnSetting;
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
@@ -73,24 +74,24 @@ public final class DashboardColumnConfigurationService {
         List<CatalogColumn> catalog = catalog(tenantId);
         Map<String, CatalogColumn> byKey = new HashMap<>();
         catalog.forEach(column -> byKey.put(column.key(), column));
-        if (requested == null || requested.isEmpty()) throw new ValidationException("Dashboard column configuration is required");
-        if (requested.size() != catalog.size()) throw new ValidationException("Dashboard column configuration must include every available column");
+        if (requested == null || requested.isEmpty()) throw new ValidationException(LvErrorCode.CFG_001, "Dashboard column configuration is required");
+        if (requested.size() != catalog.size()) throw new ValidationException(LvErrorCode.CFG_001, "Dashboard column configuration must include every available column");
 
         Set<String> seen = new HashSet<>();
         List<DashboardColumnSetting> normalized = new ArrayList<>();
         int order = 0;
         for (DashboardColumnSetting setting : requested) {
             CatalogColumn column = byKey.get(setting.key());
-            if (column == null || !seen.add(setting.key())) throw new ValidationException("Invalid or duplicate dashboard column");
-            if (setting.defaultVisible() && !setting.allowed()) throw new ValidationException("A default dashboard column must also be allowed");
+            if (column == null || !seen.add(setting.key())) throw new ValidationException(LvErrorCode.CFG_001, "Invalid or duplicate dashboard column");
+            if (setting.defaultVisible() && !setting.allowed()) throw new ValidationException(LvErrorCode.CFG_001, "A default dashboard column must also be allowed");
             if (column.primary() && (!setting.allowed() || !setting.defaultVisible())) {
-                throw new ValidationException("Primary business identifier must remain allowed and visible by default");
+                throw new ValidationException(LvErrorCode.CFG_001, "Primary business identifier must remain allowed and visible by default");
             }
             normalized.add(new DashboardColumnSetting(setting.key(), setting.allowed(), setting.defaultVisible(), order++));
         }
-        if (seen.size() != catalog.size()) throw new ValidationException("Dashboard column configuration is incomplete");
+        if (seen.size() != catalog.size()) throw new ValidationException(LvErrorCode.CFG_001, "Dashboard column configuration is incomplete");
         if (normalized.stream().noneMatch(DashboardColumnSetting::defaultVisible)) {
-            throw new ValidationException("At least one dashboard column must be visible by default");
+            throw new ValidationException(LvErrorCode.CFG_001, "At least one dashboard column must be visible by default");
         }
 
         settingsRepository.replaceForTenant(tenantId, List.copyOf(normalized));

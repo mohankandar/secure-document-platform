@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.processing.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand;
 import com.securedoc.platform.application.detection.result.DetectSensitiveDataResult;
 import com.securedoc.platform.application.exception.NotFoundException;
@@ -165,7 +166,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                     ensureDocumentIntelligenceSnapshot(command);
                     executeContinueAfterReview(command);
                 }
-                default -> throw new ValidationException(
+                default -> throw new ValidationException(LvErrorCode.PRC_009, 
                         "Cannot trigger processing for package in status: " + pkg.status());
             }
         } finally {
@@ -272,7 +273,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                     document.recoverInterruptedProcessing();
                 }
             } catch (IllegalStateException e) {
-                throw new ValidationException(e.getMessage());
+                throw new ValidationException(LvErrorCode.PRC_009, e.getMessage());
             }
             documentRepository.save(document);
             recovered++;
@@ -299,12 +300,12 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                 .toList();
 
         if (redactingDocuments.isEmpty()) {
-            throw new ValidationException("No documents in REDACTING status require processing");
+            throw new ValidationException(LvErrorCode.REV_003, "No documents in REDACTING status require processing");
         }
 
         for (Document document : redactingDocuments) {
             if (hasDetectedFindings(document.id(), command.tenantId())) {
-                throw new ValidationException("Cannot continue redaction: document " + document.id()
+                throw new ValidationException(LvErrorCode.REV_003, "Cannot continue redaction: document " + document.id()
                         + " still has findings requiring review");
             }
             attemptRedaction(document, command.packageId(), command.tenantId(), command.correlationId());

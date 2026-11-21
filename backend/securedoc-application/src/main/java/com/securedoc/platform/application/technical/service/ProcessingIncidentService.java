@@ -72,6 +72,8 @@ public final class ProcessingIncidentService {
         if (safeMetadata != null) metadata.putAll(safeMetadata);
         metadata.putIfAbsent("scope", documentId == null ? "PACKAGE" : "DOCUMENT");
         metadata.putIfAbsent("preferredStage", preferredStage == null ? ProcessingStage.UNKNOWN.name() : preferredStage.name());
+        // Task 0025: the LexaVault code, which can be more precise than the reason code (for example DELIVERY_IO).
+        metadata.put("lvCode", classification.lvCode().code());
 
         ProcessingIncident incident = ProcessingIncident.open(
                 tenantId, packageId, documentId, stage, component, category, reasonCode,
@@ -121,7 +123,8 @@ public final class ProcessingIncidentService {
                 false, Math.max(1, attempts), correlationId,
                 "Automatic package-processing recovery attempts exhausted",
                 sanitizeMap(fingerprintProvider.currentFingerprint(tenantId, packageId)),
-                Map.of("scope", "PACKAGE", "maxAttempts", String.valueOf(maxAttempts)), now);
+                Map.of("scope", "PACKAGE", "maxAttempts", String.valueOf(maxAttempts),
+                        "lvCode", com.securedoc.platform.domain.error.LvErrorCode.PRC_008.code()), now);
         try {
             repository.save(incident);
             repository.saveEvent(ProcessingIncidentEvent.create(

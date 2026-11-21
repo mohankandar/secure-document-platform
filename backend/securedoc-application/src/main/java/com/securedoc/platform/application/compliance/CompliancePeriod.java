@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.compliance;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ValidationException;
 
 import java.time.Clock;
@@ -42,31 +43,31 @@ public record CompliancePeriod(Type type, LocalDate from, LocalDate to, ZoneId z
         if (timeZone == null || timeZone.isBlank()) return ZoneId.of("UTC");
         String name = timeZone.trim();
         if (!name.equals("UTC") && !name.matches("[A-Za-z]+(?:/[A-Za-z0-9_+\\-]+)+")) {
-            throw new ValidationException("timeZone must be an IANA time zone name, for example America/New_York");
+            throw new ValidationException(LvErrorCode.CFG_001, "timeZone must be an IANA time zone name, for example America/New_York");
         }
         try {
             return ZoneId.of(name);
         } catch (DateTimeException e) {
-            throw new ValidationException("timeZone must be an IANA time zone name, for example America/New_York");
+            throw new ValidationException(LvErrorCode.CFG_001, "timeZone must be an IANA time zone name, for example America/New_York");
         }
     }
 
     public static Type type(String period) {
-        if (period == null || period.isBlank()) throw new ValidationException("period is required");
+        if (period == null || period.isBlank()) throw new ValidationException(LvErrorCode.CFG_001, "period is required");
         try {
             return Type.valueOf(period.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("period must be LAST_MONTH, LAST_QUARTER, LAST_YEAR or CUSTOM");
+            throw new ValidationException(LvErrorCode.CFG_001, "period must be LAST_MONTH, LAST_QUARTER, LAST_YEAR or CUSTOM");
         }
     }
 
     public static CompliancePeriod resolve(Type type, LocalDate customFrom, LocalDate customTo, ZoneId zone,
                                            Clock clock) {
-        if (type == null) throw new ValidationException("period is required");
-        if (zone == null) throw new ValidationException("timeZone is required");
+        if (type == null) throw new ValidationException(LvErrorCode.CFG_001, "period is required");
+        if (zone == null) throw new ValidationException(LvErrorCode.CFG_001, "timeZone is required");
         LocalDate today = LocalDate.now(clock.withZone(zone));
         if (type != Type.CUSTOM && (customFrom != null || customTo != null)) {
-            throw new ValidationException("from and to are only accepted with period CUSTOM");
+            throw new ValidationException(LvErrorCode.CFG_001, "from and to are only accepted with period CUSTOM");
         }
         return switch (type) {
             case LAST_MONTH -> {
@@ -83,13 +84,13 @@ public record CompliancePeriod(Type type, LocalDate from, LocalDate to, ZoneId z
                     LocalDate.of(today.getYear() - 1, 12, 31), zone);
             case CUSTOM -> {
                 if (customFrom == null || customTo == null) {
-                    throw new ValidationException("from and to are required for period CUSTOM");
+                    throw new ValidationException(LvErrorCode.CFG_001, "from and to are required for period CUSTOM");
                 }
-                if (customTo.isBefore(customFrom)) throw new ValidationException("to must not be before from");
-                if (!customTo.isBefore(today)) throw new ValidationException("A custom period must end before today");
+                if (customTo.isBefore(customFrom)) throw new ValidationException(LvErrorCode.CFG_001, "to must not be before from");
+                if (!customTo.isBefore(today)) throw new ValidationException(LvErrorCode.CFG_001, "A custom period must end before today");
                 long days = ChronoUnit.DAYS.between(customFrom, customTo) + 1;
                 if (days > MAX_CUSTOM_DAYS) {
-                    throw new ValidationException("A custom period must be 1 to " + MAX_CUSTOM_DAYS + " days long");
+                    throw new ValidationException(LvErrorCode.CFG_001, "A custom period must be 1 to " + MAX_CUSTOM_DAYS + " days long");
                 }
                 yield new CompliancePeriod(type, customFrom, customTo, zone);
             }

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.review.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ReviewAlreadyDecidedException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -167,7 +168,7 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(document.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", document.packageId().toString()));
         if (pkg.status() != PackageStatus.PENDING_REVIEW && pkg.status() != PackageStatus.IN_REVIEW) {
-            throw new ValidationException("Package is not awaiting manual review");
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not awaiting manual review");
         }
 
         if (command.hasBoundingBoxAdjustment()) {
@@ -181,7 +182,7 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         String safeReason = ReviewTextSanitizer.sanitizeReason(command.reason());
         if (command.resolution() == ReviewResolution.CONFIRM) {
             if (!finding.location().hasBoundingBox()) {
-                throw new ValidationException("Finding location must be adjusted before confirmation");
+                throw new ValidationException(LvErrorCode.REV_006, "Finding location must be adjusted before confirmation");
             }
             finding.confirm(command.actorId(), safeReason);
         } else {

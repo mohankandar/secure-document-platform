@@ -36,11 +36,12 @@ test('one tag says what each connection does', () => {
   assert.equal(connectionTag({ ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', providerType: 'HTTP_API' }), 'Web address');
 });
 
-test('one plain status line per connection, with no codes', () => {
+test('one plain status line per connection; a failure reads as its LV title and code, never an internal code', () => {
   const c = { enabled: true, healthStatus: 'HEALTHY', lastSuccessAt: minsAgo(14), lastFailureAt: null, lastFailureCategory: null, purpose: 'INGESTION_SOURCE' as const, providerType: 'HTTP_API' as const };
   assert.equal(statusText(connectionStatus(c, NOW)), 'Working · last collected 14 min ago');
   const failing = { ...c, healthStatus: 'DEGRADED', lastSuccessAt: minsAgo(60), lastFailureAt: minsAgo(5), lastFailureCategory: 'POLL_SOURCE_UNAVAILABLE' };
-  assert.equal(statusText(connectionStatus(failing, NOW)), "Having problems · last collected 1 h ago · last try failed: couldn't reach it");
+  // Task 0025: the words come from the LV code registry (was "couldn't reach it").
+  assert.equal(statusText(connectionStatus(failing, NOW)), "Having problems · last collected 1 h ago · last try failed: Source system can't be reached · LV-INT-040");
   assert.equal(connectionStatus(failing, NOW).tone, 'warn');
   // A failure older than the last success is not shown.
   assert.equal(statusText(connectionStatus({ ...failing, healthStatus: 'HEALTHY', lastFailureAt: minsAgo(120) }, NOW)), 'Working · last collected 1 h ago');
@@ -49,10 +50,12 @@ test('one plain status line per connection, with no codes', () => {
   assert.equal(connectionStatus({ ...c, providerType: 'PUSH_API', healthStatus: 'UNKNOWN', lastSuccessAt: null }, NOW).word, 'Ready to receive');
   assert.equal(connectionStatus({ ...c, purpose: 'SDV_DELIVERY', healthStatus: 'UNKNOWN', lastSuccessAt: null }, NOW).word, 'Not checked yet');
   assert.equal(connectionStatus({ ...c, healthStatus: 'SOMETHING_NEW' }, NOW).word, 'Status not recognised');
-  // An unknown failure code is not shown or guessed at.
+  // An unknown failure code is not shown or guessed at: it reads as LV-SYS-001 (was "reason not recognised").
   const unknown = statusText(connectionStatus({ ...failing, lastFailureCategory: 'NEW_CODE_X' }, NOW));
   assert.doesNotMatch(unknown, /NEW_CODE_X/);
-  assert.match(unknown, /reason not recognised/);
+  assert.match(unknown, /Something went wrong · LV-SYS-001$/);
+  // The server's own lvCode wins.
+  assert.equal(failureReason('POLL_SOURCE_UNAVAILABLE', 'LV-INT-041'), 'Source system answered with an error · LV-INT-041');
   for (const code of ['POLL_AUTH_CONFIGURATION_ERROR', 'RETRIEVAL_FAILED', 'DELIVERY_IO', 'SOURCE_ACKNOWLEDGEMENT_FAILED', 'ROUTING_MARKER_AMBIGUOUS']) {
     assert.doesNotMatch(failureReason(code), /[A-Z]{3,}_/);
   }
@@ -78,7 +81,8 @@ test('barcode rules read as a sentence, and failed files name the case by its ma
     markerType: 'BARCODE' as const, pageNumbers: [3, 4], status: 'ATTENTION_REQUIRED', attemptCount: 5, failureCategory: 'DELIVERY_IO', retryable: true,
     primaryIdentifierLabel: 'Loan number', primaryIdentifierValue: 'LN204812',
   };
-  assert.equal(attentionLine(item), "LN204812 · pages 3–4 → Title team folder · couldn't reach it · tried 5 times");
+  assert.equal(attentionLine(item), "LN204812 · pages 3–4 → Title team folder · Destination can't be reached · LV-DLV-001 · tried 5 times");
+  assert.equal(attentionLine({ ...item, lvCode: 'LV-DLV-002' }), 'LN204812 · pages 3–4 → Title team folder · Destination busy or down · LV-DLV-002 · tried 5 times');
   assert.doesNotMatch(attentionLine({ ...item, primaryIdentifierValue: null }), /6f1c/);
   assert.equal(attentionTitle(1), "1 file couldn't be sent");
   assert.equal(attentionTitle(2), "2 files couldn't be sent");
@@ -92,19 +96,19 @@ test('the editor: method from a saved connection, and the advanced settings in w
     'wait 30 s · try again up to 5 times · finish incomplete cases within 24 h · up to 50 files, 50 MB, 500 pages · confirm pickup to the source');
 });
 
-test('a test before saving reads as works or a plain reason, never a code', () => {
+test('a test before saving reads as works or the LV title and code, never an internal code', () => {
   assert.deepEqual(draftTestResult({ works: true, reasonCode: null }), { tone: 'ok', text: 'The connection works.' });
   assert.equal(draftTestResult({ works: false, reasonCode: 'DELIVERY_IO' }).text,
-    "The connection didn't work: couldn't reach it. Check the address and sign-in, then test again.");
+    "The connection didn't work: Destination can't be reached · LV-DLV-001. Check the address and sign-in, then test again.");
   assert.equal(draftTestResult({ works: false, reasonCode: 'ADDRESS_NOT_ALLOWED' }).text,
-    "The connection didn't work: that address isn't allowed. Cloud metadata addresses are always refused.");
+    "The connection didn't work: Connection settings not valid · LV-CFG-003. Cloud metadata addresses are always refused.");
   assert.equal(draftTestResult({ works: false, reasonCode: 'ADDRESS_NOT_RESOLVED' }).text,
-    "The connection didn't work: the address couldn't be found. Check the address and sign-in, then test again.");
+    "The connection didn't work: Connection test failed · LV-CFG-004. Check the address and sign-in, then test again.");
   const unknown = draftTestResult({ works: false, reasonCode: 'SOMETHING_NEW' });
-  assert.equal(unknown.text, "The connection didn't work. Check the address and sign-in, then test again.");
+  assert.equal(unknown.text, "The connection didn't work: Something went wrong · LV-SYS-001. Check the address and sign-in, then test again.");
   assert.doesNotMatch(unknown.text, /SOMETHING_NEW/);
-  assert.equal(failureReason('CONNECTION_TEST_FAILED'), 'the connection test failed');
-  assert.equal(failureReason('SDV_TEST_UNAVAILABLE'), "SDV testing isn't set up in this installation");
+  assert.equal(failureReason('CONNECTION_TEST_FAILED'), 'Connection test failed · LV-CFG-004');
+  assert.equal(failureReason('SDV_TEST_UNAVAILABLE'), 'Connection test failed · LV-CFG-004');
 });
 
 test('an address wraps only after a slash, never inside "://" (U020)', () => {
@@ -117,28 +121,28 @@ test('an address wraps only after a slash, never inside "://" (U020)', () => {
 
 /* ---------- Task 0023 C4: split-delivery routing codes in plain words ---------- */
 
-test('0023 C4: each split routing and delivery code has its own plain reason, with no code in it', () => {
+test('0023 C4 / 0025: each split routing and delivery code reads as its LV title and code, with no internal code in it', () => {
+  // Task 0025: the words come from the LV code registry; codes that share an LV code now read the same.
   const expected: Record<string, string> = {
-    ROUTING_MASTER_UNAVAILABLE: "the delivered document couldn't be found to take the pages from",
-    ROUTING_FAILED: "the pages couldn't be sorted by the rules",
-    DERIVED_ROUTING_POST_EXPORT_FAILED: 'sorting the pages after delivery failed',
-    DERIVED_DOCUMENT_BUILD_FAILED: "the file with these pages couldn't be made",
-    DERIVED_DESTINATION_NOT_FOUND: 'the place it goes to no longer exists',
-    DERIVED_DESTINATION_WRONG_PURPOSE: "the place it goes to isn't set up to receive these pages",
-    DERIVED_DESTINATION_DISABLED: 'the place it goes to is switched off',
-    DERIVED_ARTIFACT_UNAVAILABLE: 'the file with these pages is no longer available',
-    DERIVED_SOURCE_NOT_FOUND: 'the original document is no longer available',
+    ROUTING_MASTER_UNAVAILABLE: 'Nothing ready to export · LV-DLV-011',
+    ROUTING_FAILED: "Split document couldn't be made · LV-DLV-013",
+    DERIVED_DOCUMENT_BUILD_FAILED: "Split document couldn't be made · LV-DLV-013",
+    DERIVED_DESTINATION_NOT_FOUND: 'Destination not set up or switched off · LV-DLV-006',
+    DERIVED_DESTINATION_WRONG_PURPOSE: 'Destination not set up or switched off · LV-DLV-006',
+    DERIVED_DESTINATION_DISABLED: 'Destination not set up or switched off · LV-DLV-006',
+    DERIVED_ARTIFACT_UNAVAILABLE: 'Nothing ready to export · LV-DLV-011',
+    DERIVED_SOURCE_NOT_FOUND: 'Nothing ready to export · LV-DLV-011',
+    ROUTING_MARKER_AMBIGUOUS: 'Split rule matched more than once · LV-DLV-012',
+    DERIVED_ROUTING_POST_EXPORT_FAILED: "Split document couldn't be made · LV-DLV-013",
   };
   for (const [code, words] of Object.entries(expected)) {
     assert.equal(failureReason(code), words, code);
     assert.equal(failureReason(code.toLowerCase()), words, `${code} in lower case`);
-    assert.doesNotMatch(failureReason(code), /[A-Z]{3,}_|not recognised/, code);
+    assert.doesNotMatch(failureReason(code), /[A-Z]{3,}_/, code);
   }
-  // Each reason is told apart from the others (no catch-all).
-  assert.equal(new Set(Object.values(expected)).size, Object.keys(expected).length);
   // In the attention list line.
   assert.equal(attentionLine({ primaryIdentifierValue: 'LN204812', pageNumbers: [3, 4], destinationLabel: 'Title pages', markerType: 'BARCODE', failureCategory: 'DERIVED_DOCUMENT_BUILD_FAILED', attemptCount: 1 } as never),
-    "LN204812 · pages 3–4 → Title pages · the file with these pages couldn't be made · tried 1 time");
+    "LN204812 · pages 3–4 → Title pages · Split document couldn't be made · LV-DLV-013 · tried 1 time");
 });
 
 /* ---------- Task 0023 D3: the size limit default matches the backend ---------- */

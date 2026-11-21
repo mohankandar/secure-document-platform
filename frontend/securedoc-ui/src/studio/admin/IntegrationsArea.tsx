@@ -20,7 +20,7 @@ import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet,
 import { MINUTE_UNITS } from './adminRules';
 import {
   ACK_NAMES, AUTH_NAMES, DEFAULT_MAX_PDF_SIZE_BYTES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
-  connectionStatus, connectionTag, draftTestResult, folderCheckResult, isPolling, methodOf, slashParts, watchedFolderStatus,
+  connectionStatus, connectionTag, draftTestResult, failureReason, folderCheckResult, isPolling, methodOf, slashParts, watchedFolderStatus,
   type Method, type StatusLine, type View,
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
@@ -229,7 +229,7 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
     try {
       const r = await apiClient.runPollingNow(c.connectionId);
       const n = r.packagesDiscovered;
-      toast(r.status === 'SUCCESS' || r.status === 'PARTIAL' ? `${c.name}: ${n} case${n === 1 ? '' : 's'} found.` : `${c.name}: collecting didn't work. See its status line.`, r.status === 'SUCCESS' ? undefined : 'danger');
+      toast(r.status === 'SUCCESS' || r.status === 'PARTIAL' ? `${c.name}: ${n} case${n === 1 ? '' : 's'} found.` : `${c.name}: collecting didn't work (${failureReason(r.failureCategory, r.lvCode)}). See its status line.`, r.status === 'SUCCESS' ? undefined : 'danger');
       await onChanged();
     } catch (e) {
       toast(errorMessage(e, `${c.name} couldn't be collected from.`), 'danger');

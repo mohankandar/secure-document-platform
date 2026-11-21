@@ -3,6 +3,7 @@ package com.securedoc.platform.scanbridge.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
+import com.securedoc.platform.scanbridge.model.BridgeLvCodes;
 import com.securedoc.platform.scanbridge.model.ScanSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -156,7 +157,8 @@ public class LexaVaultScannerDeliveryClient {
 
     private DeliveryException toDeliveryException(HttpResponse<byte[]> response) {
         int status = response.statusCode();
-        String code = "LEXAVAULT_HTTP_" + status;
+        String code = BridgeLvCodes.LEXAVAULT_HTTP_PREFIX + status;
+        String lexaVaultLvCode = null;
         try {
             JsonNode json = objectMapper.readTree(response.body());
             if (json.hasNonNull("errorCode")) {
@@ -164,14 +166,16 @@ public class LexaVaultScannerDeliveryClient {
                 // Only a code-shaped value reaches the screen and the log; free text could hold content.
                 if (SAFE_ERROR_CODE.matcher(candidate).matches()) code = candidate;
             }
+            // Task 0025: LexaVault's own LV code, kept as the detail when it is LV-shaped. Its message is never read.
+            if (json.hasNonNull("code")) lexaVaultLvCode = BridgeLvCodes.safeLexaVaultLvCode(json.get("code").asText());
         } catch (Exception ignored) {
             // Never include response body in logs/errors; keep only safe status-derived code.
         }
-        if (!retryableStatus(status)) return DeliveryException.terminal(code, null);
+        if (!retryableStatus(status)) return DeliveryException.terminal(code, null, status, lexaVaultLvCode);
         Duration retryAfter = status == 429
                 ? retryAfter(response.headers().firstValue("Retry-After").orElse(null), clock.instant())
                 : null;
-        return DeliveryException.retryable(code, null, retryAfter);
+        return DeliveryException.retryable(code, null, retryAfter, status, lexaVaultLvCode);
     }
 
     /**
@@ -246,21 +250,37 @@ public class LexaVaultScannerDeliveryClient {
         private final String safeCode;
         private final boolean retryable;
         private final Duration retryAfter;
+        private final Integer httpStatus;
+        private final String lexaVaultLvCode;
 
-        private DeliveryException(String safeCode, boolean retryable, Throwable cause, Duration retryAfter) {
+        private DeliveryException(String safeCode, boolean retryable, Throwable cause, Duration retryAfter,
+                                  Integer httpStatus, String lexaVaultLvCode) {
             super(safeCode, cause);
             this.safeCode = safeCode;
             this.retryable = retryable;
             this.retryAfter = retryAfter;
+            this.httpStatus = httpStatus;
+            this.lexaVaultLvCode = BridgeLvCodes.safeLexaVaultLvCode(lexaVaultLvCode);
         }
         public String safeCode() { return safeCode; }
         public boolean retryable() { return retryable; }
         /** Task 0024: the wait LexaVault asked for (429 Retry-After), unbounded; null when it gave none. */
         public Duration retryAfter() { return retryAfter; }
-        public static DeliveryException retryable(String code, Throwable cause) { return new DeliveryException(code, true, cause, null); }
+        /** Task 0025: the HTTP status of LexaVault's answer; null when LexaVault gave no answer (or a 2xx). */
+        public Integer httpStatus() { return httpStatus; }
+        /** Task 0025: LexaVault's own LV code from its error body (LV-shaped only); null when none. */
+        public String lexaVaultLvCode() { return lexaVaultLvCode; }
+        public static DeliveryException retryable(String code, Throwable cause) { return new DeliveryException(code, true, cause, null, null, null); }
         public static DeliveryException retryable(String code, Throwable cause, Duration retryAfter) {
-            return new DeliveryException(code, true, cause, retryAfter);
+            return new DeliveryException(code, true, cause, retryAfter, null, null);
         }
-        public static DeliveryException terminal(String code, Throwable cause) { return new DeliveryException(code, false, cause, null); }
+        public static DeliveryException retryable(String code, Throwable cause, Duration retryAfter,
+                                                  Integer httpStatus, String lexaVaultLvCode) {
+            return new DeliveryException(code, true, cause, retryAfter, httpStatus, lexaVaultLvCode);
+        }
+        public static DeliveryException terminal(String code, Throwable cause) { return new DeliveryException(code, false, cause, null, null, null); }
+        public static DeliveryException terminal(String code, Throwable cause, Integer httpStatus, String lexaVaultLvCode) {
+            return new DeliveryException(code, false, cause, null, httpStatus, lexaVaultLvCode);
+        }
     }
 }

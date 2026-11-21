@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.integration;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
@@ -83,7 +84,7 @@ public final class IntegrationConnectionService {
                     input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
                     input.acknowledgementMode(), input.enabled(), Instant.now(clock));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
     }
 
@@ -100,7 +101,7 @@ public final class IntegrationConnectionService {
                     input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
                     input.acknowledgementMode(), Instant.now(clock));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
     }
 
@@ -113,7 +114,7 @@ public final class IntegrationConnectionService {
         try {
             updated = existing.setEnabled(enabled, Instant.now(clock));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
         repository.save(updated);
         auditService.recordSuccess(tenantId, actorId,
@@ -143,25 +144,25 @@ public final class IntegrationConnectionService {
     private void ensureUniqueName(TenantId tenantId, String name, IntegrationConnectionId excludeId) {
         if (name == null || name.isBlank()) return;
         if (repository.existsByTenantIdAndNameIgnoreCase(tenantId, name.trim(), excludeId)) {
-            throw new ValidationException("Integration connection name already exists for this tenant");
+            throw new ValidationException(LvErrorCode.CFG_003, "Integration connection name already exists for this tenant");
         }
     }
 
     public IntegrationConnection resolveEnabledPushSource(TenantId tenantId, String clientPrincipal) {
         if (clientPrincipal == null || clientPrincipal.isBlank()) {
-            throw new ValidationException("Authenticated integration client principal is required");
+            throw new ValidationException(LvErrorCode.AUT_008, "Authenticated integration client principal is required");
         }
         return repository.findEnabledPushSourceByTenantIdAndClientPrincipal(tenantId, clientPrincipal.trim())
-                .orElseThrow(() -> new com.securedoc.platform.application.exception.AccessDeniedException(
+                .orElseThrow(() -> new com.securedoc.platform.application.exception.AccessDeniedException(LvErrorCode.AUT_008,
                         "Authenticated client is not bound to an enabled push-ingestion source"));
     }
 
     public IntegrationConnection resolveEnabledScannerSource(TenantId tenantId, String clientPrincipal) {
         if (clientPrincipal == null || clientPrincipal.isBlank()) {
-            throw new ValidationException("Authenticated scanner client principal is required");
+            throw new ValidationException(LvErrorCode.AUT_008, "Authenticated scanner client principal is required");
         }
         return repository.findEnabledScannerSourceByTenantIdAndClientPrincipal(tenantId, clientPrincipal.trim())
-                .orElseThrow(() -> new com.securedoc.platform.application.exception.AccessDeniedException(
+                .orElseThrow(() -> new com.securedoc.platform.application.exception.AccessDeniedException(LvErrorCode.AUT_008,
                         "Authenticated client is not bound to an enabled scanner-ingestion source"));
     }
 
@@ -169,7 +170,7 @@ public final class IntegrationConnectionService {
         if ((input.providerType() != IntegrationProviderType.PUSH_API && input.providerType() != IntegrationProviderType.SCANNER)
                 || input.clientPrincipal() == null || input.clientPrincipal().isBlank()) return;
         if (repository.existsByTenantIdAndClientPrincipal(tenantId, input.clientPrincipal().trim(), excludeId)) {
-            throw new ValidationException("Authenticated client principal is already bound to another tenant integration source");
+            throw new ValidationException(LvErrorCode.CFG_003, "Authenticated client principal is already bound to another tenant integration source");
         }
     }
 
@@ -178,7 +179,7 @@ public final class IntegrationConnectionService {
         boolean another = repository.findByTenantId(tenantId).stream()
                 .anyMatch(c -> c.enabled() && c.purpose() == IntegrationPurpose.SDV_DELIVERY
                         && (excludeId == null || !c.id().equals(excludeId)));
-        if (another) throw new ValidationException("Only one SDV delivery connection may be enabled per tenant");
+        if (another) throw new ValidationException(LvErrorCode.CFG_005, "Only one SDV delivery connection may be enabled per tenant");
     }
 
     private String safeAuditDetail(IntegrationConnection connection) {

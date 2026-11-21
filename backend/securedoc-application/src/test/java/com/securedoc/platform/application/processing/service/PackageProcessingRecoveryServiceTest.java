@@ -134,7 +134,7 @@ class PackageProcessingRecoveryServiceTest {
         List<AuditRecord> failed = f.audits.stream()
                 .filter(a -> a.action() == AuditAction.DOCUMENT_PROCESSING_FAILED).toList();
         assertEquals(1, failed.size());
-        assertEquals("Package processing stopped: dependency=PROCESSING, code=PROCESSING_DISPATCH_EXHAUSTED, retryable=false, attempts=3",
+        assertEquals("Package processing stopped: code=LV-PRC-008, detail=PROCESSING_DISPATCH_EXHAUSTED, dependency=PROCESSING, retryable=false, attempts=3",
                 failed.get(0).detail());
         assertTrue(f.lifecycles.value.flatMap(PackageLifecycle::technicalHoldUntil).isPresent());
         String everything = f.audits.toString() + incident;

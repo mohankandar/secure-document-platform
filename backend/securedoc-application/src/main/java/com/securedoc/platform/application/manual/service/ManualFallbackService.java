@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.manual.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.audit.query.AuditRecordFilter;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -135,35 +136,35 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         Objects.requireNonNull(command);
         DocumentPackage pkg = loadPackage(command.packageId(), command.tenantId());
         if (pkg.status() != PackageStatus.FAILED) {
-            throw new ValidationException("Manual processing can start only after automatic processing has failed");
+            throw new ValidationException(LvErrorCode.REV_008, "Manual processing can start only after automatic processing has failed");
         }
 
         var technical = technicalExceptionQuery.execute(command.packageId(), command.tenantId());
         if (!"AI_ANALYSIS".equals(technical.failedStage())) {
-            throw new ValidationException(
+            throw new ValidationException(LvErrorCode.REV_008, 
                     "Manual processing is available only when sensitive-data analysis failed and the PDF remains safe to render and redact");
         }
 
         List<Document> documents = documentRepository.findByPackageIdAndTenantId(command.packageId(), command.tenantId());
         List<Document> failed = documents.stream().filter(d -> d.status() == DocumentStatus.FAILED).toList();
         if (failed.isEmpty()) {
-            throw new ValidationException("No failed document is available for manual processing");
+            throw new ValidationException(LvErrorCode.REV_008, "No failed document is available for manual processing");
         }
         if (documents.stream().anyMatch(d -> d.status() != DocumentStatus.FAILED && d.status() != DocumentStatus.PROCESSED)) {
-            throw new ValidationException("Package contains document work that is not safe to continue manually");
+            throw new ValidationException(LvErrorCode.REV_008, "Package contains document work that is not safe to continue manually");
         }
 
         for (Document document : failed) {
             if (document.pageCount() < 1) {
-                throw new ValidationException("Manual processing requires known source pages for every failed document");
+                throw new ValidationException(LvErrorCode.REV_008, "Manual processing requires known source pages for every failed document");
             }
             if (!hasAvailableOriginal(document.id(), command.tenantId())) {
-                throw new ValidationException("The retained original is unavailable for manual processing");
+                throw new ValidationException(LvErrorCode.REV_008, "The retained original is unavailable for manual processing");
             }
             boolean unresolvedFindings = findingRepository.findByDocumentIdAndTenantId(document.id(), command.tenantId())
                     .stream().anyMatch(f -> f.status() == FindingStatus.DETECTED);
             if (unresolvedFindings) {
-                throw new ValidationException("Existing findings still require normal Manual Review before manual fallback can start");
+                throw new ValidationException(LvErrorCode.REV_008, "Existing findings still require normal Manual Review before manual fallback can start");
             }
         }
 
@@ -184,23 +185,23 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         Document document = documentRepository.findByIdAndTenantId(command.documentId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
         if (!document.packageId().equals(command.packageId()) || document.status() != DocumentStatus.REDACTING) {
-            throw new ValidationException("Document is not part of the active manual processing session");
+            throw new ValidationException(LvErrorCode.REV_006, "Document is not part of the active manual processing session");
         }
         if (command.pageNumber() < 1 || command.pageNumber() > document.pageCount()) {
-            throw new ValidationException("Page number is outside the source document");
+            throw new ValidationException(LvErrorCode.REV_006, "Page number is outside the source document");
         }
 
         TenantRedactionPolicy policy = tenantRedactionPolicyRepository.findByTenantId(command.tenantId())
                 .orElseGet(() -> TenantRedactionPolicy.defaults(command.tenantId()));
         if (!policy.isEnabled(command.entityType())) {
-            throw new ValidationException("Selected sensitive-data type is not enabled by tenant policy");
+            throw new ValidationException(LvErrorCode.REV_006, "Selected sensitive-data type is not enabled by tenant policy");
         }
 
         FindingLocation.BoundingBox box;
         try {
             box = FindingLocation.BoundingBox.of(command.left(), command.top(), command.width(), command.height());
         } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Manual redaction region is outside the page bounds");
+            throw new ValidationException(LvErrorCode.REV_006, "Manual redaction region is outside the page bounds");
         }
         Finding finding = Finding.create(command.tenantId(), command.documentId(), command.entityType(),
                 FindingLocation.withBounds(command.pageNumber(), 0, 0, box), Confidence.full(),
@@ -227,7 +228,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         if (!document.packageId().equals(command.packageId())
                 || !MANUAL_DETECTOR.equals(finding.detectorSource().detectorName())
                 || finding.status() != FindingStatus.CONFIRMED) {
-            throw new ValidationException("Manual redaction region is not active for this package");
+            throw new ValidationException(LvErrorCode.REV_006, "Manual redaction region is not active for this package");
         }
         finding.override(command.actorId(), "Business user removed manual redaction region");
         findingRepository.save(finding);
@@ -241,26 +242,26 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
     public void execute(SubmitManualFallbackCommand command) {
         Objects.requireNonNull(command);
         if (!command.reviewAttested()) {
-            throw new ValidationException("Confirm that the document was reviewed as necessary and all required sensitive information was marked before submitting manual processing");
+            throw new ValidationException(LvErrorCode.REV_004, "Confirm that the document was reviewed as necessary and all required sensitive information was marked before submitting manual processing");
         }
         DocumentPackage pkg = loadPackage(command.packageId(), command.tenantId());
         requireActiveManualFallback(pkg, command.tenantId());
         List<Document> manualDocuments = manualDocuments(command.packageId(), command.tenantId());
         if (manualDocuments.isEmpty()) {
-            throw new ValidationException("No document is active for manual processing");
+            throw new ValidationException(LvErrorCode.REV_008, "No document is active for manual processing");
         }
 
         int activeRegions = 0;
         for (Document document : manualDocuments) {
             if (!hasAvailableOriginal(document.id(), command.tenantId())) {
-                throw new ValidationException("The retained original is unavailable for manual processing");
+                throw new ValidationException(LvErrorCode.REV_007, "The retained original is unavailable for manual processing");
             }
             List<Finding> findings = findingRepository.findByDocumentIdAndTenantId(document.id(), command.tenantId());
             if (findings.stream().anyMatch(f -> f.status() == FindingStatus.DETECTED)) {
-                throw new ValidationException("Document still contains unresolved findings");
+                throw new ValidationException(LvErrorCode.REV_003, "Document still contains unresolved findings");
             }
             if (findings.stream().anyMatch(f -> f.status() == FindingStatus.CONFIRMED && !f.location().hasBoundingBox())) {
-                throw new ValidationException("A confirmed redaction does not have a safe page location");
+                throw new ValidationException(LvErrorCode.REV_006, "A confirmed redaction does not have a safe page location");
             }
             activeRegions += (int) findings.stream()
                     .filter(f -> f.status() == FindingStatus.CONFIRMED
@@ -319,7 +320,7 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
 
     private void requireActiveManualFallback(DocumentPackage pkg, TenantId tenantId) {
         if (pkg.status() != PackageStatus.IN_REVIEW || !manualFallbackStarted(pkg.id(), tenantId)) {
-            throw new ValidationException("Package is not in business manual processing");
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not in business manual processing");
         }
     }
 

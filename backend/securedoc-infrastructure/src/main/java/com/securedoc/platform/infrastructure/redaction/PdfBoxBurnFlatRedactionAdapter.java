@@ -100,7 +100,7 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
             // Task 0023 B9 (#373): also reached when closing the staged source fails after the
             // output was created; the caller never receives it, so remove it here.
             if (content != null) content.close();
-            throw new UncheckedIOException("Failed to perform PDF redaction", e);
+            throw new RedactionEngineException("Failed to perform PDF redaction", e);
         } catch (RuntimeException e) {
             if (content != null) content.close();
             throw e;

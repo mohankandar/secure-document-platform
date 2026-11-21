@@ -6,11 +6,11 @@ import { apiClient } from '../../api/client';
 import type { SupportIncidentSearchPage } from '../../types';
 import { Spinner } from '../atoms';
 import { LoadErrorCard, checked, isRecord } from '../failure';
-import { PROBLEM_REASONS, PROCESSING_STAGE_WORDS, problemReason, processingStageWords } from '../words';
+import { PROCESSING_STAGE_WORDS, processingStageWords } from '../words';
 import { SelectField, TextField } from '../admin/shared';
 import {
-  STATUS_CHIPS, SUPPORT_CAPS, SUPPORT_PAGE_SIZE, blockingCount, chipCounts, impactChip, inChip, lastSeen, rowWhat, rowWhere,
-  searchPlaceholder, statusWord, supportSearch, type StatusChip,
+  STATUS_CHIPS, SUPPORT_CAPS, SUPPORT_PAGE_SIZE, blockingCount, chipCounts, impactChip, inChip, lastSeen, mergeSupportPages,
+  reasonFilterOptions, rowWhat, rowWhere, searchPlaceholder, statusWord, supportSearch, type StatusChip,
 } from './supportRules';
 import './support.css';
 
@@ -19,7 +19,8 @@ import './support.css';
 interface Criteria {
   status: string;
   stage: string;
-  reasonCode: string;
+  /** Task 0025: an LV code; the server is asked for each reason code that has it. */
+  reason: string;
   businessContinuityUsed: string;
   retryable: string;
   correlationId: string;
@@ -30,7 +31,7 @@ interface Criteria {
   tenantId: string;
 }
 
-const EMPTY: Criteria = { status: '', stage: '', reasonCode: '', businessContinuityUsed: '', retryable: '', correlationId: '', packageId: '', documentId: '', from: '', to: '', tenantId: '' };
+const EMPTY: Criteria = { status: '', stage: '', reason: '', businessContinuityUsed: '', retryable: '', correlationId: '', packageId: '', documentId: '', from: '', to: '', tenantId: '' };
 
 const STATUS_OPTIONS: Array<[string, string]> = [
   ['', 'Any'], ['OPEN', 'Open'], ['RETRY_SCHEDULED', 'Open: trying again'], ['INVESTIGATING', 'Open: IT looking into it'],
@@ -41,7 +42,9 @@ const STAGE_OPTIONS: Array<[string, string]> = [['', 'Any stage'], ...Object.key
   const w = processingStageWords(k);
   return [k, w.charAt(0).toUpperCase() + w.slice(1)];
 })];
-const REASON_OPTIONS: Array<[string, string]> = [['', 'Any reason'], ...Object.keys(PROBLEM_REASONS).map((k): [string, string] => [k, problemReason(k).title])];
+// Task 0025: one option per LV code ("Text reading timed out · LV-PRC-004"); reason codes sharing a code are grouped.
+const REASONS = reasonFilterOptions();
+const REASON_OPTIONS: Array<[string, string]> = [['', 'Any reason'], ...REASONS.map((r): [string, string] => [r.code, r.label])];
 const YES_NO: Array<[string, string]> = [['', 'Either'], ['true', 'Yes'], ['false', 'No']];
 
 const bool = (v: string) => (v === 'true' ? true : v === 'false' ? false : undefined);
@@ -59,7 +62,7 @@ export default function SupportList({ caps, entityName }: { caps: string[]; enti
     ...search,
     status: applied.status || undefined,
     stage: applied.stage || undefined,
-    reasonCode: applied.reasonCode || undefined,
+    reasonCodes: REASONS.find((r) => r.code === applied.reason)?.reasonCodes,
     businessContinuityUsed: bool(applied.businessContinuityUsed),
     retryable: bool(applied.retryable),
     correlationId: applied.correlationId.trim() || undefined,
@@ -75,7 +78,14 @@ export default function SupportList({ caps, entityName }: { caps: string[]; enti
   const request = 'GET /support/incidents';
   const { data, error, isValidating, mutate } = useSWR<SupportIncidentSearchPage>(
     ['support-incidents', JSON.stringify(params)],
-    () => checked(request, apiClient.searchSupportIncidents(params), (v) => isRecord(v) && Array.isArray(v.items) && typeof v.total === 'number'),
+    () => {
+      const { reasonCodes, ...rest } = params;
+      const one = (reasonCode?: string) => checked(request, apiClient.searchSupportIncidents({ ...rest, reasonCode }),
+        (v) => isRecord(v) && Array.isArray(v.items) && typeof v.total === 'number');
+      // The server filters by one reason code; an LV code shared by several is asked for once per reason code.
+      return !reasonCodes || reasonCodes.length === 1 ? one(reasonCodes?.[0])
+        : Promise.all(reasonCodes.map(one)).then((pages) => mergeSupportPages(pages, SUPPORT_PAGE_SIZE));
+    },
     { revalidateOnFocus: false, keepPreviousData: true, refreshInterval: 15000 },
   );
 
@@ -147,7 +157,7 @@ export default function SupportList({ caps, entityName }: { caps: string[]; enti
           <div className="cf-sp-grid">
             <SelectField label="Problem status" value={draft.status} onChange={set('status')} options={STATUS_OPTIONS} />
             <SelectField label="Where it stopped" value={draft.stage} onChange={set('stage')} options={STAGE_OPTIONS} />
-            <SelectField label="Reason" value={draft.reasonCode} onChange={set('reasonCode')} options={REASON_OPTIONS} />
+            <SelectField label="Reason" value={draft.reason} onChange={set('reason')} options={REASON_OPTIONS} />
             <SelectField label="Continued manually" value={draft.businessContinuityUsed} onChange={set('businessContinuityUsed')} options={YES_NO} />
             <SelectField label="Can be retried" value={draft.retryable} onChange={set('retryable')} options={YES_NO} />
             <TextField label="Reference" value={draft.correlationId} onChange={set('correlationId')} placeholder="Correlation ID (UUID)" mono />
