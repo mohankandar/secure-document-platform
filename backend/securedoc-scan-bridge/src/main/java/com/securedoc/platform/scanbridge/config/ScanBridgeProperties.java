@@ -124,7 +124,15 @@ public class ScanBridgeProperties {
         private int requestTimeoutSeconds = 600;
         private boolean cleanupAcceptedPdf = true;
         private long terminalStateRetentionHours = 72;
+        /** Task 0024: longest wait a LexaVault {@code Retry-After} (on 429) is honoured for. */
+        private long retryAfterMaxSeconds = 300;
+        /** Task 0024: how long an uploaded item may wait for LexaVault's acceptance before it needs a person. */
+        private long acceptanceWaitLimitSeconds = 600;
 
+        public long getRetryAfterMaxSeconds() { return retryAfterMaxSeconds; }
+        public void setRetryAfterMaxSeconds(long retryAfterMaxSeconds) { this.retryAfterMaxSeconds = retryAfterMaxSeconds; }
+        public long getAcceptanceWaitLimitSeconds() { return acceptanceWaitLimitSeconds; }
+        public void setAcceptanceWaitLimitSeconds(long acceptanceWaitLimitSeconds) { this.acceptanceWaitLimitSeconds = acceptanceWaitLimitSeconds; }
         public long getPollIntervalMs() { return pollIntervalMs; }
         public void setPollIntervalMs(long pollIntervalMs) { this.pollIntervalMs = pollIntervalMs; }
         public long getRetryInitialDelayMs() { return retryInitialDelayMs; }

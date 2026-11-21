@@ -4,9 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.ScanSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -27,10 +33,17 @@ public class LexaVaultScannerDeliveryClient {
     private final ScanBridgeProperties properties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final Clock clock;
 
+    @Autowired
     public LexaVaultScannerDeliveryClient(ScanBridgeProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, Clock.systemUTC());
+    }
+
+    LexaVaultScannerDeliveryClient(ScanBridgeProperties properties, ObjectMapper objectMapper, Clock clock) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.clock = clock;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .followRedirects(HttpClient.Redirect.NEVER)
@@ -154,16 +167,43 @@ public class LexaVaultScannerDeliveryClient {
         } catch (Exception ignored) {
             // Never include response body in logs/errors; keep only safe status-derived code.
         }
-        return retryableStatus(status) ? DeliveryException.retryable(code, null) : DeliveryException.terminal(code, null);
+        if (!retryableStatus(status)) return DeliveryException.terminal(code, null);
+        Duration retryAfter = status == 429
+                ? retryAfter(response.headers().firstValue("Retry-After").orElse(null), clock.instant())
+                : null;
+        return DeliveryException.retryable(code, null, retryAfter);
     }
 
     /**
      * Task 0023 D2 (#82): a 4xx is LexaVault refusing this request and the same request gets the same answer,
-     * so every 4xx (408, 425 and 429 included) goes straight to a person. Only 5xx is retried, and
-     * {@link ScannerSubmissionWorker} caps those retries.
+     * so a 4xx goes straight to a person. Task 0024: except 429 (LexaVault asks us to slow down), which is
+     * retried like a 5xx. {@link ScannerSubmissionWorker} caps those retries.
      */
     static boolean retryableStatus(int status) {
-        return status >= 500;
+        return status >= 500 || status == 429;
+    }
+
+    /**
+     * Task 0024: a {@code Retry-After} value as a wait from {@code now}: delta-seconds or an HTTP-date. A date
+     * in the past is zero. Missing or unreadable is null (the caller then uses the normal spacing). The upper
+     * bound is applied by the worker.
+     */
+    static Duration retryAfter(String header, Instant now) {
+        if (header == null || header.isBlank()) return null;
+        String value = header.trim();
+        if (value.chars().allMatch(Character::isDigit)) {
+            try {
+                return Duration.ofSeconds(Long.parseLong(value));
+            } catch (NumberFormatException tooLarge) {
+                return Duration.ofSeconds(Long.MAX_VALUE);
+            }
+        }
+        try {
+            Instant at = ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+            return at.isAfter(now) ? Duration.between(now, at) : Duration.ZERO;
+        } catch (DateTimeParseException unreadable) {
+            return null;
+        }
     }
 
     private HttpRequest.Builder requestBuilder(String path) {
@@ -205,15 +245,22 @@ public class LexaVaultScannerDeliveryClient {
     public static final class DeliveryException extends RuntimeException {
         private final String safeCode;
         private final boolean retryable;
+        private final Duration retryAfter;
 
-        private DeliveryException(String safeCode, boolean retryable, Throwable cause) {
+        private DeliveryException(String safeCode, boolean retryable, Throwable cause, Duration retryAfter) {
             super(safeCode, cause);
             this.safeCode = safeCode;
             this.retryable = retryable;
+            this.retryAfter = retryAfter;
         }
         public String safeCode() { return safeCode; }
         public boolean retryable() { return retryable; }
-        public static DeliveryException retryable(String code, Throwable cause) { return new DeliveryException(code, true, cause); }
-        public static DeliveryException terminal(String code, Throwable cause) { return new DeliveryException(code, false, cause); }
+        /** Task 0024: the wait LexaVault asked for (429 Retry-After), unbounded; null when it gave none. */
+        public Duration retryAfter() { return retryAfter; }
+        public static DeliveryException retryable(String code, Throwable cause) { return new DeliveryException(code, true, cause, null); }
+        public static DeliveryException retryable(String code, Throwable cause, Duration retryAfter) {
+            return new DeliveryException(code, true, cause, retryAfter);
+        }
+        public static DeliveryException terminal(String code, Throwable cause) { return new DeliveryException(code, false, cause, null); }
     }
 }
