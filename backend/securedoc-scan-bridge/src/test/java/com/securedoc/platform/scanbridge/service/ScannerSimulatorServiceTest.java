@@ -117,6 +117,44 @@ class ScannerSimulatorServiceTest {
         assertEquals(ScanSessionStatus.WAITING_FOR_SCAN, f.sessions.get(waiting.sessionId()).status());
     }
 
+    /** Task 0023 B9 (#86): the problem folder used to keep the original file name. */
+    @Test
+    void rejectedFilesAreKeptUnderAnIdBasedNameWithTheirReasonCode() throws Exception {
+        Fixture f = fixture();
+        f.sessions.start(new StartScanSessionRequest(Map.of()));
+        Files.writeString(f.simulator.inboxPath().resolve("Jane Doe contract 000900009901.txt"), "not a pdf");
+        Files.writeString(f.simulator.inboxPath().resolve("Jane Doe passport.pdf"), "this is not a PDF");
+        f.simulator.scanOnce(); f.simulator.scanOnce();
+
+        java.util.List<Path> problem;
+        try (var files = Files.list(f.simulator.problemPath())) { problem = files.toList(); }
+        assertEquals(4, problem.size());
+        for (Path path : problem) {
+            String name = path.getFileName().toString();
+            assertFalse(name.contains("Jane") || name.contains("000900009901") || name.contains("passport"), name);
+            assertTrue(name.matches("[0-9a-f-]{36}\\.(rejected|reason\\.txt)"), name);
+        }
+        var reasons = new java.util.TreeSet<String>();
+        for (Path path : problem) {
+            if (path.getFileName().toString().endsWith(".reason.txt")) reasons.add(Files.readString(path).trim());
+        }
+        assertEquals(new java.util.TreeSet<>(java.util.List.of("INVALID_PDF", "UNSUPPORTED_FILE_TYPE")), reasons);
+    }
+
+    @Test
+    void anInterruptedUploadIsQuarantinedUnderAnIdBasedName() throws Exception {
+        Fixture f = fixture();
+        Files.writeString(f.simulator.inboxPath().resolve("Jane Doe.pdf." + java.util.UUID.randomUUID() + ".part"), "%PDF-");
+
+        fixture(false).simulator.initializeDirectories();
+
+        try (var files = Files.list(f.simulator.problemPath())) {
+            assertTrue(files.map(p -> p.getFileName().toString())
+                    .allMatch(name -> name.matches("[0-9a-f-]{36}\\.(rejected|reason\\.txt)")));
+        }
+        try (var files = Files.list(f.simulator.inboxPath())) { assertEquals(0, files.count()); }
+    }
+
     private Fixture fixture() throws Exception { return fixture(true); }
 
     private Fixture fixture(boolean initializeSimulator) throws Exception {

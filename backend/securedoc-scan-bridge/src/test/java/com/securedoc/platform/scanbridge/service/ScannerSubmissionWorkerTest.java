@@ -140,6 +140,90 @@ class ScannerSubmissionWorkerTest {
         assertTrue(f.artifacts.exists(attention.preparedScan()));
     }
 
+    /** Task 0023 D2 (#82): a deterministic LexaVault 5xx used to be retried forever and never reached a person. */
+    @Test
+    void retryableFailureIsRetriedThreeTimesThenNeedsAttentionWithItsCode() throws Exception {
+        Fixture f = fixture();
+        var session = readySession(f);
+        f.sessions.queueForSubmission(session.sessionId());
+        when(f.client.createIntake(any(), eq(false))).thenThrow(
+                LexaVaultScannerDeliveryClient.DeliveryException.retryable("LEXAVAULT_HTTP_503", null));
+
+        for (int retry = 1; retry <= ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES; retry++) {
+            f.worker.deliverOne(session.sessionId());
+            var queued = f.sessions.get(session.sessionId());
+            assertEquals(ScanSessionStatus.QUEUED, queued.status(), "attempt " + retry + " schedules a retry");
+            assertEquals("LEXAVAULT_HTTP_503", queued.lastDeliveryErrorCode());
+            assertTrue(queued.nextDeliveryAttemptAt().isAfter(now), "retries are spaced");
+        }
+        f.worker.deliverOne(session.sessionId());
+
+        var attention = f.sessions.get(session.sessionId());
+        assertEquals(ScanSessionStatus.ATTENTION_REQUIRED, attention.status());
+        assertEquals("LEXAVAULT_HTTP_503", attention.lastDeliveryErrorCode());
+        assertNull(attention.nextDeliveryAttemptAt());
+        assertEquals(ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES + 1, attention.deliveryAttemptCount());
+        assertTrue(f.artifacts.exists(attention.preparedScan()), "the PDF stays retained for the person to resolve");
+        verify(f.client, times(ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES + 1)).createIntake(any(), eq(false));
+        // The person sees it: it is listed in the delivery-items diagnostics with its code.
+        var item = f.sessions.deliveryDiagnostics().get(0);
+        assertEquals(ScanSessionStatus.ATTENTION_REQUIRED, item.status());
+        assertEquals("LEXAVAULT_HTTP_503", item.lastDeliveryErrorCode());
+    }
+
+    @Test
+    void retryDelaysGrowWithTheExistingBackoff() throws Exception {
+        Fixture f = fixture();
+        var session = readySession(f);
+        f.sessions.queueForSubmission(session.sessionId());
+        when(f.client.createIntake(any(), eq(false))).thenThrow(
+                LexaVaultScannerDeliveryClient.DeliveryException.retryable("LEXAVAULT_UNAVAILABLE", null));
+
+        f.worker.deliverOne(session.sessionId());
+        Instant first = f.sessions.get(session.sessionId()).nextDeliveryAttemptAt();
+        f.worker.deliverOne(session.sessionId());
+        Instant second = f.sessions.get(session.sessionId()).nextDeliveryAttemptAt();
+
+        assertEquals(now.plusMillis(2000), first);
+        assertEquals(now.plusMillis(4000), second);
+    }
+
+    @Test
+    void aManualRetryAfterAttentionGetsAFreshSetOfAutomaticRetries() throws Exception {
+        Fixture f = fixture();
+        var session = readySession(f);
+        f.sessions.queueForSubmission(session.sessionId());
+        when(f.client.createIntake(any(), eq(false))).thenThrow(
+                LexaVaultScannerDeliveryClient.DeliveryException.retryable("LEXAVAULT_UNAVAILABLE", null));
+        for (int i = 0; i <= ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES; i++) f.worker.deliverOne(session.sessionId());
+        assertEquals(ScanSessionStatus.ATTENTION_REQUIRED, f.sessions.get(session.sessionId()).status());
+
+        f.sessions.retryAttentionRequired(session.sessionId());
+        f.worker.deliverOne(session.sessionId());
+
+        assertEquals(ScanSessionStatus.QUEUED, f.sessions.get(session.sessionId()).status());
+    }
+
+    @Test
+    void acceptancePendingIsAlsoCappedAndThenNeedsAttention() throws Exception {
+        Fixture f = fixture();
+        var session = readySession(f);
+        f.sessions.queueForSubmission(session.sessionId());
+        UUID packageId = UUID.randomUUID();
+        when(f.client.createIntake(any(), eq(false))).thenReturn(
+                new LexaVaultScannerDeliveryClient.IntakeStatus(packageId, "AWAITING_DOCUMENTS", "CREATED"));
+        when(f.client.upload(any(), any())).thenReturn(
+                new LexaVaultScannerDeliveryClient.DocumentReceipt(packageId, "UPLOADED", false));
+        when(f.client.status(packageId)).thenReturn(
+                new LexaVaultScannerDeliveryClient.IntakeStatus(packageId, "AWAITING_DOCUMENTS", "CREATED"));
+
+        for (int i = 0; i <= ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES; i++) f.worker.deliverOne(session.sessionId());
+
+        var attention = f.sessions.get(session.sessionId());
+        assertEquals(ScanSessionStatus.ATTENTION_REQUIRED, attention.status());
+        assertEquals("LEXAVAULT_ACCEPTANCE_PENDING", attention.lastDeliveryErrorCode());
+    }
+
     private com.securedoc.platform.scanbridge.model.ScanSession readySession(Fixture f) throws Exception {
         var waiting = f.sessions.start(new StartScanSessionRequest(Map.of("contract_number", "000900009901")));
         Path pdf = f.store.sessionDirectory(waiting.sessionId()).resolve("scan.pdf");

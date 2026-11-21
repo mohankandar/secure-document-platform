@@ -212,7 +212,13 @@ public class ScannerSimulatorService implements ScannerAcquisitionAdapter {
                 move(part, finalPath);
                 tracker.forget(finalPath);
             } catch (Exception ex) {
-                Files.deleteIfExists(part);
+                // Task 0023 B9 (#86): a failed delete must not hide the original failure; log it with the session id.
+                try {
+                    Files.deleteIfExists(part);
+                } catch (IOException cleanup) {
+                    log.warn("SCAN_BRIDGE_SIMULATOR_PART_CLEANUP_FAILED scannerId={} sessionId={} exceptionType={}",
+                            properties.getScannerId(), sessionId, cleanup.getClass().getSimpleName());
+                }
                 throw ex;
             }
             log.info("SCAN_BRIDGE_SIMULATOR_FILE_STAGED scannerId={} sessionId={} sizeBytes={}",
@@ -296,12 +302,17 @@ public class ScannerSimulatorService implements ScannerAcquisitionAdapter {
                 clock.instant(), workPath().relativize(target).toString().replace('\\', '/'), null);
     }
 
+    /**
+     * Task 0023 B9 (#86): a rejected file is kept for IT under an id-based name ({@code <rejectId>.rejected}
+     * with {@code <rejectId>.reason.txt} beside it); the original file name is not kept anywhere.
+     */
     private void moveToProblem(Path source, String reasonCode) throws IOException {
-        Path target = uniqueTarget(problemPath(), source.getFileName().toString());
+        UUID rejectId = UUID.randomUUID();
+        Path target = problemPath().resolve(rejectId + ".rejected");
         move(source, target);
         tracker.forget(source);
-        Files.writeString(target.resolveSibling(target.getFileName() + ".reason.txt"), reasonCode + System.lineSeparator(), StandardOpenOption.CREATE_NEW);
-        log.warn("SCAN_BRIDGE_FILE_REJECTED scannerId={} reasonCode={}", properties.getScannerId(), reasonCode);
+        Files.writeString(problemPath().resolve(rejectId + ".reason.txt"), reasonCode + System.lineSeparator(), StandardOpenOption.CREATE_NEW);
+        log.warn("SCAN_BRIDGE_FILE_REJECTED scannerId={} rejectId={} reasonCode={}", properties.getScannerId(), rejectId, reasonCode);
     }
 
     private String safeFileName(String originalFileName) {
