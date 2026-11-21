@@ -145,3 +145,12 @@ The design chat designs the `LV-<AREA>-<NNN>` list from the inventory. Before th
 - the watched-folder catch-all (#38);
 - the silent sign-in refusals (#239);
 - the processing loops with no limit (#346, #358).
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. **File name in `DOCUMENT_EXPORTED`:** take it out; keep the document id. File names often hold a person's name. Task 0023.
+2. **Chooser in the Case File look with the older UI switched on:** acceptable, as the no-access screen already does.
+3. **Sign-in screen follows the dark setting:** yes, same approach as A3. Task 0023.
+4. **`docs/work/compare/` in `.gitignore`:** yes. Task 0023.
+5. **Go-ahead for task 0023** to close the leaks and the silent failures before the error code list is designed, including two frozen-area changes: capping endless processing re-dispatch (V1 processing) and recording sign-in refusals with their exact reason (Enterprise Identity, LexaVault side only).
+6. **Sensitivity default (owner, restated):** the level is **Standard by default everywhere, whether or not anything is configured**: no value sent, an unknown value, a watched folder or connection with no setting saved, any future intake path.
