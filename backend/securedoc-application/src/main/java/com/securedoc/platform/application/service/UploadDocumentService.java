@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -107,10 +108,10 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
             fileName = FileName.of(command.fileName());
             mimeType = MimeType.of(command.mimeType());
         } catch (IllegalArgumentException invalid) {
-            throw new ValidationException(invalid.getMessage());
+            throw new ValidationException(LvErrorCode.INT_003, invalid.getMessage());
         }
         if (command.contentLength() < 1) {
-            throw new ValidationException("The file is empty");
+            throw new ValidationException(LvErrorCode.INT_006, "The file is empty");
         }
 
         // 3b. Task 0023 D4 (#45): a manual or watched-folder file must be a PDF the server can open, the same check
@@ -218,7 +219,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
     private void validateMimeType(String mimeType) {
         if (!ALLOWED_MIME_TYPES.contains(mimeType)) {
             // Task 0023 #45/#55: the type sent is not repeated.
-            throw new ValidationException("Only PDF files can be uploaded (application/pdf)");
+            throw new ValidationException(LvErrorCode.INT_007, "Only PDF files can be uploaded (application/pdf)");
         }
     }
 

@@ -145,7 +145,7 @@ test('Receiving: plain view names, one tag and one status line each, the watched
   await expect(los.locator('.cf-ad-conn-status')).toHaveText('Working · last worked 14 min ago');
   const poll = card.getByRole('listitem').filter({ hasText: 'Servicing outbox' });
   await expect(poll.locator('.cf-ad-tag')).toHaveText('LexaVault collects every 15 min');
-  await expect(poll.locator('.cf-ad-conn-status')).toHaveText("Having problems · last collected 1 h ago · last try failed: couldn't reach it");
+  await expect(poll.locator('.cf-ad-conn-status')).toHaveText("Having problems · last collected 1 h ago · last try failed: Source system can't be reached · LV-INT-040");
   await expect(poll.locator('.cf-ad-conn-endpoint')).toHaveText('https://servicing.northwind.example/api/outbox');
   await expect(poll.locator('.cf-ad-conn-endpoint')).toHaveCSS('font-family', /mono/i);
   for (const b of ['Collect now', 'Switch off', 'Edit']) await expect(poll.getByRole('button', { name: b })).toBeVisible();
@@ -238,7 +238,7 @@ test('Sending by barcode: rules as a sentence, failed files by loan number, Retr
   await expect(card.getByRole('region', { name: 'Rules' })).toContainText('Title pages: barcode “TITLE-001”, top right of the page → Title team folder · destination switched off');
   const failed = card.getByRole('region', { name: "Files that couldn't be sent" });
   await expect(failed).toContainText("1 file couldn't be sent");
-  await expect(failed.locator('.cf-ad-conn-status')).toHaveText("LN204812 · pages 3–4 → Title pages · couldn't reach it · tried 5 times");
+  await expect(failed.locator('.cf-ad-conn-status')).toHaveText("LN204812 · pages 3–4 → Title pages · Destination can't be reached · LV-DLV-001 · tried 5 times");
   expect(await mainText(failed)).not.toContain(PACKAGE_ID);
   // Task 0023 B4: Technical details give the document id, never a file name (even if an older server still sends one).
   await failed.locator('summary', { hasText: 'Technical details' }).click();
@@ -320,7 +320,7 @@ test('Edit a saved connection: Test connection tests the saved settings, and aft
   await sheet.getByLabel('Address').fill('http://169.254.169.254/latest');
   await sheet.getByRole('button', { name: 'Next: test and save' }).click();
   await sheet.getByRole('button', { name: 'Test connection' }).click();
-  await expect(sheet.getByText("The connection didn't work: that address isn't allowed. Cloud metadata addresses are always refused.")).toBeVisible();
+  await expect(sheet.getByText("The connection didn't work: Connection settings not valid · LV-CFG-003. Cloud metadata addresses are always refused.")).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Save' })).toBeEnabled();
   expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 });

@@ -80,6 +80,8 @@ export interface ScanSession {
   queuedAt?: string | null;
   nextDeliveryAttemptAt?: string | null;
   lastDeliveryErrorCode?: string | null;
+  /** Task 0025: the LV code for lastDeliveryErrorCode, when the bridge sends it. */
+  lastDeliveryLvCode?: string | null;
   lastDeliveryErrorAt?: string | null;
   submittedAt?: string | null;
 }
@@ -99,12 +101,16 @@ export interface ScannerDeliveryItem {
   queuedAt?: string | null;
   nextDeliveryAttemptAt?: string | null;
   lastDeliveryErrorCode?: string | null;
+  /** Task 0025: the LV code for lastDeliveryErrorCode, when the bridge sends it. */
+  lastDeliveryLvCode?: string | null;
   lastDeliveryErrorAt?: string | null;
   submittedAt?: string | null;
 }
 
 export interface ScanBridgeError {
   errorCode?: string;
+  /** Task 0025: the LexaVault error code, for example "LV-SCN-006". */
+  code?: string;
   message: string;
   source?: 'scanBridge';
   httpStatus?: number;
@@ -122,6 +128,7 @@ function isMutating(init?: RequestInit): boolean {
 function networkUnavailable(): ScanBridgeError {
   return {
     message: 'Local Scanner Bridge is unavailable. Start the bridge service and try again.',
+    code: 'LV-SCN-011',
     source: 'scanBridge',
   };
 }
@@ -145,6 +152,7 @@ async function execute<T>(path: string, init?: RequestInit, allowTokenRefresh = 
         if (probe.ok) {
           throw {
             errorCode: 'BRIDGE_BROWSER_REQUEST_BLOCKED',
+            code: 'LV-SCN-012',
             message: 'Scanner Bridge is reachable, but the browser blocked the state-changing request. Restart the Scanner Bridge and reload this page.',
             source: 'scanBridge',
           } satisfies ScanBridgeError;

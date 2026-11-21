@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.redaction.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
@@ -133,7 +134,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
 
         // 2. Verify document belongs to the specified package
         if (!document.packageId().equals(command.packageId())) {
-            throw new ValidationException("Document does not belong to the specified package");
+            throw new ValidationException(LvErrorCode.PRC_009, "Document does not belong to the specified package");
         }
 
         // 3. Verify parent package is in a valid processing state
@@ -144,12 +145,12 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         if (parentPackage.status() != PackageStatus.PROCESSING
                 && parentPackage.status() != PackageStatus.PENDING_REVIEW
                 && parentPackage.status() != PackageStatus.IN_REVIEW) {
-            throw new ValidationException("Package is not in a valid status for redaction");
+            throw new ValidationException(LvErrorCode.PRC_009, "Package is not in a valid status for redaction");
         }
 
         // 4. Verify document is in REDACTING status
         if (document.status() != DocumentStatus.REDACTING) {
-            throw new ValidationException("Document is not in REDACTING status");
+            throw new ValidationException(LvErrorCode.PRC_009, "Document is not in REDACTING status");
         }
 
         // 5. Load findings for this document (tenant-scoped). DETECTED means human review is
@@ -160,7 +161,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         boolean hasUnreviewedFindings = allFindings.stream()
                 .anyMatch(f -> f.status() == FindingStatus.DETECTED);
         if (hasUnreviewedFindings) {
-            throw new ValidationException("Document has findings that still require review");
+            throw new ValidationException(LvErrorCode.REV_003, "Document has findings that still require review");
         }
 
         List<Finding> confirmedFindings = allFindings.stream()

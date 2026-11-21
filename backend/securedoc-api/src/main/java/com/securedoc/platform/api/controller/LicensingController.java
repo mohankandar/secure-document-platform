@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -49,7 +50,7 @@ public class LicensingController {
                                                           @RequestBody InstallLicenseRequest body,
                                                           HttpServletRequest request) {
         if (body == null || body.licenseToken() == null || body.licenseToken().isBlank()) {
-            throw new ValidationException("Signed license token is required");
+            throw new ValidationException(LvErrorCode.LIC_003, "Signed license token is required");
         }
         var principal = contextResolver.resolvePrincipal(request);
         var status = licensingService.install(TenantId.of(tenantId), body.licenseToken(), principal.actorId(),

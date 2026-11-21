@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.intake;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.PdfIntakeValidationPort;
 import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
@@ -25,7 +26,7 @@ public class PdfBoxIntakeValidationAdapter implements PdfIntakeValidationPort {
             int pageCount = staged.document().getNumberOfPages();
             if (pageCount < 1) {
                 log.info("PDF_INTAKE_REFUSED reasonCode=PDF_NO_PAGES");
-                throw new ValidationException(NO_PAGES);
+                throw new ValidationException(LvErrorCode.INT_008, NO_PAGES);
             }
             return new PdfInfo(pageCount);
         } catch (IOException | RuntimeException e) {
@@ -35,7 +36,7 @@ public class PdfBoxIntakeValidationAdapter implements PdfIntakeValidationPort {
             boolean encrypted = e instanceof InvalidPasswordException;
             log.info("PDF_INTAKE_REFUSED reasonCode={} exceptionType={}",
                     encrypted ? "PDF_PASSWORD_PROTECTED" : "PDF_UNREADABLE", e.getClass().getSimpleName());
-            throw new ValidationException(encrypted ? PASSWORD_PROTECTED : NOT_READABLE);
+            throw new ValidationException(LvErrorCode.INT_008, encrypted ? PASSWORD_PROTECTED : NOT_READABLE);
         }
     }
 }

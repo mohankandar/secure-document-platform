@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.securedoc.platform.scanbridge.model.ApiErrorResponse;
 import com.securedoc.platform.scanbridge.service.BridgeRuntimeIdentity;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -13,7 +14,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,7 +49,7 @@ public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String origin = request.getHeader("Origin");
         if (origin != null && !origin.isBlank() && properties.getAllowedOrigins().stream().noneMatch(origin::equals)) {
-            reject(response, "BRIDGE_ORIGIN_NOT_ALLOWED", "This browser origin is not allowed to use the local Scanner Bridge.");
+            reject(response, "BRIDGE_ORIGIN_NOT_ALLOWED");
             return;
         }
         if (origin != null && !origin.isBlank()) {
@@ -73,8 +73,7 @@ public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
         if (MUTATING_METHODS.contains(request.getMethod())) {
             String supplied = request.getHeader(REQUEST_TOKEN_HEADER);
             if (!constantTimeEquals(runtimeIdentity.browserRequestToken(), supplied)) {
-                reject(response, "BRIDGE_REQUEST_TOKEN_INVALID",
-                        "The Scanner Bridge browser request token is missing or no longer current.");
+                reject(response, "BRIDGE_REQUEST_TOKEN_INVALID");
                 return;
             }
         }
@@ -105,10 +104,11 @@ public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
         return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), supplied.getBytes(StandardCharsets.UTF_8));
     }
 
-    private void reject(HttpServletResponse response, String code, String message) throws IOException {
+    /** Task 0025: the same body as every other bridge error: errorCode, the LV code, and its title as message. */
+    private void reject(HttpServletResponse response, String errorCode) throws IOException {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(response.getOutputStream(), Map.of("errorCode", code, "message", message));
+        objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(errorCode));
     }
 }

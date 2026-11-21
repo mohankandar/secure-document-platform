@@ -127,7 +127,7 @@ class ComplianceReportApiTest {
                     AuditRecord refused = audits.get(audits.size() - 1);
                     assertEquals(AuditAction.COMPLIANCE_REPORT_CREATED, refused.action());
                     assertEquals(AuditOutcome.DENIED, refused.outcome());
-                    assertEquals("edition=" + (full ? "FULL" : "SUMMARY") + ", refused=ROLE", refused.detail());
+                    assertEquals("code=LV-AUT-006, detail=ACCESS_DENIED, edition=" + (full ? "FULL" : "SUMMARY") + ", refused=ROLE", refused.detail());
                 }
             }
         }

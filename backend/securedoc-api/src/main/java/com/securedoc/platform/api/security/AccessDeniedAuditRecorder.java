@@ -66,7 +66,8 @@ public class AccessDeniedAuditRecorder {
 
     static String detail(HttpServletRequest request, AccessDeniedException ex) {
         String reason = ex instanceof TenantBoundaryDeniedException ? REASON_TENANT_BOUNDARY : REASON_SERVICE;
-        return "capability=none, method=" + CapabilityAuthorizationInterceptor.method(request)
+        return com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.of(ex), ex.errorCode(), null)
+                + ", capability=none, method=" + CapabilityAuthorizationInterceptor.method(request)
                 + ", route=" + CapabilityAuthorizationInterceptor.routePattern(request) + ", reason=" + reason;
     }
 

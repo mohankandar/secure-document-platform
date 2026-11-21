@@ -467,7 +467,13 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             case DUPLICATE->AuditAction.INTAKE_DUPLICATE;
             default->AuditAction.INTAKE_WAITING_FOR_TRIGGER;
         };
-        String detail="Intake status="+status+(code==null?"":", reasonCode="+code)
+        // Task 0025: a refusal, duplicate or wait records its LexaVault code first (the cause's own when known).
+        com.securedoc.platform.domain.error.LvErrorCode lvCode = status == IntakeObservationStatus.ACCEPTED ? null
+                : status == IntakeObservationStatus.WAITING_FOR_TRIGGER ? com.securedoc.platform.domain.error.LvErrorCode.INT_030
+                : cause != null && cause.lvCode() != com.securedoc.platform.domain.error.LvErrorCode.SYS_001 ? cause.lvCode()
+                : com.securedoc.platform.application.error.LvErrorCodes.forIntakeRejection(code);
+        String detail=(lvCode==null?"":"code="+lvCode.code()+", detail="+(code==null?status:code)+", ")
+                +"Intake status="+status+(code==null?"":", reasonCode="+code)
                 +(cause==null?"":", causeCode="+cause.code()+", exceptionType="+cause.exceptionType())
                 +", drop="+dropReference(candidate);
         auditService.recordSuccess(principal.tenantId(),principal.actorId(),action,

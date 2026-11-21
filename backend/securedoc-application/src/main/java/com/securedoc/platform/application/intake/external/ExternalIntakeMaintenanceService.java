@@ -111,7 +111,8 @@ public final class ExternalIntakeMaintenanceService {
         } catch (RuntimeException ex) {
             auditService.recordFailure(intake.tenantId(), actorId, AuditAction.EXTERNAL_INTAKE_CLEANED,
                     "ExternalIntake", intake.packageId().toString(), correlationId,
-                    "Expired incomplete intake cleanup failed; cleanup remains retryable");
+                    "Expired incomplete intake cleanup failed; cleanup remains retryable: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.domain.error.LvErrorCode.SYS_007,
+                            ex.getClass().getSimpleName(), null));
             return false;
         }
     }

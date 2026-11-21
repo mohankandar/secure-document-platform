@@ -5,6 +5,7 @@ import type { BusinessIdentifier, FocusedReviewItem, FocusedReviewQueue, Identif
 import { checked, isArrayOf, isRecord } from './failure';
 import { canContinueManually } from './support/supportRules';
 import { ACTION_WORDS, STAGE_NAMES } from './words';
+import { errorText } from './lvCodes';
 
 export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
 
@@ -165,11 +166,9 @@ export function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+/** Task 0025: the server's message and its LV code ("Setting not valid: … · LV-CFG-001"); see lvCodes.errorText. */
 export function errorMessage(error: unknown, fallback = 'Something went wrong.'): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') {
-    return (error as { message: string }).message;
-  }
-  return fallback;
+  return errorText(error, fallback);
 }
 
 /* ---------- SWR hooks ---------- */

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.extraction.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ApplicationException;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -119,7 +120,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
 
         if (!document.packageId().equals(command.packageId())) {
-            throw new ValidationException("Document does not belong to the specified package");
+            throw new ValidationException(LvErrorCode.PRC_009, "Document does not belong to the specified package");
         }
 
         DocumentPackage parentPackage = packageRepository
@@ -127,11 +128,11 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
         if (parentPackage.status() != PackageStatus.PROCESSING) {
-            throw new ValidationException("Package is not in PROCESSING status");
+            throw new ValidationException(LvErrorCode.PRC_009, "Package is not in PROCESSING status");
         }
 
         if (document.status() != DocumentStatus.EXTRACTING) {
-            throw new ValidationException("Document is not in EXTRACTING status");
+            throw new ValidationException(LvErrorCode.PRC_009, "Document is not in EXTRACTING status");
         }
 
         Artifact originalArtifact = artifactRepository

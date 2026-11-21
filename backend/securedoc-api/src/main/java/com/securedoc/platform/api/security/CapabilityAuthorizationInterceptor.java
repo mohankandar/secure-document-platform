@@ -66,7 +66,8 @@ public class CapabilityAuthorizationInterceptor implements HandlerInterceptor {
     /** {@code capability=A, method=POST, route=/api/v1/...}; several accepted capabilities are joined by "|". */
     static String detail(UserCapability[] capabilities, HttpServletRequest request) {
         String capability = Arrays.stream(capabilities).map(Enum::name).collect(Collectors.joining("|"));
-        return "capability=" + capability + ", method=" + method(request) + ", route=" + routePattern(request);
+        return com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.domain.error.LvErrorCode.AUT_006, "ACCESS_DENIED", null)
+                + ", capability=" + capability + ", method=" + method(request) + ", route=" + routePattern(request);
     }
 
     public static String method(HttpServletRequest request) {

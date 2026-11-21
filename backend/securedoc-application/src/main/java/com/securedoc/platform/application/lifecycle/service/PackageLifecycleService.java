@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.lifecycle.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ExtendTechnicalHoldCommand;
@@ -205,7 +206,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
     public PackageLifecycleSummary execute(ExtendTechnicalHoldCommand command) {
         if (command.holdHoursFromNow() < TenantLifecyclePolicy.MIN_NEVER_EXPORTED_HOLD_HOURS
                 || command.holdHoursFromNow() > TenantLifecyclePolicy.MAX_NEVER_EXPORTED_HOLD_HOURS) {
-            throw new ValidationException("Technical hold must be between "
+            throw new ValidationException(LvErrorCode.CFG_001, "Technical hold must be between "
                     + TenantLifecyclePolicy.MIN_NEVER_EXPORTED_HOLD_HOURS + " and "
                     + TenantLifecyclePolicy.MAX_NEVER_EXPORTED_HOLD_HOURS + " hours");
         }
@@ -222,7 +223,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         try {
             lifecycle.extendTechnicalHold(now, requestedUntil);
         } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
         lifecycleRepository.save(lifecycle);
         auditService.recordSuccess(command.tenantId(), command.actorId(), AuditAction.RETENTION_HOLD_EXTENDED,

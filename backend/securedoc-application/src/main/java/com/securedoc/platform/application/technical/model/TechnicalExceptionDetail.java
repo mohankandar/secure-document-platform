@@ -31,9 +31,12 @@ public record TechnicalExceptionDetail(
         boolean businessContinuityUsed,
         String businessOutcome,
         Map<String, String> processingFingerprint,
-        List<IncidentEventSummary> incidentEvents
+        List<IncidentEventSummary> incidentEvents,
+        /** Task 0025: the LexaVault code for this stop (recorded, else from the failure code). */
+        String lvCode
 ) {
     public TechnicalExceptionDetail {
+        lvCode = com.securedoc.platform.application.support.model.SupportIncidentDetail.lvCodeFor(lvCode, failureCode);
         processingFingerprint = processingFingerprint == null ? Map.of() : Map.copyOf(processingFingerprint);
         incidentEvents = incidentEvents == null ? List.of() : List.copyOf(incidentEvents);
     }
@@ -54,7 +57,20 @@ public record TechnicalExceptionDetail(
                                     String explanation) {
         this(packageId, documentId, status, failureCategory, failedStage, dependency, failureCode,
                 retryable, attempts, failedAt, correlationId, originalRetainedUntil, explanation,
-                null, "LEGACY_AUDIT", false, null, Map.of(), List.of());
+                null, "LEGACY_AUDIT", false, null, Map.of(), List.of(), null);
+    }
+
+    /** As the canonical constructor, without a recorded code (it follows from {@code failureCode}). */
+    public TechnicalExceptionDetail(PackageId packageId, DocumentId documentId, String status, String failureCategory,
+                                    String failedStage, String dependency, String failureCode, boolean retryable,
+                                    int attempts, Instant failedAt, String correlationId, Instant originalRetainedUntil,
+                                    String explanation, UUID incidentId, String incidentStatus,
+                                    boolean businessContinuityUsed, String businessOutcome,
+                                    Map<String, String> processingFingerprint,
+                                    List<IncidentEventSummary> incidentEvents) {
+        this(packageId, documentId, status, failureCategory, failedStage, dependency, failureCode, retryable, attempts,
+                failedAt, correlationId, originalRetainedUntil, explanation, incidentId, incidentStatus,
+                businessContinuityUsed, businessOutcome, processingFingerprint, incidentEvents, null);
     }
 
     public record IncidentEventSummary(

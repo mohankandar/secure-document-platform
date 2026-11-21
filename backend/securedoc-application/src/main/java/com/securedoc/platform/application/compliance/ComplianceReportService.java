@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.compliance;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.audit.query.AuditRecordSummary;
 import com.securedoc.platform.application.compliance.ComplianceReportContent.AppendixRow;
@@ -142,7 +143,7 @@ public final class ComplianceReportService {
         Objects.requireNonNull(edition);
         CompliancePeriod period = null;
         try {
-            if (request == null) throw new ValidationException("A request body is required");
+            if (request == null) throw new ValidationException(LvErrorCode.CFG_001, "A request body is required");
             ZoneId zone = CompliancePeriod.zone(request.timeZone());
             period = CompliancePeriod.resolve(CompliancePeriod.type(request.period()), request.from(), request.to(),
                     zone, clock);
@@ -164,7 +165,10 @@ public final class ComplianceReportService {
                     : e instanceof NotFoundException ? "NOT_FOUND" : "INTERNAL";
             auditService.recordFailure(principal.tenantId(), principal.actorId(), AuditAction.COMPLIANCE_REPORT_CREATED,
                     RESOURCE_TYPE, principal.tenantId().toString(), correlationId,
-                    (period == null ? "period=invalid" : "period=" + period.from() + ".." + period.to())
+                    com.securedoc.platform.application.error.LvErrorCodes.auditDetail(
+                            com.securedoc.platform.application.error.LvErrorCodes.optional(e)
+                                    .orElse(com.securedoc.platform.domain.error.LvErrorCode.SYS_001), failure, null) + ", "
+                    + (period == null ? "period=invalid" : "period=" + period.from() + ".." + period.to())
                             + ", edition=" + edition.name() + ", failure=" + failure);
             if (e instanceof ApplicationException) throw e;
             throw new IllegalStateException("The compliance report could not be created", e);
@@ -177,7 +181,7 @@ public final class ComplianceReportService {
      */
     public long appendixRecordCount(TenantId tenantId, Request request) {
         Objects.requireNonNull(tenantId);
-        if (request == null) throw new ValidationException("A period is required");
+        if (request == null) throw new ValidationException(LvErrorCode.CFG_001, "A period is required");
         ZoneId zone = CompliancePeriod.zone(request.timeZone());
         CompliancePeriod period = CompliancePeriod.resolve(CompliancePeriod.type(request.period()), request.from(),
                 request.to(), zone, clock);
@@ -191,7 +195,8 @@ public final class ComplianceReportService {
     public void recordRefused(AuthenticatedPrincipal principal, CorrelationId correlationId, ComplianceEdition requested) {
         auditService.recordDenied(principal.tenantId(), principal.actorId(), AuditAction.COMPLIANCE_REPORT_CREATED,
                 RESOURCE_TYPE, principal.tenantId().toString(), correlationId,
-                "edition=" + requested.name() + ", refused=ROLE");
+                "code=" + com.securedoc.platform.domain.error.LvErrorCode.AUT_006.code() + ", detail=ACCESS_DENIED, edition="
+                        + requested.name() + ", refused=ROLE");
     }
 
     ComplianceReportContent content(AuthenticatedPrincipal principal, Tenant tenant, CompliancePeriod period,

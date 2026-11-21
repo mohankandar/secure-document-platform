@@ -6,6 +6,7 @@
  * (no borrower name) and no file name. IT Administrator and Platform Operations cannot open the case itself.
  */
 import { problemReason, processingStageWords, sentenceCase } from '../words.ts';
+import { lvLabel } from '../lvCodes.ts';
 
 export const SUPPORT_CAPS = {
   view: 'TECHNICAL_EXCEPTION_VIEW',
@@ -54,6 +55,8 @@ export interface SupportRowLike {
   status: string;
   businessImpact: string;
   attemptCount: number;
+  /** Task 0025: the LV code, when the server sends it; otherwise it comes from reasonCode. */
+  lvCode?: string | null;
   primaryIdentifierLabel?: string | null;
   primaryIdentifierValue?: string | null;
 }
@@ -80,12 +83,58 @@ export function blockingCount(rows: ReadonlyArray<Pick<SupportRowLike, 'status' 
   return rows.filter((r) => !isClosed(r.status) && (r.businessImpact ?? '').toUpperCase() === 'BLOCKED').length;
 }
 
-/** "What happened" on a row: the reason in words, and a short note (tries, or that the case went on manually). */
+/** "What happened" on a row: the reason as "title · LV code", and a short note (tries, or that the case went on manually). */
 export function rowWhat(row: SupportRowLike): { text: string; note?: string } {
-  const text = problemReason(row.reasonCode).title;
+  const text = problemReason(row.reasonCode, row.lvCode).label;
   if ((row.businessImpact ?? '').toUpperCase() === 'CONTINUED') return { text, note: 'case continued manually' };
   if (row.attemptCount > 1) return { text, note: `tried ${row.attemptCount} times` };
   return { text };
+}
+
+/**
+ * Task 0025: the reason codes (TechnicalFailureCode) a support incident can carry, for the Reason filter. Internal
+ * identifiers only; their words come from the LV code registry.
+ */
+export const SUPPORT_REASON_CODES: readonly string[] = [
+  'AI_TIMEOUT', 'AI_RATE_LIMITED', 'AI_UNAVAILABLE', 'AI_REJECTED', 'AI_INVALID_RESPONSE',
+  'OCR_TIMEOUT', 'OCR_UNAVAILABLE', 'OCR_PROCESS_FAILED',
+  'DELIVERY_IO', 'DELIVERY_DESTINATION_INVALID', 'DELIVERY_SENSITIVITY_REFUSED', 'STORAGE_IO',
+  'PROCESSING_DISPATCH_EXHAUSTED', 'PROCESSING_LICENSE_DENIED',
+  'REDACTION_LOCATION_MISSING', 'REDACTION_SOURCE_PAGES_UNKNOWN', 'REDACTION_PAGE_COUNT_MISMATCH', 'REDACTION_TARGETS_NOT_APPLIED',
+  'REDACTION_OUTPUT_EMPTY', 'REDACTION_TEXT_LAYER_REMAINS', 'REDACTION_ANNOTATIONS_REMAIN', 'REDACTION_REGION_NOT_COVERED',
+  'REDACTION_OUTPUT_UNPARSABLE', 'UNKNOWN_TECHNICAL_FAILURE',
+];
+
+export interface ReasonFilterOption {
+  /** The LV code: the select's value. */
+  code: string;
+  /** "Text reading timed out · LV-PRC-004". */
+  label: string;
+  /** The reason codes the server is asked for (one request each; the server filters by one reason code). */
+  reasonCodes: string[];
+}
+
+/** The Reason filter: one option per LV code, in the order first met; reason codes that share an LV code are grouped. */
+export function reasonFilterOptions(codes: readonly string[] = SUPPORT_REASON_CODES): ReasonFilterOption[] {
+  const byCode = new Map<string, string[]>();
+  for (const reasonCode of codes) {
+    const code = problemReason(reasonCode).code;
+    byCode.set(code, [...(byCode.get(code) ?? []), reasonCode]);
+  }
+  return [...byCode.entries()].map(([code, reasonCodes]) => ({ code, label: lvLabel(code), reasonCodes }));
+}
+
+/**
+ * The answers for a grouped Reason filter (one per reason code) as one list: newest first, at most size rows, the
+ * totals added up. Each server answer keeps its own filtering and limit.
+ */
+export function mergeSupportPages<T extends { incidentId: string; lastObservedAt: string }>(
+  pages: ReadonlyArray<{ items: T[]; total: number }>, size: number,
+): { items: T[]; total: number; page: number; size: number } {
+  const seen = new Set<string>();
+  const items = pages.flatMap((p) => p.items).filter((r) => (seen.has(r.incidentId) ? false : (seen.add(r.incidentId), true)))
+    .sort((a, b) => (Date.parse(b.lastObservedAt) || 0) - (Date.parse(a.lastObservedAt) || 0));
+  return { items: items.slice(0, size), total: pages.reduce((n, p) => n + p.total, 0), page: 0, size };
 }
 
 /** The second line under the case: where in processing it happened. */
@@ -150,6 +199,8 @@ export interface IncidentLike {
   component: string;
   failureCategory: string;
   reasonCode: string;
+  /** Task 0025: the LV code, when the server sends it. */
+  lvCode?: string | null;
   retryable: boolean;
   attemptCount: number;
   correlationId: string;
@@ -176,6 +227,8 @@ export interface TechnicalLike {
   correlationId?: string | null;
   originalRetainedUntil?: string | null;
   explanation: string;
+  /** Task 0025: the LV code, when the server sends it. */
+  lvCode?: string | null;
   incidentId?: string | null;
   incidentStatus?: string | null;
   businessContinuityUsed?: boolean;
@@ -255,7 +308,9 @@ export function timelineText(event: IncidentEventLike, fallbackReason?: string |
     const reason = problemReason(event.reasonCode || fallbackReason).title;
     const lower = reason.charAt(0).toLowerCase() + reason.slice(1);
     const lead = event.attemptNumber ? `Try ${event.attemptNumber} failed` : 'Failed';
-    return /^(AI|Secure Document Vault|LexaVault)\b/.test(reason) ? `${lead}: ${reason}` : `${lead}: ${lower}`;
+    // A name or an abbreviation keeps its capital ("AI model timed out", "PDF can't be opened", "LexaVault …").
+    const keep = /^(Secure Document Vault|LexaVault|Vero|Scan Bridge)\b/.test(reason) || /^[A-Z]{2}/.test(reason);
+    return `${lead}: ${keep ? reason : lower}`;
   }
   return EVENT_WORDS[type] ?? sentenceCase(type || 'Something happened');
 }
@@ -279,7 +334,7 @@ const field = (label: string, value: unknown): [string, string] => [label, value
 
 /** The problem page from a support incident (Support › a row). */
 export function fromIncident(d: IncidentLike, when: When): ProblemView {
-  const reason = problemReason(d.reasonCode);
+  const reason = problemReason(d.reasonCode, d.lvCode);
   const closed = isClosed(d.status);
   const purged = (d.artifactAvailability ?? '').toUpperCase() === 'PURGED' || Boolean(d.artifactsPurgedAt);
   const t = timelineOf(d.events, d.reasonCode);
@@ -287,7 +342,7 @@ export function fromIncident(d: IncidentLike, when: When): ProblemView {
     incidentId: d.incidentId,
     packageId: d.packageId,
     caseValue: d.primaryIdentifierValue || undefined,
-    title: reason.title,
+    title: reason.label,
     impact: impactChip(d.businessImpact),
     status: statusWord(d.status),
     closed,
@@ -329,25 +384,35 @@ export function fromIncident(d: IncidentLike, when: When): ProblemView {
   };
 }
 
+/** The internal reason of a stopped case: the operator diagnostics' code, else the latest recorded failure's reason. */
+export function technicalReasonCode(d: Pick<TechnicalLike, 'operatorDiagnostics' | 'incidentEvents'>): string | undefined {
+  return d.operatorDiagnostics?.internalErrorCode
+    ?? [...(d.incidentEvents ?? [])].reverse().find((e) => e.reasonCode)?.reasonCode ?? undefined;
+}
+
+/** Task 0025: the case panel's problem text for a stopped case, "title · LV code" (the reason itself stays under Technical details). */
+export function technicalProblemText(d: Pick<TechnicalLike, 'operatorDiagnostics' | 'incidentEvents' | 'lvCode'>): string {
+  return problemReason(technicalReasonCode(d), d.lvCode).label;
+}
+
 /** The problem page from a stopped case that has no support incident (an older link, /technical-exceptions/<case>). */
 export function fromTechnical(d: TechnicalLike, when: When): ProblemView {
-  const code = d.operatorDiagnostics?.internalErrorCode
-    ?? [...(d.incidentEvents ?? [])].reverse().find((e) => e.reasonCode)?.reasonCode ?? undefined;
-  const reason = problemReason(code);
+  const code = technicalReasonCode(d);
+  const reason = problemReason(code, d.lvCode);
   const t = timelineOf(d.incidentEvents, code);
   const closed = isClosed(d.incidentStatus);
   const impact = (d.businessOutcome ?? '').toUpperCase() === 'COMPLETED' ? 'COMPLETED' : d.businessContinuityUsed ? 'CONTINUED' : 'BLOCKED';
   return {
     incidentId: d.incidentId ?? undefined,
     packageId: d.packageId,
-    title: reason.known ? reason.title : UNKNOWN_TITLE,
+    title: reason.label,
     impact: impactChip(impact),
     status: statusWord(d.incidentStatus),
     closed,
     blocked: impact === 'BLOCKED',
     packageStatus: undefined,
     retryable: d.retryable,
-    happened: `${reason.known ? reason.sentence : 'Processing stopped for a technical reason.'} It stopped at ${processingStageWords(d.failedStage)}.${tries(1, d.failedAt, when)}`,
+    happened: `${reason.sentence} It stopped at ${processingStageWords(d.failedStage)}.${tries(1, d.failedAt, when)}`,
     meaning: meaningFor(impact, closed, d.originalRetainedUntil, false, when),
     timeline: t.timeline,
     earlierSteps: t.earlierSteps,
@@ -375,8 +440,6 @@ export function fromTechnical(d: TechnicalLike, when: When): ProblemView {
     ],
   };
 }
-
-const UNKNOWN_TITLE = 'Processing problem';
 
 /* ---------- Who may do what on the problem page ---------- */
 

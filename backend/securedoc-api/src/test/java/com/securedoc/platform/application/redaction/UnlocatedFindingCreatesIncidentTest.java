@@ -121,6 +121,6 @@ class UnlocatedFindingCreatesIncidentTest {
         assertEquals(document.id(), incident.documentId());
         assertEquals(PackageStatus.FAILED, pkg.status());
         assertTrue(audits.stream().anyMatch(a -> a.action() == AuditAction.DOCUMENT_PROCESSING_FAILED
-                && a.detail().contains("code=REDACTION_LOCATION_MISSING")));
+                && a.detail().contains("code=LV-RED-001, detail=REDACTION_LOCATION_MISSING")));
     }
 }

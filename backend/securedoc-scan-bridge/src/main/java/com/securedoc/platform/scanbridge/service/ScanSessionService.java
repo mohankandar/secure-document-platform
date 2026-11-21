@@ -1,6 +1,8 @@
 package com.securedoc.platform.scanbridge.service;
 
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
+import com.securedoc.platform.scanbridge.model.BridgeLvCode;
+import com.securedoc.platform.scanbridge.model.BridgeLvCodes;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSession;
 import com.securedoc.platform.scanbridge.model.ScanSessionStatus;
@@ -219,10 +221,20 @@ public class ScanSessionService {
     }
 
     public synchronized ScanSession scheduleRetry(UUID sessionId, String safeErrorCode, Instant nextAttemptAt) {
+        return scheduleRetry(sessionId, safeErrorCode, nextAttemptAt, null, null);
+    }
+
+    /**
+     * Task 0025: as {@link #scheduleRetry(UUID, String, Instant)}, also keeping the HTTP status of LexaVault's answer
+     * and LexaVault's own LV code (both null when the code is the bridge's own).
+     */
+    public synchronized ScanSession scheduleRetry(UUID sessionId, String safeErrorCode, Instant nextAttemptAt,
+                                                  Integer httpStatus, String lexaVaultLvCode) {
         ScanSession existing = get(sessionId);
         ScanSession queued = copy(existing, ScanSessionStatus.QUEUED, existing.businessIdentifiers(), existing.preparedScan(),
                 existing.lexavaultPackageId(), existing.deliveryAttemptCount(), existing.queuedAt(), nextAttemptAt,
-                safeErrorCode, clock.instant(), existing.submittedAt());
+                safeErrorCode, clock.instant(), existing.submittedAt(), existing.acceptancePendingSince(),
+                httpStatus, lexaVaultLvCode);
         store.save(queued);
         sessions.put(sessionId, queued);
         return queued;
@@ -246,15 +258,26 @@ public class ScanSessionService {
     }
 
     public synchronized ScanSession markAttentionRequired(UUID sessionId, String safeErrorCode) {
+        return markAttentionRequired(sessionId, safeErrorCode, null, null);
+    }
+
+    /**
+     * Task 0025: as {@link #markAttentionRequired(UUID, String)}, also keeping the HTTP status of LexaVault's answer
+     * and LexaVault's own LV code (both null when the code is the bridge's own).
+     */
+    public synchronized ScanSession markAttentionRequired(UUID sessionId, String safeErrorCode,
+                                                          Integer httpStatus, String lexaVaultLvCode) {
         ScanSession existing = get(sessionId);
         ScanSession attention = copy(existing, ScanSessionStatus.ATTENTION_REQUIRED, existing.businessIdentifiers(), existing.preparedScan(),
                 existing.lexavaultPackageId(), existing.deliveryAttemptCount(), existing.queuedAt(), null,
-                safeErrorCode, clock.instant(), existing.submittedAt());
+                safeErrorCode, clock.instant(), existing.submittedAt(), existing.acceptancePendingSince(),
+                httpStatus, lexaVaultLvCode);
         store.save(attention);
         sessions.put(sessionId, attention);
         actionableSessionId.compareAndSet(sessionId, null);
-        log.warn("SCAN_BRIDGE_DELIVERY_ATTENTION_REQUIRED bridgeId={} siteId={} scannerId={} sessionId={} submissionId={} reasonCode={}",
-                existing.bridgeId(), existing.siteId(), existing.scannerId(), existing.sessionId(), existing.submissionId(), safeErrorCode);
+        log.warn("SCAN_BRIDGE_DELIVERY_ATTENTION_REQUIRED bridgeId={} siteId={} scannerId={} sessionId={} submissionId={} reasonCode={} code={} lexaVaultCode={}",
+                existing.bridgeId(), existing.siteId(), existing.scannerId(), existing.sessionId(), existing.submissionId(), safeErrorCode,
+                attention.lastDeliveryLvCode(), attention.lastDeliveryLexaVaultCode());
         return attention;
     }
 
@@ -278,7 +301,7 @@ public class ScanSessionService {
             } catch (RuntimeException ex) {
                 // Keep the original workReference if cleanup fails so the next worker cycle can retry disposal.
                 cleanupFailureReported.add(submitted.sessionId());
-                log.warn("SCAN_BRIDGE_ACCEPTED_PDF_CLEANUP_FAILED sessionId={} sourceDocumentId={} packageId={} exceptionType={}",
+                log.warn("SCAN_BRIDGE_ACCEPTED_PDF_CLEANUP_FAILED code={} sessionId={} sourceDocumentId={} packageId={} exceptionType={}", BridgeLvCode.LV_SYS_007.code(),
                         submitted.sessionId(), submitted.preparedScan().sourceDocumentId(), packageId, ex.getClass().getSimpleName());
             }
         }
@@ -310,7 +333,7 @@ public class ScanSessionService {
         } catch (RuntimeException ex) {
             // Keep the original workReference if cleanup fails so the next worker cycle can retry disposal.
             cleanupFailureReported.add(cancelled.sessionId());
-            log.warn("SCAN_BRIDGE_CANCELLED_PDF_CLEANUP_FAILED sessionId={} exceptionType={}",
+            log.warn("SCAN_BRIDGE_CANCELLED_PDF_CLEANUP_FAILED code={} sessionId={} exceptionType={}", BridgeLvCode.LV_SYS_007.code(),
                     cancelled.sessionId(), ex.getClass().getSimpleName());
         }
         return cancelled;
@@ -385,7 +408,8 @@ public class ScanSessionService {
                 session.status(), session.captureMode(), session.bridgeId(), session.siteId(), session.scannerId(),
                 session.lexavaultPackageId(), prepared == null ? 0L : prepared.sizeBytes(),
                 session.deliveryAttemptCount(), session.queuedAt(), session.nextDeliveryAttemptAt(),
-                session.lastDeliveryErrorCode(), session.lastDeliveryErrorAt(), session.submittedAt());
+                session.lastDeliveryErrorCode(), session.lastDeliveryLvCode(), session.lastDeliveryLexaVaultCode(),
+                session.lastDeliveryErrorAt(), session.submittedAt());
     }
 
     /**
@@ -443,7 +467,7 @@ public class ScanSessionService {
         if (!cleanupFailureReported.add(sessionId)) return;
         ScanSession session = sessions.get(sessionId);
         UUID sourceDocumentId = session == null || session.preparedScan() == null ? null : session.preparedScan().sourceDocumentId();
-        log.warn("{} sessionId={} sourceDocumentId={} status={} exceptionType={}", event, sessionId, sourceDocumentId,
+        log.warn("{} code={} sessionId={} sourceDocumentId={} status={} exceptionType={}", event, BridgeLvCode.LV_SYS_007.code(), sessionId, sourceDocumentId,
                 session == null ? null : session.status(), ex.getClass().getSimpleName());
     }
 
@@ -477,10 +501,24 @@ public class ScanSessionService {
                              PreparedScan preparedScan, UUID packageId, int attempts, Instant queuedAt,
                              Instant nextAttemptAt, String errorCode, Instant errorAt, Instant submittedAt,
                              Instant acceptancePendingSince) {
+        // Task 0025: LexaVault's answer details belong to the error code; they stay while the code stays, and go
+        // when the code changes (a new code with details is recorded through the overload below).
+        boolean sameCode = errorCode != null && errorCode.equals(existing.lastDeliveryErrorCode());
+        return copy(existing, status, identifiers, preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode,
+                errorAt, submittedAt, acceptancePendingSince,
+                sameCode ? existing.lastDeliveryHttpStatus() : null,
+                sameCode ? existing.lastDeliveryLexaVaultCode() : null);
+    }
+
+    private ScanSession copy(ScanSession existing, ScanSessionStatus status, Map<String, String> identifiers,
+                             PreparedScan preparedScan, UUID packageId, int attempts, Instant queuedAt,
+                             Instant nextAttemptAt, String errorCode, Instant errorAt, Instant submittedAt,
+                             Instant acceptancePendingSince, Integer errorHttpStatus, String lexaVaultLvCode) {
         return new ScanSession(existing.sessionId(), existing.submissionId(), existing.tenantId(), existing.bridgeId(),
                 existing.siteId(), existing.scannerId(), existing.captureMode(), status, identifiers, existing.createdAt(),
                 clock.instant(), preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode, errorAt, submittedAt,
-                existing.caseSensitivityLevel(), acceptancePendingSince);
+                existing.caseSensitivityLevel(), acceptancePendingSince, errorHttpStatus,
+                BridgeLvCodes.safeLexaVaultLvCode(lexaVaultLvCode));
     }
 
     /** Transport safety only (task 0021): a level is a short name, so anything longer is cut; LexaVault reads the value. */

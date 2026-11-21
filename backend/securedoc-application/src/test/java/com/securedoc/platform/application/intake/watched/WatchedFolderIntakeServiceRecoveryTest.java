@@ -273,7 +273,12 @@ class WatchedFolderIntakeServiceRecoveryTest {
             assertEquals(c.reason(), fresh.observations.latest.reasonCode(), c.thrown().getClass().getSimpleName());
             var rejected = fresh.audits.stream().filter(r -> r.action()
                     == com.securedoc.platform.domain.audit.AuditAction.INTAKE_REJECTED).findFirst().orElseThrow();
-            assertEquals("Intake status=REJECTED, reasonCode=" + c.reason() + ", causeCode=" + c.causeCode()
+            // Task 0025: the LexaVault code and the detail come first; the rest of the record is as before.
+            String lvCode = com.securedoc.platform.application.error.LvErrorCodes.optional(c.thrown())
+                    .filter(code -> code != com.securedoc.platform.domain.error.LvErrorCode.SYS_001)
+                    .orElse(com.securedoc.platform.application.error.LvErrorCodes.forIntakeRejection(c.reason())).code();
+            assertEquals("code=" + lvCode + ", detail=" + c.reason() + ", "
+                    + "Intake status=REJECTED, reasonCode=" + c.reason() + ", causeCode=" + c.causeCode()
                     + ", exceptionType=" + c.thrown().getClass().getSimpleName()
                     + ", drop=" + WatchedFolderDropReference.of("Jane Doe drop"), rejected.detail());
             fresh.audits.forEach(r -> assertFalse(r.detail() != null

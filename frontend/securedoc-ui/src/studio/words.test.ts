@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { SENSITIVITY_LEVELS, caseSensitivityLine, documentSensitivityNote, problemReason, sensitivityChoice, sensitivityName } from './words.ts';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { LV_CODES } from './lvErrorCodes.generated.ts';
 import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName, screenTitle } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -209,7 +210,10 @@ test('0021: a refused level reads as LV-DLV-003 in Support', () => {
   const reason = problemReason('DELIVERY_SENSITIVITY_REFUSED');
   assert.equal(reason.known, true);
   assert.equal(reason.title, 'Destination refused the sensitivity level');
-  assert.match(reason.sentence, /LV-DLV-003/);
+  // Task 0025: the code is in the label ("title · code"), no longer written into the sentence.
+  assert.equal(reason.code, 'LV-DLV-003');
+  assert.equal(reason.label, 'Destination refused the sensitivity level · LV-DLV-003');
+  assert.equal(reason.sentence, 'The destination doesn\'t accept the case\'s or a document\'s sensitivity level.');
 });
 
 test('0021: the level appears only in the case panel, New case and the watched-folder setting (no badge elsewhere)', () => {
@@ -233,28 +237,40 @@ test('0021: the level appears only in the case panel, New case and the watched-f
 
 /* ---------- Task 0023 C1/C3: new processing and redaction-check codes ---------- */
 
-test('0023 C1/C3: each new processing and redaction-check code has a plain title and sentence, with no code or content', () => {
-  const expected: Record<string, [string, string]> = {
-    PROCESSING_DISPATCH_EXHAUSTED: ['Processing couldn’t be started', 'LexaVault tried to start processing this case 3 times and couldn’t, so it stopped.'],
-    PROCESSING_LICENSE_DENIED: ['The licence doesn’t allow processing', 'The licence doesn’t allow this case to be processed, so it stopped at once without retrying.'],
-    REDACTION_LOCATION_MISSING: ['A confirmed finding has no place on the page', 'A finding was confirmed for redaction, but its place on the page isn’t known, so it couldn’t be redacted.'],
-    REDACTION_SOURCE_PAGES_UNKNOWN: ['Redaction check: the pages couldn’t be counted', 'The redaction check couldn’t tell how many pages the original document has. The document was not delivered.'],
-    REDACTION_PAGE_COUNT_MISMATCH: ['Redaction check: pages are missing or extra', 'The redacted document doesn’t have the same number of pages as the original. The document was not delivered.'],
-    REDACTION_TARGETS_NOT_APPLIED: ['Redaction check: not every redaction was made', 'Not every value marked for redaction was redacted. The document was not delivered.'],
-    REDACTION_OUTPUT_EMPTY: ['Redaction check: the redacted document is empty', 'Redaction produced an empty document. The document was not delivered.'],
-    REDACTION_TEXT_LAYER_REMAINS: ['Redaction check: hidden text remained', 'Text that should have been removed could still be read in the redacted document. The document was not delivered.'],
-    REDACTION_ANNOTATIONS_REMAIN: ['Redaction check: notes or comments remained', 'Notes, comments or form content remained in the redacted document. The document was not delivered.'],
-    REDACTION_REGION_NOT_COVERED: ['Redaction check: an area wasn’t fully covered', 'An area marked for redaction wasn’t fully covered in the redacted document. The document was not delivered.'],
-    REDACTION_OUTPUT_UNPARSABLE: ['Redaction check: the redacted document couldn’t be read', 'The redaction check couldn’t open the redacted document. The document was not delivered.'],
+test('0023 C1/C3 / 0025: each processing and redaction-check code reads as its LV code from the registry, with no internal code or content', () => {
+  // Task 0025: the hand-written words were replaced by the registry; the redaction-check refusals share LV-RED-002 and
+  // their exact reason stays under Technical details.
+  const expected: Record<string, string> = {
+    PROCESSING_DISPATCH_EXHAUSTED: 'LV-PRC-008',
+    PROCESSING_LICENSE_DENIED: 'LV-LIC-001',
+    REDACTION_LOCATION_MISSING: 'LV-RED-001',
+    REDACTION_SOURCE_PAGES_UNKNOWN: 'LV-RED-002',
+    REDACTION_PAGE_COUNT_MISMATCH: 'LV-RED-002',
+    REDACTION_TARGETS_NOT_APPLIED: 'LV-RED-002',
+    REDACTION_OUTPUT_EMPTY: 'LV-RED-002',
+    REDACTION_TEXT_LAYER_REMAINS: 'LV-RED-002',
+    REDACTION_ANNOTATIONS_REMAIN: 'LV-RED-002',
+    REDACTION_REGION_NOT_COVERED: 'LV-RED-002',
+    REDACTION_OUTPUT_UNPARSABLE: 'LV-RED-002',
   };
-  for (const [code, [title, sentence]] of Object.entries(expected)) {
+  for (const [code, lv] of Object.entries(expected)) {
     const reason = problemReason(code);
     assert.equal(reason.known, true, code);
-    assert.equal(reason.title, title, code);
-    assert.equal(reason.sentence, sentence, code);
-    assert.doesNotMatch(`${reason.title} ${reason.sentence}`, /[A-Z]{3,}_/, code);
-    assert.equal(problemReason(code.toLowerCase()).known, true, `${code} in lower case`);
+    assert.equal(reason.code, lv, code);
+    assert.equal(reason.title, LV_CODES[lv].title, code);
+    assert.equal(reason.sentence, LV_CODES[lv].description, code);
+    assert.equal(reason.label, `${LV_CODES[lv].title} · ${lv}`, code);
+    assert.doesNotMatch(`${reason.label} ${reason.sentence}`, /[A-Z]{3,}_/, code);
+    assert.equal(problemReason(code.toLowerCase()).code, lv, `${code} in lower case`);
   }
-  // Each redaction-check refusal keeps its own reason (no catch-all).
-  assert.equal(new Set(Object.values(expected).map(([title]) => title)).size, Object.keys(expected).length);
+  assert.equal(problemReason('REDACTION_LOCATION_MISSING').label, 'A finding has no location · LV-RED-001');
+});
+
+test('0025: the screen words for codes come only from the registry (no second list, no MODEL_TIMEOUT or SDV_UNAVAILABLE)', () => {
+  const source = readFileSync(join(resolve(here), 'words.ts'), 'utf8');
+  assert.doesNotMatch(source, /PROBLEM_REASONS|MODEL_TIMEOUT|SDV_UNAVAILABLE|OCR_TIMEOUT/);
+  for (const gone of ['MODEL_TIMEOUT', 'SDV_UNAVAILABLE']) {
+    assert.equal(problemReason(gone).known, false, gone);
+    assert.equal(problemReason(gone).code, 'LV-SYS-001', gone);
+  }
 });

@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.platform;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.WatchedFolderScanResponse;
 import com.securedoc.platform.api.security.RequireCapability;
@@ -80,7 +81,7 @@ public class PlatformAdminController {
         var principal = contextResolver.resolvePrincipal(request);
         SensitivityLevel.Received level = SensitivityLevel.fromSource(body == null ? null : body.sensitivityLevel());
         if (body == null || body.sensitivityLevel() == null || level.unknown()) {
-            throw new ValidationException("sensitivityLevel must be STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL");
+            throw new ValidationException(LvErrorCode.CFG_001, "sensitivityLevel must be STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL");
         }
         String folder = WatchedFolderSettingsService.INSTALLED_FOLDER;
         SensitivityLevel saved = watchedFolderSettings.changeSensitivityLevel(principal.tenantId(), principal.actorId(),

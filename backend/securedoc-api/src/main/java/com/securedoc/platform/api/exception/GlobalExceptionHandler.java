@@ -17,6 +17,9 @@ import com.securedoc.platform.application.licensing.LicenseEnforcementException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.observability.StructuredLogContext;
 import com.securedoc.platform.api.observability.RequestCorrelationFilter;
+import com.securedoc.platform.application.error.LvErrorCodes;
+import com.securedoc.platform.domain.error.LvCoded;
+import com.securedoc.platform.domain.error.LvErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +54,11 @@ import java.util.stream.Collectors;
  * anything unhandled), the response carries a fixed text per error code and the log carries the exception type, the
  * error code, the route pattern, the correlation id and the code location it came from ({@code origin}: class,
  * method and line of the nearest LexaVault frame), never the message.
+ *
+ * <p>Task 0025: every body carries {@code code}, the LexaVault error code, and {@code message} is that code's title
+ * (for {@code LV-CFG-001}, "Setting not valid", followed by the field and allowed range LexaVault's own message gives).
+ * {@code errorCode} stays the internal identifier (API version 1). HTTP statuses are unchanged. A failure without a
+ * code gets {@code LV-SYS-001} and the gap is logged with its type ({@code LV_CODE_UNMAPPED}).
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -119,7 +127,7 @@ public class GlobalExceptionHandler {
                 Map.of("reasonCode", ex.errorCode(), "licenseStatus", ex.status().name()),
                 "Tenant license rejected the requested operation");
         return ResponseEntity.status(status)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationIdForError(request)));
     }
 
     @ExceptionHandler(ValidationException.class)
@@ -128,7 +136,7 @@ public class GlobalExceptionHandler {
         StructuredLogContext.warn(log, "REQUEST_VALIDATION_REJECTED",
                 Map.of("reasonCode", ex.errorCode()), "Request validation rejected");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), ex.getMessage(), correlationId));
     }
 
     @ExceptionHandler(IntakeExpiredException.class)
@@ -136,7 +144,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.warn("INTAKE_EXPIRED_REJECTED code={} route={} correlation={}", ex.errorCode(), route(request), correlationId);
         return ResponseEntity.status(HttpStatus.GONE)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationId));
     }
 
     @ExceptionHandler(IntakeConflictException.class)
@@ -144,7 +152,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.warn("INTAKE_CONFLICT_REJECTED code={} route={} correlation={}", ex.errorCode(), route(request), correlationId);
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationId));
     }
 
     /**
@@ -162,7 +170,8 @@ public class GlobalExceptionHandler {
                     ex.reasonCode(), route(request), correlationId);
         }
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiErrorResponse.of("SECURITY_CONTEXT_INVALID", SECURITY_CONTEXT_MESSAGE, correlationId));
+                .body(ApiErrorResponse.of("SECURITY_CONTEXT_INVALID", LvErrorCodes.forAdmissionReason(ex.reasonCode()),
+                        correlationId));
     }
 
 
@@ -176,7 +185,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.warn("REQUEST_BODY_INVALID route={} correlation={}", route(request), correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("INVALID_REQUEST_BODY", "Request body is malformed or contains an invalid value type", correlationId));
+                .body(ApiErrorResponse.of("INVALID_REQUEST_BODY", LvErrorCode.INT_001, correlationId));
     }
 
     @ExceptionHandler(TechnicalDependencyException.class)
@@ -188,21 +197,17 @@ public class GlobalExceptionHandler {
                 route(request), ex.dependency(), ex.failureCode(),
                 ex.retryable(), ex.attempts(), correlationId);
         return ResponseEntity.status(status)
-                .body(ApiErrorResponse.of(ex.failureCode().name(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.failureCode().name(), LvErrorCodes.of(ex), correlationId));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleBindingValidation(MethodArgumentNotValidException ex,
                                                                      HttpServletRequest request) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(f -> f.getField() + ": " + f.getDefaultMessage())
-                .reduce((a, b) -> a + "; " + b)
-                .orElse("Validation failed");
         String correlationId = correlationIdForError(request);
         log.warn("REQUEST_VALIDATION_REJECTED code=VALIDATION_ERROR fields={} route={} correlation={}",
                 ex.getBindingResult().getFieldErrorCount(), route(request), correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("VALIDATION_ERROR", message, correlationId));
+                .body(ApiErrorResponse.of("VALIDATION_ERROR", LvErrorCode.INT_003, correlationId));
     }
 
     @ExceptionHandler(NotFoundException.class)
@@ -210,14 +215,14 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.info("NOT_FOUND_REJECTED code={} route={} correlation={}", ex.errorCode(), route(request), correlationId);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationId));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
         if (accessDeniedAuditRecorder != null) accessDeniedAuditRecorder.recordIfNotYet(request, ex);
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationIdForError(request)));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationIdForError(request)));
     }
 
     @ExceptionHandler(CapabilityNotEnabledException.class)
@@ -227,7 +232,7 @@ public class GlobalExceptionHandler {
         log.warn("CAPABILITY_DISABLED_REJECTED code={} route={} correlation={}", ex.errorCode(), route(request),
                 correlationId);
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCode.AUT_010, correlationId));
     }
 
     /** #264: the person's entity exists but is not active: 403 with its own code and a fixed text. */
@@ -237,7 +242,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         logRejected("TENANT_INACTIVE_REJECTED", "TENANT_INACTIVE", ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiErrorResponse.of("TENANT_INACTIVE", "This organization is not active.", correlationId));
+                .body(ApiErrorResponse.of("TENANT_INACTIVE", LvErrorCode.AUT_005, correlationId));
     }
 
     /** B5: a state refusal LexaVault wrote for the person (fixed text, no content): its message is sent. */
@@ -247,7 +252,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         logRejected("INVALID_STATE_REJECTED", "INVALID_STATE", ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiErrorResponse.of("INVALID_STATE", ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of("INVALID_STATE", LvErrorCodes.of(ex), correlationId));
     }
 
     /**
@@ -259,7 +264,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         logRejected("INVALID_STATE_REJECTED", "INVALID_STATE", ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiErrorResponse.of("INVALID_STATE", INVALID_STATE_MESSAGE, correlationId));
+                .body(ApiErrorResponse.of("INVALID_STATE", LvErrorCodes.of(ex), correlationId));
     }
 
     /** #290: the message can echo a value the client sent (UUID or enum parsing), so it is never sent or logged. */
@@ -269,7 +274,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         logRejected("INVALID_ARGUMENT_REJECTED", "INVALID_ARGUMENT", ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("INVALID_ARGUMENT", "Invalid request parameter", correlationId));
+                .body(ApiErrorResponse.of("INVALID_ARGUMENT", argumentCode(ex, request), correlationId));
     }
 
     /** #293: names the parameter (LexaVault's own name), never the value sent. */
@@ -281,7 +286,7 @@ public class GlobalExceptionHandler {
         log.warn("PARAMETER_TYPE_REJECTED code=INVALID_ARGUMENT parameter={} route={} correlation={}",
                 name == null ? "unknown" : name, route(request), correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("INVALID_ARGUMENT", name == null ? "Invalid request parameter"
+                .body(ApiErrorResponse.of("INVALID_ARGUMENT", argumentCode(null, request), name == null ? null
                         : "Invalid value for request parameter '" + name + "'", correlationId));
     }
 
@@ -291,8 +296,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.warn("UPLOAD_TOO_LARGE_REJECTED code=FILE_TOO_LARGE route={} correlation={}", route(request), correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("FILE_TOO_LARGE", "Upload exceeds maximum allowed size",
-                        correlationId));
+                .body(ApiErrorResponse.of("FILE_TOO_LARGE", LvErrorCode.INT_004, correlationId));
     }
 
     /** D1 (#7): a required header is missing (for example {@code Idempotency-Key} or {@code X-Content-SHA256}). */
@@ -354,8 +358,8 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         logRejected("REQUEST_REJECTED", "METHOD_NOT_ALLOWED", ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ApiErrorResponse.of("METHOD_NOT_ALLOWED", "This endpoint does not accept that HTTP method",
-                        correlationId));
+                .body(ApiErrorResponse.of("METHOD_NOT_ALLOWED",
+                        LvErrorCodes.forDetailOrFallback("METHOD_NOT_ALLOWED", "api"), correlationId));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
@@ -363,14 +367,16 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.info("NOT_FOUND_REJECTED code=NOT_FOUND type={} correlation={}", ex.getClass().getSimpleName(), correlationId);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiErrorResponse.of("NOT_FOUND", "No such endpoint", correlationId));
+                .body(ApiErrorResponse.of("NOT_FOUND", LvErrorCodes.forDetailOrFallback("NO_SUCH_ENDPOINT", "api"),
+                        correlationId));
     }
 
     private ResponseEntity<ApiErrorResponse> clientMistake(String code, String message, Exception ex,
                                                            HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
         logRejected("REQUEST_REJECTED", code, ex, request, correlationId);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiErrorResponse.of(code, message, correlationId));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiErrorResponse.of(code, LvErrorCodes.forDetailOrFallback(code, "api"), correlationId));
     }
 
     /** #331: an ApplicationException not handled above: its code is logged with type and origin. */
@@ -381,7 +387,7 @@ public class GlobalExceptionHandler {
         log.error("APPLICATION_EXCEPTION code={} type={} origin={} route={} correlation={}", ex.errorCode(),
                 ex.getClass().getSimpleName(), origin(ex), route(request), correlationId);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationId));
     }
 
     /** #331: the log now names where the fault happened (origin) and the request's correlation id. */
@@ -392,8 +398,21 @@ public class GlobalExceptionHandler {
                 Map.of("reasonCode", ex.getClass().getSimpleName(), "component", origin(ex)),
                 "Unhandled exception route=" + route(request) + " correlation=" + correlationId);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of("INTERNAL_ERROR", "An unexpected error occurred",
-                        correlationId));
+                .body(ApiErrorResponse.of("INTERNAL_ERROR", LvErrorCode.SYS_001, correlationId));
+    }
+
+    /**
+     * The code for a refused argument (#290, #293): the thrower's own code when it has one (for example a box that
+     * is not valid, LV-REV-006); a value on an intake route is LV-INT-003 (#3, #6); otherwise LV-CFG-001.
+     */
+    static LvErrorCode argumentCode(Throwable ex, HttpServletRequest request) {
+        if (ex instanceof LvCoded coded && coded.lvCode() != null) return coded.lvCode();
+        String route = request == null ? "" : route(request);
+        if (route.startsWith("/api/v1/packages") || route.startsWith("/api/v1/external-intakes")
+                || route.startsWith("/api/v1/scanner-intakes")) {
+            return LvErrorCode.INT_003;
+        }
+        return LvErrorCode.CFG_001;
     }
 
     private String correlationIdForError(HttpServletRequest request) {
@@ -413,7 +432,6 @@ public class GlobalExceptionHandler {
                 "Review decision refused: already decided");
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiErrorResponse.of(com.securedoc.platform.application.exception.ReviewAlreadyDecidedException.ERROR_CODE,
-                        com.securedoc.platform.application.exception.ReviewAlreadyDecidedException.MESSAGE,
-                        correlationIdForError(request)));
+                        LvErrorCode.REV_001, correlationIdForError(request)));
     }
 }

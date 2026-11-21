@@ -61,9 +61,9 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
                 else if(j.hasNonNull("documentId"))ref=j.get("documentId").asText();
             }
         }catch(Exception e){
-            throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived destination returned an unreadable receipt",e);
+            throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived destination returned an unreadable receipt",e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
         }
-        if(ref==null||ref.isBlank())throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived destination did not return a durable receipt",null);
+        if(ref==null||ref.isBlank())throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived destination did not return a durable receipt",null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
         return new DeliveryReceipt(ref,c.endpoint());});}
     private DeliveryReceipt deliverFile(IntegrationConnection c,DeliveryRequest r){
         Path root=safeRoot(c);String name=r.sourceDerivedDocumentId()+"__"+sanitize(r.fileName());Path target=root.resolve(name).normalize();if(!target.startsWith(root))throw invalid("Derived file path escaped configured root",null);
@@ -102,7 +102,7 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
     private String secret(String ref){if(ref==null||ref.isBlank())throw invalid("Protected destination secret reference is missing",null);String v=null;if(ref.startsWith("env:"))v=System.getenv(ref.substring(4));else if(ref.startsWith("sys:"))v=System.getProperty(ref.substring(4));else throw invalid("Unsupported protected secret reference provider",null);if(v==null||v.isBlank())throw invalid("Configured destination secret is unavailable",null);return v;}
     private <T> HttpResponse<T> send(HttpRequest req,HttpResponse.BodyHandler<T> h){try{return client.send(req,h);}catch(InterruptedException e){Thread.currentThread().interrupt();throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived delivery interrupted",e);}catch(IOException e){throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived destination unavailable",e);}}
     private <T>T withRetry(IntegrationConnection c,java.util.function.Supplier<T> op){TechnicalDependencyException last=null;int max=Math.max(1,c.retryMaxAttempts()+1);for(int i=1;i<=max;i++){try{return op.get();}catch(TechnicalDependencyException e){last=e;if(!e.retryable()||i==max)throw e.withAttempts(i);try{Thread.sleep(Math.min(1000L*i,3000L));}catch(InterruptedException x){Thread.currentThread().interrupt();throw e.withAttempts(i);}}}throw last;}
-    private void require2xx(int status,String message){if(status<200||status>=300){boolean retry=status==429||status>=500;throw failure(retry,retry?TechnicalFailureCode.DELIVERY_IO:TechnicalFailureCode.DELIVERY_DESTINATION_INVALID,message,null);}}
+    private void require2xx(int status,String message){if(status<200||status>=300){boolean retry=status==429||status>=500;throw failure(retry,retry?TechnicalFailureCode.DELIVERY_IO:TechnicalFailureCode.DELIVERY_DESTINATION_INVALID,message,null).withLvCode(status==401||status==403?com.securedoc.platform.domain.error.LvErrorCode.DLV_005:retry?com.securedoc.platform.domain.error.LvErrorCode.DLV_002:status>=400?com.securedoc.platform.domain.error.LvErrorCode.DLV_004:com.securedoc.platform.domain.error.LvErrorCode.DLV_007);}}
     private TechnicalDependencyException invalid(String msg,Throwable cause){return failure(false,TechnicalFailureCode.DELIVERY_DESTINATION_INVALID,msg,cause);}private TechnicalDependencyException failure(boolean retryable,TechnicalFailureCode code,String msg,Throwable cause){return new TechnicalDependencyException(TechnicalDependency.DELIVERY,code,retryable,msg,cause);}
     private String sanitize(String s){String x=s==null?"document.pdf":s.replaceAll("[^A-Za-z0-9._-]+","_");return x.isBlank()?"document.pdf":x;}private String safeHeader(String s){return (s==null?"":s).replace("\r","_").replace("\n","_");}
 }

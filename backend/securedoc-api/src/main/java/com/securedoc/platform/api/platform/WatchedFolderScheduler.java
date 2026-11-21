@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.platform;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.dto.WatchedFolderScanResponse;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.AccessDeniedException;
@@ -75,7 +76,7 @@ public class WatchedFolderScheduler {
     public WatchedFolderScanResponse scanManual(AuthenticatedPrincipal principal, CorrelationId correlationId) {
         TenantId configuredTenant = configuredWatchedFolderTenant();
         if (configuredTenant == null || !configuredTenant.equals(principal.tenantId())) {
-            throw new AccessDeniedException("Watched-folder intake is not configured for this tenant");
+            throw new AccessDeniedException(LvErrorCode.CFG_007, "Watched-folder intake is not configured for this tenant");
         }
         return scan(principal, correlationId, "MANUAL");
     }
@@ -153,8 +154,8 @@ public class WatchedFolderScheduler {
             last.set(new Snapshot(Instant.now(), "FAILED", null));
             String exceptionType = e.getClass().getSimpleName();
             auditService.recordFailure(principal.tenantId(), principal.actorId(), AuditAction.WATCHED_FOLDER_SCAN_TRIGGERED,
-                    "WatchedFolder", mode, correlationId, "Watched-folder scan failed: mode=" + mode
-                            + ", reasonCode=SCAN_FAILED, exceptionType=" + exceptionType);
+                    "WatchedFolder", mode, correlationId, "Watched-folder scan failed: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.domain.error.LvErrorCode.INT_034, "SCAN_FAILED",
+                            "mode=" + mode + ", exceptionType=" + exceptionType));
             // The type only: the message and the cause of a folder failure can name filesystem paths.
             log.warn("WATCHED_FOLDER_SCAN_FAILED mode={} nodeId={} fencingToken={} reasonCode=SCAN_FAILED exceptionType={}",
                     mode, logicalNodeId(), scanLease.get().fencingToken(), exceptionType);

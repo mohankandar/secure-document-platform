@@ -172,9 +172,11 @@ test('a person with no LexaVault role sees the no-access page with Sign out and 
   await mockIdentityProvider(page);
   await mockApi(page, [], new Set());
   await signIn(page);
-  await expect(page.getByRole('heading', { name: "You don't have access to anything in LexaVault yet" })).toBeVisible();
+  // Task 0025: the title and the code only (LV-AUT-002 when the server gave none); no exact reason on screen.
+  await expect(page.getByRole('heading', { name: 'No access to LexaVault · LV-AUT-002' })).toBeVisible();
   await expect(page.getByText('error.user@example.test')).toBeVisible();
-  await expect(page.getByText('Ask your administrator to add you to a LexaVault group, then sign in again.')).toBeVisible();
+  await expect(page.getByText('Ask your administrator for access and give them the code above, then sign in again.')).toBeVisible();
+  await expect(page.getByText(/LexaVault role|LexaVault group/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 });

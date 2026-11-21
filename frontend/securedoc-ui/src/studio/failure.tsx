@@ -49,9 +49,10 @@ export function failureDetails(error: unknown, request?: string): { reference?: 
   if (error instanceof LoadFailure) {
     return { reference: error.reference, request: error.request, cause: error.kind === 'shape' ? 'unexpected response shape' : error.message };
   }
-  const e = (isRecord(error) ? error : {}) as { correlationId?: unknown; httpStatus?: unknown; errorCode?: unknown; message?: unknown };
+  const e = (isRecord(error) ? error : {}) as { correlationId?: unknown; httpStatus?: unknown; errorCode?: unknown; code?: unknown; message?: unknown };
   const status = typeof e.httpStatus === 'number' ? `HTTP ${e.httpStatus}` : undefined;
-  const code = typeof e.errorCode === 'string' ? e.errorCode : undefined;
+  // Task 0025: the LV code first, then the internal detail.
+  const code = [typeof e.code === 'string' ? e.code : undefined, typeof e.errorCode === 'string' ? e.errorCode : undefined].filter(Boolean).join(' · ') || undefined;
   const message = error instanceof Error ? error.message : typeof e.message === 'string' ? e.message : undefined;
   return {
     reference: typeof e.correlationId === 'string' ? e.correlationId : undefined,

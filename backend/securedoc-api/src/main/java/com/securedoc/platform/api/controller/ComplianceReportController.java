@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.controller;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.AccessDeniedAuditRecorder;
 import com.securedoc.platform.api.security.ProductAuthorizationPolicy;
@@ -64,7 +65,7 @@ public class ComplianceReportController {
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
         CorrelationId correlationId = contextResolver.resolveCorrelationId(request);
         if (body == null || body.includeFullAuditTrail() == null) {
-            throw new ValidationException("includeFullAuditTrail is required (true or false)");
+            throw new ValidationException(LvErrorCode.CFG_001, "includeFullAuditTrail is required (true or false)");
         }
         ComplianceEdition edition = body.includeFullAuditTrail() ? ComplianceEdition.FULL : ComplianceEdition.SUMMARY;
         if (!mayCreate(principal, edition)) {

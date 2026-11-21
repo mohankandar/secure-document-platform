@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.identity;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,7 +45,7 @@ public class JdbcTenantOidcGroupGrantRepository implements TenantOidcGroupGrantR
             String rawRole = rs.getString("product_role");
             if (rawRole == null || !Set.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR",
                     "BUSINESS_ADMIN", "REPORT_VIEWER", "TENANT_IT_ADMIN").contains(rawRole)) {
-                throw new IllegalStateException("Invalid or platform-level tenant group role configuration");
+                throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.AUT_007, "Invalid or platform-level tenant group role configuration");
             }
             groups.computeIfAbsent(tenant, k -> new LinkedHashMap<>())
                     .computeIfAbsent(externalGroup, k -> new LinkedHashSet<>()).add(rawRole);

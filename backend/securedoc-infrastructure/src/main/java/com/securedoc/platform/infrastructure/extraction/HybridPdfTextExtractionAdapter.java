@@ -99,7 +99,7 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
         try {
             ByteArrayOutputStream png = new ByteArrayOutputStream();
             if (!ImageIO.write(image, "png", png)) {
-                throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "Unable to render PDF page for OCR");
+                throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "Unable to render PDF page for OCR", com.securedoc.platform.domain.error.LvErrorCode.PRC_006);
             }
 
             OcrPort.OcrPageOutput output = ocrPort.recognize(new OcrPort.OcrPageInput(
@@ -109,13 +109,13 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
             if (output.text().isBlank() && !visuallyBlank) {
                 throw new OcrProcessingException(
                         TechnicalFailureCode.OCR_PROCESS_FAILED, false,
-                        "OCR produced no readable text for a non-blank page");
+                        "OCR produced no readable text for a non-blank page", com.securedoc.platform.domain.error.LvErrorCode.PRC_002);
             }
             if (!output.text().isBlank()
                     && output.confidence() < clamp01(properties.getMinimumPageConfidence())) {
                 throw new OcrProcessingException(
                         TechnicalFailureCode.OCR_PROCESS_FAILED, false,
-                        "OCR confidence is below the configured minimum");
+                        "OCR confidence is below the configured minimum", com.securedoc.platform.domain.error.LvErrorCode.PRC_003);
             }
 
             PDRectangle mediaBox = page.getMediaBox();

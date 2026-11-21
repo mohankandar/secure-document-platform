@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.review.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.ConfirmFindingUseCase;
@@ -125,12 +126,12 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
 
         // 2. Verify task is IN_PROGRESS
         if (task.status() != ReviewStatus.IN_PROGRESS) {
-            throw new ValidationException("Review task is not in IN_PROGRESS status");
+            throw new ValidationException(LvErrorCode.REV_002, "Review task is not in IN_PROGRESS status");
         }
 
         // 3. Verify actor is assigned reviewer
         if (task.assignedTo().isEmpty() || !task.assignedTo().get().equals(actorId)) {
-            throw new ValidationException("Only the assigned reviewer can perform finding actions");
+            throw new ValidationException(LvErrorCode.REV_005, "Only the assigned reviewer can perform finding actions");
         }
 
         // 4. Load finding and verify it belongs to the same package
@@ -143,7 +144,7 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
                 .orElseThrow(() -> new NotFoundException("Document", finding.documentId().toString()));
 
         if (!document.packageId().equals(task.packageId())) {
-            throw new ValidationException("Finding does not belong to the review task's package");
+            throw new ValidationException(LvErrorCode.REV_002, "Finding does not belong to the review task's package");
         }
         return task.packageId();
     }

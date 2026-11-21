@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.business.admin;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.operations.TimeSavedRule;
 import com.securedoc.platform.application.exception.AuthoredMessages;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -77,21 +78,21 @@ public final class BusinessAdminConfigurationService {
                                                                  CorrelationId correlationId,
                                                                  List<IdentifierConfigurationInput> requested) {
         if (requested == null || requested.isEmpty()) {
-            throw new ValidationException("At least one active business identifier is required");
+            throw new ValidationException(LvErrorCode.CFG_001, "At least one active business identifier is required");
         }
         long primaryCount = requested.stream().filter(IdentifierConfigurationInput::primary).count();
         if (primaryCount != 1) {
-            throw new ValidationException("Exactly one active business identifier must be Primary");
+            throw new ValidationException(LvErrorCode.CFG_001, "Exactly one active business identifier must be Primary");
         }
         IdentifierConfigurationInput primary = requested.stream()
                 .filter(IdentifierConfigurationInput::primary)
                 .findFirst()
                 .orElseThrow();
         if (!primary.required()) {
-            throw new ValidationException("The Primary business identifier must also be Required");
+            throw new ValidationException(LvErrorCode.CFG_001, "The Primary business identifier must also be Required");
         }
         if (!primary.displayable()) {
-            throw new ValidationException("The Primary business identifier must be Displayable");
+            throw new ValidationException(LvErrorCode.CFG_001, "The Primary business identifier must be Displayable");
         }
 
         Set<UUID> requestIds = new HashSet<>();
@@ -99,11 +100,11 @@ public final class BusinessAdminConfigurationService {
         for (IdentifierConfigurationInput input : requested) {
             requireLabel(input.label());
             if (input.id() != null && !requestIds.add(input.id())) {
-                throw new ValidationException("Duplicate business identifier definition id");
+                throw new ValidationException(LvErrorCode.CFG_001, "Duplicate business identifier definition id");
             }
             String normalizedLabel = input.label().trim().toLowerCase(Locale.ROOT);
             if (!labels.add(normalizedLabel)) {
-                throw new ValidationException("Business identifier labels must be unique");
+                throw new ValidationException(LvErrorCode.CFG_001, "Business identifier labels must be unique");
             }
         }
 
@@ -122,7 +123,7 @@ public final class BusinessAdminConfigurationService {
             if (input.id() != null) {
                 BusinessIdentifierDefinition definition = existingById.get(input.id());
                 if (definition == null) {
-                    throw new ValidationException("Business identifier definition does not belong to this tenant");
+                    throw new ValidationException(LvErrorCode.CFG_001, "Business identifier definition does not belong to this tenant");
                 }
                 if (!hasValidationConfiguration(input)) {
                     active.add(definition.reconfigure(input.label(), input.required(), input.primary(),
@@ -131,7 +132,7 @@ public final class BusinessAdminConfigurationService {
                     BusinessIdentifierCaseNormalization requestedCase = parseCaseNormalization(input.caseNormalization());
                     boolean requestedStripSeparators = Boolean.TRUE.equals(input.stripSeparators());
                     if (requestedCase != definition.caseNormalization() || requestedStripSeparators != definition.stripSeparators()) {
-                        throw new ValidationException("Canonical normalization cannot be changed for an existing business identifier in V1");
+                        throw new ValidationException(LvErrorCode.CFG_001, "Canonical normalization cannot be changed for an existing business identifier in V1");
                     }
                     try {
                         active.add(definition.reconfigure(input.label(), input.required(), input.primary(),
@@ -139,7 +140,7 @@ public final class BusinessAdminConfigurationService {
                                 parseValidationType(input.validationType()), input.exactLength(), input.minLength(), input.maxLength(),
                                 requestedCase, requestedStripSeparators, safeAllowedValues(input.allowedValues()), input.customPattern()));
                     } catch (IllegalArgumentException e) {
-                        throw new ValidationException("Invalid validation configuration for " + input.label() + ": "
+                        throw new ValidationException(LvErrorCode.CFG_001, "Invalid validation configuration for " + input.label() + ": "
                                 + AuthoredMessages.messageOr(e, "the validation settings are not valid"));
                     }
                 }
@@ -154,7 +155,7 @@ public final class BusinessAdminConfigurationService {
                             parseCaseNormalization(input.caseNormalization()), Boolean.TRUE.equals(input.stripSeparators()),
                             safeAllowedValues(input.allowedValues()), input.customPattern()));
                 } catch (IllegalArgumentException e) {
-                    throw new ValidationException("Invalid validation configuration for " + input.label() + ": "
+                    throw new ValidationException(LvErrorCode.CFG_001, "Invalid validation configuration for " + input.label() + ": "
                                 + AuthoredMessages.messageOr(e, "the validation settings are not valid"));
                 }
             }
@@ -183,16 +184,16 @@ public final class BusinessAdminConfigurationService {
                                                             ReviewMode reviewMode,
                                                             boolean maskSsnLastFour) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
-            throw new ValidationException("At least one sensitive-data category must be enabled");
+            throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
         if (!TenantRedactionPolicy.v1ConfigurableTypes().containsAll(enabledTypes)) {
-            throw new ValidationException("Sensitive-data policy contains an unsupported V1 category");
+            throw new ValidationException(LvErrorCode.CFG_001, "Sensitive-data policy contains an unsupported V1 category");
         }
         if (autoRedactThreshold < MIN_THRESHOLD || autoRedactThreshold > MAX_THRESHOLD) {
-            throw new ValidationException("Automatic redaction threshold must be between 0.50 and 0.99");
+            throw new ValidationException(LvErrorCode.CFG_001, "Automatic redaction threshold must be between 0.50 and 0.99");
         }
         if (reviewMode == null) {
-            throw new ValidationException("Review mode is required");
+            throw new ValidationException(LvErrorCode.CFG_001, "Review mode is required");
         }
 
         Optional<TenantRedactionPolicy> previous = policyRepository.findByTenantId(tenantId);
@@ -242,7 +243,7 @@ public final class BusinessAdminConfigurationService {
             policy = new TenantLifecyclePolicy(tenantId, originalRetentionHours, redactedCacheHours,
                     neverExportedHoldHours, finalApprovalRequired, Instant.now());
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(AuthoredMessages.messageOr(e, "The settings are not valid"));
+            throw new ValidationException(LvErrorCode.CFG_001, AuthoredMessages.messageOr(e, "The settings are not valid"));
         }
         Optional<TenantLifecyclePolicy> previousLifecycle = lifecyclePolicyRepository.findByTenantId(tenantId);
         if (previousLifecycle.isPresent() && sameLifecyclePolicy(previousLifecycle.get(), policy)) {
@@ -308,10 +309,10 @@ public final class BusinessAdminConfigurationService {
 
     private void requireLabel(String value) {
         if (value == null || value.trim().isEmpty()) {
-            throw new ValidationException("Business identifier label is required");
+            throw new ValidationException(LvErrorCode.CFG_001, "Business identifier label is required");
         }
         if (value.trim().length() > 128) {
-            throw new ValidationException("Business identifier label must be 128 characters or fewer");
+            throw new ValidationException(LvErrorCode.CFG_001, "Business identifier label must be 128 characters or fewer");
         }
     }
 
@@ -346,14 +347,14 @@ public final class BusinessAdminConfigurationService {
         for (UUID definitionId : requested) {
             BusinessIdentifierDefinition definition = byId.get(definitionId);
             if (definition == null) {
-                throw new ValidationException("Reporting dimension does not belong to this tenant or is inactive");
+                throw new ValidationException(LvErrorCode.CFG_001, "Reporting dimension does not belong to this tenant or is inactive");
             }
             // V1 reporting dimensions must be low-cardinality, tenant-controlled values.
             // allowedValues is enforced by BusinessIdentifierValidator for every validation type,
             // so a NUMERIC/ALPHANUMERIC/etc. identifier with an explicit small allowed-value set
             // is just as safe for reporting as validationType=ALLOW_LIST.
             if (definition.allowedValues().isEmpty() || definition.allowedValues().size() > 100) {
-                throw new ValidationException("Reporting dimensions must define 1-100 allowed values");
+                throw new ValidationException(LvErrorCode.CFG_001, "Reporting dimensions must define 1-100 allowed values");
             }
             dimensions.add(new ReportingConfiguration.Dimension(definition.id().value(), definition.key(),
                     definition.label(), true, order++));
@@ -368,7 +369,7 @@ public final class BusinessAdminConfigurationService {
             configuration = new ReportingConfiguration(dimensions, deliveryTargetMinutes, deliveryTargetPercent,
                     straightThroughTargetPercent, reviewWaitTargetMinutes, reviewPercent, perPage);
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(AuthoredMessages.messageOr(e, "The settings are not valid"));
+            throw new ValidationException(LvErrorCode.CFG_001, AuthoredMessages.messageOr(e, "The settings are not valid"));
         }
         if (sameReportingConfiguration(stored, configuration)) {
             // Task 0020 B2: a save that changes nothing writes no audit record (and nothing is saved), as task 0017.
@@ -425,7 +426,7 @@ public final class BusinessAdminConfigurationService {
         try {
             return BusinessIdentifierValidationType.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unsupported business identifier validation type");
+            throw new ValidationException(LvErrorCode.CFG_001, "Unsupported business identifier validation type");
         }
     }
 
@@ -434,7 +435,7 @@ public final class BusinessAdminConfigurationService {
         try {
             return BusinessIdentifierCaseNormalization.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unsupported business identifier case normalization");
+            throw new ValidationException(LvErrorCode.CFG_001, "Unsupported business identifier case normalization");
         }
     }
 

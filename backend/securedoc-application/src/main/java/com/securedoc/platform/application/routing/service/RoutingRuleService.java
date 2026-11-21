@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.routing.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
@@ -32,22 +33,22 @@ public final class RoutingRuleService {
     public RoutingRule create(TenantId tenantId, ActorId actorId, CorrelationId correlationId, RoutingRuleInput input){
         validate(tenantId,input,null); RoutingRule rule;
         try { rule=RoutingRule.create(tenantId,input.destinationLabel(),input.markerType(),input.markerValue(),input.scanRegion(),input.destinationConnectionId(),input.enabled(),Instant.now()); }
-        catch(IllegalArgumentException e){throw new ValidationException(e.getMessage());}
+        catch(IllegalArgumentException e){throw new ValidationException(LvErrorCode.CFG_006, e.getMessage());}
         rules.save(rule); audit.recordSuccess(tenantId,actorId, AuditAction.ROUTING_RULE_CREATED,"RoutingRule",rule.id().toString(),correlationId,safe(rule)); return rule;
     }
     public RoutingRule update(TenantId tenantId, UUID id, ActorId actorId, CorrelationId correlationId, RoutingRuleInput input){
         RoutingRule rule=get(tenantId,id); validate(tenantId,input,id);
         try { rule.update(input.destinationLabel(),input.markerType(),input.markerValue(),input.scanRegion(),input.destinationConnectionId(),input.enabled(),Instant.now()); }
-        catch(IllegalArgumentException e){throw new ValidationException(e.getMessage());}
+        catch(IllegalArgumentException e){throw new ValidationException(LvErrorCode.CFG_006, e.getMessage());}
         rules.save(rule); audit.recordSuccess(tenantId,actorId,AuditAction.ROUTING_RULE_UPDATED,"RoutingRule",id.toString(),correlationId,safe(rule)); return rule;
     }
     public void delete(TenantId tenantId, UUID id, ActorId actorId, CorrelationId correlationId){ get(tenantId,id); rules.delete(tenantId,id); audit.recordSuccess(tenantId,actorId,AuditAction.ROUTING_RULE_DELETED,"RoutingRule",id.toString(),correlationId,"Routing rule removed"); }
     private void validate(TenantId tenantId, RoutingRuleInput input, UUID exclude){
-        if(input==null) throw new ValidationException("Routing rule input is required");
-        var c=connections.findByTenantIdAndId(tenantId,input.destinationConnectionId()).orElseThrow(()->new ValidationException("Derived delivery destination was not found for this tenant"));
-        if(c.purpose()!= IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY || c.direction()!= IntegrationDirection.OUTBOUND) throw new ValidationException("Routing rule destination must be an outbound derived-document delivery connection");
-        if(!c.enabled()) throw new ValidationException("Routing rule destination must be enabled before it can be mapped");
-        if(rules.existsDuplicate(tenantId,input.markerType(),input.markerValue(),input.scanRegion(),exclude)) throw new ValidationException("A routing rule already exists for this marker and scan region");
+        if(input==null) throw new ValidationException(LvErrorCode.CFG_006, "Routing rule input is required");
+        var c=connections.findByTenantIdAndId(tenantId,input.destinationConnectionId()).orElseThrow(()->new ValidationException(LvErrorCode.CFG_006, "Derived delivery destination was not found for this tenant"));
+        if(c.purpose()!= IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY || c.direction()!= IntegrationDirection.OUTBOUND) throw new ValidationException(LvErrorCode.CFG_006, "Routing rule destination must be an outbound derived-document delivery connection");
+        if(!c.enabled()) throw new ValidationException(LvErrorCode.CFG_006, "Routing rule destination must be enabled before it can be mapped");
+        if(rules.existsDuplicate(tenantId,input.markerType(),input.markerValue(),input.scanRegion(),exclude)) throw new ValidationException(LvErrorCode.CFG_006, "A routing rule already exists for this marker and scan region");
     }
     private String safe(RoutingRule r){ return "markerType="+r.markerType()+",scanRegion="+r.scanRegion()+",destinationLabel="+r.destinationLabel()+",enabled="+r.enabled(); }
 }

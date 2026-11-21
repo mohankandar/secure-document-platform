@@ -42,6 +42,32 @@ class BridgeRequestSecurityFilterTest {
         assertNull(chain.getRequest());
     }
 
+    /** Task 0025: both refusals carry errorCode as before, the LV code and its title as message. */
+    @Test
+    void refusalBodiesCarryTheLvCodeAndTitle() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        Fixture fixture = fixture();
+
+        MockHttpServletRequest hostile = request("GET", "/api/v1/scanner-status");
+        hostile.addHeader("Origin", "https://hostile.example");
+        MockHttpServletResponse originRefused = new MockHttpServletResponse();
+        fixture.filter.doFilter(hostile, originRefused, new MockFilterChain());
+        var origin = mapper.readTree(originRefused.getContentAsString());
+        assertEquals("BRIDGE_ORIGIN_NOT_ALLOWED", origin.get("errorCode").asText());
+        assertEquals("LV-SCN-012", origin.get("code").asText());
+        assertEquals("Scan Bridge refused the request", origin.get("message").asText());
+
+        MockHttpServletRequest noToken = request("POST", "/api/v1/scan-sessions");
+        noToken.addHeader("Origin", "http://localhost:5173");
+        MockHttpServletResponse tokenRefused = new MockHttpServletResponse();
+        fixture.filter.doFilter(noToken, tokenRefused, new MockFilterChain());
+        var token = mapper.readTree(tokenRefused.getContentAsString());
+        assertEquals(403, tokenRefused.getStatus());
+        assertEquals("BRIDGE_REQUEST_TOKEN_INVALID", token.get("errorCode").asText());
+        assertEquals("LV-SCN-012", token.get("code").asText());
+        assertEquals("Scan Bridge refused the request", token.get("message").asText());
+    }
+
     @Test
     void allowsMutationFromTrustedOriginWithCurrentToken() throws Exception {
         Fixture fixture = fixture();

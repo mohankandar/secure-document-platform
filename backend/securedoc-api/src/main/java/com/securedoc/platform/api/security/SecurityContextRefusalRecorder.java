@@ -69,7 +69,8 @@ public class SecurityContextRefusalRecorder {
     }
 
     static String detail(String method, String route, String reasonCode) {
-        return "method=" + method + ", route=" + route + ", reason=" + reasonCode;
+        return com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.forAdmissionReason(reasonCode), reasonCode, null)
+                + ", method=" + method + ", route=" + route + ", reason=" + reasonCode;
     }
 
     private static CorrelationId correlation(String correlationId) {

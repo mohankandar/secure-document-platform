@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intelligence.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.DocumentIntelligenceBundleRepository;
 import com.securedoc.platform.application.port.out.TenantDocumentIntelligencePolicyRepository;
@@ -112,31 +113,31 @@ public final class DocumentIntelligenceConfigurationService {
 
     private void requireKnown(String version) {
         bundleRepository.findByVersion(version)
-                .orElseThrow(() -> new ValidationException("Selected document intelligence bundle does not exist"));
+                .orElseThrow(() -> new ValidationException(LvErrorCode.CFG_001, "Selected document intelligence bundle does not exist"));
     }
 
     private void requireSelectable(String version) {
         DocumentIntelligenceBundle bundle = bundleRepository.findByVersion(version)
-                .orElseThrow(() -> new ValidationException("Selected document intelligence bundle does not exist"));
+                .orElseThrow(() -> new ValidationException(LvErrorCode.CFG_001, "Selected document intelligence bundle does not exist"));
         if (!bundle.selectableForTenant()) {
-            throw new ValidationException("Selected document intelligence bundle is not promoted for tenant use");
+            throw new ValidationException(LvErrorCode.CFG_001, "Selected document intelligence bundle is not promoted for tenant use");
         }
     }
 
     private void requireRollbackEligible(String version) {
         DocumentIntelligenceBundle bundle = bundleRepository.findByVersion(version)
-                .orElseThrow(() -> new ValidationException("Last-known-good document intelligence bundle is unavailable"));
+                .orElseThrow(() -> new ValidationException(LvErrorCode.CFG_001, "Last-known-good document intelligence bundle is unavailable"));
         if (bundle.status() == IntelligenceBundleStatus.CANDIDATE) {
-            throw new ValidationException("Last-known-good document intelligence bundle is not eligible for rollback");
+            throw new ValidationException(LvErrorCode.CFG_001, "Last-known-good document intelligence bundle is not eligible for rollback");
         }
     }
 
     private String normalizeVersion(String version) {
         if (version == null || version.trim().isEmpty()) {
-            throw new ValidationException("Document intelligence bundle version is required");
+            throw new ValidationException(LvErrorCode.CFG_001, "Document intelligence bundle version is required");
         }
         String normalized = version.trim();
-        if (normalized.length() > 80) throw new ValidationException("Document intelligence bundle version is too long");
+        if (normalized.length() > 80) throw new ValidationException(LvErrorCode.CFG_001, "Document intelligence bundle version is too long");
         return normalized;
     }
 

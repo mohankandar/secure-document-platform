@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.technical.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.GetTechnicalExceptionQuery;
@@ -104,13 +105,13 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
     private void executeInternal(RetryTechnicalFailureCommand command, boolean requireRetryableClassification) {
         var detail = technicalExceptionQuery.execute(command.packageId(), command.tenantId());
         if (requireRetryableClassification && !detail.retryable()) {
-            throw new ValidationException("This technical failure is not classified as retryable");
+            throw new ValidationException(LvErrorCode.DLV_014, "This technical failure is not classified as retryable");
         }
 
         var pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (pkg.status() != PackageStatus.FAILED) {
-            throw new ValidationException("Only a failed package can be retried");
+            throw new ValidationException(LvErrorCode.REV_002, "Only a failed package can be retried");
         }
 
         var documents = documentRepository.findByPackageIdAndTenantId(command.packageId(), command.tenantId());
@@ -129,7 +130,7 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
             boolean retainedOriginalAvailable = artifacts.stream().anyMatch(artifact ->
                     artifact.artifactType() == ArtifactType.ORIGINAL && artifact.status() == ArtifactStatus.AVAILABLE);
             if (!retainedOriginalAvailable) {
-                throw new ValidationException("Reprocess is unavailable because the retained original is no longer available");
+                throw new ValidationException(LvErrorCode.REV_007, "Reprocess is unavailable because the retained original is no longer available");
             }
             for (var artifact : artifacts) {
                 if (artifact.artifactType() != ArtifactType.ORIGINAL && artifact.status() != ArtifactStatus.DELETED) {
@@ -141,7 +142,7 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
                 if (failedDocument) document.prepareForTechnicalRetry();
                 else document.recoverInterruptedProcessing();
             } catch (IllegalStateException ex) {
-                throw new ValidationException(ex.getMessage());
+                throw new ValidationException(LvErrorCode.REV_002, ex.getMessage());
             }
             documentRepository.save(document);
         }
@@ -155,7 +156,7 @@ public final class RetryTechnicalFailureService implements RetryTechnicalFailure
         try {
             pkg.prepareForTechnicalRetry();
         } catch (IllegalStateException ex) {
-            throw new ValidationException(ex.getMessage());
+            throw new ValidationException(LvErrorCode.REV_002, ex.getMessage());
         }
         packageRepository.save(pkg);
 

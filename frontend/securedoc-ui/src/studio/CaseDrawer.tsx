@@ -14,6 +14,8 @@ import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import { CASE_SECTIONS, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 import { deliveryLabel } from './caseRules';
+import { lvCodeFor, lvLabel } from './lvCodes';
+import { technicalProblemText, technicalReasonCode } from './support/supportRules';
 
 export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   packageId: string; caps: string[]; openFindings: FocusedReviewItem[]; onClose: () => void;
@@ -280,6 +282,8 @@ function TechnicalDetail({ data, error, isLoading }: { data?: TechnicalException
       {Boolean(error) && <p className="cf-muted">The details are not available right now.</p>}
       {data && (
         <>
+          {/* Task 0025: the problem as "title · LV code"; the internal reason stays under Technical details. */}
+          <p className="cf-disclosure-lead" data-testid="case-problem"><strong>{technicalProblemText(data)}</strong></p>
           <p className="cf-disclosure-lead">{data.explanation}</p>
           <dl className="cf-facts">
             <div><dt>Can be retried</dt><dd>{data.retryable ? 'Yes' : 'No'}</dd></div>
@@ -290,6 +294,7 @@ function TechnicalDetail({ data, error, isLoading }: { data?: TechnicalException
             <dl className="cf-tech-defs">
               <div><dt>Step</dt><dd className="cf-mono">{data.failedStage}</dd></div>
               <div><dt>Category</dt><dd className="cf-mono">{data.failureCategory}</dd></div>
+              {technicalReasonCode(data) && <div><dt>Reason</dt><dd className="cf-mono">{technicalReasonCode(data)}</dd></div>}
               {data.correlationId && <div><dt>Reference</dt><dd className="cf-mono">{data.correlationId}</dd></div>}
             </dl>
           </TechnicalDetails>
@@ -348,7 +353,7 @@ function DeliveriesSection({ packageId, documents }: { packageId: string; docume
               <span className="cf-doc-meta">
                 {humanize(d.status)} · run {d.exportCycle}
                 {d.deliveredAt && <> · <time dateTime={d.deliveredAt}>{relativeTime(d.deliveredAt)}</time></>}
-                {d.failureCategory && <> · {humanize(d.failureCategory)}</>}
+                {d.failureCategory && <> · {lvLabel(lvCodeFor(d.failureCategory, d.lvCode))}</>}
               </span>
             </span>
           </li>

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.integration;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.port.out.SdvConnectionTestPort;
@@ -32,7 +33,7 @@ public final class SdvConnectionTestService {
                                       ActorId actorId, CorrelationId correlationId) {
         IntegrationConnection connection = connectionService.get(tenantId, connectionId);
         if (!connection.enabled() || connection.purpose() != IntegrationPurpose.SDV_DELIVERY) {
-            throw new AccessDeniedException("Integration connection is not an enabled SDV delivery destination");
+            throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not an enabled SDV delivery destination");
         }
         try {
             testPort.testConnection(connection);
@@ -47,7 +48,7 @@ public final class SdvConnectionTestService {
             connectionService.recordOperationalFailure(connection, category);
             auditService.recordFailure(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_TESTED,
                     "IntegrationConnection", connection.id().toString(), correlationId,
-                    "SDV connection test failed: category=" + category);
+                    "SDV connection test failed: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.domain.error.LvErrorCode.CFG_004, category, "category=" + category));
             throw e;
         }
     }

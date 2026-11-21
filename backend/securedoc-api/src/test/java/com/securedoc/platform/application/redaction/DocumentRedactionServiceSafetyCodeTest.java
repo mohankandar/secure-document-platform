@@ -162,7 +162,8 @@ class DocumentRedactionServiceSafetyCodeTest {
         List<AuditRecord> failed = audits.stream()
                 .filter(a -> a.action() == AuditAction.DOCUMENT_PROCESSING_FAILED).toList();
         assertEquals(1, failed.size());
-        assertEquals("Redaction failed: dependency=REDACTION, code=" + code + ", retryable=false, attempts=1",
+        assertEquals("Redaction failed: code=" + com.securedoc.platform.application.error.LvErrorCodes.forDetail(code.toString()).orElseThrow().code()
+                        + ", detail=" + code + ", dependency=REDACTION, retryable=false, attempts=1",
                 failed.get(0).detail());
     }
 

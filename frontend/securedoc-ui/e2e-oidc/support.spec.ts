@@ -59,7 +59,7 @@ const summary = (n: number, loan: string, reasonCode: string, stage: string, sta
 });
 const ITEMS = [
   summary(1, 'LN204860', 'OCR_TIMEOUT', 'OCR', 'OPEN', 'BLOCKED', 3, 180),
-  summary(2, 'LN204864', 'SDV_UNAVAILABLE', 'DELIVERY', 'BUSINESS_CONTINUED', 'CONTINUED', 1, 185),
+  summary(2, 'LN204864', 'DELIVERY_IO', 'DELIVERY', 'BUSINESS_CONTINUED', 'CONTINUED', 1, 185),
   summary(3, 'LN204867', 'AI_TIMEOUT', 'AI_ANALYSIS', 'RESOLVED', 'COMPLETED', 1, 60),
 ];
 const DETAIL = {
@@ -103,7 +103,8 @@ async function openAs(page: Page, role: keyof typeof ROLES): Promise<Calls> {
       calls.searches.push(url.searchParams);
       const q = url.searchParams;
       const items = ITEMS.filter((i) => (!q.get('businessIdentifier') || i.primaryIdentifierValue.toLowerCase().includes(q.get('businessIdentifier')!.toLowerCase()))
-        && (!q.get('incidentId') || i.incidentId === q.get('incidentId')) && (!q.get('stage') || i.stage === q.get('stage')));
+        && (!q.get('incidentId') || i.incidentId === q.get('incidentId')) && (!q.get('stage') || i.stage === q.get('stage'))
+        && (!q.get('reasonCode') || i.reasonCode === q.get('reasonCode')));
       return json({ items, total: items.length, page: 0, size: Number(q.get('size') || 25) });
     }
     if (path === `/api/v1/support/incidents/${INC}`) return json(DETAIL);
@@ -165,11 +166,12 @@ test('IT Administrator: Support rows in plain words, Open / Resolved / All, one 
   const list = page.getByRole('list', { name: 'Problems' });
   await expect(list.getByRole('listitem')).toHaveCount(2);
   const first = list.getByRole('listitem').filter({ hasText: 'LN204860' });
-  await expect(first).toContainText('Text recognition timed out · tried 3 times');
+  // Task 0025: the reason reads as the LV code's title and the code.
+  await expect(first).toContainText('Text reading timed out · LV-PRC-004 · tried 3 times');
   await expect(first).toContainText('Case stopped');
   await expect(first).toContainText('Open');
   await expect(first).toContainText('3h ago');
-  await expect(list.getByRole('listitem').filter({ hasText: 'LN204864' })).toContainText('Secure Document Vault didn’t answer · case continued manually');
+  await expect(list.getByRole('listitem').filter({ hasText: 'LN204864' })).toContainText("Destination can't be reached · LV-DLV-001 · case continued manually");
   await expect(list.getByRole('listitem').filter({ hasText: 'LN204864' })).toContainText('Watching');
   expect(await visibleText(page)).not.toMatch(/[A-Z]{2,}_[A-Z]/);
   expect(calls.searches[0].get('size')).toBe('100');
@@ -197,20 +199,36 @@ test('IT Administrator: Support rows in plain words, Open / Resolved / All, one 
   await more.getByRole('button', { name: 'Apply filters' }).click();
   await expect.poll(() => calls.searches.at(-1)?.get('stage')).toBe('OCR');
   await expect(more.getByText('More filters (1)')).toBeVisible();
+
+  // Task 0025: the Reason filter lists LV codes; the server is still asked by reason code, once per reason code of the LV code.
+  await more.getByLabel(/^Where it stopped/).selectOption({ label: 'Any stage' });
+  await more.getByLabel(/^Reason/).selectOption({ label: 'Text reading timed out · LV-PRC-004' });
+  await more.getByRole('button', { name: 'Apply filters' }).click();
+  await expect.poll(() => calls.searches.at(-1)?.get('reasonCode')).toBe('OCR_TIMEOUT');
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  const before = calls.searches.length;
+  await more.getByLabel(/^Reason/).selectOption({ label: 'Redacted copy failed the safety check · LV-RED-002' });
+  await more.getByRole('button', { name: 'Apply filters' }).click();
+  await expect.poll(() => calls.searches.length - before).toBe(8);
+  expect(new Set(calls.searches.slice(before).map((s) => s.get('reasonCode')))).toEqual(new Set([
+    'REDACTION_SOURCE_PAGES_UNKNOWN', 'REDACTION_PAGE_COUNT_MISMATCH', 'REDACTION_TARGETS_NOT_APPLIED', 'REDACTION_OUTPUT_EMPTY',
+    'REDACTION_TEXT_LAYER_REMAINS', 'REDACTION_ANNOTATIONS_REMAIN', 'REDACTION_REGION_NOT_COVERED', 'REDACTION_OUTPUT_UNPARSABLE',
+  ]));
+  await expect(page.getByText('Nothing matches')).toBeVisible();
 });
 
 test('IT Administrator: one problem page with Retry and Keep; every code under Technical details', async ({ page }) => {
   const calls = await openAs(page, 'it');
   await openSupport(page);
   await page.getByRole('list', { name: 'Problems' }).getByRole('link').filter({ hasText: 'LN204860' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Text recognition timed out' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Text reading timed out · LV-PRC-004' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Support›LN204860');
   await expect(page.locator('.cf-pb-title')).toContainText('Case stopped');
   const what = page.getByRole('region', { name: 'What happened' });
-  await expect(what).toContainText('Text recognition didn’t finish within the allowed time. It stopped at text recognition. LexaVault tried 3 times');
+  await expect(what).toContainText('Reading text from a page took too long. It stopped at text recognition. LexaVault tried 3 times');
   await expect(page.getByRole('region', { name: 'What it means for the case' })).toContainText('The case is stopped. Nothing was sent. The original is kept until');
   const timeline = page.getByRole('region', { name: 'Timeline' });
-  await expect(timeline).toContainText('Try 1 failed: text recognition timed out');
+  await expect(timeline).toContainText('Try 1 failed: text reading timed out');
   await expect(timeline).toContainText('No tries left; case stopped and support told');
   expect(await visibleText(page)).not.toMatch(/[A-Z]{2,}_[A-Z]|corr-9/);
 
@@ -239,7 +257,7 @@ test('IT Administrator: one problem page with Retry and Keep; every code under T
 test('IT Administrator: a stopped case’s problem link opens the same page', async ({ page }) => {
   await openAs(page, 'it');
   await page.evaluate((p) => { window.history.pushState({}, '', `/technical-exceptions/${p}`); window.dispatchEvent(new PopStateEvent('popstate')); }, PKG);
-  await expect(page.getByRole('heading', { level: 1, name: 'Text recognition timed out' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Text reading timed out · LV-PRC-004' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'What you can do' }).getByRole('button', { name: 'Retry processing' })).toBeVisible();
 });
 
@@ -250,7 +268,7 @@ test('Platform Operations: Support and the problem page, but no Retry and no kee
   await more.getByText('More filters').click();
   await expect(more.getByLabel(/^Organization ID/)).toBeVisible();
   await page.getByRole('list', { name: 'Problems' }).getByRole('link').filter({ hasText: 'LN204860' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Text recognition timed out' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Text reading timed out · LV-PRC-004' })).toBeVisible();
   const doCard = page.getByRole('region', { name: 'What you can do' });
   await expect(doCard.getByRole('button')).toHaveCount(0);
   await expect(doCard).toContainText('Retry and keeping the original are for IT Administrators');

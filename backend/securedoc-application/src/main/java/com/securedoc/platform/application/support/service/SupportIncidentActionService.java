@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.support.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ExtendTechnicalHoldCommand;
@@ -72,7 +73,7 @@ public final class SupportIncidentActionService {
             case "PRESERVE_FOR_INVESTIGATION" -> {
                 int days = holdDays == null ? 7 : holdDays;
                 if (days != 7 && days != 14 && days != 30) {
-                    throw new ValidationException("Investigation hold must be 7, 14, or 30 days");
+                    throw new ValidationException(LvErrorCode.CFG_001, "Investigation hold must be 7, 14, or 30 days");
                 }
                 int hours = days * 24;
                 lifecycleService.execute(new ExtendTechnicalHoldCommand(
@@ -96,7 +97,7 @@ public final class SupportIncidentActionService {
                 incidentService.resolveNoReprocess(incident.packageId(), tenantId, correlationId,
                         normalizeResolution(resolutionCode, normalized), true);
             }
-            default -> throw new ValidationException("Unsupported support incident action: " + action);
+            default -> throw new ValidationException(LvErrorCode.CFG_001, "Unsupported support incident action: " + action);
         }
 
         auditService.recordSuccess(tenantId, actorId, AuditAction.SUPPORT_INCIDENT_ACTION_RECORDED,

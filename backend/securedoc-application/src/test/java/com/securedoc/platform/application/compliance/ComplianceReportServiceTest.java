@@ -478,14 +478,14 @@ class ComplianceReportServiceTest {
         AuditRecord refused = audits.get(audits.size() - 1);
         assertEquals(AuditOutcome.DENIED, refused.outcome());
         assertEquals(AuditAction.COMPLIANCE_REPORT_CREATED, refused.action());
-        assertEquals("edition=FULL, refused=ROLE", refused.detail());
+        assertEquals("code=LV-AUT-006, detail=ACCESS_DENIED, edition=FULL, refused=ROLE", refused.detail());
 
         assertThrows(ValidationException.class, () -> service(nov19()).create(principal, CorrelationId.generate(),
                 new ComplianceReportService.Request("CUSTOM", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30),
                         "UTC"), ComplianceEdition.SUMMARY, "Business Administrator"));
         AuditRecord failed = audits.get(audits.size() - 1);
         assertEquals(AuditOutcome.FAILURE, failed.outcome());
-        assertEquals("period=invalid, edition=SUMMARY, failure=VALIDATION", failed.detail());
+        assertEquals("code=LV-CFG-001, detail=VALIDATION, period=invalid, edition=SUMMARY, failure=VALIDATION", failed.detail());
 
         ComplianceReportService broken = new ComplianceReportService(reads, (c, f) -> {
             throw new IllegalStateException("boom: some external text");
@@ -504,7 +504,7 @@ class ComplianceReportServiceTest {
         assertThrows(IllegalStateException.class, () -> broken.create(principal, CorrelationId.generate(),
                 new ComplianceReportService.Request("LAST_MONTH", null, null, null), ComplianceEdition.SUMMARY, "x"));
         AuditRecord internal = audits.get(audits.size() - 1);
-        assertEquals("period=2026-10-01..2026-10-31, edition=SUMMARY, failure=INTERNAL", internal.detail());
+        assertEquals("code=LV-SYS-001, detail=INTERNAL, period=2026-10-01..2026-10-31, edition=SUMMARY, failure=INTERNAL", internal.detail());
         assertFalse(internal.detail().contains("boom"), "never an exception's text");
     }
 }

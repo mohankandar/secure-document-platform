@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.branding;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.TenantRepository;
@@ -133,16 +134,16 @@ public final class BrandingService {
         if (value == null) return null;
         String trimmed = value.trim();
         if (trimmed.isEmpty()) return null;
-        if (trimmed.length() > max) throw new ValidationException(label + " must be " + max + " characters or fewer");
+        if (trimmed.length() > max) throw new ValidationException(LvErrorCode.CFG_001, label + " must be " + max + " characters or fewer");
         return trimmed;
     }
 
     private static String color(String value, String label) {
         if (value == null || value.isBlank()) return null;
         String normalized = value.trim().toUpperCase(Locale.ROOT);
-        if (!HEX.matcher(normalized).matches()) throw new ValidationException(label + " must be a six-digit hex color such as #315CF4");
+        if (!HEX.matcher(normalized).matches()) throw new ValidationException(LvErrorCode.CFG_001, label + " must be a six-digit hex color such as #315CF4");
         if ("Accent color".equals(label) && contrastWithWhite(normalized) < 4.5d) {
-            throw new ValidationException("Accent color must provide WCAG AA contrast with white button text");
+            throw new ValidationException(LvErrorCode.CFG_001, "Accent color must provide WCAG AA contrast with white button text");
         }
         return normalized;
     }
@@ -163,14 +164,14 @@ public final class BrandingService {
                                int maxBytes, String label) {
         if (update == null) return new Asset(currentBytes, currentMediaType);
         if (update.clear()) return new Asset(null, null);
-        if (update.bytes() == null || update.bytes().length == 0) throw new ValidationException(label + " is empty");
-        if (update.bytes().length > maxBytes) throw new ValidationException(label + " exceeds the allowed file size");
+        if (update.bytes() == null || update.bytes().length == 0) throw new ValidationException(LvErrorCode.CFG_001, label + " is empty");
+        if (update.bytes().length > maxBytes) throw new ValidationException(LvErrorCode.CFG_001, label + " exceeds the allowed file size");
         String mediaType = update.mediaType() == null ? "" : update.mediaType().toLowerCase(Locale.ROOT);
         if (!mediaType.equals("image/png") && !mediaType.equals("image/webp")) {
-            throw new ValidationException(label + " must be PNG or WebP");
+            throw new ValidationException(LvErrorCode.CFG_001, label + " must be PNG or WebP");
         }
-        if (mediaType.equals("image/png") && !isPng(update.bytes())) throw new ValidationException(label + " content does not match PNG format");
-        if (mediaType.equals("image/webp") && !isWebp(update.bytes())) throw new ValidationException(label + " content does not match WebP format");
+        if (mediaType.equals("image/png") && !isPng(update.bytes())) throw new ValidationException(LvErrorCode.CFG_001, label + " content does not match PNG format");
+        if (mediaType.equals("image/webp") && !isWebp(update.bytes())) throw new ValidationException(LvErrorCode.CFG_001, label + " content does not match WebP format");
         return new Asset(update.bytes(), mediaType);
     }
 

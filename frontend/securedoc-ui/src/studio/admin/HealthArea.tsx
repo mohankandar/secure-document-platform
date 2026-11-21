@@ -6,7 +6,8 @@ import type { PlatformAdminOverview } from '../../types';
 import { errorMessage } from '../data';
 import { Spinner } from '../atoms';
 import { useToast } from '../toast';
-import { Loading, humanize, when } from './shared';
+import { Loading, when } from './shared';
+import { problemReason } from '../words';
 import StorageSection from './StorageSection';
 import LicensingSection from './LicensingSection';
 import BrandingSection from './BrandingSection';
@@ -167,7 +168,7 @@ function Overview({ canOperate }: { canOperate: boolean }) {
               <li key={item.packageId} className="cf-ad-conn">
                 <span className="cf-ad-health" data-h="danger" aria-hidden="true" />
                 <div className="cf-ad-conn-main">
-                  <div className="cf-ad-conn-name">Technical processing failure<span className="cf-ad-tag">{humanize(item.reasonCode)}</span></div>
+                  <div className="cf-ad-conn-name">Technical processing failure<span className="cf-ad-tag">{problemReason(item.reasonCode, item.lvCode).label}</span></div>
                   <div className="cf-ad-conn-meta">
                     <span>{item.documentCount} document{item.documentCount === 1 ? '' : 's'}</span>
                     <span>Failed {when(item.failedAt)}</span>

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.integration;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.intake.polling.PollingSourceException;
@@ -80,19 +81,25 @@ public final class DraftConnectionTestService {
         // Same checks as Save; NotFound for a connection outside the caller's tenant; ValidationException as Save.
         IntegrationConnection draft = connections.draft(tenantId, connectionIdOrNull, input);
         Kind kind = kindOf(draft);
-        if (kind == null) throw new ValidationException("This connection has nothing to test: the other system sends to LexaVault");
+        if (kind == null) throw new ValidationException(LvErrorCode.CFG_003, "This connection has nothing to test: the other system sends to LexaVault");
         IntegrationConnection probe;
         try {
             // The probes test a switched-on connection. Switching on only adds Save's switch-on checks (e.g. a key is needed).
             probe = draft.enabled() ? draft : draft.setEnabled(true, Instant.now(clock));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException(e.getMessage());
+            throw new ValidationException(LvErrorCode.CFG_003, e.getMessage());
         }
 
         Result result = run(kind, probe);
         String target = connectionIdOrNull == null ? "draft" : connectionIdOrNull.toString();
         String detail = "draft=true,purpose=" + probe.purpose() + ",provider=" + probe.providerType()
                 + (result.works() ? ",result=works" : ",category=" + result.reasonCode());
+        if (!result.works()) {
+            // Task 0025: a failed test records its code first (a refused address is LV-CFG-003, the rest LV-CFG-004).
+            com.securedoc.platform.domain.error.LvErrorCode code = com.securedoc.platform.application.error.LvErrorCodes.forDetail(result.reasonCode())
+                    .filter(c -> c == com.securedoc.platform.domain.error.LvErrorCode.CFG_003).orElse(com.securedoc.platform.domain.error.LvErrorCode.CFG_004);
+            detail = com.securedoc.platform.application.error.LvErrorCodes.auditDetail(code, result.reasonCode(), detail);
+        }
         if (result.works()) {
             audit.recordSuccess(tenantId, actorId, AuditAction.INTEGRATION_CONNECTION_TESTED, "IntegrationConnection",
                     target, correlationId, detail);

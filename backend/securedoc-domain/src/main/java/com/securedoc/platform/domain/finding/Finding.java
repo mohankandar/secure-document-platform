@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.finding;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.FindingId;
@@ -80,7 +81,7 @@ public final class Finding {
     public void confirm(ActorId actorId, String reason) {
         Objects.requireNonNull(actorId, "ActorId must not be null");
         if (status != FindingStatus.DETECTED) {
-            throw new IllegalStateException("Cannot confirm finding in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_001, "Cannot confirm finding in status: " + status);
         }
         EvidenceRecord evidence = EvidenceRecord.create(actorId, status, FindingStatus.CONFIRMED, reason);
         evidenceHistory.add(evidence);
@@ -91,7 +92,7 @@ public final class Finding {
     public void dismiss(ActorId actorId, String reason) {
         Objects.requireNonNull(actorId, "ActorId must not be null");
         if (status != FindingStatus.DETECTED) {
-            throw new IllegalStateException("Cannot dismiss finding in status: " + status);
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_001, "Cannot dismiss finding in status: " + status);
         }
         EvidenceRecord evidence = EvidenceRecord.create(actorId, status, FindingStatus.DISMISSED, reason);
         evidenceHistory.add(evidence);

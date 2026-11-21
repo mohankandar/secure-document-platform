@@ -72,8 +72,8 @@ public final class PackageProcessingRecoveryService {
         }
         auditService.recordFailure(tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_RECOVERY_EXHAUSTED,
                 "DocumentPackage", packageId.toString(), correlationId,
-                "Automatic package-processing recovery exhausted: attempts=" + attempts
-                        + ", maxAttempts=" + maxAttempts);
+                "Automatic package-processing recovery exhausted: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.domain.error.LvErrorCode.PRC_008,
+                        "PROCESSING_RECOVERY_EXHAUSTED", "attempts=" + attempts + ", maxAttempts=" + maxAttempts));
         return true;
     }
 
@@ -121,6 +121,11 @@ public final class PackageProcessingRecoveryService {
         TechnicalDependencyException stop = new TechnicalDependencyException(
                 TechnicalDependency.PROCESSING, code, false, "Package processing stopped")
                 .withAttempts(Math.max(1, failedAttempts));
+        if (licenceDenial) {
+            // Task 0025: the licence refusal gives the precise code (LV-LIC-001 to LV-LIC-004); behaviour is unchanged.
+            var licenceCode = com.securedoc.platform.application.error.LvErrorCodes.optional(failure);
+            if (licenceCode.isPresent()) stop = stop.withLvCode(licenceCode.get());
+        }
 
         pkg.fail();
         packageRepository.save(pkg);

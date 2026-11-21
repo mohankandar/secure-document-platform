@@ -78,7 +78,7 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
     }
     @Override public void recordRoutingFailure(PackageId packageId, TenantId tenantId, int exportCycle, String code, CorrelationId correlationId){
         audit.recordFailure(tenantId,SYSTEM_ACTOR,AuditAction.ROUTING_ATTENTION_REQUIRED,"DocumentPackage",packageId.toString(),correlationId,
-                "Derived routing failed after master export: cycle="+exportCycle+", code="+code);
+                "Derived routing failed after master export: "+com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.forDetailOrFallback(code,"routing"),code,"cycle="+exportCycle));
         for(Document document:documents.findByPackageIdAndTenantId(packageId,tenantId))
             ensureAttention(tenantId,packageId,document.id(),exportCycle,List.of(),code,correlationId);
     }
@@ -152,7 +152,7 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
     private void ensureAttention(TenantId tenantId,PackageId packageId,DocumentId documentId,int exportCycle,List<Integer> pages,String category,CorrelationId correlationId){
         boolean exists=deliveries.findByTenantIdAndPackageId(tenantId,packageId).stream().anyMatch(d->d.sourceDocumentId().equals(documentId)&&d.exportCycle()==exportCycle&&d.routingRuleId()==null&&Objects.equals(d.lastFailureCategory(),category)&&d.pageNumbers().equals(pages));
         if(exists)return; DerivedDelivery attention=DerivedDelivery.routingAttention(tenantId,packageId,documentId,exportCycle,pages,category,Instant.now()); deliveries.save(attention);
-        audit.recordFailure(tenantId,SYSTEM_ACTOR,AuditAction.ROUTING_ATTENTION_REQUIRED,"DerivedDelivery",attention.id().toString(),correlationId,"Derived routing requires attention: cycle="+exportCycle+", category="+category+", pages="+pages);
+        audit.recordFailure(tenantId,SYSTEM_ACTOR,AuditAction.ROUTING_ATTENTION_REQUIRED,"DerivedDelivery",attention.id().toString(),correlationId,"Derived routing requires attention: "+com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.forDetailOrFallback(category,"routing"),category,"cycle="+exportCycle+", pages="+pages));
     }
     private long elapsedMillis(long startedNanos){return TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-startedNanos);}
     private String sha256(InputStream content){

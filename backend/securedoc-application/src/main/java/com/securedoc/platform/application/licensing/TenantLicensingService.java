@@ -74,7 +74,8 @@ public final class TenantLicensingService {
             // Task 0023 C6: its own transaction, so the record survives the refused request's rollback.
             auditService.recordFailureIndependently(tenantId, actorId, AuditAction.LICENSE_VALIDATION_FAILED,
                     "TenantLicense", tenantId.toString(), correlationId,
-                    "License install rejected: status=" + verification.status());
+                    "License install rejected: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.forLicenseStatus(verification.status()),
+                            errorCode(verification.status()), "status=" + verification.status()));
             throw new LicenseEnforcementException(errorCode(verification.status()),
                     installFailureMessage(verification.status()), verification.status());
         }
@@ -158,8 +159,9 @@ public final class TenantLicensingService {
         // Task 0023 C6: its own transaction, so the record survives the refused request's rollback.
         auditService.recordDeniedIndependently(tenantId, actorId, AuditAction.LICENSE_ENFORCEMENT_DENIED,
                 "Tenant", tenantId.toString(), correlationId,
-                "Document processing denied by tenant license: status=" + state.status()
-                        + ", reason=" + state.reasonCode());
+                "Document processing denied by tenant license: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(
+                        com.securedoc.platform.application.error.LvErrorCodes.forDetail(errorCode(state.status())).orElseGet(() -> com.securedoc.platform.application.error.LvErrorCodes.forLicenseStatus(state.status())),
+                        errorCode(state.status()), "status=" + state.status() + ", reason=" + state.reasonCode()));
         throw new LicenseEnforcementException(errorCode(state.status()), enforcementMessage(state), state.status());
     }
 

@@ -175,6 +175,8 @@ export interface DerivedDelivery {
   status: 'PENDING' | 'DELIVERING' | 'RETRY_PENDING' | 'DELIVERED' | 'ATTENTION_REQUIRED' | string;
   attemptCount: number;
   failureCategory?: string;
+  /** Task 0025: the LV code for failureCategory, when the server sends it. */
+  lvCode?: string | null;
   retryable: boolean;
   destinationReference?: string;
   deliveredAt?: string;
@@ -266,6 +268,8 @@ export interface VaultEntryResult {
 
 export interface ApiError {
   errorCode?: string;
+  /** Task 0025: the LexaVault error code, for example "LV-CFG-001" (absent from an older server). */
+  code?: string;
   message?: string;
   correlationId?: string;
 }
@@ -642,6 +646,8 @@ export interface IntegrationConnectionRequest {
 export interface DraftConnectionTestResult {
   works: boolean;
   reasonCode: string | null;
+  /** Task 0025: the LV code for reasonCode, when the server sends it. */
+  lvCode?: string | null;
 }
 
 export interface SdvConnectionTestResult {
@@ -655,6 +661,8 @@ export interface PollingRun {
   runId: string; connectionId: string; trigger: 'SCHEDULED' | 'MANUAL'; status: 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED';
   startedAt: string; completedAt?: string | null; packagesDiscovered: number; documentsExpected: number;
   documentsRetrieved: number; packagesAcknowledged: number; failureCategory?: string | null; failureDetail?: string | null;
+  /** Task 0025: the LV code for failureCategory, when the server sends it. */
+  lvCode?: string | null;
 }
 
 export interface PollingConnectionStatus {
@@ -674,6 +682,8 @@ export interface PlatformHealthItem {
 export interface TechnicalExceptionItem {
   packageId: string;
   reasonCode: string;
+  /** Task 0025: the LV code for reasonCode, when the server sends it. */
+  lvCode?: string | null;
   status: string;
   documentCount: number;
   failedAt: string;
@@ -889,6 +899,8 @@ export interface SupportIncidentSummary {
   stage: string;
   component: string;
   reasonCode: string;
+  /** Task 0025: the LV code for reasonCode, when the server sends it. */
+  lvCode?: string | null;
   status: string;
   businessOutcome?: string | null;
   businessContinuityUsed: boolean;
@@ -924,6 +936,8 @@ export interface SupportIncidentDetail {
   component: string;
   failureCategory: string;
   reasonCode: string;
+  /** Task 0025: the LV code for reasonCode, when the server sends it. */
+  lvCode?: string | null;
   retryable: boolean;
   attemptCount: number;
   correlationId: string;
@@ -950,6 +964,8 @@ export interface TechnicalExceptionDetail {
   correlationId?: string | null;
   originalRetainedUntil?: string | null;
   explanation: string;
+  /** Task 0025: the LV code of the failure, when the server sends it. */
+  lvCode?: string | null;
   incidentId?: string | null;
   incidentStatus?: string | null;
   businessContinuityUsed?: boolean;

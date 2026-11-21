@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.integration;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -41,6 +42,6 @@ public class SdvIntegrationController {
 
     private IntegrationConnectionId parseId(String raw) {
         try { return IntegrationConnectionId.fromString(raw); }
-        catch (RuntimeException e) { throw new ValidationException("Invalid integration connection id"); }
+        catch (RuntimeException e) { throw new ValidationException(LvErrorCode.CFG_003, "Invalid integration connection id"); }
     }
 }

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.detection.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand;
 import com.securedoc.platform.application.detection.result.DetectSensitiveDataResult;
 import com.securedoc.platform.application.exception.NotFoundException;
@@ -143,17 +144,17 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
 
         if (!document.packageId().equals(command.packageId())) {
-            throw new ValidationException("Document does not belong to the specified package");
+            throw new ValidationException(LvErrorCode.PRC_009, "Document does not belong to the specified package");
         }
 
         DocumentPackage parentPackage = packageRepository
                 .findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (parentPackage.status() != PackageStatus.PROCESSING) {
-            throw new ValidationException("Package is not in PROCESSING status");
+            throw new ValidationException(LvErrorCode.PRC_009, "Package is not in PROCESSING status");
         }
         if (document.status() != DocumentStatus.DETECTING) {
-            throw new ValidationException("Document is not in DETECTING status");
+            throw new ValidationException(LvErrorCode.PRC_009, "Document is not in DETECTING status");
         }
 
         TenantRedactionPolicy tenantPolicy = tenantRedactionPolicyRepository.findByTenantId(command.tenantId())

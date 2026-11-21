@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.export.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.export.command.ExportRedactedDocumentCommand;
@@ -65,7 +66,7 @@ public final class DocumentExportService implements ExportRedactedDocumentUseCas
                 .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
 
         if (!document.packageId().equals(command.packageId())) {
-            throw new ValidationException("Document does not belong to the specified package");
+            throw new ValidationException(LvErrorCode.DLV_011, "Document does not belong to the specified package");
         }
 
         // Locate the available REDACTED artifact.

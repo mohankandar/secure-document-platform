@@ -1,8 +1,9 @@
 /**
  * Admin › Integrations in plain words (UI task U008, findings 16, 24, 25). Pure functions, so the words are tested
  * without a browser. Codes (provider, authentication, failure category) never reach the main view; they stay under
- * Technical details.
+ * Technical details. Task 0025: a failure shows its LV code ("title · LV-…"), from the generated registry.
  */
+import { lvCodeFor, lvLabel } from '../lvCodes.ts';
 import type {
   DerivedDelivery,
   IntegrationAcknowledgementMode,
@@ -68,85 +69,22 @@ export function connectionTag(c: Pick<IntegrationConnection, 'purpose' | 'provid
 
 /* ---------- Status line ---------- */
 
-/** A failure category in plain words. An unknown code is not guessed at; its code stays under Technical details. */
-export function failureReason(code: string | null | undefined): string {
-  switch ((code ?? '').trim().toUpperCase()) {
-    case 'POLL_SOURCE_UNAVAILABLE':
-    case 'DELIVERY_IO':
-    case 'ROUTING_DESTINATION_UNAVAILABLE':
-      return "couldn't reach it";
-    case 'POLL_AUTH_CONFIGURATION_ERROR':
-    case 'POLL_AUTH_CONFIGURATION_UNSUPPORTED':
-      return 'its sign-in settings don’t work';
-    case 'POLL_CONFIGURATION_ERROR':
-    case 'DELIVERY_DESTINATION_INVALID':
-    case 'DELIVERY_SENSITIVITY_REFUSED':
-      return 'its settings are not right';
-    case 'POLL_RESPONSE_INVALID':
-    case 'RETRIEVAL_INVALID_CONTENT_TYPE':
-      return "it answered with something LexaVault can't read";
-    case 'POLL_DISCOVERY_FAILED':
-      return "the list of new documents couldn't be read";
-    case 'RETRIEVAL_FAILED':
-      return "documents couldn't be collected";
-    case 'RETRIEVAL_STAGING_FAILED':
-    case 'STORAGE_IO':
-      return "LexaVault couldn't store the documents";
-    case 'SOURCE_ACKNOWLEDGEMENT_FAILED':
-    case 'ACK_SERIALIZATION_FAILED':
-      return "pickup couldn't be confirmed to the source";
-    case 'POLL_INTERRUPTED':
-      return 'collecting was interrupted';
-    case 'SDV_CONNECTION_TEST_FAILED':
-    case 'DERIVED_CONNECTION_TEST_FAILED':
-    case 'CONNECTION_TEST_FAILED':
-      return 'the connection test failed';
-    case 'ADDRESS_NOT_ALLOWED':
-      return "that address isn't allowed";
-    case 'ADDRESS_NOT_RESOLVED':
-      return "the address couldn't be found";
-    case 'SDV_TEST_UNAVAILABLE':
-      return "SDV testing isn't set up in this installation";
-    case 'DERIVED_DESTINATION_DISABLED':
-      return 'the place it goes to is switched off';
-    // Task 0023 C4: split routing and split delivery refusals, each with its own reason.
-    case 'ROUTING_MASTER_UNAVAILABLE':
-      return "the delivered document couldn't be found to take the pages from";
-    case 'ROUTING_FAILED':
-      return "the pages couldn't be sorted by the rules";
-    case 'DERIVED_ROUTING_POST_EXPORT_FAILED':
-      return 'sorting the pages after delivery failed';
-    case 'DERIVED_DOCUMENT_BUILD_FAILED':
-      return "the file with these pages couldn't be made";
-    case 'DERIVED_DESTINATION_NOT_FOUND':
-      return 'the place it goes to no longer exists';
-    case 'DERIVED_DESTINATION_WRONG_PURPOSE':
-      return "the place it goes to isn't set up to receive these pages";
-    case 'DERIVED_ARTIFACT_UNAVAILABLE':
-      return 'the file with these pages is no longer available';
-    case 'DERIVED_SOURCE_NOT_FOUND':
-      return 'the original document is no longer available';
-    case 'ROUTING_MARKER_AMBIGUOUS':
-      return 'the page matched more than one rule';
-    case 'ROUTING_DETECTION_FAILED':
-      return "the barcode or marker couldn't be read";
-    case 'DERIVED_DELIVERY_RUNTIME':
-    case 'UNKNOWN_TECHNICAL_FAILURE':
-      return 'something unexpected went wrong';
-    default:
-      return 'reason not recognised (see Technical details)';
-  }
+/**
+ * Task 0025: a failure category (or a connection-test reason) as "title · LV code", from the generated registry, for
+ * example "Destination can't be reached · LV-DLV-001". The server's lvCode wins when it sent one; a reason without an
+ * LV code of its own reads as LV-SYS-001. The internal code stays under Technical details.
+ */
+export function failureReason(code: string | null | undefined, lvCode?: string | null): string {
+  return lvLabel(lvCodeFor(code, lvCode));
 }
 
 /**
  * The answer of a test before saving, in words: "The connection works." or
- * "The connection didn't work: couldn't reach it. Check the address and sign-in, then test again."
- * An unknown code is not guessed at.
+ * "The connection didn't work: Destination can't be reached · LV-DLV-001. Check the address and sign-in, then test again."
  */
-export function draftTestResult(r: { works: boolean; reasonCode: string | null }): { tone: 'ok' | 'danger'; text: string } {
+export function draftTestResult(r: { works: boolean; reasonCode: string | null; lvCode?: string | null }): { tone: 'ok' | 'danger'; text: string } {
   if (r.works) return { tone: 'ok', text: 'The connection works.' };
-  const known = failureReason(r.reasonCode);
-  const reason = known.startsWith('reason not recognised') ? '' : `: ${known}`;
+  const reason = `: ${failureReason(r.reasonCode, r.lvCode)}`;
   if (r.reasonCode === 'ADDRESS_NOT_ALLOWED') {
     return { tone: 'danger', text: `The connection didn't work${reason}. Cloud metadata addresses are always refused.` };
   }
@@ -157,7 +95,7 @@ export type Tone = 'ok' | 'warn' | 'danger' | 'off';
 export interface StatusLine { tone: Tone; word: string; rest: string[] }
 
 /**
- * One plain status line: "Working · last worked 14 min ago", "Having problems · last try failed: couldn't reach it",
+ * One plain status line: "Working · last worked 14 min ago", "Having problems · last try failed: Source system can't be reached · LV-INT-040",
  * "Switched off". Health comes from the connection's last operation (a collection, a delivery or a test).
  */
 export function connectionStatus(c: Pick<IntegrationConnection, 'enabled' | 'healthStatus' | 'lastSuccessAt' | 'lastFailureAt' | 'lastFailureCategory' | 'purpose' | 'providerType'>, now: number): StatusLine {
@@ -250,11 +188,11 @@ export function pagesText(pages: number[]): string {
 
 export type AttentionItem = DerivedDelivery;
 
-/** "LN204812 · pages 3–4 → Title team folder · couldn't reach it · tried 5 times". The case by its main ID, never the package id. */
+/** "LN204812 · pages 3–4 → Title team folder · Destination can't be reached · LV-DLV-001 · tried 5 times". The case by its main ID, never the package id. */
 export function attentionLine(d: AttentionItem): string {
   const parts = [d.primaryIdentifierValue?.trim() || 'Case without a main ID', pagesText(d.pageNumbers)];
   if (d.destinationLabel && d.markerType) parts[1] += ` → ${d.destinationLabel}`;
-  parts.push(failureReason(d.failureCategory));
+  parts.push(failureReason(d.failureCategory, d.lvCode));
   if (d.attemptCount > 0) parts.push(`tried ${d.attemptCount} time${d.attemptCount === 1 ? '' : 's'}`);
   return parts.join(' · ');
 }

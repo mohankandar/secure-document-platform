@@ -123,6 +123,46 @@ class LexaVaultScannerDeliveryClientRetryClassificationTest {
         assertNull(ex.retryAfter(), "the owner's rule names 429 only");
     }
 
+    /** Task 0025: LexaVault's LV code is kept beside its errorCode as the detail; its message is never kept. */
+    @Test
+    void aRefusalKeepsLexaVaultsLvCodeAndStatus() throws Exception {
+        var ex = refusal(400, "{\"errorCode\":\"INTAKE_UNKNOWN_IDENTIFIER\",\"code\":\"LV-INT-014\","
+                + "\"message\":\"Contract 12345 for Jane Doe\"}");
+        assertFalse(ex.retryable());
+        assertEquals("INTAKE_UNKNOWN_IDENTIFIER", ex.safeCode());
+        assertEquals("LV-INT-014", ex.lexaVaultLvCode());
+        assertEquals(400, ex.httpStatus());
+        assertEquals(com.securedoc.platform.scanbridge.model.BridgeLvCode.LV_SCN_016,
+                com.securedoc.platform.scanbridge.model.BridgeLvCodes.forDelivery(ex.safeCode(), ex.httpStatus(),
+                        ScanSessionStatus.ATTENTION_REQUIRED));
+        assertFalse(ex.getMessage().contains("Jane"));
+    }
+
+    @Test
+    void aLexaVaultCodeThatIsNotLvShapedIsDropped() throws Exception {
+        var ex = refusal(409, "{\"errorCode\":\"VALIDATION_ERROR\",\"code\":\"Contract 12345 for Jane Doe\"}");
+        assertEquals("VALIDATION_ERROR", ex.safeCode());
+        assertNull(ex.lexaVaultLvCode());
+        assertEquals(409, ex.httpStatus());
+    }
+
+    @Test
+    void a5xxKeepsItsStatusAndAnyLvCode() throws Exception {
+        var ex = refusal(503, "{\"errorCode\":\"LICENSE_UNAVAILABLE\",\"code\":\"LV-LIC-004\"}");
+        assertTrue(ex.retryable());
+        assertEquals(503, ex.httpStatus());
+        assertEquals("LV-LIC-004", ex.lexaVaultLvCode());
+    }
+
+    /** Task 0025: the LV mapping's idea of a transient LexaVault answer is the client's retry rule. */
+    @Test
+    void theLvMappingAndTheRetryRuleAgreeOnEveryStatus() {
+        for (int status = 100; status <= 599; status++) {
+            assertEquals(LexaVaultScannerDeliveryClient.retryableStatus(status),
+                    com.securedoc.platform.scanbridge.model.BridgeLvCodes.lexaVaultAnswerIsTransient(status), "HTTP " + status);
+        }
+    }
+
     @Test
     void anErrorCodeThatIsNotCodeShapedIsReplacedByTheStatusCode() throws Exception {
         var ex = refusal(400, "{\"errorCode\":\"Unknown contract 12345 for Jane Doe\"}");

@@ -1,6 +1,8 @@
 package com.securedoc.platform.scanbridge.service;
 
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
+import com.securedoc.platform.scanbridge.model.BridgeLvCode;
+import com.securedoc.platform.scanbridge.model.BridgeLvCodes;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSession;
 import com.securedoc.platform.scanbridge.model.ScannerCaptureMode;
@@ -216,7 +218,7 @@ public class ScannerSimulatorService implements ScannerAcquisitionAdapter {
                 try {
                     Files.deleteIfExists(part);
                 } catch (IOException cleanup) {
-                    log.warn("SCAN_BRIDGE_SIMULATOR_PART_CLEANUP_FAILED scannerId={} sessionId={} exceptionType={}",
+                    log.warn("SCAN_BRIDGE_SIMULATOR_PART_CLEANUP_FAILED code={} scannerId={} sessionId={} exceptionType={}", BridgeLvCode.LV_SYS_007.code(),
                             properties.getScannerId(), sessionId, cleanup.getClass().getSimpleName());
                 }
                 throw ex;
@@ -312,7 +314,8 @@ public class ScannerSimulatorService implements ScannerAcquisitionAdapter {
         move(source, target);
         tracker.forget(source);
         Files.writeString(problemPath().resolve(rejectId + ".reason.txt"), reasonCode + System.lineSeparator(), StandardOpenOption.CREATE_NEW);
-        log.warn("SCAN_BRIDGE_FILE_REJECTED scannerId={} rejectId={} reasonCode={}", properties.getScannerId(), rejectId, reasonCode);
+        log.warn("SCAN_BRIDGE_FILE_REJECTED scannerId={} rejectId={} reasonCode={} code={}", properties.getScannerId(), rejectId, reasonCode,
+                BridgeLvCodes.forBridgeCode(reasonCode).code());
     }
 
     private String safeFileName(String originalFileName) {

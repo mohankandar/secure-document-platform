@@ -291,6 +291,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(!localMode);
   const [authError, setAuthError] = useState('');
   const [authDenied, setAuthDenied] = useState(false);
+  // Task 0025: the LV code of the refusal (the server's 403 body); NoAccess shows LV-AUT-002 when there is none.
+  const [deniedCode, setDeniedCode] = useState<string | null>(null);
   const [tenantChoices, setTenantChoices] = useState<TenantChoice[]>([]);
   const [switchingTenant, setSwitchingTenant] = useState(false);
 
@@ -372,7 +374,12 @@ export default function App() {
         console.error('[LexaVault OIDC] Production-session verification failed.', error);
         const status = typeof error === 'object' && error !== null && 'httpStatus' in error ? Number((error as { httpStatus?: number }).httpStatus) : undefined;
         if (status === 403 || error instanceof NoOrganizationError) {
-          if (active) { setAuthDenied(true); setAuthError(''); }
+          if (active) {
+            const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code?: unknown }).code : undefined;
+            setDeniedCode(typeof code === 'string' ? code : null);
+            setAuthDenied(true);
+            setAuthError('');
+          }
         } else {
           clearOidcSession();
           if (active) { setAuthDenied(false); setAuthError(status === 401 ? 'Your organization session has expired or could not be verified. Please sign in again.' : 'Sign-in could not be completed. Please try again.'); }
@@ -485,7 +492,7 @@ export default function App() {
     // words changed; the refusal and the session handling are as before.
     return (
       <Suspense fallback={<div className="auth-shell"><div className="auth-card"><p>Loading…</p></div></div>}>
-        <NoAccess who={signedInIdentity()} onSignOut={() => void endOidcSession()} />
+        <NoAccess who={signedInIdentity()} code={deniedCode} onSignOut={() => void endOidcSession()} />
       </Suspense>
     );
   }

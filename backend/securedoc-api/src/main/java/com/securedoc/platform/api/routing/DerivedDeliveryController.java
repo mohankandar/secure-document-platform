@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.routing;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -22,12 +23,12 @@ public class DerivedDeliveryController {
     @GetMapping("/packages/{packageId}/derived-deliveries") @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public List<Response> list(@PathVariable String packageId,HttpServletRequest request){var p=context.resolvePrincipal(request);return service.list(p.tenantId(),packageId(packageId)).stream().map(Response::of).toList();}
     @PostMapping("/packages/{packageId}/derived-deliveries/{deliveryId}/send") @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
-    public ResponseEntity<Response> send(@PathVariable String packageId,@PathVariable String deliveryId,HttpServletRequest request){var p=context.resolvePrincipal(request);DerivedDelivery d=service.get(p.tenantId(),uuid(deliveryId));if(!d.packageId().equals(packageId(packageId)))throw new ValidationException("Derived delivery does not belong to this package");return ResponseEntity.ok(Response.of(service.send(p.tenantId(),d.id(),p.actorId(),context.resolveCorrelationId(request))));}
+    public ResponseEntity<Response> send(@PathVariable String packageId,@PathVariable String deliveryId,HttpServletRequest request){var p=context.resolvePrincipal(request);DerivedDelivery d=service.get(p.tenantId(),uuid(deliveryId));if(!d.packageId().equals(packageId(packageId)))throw new ValidationException(LvErrorCode.CFG_001, "Derived delivery does not belong to this package");return ResponseEntity.ok(Response.of(service.send(p.tenantId(),d.id(),p.actorId(),context.resolveCorrelationId(request))));}
     @GetMapping("/derived-deliveries/attention") @RequireCapability(UserCapability.TECHNICAL_EXCEPTION_VIEW)
     public List<AttentionResponse> attention(HttpServletRequest request){var p=context.resolvePrincipal(request);return attentionQuery.listAttention(p.tenantId()).stream().map(AttentionResponse::of).toList();}
     @PostMapping("/derived-deliveries/{deliveryId}/technical-retry") @RequireCapability(UserCapability.TECHNICAL_RETRY)
     public ResponseEntity<Response> retry(@PathVariable String deliveryId,HttpServletRequest request){var p=context.resolvePrincipal(request);return ResponseEntity.ok(Response.of(service.technicalRetry(p.tenantId(),uuid(deliveryId),p.actorId(),context.resolveCorrelationId(request))));}
-    private UUID uuid(String v){try{return UUID.fromString(v);}catch(Exception e){throw new ValidationException("Invalid derived delivery id");}}private PackageId packageId(String v){try{return PackageId.of(UUID.fromString(v));}catch(Exception e){throw new ValidationException("Invalid package id");}}
+    private UUID uuid(String v){try{return UUID.fromString(v);}catch(Exception e){throw new ValidationException(LvErrorCode.CFG_001, "Invalid derived delivery id");}}private PackageId packageId(String v){try{return PackageId.of(UUID.fromString(v));}catch(Exception e){throw new ValidationException(LvErrorCode.CFG_001, "Invalid package id");}}
     /**
      * Task 0023 (B4, #222): no file name in the response. The split file name is built from the original file name,
      * so it is kept for delivery only; a screen names the item by {@code sourceDocumentId}. A file-share

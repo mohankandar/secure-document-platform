@@ -81,7 +81,7 @@ class AccessDeniedAuditRecorderTest {
         assertEquals(principal.actorId(), record.actorId());
         assertEquals("ApiRoute", record.resourceType());
         assertEquals("/api/v1/packages/{packageId}", record.resourceId());
-        assertEquals("capability=none, method=GET, route=/api/v1/packages/{packageId}, reason=TENANT_BOUNDARY",
+        assertEquals("code=LV-AUT-003, detail=ACCESS_DENIED, capability=none, method=GET, route=/api/v1/packages/{packageId}, reason=TENANT_BOUNDARY",
                 record.detail());
         for (String leaked : List.of("LOAN-55120", "Jane", "borrower")) {
             assertFalse(record.toString().contains(leaked), "audit record holds " + leaked);
@@ -93,7 +93,7 @@ class AccessDeniedAuditRecorderTest {
         var request = request("POST", "/api/v1/support/incidents/abc/actions", "/api/v1/support/incidents/{incidentId}/actions");
         handler.handleAccessDenied(
                 new TenantBoundaryDeniedException("Cross-tenant support incident actions are not permitted"), request);
-        assertEquals("capability=none, method=POST, route=/api/v1/support/incidents/{incidentId}/actions, "
+        assertEquals("code=LV-AUT-003, detail=ACCESS_DENIED, capability=none, method=POST, route=/api/v1/support/incidents/{incidentId}/actions, "
                 + "reason=TENANT_BOUNDARY", audits.get(0).detail());
     }
 
@@ -103,7 +103,7 @@ class AccessDeniedAuditRecorderTest {
         handler.handleAccessDenied(
                 new AccessDeniedException("Integration connection is not an enabled polling source"), request);
         assertEquals(1, audits.size());
-        assertEquals("capability=none, method=POST, route=/api/v1/integrations/{connectionId}/poll, reason=SERVICE",
+        assertEquals("code=LV-AUT-006, detail=ACCESS_DENIED, capability=none, method=POST, route=/api/v1/integrations/{connectionId}/poll, reason=SERVICE",
                 audits.get(0).detail());
         assertTrue(AppendixDetailAllowList.isAllowed(audits.get(0).action().name()));
     }
@@ -120,7 +120,7 @@ class AccessDeniedAuditRecorderTest {
         handler.handleAccessDenied(refused, request);
 
         assertEquals(1, audits.size(), "one record per request");
-        assertEquals("capability=PACKAGE_REPROCESS, method=POST, route=/api/v1/packages/{packageId}/reprocess",
+        assertEquals("code=LV-AUT-006, detail=ACCESS_DENIED, capability=PACKAGE_REPROCESS, method=POST, route=/api/v1/packages/{packageId}/reprocess",
                 audits.get(0).detail());
     }
 

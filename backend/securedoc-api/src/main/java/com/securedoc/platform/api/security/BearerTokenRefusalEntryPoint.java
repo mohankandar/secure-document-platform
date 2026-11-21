@@ -59,7 +59,7 @@ public final class BearerTokenRefusalEntryPoint implements AuthenticationEntryPo
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setHeader(RequestCorrelationFilter.HEADER_CORRELATION_ID, correlationId);
         objectMapper.writeValue(response.getOutputStream(),
-                ApiErrorResponse.of("AUTHENTICATION_REQUIRED", "Authentication is required", correlationId));
+                ApiErrorResponse.of("AUTHENTICATION_REQUIRED", com.securedoc.platform.domain.error.LvErrorCode.AUT_001, correlationId));
     }
 
     /** The reason category; reads only exception types and Spring's own fixed error descriptions. */

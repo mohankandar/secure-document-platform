@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.integration;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
@@ -103,7 +104,7 @@ public class IntegrationConnectionController {
     }
 
     private ConnectionInput toInput(IntegrationConnectionRequest body, boolean update) {
-        if (body == null) throw new ValidationException("Integration connection request is required");
+        if (body == null) throw new ValidationException(LvErrorCode.CFG_003, "Integration connection request is required");
         boolean clearSecret = Boolean.TRUE.equals(body.clearSecretReference());
         boolean preserveSecret = update && body.secretReference() == null && !clearSecret;
         return new ConnectionInput(body.name(), body.description(), parse(body.purpose(), IntegrationPurpose.class, "purpose"),
@@ -119,11 +120,11 @@ public class IntegrationConnectionController {
     }
 
     private <E extends Enum<E>> E parse(String raw, Class<E> type, String label) {
-        if (raw == null || raw.isBlank()) throw new ValidationException("Integration " + label + " is required");
+        if (raw == null || raw.isBlank()) throw new ValidationException(LvErrorCode.CFG_003, "Integration " + label + " is required");
         try {
             return Enum.valueOf(type, raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ValidationException("Unsupported integration " + label);
+            throw new ValidationException(LvErrorCode.CFG_003, "Unsupported integration " + label);
         }
     }
 
@@ -131,20 +132,20 @@ public class IntegrationConnectionController {
     private <E extends Enum<E>> E parseOptional(String raw, Class<E> type) {
         if (raw == null || raw.isBlank()) return null;
         try { return Enum.valueOf(type, raw.trim().toUpperCase(Locale.ROOT)); }
-        catch (IllegalArgumentException e) { throw new ValidationException("Unsupported polling schedule type"); }
+        catch (IllegalArgumentException e) { throw new ValidationException(LvErrorCode.CFG_003, "Unsupported polling schedule type"); }
     }
 
     private LocalTime parseLocalTime(String raw) {
         if (raw == null || raw.isBlank()) return null;
         try { return LocalTime.parse(raw.trim()); }
-        catch (RuntimeException e) { throw new ValidationException("Polling local time must use HH:mm format"); }
+        catch (RuntimeException e) { throw new ValidationException(LvErrorCode.CFG_003, "Polling local time must use HH:mm format"); }
     }
 
     private IntegrationConnectionId parseId(String raw) {
         try {
             return IntegrationConnectionId.fromString(raw);
         } catch (RuntimeException e) {
-            throw new ValidationException("Invalid integration connection id");
+            throw new ValidationException(LvErrorCode.CFG_003, "Invalid integration connection id");
         }
     }
 

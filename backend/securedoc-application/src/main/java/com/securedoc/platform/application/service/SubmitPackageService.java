@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -61,7 +62,7 @@ public final class SubmitPackageService implements SubmitPackageUseCase {
 
         // 3. Validate package has documents (domain enforces this, but provide clear app-layer message)
         if (documentPackage.documentCount() == 0) {
-            throw new ValidationException("Cannot submit package with no documents");
+            throw new ValidationException(LvErrorCode.INT_026, "Cannot submit package with no documents");
         }
 
         // 4. Transition to SUBMITTED via domain lifecycle method

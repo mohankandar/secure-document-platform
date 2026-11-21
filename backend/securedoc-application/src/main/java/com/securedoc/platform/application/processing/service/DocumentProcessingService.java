@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.processing.service;
 
+import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.FailDocumentProcessingUseCase;
@@ -73,7 +74,7 @@ public final class DocumentProcessingService implements StartDocumentProcessingU
 
         // 1. Acquire processing lock to prevent concurrent processing
         String lockToken = processingLockPort.tryAcquire(lockKey, LOCK_TTL)
-                .orElseThrow(() -> new ValidationException(
+                .orElseThrow(() -> new ValidationException(LvErrorCode.PRC_009, 
                         "Document is already being processed"));
 
         try {
@@ -84,7 +85,7 @@ public final class DocumentProcessingService implements StartDocumentProcessingU
 
             // 3. Validate document belongs to the specified package
             if (!document.packageId().equals(command.packageId())) {
-                throw new ValidationException("Document does not belong to the specified package");
+                throw new ValidationException(LvErrorCode.PRC_009, "Document does not belong to the specified package");
             }
 
             // 4. Load parent package and validate it is in PROCESSING status
@@ -93,7 +94,7 @@ public final class DocumentProcessingService implements StartDocumentProcessingU
                     .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
 
             if (parentPackage.status() != PackageStatus.PROCESSING) {
-                throw new ValidationException("Package is not in PROCESSING status");
+                throw new ValidationException(LvErrorCode.PRC_009, "Package is not in PROCESSING status");
             }
 
             // 5. Transition to EXTRACTING via domain lifecycle (validates UPLOADED state)
@@ -145,7 +146,7 @@ public final class DocumentProcessingService implements StartDocumentProcessingU
                     .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
 
             if (!document.packageId().equals(command.packageId())) {
-                throw new ValidationException("Document does not belong to the specified package");
+                throw new ValidationException(LvErrorCode.PRC_009, "Document does not belong to the specified package");
             }
 
             // 2. Load parent package by tenant to confirm tenant ownership and package existence.
