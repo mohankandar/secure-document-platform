@@ -230,6 +230,39 @@ class DerivedRoutingFailureRecordingTest {
     }
 
     @Test
+    void withExportJobsOnASplitDocumentIsQueuedAsItsOwnJobInsteadOfSentAtOnce() throws Exception {
+        Artifact master = Artifact.create(tenant, source.id(), ArtifactType.REDACTED, MimeType.pdf(), 10,
+                Checksum.sha256("e".repeat(64)));
+        master.markAvailable(ArtifactStorageReference.local("redacted/master.pdf"));
+        DocumentRepository documents = mock(DocumentRepository.class);
+        RoutingRuleRepository rules = mock(RoutingRuleRepository.class);
+        RoutingMarkerDetectionPort detector = mock(RoutingMarkerDetectionPort.class);
+        DerivedPdfBuilderPort builder = mock(DerivedPdfBuilderPort.class);
+        when(rules.findEnabledByTenantId(tenant)).thenReturn(List.of(rule));
+        when(documents.findByPackageIdAndTenantId(pkg.id(), tenant)).thenReturn(List.of(source));
+        when(artifacts.findByDocumentIdAndTenantId(source.id(), tenant)).thenReturn(List.of(master));
+        when(storage.retrieve(any())).thenAnswer(call -> new ByteArrayInputStream("PDF".getBytes()));
+        when(storage.storeForProcessingCycle(any(), any(), anyInt(), anyString(), any(), anyLong(), anyString()))
+                .thenReturn(ArtifactStorageReference.local("derived/split.pdf"));
+        RoutingMarkerDetectionResult detected = new RoutingMarkerDetectionResult(Map.of(rule.id(), List.of(1)), Set.of());
+        when(detector.detect(any(), any())).thenReturn(detected);
+        when(builder.build(any(), any())).thenAnswer(call -> new ReplayableContent() {
+            @Override public java.io.InputStream openStream() { return new ByteArrayInputStream("SPLIT".getBytes()); }
+            @Override public long contentLength() { return 5; }
+            @Override public void close() { }
+        });
+        var scheduler = mock(com.securedoc.platform.application.pipeline.SplitExportScheduler.class);
+
+        new DerivedRoutingService(rules, deliveries, connections, documents, artifacts, storage, detector, builder,
+                deliveryService, audit, scheduler).processPackage(pkg.id(), tenant, 1, CorrelationId.generate());
+
+        // Task 0027: one SPLIT_EXPORT job for the split document; nothing is sent from here.
+        verify(scheduler).queueSplitExport(eq(tenant), eq(pkg.id()), eq(source.id()), any(UUID.class),
+                eq(destination.id()), eq(1), any());
+        verify(port, never()).deliver(any(), any());
+    }
+
+    @Test
     void aRoutingFailureAfterTheMasterExportIsAuditedOnTheCaseAndListedPerDocument() {
         DocumentRepository documents = mock(DocumentRepository.class);
         when(documents.findByPackageIdAndTenantId(pkg.id(), tenant)).thenReturn(List.of(source));

@@ -31,6 +31,8 @@ import com.securedoc.platform.application.processing.result.ProcessingWorkItem;
 import com.securedoc.platform.application.processing.result.StartDocumentProcessingResult;
 import com.securedoc.platform.application.processing.result.StartPackageProcessingResult;
 import com.securedoc.platform.application.redaction.command.RedactDocumentCommand;
+import com.securedoc.platform.application.pipeline.ExportJobScheduler;
+import com.securedoc.platform.application.pipeline.MasterExportCompletion;
 import com.securedoc.platform.application.resilience.SelectiveRetryExecutor;
 import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
@@ -89,7 +91,6 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final DetectSensitiveDataUseCase detectSensitiveDataUseCase;
     private final RedactDocumentUseCase redactDocumentUseCase;
     private final ExportPackageDocumentsUseCase exportPackageDocumentsUseCase;
-    private final ProcessDerivedRoutingUseCase processDerivedRoutingUseCase;
     private final SelectiveRetryExecutor selectiveRetryExecutor;
     private final PackageLifecycleService lifecycleService;
     private final DocumentIntelligenceExecutionService documentIntelligenceExecutionService;
@@ -97,7 +98,10 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final ProcessingIncidentService processingIncidentService;
     private final TenantLicensingService tenantLicensingService;
     private final ProductTelemetryService productTelemetryService;
+    private final ExportJobScheduler exportJobScheduler;
+    private final MasterExportCompletion masterExportCompletion;
 
+    /** Today's behaviour: the case is exported at the end of processing (export-mode inline). */
     public TriggerPackageProcessingService(PackageRepository packageRepository,
                                            DocumentRepository documentRepository,
                                            FindingRepository findingRepository,
@@ -117,6 +121,38 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            ProcessingIncidentService processingIncidentService,
                                            TenantLicensingService tenantLicensingService,
                                            ProductTelemetryService productTelemetryService) {
+        this(packageRepository, documentRepository, findingRepository, artifactRepository, processingLockPort,
+                startPackageProcessingUseCase, startDocumentProcessingUseCase, extractDocumentTextUseCase,
+                detectSensitiveDataUseCase, redactDocumentUseCase, exportPackageDocumentsUseCase,
+                processDerivedRoutingUseCase, selectiveRetryExecutor, lifecycleService,
+                documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService,
+                productTelemetryService, ExportJobScheduler.INLINE);
+    }
+
+    /**
+     * Task 0027: with export jobs on ({@code exportJobScheduler.jobMode()}), a finished case is queued for export
+     * instead of being exported here. What the export does is unchanged.
+     */
+    public TriggerPackageProcessingService(PackageRepository packageRepository,
+                                           DocumentRepository documentRepository,
+                                           FindingRepository findingRepository,
+                                           ArtifactRepository artifactRepository,
+                                           ProcessingLockPort processingLockPort,
+                                           StartPackageProcessingUseCase startPackageProcessingUseCase,
+                                           StartDocumentProcessingUseCase startDocumentProcessingUseCase,
+                                           ExtractDocumentTextUseCase extractDocumentTextUseCase,
+                                           DetectSensitiveDataUseCase detectSensitiveDataUseCase,
+                                           RedactDocumentUseCase redactDocumentUseCase,
+                                           ExportPackageDocumentsUseCase exportPackageDocumentsUseCase,
+                                           ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
+                                           SelectiveRetryExecutor selectiveRetryExecutor,
+                                           PackageLifecycleService lifecycleService,
+                                           DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
+                                           AuditService auditService,
+                                           ProcessingIncidentService processingIncidentService,
+                                           TenantLicensingService tenantLicensingService,
+                                           ProductTelemetryService productTelemetryService,
+                                           ExportJobScheduler exportJobScheduler) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -128,7 +164,6 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.detectSensitiveDataUseCase = Objects.requireNonNull(detectSensitiveDataUseCase);
         this.redactDocumentUseCase = Objects.requireNonNull(redactDocumentUseCase);
         this.exportPackageDocumentsUseCase = Objects.requireNonNull(exportPackageDocumentsUseCase);
-        this.processDerivedRoutingUseCase = Objects.requireNonNull(processDerivedRoutingUseCase);
         this.selectiveRetryExecutor = Objects.requireNonNull(selectiveRetryExecutor);
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
         this.documentIntelligenceExecutionService = Objects.requireNonNull(documentIntelligenceExecutionService);
@@ -136,6 +171,9 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
         this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
         this.productTelemetryService = Objects.requireNonNull(productTelemetryService);
+        this.exportJobScheduler = Objects.requireNonNull(exportJobScheduler);
+        this.masterExportCompletion = new MasterExportCompletion(
+                packageRepository, processDerivedRoutingUseCase, processingIncidentService, auditService);
     }
 
     @Override
@@ -444,6 +482,23 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             return;
         }
 
+        // Task 0027: with export jobs on, the case is Ready for export. It keeps its status (PROCESSING, or
+        // PENDING_REVIEW / IN_REVIEW after a review; not failed, not completed) while its export jobs run; the
+        // EXPORT job completes it with the same steps as below. Queuing the same run twice adds nothing.
+        if (exportJobScheduler.jobMode()) {
+            try {
+                exportJobScheduler.queueCaseExport(tenantId, packageId,
+                        lifecycleService.nextExportCycle(packageId, tenantId), correlationId);
+            } catch (Exception e) {
+                processingIncidentService.recordFailure(tenantId, packageId, null, ProcessingStage.DELIVERY,
+                        e, correlationId, "Package export could not be queued", java.util.Map.of());
+                failPackage(pkg, tenantId, packageId, correlationId,
+                        TechnicalFailureClassifier.safeAuditDetail(
+                                e, "Package export could not be queued; technical attention required"));
+            }
+            return;
+        }
+
         // Batch gate: the destination receives the complete package atomically. No individual
         // document becomes visible until every staged document has been written successfully.
         com.securedoc.platform.application.export.result.ExportPackageDocumentsResult exportResult;
@@ -459,32 +514,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             return;
         }
 
-        // Option A: master SDV/local export is authoritative for package completion. Derived
-        // routing is an independent post-export track; failures are recorded there and never
-        // undo the successful master export or its retention semantics.
-        try {
-            processDerivedRoutingUseCase.processPackage(packageId, tenantId, exportResult.exportCycle(), correlationId);
-        } catch (Exception e) {
-            log.warn("DERIVED_ROUTING_POST_EXPORT_FAILED package={} tenant={} correlation={} type={}",
-                    packageId, tenantId, correlationId, e.getClass().getSimpleName());
-            // Task 0023 (C4, #181): was log only. Audit it with a code and put it in the attention list; the
-            // master export stays successful and nothing is retried.
-            try {
-                processDerivedRoutingUseCase.recordRoutingFailure(packageId, tenantId, exportResult.exportCycle(),
-                        "DERIVED_ROUTING_POST_EXPORT_FAILED", correlationId);
-            } catch (RuntimeException recordFailure) {
-                log.warn("DERIVED_ROUTING_FAILURE_NOT_RECORDED package={} correlation={} type={}",
-                        packageId, correlationId, recordFailure.getClass().getSimpleName());
-            }
-        }
-
-        pkg.completeSuccessfully();
-        packageRepository.save(pkg);
-        processingIncidentService.markProcessingCompleted(packageId, tenantId, correlationId);
-        auditService.recordSuccess(
-                tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_COMPLETED,
-                "DocumentPackage", packageId.toString(), correlationId,
-                "Package processing and delivery completed: " + documents.size() + " document(s)");
+        // Derived routing, then COMPLETED (moved unchanged to MasterExportCompletion, task 0027).
+        masterExportCompletion.complete(pkg, tenantId, packageId, exportResult, documents.size(), correlationId);
     }
 
     private long elapsedMillis(long startedNanos) {

@@ -99,11 +99,20 @@ public interface DeliveryPort {
     record DeliveryReference(DocumentId documentId, String sourceDocumentId, String destinationType,
                              String destinationDocumentReference, String location) { }
 
+    /**
+     * @param alreadyReceived task 0027: the destination said it already had at least one document (Vero's idempotent
+     *                        replay or exact duplicate). Still a success; audited with LV-DLV-009.
+     */
     record BatchDeliveryReference(String destinationType, String destinationSubmissionReference,
-                                  List<DeliveryReference> documents) {
+                                  List<DeliveryReference> documents, boolean alreadyReceived) {
         public BatchDeliveryReference {
             if (destinationType == null || destinationType.isBlank()) throw new IllegalArgumentException("Destination type must not be blank");
             documents = List.copyOf(documents == null ? List.of() : documents);
+        }
+
+        public BatchDeliveryReference(String destinationType, String destinationSubmissionReference,
+                                      List<DeliveryReference> documents) {
+            this(destinationType, destinationSubmissionReference, documents, false);
         }
     }
 }

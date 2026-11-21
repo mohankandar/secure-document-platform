@@ -43,15 +43,31 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
     private final ObjectMapper mapper;
     private final HttpClient client;
 
+    /** Task 0027: with export jobs on, one attempt per call; the export job spaces the tries. */
+    private final boolean singleAttempt;
+
     @org.springframework.beans.factory.annotation.Autowired
+    public SdvDeliveryAdapter(IntegrationConnectionRepository connections, ObjectMapper mapper,
+                              @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-mode:inline}") String exportMode) {
+        this(connections, mapper, HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(),
+                com.securedoc.platform.application.pipeline.ExportMode.parse(exportMode)
+                        == com.securedoc.platform.application.pipeline.ExportMode.JOB);
+    }
+
     public SdvDeliveryAdapter(IntegrationConnectionRepository connections, ObjectMapper mapper) {
         this(connections, mapper, HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build());
     }
 
     SdvDeliveryAdapter(IntegrationConnectionRepository connections, ObjectMapper mapper, HttpClient client) {
+        this(connections, mapper, client, false);
+    }
+
+    SdvDeliveryAdapter(IntegrationConnectionRepository connections, ObjectMapper mapper, HttpClient client,
+                       boolean singleAttempt) {
         this.connections = Objects.requireNonNull(connections);
         this.mapper = Objects.requireNonNull(mapper);
         this.client = Objects.requireNonNull(client);
+        this.singleAttempt = singleAttempt;
     }
 
     @Override
@@ -86,10 +102,12 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
 
             final String activeSubmissionId = sdvSubmissionId;
             List<DeliveryReference> references = new ArrayList<>();
+            boolean alreadyReceived = false;
             for (DeliveryItem item : batch.items()) {
-                DeliveryReference reference = uploadDocument(c, activeSubmissionId, batch.sourceSubmissionId(), item);
-                references.add(reference);
-                batch.progressListener().documentAcknowledged(reference);
+                Upload upload = uploadDocument(c, activeSubmissionId, batch.sourceSubmissionId(), item);
+                references.add(upload.reference());
+                alreadyReceived |= upload.alreadyReceived();
+                batch.progressListener().documentAcknowledged(upload.reference());
             }
 
             SubmissionStatus status = withRetry(c, () -> readSubmissionStatus(c, activeSubmissionId));
@@ -98,7 +116,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
                         "SDV submission has not acknowledged all expected documents", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_008);
             }
             connections.save(c.recordOperationalSuccess(java.time.Instant.now()));
-            return new BatchDeliveryReference(DESTINATION_TYPE, activeSubmissionId, references);
+            return new BatchDeliveryReference(DESTINATION_TYPE, activeSubmissionId, references, alreadyReceived);
         } catch (TechnicalDependencyException e) {
             connections.save(c.recordOperationalFailure(e.failureCode().name(), java.time.Instant.now()));
             throw e;
@@ -143,8 +161,27 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
         catch (Exception e) { throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV submission creation failed", e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007); }
     }
 
-    private DeliveryReference uploadDocument(IntegrationConnection c, String sdvSubmissionId,
-                                             String sourceSubmissionId, DeliveryItem item) {
+    /**
+     * Task 0027: Vero answers a retry of the same upload (same key) with 200 and {@code idempotentReplay: true}, and a
+     * file it already stores with 200 and {@code receiptAcknowledgement: DUPLICATE_ALREADY_STORED} /
+     * {@code duplicate: true} (Vero docs/api/README.md). Both are a success; the export job audits them as
+     * LV-DLV-009. Vero's 409 is never "already received": it means the same key with different content (SDV-INT-011,
+     * SDV-SEN-003/004), so it stays LV-DLV-004 (or LV-DLV-003 for a level).
+     */
+    static boolean alreadyReceived(JsonNode json) {
+        if (json == null) return false;
+        JsonNode replay = json.get("idempotentReplay");
+        JsonNode duplicate = json.get("duplicate");
+        JsonNode receipt = json.get("receiptAcknowledgement");
+        return (replay != null && replay.asBoolean(false))
+                || (duplicate != null && duplicate.asBoolean(false))
+                || (receipt != null && "DUPLICATE_ALREADY_STORED".equals(receipt.asText()));
+    }
+
+    private record Upload(DeliveryReference reference, boolean alreadyReceived) { }
+
+    private Upload uploadDocument(IntegrationConnection c, String sdvSubmissionId,
+                                  String sourceSubmissionId, DeliveryItem item) {
         String path = SUBMISSIONS_PATH + "/" + enc(sdvSubmissionId) + "/documents";
         return withRetry(c, () -> {
             HttpRequest.Builder builder = authorized(c, HttpRequest.newBuilder(resolve(c, path)))
@@ -168,8 +205,9 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
                     throw failure(TechnicalFailureCode.DELIVERY_IO, false,
                             "SDV acknowledgement source document id mismatch", null).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
                 }
-                return new DeliveryReference(item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE,
-                        remoteDocumentId, "sdv://" + sdvSubmissionId + "/" + (remoteDocumentId == null ? item.sourceDocumentId() : remoteDocumentId));
+                return new Upload(new DeliveryReference(item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE,
+                        remoteDocumentId, "sdv://" + sdvSubmissionId + "/" + (remoteDocumentId == null ? item.sourceDocumentId() : remoteDocumentId)),
+                        alreadyReceived(json));
             } catch (TechnicalDependencyException e) { throw e; }
             catch (Exception e) { throw failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV document acknowledgement was invalid", e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007); }
         });
@@ -249,7 +287,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
 
     private <T> T withRetry(IntegrationConnection c, java.util.function.Supplier<T> operation) {
         TechnicalDependencyException last = null;
-        int attempts = Math.max(1, c.retryMaxAttempts() + 1);
+        int attempts = singleAttempt ? 1 : Math.max(1, c.retryMaxAttempts() + 1);
         for (int i = 1; i <= attempts; i++) {
             try { return operation.get(); }
             catch (TechnicalDependencyException e) {

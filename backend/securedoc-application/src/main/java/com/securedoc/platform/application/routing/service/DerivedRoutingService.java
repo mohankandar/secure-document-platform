@@ -33,10 +33,20 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
     private final IntegrationConnectionRepository connections; private final DocumentRepository documents;
     private final ArtifactRepository artifacts; private final StoragePort storage; private final RoutingMarkerDetectionPort detector;
     private final DerivedPdfBuilderPort pdfBuilder; private final DerivedDeliveryService deliveryService; private final AuditService audit;
+    /** Task 0027: null sends each split document at once (today); set, it queues a SPLIT_EXPORT job instead. */
+    private final com.securedoc.platform.application.pipeline.SplitExportScheduler splitExportScheduler;
     public DerivedRoutingService(RoutingRuleRepository rules, DerivedDeliveryRepository deliveries, IntegrationConnectionRepository connections,
                                  DocumentRepository documents, ArtifactRepository artifacts, StoragePort storage,
                                  RoutingMarkerDetectionPort detector, DerivedPdfBuilderPort pdfBuilder,
                                  DerivedDeliveryService deliveryService, AuditService audit){
+        this(rules,deliveries,connections,documents,artifacts,storage,detector,pdfBuilder,deliveryService,audit,null);
+    }
+    public DerivedRoutingService(RoutingRuleRepository rules, DerivedDeliveryRepository deliveries, IntegrationConnectionRepository connections,
+                                 DocumentRepository documents, ArtifactRepository artifacts, StoragePort storage,
+                                 RoutingMarkerDetectionPort detector, DerivedPdfBuilderPort pdfBuilder,
+                                 DerivedDeliveryService deliveryService, AuditService audit,
+                                 com.securedoc.platform.application.pipeline.SplitExportScheduler splitExportSchedulerOrNull){
+        this.splitExportScheduler=splitExportSchedulerOrNull;
         this.rules=Objects.requireNonNull(rules);this.deliveries=Objects.requireNonNull(deliveries);this.connections=Objects.requireNonNull(connections);
         this.documents=Objects.requireNonNull(documents);this.artifacts=Objects.requireNonNull(artifacts);this.storage=Objects.requireNonNull(storage);
         this.detector=Objects.requireNonNull(detector);this.pdfBuilder=Objects.requireNonNull(pdfBuilder);this.deliveryService=Objects.requireNonNull(deliveryService);this.audit=Objects.requireNonNull(audit);
@@ -138,6 +148,11 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
                             "Derived redacted document created for cycle="+exportCycle+", destination="+rule.destinationLabel()+", pages="+pages);
                     // Task 0023 (C4, #192): the delivery row and the audit record every failure, including a refusal
                     // before the attempt (DerivedDeliveryService.refuse); this log adds the type for IT. No retry here.
+                    if(splitExportScheduler!=null){
+                        // Task 0027 (export-mode job): the split document goes out as its own export job.
+                        splitExportScheduler.queueSplitExport(tenantId,packageId,document.id(),d.id(),c.id(),exportCycle,correlationId);
+                        continue;
+                    }
                     try{deliveryService.autoSend(tenantId,d.id(),correlationId);}
                     catch(Exception e){log.warn("DERIVED_AUTO_SEND_FAILED package={} derivedDelivery={} code={} type={}",packageId,d.id(),
                             e instanceof com.securedoc.platform.application.exception.TechnicalDependencyException t?t.failureCode().name():"DERIVED_DELIVERY_REFUSED",e.getClass().getSimpleName());}

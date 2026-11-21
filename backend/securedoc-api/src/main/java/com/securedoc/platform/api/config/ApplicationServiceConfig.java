@@ -1120,14 +1120,88 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             ProcessingIncidentService processingIncidentService,
             TenantLicensingService tenantLicensingService,
-            ProductTelemetryService productTelemetryService) {
+            ProductTelemetryService productTelemetryService,
+            com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue) {
         return new TriggerPackageProcessingService(packageRepository, documentRepository,
                 findingRepository, artifactRepository, processingLockPort,
                 startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase,
                 exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService,
                 documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService,
-                productTelemetryService);
+                productTelemetryService, exportJobQueue);
+    }
+
+    /** Task 0027: export job settings. {@code securedoc.processing.export-mode} is inline (default) or job. */
+    @Bean
+    public com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings(
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-mode:inline}") String exportMode,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.retry-delay-ms:300000}") long retryDelayMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.max-attempts:3}") int maxAttempts,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.pause-after-failures:3}") int pauseAfterFailures,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.probe-interval-ms:300000}") long probeIntervalMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.claim-lease-ms:120000}") long claimLeaseMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-per-destination:4}") int workersPerDestination,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-total:8}") int workersTotal) {
+        return new com.securedoc.platform.application.pipeline.ExportJobSettings(
+                com.securedoc.platform.application.pipeline.ExportMode.parse(exportMode),
+                java.time.Duration.ofMillis(retryDelayMs), maxAttempts, pauseAfterFailures,
+                java.time.Duration.ofMillis(probeIntervalMs), java.time.Duration.ofMillis(claimLeaseMs),
+                workersPerDestination, workersTotal);
+    }
+
+    @Bean
+    public com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue(
+            com.securedoc.platform.application.port.out.PipelineJobRepository pipelineJobRepository,
+            DeliveryPort deliveryPort,
+            AuditService auditService,
+            com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings) {
+        return new com.securedoc.platform.application.pipeline.ExportJobQueue(pipelineJobRepository, deliveryPort,
+                auditService, exportJobSettings, java.time.Clock.systemUTC());
+    }
+
+    /** Task 0027: a paused destination is probed with the existing connection test for its kind. */
+    @Bean
+    public com.securedoc.platform.application.port.out.ExportDestinationProbePort exportDestinationProbePort(
+            IntegrationConnectionRepository integrationConnectionRepository,
+            org.springframework.beans.factory.ObjectProvider<SdvConnectionTestPort> sdvConnectionTestPort,
+            DerivedDestinationDeliveryPort derivedDestinationDeliveryPort) {
+        return (tenantId, connectionId) -> {
+            var connection = integrationConnectionRepository.findByTenantIdAndId(tenantId, connectionId)
+                    .orElseThrow(() -> new com.securedoc.platform.application.exception.NotFoundException(
+                            "IntegrationConnection", connectionId.value().toString()));
+            switch (connection.purpose()) {
+                case SDV_DELIVERY -> {
+                    SdvConnectionTestPort sdv = sdvConnectionTestPort.getIfAvailable();
+                    if (sdv == null) throw new IllegalStateException("SDV delivery is not configured");
+                    sdv.testConnection(connection);
+                }
+                case DERIVED_DOCUMENT_DELIVERY -> derivedDestinationDeliveryPort.testConnection(connection);
+                default -> throw new IllegalStateException("Connection is not an export destination");
+            }
+        };
+    }
+
+    @Bean
+    public com.securedoc.platform.application.pipeline.ExportJobService exportJobService(
+            com.securedoc.platform.application.port.out.PipelineJobRepository pipelineJobRepository,
+            com.securedoc.platform.application.port.out.ExportDestinationStateRepository exportDestinationStateRepository,
+            ExportPackageDocumentsUseCase exportPackageDocumentsUseCase,
+            DerivedDeliveryService derivedDeliveryService,
+            PackageRepository packageRepository,
+            PackageLifecycleService packageLifecycleService,
+            ProcessDerivedRoutingUseCase processDerivedRoutingUseCase,
+            ProcessingIncidentService processingIncidentService,
+            AuditService auditService,
+            com.securedoc.platform.application.port.out.ExportDestinationProbePort exportDestinationProbePort,
+            IntegrationConnectionRepository integrationConnectionRepository,
+            com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings) {
+        return new com.securedoc.platform.application.pipeline.ExportJobService(pipelineJobRepository,
+                exportDestinationStateRepository, exportPackageDocumentsUseCase, derivedDeliveryService,
+                packageRepository, packageLifecycleService,
+                new com.securedoc.platform.application.pipeline.MasterExportCompletion(packageRepository,
+                        processDerivedRoutingUseCase, processingIncidentService, auditService),
+                processingIncidentService, auditService, exportDestinationProbePort, integrationConnectionRepository,
+                exportJobSettings);
     }
 
 
@@ -1232,10 +1306,13 @@ public class ApplicationServiceConfig {
                                                                      RoutingMarkerDetectionPort routingMarkerDetectionPort,
                                                                      DerivedPdfBuilderPort derivedPdfBuilderPort,
                                                                      DerivedDeliveryService derivedDeliveryService,
-                                                                     AuditService auditService) {
+                                                                     AuditService auditService,
+                                                                     com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue) {
+        // Task 0027: with export jobs on, each split document is queued as a SPLIT_EXPORT job instead of sent at once.
         return new DerivedRoutingService(routingRuleRepository, derivedDeliveryRepository,
                 integrationConnectionRepository, documentRepository, artifactRepository, storagePort,
-                routingMarkerDetectionPort, derivedPdfBuilderPort, derivedDeliveryService, auditService);
+                routingMarkerDetectionPort, derivedPdfBuilderPort, derivedDeliveryService, auditService,
+                exportJobQueue.jobMode() ? exportJobQueue : null);
     }
 
     @Bean

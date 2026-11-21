@@ -145,6 +145,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                     artifact.checksum().algorithm(), artifact.checksum().value(), documentLevel));
         }
 
+        boolean alreadyReceived = false;
         if (submission.status() != DeliverySubmissionStatus.DELIVERED) {
             BatchDeliveryReference batchReference;
             try {
@@ -158,6 +159,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 for (DeliveryReference ref : batchReference.documents()) {
                     submission.acknowledgeDocument(ref.documentId(), ref.destinationDocumentReference(), ref.location(), Instant.now());
                 }
+                alreadyReceived = batchReference.alreadyReceived();
                 submission.markDelivered(batchReference.destinationSubmissionReference(), Instant.now());
                 deliverySubmissionRepository.save(submission);
                 deliverySubmissionRepository.saveAttempt(activeAttempt.completeSuccess(Instant.now()));
@@ -209,7 +211,8 @@ public final class PackageDocumentExportService implements ExportPackageDocument
 
         log.info("PACKAGE_DELIVERY_COMPLETED package={} documents={} destination={} cycle={} durationMs={}",
                 command.packageId(), documents.size(), submission.destinationType(), exportCycle, elapsedMillis(startedNanos));
-        return ExportPackageDocumentsResult.of(command.packageId(), documents.size(), submission.destinationType(), exportCycle);
+        return ExportPackageDocumentsResult.of(command.packageId(), documents.size(), submission.destinationType(), exportCycle,
+                alreadyReceived);
     }
 
     private Map<String,String> businessIdentifiers(DocumentPackage pkg) {
