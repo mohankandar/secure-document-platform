@@ -165,3 +165,11 @@ Nothing is pushed or merged.
 ## Suggested next step
 
 Your screen check of New case, the case panel and the watched-folder setting. Then the Reports task that counts levels and `LV-INT-005` warnings.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. **Case panel level:** show the **case's own level, as sent** by the source system, not the highest level in the case. A document whose own level differs stays marked next to its name. Task 0022 (A1).
+2. **Local-folder master delivery:** same treatment as `FILE_SHARE`: no level sent; the `DOCUMENT_EXPORTED` audit record holds the case level and the document's level. Task 0022 (A2).
+3. **HTTP split destinations refusing a level:** which response means "level refused" belongs to the integration standards, decided in the Shared Capabilities thread. Until then it stays `DELIVERY_DESTINATION_INVALID`.
+
+Also: no proof pictures were taken for 0021; task 0022 (A4) takes them.
