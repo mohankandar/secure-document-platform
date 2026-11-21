@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class LvErrorCodeGuideTest {
 
-    private static final String DRAFT_LINE = "Draft: steps to be reviewed by the design chat";
+    private static final String REVIEWED_LINE = "Reviewed by the design chat, 2026-11-21.";
     private static final Pattern ENTRY_HEADING = Pattern.compile("^### (LV-[A-Z]+-\\d{3}) (.+)$");
     private static final Pattern STEP = Pattern.compile("^(\\d+)\\. \\S.*");
     private static final Map<LvErrorCode.Kind, String> KIND_LABELS = Map.of(
@@ -78,8 +78,9 @@ class LvErrorCodeGuideTest {
     }
 
     @Test
-    void draftLineIsPresent() throws IOException {
-        assertTrue(lines().stream().anyMatch(l -> l.contains(DRAFT_LINE)), "the guide must say: " + DRAFT_LINE);
+    void reviewedLineIsPresentAndTheDraftLineGone() throws IOException {
+        assertTrue(lines().stream().anyMatch(l -> l.contains(REVIEWED_LINE)), "the guide must say: " + REVIEWED_LINE);
+        assertTrue(lines().stream().noneMatch(l -> l.contains("Draft: steps to be reviewed")), "the draft line must be gone");
     }
 
     @Test
@@ -114,7 +115,7 @@ class LvErrorCodeGuideTest {
             assertEquals(code.description(), field(entry, "Means"), code.code() + " means");
             assertEquals(KIND_LABELS.get(code.kind()), field(entry, "Kind"), code.code() + " kind");
             assertEquals(code.whoActs(), field(entry, "Who acts"), code.code() + " who acts");
-            assertEquals(code.httpStatus().map(String::valueOf).orElse("—"), field(entry, "HTTP status"),
+            assertEquals(code.httpStatusLabel(), field(entry, "HTTP status"),
                     code.code() + " HTTP status");
             boolean saysReserved = entry.body().stream().anyMatch(l -> l.trim().equals("Reserved: not used yet."));
             assertEquals(code.reserved(), saysReserved, code.code() + " reserved note");

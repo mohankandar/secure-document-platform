@@ -181,6 +181,10 @@ public final class InProcessPackageProcessingDispatcher implements PackageProces
             });
         } catch (RuntimeException rejected) {
             processingLease.release(claim.get());
+            // Task 0026 (#344): a full work queue is LV-SYS-004; the type and code only.
+            log.warn("PACKAGE_PROCESSING_DISPATCH_REJECTED package={} tenant={} type={} code={}",
+                    command.packageId(), command.tenantId(), rejected.getClass().getSimpleName(),
+                    com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(rejected).code());
             throw rejected;
         }
         log.info("PACKAGE_PROCESSING_DISPATCH_SCHEDULED package={} tenant={} correlation={} recovery={}",

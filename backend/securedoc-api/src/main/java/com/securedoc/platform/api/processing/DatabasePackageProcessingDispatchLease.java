@@ -98,8 +98,9 @@ public class DatabasePackageProcessingDispatchLease implements PackageProcessing
             } catch (RuntimeException unavailable) {
                 // Fail closed for ownership. The running task may encounter the same database outage;
                 // recovery cannot take over until the shared lease store becomes available again.
-                log.warn("PACKAGE_PROCESSING_LEASE_HEARTBEAT_FAILED package={} tenant={} nodeId={} reasonCode={}",
-                        claim.packageId(), claim.tenantId(), logicalNodeId, unavailable.getClass().getSimpleName());
+                log.warn("PACKAGE_PROCESSING_LEASE_HEARTBEAT_FAILED package={} tenant={} nodeId={} reasonCode={} code={}",
+                        claim.packageId(), claim.tenantId(), logicalNodeId, unavailable.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
             }
         }
     }
@@ -112,8 +113,9 @@ public class DatabasePackageProcessingDispatchLease implements PackageProcessing
             return leasePort.isCurrent(claim.packageId(), claim.ownerId(), claim.fencingToken());
         } catch (RuntimeException unavailable) {
             // Never start queued work when authoritative ownership cannot be established.
-            log.warn("PACKAGE_PROCESSING_LEASE_CURRENT_CHECK_FAILED package={} tenant={} nodeId={} reasonCode={}",
-                    claim.packageId(), claim.tenantId(), logicalNodeId, unavailable.getClass().getSimpleName());
+            log.warn("PACKAGE_PROCESSING_LEASE_CURRENT_CHECK_FAILED package={} tenant={} nodeId={} reasonCode={} code={}",
+                    claim.packageId(), claim.tenantId(), logicalNodeId, unavailable.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
             return false;
         }
     }
@@ -126,8 +128,9 @@ public class DatabasePackageProcessingDispatchLease implements PackageProcessing
             leasePort.release(claim.packageId(), claim.ownerId(), claim.fencingToken());
         } catch (RuntimeException unavailable) {
             // Expiry is crash-safe release. Explicit release is an optimization.
-            log.warn("PACKAGE_PROCESSING_LEASE_RELEASE_FAILED package={} tenant={} nodeId={} reasonCode={}",
-                    claim.packageId(), claim.tenantId(), logicalNodeId, unavailable.getClass().getSimpleName());
+            log.warn("PACKAGE_PROCESSING_LEASE_RELEASE_FAILED package={} tenant={} nodeId={} reasonCode={} code={}",
+                    claim.packageId(), claim.tenantId(), logicalNodeId, unavailable.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
         }
     }
 

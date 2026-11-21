@@ -77,3 +77,12 @@ test('0025: the no-access heading is the title and code only; LV-AUT-002 when th
   assert.match(screen, /noAccessTitle\(code\)/);
   assert.doesNotMatch(screen, /LexaVault group|have access to anything|has\s+no LexaVault role/);
 });
+
+test('task 0026: 137 codes; the 8 new ones and their mappings come from the registry', () => {
+  assert.equal(Object.keys(LV_CODES).length, 137);
+  for (const code of ['LV-INT-035', 'LV-SCN-019', 'LV-SCN-020', 'LV-SCN-021', 'LV-REV-009', 'LV-CFG-011', 'LV-SYS-008', 'LV-SYS-009']) {
+    assert.ok(LV_CODES[code], code);
+  }
+  assert.equal(LV_BY_DETAIL.INTAKE_RECOVERY_CONFLICT, 'LV-INT-035');
+  assert.equal(lvLabel('LV-SYS-009'), 'Unknown request · LV-SYS-009');
+});

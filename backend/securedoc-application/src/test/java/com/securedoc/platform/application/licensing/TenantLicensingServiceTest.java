@@ -30,6 +30,18 @@ class TenantLicensingServiceTest {
     }
 
     @Test
+    void task0026AnEmptyTokenIsLic001NoLicenceInstalled() {
+        Tenant tenant = Tenant.create("Empty Token", "empty-token-0026");
+        var service = service(tenant, true, result(LicenseValidationStatus.ACTIVE, null));
+        for (String token : new String[] {null, "", "   "}) {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> service.install(tenant.id(), token, ActorId.generate(), CorrelationId.generate()));
+            assertEquals(com.securedoc.platform.domain.error.LvErrorCode.LIC_001,
+                    com.securedoc.platform.application.error.LvErrorCodes.of(ex));
+        }
+    }
+
+    @Test
     void localDisabledModeDoesNotRequireLicense() {
         Tenant tenant = Tenant.create("Local Demo", "local-demo-test");
         var service = service(tenant, false, result(LicenseValidationStatus.CONFIGURATION_ERROR, null));

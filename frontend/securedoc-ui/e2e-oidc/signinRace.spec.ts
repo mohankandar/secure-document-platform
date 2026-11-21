@@ -120,7 +120,8 @@ test('no-entity user still gets the refusal', async ({ page }) => {
   // test expected the generic "Sign-in could not be completed" message and a cleared access token.
   // Task 0025: the title and the code only; no organization gives no code, so LV-AUT-002.
   await expect(page.getByRole('heading', { name: 'No access to LexaVault · LV-AUT-002' })).toBeVisible();
-  await expect(page.getByText("You're signed in as race.user@example.test.")).toBeVisible();
+  // Task 0026: "Signed in as <email>" under the title and code.
+  await expect(page.getByTestId('no-access-who')).toHaveText('Signed in as race.user@example.test');
   await expect(page.getByText('Sign-in could not be completed')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /account menu/i })).toHaveCount(0);
   expect(api.meSelections).toHaveLength(0);

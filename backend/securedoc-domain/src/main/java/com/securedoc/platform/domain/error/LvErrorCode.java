@@ -116,6 +116,9 @@ public enum LvErrorCode {
     INT_034("LV-INT-034", Area.INT, "Watched folder can't be read or written",
             "LexaVault can't list, read or move files in the watched folder.",
             Kind.SYSTEM, "IT Admin", null, false),
+    INT_035("LV-INT-035", Area.INT, "Folder drop no longer matches its case",
+            "A resumed folder drop no longer matches the case it started.",
+            Kind.REFUSED, "Source system", null, false),
     INT_040("LV-INT-040", Area.INT, "Source system can't be reached",
             "Polling couldn't connect to the source, or it timed out.",
             Kind.REFUSED, "IT Admin, source system", null, false),
@@ -185,6 +188,15 @@ public enum LvErrorCode {
     SCN_018("LV-SCN-018", Area.SCN, "Scan couldn't be sent",
             "Sending failed after 3 tries.",
             Kind.STOPPED, "IT Admin", null, false),
+    SCN_019("LV-SCN-019", Area.SCN, "Scan can't be cancelled now",
+            "The scan is already being sent, or needs attention first.",
+            Kind.REFUSED, "Operator", 409, false),
+    SCN_020("LV-SCN-020", Area.SCN, "Scan resumed after a restart",
+            "The Scan Bridge restarted and picked up the scan where it left off.",
+            Kind.WARNING, "Nobody", null, false),
+    SCN_021("LV-SCN-021", Area.SCN, "Waiting for LexaVault to accept the scan",
+            "The scan was sent; LexaVault hasn't confirmed it yet.",
+            Kind.WAITING, "Nobody", null, false),
     PRC_001("LV-PRC-001", Area.PRC, "PDF can't be opened",
             "The PDF is damaged or protected with a password.",
             Kind.STOPPED, "Source system", null, false),
@@ -269,6 +281,9 @@ public enum LvErrorCode {
     REV_008("LV-REV-008", Area.REV, "Can't continue by hand",
             "Continuing manually is only for cases stopped at the AI step.",
             Kind.REFUSED, "Reviewer", 400, false),
+    REV_009("LV-REV-009", Area.REV, "Page doesn't exist",
+            "The page asked for isn't in the document.",
+            Kind.REFUSED, "Nobody", 400, false),
     DLV_001("LV-DLV-001", Area.DLV, "Destination can't be reached",
             "LexaVault couldn't connect to the destination.",
             Kind.EXPORT_FAILED, "IT Admin", null, false),
@@ -386,6 +401,9 @@ public enum LvErrorCode {
     CFG_010("LV-CFG-010", Area.CFG, "Connection switched off",
             "The connection is disabled or not of the right kind.",
             Kind.SET_UP, "IT Admin", 403, false),
+    CFG_011("LV-CFG-011", Area.CFG, "Support action not possible now",
+            "The case or incident isn't in a state that allows this action (for example the incident is closed).",
+            Kind.REFUSED, "IT Admin", 409, false),
     SYS_001("LV-SYS-001", Area.SYS, "Something went wrong",
             "An unexpected error. Give IT the reference number shown.",
             Kind.SYSTEM, "IT Admin", 500, false),
@@ -406,7 +424,13 @@ public enum LvErrorCode {
             Kind.SYSTEM, "IT Admin", null, false),
     SYS_007("LV-SYS-007", Area.SYS, "Temporary file left behind",
             "A temporary file couldn't be deleted after a failure; IT should remove it.",
-            Kind.SYSTEM, "IT Admin", null, false);
+            Kind.SYSTEM, "IT Admin", null, false),
+    SYS_008("LV-SYS-008", Area.SYS, "Item not found",
+            "The item asked for (a rule, a connection, a file) doesn't exist in this entity.",
+            Kind.REFUSED, "Person, IT Admin", 404, false),
+    SYS_009("LV-SYS-009", Area.SYS, "Unknown request",
+            "The address or method isn't one LexaVault offers.",
+            Kind.REFUSED, "Source system", false, 404, 405);
 
     /** The area a code belongs to, in the order the customer guide lists them. */
     public enum Area { INT, SCN, PRC, AI, RED, REV, DLV, AUT, LIC, CFG, SYS }
@@ -439,18 +463,25 @@ public enum LvErrorCode {
     private final String description;
     private final Kind kind;
     private final String whoActs;
-    private final Integer httpStatus;
+    private final List<Integer> httpStatuses;
     private final boolean reserved;
 
     LvErrorCode(String code, Area area, String title, String description, Kind kind, String whoActs,
                 Integer httpStatus, boolean reserved) {
+        this(code, area, title, description, kind, whoActs,
+                reserved, httpStatus == null ? new int[0] : new int[] {httpStatus});
+    }
+
+    /** Task 0026: a code answered with more than one status (LV-SYS-009: 404 unknown address, 405 wrong method). */
+    LvErrorCode(String code, Area area, String title, String description, Kind kind, String whoActs,
+                boolean reserved, int... httpStatuses) {
         this.code = code;
         this.area = area;
         this.title = title;
         this.description = description;
         this.kind = kind;
         this.whoActs = whoActs;
-        this.httpStatus = httpStatus;
+        this.httpStatuses = Arrays.stream(httpStatuses).boxed().toList();
         this.reserved = reserved;
     }
 
@@ -470,7 +501,16 @@ public enum LvErrorCode {
     public String whoActs() { return whoActs; }
 
     /** The HTTP status of an API refusal with this code; empty when the code is not an API refusal. */
-    public Optional<Integer> httpStatus() { return Optional.ofNullable(httpStatus); }
+    public Optional<Integer> httpStatus() { return httpStatuses.stream().findFirst(); }
+
+    /** Every HTTP status an API refusal with this code can have, in the design's order (usually one). */
+    public List<Integer> httpStatuses() { return httpStatuses; }
+
+    /** The HTTP status as the design and the guide write it: "400", "404 / 405", or "—". */
+    public String httpStatusLabel() {
+        return httpStatuses.isEmpty() ? "—"
+                : String.join(" / ", httpStatuses.stream().map(String::valueOf).toList());
+    }
 
     /** Reserved for later work: listed, never given to a failure yet. */
     public boolean reserved() { return reserved; }

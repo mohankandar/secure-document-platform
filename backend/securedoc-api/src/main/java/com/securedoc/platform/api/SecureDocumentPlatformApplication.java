@@ -11,6 +11,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class SecureDocumentPlatformApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SecureDocumentPlatformApplication.class, args);
+        SpringApplication application = new SpringApplication(SecureDocumentPlatformApplication.class);
+        // Task 0026: a stop at start logs its LexaVault code (LV-SYS-003, LV-SYS-005 or LV-AI-007).
+        application.addListeners(new com.securedoc.platform.api.config.StartupFailureLogger());
+        application.run(args);
     }
 }

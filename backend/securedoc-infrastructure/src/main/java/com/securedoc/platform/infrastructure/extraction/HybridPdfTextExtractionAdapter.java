@@ -56,7 +56,7 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
             return nativeExtractor.extract(content, mimeType);
         }
 
-        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(content, "lexavault-hybrid-text-")) {
+        try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTextExtractionAdapter.stageForProcessing(content, "lexavault-hybrid-text-")) {
             PDDocument document = staged.document();
             TextExtractionOutput nativeOutput = nativeExtractor.extractDocument(document);
             PDFRenderer renderer = new PDFRenderer(document);

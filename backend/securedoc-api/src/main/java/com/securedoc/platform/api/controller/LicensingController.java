@@ -50,7 +50,7 @@ public class LicensingController {
                                                           @RequestBody InstallLicenseRequest body,
                                                           HttpServletRequest request) {
         if (body == null || body.licenseToken() == null || body.licenseToken().isBlank()) {
-            throw new ValidationException(LvErrorCode.LIC_003, "Signed license token is required");
+            throw new ValidationException(LvErrorCode.LIC_001, "Signed license token is required");
         }
         var principal = contextResolver.resolvePrincipal(request);
         var status = licensingService.install(TenantId.of(tenantId), body.licenseToken(), principal.actorId(),

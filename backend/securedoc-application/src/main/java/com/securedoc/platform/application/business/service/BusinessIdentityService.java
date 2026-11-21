@@ -34,18 +34,22 @@ public final class BusinessIdentityService {
         for (String key : input.keySet()) {
             if (!byKey.containsKey(key)) {
                 throw new IntakeValidationException(IntakeRejectionCode.UNKNOWN_IDENTIFIER,
-                        "Unknown business identifier: " + key);
+                        "Unknown business identifier: " + key,
+                        // Task 0026: the name sent is not echoed.
+                        "Every case field sent must be one of this entity's case fields");
             }
         }
         for (BusinessIdentifierDefinition definition : definitions) {
             if (definition.required() && !input.containsKey(definition.key())) {
                 throw new IntakeValidationException(IntakeRejectionCode.MISSING_REQUIRED_IDENTIFIER,
-                        "Missing required business identifier: " + definition.label());
+                        "Missing required business identifier: " + definition.label(),
+                        "Case field " + definition.label() + " is required");
             }
         }
         if (input.isEmpty()) {
             throw new IntakeValidationException(IntakeRejectionCode.MISSING_REQUIRED_IDENTIFIER,
-                    "At least one business identifier is required");
+                    "At least one business identifier is required",
+                    "At least one case field is required");
         }
 
         List<BusinessIdentifier> requested = new ArrayList<>();
@@ -54,7 +58,9 @@ public final class BusinessIdentityService {
             try {
                 requested.add(BusinessIdentifier.from(definition, entry.getValue()));
             } catch (IllegalArgumentException e) {
-                throw new IntakeValidationException(IntakeRejectionCode.INVALID_IDENTIFIER_VALUE, e.getMessage());
+                // Task 0026: the rule's own text can quote the value, so the detail names only the field.
+                throw new IntakeValidationException(IntakeRejectionCode.INVALID_IDENTIFIER_VALUE, e.getMessage(),
+                        "Case field " + definition.label() + " breaks its rule (length, pattern or allowed values)");
             }
         }
         requested = requested.stream()
@@ -69,7 +75,8 @@ public final class BusinessIdentityService {
                 .filter(i -> i.definitionId().equals(primaryDefinition.id()))
                 .findFirst()
                 .orElseThrow(() -> new IntakeValidationException(IntakeRejectionCode.MISSING_REQUIRED_IDENTIFIER,
-                        "Missing required business identifier: " + primaryDefinition.label()));
+                        "Missing required business identifier: " + primaryDefinition.label(),
+                        "Case field " + primaryDefinition.label() + " is required"));
 
         /*
          * Only the tenant-configured Primary identifier resolves the long-lived BusinessRecord.
@@ -94,7 +101,8 @@ public final class BusinessIdentityService {
                     record.addIdentifier(identifier);
                 } else if (!current.normalizedValue().equals(identifier.normalizedValue())) {
                     throw new IntakeValidationException(IntakeRejectionCode.IDENTIFIER_CONFLICT,
-                            "Business identifier conflicts with the existing record: " + identifier.label());
+                            "Business identifier conflicts with the existing record: " + identifier.label(),
+                            "Case field " + identifier.label() + " differs from the existing case with the same Primary field");
                 }
             }
         }

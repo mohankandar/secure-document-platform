@@ -135,8 +135,25 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         StructuredLogContext.warn(log, "REQUEST_VALIDATION_REJECTED",
                 Map.of("reasonCode", ex.errorCode()), "Request validation rejected");
+        LvErrorCode code = LvErrorCodes.of(ex);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), ex.getMessage(), correlationId));
+                .body(ApiErrorResponse.of(ex.errorCode(), code, ex.getMessage(), correlationId)
+                        .withDetail(validationDetail(ex, code)));
+    }
+
+    /**
+     * Task 0026: the API {@code detail} of a validation refusal. The thrower's own detail first; otherwise, for an
+     * intake, scanner, settings or licence refusal, LexaVault's own refusal text (it names the field and the allowed
+     * range). An intake case-field refusal's message can quote what was sent, so it is never used.
+     */
+    static String validationDetail(ValidationException ex, LvErrorCode code) {
+        if (ex.detail() != null) return ex.detail();
+        if (ex instanceof com.securedoc.platform.application.exception.IntakeValidationException) return null;
+        if (code == null) return null;
+        return switch (code.area()) {
+            case INT, SCN, CFG, LIC -> ex.getMessage();
+            default -> null;
+        };
     }
 
     @ExceptionHandler(IntakeExpiredException.class)
@@ -206,8 +223,13 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         log.warn("REQUEST_VALIDATION_REJECTED code=VALIDATION_ERROR fields={} route={} correlation={}",
                 ex.getBindingResult().getFieldErrorCount(), route(request), correlationId);
+        // Task 0026: the detail names the fields (the API's own names), never what was sent in them.
+        String fields = ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> safeName(error.getField())).filter(java.util.Objects::nonNull).distinct().sorted()
+                .collect(Collectors.joining(", "));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("VALIDATION_ERROR", LvErrorCode.INT_003, correlationId));
+                .body(ApiErrorResponse.of("VALIDATION_ERROR", LvErrorCode.INT_003, correlationId)
+                        .withDetail(fields.isEmpty() ? null : "Field " + fields + " is missing, blank or too long"));
     }
 
     @ExceptionHandler(NotFoundException.class)
@@ -287,7 +309,8 @@ public class GlobalExceptionHandler {
                 name == null ? "unknown" : name, route(request), correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiErrorResponse.of("INVALID_ARGUMENT", argumentCode(null, request), name == null ? null
-                        : "Invalid value for request parameter '" + name + "'", correlationId));
+                        : "Invalid value for request parameter '" + name + "'", correlationId)
+                        .withDetail(name == null ? null : "Parameter " + name + " has the wrong type"));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -295,8 +318,11 @@ public class GlobalExceptionHandler {
                                                                  HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
         log.warn("UPLOAD_TOO_LARGE_REJECTED code=FILE_TOO_LARGE route={} correlation={}", route(request), correlationId);
+        long limit = ex.getMaxUploadSize();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of("FILE_TOO_LARGE", LvErrorCode.INT_004, correlationId));
+                .body(ApiErrorResponse.of("FILE_TOO_LARGE", LvErrorCode.INT_004, correlationId)
+                        .withDetail(limit > 0 ? "The upload is larger than the limit of " + limit + " bytes"
+                                : "The upload is larger than the upload limit"));
     }
 
     /** D1 (#7): a required header is missing (for example {@code Idempotency-Key} or {@code X-Content-SHA256}). */
@@ -304,8 +330,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleMissingHeader(MissingRequestHeaderException ex,
                                                                  HttpServletRequest request) {
         String name = safeName(ex.getHeaderName());
-        return clientMistake("MISSING_HEADER", name == null ? "A required request header is missing"
-                : "Required request header '" + name + "' is missing", ex, request);
+        return clientMistake("MISSING_HEADER", name == null ? "A required header is missing"
+                : "Header " + name + " is missing", ex, request);
     }
 
     /** D1 (#7): the multipart {@code file} part is missing. */
@@ -313,16 +339,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleMissingPart(MissingServletRequestPartException ex,
                                                                HttpServletRequest request) {
         String name = safeName(ex.getRequestPartName());
-        return clientMistake("MISSING_FILE_PART", name == null ? "A required multipart part is missing"
-                : "Required multipart part '" + name + "' is missing", ex, request);
+        return clientMistake("MISSING_FILE_PART", name == null ? "A required part is missing"
+                : "Part " + name + " is missing", ex, request);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex,
                                                                     HttpServletRequest request) {
         String name = safeName(ex.getParameterName());
-        return clientMistake("MISSING_PARAMETER", name == null ? "A required request parameter is missing"
-                : "Required request parameter '" + name + "' is missing", ex, request);
+        return clientMistake("MISSING_PARAMETER", name == null ? "A required parameter is missing"
+                : "Parameter " + name + " is missing", ex, request);
     }
 
     /** Any other binding refusal (missing path variable, cookie, request attribute). */
@@ -342,14 +368,14 @@ public class GlobalExceptionHandler {
         String supported = ex.getSupportedMediaTypes().stream().map(MediaType::toString)
                 .collect(Collectors.joining(", "));
         return clientMistake("UNSUPPORTED_MEDIA_TYPE", supported.isBlank()
-                ? "The request Content-Type is not supported by this endpoint"
-                : "The request Content-Type is not supported by this endpoint; use " + supported, ex, request);
+                ? "The Content-Type is not one this endpoint accepts"
+                : "Content-Type must be one of: " + supported, ex, request);
     }
 
     /** D1: a multipart endpoint called with a body that is not a readable multipart request. */
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ApiErrorResponse> handleMultipart(MultipartException ex, HttpServletRequest request) {
-        return clientMistake("INVALID_MULTIPART_REQUEST", "The request is not a readable multipart upload", ex, request);
+        return clientMistake("INVALID_MULTIPART_REQUEST", "The body must be a readable multipart upload", ex, request);
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
@@ -357,26 +383,40 @@ public class GlobalExceptionHandler {
                                                                      HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
         logRejected("REQUEST_REJECTED", "METHOD_NOT_ALLOWED", ex, request, correlationId);
+        // Task 0026: LV-SYS-009; the detail lists the methods the address accepts (LexaVault's own).
+        var methods = ex.getSupportedHttpMethods();
+        String allowed = methods == null ? ""
+                : methods.stream().map(Object::toString).sorted().collect(Collectors.joining(", "));
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                 .body(ApiErrorResponse.of("METHOD_NOT_ALLOWED",
-                        LvErrorCodes.forDetailOrFallback("METHOD_NOT_ALLOWED", "api"), correlationId));
+                        LvErrorCodes.forDetailOrFallback("METHOD_NOT_ALLOWED", "api"), correlationId)
+                        .withDetail(allowed.isEmpty() ? "This address doesn't accept this method"
+                                : "This address accepts only " + allowed));
     }
 
-    @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
+    /**
+     * Task 0026: an address LexaVault doesn't offer is {@code LV-SYS-009} with the standard body. Spring gives
+     * {@link NoResourceFoundException} (the default resource handler) or {@link NoHandlerFoundException} (when resource
+     * mappings are off); both are handled. The address itself is not echoed.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, org.springframework.web.servlet.NoHandlerFoundException.class})
+    public ResponseEntity<ApiErrorResponse> handleNoResource(Exception ex, HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
-        log.info("NOT_FOUND_REJECTED code=NOT_FOUND type={} correlation={}", ex.getClass().getSimpleName(), correlationId);
+        log.info("NOT_FOUND_REJECTED code=NOT_FOUND lvCode={} type={} correlation={}", LvErrorCode.SYS_009.code(),
+                ex.getClass().getSimpleName(), correlationId);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiErrorResponse.of("NOT_FOUND", LvErrorCodes.forDetailOrFallback("NO_SUCH_ENDPOINT", "api"),
-                        correlationId));
+                        correlationId).withDetail("No endpoint at this address"));
     }
 
-    private ResponseEntity<ApiErrorResponse> clientMistake(String code, String message, Exception ex,
+    /** Task 0026: {@code detail} names what is wrong (the header, part or parameter), never a value sent. */
+    private ResponseEntity<ApiErrorResponse> clientMistake(String code, String detail, Exception ex,
                                                            HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
         logRejected("REQUEST_REJECTED", code, ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiErrorResponse.of(code, LvErrorCodes.forDetailOrFallback(code, "api"), correlationId));
+                .body(ApiErrorResponse.of(code, LvErrorCodes.forDetailOrFallback(code, "api"), correlationId)
+                        .withDetail(detail));
     }
 
     /** #331: an ApplicationException not handled above: its code is logged with type and origin. */
@@ -394,11 +434,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
         String correlationId = correlationIdForError(request);
+        // Task 0026: a database failure is LV-SYS-003 and a full work queue LV-SYS-004 (by type); else LV-SYS-001.
+        LvErrorCode code = LvErrorCodes.forPlatformFailure(ex);
         StructuredLogContext.error(log, "UNHANDLED_EXCEPTION",
                 Map.of("reasonCode", ex.getClass().getSimpleName(), "component", origin(ex)),
-                "Unhandled exception route=" + route(request) + " correlation=" + correlationId);
+                "Unhandled exception route=" + route(request) + " correlation=" + correlationId + " code=" + code.code());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of("INTERNAL_ERROR", LvErrorCode.SYS_001, correlationId));
+                .body(ApiErrorResponse.of("INTERNAL_ERROR", code, correlationId));
     }
 
     /**

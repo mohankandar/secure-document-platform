@@ -38,8 +38,16 @@ class PlatformHealthFailureLoggingTest {
                 mock(ProcessingIncidentRepository.class), scheduler);
 
         try (LogCapture logs = LogCapture.of(PlatformHealthService.class)) {
-            service.overview(TenantId.generate(), true);
+            var overview = service.overview(TenantId.generate(), true);
             String logged = logs.text();
+            // Task 0026: a failed check logs and shows LV-SYS-006; a check that did not fail shows no code.
+            assertTrue(logged.contains("component=database code=CONNECTION_UNAVAILABLE type=SQLException lvCode=LV-SYS-006"), logged);
+            var database = overview.providers().stream().filter(p -> p.key().equals("database")).findFirst().orElseThrow();
+            assertEquals("UNHEALTHY", database.status());
+            assertEquals("LV-SYS-006", database.lvCode());
+            for (var item : overview.providers()) {
+                assertEquals("UNHEALTHY".equals(item.status()) ? "LV-SYS-006" : null, item.lvCode(), item.key());
+            }
             assertTrue(logged.contains("component=database code=CONNECTION_UNAVAILABLE type=SQLException"), logged);
             assertTrue(logged.contains("component=ocr code=EXECUTABLE_UNAVAILABLE type=IOException"), logged);
             assertTrue(logged.contains("component=storage code=CONFIGURATION_UNAVAILABLE type=IllegalStateException"), logged);

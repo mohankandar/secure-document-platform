@@ -174,9 +174,27 @@ test('a person with no LexaVault role sees the no-access page with Sign out and 
   await signIn(page);
   // Task 0025: the title and the code only (LV-AUT-002 when the server gave none); no exact reason on screen.
   await expect(page.getByRole('heading', { name: 'No access to LexaVault · LV-AUT-002' })).toBeVisible();
-  await expect(page.getByText('error.user@example.test')).toBeVisible();
-  await expect(page.getByText('Ask your administrator for access and give them the code above, then sign in again.')).toBeVisible();
+  // Task 0026: "Signed in as <email>" comes right under the title and code.
+  await expect(page.getByTestId('no-access-who')).toHaveText('Signed in as error.user@example.test');
+  await expect(page.locator('.cf-scope h1 + p')).toHaveText('Signed in as error.user@example.test');
+  await expect(page.getByText(/Ask your administrator for access and give them the code above, then sign in again\./)).toBeVisible();
   await expect(page.getByText(/LexaVault role|LexaVault group/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+});
+
+test('task 0026: the no-access sign-in name is shown to the person only: never in the console or sent to LexaVault', async ({ page }) => {
+  const console: string[] = [];
+  page.on('console', (message) => console.push(message.text()));
+  const sent: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) sent.push(`${request.url()} ${request.postData() ?? ''}`);
+  });
+  await mockIdentityProvider(page);
+  await mockApi(page, [], new Set());
+  await signIn(page);
+  await expect(page.getByTestId('no-access-who')).toHaveText('Signed in as error.user@example.test');
+  expect(console.filter((line) => line.includes('error.user@example.test'))).toEqual([]);
+  expect(sent.length).toBeGreaterThan(0);
+  expect(sent.filter((line) => line.includes('error.user@example.test'))).toEqual([]);
 });

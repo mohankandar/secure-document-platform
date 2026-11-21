@@ -78,7 +78,8 @@ public class PackageProcessingRecoveryScheduler {
         try {
             databaseNow = leasePort.currentTime();
         } catch (RuntimeException unavailable) {
-            log.warn("PACKAGE_PROCESSING_RECOVERY_SCAN_SKIPPED nodeId={} reasonCode=LEASE_STORE_UNAVAILABLE", nodeId);
+            log.warn("PACKAGE_PROCESSING_RECOVERY_SCAN_SKIPPED nodeId={} reasonCode=LEASE_STORE_UNAVAILABLE code={}", nodeId,
+                    com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
             return;
         }
 
@@ -93,8 +94,9 @@ public class PackageProcessingRecoveryScheduler {
         try {
             candidates = packageRepository.findByStatus(status, batchSize);
         } catch (RuntimeException unavailable) {
-            log.warn("PACKAGE_PROCESSING_RECOVERY_SCAN_FAILED nodeId={} status={} reasonCode={}",
-                    nodeId, status, unavailable.getClass().getSimpleName());
+            log.warn("PACKAGE_PROCESSING_RECOVERY_SCAN_FAILED nodeId={} status={} reasonCode={} code={}",
+                    nodeId, status, unavailable.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
             return;
         }
 
@@ -111,8 +113,9 @@ public class PackageProcessingRecoveryScheduler {
                 log.info("PACKAGE_PROCESSING_RECOVERY_DISPATCHED package={} tenant={} status={} nodeId={} recovery=false",
                         pkg.id(), pkg.tenantId(), status, nodeId);
             } catch (RuntimeException candidateFailure) {
-                log.warn("PACKAGE_PROCESSING_RECOVERY_CANDIDATE_FAILED package={} tenant={} status={} nodeId={} reasonCode={}",
-                        pkg.id(), pkg.tenantId(), status, nodeId, candidateFailure.getClass().getSimpleName());
+                log.warn("PACKAGE_PROCESSING_RECOVERY_CANDIDATE_FAILED package={} tenant={} status={} nodeId={} reasonCode={} code={}",
+                        pkg.id(), pkg.tenantId(), status, nodeId, candidateFailure.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(candidateFailure).code());
             }
         }
     }
@@ -129,8 +132,9 @@ public class PackageProcessingRecoveryScheduler {
                 log.info("PACKAGE_PROCESSING_LEGACY_ORPHAN_DISPATCHED package={} tenant={} status={} nodeId={} recovery=true reasonCode=PROCESSING_WITHOUT_LEASE",
                         pkg.id(), pkg.tenantId(), pkg.status(), nodeId);
             } catch (RuntimeException candidateFailure) {
-                log.warn("PACKAGE_PROCESSING_LEGACY_ORPHAN_CANDIDATE_FAILED package={} tenant={} nodeId={} reasonCode={}",
-                        orphan.packageId(), orphan.tenantId(), nodeId, candidateFailure.getClass().getSimpleName());
+                log.warn("PACKAGE_PROCESSING_LEGACY_ORPHAN_CANDIDATE_FAILED package={} tenant={} nodeId={} reasonCode={} code={}",
+                        orphan.packageId(), orphan.tenantId(), nodeId, candidateFailure.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(candidateFailure).code());
             }
         }
     }
@@ -140,8 +144,9 @@ public class PackageProcessingRecoveryScheduler {
             return leasePort.findProcessingWithoutLease(
                     Duration.ofMillis(orphanWithoutLeaseGraceMs), batchSize);
         } catch (RuntimeException unavailable) {
-            log.warn("PACKAGE_PROCESSING_NO_LEASE_SCAN_FAILED nodeId={} reasonCode={}",
-                    nodeId, unavailable.getClass().getSimpleName());
+            log.warn("PACKAGE_PROCESSING_NO_LEASE_SCAN_FAILED nodeId={} reasonCode={} code={}",
+                    nodeId, unavailable.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
             return List.of();
         }
     }
@@ -151,8 +156,9 @@ public class PackageProcessingRecoveryScheduler {
         try {
             expiredLeases = leasePort.findExpired(batchSize);
         } catch (RuntimeException unavailable) {
-            log.warn("PACKAGE_PROCESSING_RECOVERY_EXPIRED_SCAN_FAILED nodeId={} reasonCode={}",
-                    nodeId, unavailable.getClass().getSimpleName());
+            log.warn("PACKAGE_PROCESSING_RECOVERY_EXPIRED_SCAN_FAILED nodeId={} reasonCode={} code={}",
+                    nodeId, unavailable.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(unavailable).code());
             return;
         }
         for (var expired : expiredLeases) {
@@ -181,8 +187,9 @@ public class PackageProcessingRecoveryScheduler {
                             leasePort.release(pkg.id(), exhaustionOwnerId, exhaustionClaim.get().fencingToken());
                         } catch (RuntimeException releaseFailure) {
                             // The terminal claim will expire naturally; release is only an optimization.
-                            log.warn("PACKAGE_PROCESSING_EXHAUSTION_LEASE_RELEASE_FAILED package={} tenant={} nodeId={} reasonCode={}",
-                                    pkg.id(), pkg.tenantId(), nodeId, releaseFailure.getClass().getSimpleName());
+                            log.warn("PACKAGE_PROCESSING_EXHAUSTION_LEASE_RELEASE_FAILED package={} tenant={} nodeId={} reasonCode={} code={}",
+                                    pkg.id(), pkg.tenantId(), nodeId, releaseFailure.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(releaseFailure).code());
                         }
                     }
                     continue;
@@ -194,8 +201,9 @@ public class PackageProcessingRecoveryScheduler {
                         pkg.id(), pkg.tenantId(), pkg.status(), nodeId, expired.fencingToken(),
                         expired.attemptCount(), expired.attemptCount() + 1, maxProcessingAttempts);
             } catch (RuntimeException candidateFailure) {
-                log.warn("PACKAGE_PROCESSING_EXPIRED_CANDIDATE_FAILED package={} tenant={} nodeId={} reasonCode={}",
-                        expired.packageId(), expired.tenantId(), nodeId, candidateFailure.getClass().getSimpleName());
+                log.warn("PACKAGE_PROCESSING_EXPIRED_CANDIDATE_FAILED package={} tenant={} nodeId={} reasonCode={} code={}",
+                        expired.packageId(), expired.tenantId(), nodeId, candidateFailure.getClass().getSimpleName(),
+                        com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(candidateFailure).code());
             }
         }
     }

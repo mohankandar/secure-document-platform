@@ -24,10 +24,7 @@ class BridgeLvCodesTest {
 
     /** Mapped to LV-SYS-001 on purpose: an unexpected error (#78), or a failure the design places under no code. */
     private static final Set<String> INTENTIONAL_SYS_001 = Set.of(
-            "BRIDGE_INTERNAL_ERROR",                // #78
-            "SUBMISSION_ALREADY_QUEUED",            // #92, not placed by the design
-            "ATTENTION_REQUIRED_CANNOT_CANCEL",     // #92, not placed by the design
-            "RECOVERED_AFTER_RESTART");             // back in the queue after a restart; not a failure in the design
+            "BRIDGE_INTERNAL_ERROR");               // #78 (task 0026 placed #92 and the restart under SCN-019 and SCN-020)
 
     /** Upper-case literals in the bridge's main code that are not error codes. */
     private static final Set<String> NOT_ERROR_CODES = Set.of(
@@ -155,7 +152,7 @@ class BridgeLvCodesTest {
     @Test
     void deliveryCodesOfTheBridgeItself() {
         assertNull(BridgeLvCodes.forDelivery(null, null, QUEUED));
-        assertEquals(LV_SCN_015, BridgeLvCodes.forDelivery("LEXAVAULT_ACCEPTANCE_PENDING", null, QUEUED));
+        assertEquals(LV_SCN_021, BridgeLvCodes.forDelivery("LEXAVAULT_ACCEPTANCE_PENDING", null, QUEUED));
         assertEquals(LV_SCN_017, BridgeLvCodes.forDelivery("LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED", null, ATTENTION_REQUIRED));
         assertEquals(LV_SCN_015, BridgeLvCodes.forDelivery("LEXAVAULT_REQUEST_SERIALIZATION_FAILED", null, ATTENTION_REQUIRED));
         assertEquals(LV_SCN_013, BridgeLvCodes.forDelivery("LOCAL_SCAN_ARTIFACT_MISSING", null, ATTENTION_REQUIRED), "#90");
@@ -176,5 +173,25 @@ class BridgeLvCodesTest {
         assertNull(BridgeLvCodes.safeLexaVaultLvCode("Contract 12345 for Jane Doe"));
         assertNull(BridgeLvCodes.safeLexaVaultLvCode("LV-INT-014 Jane"));
         assertNull(BridgeLvCodes.safeLexaVaultLvCode(null));
+    }
+
+    @Test
+    void task0026NewCodes() {
+        // #92: cancel refused while the scan is being sent or needs attention.
+        assertEquals(LV_SCN_019, BridgeLvCodes.forBridgeCode("SUBMISSION_ALREADY_QUEUED"));
+        assertEquals(LV_SCN_019, BridgeLvCodes.forBridgeCode("ATTENTION_REQUIRED_CANNOT_CANCEL"));
+        // Resumed after a restart (a warning), also when an earlier attempt left an HTTP status on the item.
+        assertEquals(LV_SCN_020, BridgeLvCodes.forDelivery("RECOVERED_AFTER_RESTART", null, QUEUED));
+        assertEquals(LV_SCN_020, BridgeLvCodes.forDelivery("RECOVERED_AFTER_RESTART", 503, QUEUED));
+        // Waiting for acceptance, before the limit; after the limit it is LV-SCN-017.
+        assertEquals(LV_SCN_021, BridgeLvCodes.forBridgeCode("LEXAVAULT_ACCEPTANCE_PENDING"));
+        assertEquals(LV_SCN_021, BridgeLvCodes.forDelivery("LEXAVAULT_ACCEPTANCE_PENDING", 409, QUEUED));
+        assertEquals(LV_SCN_017, BridgeLvCodes.forDelivery("LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED", null, ATTENTION_REQUIRED));
+    }
+
+    @Test
+    void task0026MappingCorrections() {
+        assertEquals(LV_SCN_013, BridgeLvCodes.forBridgeCode("SCANNER_INBOX_UNAVAILABLE"), "not SCN-006");
+        assertEquals(LV_SCN_008, BridgeLvCodes.forBridgeCode("PHYSICAL_SCANNER_DEVICE_NOT_FOUND"), "not SCN-009");
     }
 }

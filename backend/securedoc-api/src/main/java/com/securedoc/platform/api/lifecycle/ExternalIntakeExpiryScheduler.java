@@ -34,8 +34,10 @@ public class ExternalIntakeExpiryScheduler {
             }
         } catch (RuntimeException e) {
             // Task 0023 #335: the type and a code, never the message.
-            log.warn("EXTERNAL_INTAKE_MAINTENANCE_FAILED reasonCode=MAINTENANCE_CYCLE_FAILED exceptionType={}; pending work will be retried",
-                    e.getClass().getSimpleName());
+            // Task 0026: and the LV code (LV-SYS-003 when the database is the cause).
+            log.warn("EXTERNAL_INTAKE_MAINTENANCE_FAILED reasonCode=MAINTENANCE_CYCLE_FAILED exceptionType={} code={}; pending work will be retried",
+                    e.getClass().getSimpleName(),
+                    com.securedoc.platform.application.error.LvErrorCodes.forPlatformFailure(e).code());
         }
     }
 }

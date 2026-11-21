@@ -41,13 +41,13 @@ public class PdfBoxReviewPageRenderAdapter implements ReviewPageRenderPort {
     public RenderedPage render(InputStream pdfContent, int pageNumber,
                                List<FindingLocation.BoundingBox> previewMasks) {
         if (pageNumber < 1) {
-            throw new ValidationException("Review page number must be at least 1");
+            throw new ValidationException(com.securedoc.platform.domain.error.LvErrorCode.REV_009, "Review page number must be at least 1");
         }
         List<FindingLocation.BoundingBox> safeMasks = previewMasks == null ? List.of() : List.copyOf(previewMasks);
         try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTempFileSupport.stage(pdfContent, "lexavault-review-")) {
             var document = staged.document();
             if (pageNumber > document.getNumberOfPages()) {
-                throw new ValidationException("Review page is outside the source document");
+                throw new ValidationException(com.securedoc.platform.domain.error.LvErrorCode.REV_009, "Review page is outside the source document");
             }
             PDFRenderer renderer = new PDFRenderer(document);
             BufferedImage image = renderer.renderImageWithDPI(pageNumber - 1, PREVIEW_DPI, ImageType.RGB);

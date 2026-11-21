@@ -1,6 +1,6 @@
 # LexaVault error codes: customer guide
 
-**Draft: steps to be reviewed by the design chat**
+**Reviewed by the design chat, 2026-11-21.**
 
 Every refusal, stop or warning in LexaVault has a code like `LV-INT-001`: `LV`, then the area (for example `INT` for intake), then a number.
 You see the code in the API error body as `code` (next to the older `errorCode`), and on screens as "Title · LV-XXX-NNN"; when you ask IT for help, give them the code and the reference number (correlation id) shown with it.
@@ -431,6 +431,19 @@ Reserved: not used yet.
 2. Check that LexaVault's account can read, write and move files there, and that there is free space.
 3. After the fix, LexaVault picks the drops up again on its next check.
 
+### LV-INT-035 Folder drop no longer matches its case
+
+- **Means:** A resumed folder drop no longer matches the case it started.
+- **Kind:** Refused
+- **Who acts:** Source system
+- **HTTP status:** —
+
+**What to do:**
+
+1. Check whether the files in the drop were changed, added or removed after LexaVault started taking it in.
+2. Put the complete, unchanged drop in the watched folder again as a new drop, with its trigger file.
+3. If it happens again, give IT the reference number from the watched-folder view.
+
 ### LV-INT-040 Source system can't be reached
 
 - **Means:** Polling couldn't connect to the source, or it timed out.
@@ -731,6 +744,41 @@ Reserved: not used yet.
 1. Check the network between the workstation and LexaVault, and that LexaVault is running.
 2. Send the scan again from the Scan Bridge. The scan is kept on the workstation.
 3. If it fails again, give support the reference number.
+### LV-SCN-019 Scan can't be cancelled now
+
+- **Means:** The scan is already being sent, or needs attention first.
+- **Kind:** Refused
+- **Who acts:** Operator
+- **HTTP status:** 409
+
+**What to do:**
+
+1. Wait for the scan to finish sending; it then shows as sent or as needing attention.
+2. If it needs attention, ask your IT Admin to look at it before you scan the case again.
+
+### LV-SCN-020 Scan resumed after a restart
+
+- **Means:** The Scan Bridge restarted and picked up the scan where it left off.
+- **Kind:** Warning
+- **Who acts:** Nobody
+- **HTTP status:** —
+
+**What to do:**
+
+1. Nothing: the scan is being sent again and LexaVault takes it in only once.
+2. If the Scan Bridge restarts often, ask IT to check the workstation.
+
+### LV-SCN-021 Waiting for LexaVault to accept the scan
+
+- **Means:** The scan was sent; LexaVault hasn't confirmed it yet.
+- **Kind:** Waiting
+- **Who acts:** Nobody
+- **HTTP status:** —
+
+**What to do:**
+
+1. Wait: the Scan Bridge checks again by itself.
+2. If it waits longer than the time limit, it shows LV-SCN-017; then ask your IT Admin.
 
 ## PRC: processing
 
@@ -1093,6 +1141,17 @@ Reserved: not used yet.
 
 1. Check on the Problem page where the case stopped.
 2. If it stopped somewhere else, follow the code shown there, or ask your IT Admin to retry processing.
+### LV-REV-009 Page doesn't exist
+
+- **Means:** The page asked for isn't in the document.
+- **Kind:** Refused
+- **Who acts:** Nobody
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Reload the review page; it then shows only the document's own pages.
+2. If it happens again, give IT the reference number shown.
 
 ## DLV: export
 
@@ -1132,7 +1191,7 @@ Reserved: not used yet.
 
 1. Look under Technical details for the destination's own code and the level it refused.
 2. Ask the destination's team whether it should accept that level, and change its set-up if so.
-3. Retrying won't help until that is fixed. After the fix, send the case again from Support.
+3. After the fix, choose **Retry processing** in Support.
 
 ### LV-DLV-004 Destination refused the file
 
@@ -1276,7 +1335,7 @@ Reserved: not used yet.
 
 1. Look under Technical details for the code of the original failure.
 2. Fix that cause (look its code up in this guide).
-3. Then send the case again from Support.
+3. After the fix, choose **Retry processing** in Support.
 
 ### LV-DLV-015 Resend failed
 
@@ -1438,6 +1497,7 @@ Reserved: not used yet.
 1. Get this entity's licence from your LexaVault supplier.
 2. Install it under Licence.
 3. Ask sources to send again any cases that were refused while there was no licence.
+4. Then choose **Retry processing** in Support for cases that stopped while the licence was missing.
 
 ### LV-LIC-002 Licence expired
 
@@ -1451,6 +1511,7 @@ Reserved: not used yet.
 1. Check the licence's start and end dates under Licence.
 2. Get a renewed licence from your supplier and install it.
 3. Ask sources to send again any cases that were refused meanwhile.
+4. Then choose **Retry processing** in Support for cases that stopped while the licence was expired.
 
 ### LV-LIC-003 Licence not valid
 
@@ -1609,6 +1670,18 @@ Reserved: not used yet.
 1. Under Integrations, check that the connection is switched on.
 2. Check that it is the right kind of connection for this action (for example a polling source).
 3. Try again.
+### LV-CFG-011 Support action not possible now
+
+- **Means:** The case or incident isn't in a state that allows this action (for example the incident is closed).
+- **Kind:** Refused
+- **Who acts:** IT Admin
+- **HTTP status:** 409
+
+**What to do:**
+
+1. Reload the page to see the case's or incident's current state.
+2. Holds and restarts are only for cases that stopped and were never exported; a closed incident allows no more actions.
+3. If the case needs work again, open it from Support while it still shows a problem.
 
 ## SYS: system
 
@@ -1698,6 +1771,31 @@ Reserved: not used yet.
 
 **What to do:**
 
-1. Find the reference number in LexaVault's log: it says where the temporary file is.
+1. Find the reference number in LexaVault's log: it gives the temporary file's id. The file is in LexaVault's temporary folder.
 2. Delete the file safely. It may hold document content.
 3. Check why it couldn't be deleted (access rights, a file still in use).
+
+### LV-SYS-008 Item not found
+
+- **Means:** The item asked for (a rule, a connection, a file) doesn't exist in this entity.
+- **Kind:** Refused
+- **Who acts:** Person, IT Admin
+- **HTTP status:** 404
+
+**What to do:**
+
+1. Reload the page: the item may have been removed by someone else.
+2. Check that you are working in the right entity.
+3. If the item should be there, give IT the reference number shown.
+
+### LV-SYS-009 Unknown request
+
+- **Means:** The address or method isn't one LexaVault offers.
+- **Kind:** Refused
+- **Who acts:** Source system
+- **HTTP status:** 404 / 405
+
+**What to do:**
+
+1. Check the address and HTTP method against LexaVault's API documentation.
+2. Fix the call in the source system and send it again. Nothing was taken in.
