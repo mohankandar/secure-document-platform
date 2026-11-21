@@ -178,7 +178,81 @@ class ProcessingIncidentServiceTest {
         }
     }
 
-    private static final class InMemoryRepository implements ProcessingIncidentRepository {
+    // ---- Task 0023 C3 (#367): a failed incident save is logged with type + code, never content ----
+
+    @Test
+    void failedIncidentSaveIsLoggedWithTypeAndCodeButNoMessage() {
+        InMemoryRepository failing = new InMemoryRepository() {
+            @Override public void save(ProcessingIncident incident) {
+                throw new IllegalStateException("insert failed for value 123-45-6789");
+            }
+            @Override public Optional<ProcessingIncident> findLatestByPackageIdAndTenantId(PackageId p, TenantId t) {
+                throw new IllegalStateException("select failed for value 123-45-6789");
+            }
+            @Override public List<ProcessingIncident> findRecentByPackageIdAndTenantId(PackageId p, TenantId t, int limit) {
+                throw new IllegalStateException("select failed for value 123-45-6789");
+            }
+        };
+        ProcessingIncidentService service = new ProcessingIncidentService(failing, (t, p) -> Map.of());
+        TenantId tenantId = TenantId.generate();
+        PackageId packageId = PackageId.generate();
+        var failure = new TechnicalDependencyException(TechnicalDependency.OCR, TechnicalFailureCode.OCR_TIMEOUT, true, "x");
+
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(ProcessingIncidentService.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            assertDoesNotThrow(() -> service.recordFailure(tenantId, packageId, null, ProcessingStage.OCR, failure,
+                    CorrelationId.generate(), "Document processing failed", Map.of()));
+            service.recordRecoveryExhausted(tenantId, packageId, 3, 3, CorrelationId.generate());
+            service.markRetryScheduled(packageId, tenantId, CorrelationId.generate());
+            service.resolveNoReprocess(packageId, tenantId, CorrelationId.generate(), null, false);
+            service.markProcessingCompleted(packageId, tenantId, CorrelationId.generate());
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        List<String> lines = appender.list.stream()
+                .map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+                .filter(line -> line.startsWith("PROCESSING_INCIDENT_SAVE_FAILED"))
+                .toList();
+        assertEquals(5, lines.size(), lines.toString());
+        assertTrue(lines.get(0).contains("operation=RECORD_FAILURE"));
+        assertTrue(lines.get(0).contains("incidentReasonCode=OCR_TIMEOUT"));
+        assertTrue(lines.get(0).contains("failureType=IllegalStateException"));
+        assertTrue(lines.get(0).contains("package=" + packageId));
+        assertTrue(lines.get(1).contains("incidentReasonCode=PROCESSING_RECOVERY_EXHAUSTED"));
+        assertTrue(lines.get(2).contains("operation=ADVANCE_LATEST"));
+        assertTrue(lines.get(3).contains("operation=ADVANCE_ALL_ACTIVE"));
+        assertTrue(lines.get(4).contains("operation=MARK_PROCESSING_COMPLETED"));
+        assertTrue(appender.list.stream().noneMatch(e -> e.getFormattedMessage().contains("123-45-6789")
+                || e.getThrowableProxy() != null), "No exception message or stack may be logged");
+    }
+
+    @Test
+    void newDispatchAndRedactionCodesHaveTheirOwnCategoryAndStage() {
+        InMemoryRepository repository = new InMemoryRepository();
+        ProcessingIncidentService service = new ProcessingIncidentService(repository, (t, p) -> Map.of());
+        var verification = new TechnicalDependencyException(TechnicalDependency.REDACTION,
+                TechnicalFailureCode.REDACTION_TEXT_LAYER_REMAINS, false, "x");
+        ProcessingIncident incident = service.recordFailure(TenantId.generate(), PackageId.generate(),
+                DocumentId.generate(), ProcessingStage.REDACTION, verification, CorrelationId.generate(),
+                "Document redaction failed", Map.of());
+        assertEquals("REDACTION_TEXT_LAYER_REMAINS", incident.reasonCode());
+        assertEquals("REDACTION_SAFETY", incident.failureCategory(), "REDACTION contains IO; must not become REDACTION_FAILURE");
+        assertEquals(ProcessingStage.VERIFICATION, incident.stage());
+
+        var location = new TechnicalDependencyException(TechnicalDependency.REDACTION,
+                TechnicalFailureCode.REDACTION_LOCATION_MISSING, false, "x");
+        ProcessingIncident locationIncident = service.recordFailure(TenantId.generate(), PackageId.generate(),
+                DocumentId.generate(), ProcessingStage.REDACTION, location, CorrelationId.generate(),
+                "Document redaction failed", Map.of());
+        assertEquals(ProcessingStage.REDACTION, locationIncident.stage());
+    }
+
+    private static class InMemoryRepository implements ProcessingIncidentRepository {
         Optional<ProcessingIncident> latest = Optional.empty();
         final List<ProcessingIncidentEvent> events = new ArrayList<>();
 

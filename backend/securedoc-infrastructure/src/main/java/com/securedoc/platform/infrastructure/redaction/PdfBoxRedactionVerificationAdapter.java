@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.redaction;
 
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 import com.securedoc.platform.application.port.out.RedactionVerificationPort;
 import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
@@ -40,10 +41,12 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
                                      List<RedactionTarget> expectedTargets) {
         List<RedactionTarget> targets = expectedTargets == null ? List.of() : List.copyOf(expectedTargets);
         if (pdfContent == null) {
-            return VerificationResult.failed(0, targets.size(), 0, false, "Generated PDF is empty");
+            return VerificationResult.failed(0, targets.size(), 0, false,
+                    TechnicalFailureCode.REDACTION_OUTPUT_EMPTY, "Generated PDF is empty");
         }
         if (expectedSourcePageCount < 1) {
             return VerificationResult.failed(0, targets.size(), 0, false,
+                    TechnicalFailureCode.REDACTION_SOURCE_PAGES_UNKNOWN,
                     "Source page count is unavailable for verification");
         }
 
@@ -52,28 +55,33 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
             int pageCount = document.getNumberOfPages();
             if (pageCount != expectedSourcePageCount) {
                 return VerificationResult.failed(pageCount, targets.size(), 0, false,
+                        TechnicalFailureCode.REDACTION_PAGE_COUNT_MISMATCH,
                         "Generated PDF page count does not match source");
             }
 
             Set<Integer> redactedPages = targetPages(targets);
             if (hasExtractableTextOnPages(document, redactedPages)) {
                 return VerificationResult.failed(pageCount, targets.size(), 0, true,
+                        TechnicalFailureCode.REDACTION_TEXT_LAYER_REMAINS,
                         "A redacted page still contains an extractable text layer");
             }
             if (hasAnyAnnotations(document)) {
                 return VerificationResult.failed(pageCount, targets.size(), 0, false,
+                        TechnicalFailureCode.REDACTION_ANNOTATIONS_REMAIN,
                         "Generated PDF still contains annotations");
             }
 
             int covered = verifyTargetCoverage(document, targets);
             if (covered != targets.size()) {
                 return VerificationResult.failed(pageCount, targets.size(), covered, false,
+                        TechnicalFailureCode.REDACTION_REGION_NOT_COVERED,
                         "One or more expected redaction regions are not visually covered");
             }
 
             return VerificationResult.safe(pageCount, targets.size(), covered);
         } catch (IOException | RuntimeException e) {
             return VerificationResult.failed(0, targets.size(), 0, false,
+                    TechnicalFailureCode.REDACTION_OUTPUT_UNPARSABLE,
                     "Generated PDF could not be parsed for verification");
         }
     }

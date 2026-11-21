@@ -1,6 +1,10 @@
 package com.securedoc.platform.application.redaction.service;
 
 import com.securedoc.platform.application.exception.NotFoundException;
+import com.securedoc.platform.application.exception.TechnicalDependency;
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
+import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
@@ -168,9 +172,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         boolean allHaveBounds = confirmedFindings.stream()
                 .allMatch(f -> f.location().hasBoundingBox());
         if (!allHaveBounds) {
-            failDocument(command, correlationId, "Redaction location could not be determined");
-            return RedactDocumentResult.of(command.documentId(), null,
-                    DocumentStatus.FAILED, 0);
+            // Fail closed (unchanged). Task 0023 C3 (#137): thrown as a typed failure so the caller
+            // records a Support incident with the code, instead of a silent document failure.
+            throw redactionSafetyFailure(TechnicalFailureCode.REDACTION_LOCATION_MISSING,
+                    "Redaction location could not be determined");
         }
 
         // 7. Build targets only from policy-confirmed findings.
@@ -201,17 +206,23 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         //     page count comes from source extraction (Document.pages), not from the redaction
         //     adapter's own result, so a page-dropping redaction defect cannot self-validate.
         int expectedSourcePageCount = document.pageCount();
-        if (expectedSourcePageCount < 1) {
-            throw new IllegalStateException("Source page count is unavailable for redaction verification");
-        }
-        if (redactionOutput.pagesRendered() != expectedSourcePageCount) {
-            throw new IllegalStateException("Redaction output page count does not match source");
-        }
-        if (redactionOutput.redactionsApplied() != targets.size()) {
-            throw new IllegalStateException("Redaction engine did not apply every expected target");
-        }
 
+        // Task 0023: the checks run inside the try so the redacted temp output is released on
+        // every path (it was left on disk when a check failed), and each check keeps its code.
         try (var redactedContent = redactionOutput.redactedPdfContent()) {
+            if (expectedSourcePageCount < 1) {
+                throw redactionSafetyFailure(TechnicalFailureCode.REDACTION_SOURCE_PAGES_UNKNOWN,
+                        "Source page count is unavailable for redaction verification");
+            }
+            if (redactionOutput.pagesRendered() != expectedSourcePageCount) {
+                throw redactionSafetyFailure(TechnicalFailureCode.REDACTION_PAGE_COUNT_MISMATCH,
+                        "Redaction output page count does not match source");
+            }
+            if (redactionOutput.redactionsApplied() != targets.size()) {
+                throw redactionSafetyFailure(TechnicalFailureCode.REDACTION_TARGETS_NOT_APPLIED,
+                        "Redaction engine did not apply every expected target");
+            }
+
             long redactedSize = redactedContent.contentLength();
             RedactionVerificationPort.VerificationResult verification;
             InputStream verificationStream = redactedContent.openStream();
@@ -222,7 +233,13 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 closeQuietly(verificationStream);
             }
             if (!verification.safe()) {
-                throw new IllegalStateException("Redacted output failed security verification");
+                // Task 0023 C3 (#142): keep the exact failed check as a code (was one generic UNKNOWN).
+                TechnicalFailureCode code = verification.failureCode() == null
+                        ? TechnicalFailureCode.REDACTION_OUTPUT_UNPARSABLE : verification.failureCode();
+                log.warn("DOCUMENT_REDACTION_VERIFICATION_FAILED document={} package={} reasonCode={} pages={} expectedRedactions={} coveredRedactions={}",
+                        command.documentId(), command.packageId(), code, verification.pageCount(),
+                        verification.expectedRedactionCount(), verification.coveredRedactionCount());
+                throw redactionSafetyFailure(code, "Redacted output failed security verification");
             }
             auditService.recordSuccess(
                     command.tenantId(), SYSTEM_ACTOR,
@@ -330,14 +347,28 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     }
 
     private void handleFailure(RedactDocumentCommand command, CorrelationId correlationId, Exception e) {
-        failDocument(command, correlationId, FailureReasonSanitizer.redactionFailed());
+        // Task 0023 C3: the audit carries the classified code ("Redaction failed: dependency=…,
+        // code=…, retryable=…, attempts=…"), which the case panel parses; the event keeps a fixed
+        // sentence. Neither carries exception text.
+        String eventReason = TechnicalFailureClassifier.classify(e).failureCode()
+                == TechnicalFailureCode.REDACTION_LOCATION_MISSING
+                ? FailureReasonSanitizer.sanitize("Redaction location could not be determined")
+                : FailureReasonSanitizer.redactionFailed();
+        failDocument(command, correlationId, eventReason,
+                TechnicalFailureClassifier.safeAuditDetail(e, FailureReasonSanitizer.redactionFailed()));
+    }
+
+    /** Task 0023 C3: a fail-closed redaction safety stop with its exact code. Never retried. */
+    private static TechnicalDependencyException redactionSafetyFailure(TechnicalFailureCode code, String safeMessage) {
+        return new TechnicalDependencyException(TechnicalDependency.REDACTION, code, false, safeMessage);
     }
 
     /**
      * Marks the document as FAILED, publishes failure event, and audits.
      * Used both for safety fail-closed (no bounding boxes) and real errors.
      */
-    private void failDocument(RedactDocumentCommand command, CorrelationId correlationId, String reason) {
+    private void failDocument(RedactDocumentCommand command, CorrelationId correlationId, String reason,
+                              String auditDetail) {
         // Mark document failed
         try {
             documentRepository.findByIdAndTenantId(command.documentId(), command.tenantId())
@@ -345,8 +376,9 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                         doc.fail();
                         documentRepository.save(doc);
                     });
-        } catch (Exception ignored) {
-            // Best-effort
+        } catch (Exception stepFailure) {
+            // Best-effort. Task 0023: no longer silent; type only, never the message.
+            logFailStep(command, "MARK_FAILED", stepFailure);
         }
 
         // Publish failure event
@@ -355,8 +387,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     command.documentId(), command.packageId(), command.tenantId(),
                     reason, correlationId);
             eventPublisher.publish(event);
-        } catch (Exception ignored) {
-            // Best-effort
+        } catch (Exception stepFailure) {
+            logFailStep(command, "PUBLISH_EVENT", stepFailure);
         }
 
         // Audit
@@ -368,11 +400,16 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     "Document",
                     command.documentId().toString(), command.packageId(),
                     correlationId,
-                    "Redaction failed: " + reason
+                    auditDetail
             );
-        } catch (Exception ignored) {
-            // Best-effort
+        } catch (Exception stepFailure) {
+            logFailStep(command, "AUDIT", stepFailure);
         }
+    }
+
+    private static void logFailStep(RedactDocumentCommand command, String step, Exception failure) {
+        log.warn("DOCUMENT_REDACTION_FAIL_STEP_FAILED document={} package={} step={} failureType={}",
+                command.documentId(), command.packageId(), step, failure.getClass().getSimpleName());
     }
 
     private long elapsedMillis(long startedNanos) {

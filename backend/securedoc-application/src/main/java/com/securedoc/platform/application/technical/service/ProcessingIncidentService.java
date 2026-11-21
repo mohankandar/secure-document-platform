@@ -91,8 +91,10 @@ public final class ProcessingIncidentService {
                     "reasonCode", reasonCode, "attempt", classification.attempts(),
                     "retryable", classification.retryable(), "status", incident.status()),
                     "Structured processing incident recorded");
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException saveFailure) {
             // Incident persistence is support telemetry and must never mask the original processing failure.
+            // Task 0023 C3 (#367): but it must not be silent either.
+            logSaveFailure("RECORD_FAILURE", tenantId, packageId, reasonCode, saveFailure);
         }
         try {
             productTelemetryService.processingFailure(tenantId, packageId, stage.name(), component, category,
@@ -131,8 +133,9 @@ public final class ProcessingIncidentService {
                     "reasonCode", reasonCode, "attempt", Math.max(1, attempts),
                     "maxAttempts", maxAttempts, "retryable", false, "status", incident.status()),
                     "Automatic package-processing recovery exhausted");
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException saveFailure) {
             // Support telemetry must never prevent the authoritative package state transition.
+            logSaveFailure("RECORD_RECOVERY_EXHAUSTED", tenantId, packageId, reasonCode, saveFailure);
         }
         return incident;
     }
@@ -266,16 +269,18 @@ public final class ProcessingIncidentService {
                                 "reasonCode", incident.reasonCode(), "status", ProcessingIncidentStatus.RESOLVED,
                                 "decision", "AUTOMATIC_RETRY_SUCCEEDED"), "Processing incident resolved after automatic recovery");
                     });
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException saveFailure) {
             // Support telemetry must never block successful business completion.
+            logSaveFailure("MARK_PROCESSING_COMPLETED", tenantId, packageId, null, saveFailure);
         }
     }
 
     private void safelyAdvance(PackageId packageId, TenantId tenantId, java.util.function.Consumer<ProcessingIncident> transition) {
         try {
             repository.findLatestByPackageIdAndTenantId(packageId, tenantId).ifPresent(transition);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException saveFailure) {
             // Support telemetry must never block retry, business continuity, redaction or delivery.
+            logSaveFailure("ADVANCE_LATEST", tenantId, packageId, null, saveFailure);
         }
     }
 
@@ -286,8 +291,25 @@ public final class ProcessingIncidentService {
                     .filter(incident -> incident.status() != ProcessingIncidentStatus.RESOLVED
                             && incident.status() != ProcessingIncidentStatus.AUTO_CLOSED)
                     .forEach(transition);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException saveFailure) {
             // Support telemetry must never block package lifecycle completion.
+            logSaveFailure("ADVANCE_ALL_ACTIVE", tenantId, packageId, null, saveFailure);
+        }
+    }
+
+    /**
+     * Task 0023 C3 (#367): a failed incident save leaves the case FAILED but missing from the
+     * Support list, so IT must see it. Logs ids, the operation, the incident code and the exception
+     * type only (never its message, which can hold SQL or values).
+     */
+    private void logSaveFailure(String operation, TenantId tenantId, PackageId packageId,
+                                String incidentReasonCode, RuntimeException failure) {
+        try {
+            log.error("PROCESSING_INCIDENT_SAVE_FAILED operation={} tenant={} package={} incidentReasonCode={} failureType={}",
+                    operation, tenantId, packageId, incidentReasonCode == null ? "n/a" : incidentReasonCode,
+                    failure.getClass().getSimpleName());
+        } catch (RuntimeException ignored) {
+            // Logging must never mask the processing outcome.
         }
     }
 

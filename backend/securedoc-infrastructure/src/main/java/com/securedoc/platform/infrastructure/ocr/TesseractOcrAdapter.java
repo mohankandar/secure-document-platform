@@ -2,6 +2,9 @@ package com.securedoc.platform.infrastructure.ocr;
 
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.OcrPort;
+import com.securedoc.platform.infrastructure.pdf.TempFileCleanup;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -23,17 +26,27 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class TesseractOcrAdapter implements OcrPort {
 
+    private static final Logger log = LoggerFactory.getLogger(TesseractOcrAdapter.class);
+
     private final TesseractOcrProperties properties;
+    /** Test seam: where the per-page temp folder is created (null = the system temp folder). */
+    private Path tempRoot;
 
     public TesseractOcrAdapter(TesseractOcrProperties properties) {
         this.properties = Objects.requireNonNull(properties);
+    }
+
+    void useTempRoot(Path root) {
+        this.tempRoot = root;
     }
 
     @Override
     public OcrPageOutput recognize(OcrPageInput input) {
         Path tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("securedoc-ocr-");
+            tempDir = tempRoot == null
+                    ? Files.createTempDirectory("securedoc-ocr-")
+                    : Files.createTempDirectory(tempRoot, "securedoc-ocr-");
             Path imagePath = tempDir.resolve("page.png");
             Path outputBase = tempDir.resolve("result");
             Files.write(imagePath, input.imageBytes());
@@ -55,14 +68,22 @@ public class TesseractOcrAdapter implements OcrPort {
                     Math.max(1, properties.getTimeoutSeconds()), TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
+                log.warn("OCR_PROCESS_FAILED reasonCode=OCR_TIMEOUT timeoutSeconds={}",
+                        Math.max(1, properties.getTimeoutSeconds()));
                 throw new OcrProcessingException(TechnicalFailureCode.OCR_TIMEOUT, true, "OCR provider timed out");
             }
-            if (process.exitValue() != 0) {
+            int exitStatus = process.exitValue();
+            if (exitStatus != 0) {
+                // Task 0023 C7 (#110): the cause is usually the install (language data, option), not the
+                // document. Log the exit status for IT; stderr stays discarded because it can echo input.
+                log.warn("OCR_PROCESS_FAILED reasonCode=OCR_NON_ZERO_EXIT exitStatus={} language={} psm={}",
+                        exitStatus, properties.getLanguage(), properties.getPageSegmentationMode());
                 throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR provider returned a non-zero exit status");
             }
 
             Path tsv = Path.of(outputBase + ".tsv");
             if (!Files.isRegularFile(tsv)) {
+                log.warn("OCR_PROCESS_FAILED reasonCode=OCR_OUTPUT_MISSING");
                 throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR provider did not produce expected output");
             }
 
@@ -70,11 +91,15 @@ public class TesseractOcrAdapter implements OcrPort {
                     input.pixelWidth(), input.pixelHeight());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("OCR_PROCESS_FAILED reasonCode=OCR_INTERRUPTED");
             throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR processing interrupted", e);
         } catch (IOException e) {
+            // The exception message can hold the executable path or a temp path: log the type only.
+            log.warn("OCR_PROCESS_FAILED reasonCode=OCR_UNAVAILABLE failureType={}", e.getClass().getSimpleName());
             throw new OcrProcessingException(TechnicalFailureCode.OCR_UNAVAILABLE, false, "OCR provider could not be executed", e);
         } finally {
-            deleteQuietly(tempDir);
+            // Task 0023 B9 (#370): the folder holds the page image and the recognized text.
+            TempFileCleanup.deleteTreeQuietly(tempDir, "OCR");
         }
     }
 
@@ -249,23 +274,6 @@ public class TesseractOcrAdapter implements OcrPort {
         if (value < 0.0) return 0.0;
         if (value > 1.0) return 1.0;
         return value;
-    }
-
-    private static void deleteQuietly(Path directory) {
-        if (directory == null || !Files.exists(directory)) {
-            return;
-        }
-        try (var paths = Files.walk(directory)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                    // Best-effort cleanup. Do not hide OCR result/failure.
-                }
-            });
-        } catch (IOException ignored) {
-            // Best-effort cleanup.
-        }
     }
 
     private record WordRow(int block, int paragraph, int line, int word,

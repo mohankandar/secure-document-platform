@@ -1154,10 +1154,18 @@ public class ApplicationServiceConfig {
             @Qualifier("reviewResumeTaskExecutor") TaskExecutor reviewResumeTaskExecutor,
             TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
             PackageProcessingDispatchLease packageProcessingDispatchLease,
-            ProcessingStorageNodeReadiness processingStorageNodeReadiness) {
+            ProcessingStorageNodeReadiness processingStorageNodeReadiness,
+            PackageProcessingRecoveryService packageProcessingRecoveryService) {
+        // Task 0023 C1: after 3 failed dispatches of the same case (at once for a licence denial),
+        // the case is stopped as FAILED with a code and a Support incident instead of looping.
         return new InProcessPackageProcessingDispatcher(
                 reviewResumeTaskExecutor, triggerPackageProcessingUseCase, packageProcessingDispatchLease,
-                processingStorageNodeReadiness::readyFor);
+                processingStorageNodeReadiness::readyFor,
+                (command, failure, failedAttempts, maxAttempts) ->
+                        packageProcessingRecoveryService.stopAfterDispatchFailure(
+                                command.packageId(), command.tenantId(), failure, failedAttempts, maxAttempts,
+                                command.correlationId()),
+                3);
     }
 
     @Bean

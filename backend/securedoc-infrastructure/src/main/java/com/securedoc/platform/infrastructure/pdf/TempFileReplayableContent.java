@@ -26,11 +26,13 @@ public final class TempFileReplayableContent implements ReplayableContent {
         try {
             long size = Files.size(path);
             if (size <= 0) {
-                Files.deleteIfExists(path);
+                TempFileCleanup.deleteQuietly(path, "PDF_OUTPUT");
                 throw new IllegalArgumentException("Generated PDF content must not be empty");
             }
             return new TempFileReplayableContent(path, size);
         } catch (IOException e) {
+            // Task 0023 B9: the caller only deletes the path when this returns, so delete it here.
+            TempFileCleanup.deleteQuietly(path, "PDF_OUTPUT");
             throw new UncheckedIOException("Unable to inspect temporary PDF content", e);
         }
     }
@@ -57,10 +59,8 @@ public final class TempFileReplayableContent implements ReplayableContent {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
-        try {
-            Files.deleteIfExists(path);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Unable to delete temporary PDF content", e);
-        }
+        // Task 0023 B9: a failed delete must not turn finished work into a failure; it is logged
+        // with a temp id (no name, no path) so IT can remove the leftover copy.
+        TempFileCleanup.deleteQuietly(path, "PDF_OUTPUT");
     }
 }

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.port.out;
 
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 
 import java.io.ByteArrayInputStream;
@@ -36,6 +37,10 @@ public interface RedactionVerificationPort {
     /**
      * hasExtractableText means extractable text was found on a page that was required to be
      * burn-flattened because it contains a redaction target. Untouched-page text is permitted.
+     *
+     * <p>Task 0023 C3: {@code failureCode} names the exact check that failed (a {@code REDACTION_*}
+     * code), so the reason reaches the incident and the audit. {@code failureReason} is a fixed,
+     * content-free sentence for the same check.
      */
     record VerificationResult(
             boolean safe,
@@ -43,16 +48,18 @@ public interface RedactionVerificationPort {
             int expectedRedactionCount,
             int coveredRedactionCount,
             boolean hasExtractableText,
-            String failureReason
+            String failureReason,
+            TechnicalFailureCode failureCode
     ) {
         public static VerificationResult safe(int pageCount, int expectedCount, int coveredCount) {
-            return new VerificationResult(true, pageCount, expectedCount, coveredCount, false, null);
+            return new VerificationResult(true, pageCount, expectedCount, coveredCount, false, null, null);
         }
 
         public static VerificationResult failed(int pageCount, int expectedCount, int coveredCount,
-                                                boolean hasExtractableText, String reason) {
+                                                boolean hasExtractableText, TechnicalFailureCode code,
+                                                String reason) {
             return new VerificationResult(false, pageCount, expectedCount, coveredCount,
-                    hasExtractableText, reason);
+                    hasExtractableText, reason, code == null ? TechnicalFailureCode.REDACTION_OUTPUT_UNPARSABLE : code);
         }
     }
 }

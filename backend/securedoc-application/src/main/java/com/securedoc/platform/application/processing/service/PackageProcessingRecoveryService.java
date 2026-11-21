@@ -1,7 +1,13 @@
 package com.securedoc.platform.application.processing.service;
 
+import com.securedoc.platform.application.exception.TechnicalDependency;
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
+import com.securedoc.platform.application.exception.TechnicalFailureCode;
+import com.securedoc.platform.application.licensing.LicenseEnforcementException;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
+import com.securedoc.platform.domain.processing.ProcessingStage;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
 import com.securedoc.platform.application.telemetry.ProductTelemetryService;
@@ -12,6 +18,8 @@ import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -66,6 +74,78 @@ public final class PackageProcessingRecoveryService {
                 "DocumentPackage", packageId.toString(), correlationId,
                 "Automatic package-processing recovery exhausted: attempts=" + attempts
                         + ", maxAttempts=" + maxAttempts);
+        return true;
+    }
+
+    /**
+     * Task 0023 C1: a licence refusal is final for this pass and is not retried automatically.
+     * A licence configuration error (the licence service itself is broken, HTTP 503) is not a
+     * refusal and is counted like any other dispatch failure.
+     */
+    public static boolean isLicenceDenial(Throwable failure) {
+        return failure instanceof LicenseEnforcementException licence && !licence.serviceUnavailable();
+    }
+
+    /**
+     * Task 0023 C1: stops a case whose processing could not be started, instead of letting the
+     * recovery scan redispatch it every few seconds forever. Called by the dispatcher after the
+     * configured number of failed dispatches of the same case, or at once for a licence denial.
+     *
+     * <p>Only SUBMITTED cases (and PROCESSING cases refused by the licence) are stopped here.
+     * Other PROCESSING failures keep the durable recovery budget ({@link #exhaustIfStillProcessing}),
+     * and review/approval continuations are human-triggered, so V1 behaviour for those is unchanged.
+     *
+     * <p>Writes the standard stop: package FAILED, a Support incident with the code, one
+     * {@code DOCUMENT_PROCESSING_FAILED} audit row on the package, and the technical hold.
+     * Nothing from the exception message is stored; only its simple type name.
+     *
+     * @return true when the case was stopped by this call
+     */
+    public boolean stopAfterDispatchFailure(PackageId packageId,
+                                            TenantId tenantId,
+                                            Throwable failure,
+                                            int failedAttempts,
+                                            int maxAttempts,
+                                            CorrelationId correlationId) {
+        Objects.requireNonNull(failure);
+        var pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
+        if (pkg == null) return false;
+        boolean licenceDenial = isLicenceDenial(failure);
+        boolean applicable = pkg.status() == PackageStatus.SUBMITTED
+                || (licenceDenial && pkg.status() == PackageStatus.PROCESSING);
+        if (!applicable) return false;
+
+        TechnicalFailureCode code = licenceDenial
+                ? TechnicalFailureCode.PROCESSING_LICENSE_DENIED
+                : TechnicalFailureCode.PROCESSING_DISPATCH_EXHAUSTED;
+        TechnicalDependencyException stop = new TechnicalDependencyException(
+                TechnicalDependency.PROCESSING, code, false, "Package processing stopped")
+                .withAttempts(Math.max(1, failedAttempts));
+
+        pkg.fail();
+        packageRepository.save(pkg);
+
+        Map<String, String> metadata = new LinkedHashMap<>();
+        metadata.put("scope", "PACKAGE");
+        metadata.put("failureType", failure.getClass().getSimpleName());
+        metadata.put("maxAttempts", String.valueOf(maxAttempts));
+        if (failure instanceof LicenseEnforcementException licence) {
+            metadata.put("licenceErrorCode", licence.errorCode());
+            if (licence.status() != null) metadata.put("licenceStatus", licence.status().name());
+        }
+        incidentService.recordFailure(tenantId, packageId, null, ProcessingStage.DOCUMENT_PROCESSING, stop,
+                correlationId, licenceDenial
+                        ? "Processing stopped: the tenant licence does not allow document processing"
+                        : "Processing stopped: it could not be started after repeated tries",
+                metadata);
+        try {
+            lifecycleService.recordTechnicalFailure(packageId, tenantId, correlationId);
+        } catch (RuntimeException ignored) {
+            // FAILED + incident state is authoritative; retention scheduling can be retried operationally.
+        }
+        auditService.recordFailure(tenantId, SYSTEM_ACTOR, AuditAction.DOCUMENT_PROCESSING_FAILED,
+                "DocumentPackage", packageId.toString(), correlationId,
+                TechnicalFailureClassifier.safeAuditDetail(stop, "Package processing stopped"));
         return true;
     }
 }
