@@ -36,6 +36,27 @@ class ScanSessionServiceTest {
         assertTrue(Files.exists(fixture.store.sessionDirectory(session.sessionId()).resolve(FileScanSessionStore.STATE_FILE)));
     }
 
+    /** Task 0021: the New case "Sensitivity" choice is carried as sent, survives a restart and every state change. */
+    @Test
+    void carriesTheCaseLevelChosenOnNewCaseThroughRestartAndReady() throws Exception {
+        Fixture first = fixture();
+        var waiting = first.service.start(new StartScanSessionRequest(Map.of("contractNumber", "1"), "CONFIDENTIAL"));
+        assertEquals("CONFIDENTIAL", waiting.caseSensitivityLevel());
+
+        Fixture restarted = fixture();
+        Path pdf = restarted.store.sessionDirectory(waiting.sessionId()).resolve("scan.pdf");
+        Files.write(pdf, minimalPdf());
+        var ready = restarted.service.markReady(waiting.sessionId(),
+                new PreparedScan(UUID.randomUUID(), "scan.pdf", Files.size(pdf), "abc", now, waiting.sessionId() + "/scan.pdf"));
+        assertEquals("CONFIDENTIAL", ready.caseSensitivityLevel());
+    }
+
+    @Test
+    void noChoiceIsCarriedAsNothingSent() {
+        Fixture fixture = fixture();
+        assertNull(fixture.service.start(new StartScanSessionRequest(Map.of())).caseSensitivityLevel());
+    }
+
     @Test
     void rejectsSecondConcurrentWaitingSessionForSameScanner() {
         Fixture fixture = fixture();

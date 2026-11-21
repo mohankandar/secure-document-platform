@@ -89,6 +89,7 @@ public class JpaExternalIntakeRepositoryAdapter implements ExternalIntakeReposit
             row.setReceivedSha256(document.receivedSha256());
             row.setIdempotencyKey(document.idempotencyKey());
             row.setReceivedAt(document.receivedAt());
+            row.setSensitivityLevel(document.sensitivityLevel().name());
             documentRepository.save(row);
         }
     }
@@ -98,7 +99,8 @@ public class JpaExternalIntakeRepositoryAdapter implements ExternalIntakeReposit
                 .stream().map(row -> new ExternalManifestDocument(
                         row.getExternalSourceDocumentId(), row.getOriginalFileName(), row.getDeclaredSha256(),
                         row.getReceivedDocumentId() == null ? null : DocumentId.of(row.getReceivedDocumentId()),
-                        row.getReceivedSha256(), row.getIdempotencyKey(), row.getReceivedAt())).toList();
+                        row.getReceivedSha256(), row.getIdempotencyKey(), row.getReceivedAt(),
+                        com.securedoc.platform.domain.document.SensitivityLevel.valueOf(row.getSensitivityLevel()))).toList();
         return ExternalIntake.reconstitute(PackageId.of(entity.getPackageId()), TenantId.of(entity.getTenantId()),
                 IntegrationConnectionId.of(entity.getIntegrationConnectionId()), ExternalIntakeChannel.valueOf(entity.getChannel()),
                 entity.getExternalSourcePackageId(), entity.getSourceRevision(), entity.getAttemptNumber(), entity.getRequestFingerprint(), entity.getCreatedAt(), entity.getExpiresAt(),

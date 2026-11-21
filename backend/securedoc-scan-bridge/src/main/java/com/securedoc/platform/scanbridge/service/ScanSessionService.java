@@ -92,7 +92,8 @@ public class ScanSessionService {
         ScanSession session = new ScanSession(
                 UUID.randomUUID(), UUID.randomUUID(), properties.getTenantId(), properties.getBridgeId(), properties.getSiteId(),
                 properties.getScannerId(), properties.getMode(), ScanSessionStatus.WAITING_FOR_SCAN, identifiers,
-                now, now, null, null, 0, null, null, null, null, null);
+                now, now, null, null, 0, null, null, null, null, null,
+                carriedSensitivityLevel(request == null ? null : request.caseSensitivityLevel()));
         store.save(session);
         sessions.put(session.sessionId(), session);
         actionableSessionId.set(session.sessionId());
@@ -422,7 +423,14 @@ public class ScanSessionService {
                              Instant nextAttemptAt, String errorCode, Instant errorAt, Instant submittedAt) {
         return new ScanSession(existing.sessionId(), existing.submissionId(), existing.tenantId(), existing.bridgeId(),
                 existing.siteId(), existing.scannerId(), existing.captureMode(), status, identifiers, existing.createdAt(),
-                clock.instant(), preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode, errorAt, submittedAt);
+                clock.instant(), preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode, errorAt, submittedAt,
+                existing.caseSensitivityLevel());
+    }
+
+    /** Transport safety only (task 0021): a level is a short name, so anything longer is cut; LexaVault reads the value. */
+    private static String carriedSensitivityLevel(String raw) {
+        if (raw == null) return null;
+        return raw.length() > 64 ? raw.substring(0, 64) : raw;
     }
 
     private Map<String, String> sanitizeBusinessIdentifiers(Map<String, String> raw) {

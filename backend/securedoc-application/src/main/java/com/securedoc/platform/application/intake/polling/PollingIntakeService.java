@@ -164,8 +164,9 @@ public final class PollingIntakeService {
         try {
             PushIntakeCreateInput input = new PushIntakeCreateInput(sourcePackage.externalSourcePackageId(), sourcePackage.sourceRevision(),
                     sourcePackage.businessIdentifiers(), sourcePackage.metadata(), sourcePackage.documents().stream()
-                    .map(d -> new PushIntakeCreateInput.ManifestDocumentInput(d.externalSourceDocumentId(), d.fileName(), d.sha256())).toList(),
-                    sourcePackage.retry());
+                    .map(d -> new PushIntakeCreateInput.ManifestDocumentInput(d.externalSourceDocumentId(), d.fileName(), d.sha256(),
+                            d.sensitivityLevel())).toList(),
+                    sourcePackage.retry(), sourcePackage.caseSensitivityLevel());
             ExternalIntakeSnapshot intake = externalIntakeService.createPollingIntake(input, source, principal, correlationId);
             if (intake.intakeStatus() == ExternalIntakeStatus.INCOMPLETE_EXPIRED) return new PackageOutcome(0, false);
             Set<String> missing = new HashSet<>(intake.missingExternalSourceDocumentIds());

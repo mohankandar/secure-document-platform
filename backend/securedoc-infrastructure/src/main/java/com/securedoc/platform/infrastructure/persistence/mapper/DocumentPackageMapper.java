@@ -8,6 +8,7 @@ import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.PackageMetadata;
 import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.document.PackageType;
+import com.securedoc.platform.domain.document.SensitivityLevel;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.BusinessRecordId;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -39,7 +40,8 @@ public final class DocumentPackageMapper {
                 PackageStatus.valueOf(entity.getStatus()),
                 metadata,
                 documents,
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                SensitivityLevel.valueOf(entity.getSensitivityLevel())
         );
     }
 
@@ -53,6 +55,7 @@ public final class DocumentPackageMapper {
         entity.setSourceReference(pkg.sourceReference().orElse(null));
         entity.setStatus(pkg.status().name());
         entity.setMetadataJson(serializeMetadata(pkg.metadata()));
+        entity.setSensitivityLevel(pkg.sensitivityLevel().name());
         entity.setCreatedBy(pkg.submittedBy().value());
         entity.setCreatedAt(pkg.createdAt());
         entity.setUpdatedAt(pkg.updatedAt());

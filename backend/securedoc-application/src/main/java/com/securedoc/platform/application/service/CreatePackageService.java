@@ -66,7 +66,7 @@ public final class CreatePackageService implements CreatePackageUseCase {
         DocumentPackage documentPackage = DocumentPackage.createIntake(
                 principal.tenantId(), command.packageType(), identity.businessRecordId(),
                 command.intakeFingerprint(), command.sourceReference(), principal.actorId(),
-                PackageMetadata.of(command.metadata()));
+                PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
         packageRepository.save(documentPackage);
 
         CorrelationId correlationId = command.correlationId();
@@ -74,7 +74,12 @@ public final class CreatePackageService implements CreatePackageUseCase {
                 command.packageType(), principal.actorId(), correlationId));
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.PACKAGE_CREATED,
                 "IntakeBatch", documentPackage.id().toString(), correlationId,
-                "Intake batch created: channel=" + command.packageType());
+                "Intake batch created: channel=" + command.packageType()
+                        + ", sensitivityLevel=" + documentPackage.sensitivityLevel().name());
+        if (command.caseSensitivity().unknown()) {
+            auditService.recordUnknownSensitivityLevel(principal.tenantId(), principal.actorId(), documentPackage.id(),
+                    AuditService.SensitivityScope.CASE, correlationId);
+        }
         if (identity.createdNew()) {
             auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.BUSINESS_RECORD_CREATED,
                     "BusinessRecord", identity.businessRecordId().toString(), correlationId,

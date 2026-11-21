@@ -20,5 +20,27 @@ public record ExternalIntakeSnapshot(
         Instant createdAt,
         Instant expiresAt,
         Instant acceptedAt,
-        Instant expiredAt) {
+        Instant expiredAt,
+        List<IntakeWarning> warnings) {
+
+    public ExternalIntakeSnapshot {
+        warnings = warnings == null ? List.of() : List.copyOf(warnings);
+    }
+
+    public ExternalIntakeSnapshot(UUID packageId, String externalSourcePackageId, String sourceRevision,
+                                  int attemptNumber, ExternalIntakeStatus intakeStatus, PackageStatus packageStatus,
+                                  int expectedDocuments, int receivedDocuments,
+                                  List<String> missingExternalSourceDocumentIds, Instant createdAt,
+                                  Instant expiresAt, Instant acceptedAt, Instant expiredAt) {
+        this(packageId, externalSourcePackageId, sourceRevision, attemptNumber, intakeStatus, packageStatus,
+                expectedDocuments, receivedDocuments, missingExternalSourceDocumentIds, createdAt, expiresAt,
+                acceptedAt, expiredAt, List.of());
+    }
+
+    /** The same snapshot carrying the warnings of the create request it answers. */
+    public ExternalIntakeSnapshot withWarnings(List<IntakeWarning> value) {
+        return new ExternalIntakeSnapshot(packageId, externalSourcePackageId, sourceRevision, attemptNumber,
+                intakeStatus, packageStatus, expectedDocuments, receivedDocuments, missingExternalSourceDocumentIds,
+                createdAt, expiresAt, acceptedAt, expiredAt, value);
+    }
 }

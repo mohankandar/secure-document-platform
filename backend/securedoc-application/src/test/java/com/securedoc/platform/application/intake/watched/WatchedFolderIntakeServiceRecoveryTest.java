@@ -139,6 +139,75 @@ class WatchedFolderIntakeServiceRecoveryTest {
         assertEquals(IntakeObservationStatus.DUPLICATE, harness.observations.latest.status());
     }
 
+    /** Task 0021: every file picked up from the folder gets the level Tenant IT set for it (default Standard). */
+    @Test
+    void everyFilePickedUpGetsTheFolderLevel() {
+        for (SensitivityLevel folderLevel : SensitivityLevel.values()) {
+            var candidate = candidate("case-level-" + folderLevel, doc("one.pdf", "one"), doc("two.pdf", "two"));
+            var repository = new MemoryPackageRepository(null);
+            List<CreatePackageCommand> creates = new ArrayList<>();
+            List<SensitivityLevel> uploadLevels = new ArrayList<>();
+            CreatePackageUseCase create = (command, p) -> {
+                creates.add(command);
+                DocumentPackage pkg = DocumentPackage.createIntake(tenantId, PackageType.FOLDER_INTAKE,
+                        BusinessRecordId.generate(), command.intakeFingerprint(), command.sourceReference(), actorId,
+                        PackageMetadata.empty(), command.caseSensitivity().level());
+                repository.current = pkg;
+                return CreatePackageResult.of(pkg.id(), BusinessRecordId.generate(), pkg.status(), pkg.createdAt());
+            };
+            UploadDocumentUseCase upload = (command, p) -> {
+                uploadLevels.add(command.sensitivityLevel());
+                DocumentPackage pkg = repository.findByIdAndTenantId(command.packageId(), tenantId).orElseThrow();
+                Document document = persisted(pkg.id(), new WatchedFolderDocument(command.fileName(), command.mimeType(), command.content()));
+                pkg.addDocument(document);
+                return UploadDocumentResult.of(document.id(), ArtifactId.generate(), document.status());
+            };
+            SubmitPackageUseCase submit = (command, p) -> repository.current.submit();
+            WatchedFolderIntakeService service = new WatchedFolderIntakeService(new SourceStub(candidate), new LeaseStub(),
+                    new ObservationStub(), repository, create, upload, submit, command -> { }, new AuditService(r -> { }),
+                    Duration.ofMinutes(15), Duration.ofSeconds(10), tenant -> folderLevel);
+
+            assertEquals(1, service.scan(principal, correlationId).accepted());
+            assertEquals(folderLevel, creates.get(0).caseSensitivity().level());
+            assertFalse(creates.get(0).caseSensitivity().unknown());
+            assertEquals(List.of(folderLevel, folderLevel), uploadLevels);
+        }
+    }
+
+    @Test
+    void withoutAFolderSettingFilesAreStandard() {
+        WatchedFolderSettingsService settings = new WatchedFolderSettingsService(new MemorySettings(),
+                new AuditService(r -> { }), null);
+        assertEquals(SensitivityLevel.STANDARD, settings.sensitivityLevel(tenantId, WatchedFolderSettingsService.INSTALLED_FOLDER));
+    }
+
+    @Test
+    void tenantItChangesTheFolderLevelAndItIsAuditedAsCodes() {
+        List<com.securedoc.platform.domain.audit.AuditRecord> audits = new ArrayList<>();
+        MemorySettings store = new MemorySettings();
+        WatchedFolderSettingsService settings = new WatchedFolderSettingsService(store, new AuditService(audits::add), null);
+        settings.changeSensitivityLevel(tenantId, actorId, WatchedFolderSettingsService.INSTALLED_FOLDER,
+                SensitivityLevel.HIGHLY_CONFIDENTIAL, correlationId);
+        assertEquals(SensitivityLevel.HIGHLY_CONFIDENTIAL,
+                settings.sensitivityLevel(tenantId, WatchedFolderSettingsService.INSTALLED_FOLDER));
+        assertEquals(SensitivityLevel.STANDARD, settings.sensitivityLevel(TenantId.generate(),
+                WatchedFolderSettingsService.INSTALLED_FOLDER), "a setting belongs to one tenant");
+        assertEquals(1, audits.size());
+        assertEquals(com.securedoc.platform.domain.audit.AuditAction.WATCHED_FOLDER_SETTINGS_CHANGED, audits.get(0).action());
+        assertEquals("sensitivityLevel=STANDARD->HIGHLY_CONFIDENTIAL", audits.get(0).detail());
+    }
+
+    private static final class MemorySettings implements WatchedFolderSettingsRepository {
+        private final Map<String, SensitivityLevel> values = new HashMap<>();
+        @Override public Optional<SensitivityLevel> findSensitivityLevel(TenantId tenantId, String folderKey) {
+            return Optional.ofNullable(values.get(tenantId + "|" + folderKey));
+        }
+        @Override public void saveSensitivityLevel(TenantId tenantId, String folderKey, SensitivityLevel level,
+                                                   ActorId updatedBy, Instant updatedAt) {
+            values.put(tenantId + "|" + folderKey, level);
+        }
+    }
+
     private Harness harness(MemoryPackageRepository repository,
                             WatchedFolderCandidate candidate,
                             boolean simulateCreateRace) {

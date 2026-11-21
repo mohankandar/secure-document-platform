@@ -130,13 +130,18 @@ public final class PackageDocumentExportService implements ExportPackageDocument
             }
         };
 
+        // Task 0021: the levels are read from the stored case on every attempt, so a retry carries the same levels.
+        Map<String, com.securedoc.platform.domain.document.SensitivityLevel> levelByDocumentId = new HashMap<>();
+        documents.forEach(d -> levelByDocumentId.put(d.id().toString(), d.sensitivityLevel()));
         List<DeliveryItem> pendingItems = new ArrayList<>();
         for (DeliverySubmission.DocumentState state : submission.pendingDocuments()) {
             Artifact artifact = artifactByDocumentId.get(state.documentId().toString());
             if (artifact == null) throw new IllegalStateException("Delivery submission refers to an unknown package document");
+            var documentLevel = levelByDocumentId.get(state.documentId().toString());
+            if (documentLevel == null) throw new IllegalStateException("Delivery submission refers to a document outside the package");
             pendingItems.add(new DeliveryItem(state.documentId(), state.sourceDocumentId(), state.fileName(),
                     () -> storagePort.retrieve(artifact.storageReference()), artifact.sizeBytes(), PDF_MIME_TYPE,
-                    artifact.checksum().algorithm(), artifact.checksum().value()));
+                    artifact.checksum().algorithm(), artifact.checksum().value(), documentLevel));
         }
 
         if (submission.status() != DeliverySubmissionStatus.DELIVERED) {
@@ -144,7 +149,8 @@ public final class PackageDocumentExportService implements ExportPackageDocument
             try {
                 batchReference = deliveryPort.deliverBatch(new DeliveryBatch(command.tenantId(), command.packageId(), exportCycle,
                         submission.sourceSubmissionId(), submission.destinationSubmissionReference(), businessIdentifiers(pkg),
-                        Map.of("sourceRevision", Integer.toString(exportCycle)), pendingItems, progress));
+                        Map.of("sourceRevision", Integer.toString(exportCycle)), pendingItems, progress,
+                        pkg.sensitivityLevel()));
                 if (batchReference.destinationSubmissionReference() != null) {
                     submission.recordDestinationSubmissionReference(batchReference.destinationSubmissionReference(), Instant.now());
                 }

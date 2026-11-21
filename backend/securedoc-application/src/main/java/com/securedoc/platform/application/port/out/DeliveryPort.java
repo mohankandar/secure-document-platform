@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.port.out;
 
+import com.securedoc.platform.domain.document.SensitivityLevel;
 import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import com.securedoc.platform.domain.identity.PackageId;
@@ -46,7 +47,8 @@ public interface DeliveryPort {
     record DeliveryBatch(TenantId tenantId, PackageId packageId, int exportCycle, String sourceSubmissionId,
                          String existingDestinationSubmissionReference,
                          Map<String,String> businessIdentifiers, Map<String,String> metadata,
-                         List<DeliveryItem> items, DeliveryProgressListener progressListener) {
+                         List<DeliveryItem> items, DeliveryProgressListener progressListener,
+                         SensitivityLevel caseSensitivityLevel) {
         public DeliveryBatch {
             Objects.requireNonNull(tenantId); Objects.requireNonNull(packageId);
             if (exportCycle < 1) throw new IllegalArgumentException("Export cycle must be >= 1");
@@ -57,15 +59,24 @@ public interface DeliveryPort {
             metadata = Map.copyOf(metadata == null ? Map.of() : metadata);
             items = List.copyOf(items == null ? List.of() : items);
             progressListener = progressListener == null ? NOOP_PROGRESS : progressListener;
+            caseSensitivityLevel = caseSensitivityLevel == null ? SensitivityLevel.STANDARD : caseSensitivityLevel;
             if (items.isEmpty() && existingDestinationSubmissionReference == null) {
                 throw new IllegalArgumentException("Delivery batch must contain documents when no destination submission exists");
             }
+        }
+
+        /** A batch with no case level (Standard). */
+        public DeliveryBatch(TenantId tenantId, PackageId packageId, int exportCycle, String sourceSubmissionId,
+                             String existingDestinationSubmissionReference, Map<String,String> businessIdentifiers,
+                             Map<String,String> metadata, List<DeliveryItem> items, DeliveryProgressListener progressListener) {
+            this(tenantId, packageId, exportCycle, sourceSubmissionId, existingDestinationSubmissionReference,
+                    businessIdentifiers, metadata, items, progressListener, SensitivityLevel.STANDARD);
         }
     }
 
     record DeliveryItem(DocumentId documentId, String sourceDocumentId, String originalFileName,
                         ContentSource contentSource, long sizeBytes, String mimeType,
-                        String checksumAlgorithm, String checksumValue) {
+                        String checksumAlgorithm, String checksumValue, SensitivityLevel sensitivityLevel) {
         public DeliveryItem {
             Objects.requireNonNull(documentId, "DocumentId must not be null");
             if (sourceDocumentId == null || sourceDocumentId.isBlank()) throw new IllegalArgumentException("Source document id must not be blank");
@@ -73,6 +84,15 @@ public interface DeliveryPort {
             Objects.requireNonNull(contentSource, "Content source must not be null");
             if (sizeBytes < 0) throw new IllegalArgumentException("Size must be >= 0");
             if (mimeType == null || mimeType.isBlank()) throw new IllegalArgumentException("Mime type must not be blank");
+            sensitivityLevel = sensitivityLevel == null ? SensitivityLevel.STANDARD : sensitivityLevel;
+        }
+
+        /** An item with no document level (Standard). */
+        public DeliveryItem(DocumentId documentId, String sourceDocumentId, String originalFileName,
+                            ContentSource contentSource, long sizeBytes, String mimeType,
+                            String checksumAlgorithm, String checksumValue) {
+            this(documentId, sourceDocumentId, originalFileName, contentSource, sizeBytes, mimeType,
+                    checksumAlgorithm, checksumValue, SensitivityLevel.STANDARD);
         }
     }
 

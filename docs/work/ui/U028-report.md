@@ -182,3 +182,10 @@ For another test user add `-Username <name>`. A pass ends with "PASS - OIDC sess
 .\Stop-LexaVault-Local.ps1
 docker stop lexa-keycloak lexa-keycloak-db
 ```
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. **Continuity run:** the owner runs `Test-LexaVault-OidcSessionContinuity.ps1 -PromptForPassword` once in his own PowerShell window and reports PASS or the step it stopped at. It does not block other tasks.
+2. **Phase 1 browser script:** run `Invoke-Phase1BrowserSignin.mjs` at the next Phase 1 regression, not as its own task.
+
+Design chat review of the proof pictures: the entity chooser's "dark" picture is identical to the light one (the chooser does not follow the dark setting before sign-in), and the two entity buttons touch each other with the line above sitting right on them. Both are fixed in task 0022 (A3).

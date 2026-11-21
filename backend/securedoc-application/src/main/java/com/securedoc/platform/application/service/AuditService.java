@@ -109,6 +109,21 @@ public final class AuditService {
                 AuditOutcome.DENIED, correlationId, detail);
     }
 
+    /** What an unknown sensitivity level was sent for (task 0021). */
+    public enum SensitivityScope { CASE, DOCUMENT }
+
+    /**
+     * Records the LV-INT-005 warning: a source sent an unknown sensitivity level, taken as Standard (task 0021).
+     * The intake is not refused. The detail holds the code and scope only, never the value sent, so Reports can count it.
+     */
+    public void recordUnknownSensitivityLevel(TenantId tenantId, ActorId actorId, PackageId caseId,
+                                              SensitivityScope scope, CorrelationId correlationId) {
+        record(tenantId, actorId, AuditAction.INTAKE_SENSITIVITY_LEVEL_UNKNOWN, "IntakeBatch",
+                caseId == null ? null : caseId.toString(), caseId, AuditOutcome.SUCCESS, correlationId,
+                "code=" + com.securedoc.platform.domain.document.SensitivityLevel.UNKNOWN_LEVEL_WARNING
+                        + ",scope=" + scope.name());
+    }
+
     private void record(TenantId tenantId, ActorId actorId, AuditAction action,
                          String resourceType, String resourceId,
                          AuditOutcome outcome, CorrelationId correlationId, String detail) {

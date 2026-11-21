@@ -65,6 +65,32 @@ Recreating the identical active/accepted source package+revision returns the exi
 
 If a prior identical attempt expired, `retry=true` creates the next internal attempt number while preserving the expired attempt. `retry=true` without any prior matching source identity is rejected.
 
+### Sensitivity levels (task 0021)
+
+Optional. The source system sets them; LexaVault keeps them, passes them on unchanged when it exports, and never changes them. They limit nothing inside LexaVault.
+
+- `caseSensitivityLevel` on the request: the level of the whole case (contract).
+- `sensitivityLevel` on each entry of `documents`: that document's own level.
+- Values: `STANDARD`, `CONFIDENTIAL`, `HIGHLY_CONFIDENTIAL`, exact capitals. Nothing sent (field absent or `null`) means `STANDARD`.
+- **An unknown or wrongly cased value is never refused.** That case or document is taken in as `STANDARD`, the request still succeeds, and the warning `LV-INT-005` "Unknown sensitivity level, taken as Standard" is recorded in the audit trail (the code only, never the value sent). The response lists it:
+
+```json
+{
+  "warnings": [
+    { "code": "LV-INT-005", "message": "Unknown sensitivity level, taken as Standard", "scope": "CASE", "externalSourceDocumentId": null },
+    { "code": "LV-INT-005", "message": "Unknown sensitivity level, taken as Standard", "scope": "DOCUMENT", "externalSourceDocumentId": "DOC-002" }
+  ]
+}
+```
+
+`warnings` is empty when there is nothing to say, and on status reads. A replay of the same request answers with the same warnings and records nothing new.
+
+A level is part of the request's identity only when one is sent: requests without levels keep the identity they had before, so an older intake can still be retried. Sending a different level for the same source package and revision is a changed request (`409 SOURCE_REVISION_REUSED`).
+
+The effective level of a document is the higher of its own level and its case's level (`SensitivityLevel.effective`).
+
+The scanner intake (`POST /api/v1/scanner-intakes`) takes the same `caseSensitivityLevel`; the Scan Bridge sends the New case "Sensitivity" choice there. The polling contract (`POLLING_INGESTION_V1.md`) takes the same two fields.
+
 ## 2. Upload one expected PDF
 
 `POST /api/v1/external-intakes/{packageId}/documents/{externalSourceDocumentId}`

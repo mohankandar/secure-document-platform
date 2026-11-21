@@ -10,8 +10,10 @@ import type {
   PollingConnectionStatus,
   PlatformAdminOverview,
   WatchedFolderAdminStatus,
+  WatchedFolderSettings,
 } from '../../types';
 import { errorMessage } from '../data';
+import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityName, type SensitivityLevelCode } from '../words';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
@@ -260,6 +262,7 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
         </div>
         <StatusText s={status} />
         {address && <div className="cf-ad-conn-endpoint cf-mono">{address}</div>}
+        {folder && <FolderSensitivity />}
         <details className="cf-disclosure">
           <summary>Technical details</summary>
           <dl className="cf-ad-facts cf-ad-facts-compact">
@@ -283,6 +286,50 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
         <button type="button" className="cf-btn" data-size="sm" onClick={onEdit}>Edit</button>
       </div>
     </li>
+  );
+}
+
+/**
+ * Task 0021: the level every file picked up from the watched folder gets (Tenant IT; default Standard). A default:
+ * a later trigger-file mapping may give a drop its own level. Files already picked up keep theirs.
+ */
+function FolderSensitivity() {
+  const toast = useToast();
+  const settings = useSWR<WatchedFolderSettings>('watched-folder-settings', () => apiClient.getWatchedFolderSettings(), { revalidateOnFocus: false });
+  const [draft, setDraft] = useState<SensitivityLevelCode | null>(null);
+  const [saving, setSaving] = useState(false);
+  if (!settings.data) return null;
+  const saved = settings.data.sensitivityLevel as SensitivityLevelCode;
+  const value = draft ?? saved;
+  async function save() {
+    if (draft === null || draft === saved) return;
+    setSaving(true);
+    try {
+      await settings.mutate(await apiClient.updateWatchedFolderSettings(draft), { revalidate: false });
+      setDraft(null);
+      toast(`Files from this folder will be ${sensitivityName(draft)}.`);
+    } catch (e) {
+      toast(errorMessage(e, "The folder's sensitivity couldn't be saved."), 'danger');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div data-testid="folder-sensitivity">
+      <SelectField<SensitivityLevelCode>
+        label={SENSITIVITY_FIELD.folderLabel}
+        value={value}
+        options={SENSITIVITY_LEVELS.map((l) => [l, SENSITIVITY_NAMES[l]] as [SensitivityLevelCode, string])}
+        onChange={(v) => setDraft(v)}
+        hint={SENSITIVITY_FIELD.folderHint}
+        disabled={saving}
+      />
+      {draft !== null && draft !== saved && (
+        <button type="button" className="cf-btn" data-size="sm" data-variant="primary" disabled={saving} onClick={() => void save()}>
+          {saving && <Spinner label="Saving" />}Save
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -310,6 +357,7 @@ function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; on
         <div className="cf-ad-conn-name">Watched folder<span className="cf-ad-tag">Folder</span></div>
         <StatusText s={status} />
         <div className="cf-ad-conn-endpoint cf-mono">{folder.rootPath}</div>
+        <FolderSensitivity />
         <details className="cf-disclosure">
           <summary>Technical details</summary>
           <dl className="cf-ad-facts cf-ad-facts-compact">

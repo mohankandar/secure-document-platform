@@ -30,11 +30,12 @@ public final class Document {
     private final Instant uploadedAt;
     private DocumentStatus status;
     private final List<Page> pages;
+    private final SensitivityLevel sensitivityLevel;
     private Instant updatedAt;
 
     private Document(DocumentId id, TenantId tenantId, PackageId packageId, FileName fileName,
                      MimeType mimeType, long sizeBytes, Checksum checksum,
-                     DocumentType documentType, Instant uploadedAt) {
+                     DocumentType documentType, Instant uploadedAt, SensitivityLevel sensitivityLevel) {
         this.id = id;
         this.tenantId = tenantId;
         this.packageId = packageId;
@@ -46,12 +47,22 @@ public final class Document {
         this.uploadedAt = uploadedAt;
         this.status = DocumentStatus.UPLOADED;
         this.pages = new ArrayList<>();
+        this.sensitivityLevel = sensitivityLevel == null ? SensitivityLevel.STANDARD : sensitivityLevel;
         this.updatedAt = uploadedAt;
     }
 
     public static Document create(TenantId tenantId, PackageId packageId, FileName fileName,
                                    MimeType mimeType, long sizeBytes, Checksum checksum,
                                    DocumentType documentType) {
+        return create(tenantId, packageId, fileName, mimeType, sizeBytes, checksum, documentType,
+                SensitivityLevel.STANDARD);
+    }
+
+    /** Creates a document with the level the source system sent for it (task 0021); kept as given. */
+    public static Document create(TenantId tenantId, PackageId packageId, FileName fileName,
+                                   MimeType mimeType, long sizeBytes, Checksum checksum,
+                                   DocumentType documentType, SensitivityLevel sensitivityLevel) {
+        Objects.requireNonNull(sensitivityLevel, "Sensitivity level must not be null");
         Objects.requireNonNull(tenantId, "TenantId must not be null");
         Objects.requireNonNull(packageId, "PackageId must not be null");
         Objects.requireNonNull(fileName, "FileName must not be null");
@@ -63,7 +74,7 @@ public final class Document {
         }
 
         return new Document(DocumentId.generate(), tenantId, packageId, fileName, mimeType,
-                sizeBytes, checksum, documentType, Instant.now());
+                sizeBytes, checksum, documentType, Instant.now(), sensitivityLevel);
     }
 
     public static Document reconstitute(DocumentId id, TenantId tenantId, PackageId packageId,
@@ -71,8 +82,18 @@ public final class Document {
                                          Checksum checksum, DocumentType documentType,
                                          Instant uploadedAt, DocumentStatus status,
                                          List<Page> pages, Instant updatedAt) {
+        return reconstitute(id, tenantId, packageId, fileName, mimeType, sizeBytes, checksum, documentType,
+                uploadedAt, status, pages, updatedAt, SensitivityLevel.STANDARD);
+    }
+
+    /** Reconstitutes a document with its stored sensitivity level. */
+    public static Document reconstitute(DocumentId id, TenantId tenantId, PackageId packageId,
+                                         FileName fileName, MimeType mimeType, long sizeBytes,
+                                         Checksum checksum, DocumentType documentType,
+                                         Instant uploadedAt, DocumentStatus status,
+                                         List<Page> pages, Instant updatedAt, SensitivityLevel sensitivityLevel) {
         Document doc = new Document(id, tenantId, packageId, fileName, mimeType,
-                sizeBytes, checksum, documentType, uploadedAt);
+                sizeBytes, checksum, documentType, uploadedAt, sensitivityLevel);
         doc.status = status;
         doc.pages.addAll(pages);
         doc.updatedAt = updatedAt;
@@ -232,6 +253,16 @@ public final class Document {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    /** The document's own level as the source system sent it; {@link SensitivityLevel#STANDARD} when none. */
+    public SensitivityLevel sensitivityLevel() {
+        return sensitivityLevel;
+    }
+
+    /** The higher of this document's level and its case's level ({@link SensitivityLevel#effective}). */
+    public SensitivityLevel effectiveSensitivityLevel(SensitivityLevel caseLevel) {
+        return SensitivityLevel.effective(sensitivityLevel, caseLevel);
     }
 
     public int pageCount() {

@@ -463,12 +463,24 @@ public class ApplicationServiceConfig {
             SubmitPackageUseCase submitPackageUseCase,
             PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService,
-            WatchedFolderProperties properties) {
+            WatchedFolderProperties properties,
+            com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings) {
         return new WatchedFolderIntakeService(sourcePort, watchedFolderLeasePort, observationRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase,
                 packageProcessingDispatcher, auditService,
                 Duration.ofMinutes(Math.max(0, properties.getIncompleteVisibilityMinutes())),
-                Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())));
+                Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())),
+                tenant -> watchedFolderSettings.sensitivityLevel(tenant,
+                        com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER));
+    }
+
+    /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */
+    @Bean
+    public com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettingsService(
+            com.securedoc.platform.application.port.out.WatchedFolderSettingsRepository repository,
+            AuditService auditService) {
+        return new com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService(
+                repository, auditService, java.time.Clock.systemUTC());
     }
 
     @Bean
@@ -1177,9 +1189,10 @@ public class ApplicationServiceConfig {
                                                          ArtifactRepository artifactRepository,
                                                          StoragePort storagePort,
                                                          DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
-                                                         AuditService auditService) {
+                                                         AuditService auditService,
+                                                         PackageRepository packageRepository) {
         return new DerivedDeliveryService(derivedDeliveryRepository, integrationConnectionRepository,
-                artifactRepository, storagePort, derivedDestinationDeliveryPort, auditService);
+                artifactRepository, storagePort, derivedDestinationDeliveryPort, auditService, packageRepository);
     }
 
     @Bean

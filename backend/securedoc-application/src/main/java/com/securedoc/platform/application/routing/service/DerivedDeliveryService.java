@@ -23,12 +23,15 @@ public final class DerivedDeliveryService {
     private final StoragePort storage;
     private final DerivedDestinationDeliveryPort destination;
     private final AuditService audit;
+    private final PackageRepository packages;
     public DerivedDeliveryService(DerivedDeliveryRepository deliveries, IntegrationConnectionRepository connections,
                                   ArtifactRepository artifacts, StoragePort storage,
-                                  DerivedDestinationDeliveryPort destination, AuditService audit){
+                                  DerivedDestinationDeliveryPort destination, AuditService audit,
+                                  PackageRepository packages){
         this.deliveries=Objects.requireNonNull(deliveries); this.connections=Objects.requireNonNull(connections);
         this.artifacts=Objects.requireNonNull(artifacts); this.storage=Objects.requireNonNull(storage);
         this.destination=Objects.requireNonNull(destination); this.audit=Objects.requireNonNull(audit);
+        this.packages=Objects.requireNonNull(packages);
     }
     public List<DerivedDelivery> list(TenantId tenantId, PackageId packageId){return deliveries.findByTenantIdAndPackageId(tenantId,packageId);}
     public List<DerivedDelivery> listAttention(TenantId tenantId){return deliveries.findAttentionByTenantId(tenantId);}
@@ -49,17 +52,24 @@ public final class DerivedDeliveryService {
         }
         Artifact artifact=artifacts.findByIdAndTenantId(d.artifactId(),tenantId).orElseThrow(()->new NotFoundException("Derived artifact",d.artifactId().toString()));
         if(!artifact.isAvailable()) throw new ValidationException("Derived redacted artifact is not available");
+        // Task 0021: a split document carries its source document's level and the case level, as stored at intake.
+        var pkg=packages.findByIdAndTenantId(d.packageId(),tenantId).orElseThrow(()->new NotFoundException("DocumentPackage",d.packageId().toString()));
+        var sourceDocument=pkg.documents().stream().filter(doc->doc.id().equals(d.sourceDocumentId())).findFirst()
+                .orElseThrow(()->new NotFoundException("Source document",d.sourceDocumentId().toString()));
+        String documentLevel=sourceDocument.sensitivityLevel().name(), caseLevel=pkg.sensitivityLevel().name();
         d.startAttempt(Instant.now()); deliveries.save(d);
         DerivedDeliveryAttempt attempt=DerivedDeliveryAttempt.started(d.id(),d.attemptCount(),c.id(),c.configurationVersion(),Instant.now()); deliveries.saveAttempt(attempt);
         try{
             var receipt=destination.deliver(c,new DerivedDestinationDeliveryPort.DeliveryRequest(
                     d.sourceDerivedDocumentId(),d.fileName(),"application/pdf",artifact.sizeBytes(),artifact.checksum().value(),d.markerValue(),
-                    Map.of("packageId",d.packageId().toString(),"sourceDocumentId",d.sourceDocumentId().toString(),"destinationLabel",d.destinationLabel(),"pages",joinPages(d.pageNumbers())),
+                    Map.of("packageId",d.packageId().toString(),"sourceDocumentId",d.sourceDocumentId().toString(),"destinationLabel",d.destinationLabel(),"pages",joinPages(d.pageNumbers()),
+                            DerivedDestinationDeliveryPort.SENSITIVITY_LEVEL,documentLevel,DerivedDestinationDeliveryPort.CASE_SENSITIVITY_LEVEL,caseLevel),
                     ()->storage.retrieve(artifact.storageReference())));
             d.markDelivered(receipt.destinationReference(),Instant.now()); deliveries.save(d); deliveries.saveAttempt(attempt.success(Instant.now()));
             connections.save(c.recordOperationalSuccess(Instant.now()));
             audit.recordSuccess(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERED,"DerivedDelivery",d.id().toString(),correlationId,
-                    "Derived redacted document delivered to approved destination="+d.destinationLabel()+", pages="+joinPages(d.pageNumbers()));
+                    "Derived redacted document delivered to approved destination="+d.destinationLabel()+", pages="+joinPages(d.pageNumbers())
+                            +", sensitivityLevel="+documentLevel+", caseSensitivityLevel="+caseLevel);
             return d;
         }catch(TechnicalDependencyException e){
             d.markFailure(e.failureCode().name(),e.retryable(),Instant.now()); deliveries.save(d); deliveries.saveAttempt(attempt.failure(e.failureCode().name(),Instant.now()));

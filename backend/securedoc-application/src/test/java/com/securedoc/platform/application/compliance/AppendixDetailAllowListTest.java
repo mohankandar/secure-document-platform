@@ -35,7 +35,11 @@ class AppendixDetailAllowListTest {
     void theListIsExactlyTheReviewedSet() {
         // Changing the list is a review decision: update the report's list and this count together.
         // 89 in task 0017; task 0018 A2 adds AUTHORIZATION_FAILED (now written by the capability interceptor).
-        assertEquals(90, AppendixDetailAllowList.allowed().size());
+        // Task 0021 adds INTAKE_SENSITIVITY_LEVEL_UNKNOWN (code and scope only) and WATCHED_FOLDER_SETTINGS_CHANGED
+        // (level codes only).
+        assertEquals(92, AppendixDetailAllowList.allowed().size());
+        assertTrue(AppendixDetailAllowList.isAllowed("INTAKE_SENSITIVITY_LEVEL_UNKNOWN"));
+        assertTrue(AppendixDetailAllowList.isAllowed("WATCHED_FOLDER_SETTINGS_CHANGED"));
         assertTrue(AppendixDetailAllowList.isAllowed("SENSITIVE_DATA_POLICY_CHANGED"));
         assertTrue(AppendixDetailAllowList.isAllowed("COMPLIANCE_REPORT_CREATED"));
         assertTrue(AppendixDetailAllowList.isAllowed("AUTHORIZATION_FAILED"));

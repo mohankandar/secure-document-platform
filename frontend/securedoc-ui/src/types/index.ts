@@ -196,6 +196,9 @@ export interface PackageSummary {
 }
 
 export interface PackageDetail extends PackageSummary {
+  /** Task 0021: the case level as sent by the source system, and the case's effective level (read-only). */
+  sensitivityLevel?: string;
+  effectiveSensitivityLevel?: string;
   metadata?: Record<string, string>;
   documents: DocumentSummary[];
 }
@@ -207,12 +210,17 @@ export interface DocumentSummary {
   sizeBytes: number;
   documentType?: string;
   status: string;
+  /** Task 0021: the document's own level as sent, and the higher of it and the case level. */
+  sensitivityLevel?: string;
+  effectiveSensitivityLevel?: string;
 }
 
 export interface CreatePackageRequest {
   packageType: string;
   businessIdentifiers: Record<string, string>;
   metadata?: Record<string, string>;
+  /** Task 0021: the New case "Sensitivity" choice (the case level). */
+  sensitivityLevel?: string;
 }
 
 export interface PackageStatusResult {
@@ -671,6 +679,12 @@ export interface TechnicalExceptionItem {
   documentCount: number;
   failedAt: string;
   technicalHoldUntil?: string | null;
+}
+
+/** Task 0021: the watched folder's settings (Tenant IT). */
+export interface WatchedFolderSettings {
+  folderKey: string;
+  sensitivityLevel: string;
 }
 
 export interface WatchedFolderAdminStatus {

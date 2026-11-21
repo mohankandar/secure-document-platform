@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0021 (owner approved 2026-11-20): sensitivity levels sent by the source system.
+        LexaVault never decides or changes a level; it keeps what it was given and passes it on when it exports.
+        STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL. Existing rows get STANDARD ("nothing sent").
+    -->
+    <changeSet id="042-01-case-sensitivity-level" author="securedoc">
+        <addColumn tableName="document_packages">
+            <column name="sensitivity_level" type="VARCHAR(32)" defaultValue="STANDARD">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            alter table document_packages
+                add constraint ck_document_packages_sensitivity_level
+                check (sensitivity_level in ('STANDARD', 'CONFIDENTIAL', 'HIGHLY_CONFIDENTIAL'))
+        </sql>
+        <rollback>
+            <dropColumn tableName="document_packages" columnName="sensitivity_level"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="042-02-document-sensitivity-level" author="securedoc">
+        <addColumn tableName="documents">
+            <column name="sensitivity_level" type="VARCHAR(32)" defaultValue="STANDARD">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            alter table documents
+                add constraint ck_documents_sensitivity_level
+                check (sensitivity_level in ('STANDARD', 'CONFIDENTIAL', 'HIGHLY_CONFIDENTIAL'))
+        </sql>
+        <rollback>
+            <dropColumn tableName="documents" columnName="sensitivity_level"/>
+        </rollback>
+    </changeSet>
+
+    <!-- The level each expected document was announced with, kept until its PDF arrives. -->
+    <changeSet id="042-03-external-intake-document-sensitivity-level" author="securedoc">
+        <addColumn tableName="external_intake_documents">
+            <column name="sensitivity_level" type="VARCHAR(32)" defaultValue="STANDARD">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            alter table external_intake_documents
+                add constraint ck_external_intake_documents_sensitivity_level
+                check (sensitivity_level in ('STANDARD', 'CONFIDENTIAL', 'HIGHLY_CONFIDENTIAL'))
+        </sql>
+        <rollback>
+            <dropColumn tableName="external_intake_documents" columnName="sensitivity_level"/>
+        </rollback>
+    </changeSet>
+
+    <!--
+        The level each watched folder gives the files it picks up (Tenant IT; default STANDARD; owner's choice
+        2026-11-20: a small table, one row per folder). folder_key names the folder; the installed folder is
+        'installed'. A later trigger-file mapping can override this default per drop.
+    -->
+    <changeSet id="042-04-watched-folder-settings" author="securedoc">
+        <createTable tableName="watched_folder_settings">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="folder_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="sensitivity_level" type="VARCHAR(32)" defaultValue="STANDARD">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="watched_folder_settings" columnNames="tenant_id,folder_key"
+                       constraintName="pk_watched_folder_settings"/>
+        <addForeignKeyConstraint baseTableName="watched_folder_settings" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_watched_folder_settings_tenant"/>
+        <sql>
+            alter table watched_folder_settings
+                add constraint ck_watched_folder_settings_sensitivity_level
+                check (sensitivity_level in ('STANDARD', 'CONFIDENTIAL', 'HIGHLY_CONFIDENTIAL'))
+        </sql>
+        <rollback>
+            <dropTable tableName="watched_folder_settings"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

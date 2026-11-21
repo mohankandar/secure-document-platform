@@ -102,6 +102,10 @@ async function openIntegrations(page: Page, calls: Call[], connections: readonly
     if (url.pathname === '/api/v1/integrations' && request.method() === 'GET') return json(connections);
     if (url.pathname === '/api/v1/integrations' && request.method() === 'POST') return json({ ...connection({ connectionId: 'c-new' }), ...calls.at(-1)!.body });
     if (url.pathname === '/api/v1/platform-admin/overview') return json(OVERVIEW);
+    // Task 0021: the watched folder's level (Standard until Tenant IT changes it).
+    if (url.pathname === '/api/v1/platform-admin/watched-folder/settings') {
+      return json({ folderKey: 'installed', sensitivityLevel: request.method() === 'PUT' ? (calls.at(-1)!.body as { sensitivityLevel: string }).sensitivityLevel : 'STANDARD' });
+    }
     if (url.pathname === '/api/v1/derived-deliveries/attention') return json(ATTENTION);
     if (url.pathname === '/api/v1/derived-deliveries/dd-1/technical-retry') return json({ ...ATTENTION[0], status: 'DELIVERED' });
     if (url.pathname === '/api/v1/business-admin/routing-rules') {
@@ -176,6 +180,32 @@ test('U019: the installed watched folder (no folder connection) has Check now on
   // A connection row keeps its own actions.
   const los = card.getByRole('listitem').filter({ hasText: 'Loan origination system' });
   for (const b of ['Switch off', 'Edit']) await expect(los.getByRole('button', { name: b })).toBeVisible();
+});
+
+test('0021: Tenant IT sets the level every file from the watched folder gets (default Standard)', async ({ page }) => {
+  const calls: Call[] = [];
+  await openIntegrations(page, calls, CONNECTIONS.filter((c) => c.connectionId !== 'c-folder'));
+  const folder = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Watched folder' });
+  const choice = folder.getByLabel('Sensitivity of files from this folder');
+  await expect(choice).toHaveValue('STANDARD');
+  await expect(folder).toContainText('Every file picked up from this folder gets this level.');
+  await expect(folder.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  await choice.selectOption({ label: 'Highly Confidential' });
+  await folder.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => calls.find((c) => c.method === 'PUT' && c.path === '/api/v1/platform-admin/watched-folder/settings')?.body)
+    .toEqual({ sensitivityLevel: 'HIGHLY_CONFIDENTIAL' });
+  await expect(page.getByText('Files from this folder will be Highly Confidential.')).toBeVisible();
+  await expect(folder.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  // The other connections get no level choice: it belongs to the folder only.
+  const los = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Loan origination system' });
+  await expect(los.getByLabel('Sensitivity of files from this folder')).toHaveCount(0);
+});
+
+test('0021: the folder shown on its connection has the level choice too', async ({ page }) => {
+  await openIntegrations(page, []);
+  const folderConnection = page.getByRole('region', { name: 'Receiving documents' }).getByTestId('folder-sensitivity');
+  await expect(folderConnection).toHaveCount(1);
+  await expect(folderConnection.getByLabel('Sensitivity of files from this folder')).toHaveValue('STANDARD');
 });
 
 test('Sending by barcode: rules as a sentence, failed files by loan number, Retry', async ({ page }) => {

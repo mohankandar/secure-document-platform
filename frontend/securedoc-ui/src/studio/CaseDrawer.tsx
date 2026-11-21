@@ -12,7 +12,7 @@ import {
 import { Notice, Spinner } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
-import { CASE_SECTIONS, destinationName, fieldNameInSentence, runsLeft } from './words';
+import { CASE_SECTIONS, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 
 export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   packageId: string; caps: string[]; openFindings: FocusedReviewItem[]; onClose: () => void;
@@ -85,6 +85,11 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
           )}
 
           {pkg.status === 'FAILED' && caps.includes(CAP.technicalView) && <TechnicalDetail data={technical.data} error={technical.error} isLoading={technical.isLoading} />}
+
+          {/* Task 0021: one read-only line. The level limits nothing here and nobody can change it in LexaVault. */}
+          <p className="cf-muted cf-small" data-testid="case-sensitivity">
+            {caseSensitivityLine(pkg.effectiveSensitivityLevel ?? pkg.sensitivityLevel)}
+          </p>
 
           <DocumentsSection pkg={pkg} openFindings={openFindings} />
 
@@ -302,6 +307,7 @@ function DocumentsSection({ pkg, openFindings }: { pkg: PackageDetail; openFindi
         <ul className="cf-docs">
           {pkg.documents.map((doc) => {
             const findings = openFindings.filter((f) => f.documentId === doc.documentId).length;
+            const level = documentSensitivityNote(doc.sensitivityLevel, pkg.sensitivityLevel);
             return (
               <li key={doc.documentId} className="cf-doc">
                 <FileText size={16} aria-hidden="true" className="cf-doc-icon" />
@@ -310,6 +316,7 @@ function DocumentsSection({ pkg, openFindings }: { pkg: PackageDetail; openFindi
                   <span className="cf-doc-meta">
                     {formatBytes(doc.sizeBytes)}
                     {doc.status === 'FAILED' && <> · Stopped</>}
+                    {level && <> · <span data-testid="document-sensitivity">{level}</span></>}
                     {findings > 0 && <> · <mark className="cf-mark-text">{findings} to review</mark></>}
                   </span>
                 </span>

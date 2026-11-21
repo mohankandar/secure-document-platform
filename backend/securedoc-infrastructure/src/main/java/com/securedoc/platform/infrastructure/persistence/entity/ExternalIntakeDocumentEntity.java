@@ -17,6 +17,7 @@ public class ExternalIntakeDocumentEntity {
     @Column(name = "received_sha256", length = 64) private String receivedSha256;
     @Column(name = "idempotency_key", length = 255) private String idempotencyKey;
     @Column(name = "received_at") private Instant receivedAt;
+    @Column(name = "sensitivity_level", nullable = false, updatable = false, length = 32) private String sensitivityLevel = "STANDARD";
 
     public UUID getId() { return id; } public void setId(UUID v) { id = v; }
     public UUID getPackageId() { return packageId; } public void setPackageId(UUID v) { packageId = v; }
@@ -27,4 +28,5 @@ public class ExternalIntakeDocumentEntity {
     public String getReceivedSha256() { return receivedSha256; } public void setReceivedSha256(String v) { receivedSha256 = v; }
     public String getIdempotencyKey() { return idempotencyKey; } public void setIdempotencyKey(String v) { idempotencyKey = v; }
     public Instant getReceivedAt() { return receivedAt; } public void setReceivedAt(Instant v) { receivedAt = v; }
+    public String getSensitivityLevel() { return sensitivityLevel; } public void setSensitivityLevel(String v) { sensitivityLevel = v; }
 }

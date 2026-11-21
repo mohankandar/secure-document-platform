@@ -28,11 +28,13 @@ public final class DocumentPackage {
     private PackageStatus status;
     private PackageMetadata metadata;
     private final List<Document> documents;
+    private final SensitivityLevel sensitivityLevel;
     private Instant updatedAt;
 
     private DocumentPackage(PackageId id, TenantId tenantId, PackageType packageType,
                             BusinessRecordId businessRecordId, String intakeFingerprint, String sourceReference,
-                            ActorId submittedBy, Instant createdAt, PackageMetadata metadata) {
+                            ActorId submittedBy, Instant createdAt, PackageMetadata metadata,
+                            SensitivityLevel sensitivityLevel) {
         this.id = id;
         this.tenantId = tenantId;
         this.packageType = packageType;
@@ -44,6 +46,7 @@ public final class DocumentPackage {
         this.status = PackageStatus.CREATED;
         this.metadata = metadata;
         this.documents = new ArrayList<>();
+        this.sensitivityLevel = sensitivityLevel == null ? SensitivityLevel.STANDARD : sensitivityLevel;
         this.updatedAt = createdAt;
     }
 
@@ -69,12 +72,25 @@ public final class DocumentPackage {
                                                BusinessRecordId businessRecordId, String intakeFingerprint,
                                                String sourceReference, ActorId submittedBy,
                                                PackageMetadata metadata) {
+        return createIntake(tenantId, packageType, businessRecordId, intakeFingerprint, sourceReference,
+                submittedBy, metadata, SensitivityLevel.STANDARD);
+    }
+
+    /**
+     * Creates a new intake batch with the case sensitivity level the source system sent (task 0021).
+     * The level is kept as given; LexaVault never changes it.
+     */
+    public static DocumentPackage createIntake(TenantId tenantId, PackageType packageType,
+                                               BusinessRecordId businessRecordId, String intakeFingerprint,
+                                               String sourceReference, ActorId submittedBy,
+                                               PackageMetadata metadata, SensitivityLevel sensitivityLevel) {
         Objects.requireNonNull(tenantId, "TenantId must not be null");
         Objects.requireNonNull(packageType, "PackageType must not be null");
         Objects.requireNonNull(submittedBy, "SubmittedBy must not be null");
         Objects.requireNonNull(metadata, "Metadata must not be null");
+        Objects.requireNonNull(sensitivityLevel, "Sensitivity level must not be null");
         return new DocumentPackage(PackageId.generate(), tenantId, packageType, businessRecordId,
-                intakeFingerprint, sourceReference, submittedBy, Instant.now(), metadata);
+                intakeFingerprint, sourceReference, submittedBy, Instant.now(), metadata, sensitivityLevel);
     }
 
     /**
@@ -85,8 +101,19 @@ public final class DocumentPackage {
                                                String sourceReference, ActorId submittedBy, Instant createdAt,
                                                PackageStatus status, PackageMetadata metadata,
                                                List<Document> documents, Instant updatedAt) {
+        return reconstitute(id, tenantId, packageType, businessRecordId, intakeFingerprint, sourceReference,
+                submittedBy, createdAt, status, metadata, documents, updatedAt, SensitivityLevel.STANDARD);
+    }
+
+    /** Reconstitutes a package with its stored case sensitivity level. */
+    public static DocumentPackage reconstitute(PackageId id, TenantId tenantId, PackageType packageType,
+                                               BusinessRecordId businessRecordId, String intakeFingerprint,
+                                               String sourceReference, ActorId submittedBy, Instant createdAt,
+                                               PackageStatus status, PackageMetadata metadata,
+                                               List<Document> documents, Instant updatedAt,
+                                               SensitivityLevel sensitivityLevel) {
         DocumentPackage pkg = new DocumentPackage(id, tenantId, packageType, businessRecordId, intakeFingerprint,
-                sourceReference, submittedBy, createdAt, metadata);
+                sourceReference, submittedBy, createdAt, metadata, sensitivityLevel);
         pkg.status = status;
         pkg.documents.addAll(documents);
         pkg.updatedAt = updatedAt;
@@ -310,6 +337,17 @@ public final class DocumentPackage {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    /** The case level the source system sent; {@link SensitivityLevel#STANDARD} when it sent none. */
+    public SensitivityLevel sensitivityLevel() {
+        return sensitivityLevel;
+    }
+
+    /** The case's effective level ({@link SensitivityLevel#effectiveForCase}). */
+    public SensitivityLevel effectiveSensitivityLevel() {
+        return SensitivityLevel.effectiveForCase(sensitivityLevel,
+                documents.stream().map(Document::sensitivityLevel).toList());
     }
 
     public int documentCount() {

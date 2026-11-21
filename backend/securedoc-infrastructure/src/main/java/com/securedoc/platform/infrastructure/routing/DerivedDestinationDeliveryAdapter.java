@@ -21,6 +21,8 @@ import java.util.*;
 /** Typed V1 derived-document transport for HTTP_API and secure deployment-managed FILE_SHARE. */
 @Component
 public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeliveryPort {
+    static final String SENSITIVITY_HEADER="X-LexaVault-Sensitivity-Level";
+    static final String CASE_SENSITIVITY_HEADER="X-LexaVault-Case-Sensitivity-Level";
     private final ObjectMapper mapper; private final HttpClient client;
     @Autowired
     public DerivedDestinationDeliveryAdapter(ObjectMapper mapper){this(mapper,HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build());}
@@ -45,6 +47,9 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
         addMetadataHeader(b,"X-LexaVault-Source-Document-Id",r.metadata().get("sourceDocumentId"));
         addMetadataHeader(b,"X-LexaVault-Routing-Pages",r.metadata().get("pages"));
         addMetadataHeader(b,"X-LexaVault-Destination-Label",r.metadata().get("destinationLabel"));
+        // Task 0021: the source document's level and the case level, as the source system set them.
+        addMetadataHeader(b,SENSITIVITY_HEADER,r.metadata().get(DerivedDestinationDeliveryPort.SENSITIVITY_LEVEL));
+        addMetadataHeader(b,CASE_SENSITIVITY_HEADER,r.metadata().get(DerivedDestinationDeliveryPort.CASE_SENSITIVITY_LEVEL));
         HttpResponse<String> resp=send(b.POST(HttpRequest.BodyPublishers.ofInputStream(r.contentSource()::open)).build(),HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         require2xx(resp.statusCode(),"Derived HTTP delivery failed");
         String ref=null;

@@ -42,6 +42,8 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     private final AuditService auditService;
     private final Duration incompleteVisibility;
     private final Duration staleClaimAfter;
+    /** Task 0021: the level Tenant IT set for the folder; every file picked up from it gets that level. */
+    private final java.util.function.Function<com.securedoc.platform.domain.identity.TenantId, com.securedoc.platform.domain.document.SensitivityLevel> folderSensitivityLevel;
 
     public WatchedFolderIntakeService(WatchedFolderSourcePort sourcePort,
                                       WatchedFolderLeasePort leasePort,
@@ -54,6 +56,24 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                                       AuditService auditService,
                                       Duration incompleteVisibility,
                                       Duration staleClaimAfter) {
+        this(sourcePort, leasePort, observationRepository, packageRepository, createPackageUseCase, uploadDocumentUseCase,
+                submitPackageUseCase, processingDispatcher, auditService, incompleteVisibility, staleClaimAfter,
+                tenant -> com.securedoc.platform.domain.document.SensitivityLevel.STANDARD);
+    }
+
+    public WatchedFolderIntakeService(WatchedFolderSourcePort sourcePort,
+                                      WatchedFolderLeasePort leasePort,
+                                      IntakeObservationRepository observationRepository,
+                                      PackageRepository packageRepository,
+                                      CreatePackageUseCase createPackageUseCase,
+                                      UploadDocumentUseCase uploadDocumentUseCase,
+                                      SubmitPackageUseCase submitPackageUseCase,
+                                      PackageProcessingDispatcher processingDispatcher,
+                                      AuditService auditService,
+                                      Duration incompleteVisibility,
+                                      Duration staleClaimAfter,
+                                      java.util.function.Function<com.securedoc.platform.domain.identity.TenantId, com.securedoc.platform.domain.document.SensitivityLevel> folderSensitivityLevel) {
+        this.folderSensitivityLevel = Objects.requireNonNull(folderSensitivityLevel);
         this.sourcePort=Objects.requireNonNull(sourcePort); this.leasePort=Objects.requireNonNull(leasePort);
         this.observationRepository=Objects.requireNonNull(observationRepository);
         this.packageRepository=Objects.requireNonNull(packageRepository); this.createPackageUseCase=Objects.requireNonNull(createPackageUseCase);
@@ -163,7 +183,9 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         try {
             createdPackageId = createPackageUseCase.execute(
                     CreatePackageCommand.watchedFolder(candidate.businessIdentifiers(), candidate.metadata(), fingerprint,
-                            candidate.sourceReference(), correlationId), principal).packageId();
+                            candidate.sourceReference(), correlationId,
+                            com.securedoc.platform.domain.document.SensitivityLevel.Received.of(
+                                    folderSensitivityLevel.apply(principal.tenantId()))), principal).packageId();
         } catch (RuntimeException createFailure) {
             // A competing transaction may have won the unique fingerprint insert after our pre-check.
             // Re-read and classify the winner rather than translating the race to SOURCE_IO_ERROR.
@@ -197,7 +219,9 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             for (WatchedFolderDocument document : missing) {
                 requireCurrentLease(scanLease);
                 uploadDocumentUseCase.execute(UploadDocumentCommand.of(current.id(), document.fileName(),
-                        document.mimeType(), document.content(), correlationId), principal);
+                        document.mimeType(), document.content(), correlationId,
+                        // Every file gets the folder's level, which the case already holds (so a resumed drop never mixes levels).
+                        current.sensitivityLevel()), principal);
             }
 
             current = packageRepository.findByIdAndTenantId(current.id(), principal.tenantId())

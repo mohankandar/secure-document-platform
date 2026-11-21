@@ -9,6 +9,7 @@ import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
 import { useUnsavedWork } from './unsavedWork';
 import { prefillIdentifier } from './intakeRules';
+import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, type SensitivityLevelCode } from './words';
 
 type Method = 'upload' | 'scan';
 
@@ -16,6 +17,8 @@ export interface IdentityGate {
   /** Marks every field touched and returns the canonical identity, or null when it is invalid. */
   require: () => Record<string, string> | null;
   valid: boolean;
+  /** Task 0021: the "Sensitivity" choice, applied as the case level. Standard unless changed. */
+  sensitivity: SensitivityLevelCode;
 }
 
 export default function Intake() {
@@ -27,6 +30,7 @@ export default function Intake() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   const [lockedBy, setLockedBy] = useState<string | null>(null);
+  const [sensitivity, setSensitivity] = useState<SensitivityLevelCode>('STANDARD');
   const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method } | null>(null);
   useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
@@ -44,16 +48,21 @@ export default function Intake() {
 
   const gate: IdentityGate = {
     valid,
+    sensitivity,
     require: () => {
       setTouched(new Set(definitions.map((d) => d.key)));
       return valid ? canonicalIdentity(definitions, values) : null;
     },
   };
 
-  const lock = useCallback((identity: Record<string, string> | null, reason: string) => {
+  const lock = useCallback((identity: Record<string, string> | null, reason: string, sensitivityLevel?: string | null) => {
     if (identity) {
       setValues(identity);
       setLockedBy(reason);
+      // A resumed scan session shows the level it was started with.
+      if (sensitivityLevel && (SENSITIVITY_LEVELS as readonly string[]).includes(sensitivityLevel)) {
+        setSensitivity(sensitivityLevel as SensitivityLevelCode);
+      }
     } else {
       setLockedBy(null);
     }
@@ -69,6 +78,7 @@ export default function Intake() {
     setValues({});
     setTouched(new Set());
     setLockedBy(null);
+    setSensitivity('STANDARD');
     setCreated(null);
   };
 
@@ -111,6 +121,9 @@ export default function Intake() {
                 onBlur={() => setTouched((t) => new Set(t).add(definition.key))}
               />
             ))}
+            {definitions.length > 0 && (
+              <SensitivityField value={sensitivity} locked={!!lockedBy} onChange={setSensitivity} />
+            )}
           </div>
         </section>
 
@@ -183,6 +196,25 @@ function IdentityField({ definition, value, error, locked, onChange, onBlur }: {
         />
       )}
       <span id={hintId} className="cf-field-hint">{error ?? hint ?? ''}</span>
+    </div>
+  );
+}
+
+/** Task 0021: the case's sensitivity level. The same look as the other New case fields; Standard by default. */
+function SensitivityField({ value, locked, onChange }: {
+  value: SensitivityLevelCode; locked: boolean; onChange: (value: SensitivityLevelCode) => void;
+}) {
+  return (
+    <div className="cf-field">
+      <label htmlFor="cf-id-sensitivity">
+        {SENSITIVITY_FIELD.label}
+        <span className="cf-field-opt">Optional</span>
+      </label>
+      <select id="cf-id-sensitivity" value={value} disabled={locked}
+        onChange={(e) => onChange(e.target.value as SensitivityLevelCode)} aria-describedby="cf-id-sensitivity-hint">
+        {SENSITIVITY_LEVELS.map((level) => <option key={level} value={level}>{SENSITIVITY_NAMES[level]}</option>)}
+      </select>
+      <span id="cf-id-sensitivity-hint" className="cf-field-hint">{SENSITIVITY_FIELD.hint}</span>
     </div>
   );
 }

@@ -45,4 +45,5 @@
     <include file="db/changelog/039-findings-drop-snippet.xml"/>
     <include file="db/changelog/040-audit-actor-name-case-id.xml"/>
     <include file="db/changelog/041-reporting-minutes-per-page.xml"/>
+    <include file="db/changelog/042-sensitivity-levels.xml"/>
 </databaseChangeLog>

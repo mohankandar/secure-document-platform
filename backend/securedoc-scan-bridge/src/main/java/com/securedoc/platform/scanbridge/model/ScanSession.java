@@ -30,7 +30,9 @@ public record ScanSession(
         Instant nextDeliveryAttemptAt,
         String lastDeliveryErrorCode,
         Instant lastDeliveryErrorAt,
-        Instant submittedAt
+        Instant submittedAt,
+        /** Task 0021: the case level chosen on New case, carried to LexaVault as sent (null when none). */
+        String caseSensitivityLevel
 ) {
     public ScanSession {
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);

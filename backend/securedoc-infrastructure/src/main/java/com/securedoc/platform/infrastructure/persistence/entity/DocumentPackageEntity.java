@@ -38,6 +38,10 @@ public class DocumentPackageEntity {
     @Column(name = "metadata_json", columnDefinition = "TEXT")
     private String metadataJson;
 
+    /** Case level sent by the source system (task 0021); set once at intake, never changed. */
+    @Column(name = "sensitivity_level", nullable = false, updatable = false, length = 32)
+    private String sensitivityLevel = "STANDARD";
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
@@ -83,6 +87,8 @@ public class DocumentPackageEntity {
 
     public String getMetadataJson() { return metadataJson; }
     public void setMetadataJson(String metadataJson) { this.metadataJson = metadataJson; }
+    public String getSensitivityLevel() { return sensitivityLevel; }
+    public void setSensitivityLevel(String sensitivityLevel) { this.sensitivityLevel = sensitivityLevel; }
 
     public UUID getCreatedBy() { return createdBy; }
     public void setCreatedBy(UUID createdBy) { this.createdBy = createdBy; }

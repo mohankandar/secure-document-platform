@@ -267,6 +267,168 @@ class ExternalIntakeServiceTest {
         assertEquals("a".repeat(64), receivedPackage.metadata().get("sourceSha256").orElseThrow());
     }
 
+    // ---------- Task 0021: sensitivity levels at intake ----------
+
+    /** A push service whose create/upload steps are recorded, so the levels handed on can be checked. */
+    private static final class LevelHarness {
+        final TenantId tenant = TenantId.generate();
+        final AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(ActorId.generate(), tenant, "los-client", Set.of());
+        final List<AuditRecord> audits = new ArrayList<>();
+        final List<CreatePackageCommand> creates = new ArrayList<>();
+        final List<UploadDocumentCommand> uploads = new ArrayList<>();
+        final FakePackageRepository packages = new FakePackageRepository();
+        final ExternalIntakeService service;
+
+        LevelHarness(IntegrationProviderType provider) {
+            MutableClock clock = new MutableClock(Instant.parse("2026-09-10T12:00:00Z"));
+            AuditService auditService = new AuditService(audits::add);
+            FakeConnectionRepository connections = new FakeConnectionRepository();
+            connections.save(IntegrationConnection.create(tenant, "Source", null, IntegrationPurpose.INGESTION_SOURCE,
+                    IntegrationDirection.INBOUND, provider, provider == IntegrationProviderType.SCANNER
+                            ? IntegrationAuthenticationType.NONE : IntegrationAuthenticationType.JWT,
+                    "los-client", null, null, null, 60, 2, 24, provider == IntegrationProviderType.SCANNER ? 1 : 10,
+                    10_000_000L, 100,
+                    IntegrationAcknowledgementMode.NONE, true, clock.instant()));
+            FakeExternalIntakeRepository intakes = new FakeExternalIntakeRepository();
+            CreatePackageUseCase create = (command, p) -> {
+                creates.add(command);
+                DocumentPackage pkg = DocumentPackage.createIntake(p.tenantId(), command.packageType(), null, null, null,
+                        p.actorId(), PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
+                packages.save(pkg);
+                return CreatePackageResult.of(pkg.id(), BusinessRecordId.generate(), pkg.status(), pkg.createdAt());
+            };
+            UploadDocumentUseCase upload = (command, p) -> {
+                uploads.add(command);
+                return UploadDocumentResult.of(DocumentId.generate(), ArtifactId.generate(), DocumentStatus.UPLOADED);
+            };
+            ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
+                    new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+            service = new ExternalIntakeService(new IntegrationConnectionService(connections, auditService), intakes,
+                    packages, create, upload, (command, p) -> { }, command -> { },
+                    input -> Checksum.sha256("a".repeat(64)), input -> new PdfIntakeValidationPort.PdfInfo(1),
+                    auditService, maintenance, clock);
+        }
+
+        void receive(UUID packageId, String externalId) {
+            UploadContent content = new UploadContent() {
+                private final byte[] bytes = "%PDF-1.4\nx\n%%EOF\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                @Override public InputStream openStream() { return new java.io.ByteArrayInputStream(bytes); }
+                @Override public long contentLength() { return bytes.length; }
+            };
+            service.receivePushDocument(PackageId.of(packageId), externalId, "key-" + externalId, "a".repeat(64),
+                    "application/pdf", content, principal, CorrelationId.generate());
+        }
+
+        long unknownLevelAudits() {
+            return audits.stream().filter(r -> r.action()
+                    == com.securedoc.platform.domain.audit.AuditAction.INTAKE_SENSITIVITY_LEVEL_UNKNOWN).count();
+        }
+    }
+
+    private static PushIntakeCreateInput.ManifestDocumentInput doc(String id, String level) {
+        return new PushIntakeCreateInput.ManifestDocumentInput(id, id + ".pdf", null, level);
+    }
+
+    @Test
+    void pushIntakeKeepsTheLevelsSentAndNothingSentIsStandard() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        ExternalIntakeSnapshot created = h.service.createPushIntake(new PushIntakeCreateInput("SRC-L1", "1",
+                Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(doc("DOC-1", "HIGHLY_CONFIDENTIAL"), doc("DOC-2", null)), false, "CONFIDENTIAL"),
+                h.principal, CorrelationId.generate());
+
+        assertEquals(SensitivityLevel.CONFIDENTIAL, h.creates.get(0).caseSensitivity().level());
+        assertFalse(h.creates.get(0).caseSensitivity().unknown());
+        assertTrue(created.warnings().isEmpty());
+        assertEquals(0, h.unknownLevelAudits());
+
+        h.receive(created.packageId(), "DOC-1");
+        h.receive(created.packageId(), "DOC-2");
+        assertEquals(SensitivityLevel.HIGHLY_CONFIDENTIAL, h.uploads.get(0).sensitivityLevel());
+        assertEquals(SensitivityLevel.STANDARD, h.uploads.get(1).sensitivityLevel(), "nothing sent means Standard");
+    }
+
+    @Test
+    void noLevelAtAllIsStandardEverywhere() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        ExternalIntakeSnapshot created = h.service.createPushIntake(new PushIntakeCreateInput("SRC-L0", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null))), h.principal, CorrelationId.generate());
+        assertEquals(SensitivityLevel.Received.standard(), h.creates.get(0).caseSensitivity());
+        h.receive(created.packageId(), "DOC-1");
+        assertEquals(SensitivityLevel.STANDARD, h.uploads.get(0).sensitivityLevel());
+        assertTrue(created.warnings().isEmpty());
+    }
+
+    @Test
+    void anUnknownLevelIsTakenAsStandardWithTheWarningAndNeverRefused() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        PushIntakeCreateInput input = new PushIntakeCreateInput("SRC-L2", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(doc("DOC-1", "SECRET"), doc("DOC-2", "CONFIDENTIAL")), false, "confidential");
+        ExternalIntakeSnapshot created = h.service.createPushIntake(input, h.principal, CorrelationId.generate());
+
+        assertEquals(SensitivityLevel.STANDARD, h.creates.get(0).caseSensitivity().level());
+        assertTrue(h.creates.get(0).caseSensitivity().unknown(), "CreatePackageService records the case warning");
+        assertEquals(2, created.warnings().size());
+        assertEquals("LV-INT-005", created.warnings().get(0).code());
+        assertEquals("CASE", created.warnings().get(0).scope());
+        assertEquals("DOCUMENT", created.warnings().get(1).scope());
+        assertEquals("DOC-1", created.warnings().get(1).externalSourceDocumentId());
+        assertEquals("Unknown sensitivity level, taken as Standard", created.warnings().get(1).message());
+
+        // The document warning is audited here, with the code only, never the value sent.
+        assertEquals(1, h.unknownLevelAudits());
+        AuditRecord warning = h.audits.stream().filter(r -> r.action()
+                == com.securedoc.platform.domain.audit.AuditAction.INTAKE_SENSITIVITY_LEVEL_UNKNOWN).findFirst().orElseThrow();
+        assertEquals("code=LV-INT-005,scope=DOCUMENT", warning.detail());
+        assertTrue(h.audits.stream().noneMatch(r -> r.detail() != null
+                && (r.detail().contains("SECRET") || r.detail().contains("confidential"))));
+
+        h.receive(created.packageId(), "DOC-1");
+        h.receive(created.packageId(), "DOC-2");
+        assertEquals(SensitivityLevel.STANDARD, h.uploads.get(0).sensitivityLevel());
+        assertEquals(SensitivityLevel.CONFIDENTIAL, h.uploads.get(1).sensitivityLevel());
+
+        // A replay of the same request answers with the same warnings and records nothing new.
+        ExternalIntakeSnapshot replay = h.service.createPushIntake(input, h.principal, CorrelationId.generate());
+        assertEquals(created.packageId(), replay.packageId());
+        assertEquals(2, replay.warnings().size());
+        assertEquals(1, h.unknownLevelAudits());
+    }
+
+    @Test
+    void aDifferentLevelOnTheSameRevisionIsAChangedRequest() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        h.service.createPushIntake(new PushIntakeCreateInput("SRC-L3", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(doc("DOC-1", null)), false, "CONFIDENTIAL"), h.principal, CorrelationId.generate());
+        IntakeConflictException conflict = assertThrows(IntakeConflictException.class, () ->
+                h.service.createPushIntake(new PushIntakeCreateInput("SRC-L3", "1", Map.of("contractNumber", "C-1"),
+                        Map.of(), List.of(doc("DOC-1", null)), false, "HIGHLY_CONFIDENTIAL"), h.principal,
+                        CorrelationId.generate()));
+        assertEquals("SOURCE_REVISION_REUSED", conflict.errorCode());
+    }
+
+    @Test
+    void scannerIntakeCarriesTheCaseLevelChosenOnNewCase() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.SCANNER);
+        String submissionId = UUID.randomUUID().toString();
+        String sourceDocumentId = UUID.randomUUID().toString();
+        Map<String, String> metadata = new LinkedHashMap<>();
+        metadata.put("scannerCaptureMode", "SIMULATOR");
+        metadata.put("bridgeId", "BRIDGE-LAS-01");
+        metadata.put("siteId", "LAS-01");
+        metadata.put("scannerId", "SCANNER-01");
+        metadata.put("scanSessionId", UUID.randomUUID().toString());
+        metadata.put("scanStartedAt", "2026-09-10T11:59:00Z");
+        metadata.put("scanCompletedAt", "2026-09-10T12:00:00Z");
+        metadata.put("scannerSubmittedAt", "2026-09-10T12:00:01Z");
+        metadata.put("sourceFileSizeBytes", "23");
+        h.service.createScannerIntake(new PushIntakeCreateInput(submissionId, "1", Map.of("contract_number", "1"),
+                metadata, List.of(new PushIntakeCreateInput.ManifestDocumentInput(sourceDocumentId, "scan.pdf", "a".repeat(64))),
+                false, "HIGHLY_CONFIDENTIAL"), h.principal, CorrelationId.generate());
+        assertEquals(SensitivityLevel.HIGHLY_CONFIDENTIAL, h.creates.get(0).caseSensitivity().level());
+        assertEquals(PackageType.SCANNER_INTAKE, h.creates.get(0).packageType());
+    }
+
     private static final class MutableClock extends Clock {
         private Instant instant;
         MutableClock(Instant instant) { this.instant = instant; }
