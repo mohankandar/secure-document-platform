@@ -18,6 +18,16 @@ public interface FindingRepository {
 
     void saveAll(List<Finding> findings);
 
+    /**
+     * Task 0023 (D5, #160): saves a review decision only while the stored finding is still DETECTED.
+     * Returns false when someone else decided it first, including two saves that meet in the database.
+     * The default (for in-memory test repositories, which have no concurrent writers) just saves.
+     */
+    default boolean saveDecisionIfPending(Finding decided) {
+        save(decided);
+        return true;
+    }
+
     Optional<Finding> findByIdAndTenantId(FindingId id, TenantId tenantId);
 
     List<Finding> findByDocumentIdAndTenantId(DocumentId documentId, TenantId tenantId);

@@ -78,7 +78,8 @@ public final class ReviewPagePreviewService implements GetReviewPagePreviewQuery
                 .orElseThrow(() -> new NotFoundException("Finding", findingId.toString()));
         if (finding.status() != FindingStatus.DETECTED) {
             log.warn("REVIEW_PREVIEW_REJECTED finding={} reason=ITEM_NOT_PENDING status={}", findingId, finding.status());
-            throw new IllegalStateException("Review item is no longer pending; refresh the Manual Review queue");
+            // Task 0023 (D5): the same code as a decision on an already-decided item.
+            throw new com.securedoc.platform.application.exception.ReviewAlreadyDecidedException();
         }
 
         Document document = documentRepository.findByIdAndTenantId(finding.documentId(), tenantId)

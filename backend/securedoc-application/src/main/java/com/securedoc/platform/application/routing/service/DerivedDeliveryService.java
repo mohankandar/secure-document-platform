@@ -12,11 +12,21 @@ import com.securedoc.platform.domain.integration.IntegrationDirection;
 import com.securedoc.platform.domain.integration.IntegrationPurpose;
 import com.securedoc.platform.domain.routing.*;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Instant;
 import java.util.*;
 
 /** Independent derived-delivery lifecycle. It never changes master package export/retention state. */
 public final class DerivedDeliveryService {
+    private static final Logger log = LoggerFactory.getLogger(DerivedDeliveryService.class);
+    /** Task 0023 (C4, #192/#185/#186): refusals before an attempt starts, recorded on the delivery row and in the audit. */
+    public static final String DESTINATION_NOT_FOUND = "DERIVED_DESTINATION_NOT_FOUND";
+    public static final String DESTINATION_WRONG_PURPOSE = "DERIVED_DESTINATION_WRONG_PURPOSE";
+    public static final String DESTINATION_DISABLED = "DERIVED_DESTINATION_DISABLED";
+    public static final String ARTIFACT_UNAVAILABLE = "DERIVED_ARTIFACT_UNAVAILABLE";
+    public static final String SOURCE_NOT_FOUND = "DERIVED_SOURCE_NOT_FOUND";
     private final DerivedDeliveryRepository deliveries;
     private final IntegrationConnectionRepository connections;
     private final ArtifactRepository artifacts;
@@ -44,18 +54,18 @@ public final class DerivedDeliveryService {
         DerivedDelivery d=get(tenantId,id);
         if(d.artifactId()==null || d.destinationConnectionId()==null) throw new ValidationException("Routing-attention item has no approved destination to send");
         if(!technical && d.status()==DerivedDeliveryStatus.ATTENTION_REQUIRED) throw new ValidationException("Technical attention is required before this derived document can be sent");
-        var c=connections.findByTenantIdAndId(tenantId,d.destinationConnectionId()).orElseThrow(()->new ValidationException("Configured derived destination no longer exists"));
-        if(c.purpose()!= IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY || c.direction()!= IntegrationDirection.OUTBOUND) throw new ValidationException("Configured connection is not a derived-document destination");
-        if(!c.enabled()){
-            d.markFailure("DERIVED_DESTINATION_DISABLED",false,Instant.now()); deliveries.save(d);
-            throw new ValidationException("Derived-document destination is disabled");
-        }
-        Artifact artifact=artifacts.findByIdAndTenantId(d.artifactId(),tenantId).orElseThrow(()->new NotFoundException("Derived artifact",d.artifactId().toString()));
-        if(!artifact.isAvailable()) throw new ValidationException("Derived redacted artifact is not available");
+        var c=connections.findByTenantIdAndId(tenantId,d.destinationConnectionId()).orElse(null);
+        if(c==null) throw refuse(d,DESTINATION_NOT_FOUND,tenantId,actorId,correlationId,new ValidationException("Configured derived destination no longer exists"));
+        if(c.purpose()!= IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY || c.direction()!= IntegrationDirection.OUTBOUND) throw refuse(d,DESTINATION_WRONG_PURPOSE,tenantId,actorId,correlationId,new ValidationException("Configured connection is not a derived-document destination"));
+        if(!c.enabled()) throw refuse(d,DESTINATION_DISABLED,tenantId,actorId,correlationId,new ValidationException("Derived-document destination is disabled"));
+        Artifact artifact=artifacts.findByIdAndTenantId(d.artifactId(),tenantId).orElse(null);
+        if(artifact==null) throw refuse(d,ARTIFACT_UNAVAILABLE,tenantId,actorId,correlationId,new NotFoundException("Derived artifact",d.artifactId().toString()));
+        if(!artifact.isAvailable()) throw refuse(d,ARTIFACT_UNAVAILABLE,tenantId,actorId,correlationId,new ValidationException("Derived redacted artifact is not available"));
         // Task 0021: a split document carries its source document's level and the case level, as stored at intake.
-        var pkg=packages.findByIdAndTenantId(d.packageId(),tenantId).orElseThrow(()->new NotFoundException("DocumentPackage",d.packageId().toString()));
-        var sourceDocument=pkg.documents().stream().filter(doc->doc.id().equals(d.sourceDocumentId())).findFirst()
-                .orElseThrow(()->new NotFoundException("Source document",d.sourceDocumentId().toString()));
+        var pkg=packages.findByIdAndTenantId(d.packageId(),tenantId).orElse(null);
+        if(pkg==null) throw refuse(d,SOURCE_NOT_FOUND,tenantId,actorId,correlationId,new NotFoundException("DocumentPackage",d.packageId().toString()));
+        var sourceDocument=pkg.documents().stream().filter(doc->doc.id().equals(d.sourceDocumentId())).findFirst().orElse(null);
+        if(sourceDocument==null) throw refuse(d,SOURCE_NOT_FOUND,tenantId,actorId,correlationId,new NotFoundException("Source document",d.sourceDocumentId().toString()));
         String documentLevel=sourceDocument.sensitivityLevel().name(), caseLevel=pkg.sensitivityLevel().name();
         d.startAttempt(Instant.now()); deliveries.save(d);
         DerivedDeliveryAttempt attempt=DerivedDeliveryAttempt.started(d.id(),d.attemptCount(),c.id(),c.configurationVersion(),Instant.now()); deliveries.saveAttempt(attempt);
@@ -81,6 +91,18 @@ public final class DerivedDeliveryService {
             connections.save(c.recordOperationalFailure("DERIVED_DELIVERY_RUNTIME",Instant.now()));
             audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,"Derived delivery failed"); throw e;
         }
+    }
+    /**
+     * Task 0023 (C4): a refusal before the attempt starts used to leave an automatic send PENDING with no record.
+     * It now marks the delivery ATTENTION_REQUIRED with the code (so it is in the attention list), audits the code
+     * and logs it. No retry is scheduled. The caller gets the same exception as before.
+     */
+    private RuntimeException refuse(DerivedDelivery d,String code,TenantId tenantId,ActorId actorId,CorrelationId correlationId,RuntimeException toThrow){
+        d.markFailure(code,false,Instant.now()); deliveries.save(d);
+        audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,
+                "Derived delivery refused before sending: code="+code+",retryable=false");
+        log.warn("DERIVED_DELIVERY_REFUSED derivedDelivery={} package={} code={}",d.id(),d.packageId(),code);
+        return toThrow;
     }
     private String joinPages(List<Integer> pages){return pages.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));}
 }

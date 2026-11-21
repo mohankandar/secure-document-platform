@@ -466,6 +466,15 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         } catch (Exception e) {
             log.warn("DERIVED_ROUTING_POST_EXPORT_FAILED package={} tenant={} correlation={} type={}",
                     packageId, tenantId, correlationId, e.getClass().getSimpleName());
+            // Task 0023 (C4, #181): was log only. Audit it with a code and put it in the attention list; the
+            // master export stays successful and nothing is retried.
+            try {
+                processDerivedRoutingUseCase.recordRoutingFailure(packageId, tenantId, exportResult.exportCycle(),
+                        "DERIVED_ROUTING_POST_EXPORT_FAILED", correlationId);
+            } catch (RuntimeException recordFailure) {
+                log.warn("DERIVED_ROUTING_FAILURE_NOT_RECORDED package={} correlation={} type={}",
+                        packageId, correlationId, recordFailure.getClass().getSimpleName());
+            }
         }
 
         pkg.completeSuccessfully();

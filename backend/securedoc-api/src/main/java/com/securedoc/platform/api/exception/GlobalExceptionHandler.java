@@ -198,4 +198,17 @@ public class GlobalExceptionHandler {
         }
         return UUID.randomUUID().toString();
     }
+
+    /** Task 0023 (D5, #160): "already decided by someone else" in review is one code, 409, with a fixed message. */
+    @ExceptionHandler(com.securedoc.platform.application.exception.ReviewAlreadyDecidedException.class)
+    public ResponseEntity<ApiErrorResponse> handleReviewAlreadyDecided(
+            com.securedoc.platform.application.exception.ReviewAlreadyDecidedException ex, HttpServletRequest request) {
+        StructuredLogContext.info(log, "REVIEW_ALREADY_DECIDED",
+                Map.of("reasonCode", com.securedoc.platform.application.exception.ReviewAlreadyDecidedException.ERROR_CODE),
+                "Review decision refused: already decided");
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiErrorResponse.of(com.securedoc.platform.application.exception.ReviewAlreadyDecidedException.ERROR_CODE,
+                        com.securedoc.platform.application.exception.ReviewAlreadyDecidedException.MESSAGE,
+                        correlationIdForError(request)));
+    }
 }

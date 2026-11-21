@@ -30,7 +30,7 @@ import java.util.UUID;
  * destination (local output folder in V1), preserving the customer's original filename.
  *
  * <p>Only documents with an available REDACTED artifact are exported. No sensitive
- * values are recorded in audit — only IDs, filename, and destination metadata.
+ * values are recorded in audit — only IDs and destination metadata (no file name, task 0023 A1).
  */
 @Deprecated
 public final class DocumentExportService implements ExportRedactedDocumentUseCase {
@@ -96,8 +96,8 @@ public final class DocumentExportService implements ExportRedactedDocumentUseCas
                 command.tenantId(), SYSTEM_ACTOR,
                 AuditAction.DOCUMENT_EXPORTED, "Document", command.documentId().toString(), command.packageId(),
                 command.correlationId(),
-                "Document exported: destination=" + reference.destinationType()
-                        + ", filename=" + originalFileName);
+                // Task 0023 (A1): no file name in the audit detail; the record names the document by its id.
+                "Document exported: destination=" + reference.destinationType());
 
         return ExportRedactedDocumentResult.of(command.documentId(), true, reference.destinationType());
     }

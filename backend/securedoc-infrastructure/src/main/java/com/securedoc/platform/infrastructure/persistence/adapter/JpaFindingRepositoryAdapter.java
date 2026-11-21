@@ -12,6 +12,7 @@ import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.vo.Confidence;
 import com.securedoc.platform.infrastructure.persistence.entity.FindingEntity;
 import com.securedoc.platform.infrastructure.persistence.repository.SpringDataFindingRepository;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -35,6 +36,25 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
             jpaRepo.save(existing.get());
         } else {
             jpaRepo.save(toNewEntity(finding));
+        }
+    }
+
+    /**
+     * Task 0023 (D5, #160). The stored row is read and must still be DETECTED; the save then carries that row's
+     * version, so a decision committed in between fails the version check. Both cases answer false.
+     */
+    @Override
+    public boolean saveDecisionIfPending(Finding decided) {
+        Optional<FindingEntity> stored = jpaRepo.findByIdAndTenantId(decided.id().value(), decided.tenantId().value());
+        if (stored.isEmpty() || !FindingStatus.DETECTED.name().equals(stored.get().getStatus())) {
+            return false;
+        }
+        updateEntity(decided, stored.get());
+        try {
+            jpaRepo.save(stored.get());
+            return true;
+        } catch (OptimisticLockingFailureException concurrentDecision) {
+            return false;
         }
     }
 

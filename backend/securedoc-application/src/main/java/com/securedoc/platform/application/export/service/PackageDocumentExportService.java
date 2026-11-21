@@ -187,12 +187,14 @@ public final class PackageDocumentExportService implements ExportPackageDocument
             Artifact artifact = artifactByDocumentId.get(document.id().toString());
             DeliverySubmission.DocumentState state = stateByDocument.get(document.id().toString());
             if (state == null || !state.acknowledged()) throw new IllegalStateException("Delivery result is missing a document acknowledgement");
-            exportDocuments.add(new PackageExportRecord.ExportedDocument(document.id(), document.fileName().value(),
+            // Task 0023 (A1, B4): the export record keeps a document reference, never the original file name.
+            exportDocuments.add(new PackageExportRecord.ExportedDocument(document.id(), exportRecordDocumentReference(document),
                     artifact.sizeBytes(), artifact.checksum(), state.destinationLocation()));
             auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_EXPORTED,
                     "Document", document.id().toString(), command.packageId(), command.correlationId(),
                     "Document acknowledged by master delivery destination=" + submission.destinationType()
-                            + ", cycle=" + exportCycle + ", filename=" + document.fileName().value()
+                            + ", cycle=" + exportCycle
+                            // Task 0023 (A1): no file name here; the record names the document by its id.
                             // Task 0022 (A2): a destination that cannot receive a level (local folder) still records it here.
                             + ", sensitivityLevel=" + document.sensitivityLevel().name()
                             + ", caseSensitivityLevel=" + pkg.sensitivityLevel().name());
@@ -216,5 +218,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                     return Map.copyOf(values);
                 }).orElse(Map.of());
     }
+    /** Kept in the export record in place of a file name (task 0023 A1/B4): the document id, never the name. */
+    static String exportRecordDocumentReference(Document document) { return "document-" + document.id(); }
     private long elapsedMillis(long startedNanos) { return (System.nanoTime() - startedNanos) / 1_000_000L; }
 }
