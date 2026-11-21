@@ -4,6 +4,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * One case. {@code sensitivityLevel} is the case level as sent by the source system and
+ * {@code effectiveSensitivityLevel} the case's effective level (task 0021). LexaVault never changes either.
+ */
 public record PackageDetailResponse(
         String packageId,
         String packageType,
@@ -12,5 +16,7 @@ public record PackageDetailResponse(
         Map<String,String> metadata,
         List<DocumentSummaryResponse> documents,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String sensitivityLevel,
+        String effectiveSensitivityLevel
 ) {}

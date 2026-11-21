@@ -45,6 +45,10 @@ public enum AuditAction {
     INTAKE_ACCEPTED,
     INTAKE_REJECTED,
     INTAKE_DUPLICATE,
+    /** Task 0021: a source sent an unknown sensitivity level; taken as Standard. Detail holds the code LV-INT-005 only. */
+    INTAKE_SENSITIVITY_LEVEL_UNKNOWN,
+    /** Task 0021: Tenant IT changed a watched folder's settings (its sensitivity level). Detail: level codes only. */
+    WATCHED_FOLDER_SETTINGS_CHANGED,
     EXTERNAL_INTAKE_CREATED,
     EXTERNAL_DOCUMENT_RECEIVED,
     EXTERNAL_INTAKE_ACCEPTED,

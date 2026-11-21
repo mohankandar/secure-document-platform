@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { SENSITIVITY_LEVELS, caseSensitivityLine, documentSensitivityNote, problemReason, sensitivityName } from './words.ts';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEADING, STAGE_NAMES, CASE_SEARCH_FALLBACK, firstThatFits, caseSearchPlaceholder, caseSearchPlaceholders, dashboardColumnName, fieldNameInSentence, findSensitiveType, sensitiveTypeName, screenTitle } from './words.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -163,4 +166,56 @@ test('U026: every screen has its own page title, the product name last', () => {
   assert.equal(screenTitle('/technical-exceptions/x', 'LexaVault'), 'Problem · Support · LexaVault');
   assert.equal(screenTitle('/packages/x/manual-processing', 'LexaVault'), 'Continue manually · LexaVault');
   assert.equal(screenTitle('/somewhere', 'LexaVault'), 'LexaVault');
+});
+
+/* ---------- Task 0021: sensitivity levels ---------- */
+
+test('0021: each level has its plain name, and nothing sent is Standard', () => {
+  assert.deepEqual([...SENSITIVITY_LEVELS], ['STANDARD', 'CONFIDENTIAL', 'HIGHLY_CONFIDENTIAL']);
+  assert.equal(sensitivityName('STANDARD'), 'Standard');
+  assert.equal(sensitivityName('CONFIDENTIAL'), 'Confidential');
+  assert.equal(sensitivityName('HIGHLY_CONFIDENTIAL'), 'Highly Confidential');
+  assert.equal(sensitivityName(null), 'Standard');
+  assert.equal(sensitivityName(undefined), 'Standard');
+  assert.equal(sensitivityName(''), 'Standard');
+});
+
+test('0021: the case panel line is the owner’s wording with the effective level', () => {
+  assert.equal(caseSensitivityLine('HIGHLY_CONFIDENTIAL'), 'Sensitivity: Highly Confidential, as sent by the source system');
+  assert.equal(caseSensitivityLine('CONFIDENTIAL'), 'Sensitivity: Confidential, as sent by the source system');
+  assert.equal(caseSensitivityLine(undefined), 'Sensitivity: Standard, as sent by the source system');
+});
+
+test('0021: a document shows its own level only when it differs from the case level', () => {
+  assert.equal(documentSensitivityNote('CONFIDENTIAL', 'CONFIDENTIAL'), null);
+  assert.equal(documentSensitivityNote(undefined, 'STANDARD'), null);
+  assert.equal(documentSensitivityNote('STANDARD', undefined), null);
+  assert.equal(documentSensitivityNote('HIGHLY_CONFIDENTIAL', 'CONFIDENTIAL'), 'Highly Confidential');
+  assert.equal(documentSensitivityNote('STANDARD', 'CONFIDENTIAL'), 'Standard');
+});
+
+test('0021: a refused level reads as LV-DLV-003 in Support', () => {
+  const reason = problemReason('DELIVERY_SENSITIVITY_REFUSED');
+  assert.equal(reason.known, true);
+  assert.equal(reason.title, 'Destination refused the sensitivity level');
+  assert.match(reason.sentence, /LV-DLV-003/);
+});
+
+test('0021: the level appears only in the case panel, New case and the watched-folder setting (no badge elsewhere)', () => {
+  const studio = resolve(here);
+  const allowed = new Set(['CaseDrawer.tsx', 'Intake.tsx', join('admin', 'IntegrationsArea.tsx'), 'words.ts']);
+  const pattern = /sensitivityName|caseSensitivityLine|documentSensitivityNote|SENSITIVITY_NAMES|sensitivityLevel|effectiveSensitivityLevel/;
+  const offenders: string[] = [];
+  const walk = (dir: string, rel: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      const relPath = rel ? join(rel, entry.name) : entry.name;
+      if (entry.isDirectory()) { walk(path, relPath); continue; }
+      if (!/\.tsx?$/.test(entry.name) || /\.test\.ts$/.test(entry.name)) continue;
+      if (!allowed.has(relPath) && pattern.test(readFileSync(path, 'utf8'))) offenders.push(relPath);
+    }
+  };
+  walk(studio, '');
+  // UploadCapture and ScanCapture only pass the New case choice on (gate.sensitivity); they show nothing.
+  assert.deepEqual(offenders.filter((f) => f !== 'UploadCapture.tsx' && f !== 'ScanCapture.tsx'), []);
 });

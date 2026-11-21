@@ -52,6 +52,32 @@ class DerivedDestinationDeliveryAdapterTest {
         assertEquals("derived-123", captured[0].headers().firstValue("Idempotency-Key").orElseThrow());
     }
 
+    /** Task 0021: a split document carries its source document's level and the case level to an HTTP destination. */
+    @Test
+    void httpDeliveryCarriesTheSourceDocumentAndCaseLevels() throws Exception {
+        HttpClient client = mock(HttpClient.class);
+        @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("{\"receiptId\":\"receipt-42\"}");
+        final HttpRequest[] captured = new HttpRequest[1];
+        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(invocation -> {
+            captured[0] = invocation.getArgument(0);
+            return response;
+        });
+        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client);
+        byte[] body = "PDF-CONTENT".getBytes(StandardCharsets.UTF_8);
+        var request = new DerivedDestinationDeliveryPort.DeliveryRequest("derived-123", "routed.pdf", "application/pdf",
+                body.length, "a".repeat(64), "77777777", Map.of("packageId", "pkg-1",
+                DerivedDestinationDeliveryPort.SENSITIVITY_LEVEL, "HIGHLY_CONFIDENTIAL",
+                DerivedDestinationDeliveryPort.CASE_SENSITIVITY_LEVEL, "CONFIDENTIAL"),
+                () -> new ByteArrayInputStream(body));
+
+        adapter.deliver(httpConnection("https://example.test/derived"), request);
+
+        assertEquals("HIGHLY_CONFIDENTIAL", captured[0].headers().firstValue("X-LexaVault-Sensitivity-Level").orElseThrow());
+        assertEquals("CONFIDENTIAL", captured[0].headers().firstValue("X-LexaVault-Case-Sensitivity-Level").orElseThrow());
+    }
+
     @Test
     void fileShareWritesOnlyBeneathConfiguredRoot() throws Exception {
         var root = Files.createTempDirectory("derived-destination-");

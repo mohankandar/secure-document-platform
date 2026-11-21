@@ -38,9 +38,12 @@ Body:
       "sizeBytes": 12345,
       "sha256": "..."
     }
-  ]
+  ],
+  "recordSensitivityLevel": "CONFIDENTIAL"
 }
 ```
+
+`recordSensitivityLevel` (task 0021, Vero task 0024) is the case level exactly as the source system set it: `STANDARD`, `CONFIDENTIAL` or `HIGHLY_CONFIDENTIAL`; `STANDARD` when none was sent. It is always sent. A document's own level is not part of the submission (Vero refuses `sensitivityLevel` here, `SDV-SEN-006`); it goes on each upload.
 
 Expected 2xx response includes:
 
@@ -64,6 +67,7 @@ Headers:
 - `X-Source-Document-Id: <sourceDocumentId>`
 - `X-Original-File-Name: <original filename>`
 - `X-Content-SHA256: <sha256>`
+- `X-SDV-Sensitivity-Level: <the document's own level>` (task 0021; always sent, `STANDARD` when none was sent)
 - configured authentication headers
 
 Body: streaming redacted PDF bytes.
@@ -96,7 +100,12 @@ LexaVault persists the SDV submission reference and per-document acknowledgement
 - reuses each `sourceDocumentId`;
 - does not rerun redaction;
 - does not re-upload already acknowledged documents;
-- retries only unacknowledged documents / final completion confirmation.
+- retries only unacknowledged documents / final completion confirmation;
+- carries the same levels: they are read from the stored case on every attempt (task 0021).
+
+### A refused level (task 0021)
+
+When SDV answers a submission or an upload with a 4xx whose `code` starts with `SDV-SEN-` (for example `SDV-SEN-001`, `SDV-SEN-002`), LexaVault records the non-retryable export error `DELIVERY_SENSITIVITY_REFUSED`, shown to IT Admin in Support as `LV-DLV-003` "Destination refused the sensitivity level". It is not retried, because LexaVault would only send the same level again. Any other 4xx keeps `DELIVERY_DESTINATION_INVALID`.
 
 ## Profiles
 

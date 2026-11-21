@@ -7,6 +7,11 @@ import java.util.Map;
 
 /** Dynamic transport for approved derived-document destinations (HTTP_API or FILE_SHARE). */
 public interface DerivedDestinationDeliveryPort {
+    /** Metadata key: the source document's own sensitivity level (task 0021). Every document cut from it carries it. */
+    String SENSITIVITY_LEVEL = "sensitivityLevel";
+    /** Metadata key: the case's sensitivity level (task 0021). */
+    String CASE_SENSITIVITY_LEVEL = "caseSensitivityLevel";
+
     DeliveryReceipt deliver(IntegrationConnection connection, DeliveryRequest request);
     void testConnection(IntegrationConnection connection);
 

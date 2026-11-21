@@ -57,6 +57,28 @@ class PollingIntakeServiceBehaviorTest {
         verify(sourcePort, never()).acknowledgeReceived(any(), any(), anyInt());
     }
 
+    /** Task 0021: a polling source's levels reach the shared intake rule as sent (it reads, never refuses, them). */
+    @Test
+    void pollingPassesTheSourceLevelsOnAsSent() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        when(connections.recordOperationalSuccess(any())).thenReturn(source);
+        var pkg = new PollingSourcePackage("SRC-1", "1", false, Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(new PollingSourceDocument("DOC-A", "a.pdf", "a".repeat(64), "HIGHLY_CONFIDENTIAL"),
+                        new PollingSourceDocument("DOC-B", "b.pdf", "a".repeat(64))), "CONFIDENTIAL");
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of(pkg));
+        when(external.createPollingIntake(any(), eq(source), any(), any())).thenReturn(snapshot(UUID.randomUUID(),
+                ExternalIntakeStatus.INCOMPLETE_EXPIRED, 0, List.of()));
+
+        service.runNow(tenant, source.id(), ActorId.generate());
+
+        var input = org.mockito.ArgumentCaptor.forClass(PushIntakeCreateInput.class);
+        verify(external).createPollingIntake(input.capture(), eq(source), any(), any());
+        assertEquals("CONFIDENTIAL", input.getValue().caseSensitivityLevel());
+        assertEquals("HIGHLY_CONFIDENTIAL", input.getValue().documents().get(0).sensitivityLevel());
+        assertNull(input.getValue().documents().get(1).sensitivityLevel(), "nothing sent");
+    }
+
     @Test
     void sourceAckOccursOnlyAfterFinalStatusConfirmsDurableAcceptance() {
         when(connections.get(tenant, source.id())).thenReturn(source);

@@ -80,6 +80,7 @@ export function failureReason(code: string | null | undefined): string {
       return 'its sign-in settings don’t work';
     case 'POLL_CONFIGURATION_ERROR':
     case 'DELIVERY_DESTINATION_INVALID':
+    case 'DELIVERY_SENSITIVITY_REFUSED':
       return 'its settings are not right';
     case 'POLL_RESPONSE_INVALID':
     case 'RETRIEVAL_INVALID_CONTENT_TYPE':

@@ -1,19 +1,26 @@
 package com.securedoc.platform.application.intake.command;
 
 import com.securedoc.platform.domain.document.PackageType;
+import com.securedoc.platform.domain.document.SensitivityLevel;
 import com.securedoc.platform.domain.identity.CorrelationId;
 
 import java.util.Map;
 import java.util.Objects;
 
-/** Command to create one intake batch (internally still represented by DocumentPackage). */
+/**
+ * Command to create one intake batch (internally still represented by DocumentPackage).
+ *
+ * <p>{@code caseSensitivity} is the case level as the source system sent it (task 0021): nothing sent is Standard,
+ * and an unknown value is taken as Standard with {@code unknown} set, so the service records LV-INT-005.
+ */
 public record CreatePackageCommand(
         PackageType packageType,
         Map<String, String> businessIdentifiers,
         Map<String, String> metadata,
         String intakeFingerprint,
         String sourceReference,
-        CorrelationId correlationId
+        CorrelationId correlationId,
+        SensitivityLevel.Received caseSensitivity
 ) {
     public CreatePackageCommand {
         Objects.requireNonNull(packageType, "PackageType must not be null");
@@ -22,6 +29,15 @@ public record CreatePackageCommand(
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         intakeFingerprint = normalizeOptional(intakeFingerprint);
         sourceReference = normalizeOptional(sourceReference);
+        caseSensitivity = caseSensitivity == null ? SensitivityLevel.Received.standard() : caseSensitivity;
+    }
+
+    /** A command with no level sent (Standard). */
+    public CreatePackageCommand(PackageType packageType, Map<String, String> businessIdentifiers,
+                                Map<String, String> metadata, String intakeFingerprint, String sourceReference,
+                                CorrelationId correlationId) {
+        this(packageType, businessIdentifiers, metadata, intakeFingerprint, sourceReference, correlationId,
+                SensitivityLevel.Received.standard());
     }
 
     public static CreatePackageCommand of(PackageType packageType, Map<String,String> businessIdentifiers,
@@ -32,14 +48,29 @@ public record CreatePackageCommand(
     public static CreatePackageCommand watchedFolder(Map<String,String> businessIdentifiers, Map<String,String> metadata,
                                                      String fingerprint, String sourceReference,
                                                      CorrelationId correlationId) {
+        return watchedFolder(businessIdentifiers, metadata, fingerprint, sourceReference, correlationId,
+                SensitivityLevel.Received.standard());
+    }
+
+    /** A watched-folder batch with the folder's level (task 0021). */
+    public static CreatePackageCommand watchedFolder(Map<String,String> businessIdentifiers, Map<String,String> metadata,
+                                                     String fingerprint, String sourceReference,
+                                                     CorrelationId correlationId,
+                                                     SensitivityLevel.Received caseSensitivity) {
         return new CreatePackageCommand(PackageType.FOLDER_INTAKE, businessIdentifiers, metadata,
-                fingerprint, sourceReference, correlationId);
+                fingerprint, sourceReference, correlationId, caseSensitivity);
     }
 
     /** Legacy convenience factory retained for non-API callers during migration. */
     public static CreatePackageCommand of(PackageType packageType, Map<String,String> metadata,
                                           CorrelationId correlationId) {
         return new CreatePackageCommand(packageType, Map.of(), metadata, null, null, correlationId);
+    }
+
+    /** The same command with the case level the source sent. */
+    public CreatePackageCommand withCaseSensitivity(SensitivityLevel.Received received) {
+        return new CreatePackageCommand(packageType, businessIdentifiers, metadata, intakeFingerprint,
+                sourceReference, correlationId, received);
     }
 
     private static String normalizeOptional(String value) {

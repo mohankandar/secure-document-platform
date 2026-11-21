@@ -4,6 +4,7 @@ import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentStatus;
 import com.securedoc.platform.domain.document.DocumentType;
 import com.securedoc.platform.domain.document.Page;
+import com.securedoc.platform.domain.document.SensitivityLevel;
 import com.securedoc.platform.domain.identity.DocumentId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -32,7 +33,8 @@ public final class DocumentMapper {
                 entity.getCreatedAt(),
                 DocumentStatus.valueOf(entity.getStatus()),
                 reconstitutePages(entity.getPageCount()),
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                SensitivityLevel.valueOf(entity.getSensitivityLevel())
         );
     }
 
@@ -59,6 +61,7 @@ public final class DocumentMapper {
         entity.setTenantId(doc.tenantId().value());
         entity.setPackageId(doc.packageId().value());
         entity.setDocumentType(doc.documentType().name());
+        entity.setSensitivityLevel(doc.sensitivityLevel().name());
         entity.setStatus(doc.status().name());
         entity.setFileName(doc.fileName().value());
         entity.setMimeType(doc.mimeType().value());

@@ -92,7 +92,9 @@ public class PackageController {
                     source + " batches must be created through their trusted intake boundary");
         }
 
-        CreatePackageCommand command = CreatePackageCommand.of(packageType, request.businessIdentifiers(), request.metadata(), correlationId);
+        CreatePackageCommand command = CreatePackageCommand.of(packageType, request.businessIdentifiers(), request.metadata(), correlationId)
+                .withCaseSensitivity(com.securedoc.platform.domain.document.SensitivityLevel.fromSource(
+                        request.sentSensitivityLevel()));
         CreatePackageResult result = createPackageUseCase.execute(command, principal);
 
         CreatePackageResponse response = new CreatePackageResponse(
@@ -180,7 +182,10 @@ public class PackageController {
                         d.mimeType(),
                         d.sizeBytes(),
                         d.documentType().name(),
-                        d.status().name()
+                        d.status().name(),
+                        d.sensitivityLevel().name(),
+                        com.securedoc.platform.domain.document.SensitivityLevel
+                                .effective(d.sensitivityLevel(), detail.sensitivityLevel()).name()
                 ))
                 .toList();
 
@@ -192,7 +197,9 @@ public class PackageController {
                 detail.metadata(),
                 docs,
                 detail.createdAt(),
-                detail.updatedAt()
+                detail.updatedAt(),
+                detail.sensitivityLevel().name(),
+                detail.effectiveSensitivityLevel().name()
         );
         return ResponseEntity.ok(response);
     }

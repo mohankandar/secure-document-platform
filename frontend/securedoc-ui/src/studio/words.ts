@@ -336,6 +336,44 @@ export const CASE_SECTIONS = {
   sentTo: 'Sent to',
 } as const;
 
+/* ---------- Sensitivity levels (task 0021) ----------
+ * The source system sets a level; LexaVault keeps it and passes it on, and never changes it. It limits nothing in
+ * LexaVault, so it appears only as one read-only line in the case panel (no badge anywhere else). */
+
+export const SENSITIVITY_LEVELS = ['STANDARD', 'CONFIDENTIAL', 'HIGHLY_CONFIDENTIAL'] as const;
+export type SensitivityLevelCode = (typeof SENSITIVITY_LEVELS)[number];
+
+export const SENSITIVITY_NAMES: Record<SensitivityLevelCode, string> = {
+  STANDARD: 'Standard',
+  CONFIDENTIAL: 'Confidential',
+  HIGHLY_CONFIDENTIAL: 'Highly Confidential',
+};
+
+/** The plain name of a level code. Nothing sent means Standard. */
+export function sensitivityName(raw: string | null | undefined): string {
+  if (!raw) return SENSITIVITY_NAMES.STANDARD;
+  return (SENSITIVITY_NAMES as Record<string, string>)[raw] ?? sentenceCase(raw);
+}
+
+/** The case panel's one line: "Sensitivity: Confidential, as sent by the source system". */
+export function caseSensitivityLine(effectiveLevel: string | null | undefined): string {
+  return `Sensitivity: ${sensitivityName(effectiveLevel)}, as sent by the source system`;
+}
+
+/** A document's own level, shown next to it only when it differs from the case's level; otherwise null. */
+export function documentSensitivityNote(documentLevel: string | null | undefined, caseLevel: string | null | undefined): string | null {
+  const doc = documentLevel || 'STANDARD';
+  const kase = caseLevel || 'STANDARD';
+  return doc === kase ? null : sensitivityName(doc);
+}
+
+export const SENSITIVITY_FIELD = {
+  label: 'Sensitivity',
+  hint: 'Passed on unchanged when the case is sent.',
+  folderLabel: 'Sensitivity of files from this folder',
+  folderHint: 'Every file picked up from this folder gets this level.',
+} as const;
+
 /** Where a case was delivered, from the lifecycle's destination type ("sdv", "local-folder"). */
 export function destinationName(raw: string | null | undefined): string {
   if (!raw) return 'its destination';
@@ -376,6 +414,8 @@ export const PROBLEM_REASONS: Record<string, Omit<ProblemReason, 'known'>> = {
   SDV_UNAVAILABLE: { title: 'Secure Document Vault didn’t answer', sentence: 'Secure Document Vault didn’t answer when LexaVault tried to send the case.' },
   DELIVERY_IO: { title: 'The delivery destination couldn’t be reached', sentence: 'LexaVault couldn’t reach the place the case is sent to.' },
   DELIVERY_DESTINATION_INVALID: { title: 'The delivery destination isn’t set up for this case', sentence: 'The place this case is sent to isn’t set up correctly for it.' },
+  // Task 0021: LV-DLV-003. Never retried: LexaVault would only send the same level again.
+  DELIVERY_SENSITIVITY_REFUSED: { title: 'Destination refused the sensitivity level', sentence: 'The place this case is sent to wouldn’t accept the sensitivity level sent with it (LV-DLV-003). Sending it again won’t help: the destination’s set-up needs checking.' },
   STORAGE_IO: { title: 'Document storage wasn’t available', sentence: 'LexaVault’s document storage didn’t answer for a while.' },
 };
 

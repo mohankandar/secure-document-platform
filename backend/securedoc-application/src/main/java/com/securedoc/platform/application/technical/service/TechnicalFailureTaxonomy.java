@@ -23,6 +23,7 @@ final class TechnicalFailureTaxonomy {
         if (code.contains("RATE_LIMITED")) return "DEPENDENCY_RATE_LIMITED";
         if (code.contains("INVALID_RESPONSE") || code.contains("REJECTED")) return "DEPENDENCY_RESPONSE_ERROR";
         if (code.contains("DESTINATION_INVALID")) return "DELIVERY_CONFIGURATION";
+        if (code.contains("SENSITIVITY_REFUSED")) return "DELIVERY_CONFIGURATION";
         if (code.contains("IO") || code.contains("PROCESS_FAILED")) {
             String safeDependency = dependency == null || dependency.isBlank() ? "TECHNICAL" : dependency;
             return safeDependency + "_FAILURE";
@@ -41,6 +42,7 @@ final class TechnicalFailureTaxonomy {
             case "OCR_PROCESS_FAILED" -> "OCR could not process the document successfully.";
             case "DELIVERY_IO" -> "The configured delivery destination could not be reached successfully.";
             case "DELIVERY_DESTINATION_INVALID" -> "The configured delivery destination is not valid for this package.";
+            case "DELIVERY_SENSITIVITY_REFUSED" -> "Destination refused the sensitivity level (LV-DLV-003). LexaVault sends the level it was given and never changes it; the destination's set-up needs checking.";
             case "STORAGE_IO" -> "Internal document storage was temporarily unavailable.";
             default -> "Processing stopped because of a technical failure. Use the incident or correlation ID for support diagnostics.";
         };

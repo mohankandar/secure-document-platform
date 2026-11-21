@@ -9,7 +9,7 @@ import { scannerDisplayName } from './intakeRules';
 
 export default function ScanCapture({ gate, onLock, onCreated }: {
   gate: IdentityGate;
-  onLock: (identity: Record<string, string> | null, reason: string) => void;
+  onLock: (identity: Record<string, string> | null, reason: string, sensitivity?: string | null) => void;
   onCreated: (packageId: string | null) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -26,7 +26,7 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
 
   const sessionId = session?.sessionId;
   useEffect(() => {
-    onLock(session ? session.businessIdentifiers : null, 'the active scan session');
+    onLock(session ? session.businessIdentifiers : null, 'the active scan session', session?.caseSensitivityLevel);
     // Lock only changes when a session starts or ends, not on every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, onLock]);
@@ -50,7 +50,7 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
   const start = () => act('start', async () => {
     const identity = gate.require();
     if (!identity) throw new Error('Complete the case identity first.');
-    await mutate(await scanBridgeClient.startSession(identity), { revalidate: false });
+    await mutate(await scanBridgeClient.startSession(identity, gate.sensitivity), { revalidate: false });
   });
 
   const stage = (file: File) => act('stage', async () => {

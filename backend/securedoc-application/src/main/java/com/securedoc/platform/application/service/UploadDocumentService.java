@@ -115,7 +115,8 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
                 mimeType,
                 command.contentLength(),
                 checksum,
-                documentType
+                documentType,
+                command.sensitivityLevel()
         );
 
         // 6. Create Artifact entity before storage so artifact.id() is available for the path
@@ -181,6 +182,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
                 document.id().toString(), document.packageId(),
                 correlationId,
                 "Document uploaded: mimeType=" + command.mimeType() + ", sizeBytes=" + command.contentLength()
+                        + ", sensitivityLevel=" + document.sensitivityLevel().name()
         );
 
         // 13. Return result

@@ -116,7 +116,8 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
     private PollingSourcePackage toDomain(SourcePackage p) {
         return new PollingSourcePackage(p.externalSourcePackageId(), p.sourceRevision(), Boolean.TRUE.equals(p.retry()),
                 p.businessIdentifiers(), p.metadata(), p.documents() == null ? List.of() : p.documents().stream()
-                .map(d -> new PollingSourceDocument(d.externalSourceDocumentId(), d.fileName(), d.sha256())).toList());
+                .map(d -> new PollingSourceDocument(d.externalSourceDocumentId(), d.fileName(), d.sha256(),
+                        sentLevel(d.sensitivityLevel()))).toList(), sentLevel(p.caseSensitivityLevel()));
     }
 
     private HttpRequest.Builder authorized(IntegrationConnection c, HttpRequest.Builder builder) {
@@ -174,8 +175,16 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
 
     private record DiscoveryEnvelope(List<SourcePackage> items) {}
     private record SourcePackage(String externalSourcePackageId, String sourceRevision, Boolean retry,
-                                 Map<String,String> businessIdentifiers, Map<String,String> metadata, List<SourceDocument> documents) {}
-    private record SourceDocument(String externalSourceDocumentId, String fileName, String sha256) {}
+                                 Map<String,String> businessIdentifiers, Map<String,String> metadata, List<SourceDocument> documents,
+                                 com.fasterxml.jackson.databind.JsonNode caseSensitivityLevel) {}
+    private record SourceDocument(String externalSourceDocumentId, String fileName, String sha256,
+                                  com.fasterxml.jackson.databind.JsonNode sensitivityLevel) {}
+
+    /** Task 0021: a level as the source sent it; never refused here (an unknown one is taken as Standard later). */
+    private static String sentLevel(com.fasterxml.jackson.databind.JsonNode value) {
+        if (value == null || value.isNull() || value.isMissingNode()) return null;
+        return value.isTextual() ? value.textValue() : value.toString();
+    }
 
     private static final class FileUploadContent implements UploadContent {
         private final Path path; private final long length;

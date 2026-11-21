@@ -13,6 +13,7 @@ import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.document.PackageMetadata;
 import com.securedoc.platform.domain.document.PackageType;
+import com.securedoc.platform.domain.document.SensitivityLevel;
 import com.securedoc.platform.domain.identity.*;
 import com.securedoc.platform.domain.integration.IntegrationConnection;
 import com.securedoc.platform.domain.intake.*;
@@ -171,7 +172,7 @@ public final class ExternalIntakeService {
         validateScannerProvenance(metadata);
         PushIntakeCreateInput scannerInput = new PushIntakeCreateInput(
                 input.externalSourcePackageId(), input.sourceRevision(), input.businessIdentifiers(), metadata,
-                input.documents(), input.retry());
+                input.documents(), input.retry(), input.caseSensitivityLevel());
         return createMachineIntake(scannerInput, source, ExternalIntakeChannel.SCANNER, principal, correlationId);
     }
 
@@ -257,10 +258,25 @@ public final class ExternalIntakeService {
         Objects.requireNonNull(input, "External intake request is required");
         validateCreateInput(input, source);
 
+        // Task 0021: levels are read, never refused. An unknown value is taken as Standard with LV-INT-005.
+        SensitivityLevel.Received caseSensitivity = SensitivityLevel.fromSource(input.caseSensitivityLevel());
+        List<IntakeWarning> warnings = new ArrayList<>();
+        if (caseSensitivity.unknown()) {
+            warnings.add(new IntakeWarning(SensitivityLevel.UNKNOWN_LEVEL_WARNING,
+                    SensitivityLevel.UNKNOWN_LEVEL_WARNING_TEXT, "CASE", null));
+        }
         List<ExternalManifestDocument> manifest;
         try {
-            manifest = input.documents().stream().map(d -> ExternalManifestDocument.expected(
-                    d.externalSourceDocumentId(), d.fileName(), d.sha256())).toList();
+            manifest = input.documents().stream().map(d -> {
+                SensitivityLevel.Received documentSensitivity = SensitivityLevel.fromSource(d.sensitivityLevel());
+                ExternalManifestDocument expected = ExternalManifestDocument.expected(
+                        d.externalSourceDocumentId(), d.fileName(), d.sha256(), documentSensitivity.level());
+                if (documentSensitivity.unknown()) {
+                    warnings.add(new IntakeWarning(SensitivityLevel.UNKNOWN_LEVEL_WARNING,
+                            SensitivityLevel.UNKNOWN_LEVEL_WARNING_TEXT, "DOCUMENT", expected.externalSourceDocumentId()));
+                }
+                return expected;
+            }).toList();
         } catch (IllegalArgumentException e) {
             throw new ValidationException(e.getMessage());
         }
@@ -278,7 +294,8 @@ public final class ExternalIntakeService {
             if (latest.status() == ExternalIntakeStatus.INCOMPLETE_EXPIRED && input.retry()) {
                 attemptNumber = latest.attemptNumber() + 1;
             } else {
-                return snapshot(latest);
+                // A replay of the same request: the same warnings, not recorded again.
+                return snapshot(latest).withWarnings(warnings);
             }
         } else if (input.retry()) {
             throw new IntakeConflictException("RETRY_SOURCE_NOT_FOUND",
@@ -291,7 +308,8 @@ public final class ExternalIntakeService {
         PackageType packageType = channel == ExternalIntakeChannel.SCANNER
                 ? PackageType.SCANNER_INTAKE : PackageType.API_SUBMISSION;
         var createResult = createPackageUseCase.execute(new CreatePackageCommand(packageType,
-                input.businessIdentifiers(), input.metadata(), intakeFingerprint, sourcePackageId, correlationId), principal);
+                input.businessIdentifiers(), input.metadata(), intakeFingerprint, sourcePackageId, correlationId,
+                caseSensitivity), principal);
 
         Instant createdAt = Instant.now(clock);
         ExternalIntake intake;
@@ -307,7 +325,14 @@ public final class ExternalIntakeService {
                 "ExternalIntake", intake.packageId().toString(), correlationId,
                 channel + " intake created: sourceConnection=" + source.id() + ",attempt=" + intake.attemptNumber()
                         + ",expectedDocuments=" + intake.expectedCount() + ",expiresAt=" + intake.expiresAt());
-        return snapshot(intake);
+        // The case warning is recorded by CreatePackageService; each unknown document level is recorded here.
+        for (IntakeWarning warning : warnings) {
+            if ("DOCUMENT".equals(warning.scope())) {
+                auditService.recordUnknownSensitivityLevel(principal.tenantId(), principal.actorId(),
+                        intake.packageId(), AuditService.SensitivityScope.DOCUMENT, correlationId);
+            }
+        }
+        return snapshot(intake).withWarnings(warnings);
     }
 
     public ExternalDocumentReceipt receivePushDocument(PackageId packageId, String externalSourceDocumentId,
@@ -415,7 +440,8 @@ public final class ExternalIntakeService {
         }
 
         var uploadResult = uploadDocumentUseCase.execute(UploadDocumentCommand.of(packageId,
-                manifestDocument.originalFileName(), "application/pdf", content, correlationId), principal);
+                manifestDocument.originalFileName(), "application/pdf", content, correlationId,
+                manifestDocument.sensitivityLevel()), principal);
         try {
             intake.recordReceived(normalizedExternalId, uploadResult.documentId(), actual.value(), normalizedIdempotency,
                     Instant.now(clock));
@@ -545,10 +571,23 @@ public final class ExternalIntakeService {
                 appendCanonical(canonical, "business:" + k, v));
         new TreeMap<>(input.metadata()).forEach((k, v) ->
                 appendCanonical(canonical, "metadata:" + k, v));
+        // Task 0021: a level takes part only when one was sent, so requests without levels keep the fingerprint
+        // they had before levels existed (a retry of an older intake still matches).
+        if (input.caseSensitivityLevel() != null) {
+            appendCanonical(canonical, "case:sensitivity", input.caseSensitivityLevel());
+        }
+        Map<String, String> sentDocumentLevels = new HashMap<>();
+        input.documents().forEach(d -> {
+            if (d.sensitivityLevel() != null && d.externalSourceDocumentId() != null) {
+                sentDocumentLevels.put(d.externalSourceDocumentId().trim(), d.sensitivityLevel());
+            }
+        });
         manifest.stream().sorted(Comparator.comparing(ExternalManifestDocument::externalSourceDocumentId)).forEach(d -> {
             appendCanonical(canonical, "document:id", d.externalSourceDocumentId());
             appendCanonical(canonical, "document:file", d.originalFileName());
             appendCanonical(canonical, "document:sha256", d.declaredSha256() == null ? "" : d.declaredSha256());
+            String sentLevel = sentDocumentLevels.get(d.externalSourceDocumentId());
+            if (sentLevel != null) appendCanonical(canonical, "document:sensitivity", sentLevel);
         });
         return sha256Hex(canonical.toString());
     }

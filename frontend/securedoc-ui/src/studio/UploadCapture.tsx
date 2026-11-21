@@ -32,7 +32,7 @@ const fileKey = (file: File) => `${file.name.toLowerCase()}::${file.size}::${fil
 
 export default function UploadCapture({ gate, onLock, onCreated }: {
   gate: IdentityGate;
-  onLock: (identity: Record<string, string> | null, reason: string) => void;
+  onLock: (identity: Record<string, string> | null, reason: string, sensitivity?: string | null) => void;
   onCreated: (packageId: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -90,7 +90,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
     let packageId = draftPackageId;
     try {
       if (!packageId) {
-        const pkg = await apiClient.createPackage({ packageType: 'MANUAL_UPLOAD', businessIdentifiers: identity });
+        const pkg = await apiClient.createPackage({ packageType: 'MANUAL_UPLOAD', businessIdentifiers: identity, sensitivityLevel: gate.sensitivity });
         packageId = pkg.packageId;
         setDraftPackageId(packageId);
       }

@@ -25,6 +25,12 @@ V1 typed providers:
 
 HTTP uploads stream the existing derived artifact and use stable `sourceDerivedDocumentId` as the idempotency identity.
 
+Sensitivity levels (task 0021). Every document cut from a source document carries that source document's own level, plus the case level, as the source system set them. What the destination does with them is its own choice.
+
+- `HTTP_API`: headers `X-LexaVault-Sensitivity-Level` (the source document's level) and `X-LexaVault-Case-Sensitivity-Level`, next to the existing `X-LexaVault-*` headers.
+- `FILE_SHARE`: the file carries no level (the owner chose not to invent a file format, 2026-11-20). LexaVault's own audit record `DERIVED_DOCUMENT_DELIVERED` holds both levels for every delivery.
+- An HTTP destination's 4xx stays `DELIVERY_DESTINATION_INVALID`: no destination contract says which 4xx means "level refused".
+
 ## Lifecycle
 
 One derived-delivery record is created per tenant + package + export cycle + source document + routing rule. This is deliberately export-cycle scoped so a reprocess/new master export can create a new derived output without rewriting prior history.

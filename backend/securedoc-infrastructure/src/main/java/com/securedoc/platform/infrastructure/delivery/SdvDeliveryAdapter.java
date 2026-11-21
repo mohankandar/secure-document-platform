@@ -34,6 +34,10 @@ import java.util.*;
 public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
     private static final String DESTINATION_TYPE = "sdv";
     private static final String SUBMISSIONS_PATH = "/api/v1/submissions";
+    /** Vero's upload header for a document's own level (Vero task 0024). */
+    static final String SENSITIVITY_HEADER = "X-SDV-Sensitivity-Level";
+    /** Vero's error codes for a refused sensitivity level start with this (docs/api/error-codes.md in Vero). */
+    private static final String SDV_SENSITIVITY_CODE_PREFIX = "SDV-SEN-";
 
     private final IntegrationConnectionRepository connections;
     private final ObjectMapper mapper;
@@ -117,6 +121,9 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
         body.put("businessIdentifiers", batch.businessIdentifiers());
         body.put("expectedDocumentCount", docs.size());
         body.put("documents", docs);
+        // Task 0021 (Vero task 0024): the case (record) level goes in the submission; each document's own level goes
+        // on its upload as X-SDV-Sensitivity-Level. Both are passed on exactly as the source system set them.
+        body.put("recordSensitivityLevel", batch.caseSensitivityLevel().name());
         try {
             byte[] bytes = mapper.writeValueAsBytes(body);
             HttpRequest request = authorized(c, HttpRequest.newBuilder(resolve(c, SUBMISSIONS_PATH)))
@@ -125,6 +132,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
                     .header("Idempotency-Key", batch.sourceSubmissionId())
                     .POST(HttpRequest.BodyPublishers.ofByteArray(bytes)).build();
             HttpResponse<String> response = send(c, request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            refuseIfSensitivityRefused(response, "SDV refused the case sensitivity level");
             require2xx(response.statusCode(), false, "SDV submission creation failed");
             JsonNode json = mapper.readTree(response.body());
             String id = text(json, "submissionId");
@@ -144,10 +152,12 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
                     .header("Content-Type", item.mimeType())
                     .header("Idempotency-Key", sourceSubmissionId + ":" + item.sourceDocumentId())
                     .header("X-Source-Document-Id", item.sourceDocumentId())
-                    .header("X-Original-File-Name", safeHeader(item.originalFileName()));
+                    .header("X-Original-File-Name", safeHeader(item.originalFileName()))
+                    .header(SENSITIVITY_HEADER, item.sensitivityLevel().name());
             if (item.checksumValue() != null) builder.header("X-Content-SHA256", item.checksumValue());
             HttpResponse<String> response = send(c, builder.POST(HttpRequest.BodyPublishers.ofInputStream(item.contentSource()::open)).build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            refuseIfSensitivityRefused(response, "SDV refused the document sensitivity level");
             require2xx(response.statusCode(), response.statusCode() >= 500 || response.statusCode() == 429,
                     "SDV document upload failed");
             try {
@@ -250,6 +260,25 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
             }
         }
         throw last == null ? failure(TechnicalFailureCode.DELIVERY_IO, true, "SDV delivery failed", null) : last;
+    }
+
+    /**
+     * Task 0021: Vero answers a level it will not take with a 4xx whose {@code code} is SDV-SEN-nnn. That is
+     * LV-DLV-003, "Destination refused the sensitivity level": never retried, because LexaVault would only send the
+     * same level again.
+     */
+    private void refuseIfSensitivityRefused(HttpResponse<String> response, String message) {
+        int status = response.statusCode();
+        if (status < 400 || status >= 500 || status == 429) return;
+        String code;
+        try {
+            code = text(mapper.readTree(response.body() == null ? "" : response.body()), "code");
+        } catch (Exception unreadable) {
+            return;
+        }
+        if (code != null && code.startsWith(SDV_SENSITIVITY_CODE_PREFIX)) {
+            throw failure(TechnicalFailureCode.DELIVERY_SENSITIVITY_REFUSED, false, message, null);
+        }
     }
 
     private void require2xx(int status, boolean retryable, String message) {

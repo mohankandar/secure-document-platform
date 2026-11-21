@@ -26,6 +26,10 @@ public class DocumentEntity {
     @Column(name = "document_type", nullable = false)
     private String documentType;
 
+    /** Document level sent by the source system (task 0021); set once at intake, never changed. */
+    @Column(name = "sensitivity_level", nullable = false, updatable = false, length = 32)
+    private String sensitivityLevel = "STANDARD";
+
     @Column(name = "status", nullable = false)
     private String status;
 
@@ -71,6 +75,8 @@ public class DocumentEntity {
 
     public String getDocumentType() { return documentType; }
     public void setDocumentType(String documentType) { this.documentType = documentType; }
+    public String getSensitivityLevel() { return sensitivityLevel; }
+    public void setSensitivityLevel(String sensitivityLevel) { this.sensitivityLevel = sensitivityLevel; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

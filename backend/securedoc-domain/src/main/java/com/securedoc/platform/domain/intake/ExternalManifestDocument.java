@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.intake;
 
+import com.securedoc.platform.domain.document.SensitivityLevel;
 import com.securedoc.platform.domain.identity.DocumentId;
 
 import java.time.Instant;
@@ -13,9 +14,11 @@ public record ExternalManifestDocument(
         DocumentId receivedDocumentId,
         String receivedSha256,
         String idempotencyKey,
-        Instant receivedAt) {
+        Instant receivedAt,
+        SensitivityLevel sensitivityLevel) {
 
     public ExternalManifestDocument {
+        sensitivityLevel = sensitivityLevel == null ? SensitivityLevel.STANDARD : sensitivityLevel;
         externalSourceDocumentId = requireText(externalSourceDocumentId, "External source document id", 255);
         originalFileName = requireText(originalFileName, "Original file name", 255);
         declaredSha256 = normalizeSha256(declaredSha256, false);
@@ -29,10 +32,24 @@ public record ExternalManifestDocument(
         }
     }
 
+    /** Manifest document without a level (taken as Standard); kept for callers that predate task 0021. */
+    public ExternalManifestDocument(String externalSourceDocumentId, String originalFileName, String declaredSha256,
+                                    DocumentId receivedDocumentId, String receivedSha256, String idempotencyKey,
+                                    Instant receivedAt) {
+        this(externalSourceDocumentId, originalFileName, declaredSha256, receivedDocumentId, receivedSha256,
+                idempotencyKey, receivedAt, SensitivityLevel.STANDARD);
+    }
+
     public static ExternalManifestDocument expected(String externalSourceDocumentId, String originalFileName,
                                                      String declaredSha256) {
+        return expected(externalSourceDocumentId, originalFileName, declaredSha256, SensitivityLevel.STANDARD);
+    }
+
+    /** An expected PDF with the level the source system sent for it (task 0021). */
+    public static ExternalManifestDocument expected(String externalSourceDocumentId, String originalFileName,
+                                                     String declaredSha256, SensitivityLevel sensitivityLevel) {
         return new ExternalManifestDocument(externalSourceDocumentId, originalFileName, declaredSha256,
-                null, null, null, null);
+                null, null, null, null, sensitivityLevel);
     }
 
     public boolean received() { return receivedDocumentId != null; }
@@ -48,7 +65,7 @@ public record ExternalManifestDocument(
             throw new IllegalArgumentException("Document checksum does not match manifest checksum");
         }
         return new ExternalManifestDocument(externalSourceDocumentId, originalFileName, declaredSha256,
-                documentId, normalizedActual, normalizedIdempotency, receivedAt);
+                documentId, normalizedActual, normalizedIdempotency, receivedAt, sensitivityLevel);
     }
 
     public boolean matchesReceivedContent(String sha256) {

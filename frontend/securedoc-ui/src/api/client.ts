@@ -7,6 +7,7 @@ import type {
   PackageSummary,
   PackageDetail,
   CreatePackageRequest,
+  WatchedFolderSettings,
   PackageStatusResult,
   DocumentUploadResult,
   ReviewTaskResult,
@@ -384,6 +385,15 @@ class ApiClient {
 
   async getProductTelemetryStatus(): Promise<ProductTelemetryStatus> {
     return this.request('/platform/product-telemetry/status');
+  }
+
+  /** Task 0021: the level the installed watched folder gives every file it picks up. */
+  async getWatchedFolderSettings(): Promise<WatchedFolderSettings> {
+    return this.request('/platform-admin/watched-folder/settings');
+  }
+
+  async updateWatchedFolderSettings(sensitivityLevel: string): Promise<WatchedFolderSettings> {
+    return this.request('/platform-admin/watched-folder/settings', { method: 'PUT', body: JSON.stringify({ sensitivityLevel }) });
   }
 
   async scanPlatformWatchedFolder(): Promise<{ discovered: number; waitingForTrigger: number; accepted: number; rejected: number; duplicates: number }> {

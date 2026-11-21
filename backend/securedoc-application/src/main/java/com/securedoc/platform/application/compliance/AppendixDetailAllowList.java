@@ -49,6 +49,8 @@ public final class AppendixDetailAllowList {
             AuditAction.EXTERNAL_INTAKE_CREATED, AuditAction.EXTERNAL_DOCUMENT_RECEIVED,
             AuditAction.EXTERNAL_INTAKE_ACCEPTED, AuditAction.EXTERNAL_INTAKE_EXPIRED,
             AuditAction.EXTERNAL_INTAKE_CLEANED,
+            // Task 0021: fixed code and scope only (LV-INT-005), never the value the source sent.
+            AuditAction.INTAKE_SENSITIVITY_LEVEL_UNKNOWN,
             // Documents and findings
             AuditAction.DOCUMENT_UPLOADED, AuditAction.DOCUMENT_EXTRACTION_STARTED,
             AuditAction.DOCUMENT_EXTRACTION_COMPLETED, AuditAction.DOCUMENT_DETECTION_COMPLETED,
@@ -71,6 +73,8 @@ public final class AppendixDetailAllowList {
             AuditAction.COMPLIANCE_REPORT_CREATED,
             // IT and platform administration
             AuditAction.PLATFORM_HEALTH_CHECKED, AuditAction.WATCHED_FOLDER_SCAN_TRIGGERED,
+            // Task 0021: level codes only ("sensitivityLevel=STANDARD->CONFIDENTIAL").
+            AuditAction.WATCHED_FOLDER_SETTINGS_CHANGED,
             AuditAction.POLLING_RUN_STARTED, AuditAction.POLLING_RUN_COMPLETED, AuditAction.INTEGRATION_CONNECTION_TESTED,
             AuditAction.ENTERPRISE_IDENTITY_DRAFT_SAVED, AuditAction.ENTERPRISE_IDENTITY_CONNECTION_TESTED,
             AuditAction.ENTERPRISE_IDENTITY_CONNECTION_ACTIVATED,

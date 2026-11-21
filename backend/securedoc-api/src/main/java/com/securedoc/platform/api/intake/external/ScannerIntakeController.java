@@ -37,13 +37,7 @@ public class ScannerIntakeController {
                                                          HttpServletRequest httpRequest) {
         AuthenticatedPrincipal principal = contextResolver.resolveIntegrationPrincipal(httpRequest);
         CorrelationId correlationId = contextResolver.resolveCorrelationId(httpRequest);
-        var documents = request.documents() == null
-                ? java.util.List.<ExternalIntakeCreateRequest.ManifestDocument>of() : request.documents();
-        var input = new PushIntakeCreateInput(request.externalSourcePackageId(), request.sourceRevision(),
-                request.businessIdentifiers(), request.metadata(), documents.stream()
-                .map(d -> new PushIntakeCreateInput.ManifestDocumentInput(
-                        d.externalSourceDocumentId(), d.fileName(), d.sha256())).toList(),
-                Boolean.TRUE.equals(request.retry()));
+        PushIntakeCreateInput input = request.toInput();
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ExternalIntakeResponse.from(transactions.create(input, principal, correlationId)));
     }
