@@ -14,15 +14,15 @@ Recorded 2026-11-21 by the LexaVault design chat, from the capabilities thread's
 | 7 | **Vision-based redaction with page routing** (V1 headline) | Not built. Requirement file `docs/work/vision-routing-requirement.md` (committed with this file) | After pipeline P2 |
 | 8 | **Performance target and benchmark**: under 60 s per document (30 better); benchmark on 20–30 first-customer samples, text vs vision path | Not started | Benchmark B1 now (public samples, owner's GPU), B2 with the customer's samples |
 | 9 | **Later AI ideas (V2)**: IT Admin operations assistant (logs/metrics only), AI-suggested tuning from reviewer corrections, AI-generated test documents | Not built | Backlog, V2 |
-| 10 | **Unreadable or corrupt pages always go to review**, never passed through; one case can hold several PDFs; LexaVault does not split a PDF into documents | **Partly.** Several PDFs per case: yes. Unreadable pages: today the **case stops** (OCR failure, `LV-PRC-002/003/006`) instead of the page going to review. Not splitting: true for documents in the case; the **split-by-barcode export** to split destinations exists and is a separate, approved feature (to confirm with the owner that the rule doesn't mean it) | Task R2 |
+| 10 | **Unreadable or corrupt pages always go to review**, never passed through; one case can hold several PDFs; LexaVault does not split a PDF into documents | **Partly.** Several PDFs per case: yes. Unreadable pages: today the **case stops** (OCR failure, `LV-PRC-002/003/006`) instead of the page going to review. Not splitting: true for documents in the case; the **split-by-barcode export** to split destinations exists and is a separate, approved feature (taken as not meant by this rule unless the owner says otherwise) | Task R2 |
 
-## Design decision needed for item 6 (searchable text on redacted pages)
+## Design decision for item 6 (searchable text on redacted pages): **B chosen by the owner, 2026-11-21**
 
 Today a page with a redaction becomes an image with no text, which is the safest output but not searchable. Options:
 - **A. Keep the page's own text and remove only the redacted words** from the page's content. Best quality, but hard to do reliably (fonts, overlapping text, garbage fonts) and the riskiest: a mistake leaks a value.
 - **B. (recommended) Keep the image page, then add a text layer made by OCR of the redacted image.** The black boxes are already burned in, so the redacted values can't appear in the new text; the final check verifies it. Searchable, safe, slightly lower text quality than the original.
 
-## Order (LexaVault, as recommended to the owner 2026-11-21)
+## Order (LexaVault, **confirmed by the owner 2026-11-21**)
 
 1. 0031 live run against Vero · 2. P1b job clean-up · 3. **R1** catalog, packs, locked items, styles and new pattern types · 4. **R2** true redaction hardening, searchable output, unreadable pages to review, signed PDFs recorded · 5. **R3** password-protected PDFs through the API · 6. Pipeline P2 · 7. Vision-based redaction · 8. Switch-over to platform-core (identity, licensing, notifications, case fields, integration standards round 1) · 9. Reports build, P2b, P3–P6.
 Alongside: benchmark B1 now. V2 backlog: item 9.
