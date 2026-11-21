@@ -230,6 +230,16 @@ public class GlobalExceptionHandler {
                 .body(ApiErrorResponse.of(ex.errorCode(), ex.getMessage(), correlationId));
     }
 
+    /** #264: the person's entity exists but is not active: 403 with its own code and a fixed text. */
+    @ExceptionHandler(com.securedoc.platform.application.exception.TenantInactiveException.class)
+    public ResponseEntity<ApiErrorResponse> handleTenantInactive(
+            com.securedoc.platform.application.exception.TenantInactiveException ex, HttpServletRequest request) {
+        String correlationId = correlationIdForError(request);
+        logRejected("TENANT_INACTIVE_REJECTED", "TENANT_INACTIVE", ex, request, correlationId);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrorResponse.of("TENANT_INACTIVE", "This organization is not active.", correlationId));
+    }
+
     /** B5: a state refusal LexaVault wrote for the person (fixed text, no content): its message is sent. */
     @ExceptionHandler(com.securedoc.platform.application.exception.PersonFacingStateException.class)
     public ResponseEntity<ApiErrorResponse> handlePersonFacingState(

@@ -69,6 +69,16 @@ class GlobalExceptionHandlerSafeMessagesTest {
     }
 
     @Test
+    void anInactiveEntityIs403WithItsOwnCode() {
+        var response = handler.handleTenantInactive(
+                new com.securedoc.platform.application.exception.TenantInactiveException("Tenant Acme is SUSPENDED"),
+                request());
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals("TENANT_INACTIVE", response.getBody().errorCode());
+        assertEquals("This organization is not active.", response.getBody().message());
+    }
+
+    @Test
     void aPersonFacingStateMessageWrittenByLexaVaultIsSent() {
         var response = handler.handlePersonFacingState(new PersonFacingStateException(
                 "Activation requires a successful connection test from the last 15 minutes. Test the current draft again."),

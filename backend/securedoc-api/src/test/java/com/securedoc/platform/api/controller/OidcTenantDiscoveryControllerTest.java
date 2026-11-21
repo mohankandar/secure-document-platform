@@ -43,6 +43,8 @@ class OidcTenantDiscoveryControllerTest {
         // Task 0023 C5 (#236): before, the entity just disappeared from the list without a trace.
         Tenant active = Tenant.create("Active", "active-entity");
         Tenant suspended = Tenant.create("Suspended", "suspended-entity");
+        active.activate();
+        suspended.activate();
         suspended.suspend();
         TenantId missing = TenantId.generate();
         ActorId actor = ActorId.generate();
