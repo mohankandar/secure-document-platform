@@ -1,7 +1,7 @@
 # LexaVault error codes (design)
 
 **Status:** approved. Drafted by the LexaVault design chat, 2026-11-20, from the failure inventory of task 0022 (`docs/work/0022-failure-inventory.md`, 388 rows) after the fixes of task 0023.
-**Owner's approval:** approved (owner, 2026-11-20)
+**Owner's approval:** approved (owner, 2026-11-20). Additions of 2026-11-21 (LV-INT-035, LV-SCN-019 to 021, LV-REV-009, LV-CFG-011, LV-SYS-008, LV-SYS-009) approved by the owner, 2026-11-21.
 
 ## 1. Rules
 
@@ -56,6 +56,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-INT-032 | File named in the trigger file is missing | The trigger file lists a document that isn't in the folder. | Refused | Source system | — | 58 |
 | LV-INT-033 | Folder drop has no documents | The drop has a trigger file but no PDFs. | Refused | Source system | — | 59 |
 | LV-INT-034 | Watched folder can't be read or written | LexaVault can't list, read or move files in the watched folder. | System | IT Admin | — | 36, 39, 56, 57 |
+| LV-INT-035 | Folder drop no longer matches its case | A resumed folder drop no longer matches the case it started. | Refused | Source system | — | 0025 (RECOVERY_CONFLICT) |
 | LV-INT-040 | Source system can't be reached | Polling couldn't connect to the source, or it timed out. | Refused | IT Admin, source system | — | 69 |
 | LV-INT-041 | Source system answered with an error | The source answered polling with an error status. | Refused | Source system | — | 65, 68 |
 | LV-INT-042 | Source system's answer not understood | The source's list of cases or a document wasn't in the expected form. | Refused | Source system | — | 64, 66 |
@@ -84,6 +85,9 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SCN-016 | LexaVault refused the scan | LexaVault refused the scan; its own code says why. | Refused | IT Admin | — | 83 |
 | LV-SCN-017 | Scan waiting too long for LexaVault | LexaVault hasn't accepted the scan within the time limit. | Stopped | IT Admin | — | 0024 |
 | LV-SCN-018 | Scan couldn't be sent | Sending failed after 3 tries. | Stopped | IT Admin | — | 0023 |
+| LV-SCN-019 | Scan can't be cancelled now | The scan is already being sent, or needs attention first. | Refused | Operator | 409 | 92 |
+| LV-SCN-020 | Scan resumed after a restart | The Scan Bridge restarted and picked up the scan where it left off. | Warning | Nobody | — | 0025 (RECOVERED_AFTER_RESTART) |
+| LV-SCN-021 | Waiting for LexaVault to accept the scan | The scan was sent; LexaVault hasn't confirmed it yet. | Waiting | Nobody | — | 0024 (acceptance pending) |
 
 ### PRC: processing (001–019)
 
@@ -132,6 +136,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-REV-006 | Box not valid | The box is outside the page or has no size. | Refused | Reviewer | 400 | 143, 148, 159, 165, 168 |
 | LV-REV-007 | Can't process again | The original is no longer kept, or the case reached its limit of runs. | Refused | Nobody | 400 | 146, 199 |
 | LV-REV-008 | Can't continue by hand | Continuing manually is only for cases stopped at the AI step. | Refused | Reviewer | 400 | 151 |
+| LV-REV-009 | Page doesn't exist | The page asked for isn't in the document. | Refused | Nobody | 400 | 0025 (review page out of range) |
 
 ### DLV: export (001–029)
 
@@ -193,6 +198,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-CFG-008 | Login system settings not valid | The draft login settings are incomplete or failed their test. | Set-up | IT Admin | 400 | 240, 241 |
 | LV-CFG-009 | Scanner settings not valid | A scanner setting is out of range. | Set-up | IT Admin | 500 | 315 |
 | LV-CFG-010 | Connection switched off | The connection is disabled or not of the right kind. | Set-up | IT Admin | 403 | 302, 303 |
+| LV-CFG-011 | Support action not possible now | The case or incident isn't in a state that allows this action (for example the incident is closed). | Refused | IT Admin | 409 | 0025 (hold extension, restart, closed incident, Dashboard removal) |
 
 ### SYS: system (001–019)
 
@@ -205,8 +211,10 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-005 | Start-up setting wrong | LexaVault stopped at start because a setting is wrong; the log names it. | Set-up | IT Admin | — | 324, 326, 328, 348, 349, 350, 351, 379, 327 |
 | LV-SYS-006 | Health check failed | A part LexaVault needs (AI model, text reader, database, storage, destination) failed its check. | System | IT Admin | — | 336, 337, 338, 352, 353, 380 |
 | LV-SYS-007 | Temporary file left behind | A temporary file couldn't be deleted after a failure; IT should remove it. | System | IT Admin | — | 91, 356, 370, 372, 373 |
+| LV-SYS-008 | Item not found | The item asked for (a rule, a connection, a file) doesn't exist in this entity. | Refused | Person, IT Admin | 404 | 0025 (not-found other than a case) |
+| LV-SYS-009 | Unknown request | The address or method isn't one LexaVault offers. | Refused | Source system | 404 / 405 | 0025 (unknown endpoint, wrong method) |
 
-**Totals:** INT 37 · SCN 18 · PRC 9 · AI 7 · RED 4 · REV 8 · DLV 15 · AUT 10 · LIC 4 · CFG 10 · SYS 7 = **124 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015).
+**Totals:** INT 38 · SCN 21 · PRC 9 · AI 7 · RED 4 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **137 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025.)*
 
 ## 3. Rows with no code on purpose
 
