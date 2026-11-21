@@ -4,7 +4,10 @@ import { Search } from 'lucide-react';
 import { SWRConfig } from 'swr';
 import type { CurrentUser, TenantSwitchActions } from '../types';
 import AccountMenu from './AccountMenu';
-import { ADMIN_CAPS, CAP, needsYou, usePackages, useReviewQueue } from './data';
+import { ADMIN_CAPS, CAP, needsYou, useExportNeedsIt, usePackages, useReviewQueue, useWaitingForYou } from './data';
+import { showWaitingNav, supportBadgeCount } from './exportRules';
+import WaitingForYou from './WaitingForYou';
+import SupportExport from './support/SupportExport';
 import { useBranding } from '../branding/BrandingContext';
 import { ToastProvider } from './toast';
 import CommandPalette from './CommandPalette';
@@ -58,6 +61,14 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
   const { data: queue } = useReviewQueue(canReview);
   const needsYouCount = (packages ?? []).filter((p) => needsYou(p, caps)).length;
   const openFindings = queue?.totalItems ?? 0;
+  // Task 0029: "Waiting for you" (EXPORT_RESEND) shows only while a destination refused something; Support's badge
+  // counts the export groups waiting for IT.
+  const canResend = canDesk && caps.includes(CAP.exportResend);
+  const { data: waiting } = useWaitingForYou(canResend, true);
+  const waitingCount = waiting?.total ?? 0;
+  const showWaiting = showWaitingNav(caps, waiting?.total) || location.pathname === '/waiting';
+  const { data: needsIt } = useExportNeedsIt(canSupport, true);
+  const itGroups = supportBadgeCount(needsIt);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -105,6 +116,12 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
               {openFindings > 0 && <span className="cf-nav-count" aria-label={`${openFindings} open findings`}>{openFindings}</span>}
             </NavLink>
           )}
+          {canResend && showWaiting && (
+            <NavLink to="/waiting" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>
+              {NAV.waiting}
+              {waitingCount > 0 && <span className="cf-nav-count" data-tone="mark" aria-label={`${waitingCount} refused`}>{waitingCount}</span>}
+            </NavLink>
+          )}
           {(canReports || canAdmin) && (canDesk || canIntake || canReview) && <span className="cf-nav-sep" aria-hidden="true" />}
           {canReports && (
             <NavLink to="/reports" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.reports}</NavLink>
@@ -113,7 +130,10 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
             <NavLink to="/admin" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.admin}</NavLink>
           )}
           {canSupport && (
-            <NavLink to="/support/incidents" className={({ isActive }) => `cf-nav-link${isActive ? ' is-active' : ''}`}>{NAV.support}</NavLink>
+            <NavLink to="/support/incidents" className={() => `cf-nav-link${location.pathname.startsWith('/support') || location.pathname.startsWith('/technical-exceptions') ? ' is-active' : ''}`}>
+              {NAV.support}
+              {itGroups > 0 && <span className="cf-nav-count" data-tone="danger" aria-label={`${itGroups} export ${itGroups === 1 ? 'problem needs' : 'problems need'} IT`}>{itGroups}</span>}
+            </NavLink>
           )}
         </nav>
 
@@ -147,6 +167,8 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/platform-admin" element={<Navigate to={caps.includes(CAP.technicalAdmin) ? '/admin/health' : home} replace />} />
           <Route path="/audit" element={<Navigate to={caps.includes(CAP.audit) ? '/admin/audit' : home} replace />} />
           {/* UI task U012: Case File screens; the legacy pages stay for the legacy app (App.tsx). */}
+          <Route path="/waiting" element={canResend ? <WaitingForYou /> : <Navigate to={home} replace />} />
+          <Route path="/support/export" element={canSupport ? <SupportExport caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/support/incidents" element={canSupport ? <SupportList caps={caps} entityName={me.tenantName} /> : <Navigate to={home} replace />} />
           <Route path="/support/incidents/:incidentId" element={canSupport ? <IncidentProblem caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/technical-exceptions/:packageId" element={canSupport ? <CaseProblem caps={caps} /> : <Navigate to={home} replace />} />

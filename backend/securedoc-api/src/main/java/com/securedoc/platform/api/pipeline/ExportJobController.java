@@ -137,6 +137,21 @@ public class ExportJobController {
         return new DestinationChange(id, "WORKING");
     }
 
+    /**
+     * Task 0029, Support's "Check now": runs the destination's health check at once. A paused destination whose check
+     * passes is working again (its waiting jobs go out in order). Answers whether the check passed; LV-CFG-001 for a
+     * destination that is not one of the tenant's.
+     */
+    @PostMapping("/support/export-destinations/{destinationId}/check")
+    @RequireCapability(UserCapability.TECHNICAL_RETRY)
+    public ExportJobService.CheckNow checkNow(@PathVariable String destinationId, HttpServletRequest request) {
+        var principal = context.resolvePrincipal(request);
+        UUID id = uuid(destinationId, "Invalid destination id");
+        return service.checkDestinationNow(principal.tenantId(), IntegrationConnectionId.of(id), principal.actorId(),
+                        context.resolveCorrelationId(request))
+                .orElseThrow(() -> new ValidationException(LvErrorCode.CFG_001, "Unknown export destination"));
+    }
+
     private static List<UUID> ids(JobIdsRequest body) {
         if (body == null || body.jobIds() == null || body.jobIds().isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "jobIds is required");

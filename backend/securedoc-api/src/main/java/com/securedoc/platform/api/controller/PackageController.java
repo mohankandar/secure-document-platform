@@ -32,6 +32,8 @@ import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import com.securedoc.platform.application.pipeline.ExportJobService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +48,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -59,6 +62,8 @@ public class PackageController {
     private final GetPackageQuery getPackageQuery;
     private final ListPackagesQuery listPackagesQuery;
     private final RequestContextResolver contextResolver;
+    /** Task 0029: the Cases list shows each case's export state; null in tests that do not need it (all NONE). */
+    private final ExportJobService exportJobs;
 
     public PackageController(CreatePackageUseCase createPackageUseCase,
                               UploadDocumentUseCase uploadDocumentUseCase,
@@ -67,6 +72,20 @@ public class PackageController {
                               GetPackageQuery getPackageQuery,
                               ListPackagesQuery listPackagesQuery,
                               RequestContextResolver contextResolver) {
+        this(createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
+                getPackageQuery, listPackagesQuery, contextResolver, null);
+    }
+
+    @Autowired
+    public PackageController(CreatePackageUseCase createPackageUseCase,
+                              UploadDocumentUseCase uploadDocumentUseCase,
+                              SubmitPackageUseCase submitPackageUseCase,
+                              PackageProcessingDispatcher packageProcessingDispatcher,
+                              GetPackageQuery getPackageQuery,
+                              ListPackagesQuery listPackagesQuery,
+                              RequestContextResolver contextResolver,
+                              ExportJobService exportJobs) {
+        this.exportJobs = exportJobs;
         this.createPackageUseCase = createPackageUseCase;
         this.uploadDocumentUseCase = uploadDocumentUseCase;
         this.submitPackageUseCase = submitPackageUseCase;
@@ -216,6 +235,10 @@ public class PackageController {
 
         List<PackageSummary> summaries = listPackagesQuery.execute(principal, offset, limit);
 
+        // Task 0029: the page's export states in two queries, as the dashboard (OperationsController) does.
+        Map<PackageId, ExportJobService.CaseExportState> exportStates = exportJobs == null ? Map.of()
+                : exportJobs.caseExportStates(principal.tenantId(),
+                        summaries.stream().map(PackageSummary::packageId).toList());
         List<PackageSummaryResponse> response = summaries.stream()
                 .map(s -> new PackageSummaryResponse(
                         s.packageId().toString(),
@@ -224,7 +247,8 @@ public class PackageController {
                         s.businessIdentifiers().stream().map(i -> new BusinessIdentifierResponse(i.key(), i.label(), i.value(), i.primary(), i.searchable(), i.displayable(), i.displayOrder())).toList(),
                         s.documentCount(),
                         s.createdAt(),
-                        s.updatedAt()
+                        s.updatedAt(),
+                        exportStates.getOrDefault(s.packageId(), ExportJobService.CaseExportState.NONE).name()
                 ))
                 .toList();
         return ResponseEntity.ok(response);

@@ -1,6 +1,7 @@
 import { expect, type Page, type Route } from '@playwright/test';
 import { crc32, deflateSync } from 'node:zlib';
 import { capabilitiesFor } from '../e2e-oidc/policyCapabilities';
+import { INLINE_EXPORT, exportApi, exportCases, retentionSettings } from '../e2e-oidc/exportFixtures';
 
 /**
  * UI task U026: one mocked identity provider and one mocked API that answers every Case File screen, so the
@@ -73,6 +74,14 @@ export const STOPPED_CASE = caseFor('LN-3003', 'FAILED', '0003', 'Priya Nataraja
 export const DELIVERED_CASE = caseFor('LN-3004', 'COMPLETED', '0004', 'Daniel Kim');
 export const REDACTING_CASE = caseFor('LN-3005', 'PROCESSING', '0005', 'Ana Souza');
 const CASES = [REVIEW_CASE, APPROVAL_CASE, STOPPED_CASE, DELIVERED_CASE, REDACTING_CASE];
+
+/* ---------- Task 0029: export screens (MockOptions.exports) ---------- */
+
+export const EXPORT_CASES = exportCases('c9c9c9c9').map((c) => ({
+  ...caseFor(c.loan, c.status, c.packageId.slice(-4), 'Borrower', (c.documents ?? []).map((d, i) => ({ documentId: d, fileName: `Document_${i + 1}.pdf` }))),
+  packageId: c.packageId, exportState: c.exportState,
+}));
+const EXPORTS = exportApi(exportCases('c9c9c9c9'));
 
 /* ---------- Review ---------- */
 
@@ -303,6 +312,8 @@ export interface MockOptions {
   broken?: string[];
   /** Two entities: the chooser shows after sign-in. */
   twoEntities?: boolean;
+  /** Task 0029: the export screens' data (cases in every export state, refused cases, IT groups, the alert). */
+  exports?: boolean;
 }
 
 export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
@@ -322,8 +333,16 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (path.startsWith('/branding')) return json({});
 
     // Cases, the case panel, Approve
-    if (path === '/packages' && method === 'GET') return json(CASES);
-    const one = CASES.find((c) => path === `/packages/${c.packageId}`);
+    // Task 0029: the export answers; inline mode's empty answers unless the test asks for the export screens.
+    const ex = options.exports ? EXPORTS : null;
+    if (path === '/export-jobs/waiting-for-you') return json(ex ? ex.waiting : INLINE_EXPORT.waiting);
+    if (path === '/support/export-jobs/needs-it') return json(ex ? ex.needsIt : INLINE_EXPORT.needsIt);
+    if (path === '/support/export-destinations') return json(ex ? ex.destinations : INLINE_EXPORT.destinations);
+    if (path === '/support/export-destinations/alert') return json(ex ? ex.alert : INLINE_EXPORT.alert);
+    if (/^\/packages\/[^/]+\/export-jobs$/.test(path)) return json(ex ? ex.caseExport(path.split('/')[2]) : INLINE_EXPORT.caseExport);
+    if (path === '/business-admin/export-retention') return json(retentionSettings());
+    if (path === '/packages' && method === 'GET') return json(ex ? [...EXPORT_CASES, ...CASES] : CASES);
+    const one = [...(ex ? EXPORT_CASES : []), ...CASES].find((c) => path === `/packages/${c.packageId}`);
     if (one) return json(one);
     if (path.endsWith('/lifecycle')) return json({ packageId: path.split('/')[2], successfulExportCycles: 0, maximumExportCycles: 3, canReprocess: true, finalApprovalRequired: true, finalApprovalGranted: false });
     if (path.endsWith('/derived-deliveries') && method === 'GET') return json([]);

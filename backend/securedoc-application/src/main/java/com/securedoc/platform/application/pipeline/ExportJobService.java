@@ -401,23 +401,60 @@ public final class ExportJobService {
                 actorId, correlationId);
     }
 
-    /** Every export destination of the tenant with its state (no row is WORKING), the local folder included. */
+    /**
+     * Every export destination of the tenant with its state (no row is WORKING), the local folder included. Task 0029:
+     * with the time of its next check while paused, and the number of its export jobs still to be done.
+     */
     public List<DestinationView> destinationStates(TenantId tenantId) {
         Map<UUID, ExportDestinationStatus> stored = new HashMap<>();
         destinations.findByTenantId(tenantId).forEach(s -> stored.put(s.connectionId().value(), s));
+        Map<UUID, Integer> open = jobs.countOpenByDestination(tenantId);
         List<DestinationView> views = new ArrayList<>();
         IntegrationConnectionId master = queue.masterDestination(tenantId);
         if (ExportDestinations.isLocalFolder(tenantId, master)) {
             views.add(view(stored.getOrDefault(master.value(), ExportDestinationStatus.working(tenantId, master)),
-                    LOCAL_FOLDER_NAME, "LOCAL_FOLDER", true));
+                    LOCAL_FOLDER_NAME, "LOCAL_FOLDER", true, open));
         }
         for (IntegrationConnection c : connections.findByTenantId(tenantId)) {
             if (c.purpose() != IntegrationPurpose.SDV_DELIVERY
                     && c.purpose() != IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY) continue;
             views.add(view(stored.getOrDefault(c.id().value(), ExportDestinationStatus.working(tenantId, c.id())),
-                    c.name(), c.purpose().name(), c.enabled()));
+                    c.name(), c.purpose().name(), c.enabled(), open));
         }
         return views;
+    }
+
+    /**
+     * Support's "Check now" (task 0029): the destination's health check, at once. A PAUSED destination whose check
+     * passes is WORKING again and its waiting jobs go out in their order (audited as a resume, by "check-now"). A
+     * failing check is recorded and the destination stays as it is. Empty when it is not one of the tenant's export
+     * destinations.
+     */
+    public Optional<CheckNow> checkDestinationNow(TenantId tenantId, IntegrationConnectionId destinationId,
+                                                  ActorId actorId, CorrelationId correlationId) {
+        if (destinationId == null || !isExportDestination(tenantId, destinationId)) return Optional.empty();
+        destinations.recordProbe(tenantId, destinationId);
+        boolean passed = check(tenantId, destinationId);
+        boolean resumed = false;
+        if (passed) {
+            resumed = resume(tenantId, destinationId, EnumSet.of(DestinationState.PAUSED), "check-now", actorId,
+                    correlationId);
+        } else {
+            destinations.recordCheckFailed(tenantId, destinationId);
+        }
+        String state = destinations.find(tenantId, destinationId).map(s -> s.state().name())
+                .orElse(DestinationState.WORKING.name());
+        log.info("EXPORT_DESTINATION_CHECKED_NOW destination={} passed={} resumed={}", destinationId.value(), passed,
+                resumed);
+        return Optional.of(new CheckNow(destinationId.value(), passed, resumed, state));
+    }
+
+    /** The master destination (the local folder too) or one of the tenant's SDV or split delivery connections. */
+    private boolean isExportDestination(TenantId tenantId, IntegrationConnectionId destinationId) {
+        if (destinationId.equals(queue.masterDestination(tenantId))) return true;
+        return connections.findByTenantId(tenantId).stream().anyMatch(c -> c.id().equals(destinationId)
+                && (c.purpose() == IntegrationPurpose.SDV_DELIVERY
+                || c.purpose() == IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY));
     }
 
     /** "LexaVault can't reach its destinations", as Support shows it. */
@@ -428,10 +465,19 @@ public final class ExportJobService {
                 .orElse(new AlertView(false, null, null, null, null, null));
     }
 
-    private DestinationView view(ExportDestinationStatus s, String name, String purpose, boolean enabled) {
+    private DestinationView view(ExportDestinationStatus s, String name, String purpose, boolean enabled,
+                                 Map<UUID, Integer> open) {
         return new DestinationView(s.connectionId().value(), name, purpose, enabled, s.state().name(), s.pausedAt(),
                 s.consecutiveFailures(), s.lastProbeAt(), s.lastLvCode(), s.lastCheckFailedAt(), s.rateLimitedUntil(),
-                s.workerLimit(settings.workersPerDestination()));
+                s.workerLimit(settings.workersPerDestination()), nextCheckAt(s),
+                open.getOrDefault(s.connectionId().value(), 0));
+    }
+
+    /** A paused destination is checked one probe interval after its last check (or after it paused); null otherwise. */
+    private Instant nextCheckAt(ExportDestinationStatus s) {
+        if (s.state() != DestinationState.PAUSED) return null;
+        Instant last = s.lastProbeAt() != null ? s.lastProbeAt() : s.pausedAt();
+        return last == null ? clock.instant() : last.plus(settings.probeInterval());
     }
 
     /**
@@ -957,9 +1003,14 @@ public final class ExportJobService {
     public record ItGroup(UUID destinationId, String destinationName, String lvCode, int count, Instant firstFailedAt,
                           List<UUID> caseIds, List<JobView> jobs) { }
 
+    /** Task 0029 added {@code nextCheckAt} (while paused) and {@code openJobs} (its export jobs still to be done). */
     public record DestinationView(UUID destinationId, String name, String purpose, boolean enabled, String state,
                                   Instant pausedAt, int consecutiveFailures, Instant lastProbeAt, String lastLvCode,
-                                  Instant lastCheckFailedAt, Instant rateLimitedUntil, int workerLimit) { }
+                                  Instant lastCheckFailedAt, Instant rateLimitedUntil, int workerLimit,
+                                  Instant nextCheckAt, int openJobs) { }
+
+    /** "Check now": whether the check passed, whether that brought the destination back, and its state now. */
+    public record CheckNow(UUID destinationId, boolean passed, boolean resumed, String state) { }
 
     public record AlertView(boolean raised, String lvCode, String detail, Instant raisedAt, Instant lastCheckAt,
                             Instant clearedAt) { }

@@ -6,6 +6,7 @@ import { checked, isArrayOf, isRecord } from './failure';
 import { canContinueManually } from './support/supportRules';
 import { ACTION_WORDS, STAGE_NAMES } from './words';
 import { errorText } from './lvCodes';
+import { exportNeedsYou, exportStateOf, isExporting, type CaseExport, type DestinationView as ExportDestinationView, type NeedsIt, type ReachabilityAlert, type WaitingForYou } from './exportRules';
 
 export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
 
@@ -74,6 +75,7 @@ export const CAP = {
   technicalAdmin: 'TECHNICAL_ADMIN_VIEW',
   platformOps: 'PLATFORM_OPERATIONS',
   audit: 'AUDIT_VIEW',
+  exportResend: 'EXPORT_RESEND',
 } as const;
 
 /** Capabilities that grant at least one Admin area. Each area re-checks its own capability. */
@@ -81,6 +83,9 @@ export const ADMIN_CAPS: string[] = [CAP.policy, CAP.identifiers, CAP.integratio
 
 /** A case needs the current user when they hold the capability to move it forward. */
 export function needsYou(pkg: PackageSummary, caps: string[]): boolean {
+  // Task 0029: while exporting, only a refusal needs a person (one who may resend); the review status no longer counts.
+  const exportState = exportStateOf(pkg.exportState);
+  if (isExporting(exportState)) return exportNeedsYou(exportState, caps);
   if (pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') return caps.includes(CAP.review);
   if (pkg.status === 'PENDING_FINAL_APPROVAL') return caps.includes(CAP.approve);
   if (pkg.status === 'FAILED') return caps.includes(CAP.technicalRetry) || caps.includes(CAP.review);
@@ -237,6 +242,63 @@ export function useCaseFields(caps: string[], packages: PackageSummary[] | undef
     for (const id of pkg.businessIdentifiers) if (!seen.has(id.label)) seen.set(id.label, { label: id.label, primary: id.primary, searchable: id.searchable });
   }
   return [...seen.values()];
+}
+
+/* ---------- Export jobs (task 0029) ----------
+   Each answer is checked; an answer this screen does not understand (an older server, inline mode's empty answers) is an
+   error, so the nav item, badge or box it feeds stays hidden (fail closed). */
+
+const isWaitingForYou = (v: unknown) => isRecord(v) && typeof v.total === 'number' && Array.isArray(v.destinations);
+const isNeedsIt = (v: unknown) => isRecord(v) && typeof v.total === 'number' && Array.isArray(v.groups);
+
+/**
+ * The top bar's nav item and badge check the answer quietly: an answer they do not understand hides them without
+ * logging an error on every screen (an older server, a mock). The screens themselves use the logging check.
+ */
+async function quietly<T>(answer: Promise<T>, isExpected: (value: unknown) => boolean): Promise<T | null> {
+  const value = await answer;
+  return isExpected(value) ? value : null;
+}
+
+export function useWaitingForYou(enabled: boolean, badge = false) {
+  return useSWR(enabled ? (badge ? 'export-waiting-for-you-badge' : 'export-waiting-for-you') : null,
+    () => (badge ? quietly<WaitingForYou>(apiClient.getWaitingForYou(), isWaitingForYou)
+      : checked<WaitingForYou>('GET /export-jobs/waiting-for-you', apiClient.getWaitingForYou(), isWaitingForYou)),
+    { refreshInterval: 10000, shouldRetryOnError: false });
+}
+
+export function useCaseExport(packageId: string | undefined, enabled: boolean) {
+  return useSWR(packageId && enabled ? ['case-export', packageId] : null,
+    () => checked<CaseExport>(`GET /packages/${packageId}/export-jobs`, apiClient.getCaseExport(packageId as string),
+      (v) => isRecord(v) && typeof v.exportState === 'string' && Array.isArray(v.jobs)),
+    { refreshInterval: 5000, shouldRetryOnError: false });
+}
+
+export function useExportNeedsIt(enabled: boolean, badge = false) {
+  return useSWR(enabled ? (badge ? 'export-needs-it-badge' : 'export-needs-it') : null,
+    () => (badge ? quietly<NeedsIt>(apiClient.getExportNeedsIt(), isNeedsIt)
+      : checked<NeedsIt>('GET /support/export-jobs/needs-it', apiClient.getExportNeedsIt(), isNeedsIt)),
+    { refreshInterval: 15000, shouldRetryOnError: false });
+}
+
+export function useExportDestinations(enabled: boolean) {
+  return useSWR(enabled ? 'export-destinations' : null,
+    () => checked<ExportDestinationView[]>('GET /support/export-destinations', apiClient.getExportDestinations(),
+      isArrayOf((d) => isRecord(d) && typeof d.destinationId === 'string' && typeof d.state === 'string')),
+    { refreshInterval: 15000, shouldRetryOnError: false });
+}
+
+export function useExportAlert(enabled: boolean) {
+  return useSWR(enabled ? 'export-alert' : null,
+    () => checked<ReachabilityAlert>('GET /support/export-destinations/alert', apiClient.getExportAlert(), (v) => isRecord(v) && typeof v.raised === 'boolean'),
+    { refreshInterval: 15000, shouldRetryOnError: false });
+}
+
+/** A case's name and documents for a row that only has its id (Waiting for you, Support): fetched once, not refreshed. */
+export function useCaseBrief(packageId: string | undefined) {
+  return useSWR(packageId ? ['case-brief', packageId] : null,
+    () => checked<PackageDetail>(`GET /packages/${packageId}`, apiClient.getPackage(packageId as string), (v) => isRecord(v) && typeof v.packageId === 'string'),
+    { revalidateOnFocus: false, shouldRetryOnError: false });
 }
 
 export function openFindingsByPackage(items: FocusedReviewItem[] | undefined): Map<string, FocusedReviewItem[]> {

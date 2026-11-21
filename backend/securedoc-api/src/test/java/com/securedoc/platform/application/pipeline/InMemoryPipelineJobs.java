@@ -265,4 +265,13 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
                 && Objects.equals(destinationId, j.destinationId()) && j.status() == PipelineJobStatus.NEEDS_IT
                 && lvCode.equals(j.lastLvCode()) && !j.id().equals(exceptJobId)).count();
     }
+
+    @Override
+    public synchronized Map<UUID, Integer> countOpenByDestination(TenantId tenantId) {
+        Map<UUID, Integer> counts = new LinkedHashMap<>();
+        rows.values().stream().filter(j -> j.tenantId().equals(tenantId) && j.destinationId() != null
+                        && j.status().open() && j.stage().isExport())
+                .forEach(j -> counts.merge(j.destinationId().value(), 1, Integer::sum));
+        return counts;
+    }
 }

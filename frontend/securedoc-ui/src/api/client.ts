@@ -4,6 +4,9 @@ import { selectedOidcTenant, oidcTenantContextRevision } from './tenantContext';
 import { beginWrite } from './pendingWork';
 import type { PolicyEstimate } from '../studio/admin/policyRules';
 import type {
+  CaseExport, DestinationView as ExportDestinationView, NeedsIt, ReachabilityAlert, RetentionSettings, WaitingForYou,
+} from '../studio/exportRules';
+import type {
   PackageSummary,
   PackageDetail,
   CreatePackageRequest,
@@ -501,6 +504,56 @@ class ApiClient {
 
   async listPackages(): Promise<PackageSummary[]> {
     return this.request('/packages');
+  }
+
+  // --- Export jobs (tasks 0027/0028 API, task 0029 screens) ---
+
+  async getWaitingForYou(): Promise<WaitingForYou> {
+    return this.request('/export-jobs/waiting-for-you');
+  }
+
+  async resendExportJobs(jobIds: string[]): Promise<Array<{ jobId: string; status: string | null; lvCode: string | null; saved: boolean }>> {
+    return this.request('/export-jobs/resend', { method: 'POST', body: JSON.stringify({ jobIds }) });
+  }
+
+  async resendAllExportJobs(destinationId: string): Promise<{ destinationId: string; queued: number; jobIds: string[] }> {
+    return this.request('/export-jobs/resend-all', { method: 'POST', body: JSON.stringify({ destinationId }) });
+  }
+
+  async getCaseExport(packageId: string): Promise<CaseExport> {
+    return this.request(`/packages/${packageId}/export-jobs`);
+  }
+
+  async getExportNeedsIt(): Promise<NeedsIt> {
+    return this.request('/support/export-jobs/needs-it');
+  }
+
+  async getExportDestinations(): Promise<ExportDestinationView[]> {
+    return this.request('/support/export-destinations');
+  }
+
+  async getExportAlert(): Promise<ReachabilityAlert> {
+    return this.request('/support/export-destinations/alert');
+  }
+
+  async retryExportGroup(destinationId: string | null, code: string): Promise<Array<{ jobId: string; status: string | null }>> {
+    return this.request('/support/export-jobs/retry-group', { method: 'POST', body: JSON.stringify({ destinationId, code }) });
+  }
+
+  async setExportDestinationWorking(destinationId: string): Promise<{ destinationId: string; state: string }> {
+    return this.request(`/support/export-destinations/${destinationId}/working`, { method: 'POST' });
+  }
+
+  async checkExportDestinationNow(destinationId: string): Promise<{ destinationId: string; passed: boolean; resumed: boolean; state: string }> {
+    return this.request(`/support/export-destinations/${destinationId}/check`, { method: 'POST' });
+  }
+
+  async getExportRetention(): Promise<RetentionSettings> {
+    return this.request('/business-admin/export-retention');
+  }
+
+  async updateExportRetention(body: { masterHours: number | null; splitDestinations: Array<{ destinationId: string; hours: number | null }> }): Promise<RetentionSettings> {
+    return this.request('/business-admin/export-retention', { method: 'PUT', body: JSON.stringify(body) });
   }
 
   async getPackage(packageId: string): Promise<PackageDetail> {

@@ -10,6 +10,7 @@ import com.securedoc.platform.domain.pipeline.PipelineStage;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -108,6 +109,9 @@ public interface PipelineJobRepository {
 
     /** NEEDS_IT jobs of this destination with this code, other than {@code exceptJobId} (the grouped IT alert). */
     int countNeedsIt(TenantId tenantId, IntegrationConnectionId destinationId, String lvCode, UUID exceptJobId);
+
+    /** Task 0029: the tenant's export jobs still to be done (not DONE or STOPPED), counted per destination id. */
+    Map<UUID, Integer> countOpenByDestination(TenantId tenantId);
 
     /**
      * A worker's result.
