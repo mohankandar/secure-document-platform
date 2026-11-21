@@ -146,3 +146,12 @@ During development some of my new tests failed on test mistakes (Mockito stubbin
 
 ## Suggested next step
 The design chat reviews and merges `feature/0027-export-job`, then task 0028 (the screens). Before turning `job` on anywhere, one run with `export-mode=job` against Vero R7 with Vero stopped mid-run.
+
+## Owner's answers (2026-11-21, recorded by the design chat)
+
+1. **Who may resend:** the **Processor** (and Supervisor). A new capability for resend; approving delivery stays Supervisor only. Task 0028.
+2. **Pausing a destination: decided by evidence, not by counting.** On can't-connect, timeout or 5xx, LexaVault runs the destination's health check at once: check fails → pause, check every 5 minutes, resume on its own in order; check passes → it's this case. 429 → slow down for that destination (Retry-After), no attempt used, no pause. Every destination failing its check at once → LexaVault's own network: one alert, nothing paused or blamed. Backup only: several different cases failing in a short time while the check passes → pause ("answering but failing"). Task 0028.
+3. **A single failing case (destination healthy):** retries on its own about 5 min, 15 min, 1 h, 4 h and 12 h apart, is rebuilt once from the stored redacted copies before a later retry, then goes to IT. **IT alerts are grouped** per destination and problem with one "Retry all". Task 0028.
+4. **Status name:** **"Exporting"**, with the detail: ready / destination paused / waiting for you / needs IT. Replaces "In review" for a reviewed case waiting to go out. Task 0029 (screens).
+5. **Retention per destination:** the main export and each split destination have their own retention period, set by the Business Admin; each clock starts when that destination confirms receipt; nothing is deleted while its export job is open. Task 0028.
+6. **Screens:** as on the design canvas "LexaVault · Export screens" (https://claude.ai/artifact/DQQMWiPS4N8JkUTDBLPcTG), approved: Waiting for you grouped by destination with one "Resend all" per group and no per-row buttons; Resend all confirmation; Exporting status in the Cases list and case panel with one "Resend this case"; Support with grouped IT alerts and destination states. Task 0029.
