@@ -6,7 +6,7 @@ import {
   CAP, LIFECYCLE, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf,
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
-import { CASE_GROUPS, NAV, caseSearchPlaceholders, firstThatFits } from './words';
+import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits } from './words';
 import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
 import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
 import CaseDrawer from './CaseDrawer';
@@ -140,7 +140,7 @@ export default function Desk({ caps }: { caps: string[] }) {
                   {counts.you > 0
                     ? <><mark className="cf-mark-text">{counts.you} {counts.you === 1 ? 'case needs' : 'cases need'} you</mark>{' · '}</>
                     : 'Nothing is waiting on you · '}
-                  {total - deliveredCount} open · {deliveredCount} delivered
+                  {total - deliveredCount} open · {deliveredCount} {STAGE_NAMES.delivered.toLowerCase()}
                 </>
               )}
             </p>

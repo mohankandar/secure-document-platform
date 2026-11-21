@@ -4,10 +4,10 @@ import { NavLink } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import { CAP, caseTitle, errorMessage, useCaseBrief, useExportAlert, useExportDestinations, useExportNeedsIt } from '../data';
 import { Notice, Spinner } from '../atoms';
-import { LoadErrorCard } from '../failure';
+import { LoadErrorCard, TechnicalDetails } from '../failure';
 import { useToast } from '../toast';
 import {
-  SUPPORT_EXPORT_WORDS as W, destinationKind, destinationLabel, destinationStateWords, isSignInGroup, itGroupTitle, reasonLabel,
+  SUPPORT_EXPORT_WORDS as W, DESTINATION_CODE_LABEL, destinationCodesOf, destinationKind, destinationLabel, destinationStateWords, isSignInGroup, itGroupTitle, reasonLabel,
   retryAllLabel, signInBody, signInTitle, supportBadgeCount, triedLine, waitingText, type DestinationView, type ItGroup,
 } from '../exportRules';
 import './support.css';
@@ -119,6 +119,7 @@ function ItCard({ group, now, canRetry, waiting, onDone }: { group: ItGroup; now
   }
 
   const label = reasonLabel(group.lvCode);
+  const codes = destinationCodesOf(group.jobs ?? []);
   return (
     <article className="cf-sx-it" aria-label={signIn ? signInTitle(group.destinationName) : itGroupTitle(group, now)} data-testid="it-group">
       <div className="cf-sx-it-text">
@@ -128,6 +129,13 @@ function ItCard({ group, now, canRetry, waiting, onDone }: { group: ItGroup; now
           {signIn ? signInBody(Math.max(waiting, group.count)) : tried}
           {!signIn && <>{tried ? ' ' : ''}Cases {group.caseIds.map((id, i) => <span key={id}>{i > 0 && ', '}<CaseName packageId={id} /></span>)}.</>}
         </p>
+        {codes.length > 0 && (
+          <TechnicalDetails>
+            <ul className="cf-sx-codes" data-testid="it-destination-codes">
+              {codes.map((code) => <li key={code}>{DESTINATION_CODE_LABEL} <code className="cf-code">{code}</code></li>)}
+            </ul>
+          </TechnicalDetails>
+        )}
         {problem && <Notice tone="danger">{problem}</Notice>}
       </div>
       {canRetry && (

@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Request } from '@playwright/test';
 import { ENTITY, EXPORT_CASES, go, mockApi, mockIdentityProvider, signInAs } from '../e2e-a11y/harness';
-import { ARCHIVE, TITLE_CO, VAULT, retentionSettings } from './exportFixtures';
+import { ARCHIVE, TITLE_CO, VAULT, chipProblems, panelLineProblems, retentionSettings } from './exportFixtures';
 import { capabilitiesFor } from './policyCapabilities';
 
 /**
@@ -106,6 +106,10 @@ test.describe('Waiting for you (Processor and Supervisor)', () => {
 
     await panel.getByText('Technical details').first().click();
     await expect(panel.getByTestId('export-technical')).toContainText('DELIVERY_SENSITIVITY_REFUSED');
+    // Task 0030: the destination's own code, next to LexaVault's reason ("Destination code" | "SDV-SEN-006").
+    await expect(panel.getByTestId('export-destination-code').locator('dt')).toHaveText('Destination code');
+    await expect(panel.getByTestId('export-destination-code').locator('dd')).toHaveText('SDV-SEN-006');
+    await expect(panel.getByTestId('export-technical')).not.toContainText('destination=');
 
     await box.getByRole('button', { name: 'Resend this case' }).click();
     await expect(page.locator('.cf-toast')).toHaveText('Sent again.');
@@ -186,11 +190,44 @@ test.describe('The "Exporting" status', () => {
     });
   }
 
-  test('an exported case reads Delivered at the end of the stage strip', async ({ page }) => {
+  test('an exported case reads Exported at the end of the stage strip and in the heading (task 0030: one word)', async ({ page }) => {
     await signInAs(page, 'processor', `/case/${caseOf('LN-6985').packageId}`, { exports: true });
-    const steps = page.getByRole('complementary', { name: 'Case panel' }).getByRole('list', { name: 'Stages' }).getByRole('listitem');
-    await expect(steps.last()).toHaveText('Delivered');
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    const steps = panel.getByRole('list', { name: 'Stages' }).getByRole('listitem');
+    await expect(steps.last()).toHaveText('Exported');
+    await expect(panel).not.toContainText('Delivered');
+    // The Cases list names finished cases the same way: the chips, the stage tiles and the line under the title.
+    await expect(page.locator('.cf-lede')).toContainText(/\d+ exported$/);
+    await expect(page.locator('.cf-desk-main')).not.toContainText('Delivered');
   });
+
+  test('a destination code that is not safe is not shown; the reason still is (task 0030)', async ({ page }) => {
+    await signInAs(page, 'processor', `/case/${caseOf('LN-7011').packageId}`, { exports: true });
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await panel.getByText('Technical details').first().click();
+    await expect(panel.getByTestId('export-technical')).toContainText('DELIVERY_SENSITIVITY_REFUSED');
+    await expect(panel.getByTestId('export-destination-code')).toHaveCount(0);
+    await expect(panel.getByTestId('export-technical')).not.toContainText('SEN 006');
+  });
+
+  // Task 0030: every chip on one line, whole and inside its column, at 1440 and 1024, with and without the case panel.
+  for (const width of [1440, 1024]) {
+    for (const withPanel of [false, true]) {
+      test(`status chips stay on one line at ${width} px${withPanel ? ' with the case panel open' : ''}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: width > 1024 ? 900 : 768 });
+        await signInAs(page, 'processor', withPanel ? `/case/${caseOf('LN-7015').packageId}` : '/', { exports: true });
+        await expect(page.locator(`#cf-row-${caseOf('LN-7015').packageId} .cf-case-stage`)).toHaveText('Exporting · destination paused');
+        for (const loan of ['LN-7020', 'LN-7015', 'LN-7004', 'LN-6990', 'LN-6985']) {
+          await expect(page.locator(`#cf-row-${caseOf(loan).packageId} .cf-case-stage .cf-stage`)).toBeVisible();
+        }
+        expect(await chipProblems(page)).toEqual([]);
+        if (withPanel) {
+          await expect(page.getByRole('complementary', { name: 'Case panel' }).locator('.cf-export-step .cf-eyebrow')).toHaveText('Exporting · destination paused');
+          expect(await panelLineProblems(page)).toEqual([]);
+        }
+      });
+    }
+  }
 });
 
 test.describe('Support (IT Admin): export', () => {
@@ -214,6 +251,10 @@ test.describe('Support (IT Admin): export', () => {
     await expect(cards.nth(0)).toContainText("Destination's answer not understood · LV-DLV-007");
     await expect(cards.nth(0)).toContainText('The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.');
     await expect(cards.nth(0)).toContainText('Cases LN-6990.');
+    // Task 0030: the destination's own code under Technical details.
+    await cards.nth(0).getByText('Technical details').click();
+    await expect(cards.nth(0).getByTestId('it-destination-codes')).toHaveText('Destination code SDV-SUB-017');
+    await expect(cards.nth(1).getByTestId('it-destination-codes')).toHaveCount(0);
     await expect(cards.nth(1)).toContainText('Title company refused LexaVault’s sign-in');
     await expect(cards.nth(1)).toContainText('Exports to it are on hold: 12 waiting, nothing lost. Fix the credential in Admin › Integrations, then set it back to working.');
 

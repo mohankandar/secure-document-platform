@@ -115,6 +115,39 @@ class SdvDeliveryAdapterSensitivityTest {
         assertNull(failure.failureCode().publicCode());
     }
 
+    /** Task 0030: the destination's own code goes with the failure; an unsafe one is dropped. */
+    @Test
+    void theDestinationsOwnCodeGoesWithTheFailureOnlyWhenSafe() throws Exception {
+        String[][] answers = {
+                {"{\"code\":\"SDV-SEN-006\",\"message\":\"no\"}", "SDV-SEN-006"},
+                {"{\"code\":\"<b>SDV-SEN-006</b>\",\"message\":\"no\"}", null},
+                {"{\"code\":\"SDV-SEN-" + "9".repeat(40) + "\"}", null},
+                {"{\"message\":\"no code\"}", null},
+        };
+        for (String[] answer : answers) {
+            boolean sensitivity = answer[0].contains("\"code\":\"SDV-SEN-");
+            SdvDeliveryAdapter adapter = adapter(new ArrayList<>(), new ArrayDeque<>(List.of(response(400, answer[0]))), 0);
+            TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
+                    () -> adapter.deliverBatch(batch(SensitivityLevel.CONFIDENTIAL, item("src-1", SensitivityLevel.STANDARD))));
+            assertEquals(sensitivity ? TechnicalFailureCode.DELIVERY_SENSITIVITY_REFUSED
+                    : TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, failure.failureCode(), answer[0]);
+            assertEquals(answer[1], failure.destinationCode(), answer[0]);
+        }
+        // Any other answer that is not 2xx carries its code too (here a refused upload, LV-DLV-004).
+        SdvDeliveryAdapter adapter = adapter(new ArrayList<>(), new ArrayDeque<>(List.of(
+                response(201, "{\"submissionId\":\"sdv-sub-1\"}"),
+                response(422, "{\"code\":\"SDV-DOC-014\",\"message\":\"x\"}"))), 0);
+        TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
+                () -> adapter.deliverBatch(batch(SensitivityLevel.STANDARD, item("src-1", SensitivityLevel.STANDARD))));
+        assertEquals("LV-DLV-004", failure.lvCode().code());
+        assertEquals("SDV-DOC-014", failure.destinationCode());
+        // An answer that is not JSON carries no code.
+        SdvDeliveryAdapter plain = adapter(new ArrayList<>(), new ArrayDeque<>(List.of(response(400, "<html>no</html>"))), 0);
+        assertNull(assertThrows(TechnicalDependencyException.class,
+                () -> plain.deliverBatch(batch(SensitivityLevel.STANDARD, item("src-1", SensitivityLevel.STANDARD))))
+                .destinationCode());
+    }
+
     private SdvDeliveryAdapter adapter(List<HttpRequest> requests, Deque<HttpResponse<String>> responses, int retries) throws Exception {
         HttpClient client = mock(HttpClient.class);
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(invocation -> {

@@ -1593,16 +1593,16 @@ Reserved: not used yet.
 2. Fix that step (address, sign-in, network, or the other system itself).
 3. Run the test again.
 
-### LV-CFG-005 More than one Vero connection
+### LV-CFG-005 More than one main export destination
 
-- **Means:** Only one enabled Vero connection is allowed per entity.
+- **Means:** Only one enabled main export destination is allowed per entity.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 409
 
 **What to do:**
 
-1. Under Integrations, decide which Vero connection this entity should use.
+1. Under Integrations, decide which connection is this entity's main export destination.
 2. Switch the other one off.
 3. Save again.
 

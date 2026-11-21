@@ -24,9 +24,9 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
   PENDING_REVIEW: { stage: 'review', label: 'Needs review', detail: 'Uncertain findings need a person to decide.' },
   IN_REVIEW: { stage: 'review', label: 'In review', detail: 'A reviewer is working on this case.' },
   PENDING_FINAL_APPROVAL: { stage: 'approval', label: 'Awaiting approval', detail: 'Redaction is done. Delivery needs a final sign-off.' },
-  COMPLETED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
-  EXPORTED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
-  DELIVERED: { stage: 'delivered', label: 'Delivered', detail: 'Processing and delivery completed.' },
+  COMPLETED: { stage: 'delivered', label: STAGE_NAMES.delivered, detail: 'Processing and export completed.' },
+  EXPORTED: { stage: 'delivered', label: STAGE_NAMES.delivered, detail: 'Processing and export completed.' },
+  DELIVERED: { stage: 'delivered', label: STAGE_NAMES.delivered, detail: 'Processing and export completed.' },
   FAILED: { stage: 'stopped', label: 'Stopped', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
   REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'The source was rejected and will not be processed.' },
 };

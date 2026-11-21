@@ -60,7 +60,7 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
         addMetadataHeader(b,CASE_SENSITIVITY_HEADER,r.metadata().get(DerivedDestinationDeliveryPort.CASE_SENSITIVITY_LEVEL));
         HttpResponse<String> resp=send(b.POST(HttpRequest.BodyPublishers.ofInputStream(r.contentSource()::open)).build(),HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         try{ require2xx(resp.statusCode(),"Derived HTTP delivery failed"); }
-        catch(TechnicalDependencyException e){ throw com.securedoc.platform.infrastructure.delivery.RetryAfter.mark(e,resp); } // task 0028: a 429 keeps its Retry-After
+        catch(TechnicalDependencyException e){ throw com.securedoc.platform.infrastructure.delivery.RetryAfter.mark(e,resp).withDestinationCode(destinationCode(resp)); } // task 0028: a 429 keeps its Retry-After; task 0030: the destination's own code (safe pattern only)
         String ref=null;
         try{
             if(resp.body()!=null&&!resp.body().isBlank()){
@@ -100,6 +100,12 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
     private void deleteTempBestEffort(IntegrationConnection c,DeliveryRequest r,Path temp){
         try{Files.deleteIfExists(temp);}
         catch(IOException e){log.warn("DERIVED_FILE_SHARE_TEMP_CLEANUP_FAILED connection={} derivedDocument={} type={}",c.id(),r.sourceDerivedDocumentId(),e.getClass().getSimpleName());}
+    }
+    /** Task 0030: the {@code code} field of a JSON answer, or null when there is none or it can't be read. */
+    private String destinationCode(HttpResponse<String> resp){
+        if(resp.body()==null||resp.body().isBlank())return null;
+        try{JsonNode code=mapper.readTree(resp.body()).get("code");return code==null||code.isNull()||!code.isValueNode()?null:code.asText();}
+        catch(Exception unreadable){return null;}
     }
     private void addMetadataHeader(HttpRequest.Builder b,String name,String value){if(value!=null&&!value.isBlank())b.header(name,safeHeader(value));}
     private void forceDirectory(IntegrationConnection c,Path root){try(FileChannel dir=FileChannel.open(root,StandardOpenOption.READ)){dir.force(true);}catch(IOException|UnsupportedOperationException e){/* best-effort directory metadata sync after file fsync + move (Windows cannot open a directory) */log.debug("DERIVED_FILE_SHARE_DIRECTORY_SYNC_SKIPPED connection={} type={}",c.id(),e.getClass().getSimpleName());}}

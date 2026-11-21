@@ -54,6 +54,33 @@ class DerivedDestinationDeliveryAdapterTest {
         assertEquals("derived-123", captured[0].headers().firstValue("Idempotency-Key").orElseThrow());
     }
 
+    /** Task 0030: a refusal carries the destination's own code from its answer; an unsafe one is dropped. */
+    @Test
+    void aRefusalCarriesTheDestinationsOwnCodeOnlyWhenSafe() throws Exception {
+        String[][] answers = {
+                {"400", "{\"code\":\"TC-REFUSED_17\",\"message\":\"no\"}", "TC-REFUSED_17"},
+                {"503", "{\"code\":\"TC-BUSY\"}", "TC-BUSY"},
+                {"400", "{\"code\":\"<script>alert(1)</script>\"}", null},
+                {"400", "{\"code\":\"" + "x".repeat(41) + "\"}", null},
+                {"400", "{\"code\":{\"nested\":\"TC-1\"}}", null},
+                {"400", "not json", null},
+                {"400", "", null},
+        };
+        for (String[] answer : answers) {
+            HttpClient client = mock(HttpClient.class);
+            @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
+            when(response.statusCode()).thenReturn(Integer.parseInt(answer[0]));
+            when(response.body()).thenReturn(answer[1]);
+            when(response.headers()).thenReturn(HttpHeaders.of(Map.of(), (a, b) -> true));
+            when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+            var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client, true);
+
+            TechnicalDependencyException ex = assertThrows(TechnicalDependencyException.class,
+                    () -> adapter.deliver(httpConnection("https://example.test/derived"), request()));
+            assertEquals(answer[2], ex.destinationCode(), answer[1]);
+        }
+    }
+
     /** Task 0021: a split document carries its source document's level and the case level to an HTTP destination. */
     @Test
     void httpDeliveryCarriesTheSourceDocumentAndCaseLevels() throws Exception {
