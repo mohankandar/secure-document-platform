@@ -235,3 +235,10 @@ Nothing pushed.
 - Owner: run the step 0 merge.
 - Then merge `feature/0023-leaks-and-silent-failures` into R1B after review.
 - The design chat can design the `LV-` codes on top of the codes introduced here: `REVIEW_ALREADY_DECIDED`, `TENANT_INACTIVE`, `PROCESSING_*`, `REDACTION_*`, `ROUTING_*` / `DERIVED_*`, the `IntakeRejectionCode` additions, and `MISSING_HEADER` and the other binding codes.
+
+## Owner's answers (2026-11-20, recorded by the design chat)
+
+1. **The ~22 throws in the Enterprise Identity R1 screens using the new exception type:** keep them (approved after the fact). Messages and status codes are unchanged.
+2. **Scan Bridge and 429:** retry 429 within the cap of 3, waiting as long as `Retry-After` asks (with a sensible upper bound). Other 4xx stay not retried. Task 0024.
+3. **"Acceptance pending":** must not count toward the failure cap. It waits up to a time limit (default 10 minutes, configurable), then the item needs a person. Task 0024.
+4. **Lost processing lease (#342):** not its own task; folded into the staged pipeline design, which replaces the lease mechanism.
