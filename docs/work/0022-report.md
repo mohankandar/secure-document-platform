@@ -122,7 +122,7 @@ No failures in the final runs.
 
 - `03e1299` docs(work): 0021 and U028 owner's answers; task 0022 (on `feature/sensitivity-levels`)
 - `c486fac` Merge branch 'feature/sensitivity-levels' into feature/lexavault-r1b-tenant-identity
-- COMMIT_0022 (on `feature/0022-followups-and-failure-inventory`)
+- `4608e51` feat: 0022 follow-ups (case panel level, local-folder audit levels, entity chooser dark mode) and failure inventory (on `feature/0022-followups-and-failure-inventory`), plus a docs commit adding this hash to the report
 
 Nothing pushed. No merge beyond step 0.
 
