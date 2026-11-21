@@ -32,7 +32,13 @@ public record ScanSession(
         Instant lastDeliveryErrorAt,
         Instant submittedAt,
         /** Task 0021: the case level chosen on New case, carried to LexaVault as sent (null when none). */
-        String caseSensitivityLevel
+        String caseSensitivityLevel,
+        /**
+         * Task 0024: start of the current wait for LexaVault to accept a document it already has; null when
+         * not waiting. Waiting does not count toward the automatic retry cap; it is bounded by
+         * {@code delivery.acceptance-wait-limit-seconds} instead.
+         */
+        Instant acceptancePendingSince
 ) {
     public ScanSession {
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);

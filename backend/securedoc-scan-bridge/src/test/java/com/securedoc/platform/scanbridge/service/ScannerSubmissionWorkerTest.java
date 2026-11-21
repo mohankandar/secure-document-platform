@@ -204,26 +204,6 @@ class ScannerSubmissionWorkerTest {
         assertEquals(ScanSessionStatus.QUEUED, f.sessions.get(session.sessionId()).status());
     }
 
-    @Test
-    void acceptancePendingIsAlsoCappedAndThenNeedsAttention() throws Exception {
-        Fixture f = fixture();
-        var session = readySession(f);
-        f.sessions.queueForSubmission(session.sessionId());
-        UUID packageId = UUID.randomUUID();
-        when(f.client.createIntake(any(), eq(false))).thenReturn(
-                new LexaVaultScannerDeliveryClient.IntakeStatus(packageId, "AWAITING_DOCUMENTS", "CREATED"));
-        when(f.client.upload(any(), any())).thenReturn(
-                new LexaVaultScannerDeliveryClient.DocumentReceipt(packageId, "UPLOADED", false));
-        when(f.client.status(packageId)).thenReturn(
-                new LexaVaultScannerDeliveryClient.IntakeStatus(packageId, "AWAITING_DOCUMENTS", "CREATED"));
-
-        for (int i = 0; i <= ScannerSubmissionWorker.MAX_AUTOMATIC_RETRIES; i++) f.worker.deliverOne(session.sessionId());
-
-        var attention = f.sessions.get(session.sessionId());
-        assertEquals(ScanSessionStatus.ATTENTION_REQUIRED, attention.status());
-        assertEquals("LEXAVAULT_ACCEPTANCE_PENDING", attention.lastDeliveryErrorCode());
-    }
-
     private com.securedoc.platform.scanbridge.model.ScanSession readySession(Fixture f) throws Exception {
         var waiting = f.sessions.start(new StartScanSessionRequest(Map.of("contract_number", "000900009901")));
         Path pdf = f.store.sessionDirectory(waiting.sessionId()).resolve("scan.pdf");

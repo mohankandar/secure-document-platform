@@ -95,7 +95,7 @@ public class ScanSessionService {
                 UUID.randomUUID(), UUID.randomUUID(), properties.getTenantId(), properties.getBridgeId(), properties.getSiteId(),
                 properties.getScannerId(), properties.getMode(), ScanSessionStatus.WAITING_FOR_SCAN, identifiers,
                 now, now, null, null, 0, null, null, null, null, null,
-                carriedSensitivityLevel(request == null ? null : request.caseSensitivityLevel()));
+                carriedSensitivityLevel(request == null ? null : request.caseSensitivityLevel()), null);
         store.save(session);
         sessions.put(session.sessionId(), session);
         actionableSessionId.set(session.sessionId());
@@ -228,6 +228,23 @@ public class ScanSessionService {
         return queued;
     }
 
+    /**
+     * Task 0024: LexaVault has the document but has not accepted it yet. This is waiting, not a failure: the
+     * attempt that found it is taken back off the count, and the start of the wait is kept so the worker can
+     * bound it with {@code delivery.acceptance-wait-limit-seconds}.
+     */
+    public synchronized ScanSession waitForAcceptance(UUID sessionId, String safeCode, Instant nextAttemptAt) {
+        ScanSession existing = get(sessionId);
+        Instant now = clock.instant();
+        Instant since = existing.acceptancePendingSince() == null ? now : existing.acceptancePendingSince();
+        ScanSession queued = copy(existing, ScanSessionStatus.QUEUED, existing.businessIdentifiers(), existing.preparedScan(),
+                existing.lexavaultPackageId(), Math.max(0, existing.deliveryAttemptCount() - 1), existing.queuedAt(),
+                nextAttemptAt, safeCode, now, existing.submittedAt(), since);
+        store.save(queued);
+        sessions.put(sessionId, queued);
+        return queued;
+    }
+
     public synchronized ScanSession markAttentionRequired(UUID sessionId, String safeErrorCode) {
         ScanSession existing = get(sessionId);
         ScanSession attention = copy(existing, ScanSessionStatus.ATTENTION_REQUIRED, existing.businessIdentifiers(), existing.preparedScan(),
@@ -250,7 +267,7 @@ public class ScanSessionService {
         // Scrub business identifiers as part of the durable success transition. The PDF is disposed only after
         // this durable record proves that LexaVault owns the package.
         ScanSession submitted = copy(existing, ScanSessionStatus.SUBMITTED, Map.of(), existing.preparedScan(), packageId,
-                existing.deliveryAttemptCount(), existing.queuedAt(), null, null, null, now);
+                existing.deliveryAttemptCount(), existing.queuedAt(), null, null, null, now, null);
         store.save(submitted);
         sessions.put(sessionId, submitted);
         actionableSessionId.compareAndSet(sessionId, null);
@@ -346,7 +363,7 @@ public class ScanSessionService {
         ScanSession queued = copy(existing, ScanSessionStatus.QUEUED, existing.businessIdentifiers(),
                 existing.preparedScan(), existing.lexavaultPackageId(), 0,
                 existing.queuedAt() == null ? now : existing.queuedAt(), now,
-                existing.lastDeliveryErrorCode(), existing.lastDeliveryErrorAt(), existing.submittedAt());
+                existing.lastDeliveryErrorCode(), existing.lastDeliveryErrorAt(), existing.submittedAt(), null);
         store.save(queued);
         sessions.put(sessionId, queued);
         log.info("SCAN_BRIDGE_DELIVERY_REQUEUED bridgeId={} siteId={} scannerId={} sessionId={} submissionId={} priorReasonCode={}",
@@ -452,10 +469,18 @@ public class ScanSessionService {
     private ScanSession copy(ScanSession existing, ScanSessionStatus status, Map<String, String> identifiers,
                              PreparedScan preparedScan, UUID packageId, int attempts, Instant queuedAt,
                              Instant nextAttemptAt, String errorCode, Instant errorAt, Instant submittedAt) {
+        return copy(existing, status, identifiers, preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode,
+                errorAt, submittedAt, existing.acceptancePendingSince());
+    }
+
+    private ScanSession copy(ScanSession existing, ScanSessionStatus status, Map<String, String> identifiers,
+                             PreparedScan preparedScan, UUID packageId, int attempts, Instant queuedAt,
+                             Instant nextAttemptAt, String errorCode, Instant errorAt, Instant submittedAt,
+                             Instant acceptancePendingSince) {
         return new ScanSession(existing.sessionId(), existing.submissionId(), existing.tenantId(), existing.bridgeId(),
                 existing.siteId(), existing.scannerId(), existing.captureMode(), status, identifiers, existing.createdAt(),
                 clock.instant(), preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode, errorAt, submittedAt,
-                existing.caseSensitivityLevel());
+                existing.caseSensitivityLevel(), acceptancePendingSince);
     }
 
     /** Transport safety only (task 0021): a level is a short name, so anything longer is cut; LexaVault reads the value. */

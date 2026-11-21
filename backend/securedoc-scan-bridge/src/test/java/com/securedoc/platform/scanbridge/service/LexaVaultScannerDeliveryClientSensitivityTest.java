@@ -47,7 +47,7 @@ class LexaVaultScannerDeliveryClientSensitivityTest {
                     "BRIDGE-1", "SITE-1", "SCANNER-1", ScannerCaptureMode.SIMULATOR, ScanSessionStatus.QUEUED,
                     Map.of("contractNumber", "1"), now, now,
                     new PreparedScan(UUID.randomUUID(), "scan.pdf", 10, "a".repeat(64), now, "x/scan.pdf"),
-                    null, 0, now, null, null, null, null, level);
+                    null, 0, now, null, null, null, null, level, null);
             new LexaVaultScannerDeliveryClient(properties, mapper).createIntake(session, false);
             return mapper.readTree(received.get());
         } finally {

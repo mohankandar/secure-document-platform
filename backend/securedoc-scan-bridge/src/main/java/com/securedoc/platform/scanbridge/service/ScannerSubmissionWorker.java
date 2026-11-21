@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,6 +22,9 @@ public class ScannerSubmissionWorker {
     private static final Logger log = LoggerFactory.getLogger(ScannerSubmissionWorker.class);
     /** Automatic retries after the first attempt, counted since the item was last queued by a person. */
     static final int MAX_AUTOMATIC_RETRIES = 3;
+    static final String ACCEPTANCE_PENDING = "LEXAVAULT_ACCEPTANCE_PENDING";
+    /** Task 0024: shown to the person as the reference when LexaVault did not accept within the wait limit. */
+    static final String ACCEPTANCE_WAIT_EXPIRED = "LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED";
     private final ScanBridgeProperties properties;
     private final ScanSessionService sessions;
     private final ScanArtifactService artifacts;
@@ -113,10 +117,10 @@ public class ScannerSubmissionWorker {
             if (accepted(status.intakeStatus())) {
                 sessions.markSubmitted(current.sessionId(), status.packageId());
             } else {
-                scheduleRetry(current, "LEXAVAULT_ACCEPTANCE_PENDING");
+                waitForAcceptance(current);
             }
         } catch (LexaVaultScannerDeliveryClient.DeliveryException ex) {
-            if (ex.retryable()) scheduleRetry(sessions.get(sessionId), ex.safeCode());
+            if (ex.retryable()) scheduleRetry(sessions.get(sessionId), ex.safeCode(), ex.retryAfter());
             else sessions.markAttentionRequired(sessionId, ex.safeCode());
         } catch (RuntimeException ex) {
             // Unknown local/runtime errors are not blindly retried forever because they may indicate corrupt state.
@@ -125,7 +129,7 @@ public class ScannerSubmissionWorker {
         }
     }
 
-    private void scheduleRetry(ScanSession current, String reasonCode) {
+    private void scheduleRetry(ScanSession current, String reasonCode, Duration retryAfter) {
         // Task 0023 D2 (#82): retries are capped. After the first attempt and MAX_AUTOMATIC_RETRIES spaced
         // retries the item goes to ATTENTION_REQUIRED with its last code, where the scanner screen and the
         // delivery-items list show it to a person (manual retry: POST /delivery-items/{id}/retry).
@@ -135,18 +139,61 @@ public class ScannerSubmissionWorker {
             sessions.markAttentionRequired(current.sessionId(), reasonCode);
             return;
         }
-        int exponent = Math.min(20, Math.max(0, current.deliveryAttemptCount() - 1));
-        long initial = Math.max(250, properties.getDelivery().getRetryInitialDelayMs());
-        long max = Math.max(initial, properties.getDelivery().getRetryMaxDelayMs());
-        long factor = 1L << exponent;
+        // Task 0024: a 429 waits as long as LexaVault's Retry-After asks, up to retry-after-max-seconds.
+        // Without a usable Retry-After (missing, unreadable, zero or in the past) the normal spacing applies.
         long delay;
-        try { delay = Math.multiplyExact(initial, factor); }
-        catch (ArithmeticException ex) { delay = max; }
-        delay = Math.min(max, delay);
+        if (retryAfter != null && !retryAfter.isZero() && !retryAfter.isNegative()) {
+            long maxSeconds = Math.max(1, properties.getDelivery().getRetryAfterMaxSeconds());
+            delay = retryAfter.compareTo(Duration.ofSeconds(maxSeconds)) > 0
+                    ? maxSeconds * 1000L
+                    : retryAfter.toMillis();
+        } else {
+            delay = backoffMs(current.deliveryAttemptCount() - 1);
+        }
         Instant next = clock.instant().plusMillis(delay);
         sessions.scheduleRetry(current.sessionId(), reasonCode, next);
         log.warn("SCAN_BRIDGE_DELIVERY_RETRY_SCHEDULED sessionId={} submissionId={} reasonCode={} attempt={} retryDelayMs={}",
                 current.sessionId(), current.submissionId(), reasonCode, current.deliveryAttemptCount(), delay);
+    }
+
+    /**
+     * Task 0024: LexaVault has the document but has not accepted it. That is waiting, not a failure: it does
+     * not count toward MAX_AUTOMATIC_RETRIES. The item is re-checked with the normal spacing (initial delay,
+     * growing with the time already waited, up to the maximum delay) until acceptance-wait-limit-seconds since
+     * the wait began; then it needs a person.
+     */
+    private void waitForAcceptance(ScanSession current) {
+        Instant now = clock.instant();
+        Instant since = current.acceptancePendingSince() == null ? now : current.acceptancePendingSince();
+        Duration limit = Duration.ofSeconds(Math.max(1, properties.getDelivery().getAcceptanceWaitLimitSeconds()));
+        Instant deadline = since.plus(limit);
+        if (!now.isBefore(deadline)) {
+            log.warn("SCAN_BRIDGE_ACCEPTANCE_WAIT_EXPIRED sessionId={} submissionId={} packageId={} waitedSeconds={} limitSeconds={}",
+                    current.sessionId(), current.submissionId(), current.lexavaultPackageId(),
+                    Duration.between(since, now).toSeconds(), limit.toSeconds());
+            sessions.markAttentionRequired(current.sessionId(), ACCEPTANCE_WAIT_EXPIRED);
+            return;
+        }
+        long waitedMs = Duration.between(since, now).toMillis();
+        long initial = Math.max(250, properties.getDelivery().getRetryInitialDelayMs());
+        long max = Math.max(initial, properties.getDelivery().getRetryMaxDelayMs());
+        long delay = Math.min(max, Math.max(initial, waitedMs));
+        Instant next = now.plusMillis(delay);
+        if (next.isAfter(deadline)) next = deadline;
+        sessions.waitForAcceptance(current.sessionId(), ACCEPTANCE_PENDING, next);
+        log.info("SCAN_BRIDGE_ACCEPTANCE_PENDING sessionId={} submissionId={} packageId={} waitedSeconds={} nextCheckDelayMs={}",
+                current.sessionId(), current.submissionId(), current.lexavaultPackageId(),
+                Duration.between(since, now).toSeconds(), Duration.between(now, next).toMillis());
+    }
+
+    private long backoffMs(int exponentRaw) {
+        int exponent = Math.min(20, Math.max(0, exponentRaw));
+        long initial = Math.max(250, properties.getDelivery().getRetryInitialDelayMs());
+        long max = Math.max(initial, properties.getDelivery().getRetryMaxDelayMs());
+        long delay;
+        try { delay = Math.multiplyExact(initial, 1L << exponent); }
+        catch (ArithmeticException ex) { delay = max; }
+        return Math.min(max, delay);
     }
 
     private boolean accepted(String intakeStatus) {

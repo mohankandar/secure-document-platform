@@ -64,6 +64,11 @@ securedoc:
       poll-interval-ms: ${SECUREDOC_SCAN_BRIDGE_DELIVERY_POLL_MS:1000}
       retry-initial-delay-ms: ${SECUREDOC_SCAN_BRIDGE_RETRY_INITIAL_DELAY_MS:2000}
       retry-max-delay-ms: ${SECUREDOC_SCAN_BRIDGE_RETRY_MAX_DELAY_MS:60000}
+      # A 429 from LexaVault is retried (within the cap of 3) after its Retry-After, bounded by this.
+      retry-after-max-seconds: ${SECUREDOC_SCAN_BRIDGE_RETRY_AFTER_MAX_SECONDS:300}
+      # Uploaded but not yet accepted by LexaVault is waiting, not failing: it is re-checked until this
+      # limit, then the item needs a person (LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED).
+      acceptance-wait-limit-seconds: ${SECUREDOC_SCAN_BRIDGE_ACCEPTANCE_WAIT_LIMIT_SECONDS:600}
       request-timeout-seconds: ${SECUREDOC_SCAN_BRIDGE_REQUEST_TIMEOUT_SECONDS:600}
       cleanup-accepted-pdf: ${SECUREDOC_SCAN_BRIDGE_CLEANUP_ACCEPTED_PDF:true}
       # Terminal state contains safe technical reconciliation data only. Keep it briefly for diagnostics,

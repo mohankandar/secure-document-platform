@@ -96,6 +96,22 @@ Required behavior:
 - retryable connectivity/server failures remain queued and retry automatically;
 - terminal validation/authentication/state failures become `ATTENTION_REQUIRED` and are not retried forever.
 
+### Delivery retries and waiting (tasks 0023 and 0024)
+
+| LexaVault answer | What the bridge does |
+|---|---|
+| Network error, unreadable answer, any 5xx | Retried. Counts toward the cap. Spacing: `retry-initial-delay-ms` (2 s), doubling, up to `retry-max-delay-ms` (60 s). |
+| 429 (too many requests) | Retried. Counts toward the cap. Waits as long as `Retry-After` asks (seconds or an HTTP date), at most `retry-after-max-seconds` (300 s). With no usable `Retry-After` (missing, unreadable, zero or in the past), the normal spacing above. |
+| Any other 4xx | Not retried. The item goes straight to `ATTENTION_REQUIRED` with LexaVault's code. |
+| Document uploaded but not yet accepted (`LEXAVAULT_ACCEPTANCE_PENDING`) | Waiting, not failing: does **not** count toward the cap. Re-checked (status, then the idempotent upload) with the normal spacing, growing with the time already waited. After `acceptance-wait-limit-seconds` (600 s = 10 minutes) from the start of the wait, the item goes to `ATTENTION_REQUIRED` with `LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED`. |
+
+- **The cap.** The first attempt plus 3 automatic retries. After that the item goes to `ATTENTION_REQUIRED` with its last code. The scanner screen shows it as "Reference: <code>", and `GET /delivery-items` lists it.
+- A real failure during an acceptance wait counts toward the cap. The wait keeps its original start, so the time limit still applies.
+- The start of the wait is stored with the item on disk (`acceptancePendingSince`), so it survives a bridge restart.
+- A person's retry (`POST /delivery-items/{id}/retry`) gives a fresh cap and a fresh wait.
+- Settings live under `securedoc.scan-bridge.delivery`. Environment variables: `SECUREDOC_SCAN_BRIDGE_RETRY_AFTER_MAX_SECONDS`, `SECUREDOC_SCAN_BRIDGE_ACCEPTANCE_WAIT_LIMIT_SECONDS` (plus the existing `..._RETRY_INITIAL_DELAY_MS` and `..._RETRY_MAX_DELAY_MS`).
+- Log lines: `SCAN_BRIDGE_DELIVERY_RETRY_SCHEDULED`, `SCAN_BRIDGE_DELIVERY_RETRIES_EXHAUSTED`, `SCAN_BRIDGE_ACCEPTANCE_PENDING`, `SCAN_BRIDGE_ACCEPTANCE_WAIT_EXPIRED`, `SCAN_BRIDGE_DELIVERY_ATTENTION_REQUIRED`.
+
 ## Submission semantics
 
 The operator explicitly selects **Submit** only after the consolidated PDF reaches `READY`.
