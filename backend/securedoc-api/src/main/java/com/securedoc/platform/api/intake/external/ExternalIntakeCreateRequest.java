@@ -22,6 +22,13 @@ public record ExternalIntakeCreateRequest(
         Boolean retry,
         JsonNode caseSensitivityLevel) {
 
+    /** Task 0023 D1 (#32): a JSON null identifier or metadata value, or a null document entry, is a 400. */
+    public ExternalIntakeCreateRequest {
+        com.securedoc.platform.api.dto.RequestValues.requireNoNullValues(businessIdentifiers, "businessIdentifiers");
+        com.securedoc.platform.api.dto.RequestValues.requireNoNullValues(metadata, "metadata");
+        com.securedoc.platform.api.dto.RequestValues.requireNoNullEntries(documents, "documents");
+    }
+
     public record ManifestDocument(String externalSourceDocumentId, String fileName, String sha256,
                                    JsonNode sensitivityLevel) { }
 

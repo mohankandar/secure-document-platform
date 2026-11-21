@@ -142,7 +142,7 @@ public class RequestContextResolver {
         if (securityProperties.getMode() != SecurityMode.OIDC
                 || !securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()
                 || !securityProperties.getOidc().isPersistentConnectionEnabled()) {
-            throw new SecurityContextException("OIDC tenant discovery is not enabled");
+            throw new SecurityContextException("OIDC tenant discovery is not enabled", "TENANT_DISCOVERY_NOT_ENABLED");
         }
         var jwt = requireOidcToken().getToken();
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
@@ -201,7 +201,7 @@ public class RequestContextResolver {
         if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
             if (!securityProperties.getOidc().isPersistentConnectionEnabled()
                     || jwt.getIssuer() == null || securityProperties.getOidc().getAudience().isBlank()) {
-                throw new SecurityContextException("Shared-issuer machine identity configuration is incomplete");
+                throw new SecurityContextException("Shared-issuer machine identity configuration is incomplete", "MACHINE_IDENTITY_CONFIGURATION_INCOMPLETE");
             }
             // Preserve existing integration client-principal matching semantics.
             // This candidate lookup never trusts human tenant-selection headers.
@@ -224,7 +224,7 @@ public class RequestContextResolver {
         Set<String> roles;
         if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
             if (!securityProperties.getOidc().isPersistentConnectionEnabled()) {
-                throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections");
+                throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections", "SHARED_ISSUER_REQUIRES_PERSISTED_CONNECTIONS");
             }
             var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
             var entities = toEntityKeys(authorized);
@@ -236,7 +236,13 @@ public class RequestContextResolver {
             roles = authorized.get(tenantId);
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
-            roles = oidcRoleMapper.map(identity.groups());
+            try {
+                roles = oidcRoleMapper.map(identity.groups());
+            } catch (SecurityContextException refused) {
+                // Task 0023 C5: the entity comes from trusted configuration and the person from the verified token,
+                // so this refusal (most often "no LexaVault group") is audited in that entity's log.
+                throw attributed(refused, tenantId, jwt);
+            }
         }
         ActorId actorId = trustedActorResolver.resolve(jwt);
         AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
@@ -246,18 +252,43 @@ public class RequestContextResolver {
     }
 
 
+    /**
+     * The verified person of the current OIDC request, when there is one (task 0023 C5: to audit a refusal that
+     * concerns them). Never throws.
+     */
+    public java.util.Optional<ActorId> currentOidcActor() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication instanceof JwtAuthenticationToken token && authentication.isAuthenticated()) {
+                return java.util.Optional.of(trustedActorResolver.resolve(token.getToken()));
+            }
+        } catch (RuntimeException ignored) {
+            // No trusted actor: the caller records nothing in an entity's log.
+        }
+        return java.util.Optional.empty();
+    }
+
+    private SecurityContextException attributed(SecurityContextException refused, TenantId tenantId,
+                                                org.springframework.security.oauth2.jwt.Jwt jwt) {
+        try {
+            return refused.attributedTo(tenantId, trustedActorResolver.resolve(jwt));
+        } catch (SecurityContextException noActor) {
+            return refused;
+        }
+    }
+
     private AuthenticatedIdentity normalizeIdentity(org.springframework.security.oauth2.jwt.Jwt jwt) {
         try {
             return oidcIdentityNormalizer.normalize(jwt);
         } catch (IllegalArgumentException ex) {
-            throw new SecurityContextException("Authenticated identity has invalid OIDC identity claims");
+            throw new SecurityContextException("Authenticated identity has invalid OIDC identity claims", "INVALID_IDENTITY_CLAIMS");
         }
     }
 
     private JwtAuthenticationToken requireOidcToken() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (!(authentication instanceof JwtAuthenticationToken token) || !authentication.isAuthenticated()) {
-            throw new SecurityContextException("Authenticated OIDC identity is required");
+            throw new SecurityContextException("Authenticated OIDC identity is required", "OIDC_IDENTITY_REQUIRED");
         }
         return token;
     }
@@ -268,7 +299,7 @@ public class RequestContextResolver {
             try {
                 return UUID.fromString(header.trim());
             } catch (IllegalArgumentException e) {
-                throw new SecurityContextException("Invalid " + headerName + " header: must be a valid UUID");
+                throw new SecurityContextException("Invalid " + headerName + " header: must be a valid UUID", "INVALID_LOCAL_IDENTITY_HEADER");
             }
         }
         return fallback;
@@ -285,7 +316,7 @@ public class RequestContextResolver {
             if (role.isEmpty()) continue;
             ProductRole canonical = ProductRole.fromIdentityName(role)
                     .orElseThrow(() -> new SecurityContextException(
-                            "Invalid role in X-Actor-Roles header: " + raw.trim()));
+                            "Invalid role in X-Actor-Roles header: " + raw.trim(), "INVALID_LOCAL_ROLE_HEADER"));
             roles.add(canonical.name());
         }
         return roles.isEmpty() ? Set.of(ProductRole.DOCUMENT_PROCESSOR.name()) : Set.copyOf(roles);

@@ -32,7 +32,7 @@ public class OidcRoleMapper {
             }
         }
         if (mapped.isEmpty()) {
-            throw new SecurityContextException("Authenticated identity has no mapped application role");
+            throw new SecurityContextException("Authenticated identity has no mapped application role", "NO_MAPPED_ROLE");
         }
         return Set.copyOf(mapped);
     }

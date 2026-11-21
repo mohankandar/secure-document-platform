@@ -69,13 +69,13 @@ public class CapabilityAuthorizationInterceptor implements HandlerInterceptor {
         return "capability=" + capability + ", method=" + method(request) + ", route=" + routePattern(request);
     }
 
-    static String method(HttpServletRequest request) {
+    public static String method(HttpServletRequest request) {
         String method = request.getMethod();
         return method != null && method.matches("[A-Za-z]{1,10}") ? method.toUpperCase(Locale.ROOT) : "UNKNOWN";
     }
 
     /** The matched mapping pattern; {@link #UNKNOWN_ROUTE} when there is none or it does not look like one. */
-    static String routePattern(HttpServletRequest request) {
+    public static String routePattern(HttpServletRequest request) {
         Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
         String route = pattern == null ? null : pattern.toString();
         return route != null && SAFE_ROUTE.matcher(route).matches() ? route : UNKNOWN_ROUTE;

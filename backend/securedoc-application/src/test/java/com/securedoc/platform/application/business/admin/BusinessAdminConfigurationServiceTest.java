@@ -56,6 +56,27 @@ class BusinessAdminConfigurationServiceTest {
         assertTrue(error.getMessage().contains("Canonical normalization"));
     }
 
+    @Test
+    void anInvalidPatternIsNamedWithoutQuotingThePatternCompiler() {
+        // Task 0023 B7 (#286): only LexaVault's own text follows "Invalid validation configuration for <label>:".
+        TenantId tenant = TenantId.generate();
+        BusinessIdentifierDefinition contract = numericContract(tenant);
+        BusinessAdminConfigurationService service = service(new DefinitionRepo(List.of(contract)));
+
+        ValidationException error = assertThrows(ValidationException.class, () -> service.updateIdentifiers(
+                tenant, ActorId.generate(), CorrelationId.generate(), List.of(
+                        new BusinessAdminConfigurationService.IdentifierConfigurationInput(
+                                contract.id().value(), "Contract Number", true, true, true, true, true,
+                                null, null, null, null, null, null, null, null),
+                        new BusinessAdminConfigurationService.IdentifierConfigurationInput(
+                                null, "Branch", false, false, true, true, true,
+                                "CUSTOM_PATTERN", null, null, null, "UPPER", false, Set.of(), "(unclosed[secret"))));
+
+        assertEquals("Invalid validation configuration for Branch: customPattern is not a valid regular expression",
+                error.getMessage());
+        assertFalse(error.getMessage().contains("unclosed"));
+    }
+
 
     @Test
     void reportingDimensionsRequireLowCardinalityTenantControlledValues() {

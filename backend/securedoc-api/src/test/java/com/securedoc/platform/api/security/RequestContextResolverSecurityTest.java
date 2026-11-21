@@ -177,6 +177,35 @@ class RequestContextResolverSecurityTest {
                 resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
     }
 
+    @Test
+    void anUnmappedRoleRefusalCarriesItsReasonAndTheTrustedEntityAndPerson() {
+        // Task 0023 C5: the refusal names a fixed reason and the entity and person LexaVault already trusts.
+        SecurityProperties oidc = oidcProperties();
+        Jwt jwt = jwt("00000000-0000-0000-0000-000000000001", List.of("unknown-group"));
+        SecurityContextHolder.getContext().setAuthentication(authenticated(jwt));
+        RequestContextResolver resolver = resolver(oidc);
+
+        SecurityContextException refused = assertThrows(SecurityContextException.class,
+                () -> resolver.resolvePrincipal(mock(HttpServletRequest.class)));
+        assertEquals("NO_MAPPED_ROLE", refused.reasonCode());
+        assertEquals("00000000-0000-0000-0000-000000000001", refused.tenantId().toString());
+        assertEquals(new TrustedActorResolver().resolve(jwt), refused.actorId());
+        assertEquals(Optional.of(new TrustedActorResolver().resolve(jwt)), resolver.currentOidcActor());
+    }
+
+    @Test
+    void aRefusalBeforeAnyEntityIsKnownHasAReasonButNoEntity() {
+        SecurityProperties oidc = oidcProperties();
+        RequestContextResolver resolver = resolver(oidc);
+        // No authenticated token at all.
+        SecurityContextException refused = assertThrows(SecurityContextException.class,
+                () -> resolver.resolvePrincipal(mock(HttpServletRequest.class)));
+        assertEquals("OIDC_IDENTITY_REQUIRED", refused.reasonCode());
+        assertNull(refused.tenantId());
+        assertNull(refused.actorId());
+        assertEquals(Optional.empty(), resolver.currentOidcActor());
+    }
+
     private JwtAuthenticationToken authenticated(Jwt jwt) {
         return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_AUTHENTICATED")));
     }

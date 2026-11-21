@@ -49,7 +49,7 @@ public class OidcTenantMembershipResolver {
     /** The caller must supply groups from normalized, cryptographically authenticated OIDC identity. */
     public Map<TenantId, Set<String>> authorizedTenants(Jwt verifiedJwt, Object authenticatedGroups) {
         if (verifiedJwt == null) {
-            throw new SecurityContextException("Verified OIDC tenant membership context is unavailable");
+            throw new SecurityContextException("Verified OIDC tenant membership context is unavailable", "MEMBERSHIP_CONTEXT_UNAVAILABLE");
         }
         URI issuer = verifiedJwt.getIssuer() == null ? null : URI.create(verifiedJwt.getIssuer().toString());
         return refusingAsSecurityContext(() -> Map.copyOf(toTenantKeys(admission.authorizedEntities(issuer, authenticatedGroups))));

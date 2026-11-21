@@ -200,15 +200,27 @@ public class ApplicationServiceConfig {
                 && !licensingProperties.getDevelopmentPublicKey().isBlank()) {
             publicKey = licensingProperties.getDevelopmentPublicKey();
         } else {
+            String problem = null;
             try {
                 var resource = resourceLoader.getResource(licensingProperties.getVerificationKeyResource());
                 if (resource.exists()) {
                     try (var in = resource.getInputStream()) {
                         publicKey = new String(in.readAllBytes(), StandardCharsets.US_ASCII);
                     }
+                    if (publicKey.isBlank()) problem = "EMPTY";
+                } else {
+                    problem = "MISSING";
                 }
-            } catch (Exception ignored) {
+            } catch (Exception unreadable) {
                 // Missing/unreadable vendor key is represented as CONFIGURATION_ERROR by the verifier.
+                problem = "UNREADABLE (" + unreadable.getClass().getSimpleName() + ")";
+            }
+            if (problem != null) {
+                // Task 0023 C7 (#325): say so at start-up instead of only at the first refused intake.
+                org.slf4j.LoggerFactory.getLogger(ApplicationServiceConfig.class).warn(
+                        "LICENSE_VERIFICATION_KEY_UNAVAILABLE reason={} enforcement={} setting=securedoc.licensing."
+                                + "verification-key-resource: licences cannot be verified", problem,
+                        licensingProperties.enforcementEnabled());
             }
         }
         return new Ed25519LicenseTokenVerifier(publicKey);
