@@ -85,7 +85,10 @@ The run started just after midnight (00:42). The fixture's refusal time is about
 
 ## Commits (hash and message), or "not committed"
 
-See below.
+- `aa9a03f` feat(pipeline): task 0034 clean-up of finished jobs (P1b). This is the code, the tests and this report.
+- A second commit adds this hash to the report.
+
+Not merged, not pushed.
 
 ## Not done, and why
 
