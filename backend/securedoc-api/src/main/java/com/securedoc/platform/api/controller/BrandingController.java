@@ -99,25 +99,25 @@ public class BrandingController {
     }
 
     public record BrandingUpdateRequest(String applicationName, String shortName, String organizationName,
-                                        String pageTitle, String accentColor, String secondaryColor,
+                                        String pageTitle, String secondaryColor,
                                         BrandingAssetRequest primaryLogo, BrandingAssetRequest compactLogo,
                                         BrandingAssetRequest favicon) {
         BrandingUpdate toUpdate() {
-            return new BrandingUpdate(applicationName, shortName, organizationName, pageTitle, accentColor,
+            return new BrandingUpdate(applicationName, shortName, organizationName, pageTitle,
                     secondaryColor, primaryLogo == null ? null : primaryLogo.toUpdate(),
                     compactLogo == null ? null : compactLogo.toUpdate(), favicon == null ? null : favicon.toUpdate());
         }
     }
 
     public record BrandingConfigurationResponse(UUID id, UUID tenantId, String applicationName, String shortName,
-                                                String organizationName, String pageTitle, String accentColor,
+                                                String organizationName, String pageTitle,
                                                 String secondaryColor, String primaryLogoDataUrl,
                                                 String compactLogoDataUrl, String faviconDataUrl,
                                                 UUID updatedBy, String updatedAt) {
         static BrandingConfigurationResponse from(BrandingConfiguration c) {
             if (c == null) return null;
             return new BrandingConfigurationResponse(c.id(), c.tenantId() == null ? null : c.tenantId().value(),
-                    c.applicationName(), c.shortName(), c.organizationName(), c.pageTitle(), c.accentColor(),
+                    c.applicationName(), c.shortName(), c.organizationName(), c.pageTitle(),
                     c.secondaryColor(), dataUrl(c.primaryLogo(), c.primaryLogoMediaType()),
                     dataUrl(c.compactLogo(), c.compactLogoMediaType()), dataUrl(c.favicon(), c.faviconMediaType()),
                     c.updatedBy(), c.updatedAt().toString());
@@ -125,12 +125,12 @@ public class BrandingController {
     }
 
     public record EffectiveBrandingResponse(UUID tenantId, String applicationName, String shortName,
-                                            String organizationName, String pageTitle, String accentColor,
+                                            String organizationName, String pageTitle,
                                             String secondaryColor, String primaryLogoDataUrl,
                                             String compactLogoDataUrl, String faviconDataUrl) {
         static EffectiveBrandingResponse from(EffectiveBranding b) {
             return new EffectiveBrandingResponse(b.tenantId() == null ? null : b.tenantId().value(), b.applicationName(),
-                    b.shortName(), b.organizationName(), b.pageTitle(), b.accentColor(), b.secondaryColor(),
+                    b.shortName(), b.organizationName(), b.pageTitle(), b.secondaryColor(),
                     dataUrl(b.primaryLogo(), b.primaryLogoMediaType()), dataUrl(b.compactLogo(), b.compactLogoMediaType()),
                     dataUrl(b.favicon(), b.faviconMediaType()));
         }

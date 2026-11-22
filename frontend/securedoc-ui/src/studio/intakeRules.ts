@@ -10,22 +10,36 @@
  * is refused with FILE_TOO_LARGE by `GlobalExceptionHandler`. The screen has no endpoint that reports it, so the
  * value is repeated here; change both together.
  *
- * Manual upload has no page limit and no files-per-case limit on the server today (only machine intake has
- * per-source limits), so the screen states none.
+ * Task 0038: the server also enforces the case limits on every way a case is filled (`CaseLimits`): up to 500 pages
+ * per file (LV-INT-028) and 50 files per case (LV-INT-029). They are repeated here; change both together.
  */
 export const MAX_UPLOAD_MB = 50;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+export const MAX_PAGES_PER_FILE = 500;
+export const MAX_FILES_PER_CASE = 50;
 
-/** The rule line under the drop area. */
-export const intakeRulesLine = () => `PDF only · up to ${MAX_UPLOAD_MB} MB each`;
+/** The rule line under the drop area, shown before any file is picked. */
+export const intakeRulesLine = () =>
+  `PDF only · up to ${MAX_UPLOAD_MB} MB and ${MAX_PAGES_PER_FILE} pages each · up to ${MAX_FILES_PER_CASE} files per case`;
 
-export type FileProblem = 'NOT_PDF' | 'TOO_LARGE';
+export type FileProblem = 'NOT_PDF' | 'TOO_LARGE' | 'TOO_MANY_PAGES';
 
 /** What to do, in the words the person sees. */
 export const fileProblemText: Record<FileProblem, string> = {
   NOT_PDF: 'Not a PDF — remove it or convert it first',
   TOO_LARGE: `Over ${MAX_UPLOAD_MB} MB — remove it or split it first`,
+  TOO_MANY_PAGES: `Over ${MAX_PAGES_PER_FILE} pages — split it into smaller PDFs first`,
 };
+
+/** A page count the server would refuse. An unknown count (null) is left to the server, which counts itself. */
+export const tooManyPages = (pages: number | null) => pages !== null && pages > MAX_PAGES_PER_FILE;
+
+/** The case-level refusal when more files are listed than a case holds, or null. */
+export function tooManyFilesText(count: number): string | null {
+  if (count <= MAX_FILES_PER_CASE) return null;
+  const over = count - MAX_FILES_PER_CASE;
+  return `A case holds up to ${MAX_FILES_PER_CASE} files. Remove ${over} ${over === 1 ? 'file' : 'files'}, or put the rest in another case.`;
+}
 
 /** The name and type the browser gives: the server accepts only application/pdf (UploadDocumentService). */
 export function looksLikePdf(name: string, type: string): boolean {

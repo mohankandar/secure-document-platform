@@ -50,7 +50,8 @@ const LOAN = {
   validationType: 'ALPHANUMERIC', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: [],
 };
 
-async function mockApi(page: Page, calls: string[]) {
+/** Task 0038: `refuseUpload` answers every file upload with this server refusal. */
+async function mockApi(page: Page, calls: string[], refuseUpload?: { code: string; message: string }) {
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -73,14 +74,18 @@ async function mockApi(page: Page, calls: string[]) {
       return json({ username: 'intake.user', roles: ENTITY.roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities: PROCESSOR });
     }
     if (url.pathname === '/api/v1/intake/identifier-definitions') return json([LOAN]);
+    if (url.pathname === '/api/v1/packages' && request.method() === 'POST') return json({ packageId: 'p-0038', status: 'CREATED' });
+    if (url.pathname === '/api/v1/packages/p-0038/documents' && refuseUpload) {
+      return json({ errorCode: 'VALIDATION_ERROR', ...refuseUpload, correlationId: 'c-0038', timestamp: '2026-11-22T12:00:00Z' }, 400);
+    }
     if (url.pathname === '/api/v1/packages') return json([]);
     return json({});
   });
 }
 
-async function openNewCase(page: Page, path = '/intake', calls: string[] = []) {
+async function openNewCase(page: Page, path = '/intake', calls: string[] = [], refuseUpload?: { code: string; message: string }) {
   await mockIdentityProvider(page);
-  await mockApi(page, calls);
+  await mockApi(page, calls, refuseUpload);
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
   await expect(page.getByRole('link', { name: /^New case/ }).first()).toBeVisible();
@@ -98,7 +103,8 @@ const createButton = (page: Page) => page.getByRole('button', { name: 'Create ca
 test('states the rules, lists size and pages, and holds Create case while a file the server would refuse is listed', async ({ page }) => {
   const calls: string[] = [];
   await openNewCase(page, '/intake', calls);
-  await expect(page.getByText('PDF only · up to 50 MB each')).toBeVisible();
+  // Task 0038: the server's case limits are stated before any file is picked.
+  await expect(page.getByText('PDF only · up to 50 MB and 500 pages each · up to 50 files per case')).toBeVisible();
   // U019: one line "Drop PDFs here or choose files", the rules under it, no separate order note.
   await expect(page.locator('.cf-drop-line')).toHaveText('Drop PDFs here or choose files');
   await expect(page.getByText(/processed in the order/)).toHaveCount(0);
@@ -125,6 +131,56 @@ test('states the rules, lists size and pages, and holds Create case while a file
   await expect(rows).toHaveCount(1);
   await expect(createButton(page)).toBeEnabled();
   expect(calls).toEqual([]); // nothing was sent while the file was listed
+});
+
+/** A PDF whose page tree says `pages` pages (the screen reads the count from the root of the tree). */
+function pdfOfPages(pages: number): Buffer {
+  return Buffer.from(`%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [] /Count ${pages} >>
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF
+`, 'latin1');
+}
+
+test('task 0038: a file over 500 pages is marked, and over 50 files holds Create case with what to do', async ({ page }) => {
+  await openNewCase(page);
+  await page.getByLabel(/Loan number/).fill('LN204901');
+  await page.locator('input[type=file]').setInputFiles([{ name: 'Appraisal.pdf', mimeType: 'application/pdf', buffer: pdfOfPages(501) }]);
+  const rows = page.locator('.cf-ledger-row');
+  await expect(rows.nth(0)).toHaveAttribute('data-state', 'refused');
+  await expect(rows.nth(0)).toContainText('Over 500 pages — split it into smaller PDFs first');
+  await expect(createButton(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'Remove Appraisal.pdf' }).click();
+
+  const files = Array.from({ length: 51 }, (_, i) => ({ name: `Doc_${i + 1}.pdf`, mimeType: 'application/pdf', buffer: twoPagePdf() }));
+  await page.locator('input[type=file]').setInputFiles(files);
+  await expect(rows).toHaveCount(51);
+  await expect(page.getByText('A case holds up to 50 files. Remove 1 file, or put the rest in another case.')).toBeVisible();
+  await expect(createButton(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'Remove Doc_51.pdf' }).click();
+  await expect(page.getByText(/A case holds up to 50 files/)).toHaveCount(0);
+  await expect(createButton(page)).toBeEnabled();
+});
+
+test('task 0038: the server refusing a file shows its words and code on that file', async ({ page }) => {
+  await openNewCase(page, '/intake', [], { code: 'LV-INT-028', message: 'The PDF has more than 500 pages' });
+  await page.getByLabel(/Loan number/).fill('LN204901');
+  await page.locator('input[type=file]').setInputFiles([{ name: 'Title_Commitment.pdf', mimeType: 'application/pdf', buffer: twoPagePdf() }]);
+  await expect(page.locator('.cf-ledger-row').nth(0)).toContainText('2 pages');
+  await createButton(page).click();
+  const row = page.locator('.cf-ledger-row').nth(0);
+  await expect(row).toHaveAttribute('data-state', 'error');
+  await expect(row).toContainText('The PDF has more than 500 pages · LV-INT-028');
+  await expect(page.getByText('1 document did not upload.', { exact: false })).toBeVisible();
+  if (process.env.P0038_PROOF) {
+    await page.screenshot({ path: '../../docs/work/0038-proof/new-case-limits-and-refusal.png', fullPage: true });
+  }
 });
 
 test('a .pdf file that is not a PDF inside is marked too', async ({ page }) => {

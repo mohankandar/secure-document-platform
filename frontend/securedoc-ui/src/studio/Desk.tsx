@@ -12,7 +12,7 @@ import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from '.
 import CaseDrawer from './CaseDrawer';
 import { LoadErrorCard } from './failure';
 import { apiClient } from '../api/client';
-import { nextStepText, rowAction, type RowAction } from './caseRules';
+import { nextStepText, rowAction, rowDestination, rowReason, type RowAction } from './caseRules';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { ConfirmDialog } from './admin/shared';
 import { CASES_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
@@ -249,6 +249,8 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
   const exportLabel = exportStatusLabel(exportState);
   const action = exporting ? null : rowAction(pkg.status, caps, open);
   const next = exportNextStep(exportState) ?? nextStepText(pkg.status, caps.includes(CAP.review) ? open : undefined);
+  const reason = rowReason(pkg);
+  const destination = rowDestination(pkg);
   return (
     <li id={`cf-row-${pkg.packageId}`} className="cf-case-row" data-selected={selected || undefined} data-you={you || undefined}>
       <Link to={`/case/${pkg.packageId}`} className="cf-case" aria-current={selected ? 'true' : undefined} data-you={you || undefined}>
@@ -259,7 +261,12 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
         </span>
         <span className="cf-case-source">{SOURCE_LABEL[pkg.packageType] ?? pkg.packageType}</span>
         <span className="cf-case-docs">{pkg.documentCount} {pkg.documentCount === 1 ? 'doc' : 'docs'}</span>
-        <span className="cf-case-next" data-stage={stage}>{next}</span>
+        <span className="cf-case-next" data-stage={stage}>
+          {next}
+          {/* Task 0038: why it stopped or waits, and where it goes; codes and the destination's name only. */}
+          {reason && <span className="cf-case-why">{reason}</span>}
+          {destination && <span className="cf-case-to">{destination}</span>}
+        </span>
         <span className="cf-case-stage">
           {exportLabel ? <ExportChip state={exportState} /> : <StageChip stage={stage} status={pkg.status} />}
         </span>

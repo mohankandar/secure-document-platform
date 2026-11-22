@@ -15,8 +15,16 @@ public record PackageSummary(
         List<BusinessIdentifierSummary> businessIdentifiers,
         int documentCount,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        /** Task 0038: why a stopped (FAILED) case stopped, as an LV code; null otherwise or when not known. */
+        String stopReasonCode
 ) {
+    public PackageSummary(PackageId packageId, PackageType packageType, PackageStatus status,
+                          List<BusinessIdentifierSummary> businessIdentifiers, int documentCount, Instant createdAt,
+                          Instant updatedAt) {
+        this(packageId, packageType, status, businessIdentifiers, documentCount, createdAt, updatedAt, null);
+    }
+
     public PackageSummary {
         Objects.requireNonNull(packageId); Objects.requireNonNull(packageType); Objects.requireNonNull(status);
         businessIdentifiers = businessIdentifiers == null ? List.of() : List.copyOf(businessIdentifiers);

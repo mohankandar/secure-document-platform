@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deliveryLabel, nextStepText, rowAction } from './caseRules.ts';
+import { deliveryLabel, nextStepText, rowAction, rowDestination, rowReason } from './caseRules.ts';
 import { canContinueManually } from './support/supportRules.ts';
 
 // Capabilities as the backend grants them (ProductAuthorizationPolicy), per role.
@@ -73,4 +73,22 @@ test('0023 B4: a delivery is named by its destination, else the document type, e
     assert.equal(label.includes('Maria'), false);
     assert.equal(label.includes('.pdf'), false);
   }
+});
+
+// Task 0038: the plain stop reason and the destination on each row.
+test('a stopped, rejected or waiting row says why in the code title; other rows say nothing more', () => {
+  assert.equal(rowReason({ status: 'FAILED', stopReasonCode: 'LV-PRC-004' }), 'Text reading timed out');
+  assert.equal(rowReason({ status: 'IN_REVIEW', exportState: 'NEEDS_IT', stopReasonCode: 'LV-DLV-004' }), 'Destination refused the file');
+  assert.equal(rowReason({ status: 'APPROVED', exportState: 'WAITING_FOR_YOU', stopReasonCode: 'LV-DLV-004' }), 'Destination refused the file');
+  assert.equal(rowReason({ status: 'REJECTED', stopReasonCode: 'LV-PRC-004' }), 'Text reading timed out');
+  assert.equal(rowReason({ status: 'REJECTED' }), null, 'no rejection reason is stored yet');
+  assert.equal(rowReason({ status: 'IN_REVIEW', stopReasonCode: 'LV-PRC-004' }), null, 'a case in review neither stopped nor waits');
+  assert.equal(rowReason({ status: 'FAILED', stopReasonCode: 'Jane Doe 123-45-6789' }), null, 'never text that is no known code');
+  assert.equal(rowReason({ status: 'FAILED', stopReasonCode: null }), null);
+});
+
+test('the destination shows once one is chosen', () => {
+  assert.equal(rowDestination({ destinationName: 'Records archive' }), 'To Records archive');
+  assert.equal(rowDestination({ destinationName: '  ' }), null);
+  assert.equal(rowDestination({}), null);
 });

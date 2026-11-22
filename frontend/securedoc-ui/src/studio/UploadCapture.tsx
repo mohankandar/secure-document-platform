@@ -6,7 +6,7 @@ import { errorMessage, formatBytes } from './data';
 import { Notice, Spinner } from './atoms';
 import type { IdentityGate } from './Intake';
 import { useUnsavedWork } from './unsavedWork';
-import { countPdfPages, fileProblem, fileProblemText, intakeRulesLine, MAX_UPLOAD_BYTES, type FileProblem } from './intakeRules';
+import { countPdfPages, fileProblem, fileProblemText, intakeRulesLine, MAX_UPLOAD_BYTES, tooManyFilesText, tooManyPages, type FileProblem } from './intakeRules';
 
 type DraftState = 'ready' | 'uploading' | 'done' | 'error';
 /**
@@ -21,7 +21,8 @@ async function inspect(file: File): Promise<{ problem: FileProblem | null; pages
     const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
     const problem = fileProblem(file, head);
     if (problem || file.size > MAX_UPLOAD_BYTES) return { problem, pages: null };
-    return { problem: null, pages: countPdfPages(new Uint8Array(await file.arrayBuffer())) };
+    const pages = countPdfPages(new Uint8Array(await file.arrayBuffer()));
+    return { problem: tooManyPages(pages) ? 'TOO_MANY_PAGES' : null, pages };
   } catch {
     return { problem: 'NOT_PDF', pages: null };
   }
@@ -83,6 +84,8 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
     if (!identity) { setFailure('Complete the case identity first.'); return; }
     if (drafts.length === 0) { setFailure('Add at least one PDF.'); return; }
     if (drafts.some((d) => d.problem !== null)) return; // a refused or unread file: fail closed
+    const overLimit = tooManyFilesText(drafts.length);
+    if (overLimit) { setFailure(overLimit); return; } // task 0038: the server would refuse the rest (LV-INT-029)
 
     inFlight.current = true;
     setPhase('working');
@@ -132,6 +135,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
   const uploaded = drafts.filter((d) => d.state === 'done').length;
   const refused = drafts.filter((d) => d.problem).length;
   const reading = drafts.some((d) => d.problem === undefined);
+  const tooManyFiles = tooManyFilesText(drafts.length);
   const label = working ? null : errors > 0 ? 'Retry failed uploads' : draftPackageId ? 'Submit case' : 'Create case';
 
   return (
@@ -205,17 +209,20 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
         </div>
       )}
 
+      {tooManyFiles && failure !== tooManyFiles && <Notice tone="danger">{tooManyFiles}</Notice>}
       {failure && <Notice tone="danger">{failure}</Notice>}
 
       <div className="cf-capture-foot">
         <p className="cf-muted">
           {refused > 0
             ? `Fix the ${refused === 1 ? 'file' : 'files'} marked in red to continue.`
+            : tooManyFiles
+            ? 'Remove files to continue.'
             : draftPackageId
             ? 'The case is open as a draft. Identity is locked to it.'
             : gate.valid ? (drafts.length ? 'Ready to open the case.' : 'Add the documents to continue.') : 'Complete the identity to continue.'}
         </p>
-        <button type="button" className="cf-btn" data-variant="solid" onClick={submit} disabled={working || drafts.length === 0 || refused > 0 || reading}>
+        <button type="button" className="cf-btn" data-variant="solid" onClick={submit} disabled={working || drafts.length === 0 || refused > 0 || reading || !!tooManyFiles}>
           {working ? <><Spinner label="Submitting" /> Submitting…</> : label}
         </button>
       </div>

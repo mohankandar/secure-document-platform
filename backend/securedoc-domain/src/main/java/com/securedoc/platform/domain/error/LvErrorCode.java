@@ -101,6 +101,13 @@ public enum LvErrorCode {
     INT_027("LV-INT-027", Area.INT, "Busy, try again later",
             "LexaVault is full for now; nothing was lost. Send again after the time given.",
             Kind.REFUSED, "Source system", 429, true),
+    /** Task 0038: the case limits of {@code CaseLimits}, for every way a case is filled. */
+    INT_028("LV-INT-028", Area.INT, "Too many pages in one file",
+            "A PDF in a case can have up to 500 pages. Nothing was taken in from this file.",
+            Kind.REFUSED, "Person, source system", 400, false),
+    INT_029("LV-INT-029", Area.INT, "Too many files in one case",
+            "A case can hold up to 50 files. Nothing more was taken in.",
+            Kind.REFUSED, "Person, source system", 400, false),
     INT_030("LV-INT-030", Area.INT, "Waiting for the trigger file",
             "The folder drop has no trigger file yet, so it isn't taken in.",
             Kind.WAITING, "Source system", null, false),

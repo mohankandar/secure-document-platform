@@ -638,7 +638,8 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                  order by display_order asc, label asc
                 """).setParameter("tenant", tenant).getResultList();
         List<DashboardColumnDefinition> result = new ArrayList<>();
-        int fallbackOrder = 0;
+        // Task 0038, as DashboardColumnConfigurationService: unsaved columns after every saved one; ties by key.
+        int fallbackOrder = policies.values().stream().mapToInt(ColumnPolicy::displayOrder).max().orElse(-1) + 1;
         for (Object[] row : rows) {
             String key = "identifier:" + string(row[0]);
             boolean primary = bool(row[2]);
@@ -661,7 +662,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         fallbackOrder = addSystemColumn(result, policies, "lastUpdated", "Last Updated", false, fallbackOrder);
         addSystemColumn(result, policies, "exportCycles", "Export Cycles", false, fallbackOrder);
         return result.stream().sorted(java.util.Comparator.comparingInt(DashboardColumnDefinition::displayOrder)
-                .thenComparing(DashboardColumnDefinition::label)).toList();
+                .thenComparing(DashboardColumnDefinition::key)).toList();
     }
 
     private Map<String, ColumnPolicy> loadColumnPolicies(UUID tenant) {

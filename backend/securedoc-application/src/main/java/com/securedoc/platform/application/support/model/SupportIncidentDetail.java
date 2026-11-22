@@ -36,7 +36,9 @@ public record SupportIncidentDetail(
         Instant resolvedAt,
         List<Event> events,
         /** Task 0025: the LexaVault code (stored with the incident, else from the reason code). */
-        String lvCode) {
+        String lvCode,
+        /** Task 0038: where the problem's document sits in its case ("document 2 of 3, page 14"); null when none. */
+        DocumentPosition documentPosition) {
 
     public SupportIncidentDetail {
         lvCode = lvCodeFor(lvCode != null ? lvCode : safeMetadata == null ? null : safeMetadata.get("lvCode"), reasonCode);
@@ -66,7 +68,16 @@ public record SupportIncidentDetail(
                 status, businessOutcome, businessImpact, businessContinuityUsed, stage, component, failureCategory,
                 reasonCode, retryable, attemptCount, correlationId, safeSummary, artifactAvailability,
                 technicalAttentionRetainedUntil, artifactsPurgedAt, processingFingerprint, safeMetadata, firstObservedAt,
-                lastObservedAt, resolvedAt, events, null);
+                lastObservedAt, resolvedAt, events, null, null);
+    }
+
+    /** Task 0038: the same detail with the document's position in its case. */
+    public SupportIncidentDetail withDocumentPosition(DocumentPosition position) {
+        return new SupportIncidentDetail(incidentId, tenantId, packageId, documentId, packageStatus, primaryIdentifierLabel,
+                primaryIdentifierValue, status, businessOutcome, businessImpact, businessContinuityUsed, stage, component,
+                failureCategory, reasonCode, retryable, attemptCount, correlationId, safeSummary, artifactAvailability,
+                technicalAttentionRetainedUntil, artifactsPurgedAt, processingFingerprint, safeMetadata, firstObservedAt,
+                lastObservedAt, resolvedAt, events, lvCode, position);
     }
 
     public record Event(

@@ -336,9 +336,10 @@ public class ApplicationServiceConfig {
     public SupportIncidentQueryService supportIncidentQueryService(
             SupportIncidentSearchRepository supportIncidentSearchRepository,
             ProcessingIncidentRepository processingIncidentRepository,
-            PackageLifecycleRepository packageLifecycleRepository) {
+            PackageLifecycleRepository packageLifecycleRepository,
+            DocumentRepository documentRepository) {
         return new SupportIncidentQueryService(supportIncidentSearchRepository, processingIncidentRepository,
-                packageLifecycleRepository);
+                packageLifecycleRepository, documentRepository);
     }
 
     @Bean
@@ -533,8 +534,9 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public ListPackagesQuery listPackagesQuery(PackageRepository packageRepository, BusinessIdentityService businessIdentityService) {
-        return new ListPackagesQueryService(packageRepository, businessIdentityService);
+    public ListPackagesQuery listPackagesQuery(PackageRepository packageRepository, BusinessIdentityService businessIdentityService,
+                                               ProcessingIncidentRepository processingIncidentRepository) {
+        return new ListPackagesQueryService(packageRepository, businessIdentityService, processingIncidentRepository);
     }
 
     @Bean

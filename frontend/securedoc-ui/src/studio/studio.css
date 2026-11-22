@@ -292,6 +292,9 @@
 .cf-case[data-you] .cf-case-flag { background: var(--cf-mark); }
 .cf-case-next { font-size: 14px; color: var(--cf-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cf-case-next[data-stage='stopped'] { color: var(--cf-danger); }
+/* Task 0038: the plain stop reason and the destination under the next step. */
+.cf-case-why, .cf-case-to { display: block; font-size: 12px; color: var(--cf-muted); overflow: hidden; text-overflow: ellipsis; }
+.cf-case-next[data-stage='stopped'] .cf-case-why { color: var(--cf-danger); }
 .cf-case-next[data-stage='delivered'], .cf-case-next[data-stage='redacting'], .cf-case-next[data-stage='intake'] { color: var(--cf-muted); }
 .cf-case-act { display: flex; justify-content: flex-end; padding-right: 16px; }
 .cf-case-act .cf-btn { white-space: nowrap; }

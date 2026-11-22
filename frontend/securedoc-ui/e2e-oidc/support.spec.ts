@@ -66,6 +66,8 @@ const DETAIL = {
   ...ITEMS[0], packageStatus: 'FAILED', failureCategory: 'DEPENDENCY_TIMEOUT', safeSummary: 'OCR did not complete within the allowed time.',
   artifactAvailability: 'RETAINED_UNTIL_POLICY_EXPIRY', technicalAttentionRetainedUntil: new Date(Date.now() + 2 * 864e5).toISOString(), artifactsPurgedAt: null,
   processingFingerprint: { bundle: '2026.11.1', ocr: 'tesseract-5.4' }, safeMetadata: { page: '14' },
+  // Task 0038: the problem's document by position and page, never by file name.
+  documentPosition: { position: 2, count: 3, page: 14 },
   events: [
     { eventType: 'FAILURE_RECORDED', attemptNumber: 1, scope: 'DOCUMENT', reasonCode: 'OCR_TIMEOUT', retryable: true, correlationId: 'corr-91', occurredAt: minsAgo(200), safeMetadata: {} },
     { eventType: 'FAILURE_RECORDED', attemptNumber: 3, scope: 'DOCUMENT', reasonCode: 'OCR_TIMEOUT', retryable: true, correlationId: 'corr-93', occurredAt: minsAgo(180), safeMetadata: {} },
@@ -225,7 +227,9 @@ test('IT Administrator: one problem page with Retry and Keep; every code under T
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Support›LN204860');
   await expect(page.locator('.cf-pb-title')).toContainText('Case stopped');
   const what = page.getByRole('region', { name: 'What happened' });
-  await expect(what).toContainText('Reading text from a page took too long. It stopped at text recognition. LexaVault tried 3 times');
+  await expect(what).toContainText('Reading text from a page took too long. It stopped at text recognition, in document 2 of 3, page 14. LexaVault tried 3 times');
+  await expect(page.locator('main')).not.toContainText('Title_Commitment'); // task 0038: never the file name
+  if (process.env.P0038_PROOF) await page.screenshot({ path: '../../docs/work/0038-proof/support-document-position.png', fullPage: true });
   await expect(page.getByRole('region', { name: 'What it means for the case' })).toContainText('The case is stopped. Nothing was sent. The original is kept until');
   const timeline = page.getByRole('region', { name: 'Timeline' });
   await expect(timeline).toContainText('Try 1 failed: text reading timed out');
