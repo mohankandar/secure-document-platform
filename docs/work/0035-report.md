@@ -124,3 +124,14 @@ Not merged, not pushed.
 ## Suggested next step
 
 Owner review of the findings and questions. Then, if wanted, a small task for finding 1 (claim lock per destination, with its PostgreSQL test) and the two screen points. The suite is ready to move onto the mock destination server when platform-core delivers it (switch-over part 3).
+
+## Owner's answers (2026-11-22, recorded by the design chat)
+
+- **Finding 1 (per-destination worker limit):** fix it with a lock per destination while a job is being claimed. Task 0036.
+- **Finding 2 (order follows the database clock):** approved schema change: an ever-increasing queue number on export jobs; order by it, not by time. Task 0036.
+- **Storage refusing uploads for 30 s after an abrupt stop:** fail-closed, by design; no change.
+1. **Only destination down:** raise the "can't reach its destinations" IT alert whenever every destination is down, including when there is only one. The pause stays. Task 0036.
+2. **Reviewer:** keep the alias (Reviewer = Document Processor, may resend). The task's wording was wrong, not the product.
+3. **Resend after retention:** keep the rule: only cases waiting for a person can be resent. "Export a finished case again" goes to the backlog as its own feature.
+4. **Timings in screen text:** keep the schedule; every sentence takes its numbers from the real settings ("every 5 minutes", "over about 17 hours"). Task 0036.
+5. **Screen points:** yes. Add an Exporting tile; Needs IT counted as "need IT" in Support › Destinations; the IT card says the cases can't be written (not "Destination can't be reached") when the health check passes; cases listed by case number, not internal id. Task 0036.
