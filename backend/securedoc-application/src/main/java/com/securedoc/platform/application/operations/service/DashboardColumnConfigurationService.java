@@ -51,13 +51,17 @@ public final class DashboardColumnConfigurationService {
         Map<String, DashboardColumnSetting> saved = new HashMap<>();
         for (DashboardColumnSetting setting : settingsRepository.findByTenantId(tenantId)) saved.put(setting.key(), setting);
 
+        // Task 0038: columns are kept by their stable key. A column with no saved choice yet (an identifier added after
+        // the last save) goes after every saved one, so it never takes a saved column's place; ties go by key, never by
+        // label, so a rename never reorders.
+        int unsavedBase = saved.values().stream().mapToInt(DashboardColumnSetting::displayOrder).max().orElse(-1) + 1;
         List<DashboardAdminColumn> result = new ArrayList<>();
         for (int i = 0; i < catalog.size(); i++) {
             CatalogColumn column = catalog.get(i);
             DashboardColumnSetting setting = saved.get(column.key());
             boolean allowed = setting == null || setting.allowed();
             boolean defaultVisible = setting == null ? column.defaultVisible() : setting.defaultVisible();
-            int order = setting == null ? i : setting.displayOrder();
+            int order = setting == null ? unsavedBase + i : setting.displayOrder();
             if (column.primary()) {
                 allowed = true;
                 defaultVisible = true;
@@ -66,7 +70,7 @@ public final class DashboardColumnConfigurationService {
                     allowed, allowed && defaultVisible, order));
         }
         return result.stream().sorted(Comparator.comparingInt(DashboardAdminColumn::displayOrder)
-                .thenComparing(DashboardAdminColumn::label)).toList();
+                .thenComparing(DashboardAdminColumn::key)).toList();
     }
 
     public void updateConfiguration(TenantId tenantId, ActorId actorId, CorrelationId correlationId,

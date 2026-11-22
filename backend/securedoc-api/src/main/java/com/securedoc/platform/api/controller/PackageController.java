@@ -236,9 +236,12 @@ public class PackageController {
         List<PackageSummary> summaries = listPackagesQuery.execute(principal, offset, limit);
 
         // Task 0029: the page's export states in two queries, as the dashboard (OperationsController) does.
-        Map<PackageId, ExportJobService.CaseExportState> exportStates = exportJobs == null ? Map.of()
-                : exportJobs.caseExportStates(principal.tenantId(),
+        // Task 0038: with the reason it waits and the destination's name.
+        Map<PackageId, ExportJobService.CaseExportRow> exportRows = exportJobs == null ? Map.of()
+                : exportJobs.caseExportRows(principal.tenantId(),
                         summaries.stream().map(PackageSummary::packageId).toList());
+        ExportJobService.CaseExportRow none = new ExportJobService.CaseExportRow(ExportJobService.CaseExportState.NONE,
+                null, null);
         List<PackageSummaryResponse> response = summaries.stream()
                 .map(s -> new PackageSummaryResponse(
                         s.packageId().toString(),
@@ -248,7 +251,10 @@ public class PackageController {
                         s.documentCount(),
                         s.createdAt(),
                         s.updatedAt(),
-                        exportStates.getOrDefault(s.packageId(), ExportJobService.CaseExportState.NONE).name()
+                        exportRows.getOrDefault(s.packageId(), none).state().name(),
+                        s.stopReasonCode() != null ? s.stopReasonCode()
+                                : exportRows.getOrDefault(s.packageId(), none).reasonCode(),
+                        exportRows.getOrDefault(s.packageId(), none).destinationName()
                 ))
                 .toList();
         return ResponseEntity.ok(response);

@@ -561,6 +561,37 @@ class ExportFollowupsTest {
                 "the case's own endpoint agrees");
     }
 
+    @Test
+    void theCasesListGetsWhyACaseWaitsAsACodeAndItsDestinationsName() {
+        // Task 0038: the reason a case waits, as an LV code only, and the destination's name once one is chosen.
+        ExportJobFixture f = new ExportJobFixture();
+        var archive = org.mockito.Mockito.mock(com.securedoc.platform.domain.integration.IntegrationConnection.class);
+        org.mockito.Mockito.when(archive.name()).thenReturn("Records archive");
+        org.mockito.Mockito.when(f.connections.findByTenantIdAndId(f.tenant, f.destination.id))
+                .thenReturn(java.util.Optional.of(archive));
+        DocumentPackage forIt = f.caseReadyForExport();
+        DocumentPackage unknownCode = f.caseReadyForExport();
+        DocumentPackage queued = f.caseReadyForExport();
+        PipelineJob itJob = f.jobs.all().stream().filter(j -> j.packageId().equals(forIt.id())).findFirst().orElseThrow();
+        f.jobs.changeStatus(f.tenant, itJob.id(), PipelineJobStatus.READY, PipelineJobStatus.NEEDS_IT, 1, "LV-DLV-004",
+                "DESTINATION_REFUSED");
+        PipelineJob oddJob = f.jobs.all().stream().filter(j -> j.packageId().equals(unknownCode.id())).findFirst()
+                .orElseThrow();
+        f.jobs.changeStatus(f.tenant, oddJob.id(), PipelineJobStatus.READY, PipelineJobStatus.NEEDS_IT, 1,
+                "Jane Doe 123-45-6789", "X");
+
+        Map<PackageId, ExportJobService.CaseExportRow> rows = f.service.caseExportRows(f.tenant,
+                List.of(forIt.id(), unknownCode.id(), queued.id(), PackageId.generate()));
+
+        assertEquals(new ExportJobService.CaseExportRow(ExportJobService.CaseExportState.NEEDS_IT, "LV-DLV-004",
+                "Records archive"), rows.get(forIt.id()));
+        assertEquals(new ExportJobService.CaseExportRow(ExportJobService.CaseExportState.NEEDS_IT, null,
+                "Records archive"), rows.get(unknownCode.id()), "text that is no LV code is never passed on");
+        assertEquals(new ExportJobService.CaseExportRow(ExportJobService.CaseExportState.READY, null, "Records archive"),
+                rows.get(queued.id()), "queued: no reason, the destination is chosen");
+        rows.values().forEach(r -> assertFalse(String.valueOf(r).contains("Jane")));
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /** The defaults with a different first retry delay (the rest of the schedule as default). */

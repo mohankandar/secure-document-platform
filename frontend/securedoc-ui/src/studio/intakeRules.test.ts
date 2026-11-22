@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MAX_UPLOAD_BYTES, countPdfPages, fileProblem, fileProblemText, hasPdfHeader, intakeRulesLine, prefillIdentifier, scannerDisplayName,
+  tooManyFilesText, tooManyPages,
 } from './intakeRules.ts';
 
 const bytes = (text: string) => new Uint8Array(Buffer.from(text, 'latin1'));
@@ -14,9 +15,19 @@ function pdf(pages: number): Uint8Array {
   return bytes(`%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${pages} >>\nendobj\n${pageObjects}trailer\n<< /Root 1 0 R >>\n%%EOF\n`);
 }
 
-test('the rule line states only the limit the server enforces on manual upload', () => {
-  assert.equal(intakeRulesLine(), 'PDF only · up to 50 MB each');
+test('the rule line states the limits the server enforces (task 0038: pages per file and files per case)', () => {
+  assert.equal(intakeRulesLine(), 'PDF only · up to 50 MB and 500 pages each · up to 50 files per case');
   assert.equal(MAX_UPLOAD_BYTES, 50 * 1024 * 1024);
+});
+
+test('over 500 pages or over 50 files is refused with what to do (task 0038)', () => {
+  assert.equal(tooManyPages(500), false);
+  assert.equal(tooManyPages(501), true);
+  assert.equal(tooManyPages(null), false, 'an unknown count is left to the server');
+  assert.equal(fileProblemText.TOO_MANY_PAGES, 'Over 500 pages — split it into smaller PDFs first');
+  assert.equal(tooManyFilesText(50), null);
+  assert.equal(tooManyFilesText(51), 'A case holds up to 50 files. Remove 1 file, or put the rest in another case.');
+  assert.equal(tooManyFilesText(53), 'A case holds up to 50 files. Remove 3 files, or put the rest in another case.');
 });
 
 test('a file the server would refuse is named with what to do', () => {

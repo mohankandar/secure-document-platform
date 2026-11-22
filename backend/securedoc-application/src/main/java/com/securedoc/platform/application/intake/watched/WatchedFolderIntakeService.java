@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intake.watched;
 
+import com.securedoc.platform.domain.document.CaseLimits;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.command.*;
 import com.securedoc.platform.application.intake.model.IntakeFailure;
@@ -195,6 +196,12 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             return resumeExisting(principal, candidate, existing.get(), correlationId, scanLease);
         }
 
+        // Task 0038: a drop with more files than a case holds is refused before a case is made.
+        if (candidate.documents().size() > CaseLimits.MAX_FILES_PER_CASE) {
+            throw new com.securedoc.platform.application.exception.ValidationException(
+                    com.securedoc.platform.domain.error.LvErrorCode.INT_029, "The folder drop has more than "
+                    + CaseLimits.MAX_FILES_PER_CASE + " files");
+        }
         requireCurrentLease(scanLease);
         PackageId createdPackageId;
         try {

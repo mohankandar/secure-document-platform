@@ -366,6 +366,32 @@ Reserved: not used yet.
 2. Send the same request again, with the same Idempotency-Key. Nothing was lost.
 3. If it happens often, tell your IT Admin.
 
+### LV-INT-028 Too many pages in one file
+
+- **Means:** A PDF in a case can have up to 500 pages. Nothing was taken in from this file.
+- **Kind:** Refused
+- **Who acts:** Person, source system
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Split the PDF into files of 500 pages or fewer.
+2. Add the parts to the case as separate files. A case can hold up to 50 files.
+3. A source system sends the parts as separate documents of the case. The source's own page limit may be lower; your IT Admin can see it under Integrations.
+
+### LV-INT-029 Too many files in one case
+
+- **Means:** A case can hold up to 50 files. Nothing more was taken in.
+- **Kind:** Refused
+- **Who acts:** Person, source system
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Send the case with 50 files or fewer.
+2. If more files belong together, split them over several cases.
+3. Files already in the case stay as they are; nothing in them was changed.
+
 ### LV-INT-030 Waiting for the trigger file
 
 - **Means:** The folder drop has no trigger file yet, so it isn't taken in.

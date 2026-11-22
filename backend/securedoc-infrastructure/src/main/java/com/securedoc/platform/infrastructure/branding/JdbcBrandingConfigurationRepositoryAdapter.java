@@ -44,15 +44,14 @@ public class JdbcBrandingConfigurationRepositoryAdapter implements BrandingConfi
         jdbc.update("""
                 INSERT INTO branding_configurations
                     (id, tenant_id, application_name, short_name, organization_name, page_title,
-                     accent_color, secondary_color, primary_logo, primary_logo_media_type,
+                     secondary_color, primary_logo, primary_logo_media_type,
                      compact_logo, compact_logo_media_type, favicon, favicon_media_type, updated_by, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     application_name = EXCLUDED.application_name,
                     short_name = EXCLUDED.short_name,
                     organization_name = EXCLUDED.organization_name,
                     page_title = EXCLUDED.page_title,
-                    accent_color = EXCLUDED.accent_color,
                     secondary_color = EXCLUDED.secondary_color,
                     primary_logo = EXCLUDED.primary_logo,
                     primary_logo_media_type = EXCLUDED.primary_logo_media_type,
@@ -64,7 +63,7 @@ public class JdbcBrandingConfigurationRepositoryAdapter implements BrandingConfi
                     updated_at = EXCLUDED.updated_at
                 """,
                 c.id(), c.tenantId() == null ? null : c.tenantId().value(), c.applicationName(), c.shortName(),
-                c.organizationName(), c.pageTitle(), c.accentColor(), c.secondaryColor(), c.primaryLogo(),
+                c.organizationName(), c.pageTitle(), c.secondaryColor(), c.primaryLogo(),
                 c.primaryLogoMediaType(), c.compactLogo(), c.compactLogoMediaType(), c.favicon(), c.faviconMediaType(),
                 c.updatedBy(), Timestamp.from(c.updatedAt()));
         return c;
@@ -80,7 +79,7 @@ public class JdbcBrandingConfigurationRepositoryAdapter implements BrandingConfi
         return new BrandingConfiguration(
                 rs.getObject("id", UUID.class), tenant == null ? null : TenantId.of(tenant),
                 rs.getString("application_name"), rs.getString("short_name"), rs.getString("organization_name"),
-                rs.getString("page_title"), rs.getString("accent_color"), rs.getString("secondary_color"),
+                rs.getString("page_title"), rs.getString("secondary_color"),
                 rs.getBytes("primary_logo"), rs.getString("primary_logo_media_type"), rs.getBytes("compact_logo"),
                 rs.getString("compact_logo_media_type"), rs.getBytes("favicon"), rs.getString("favicon_media_type"),
                 rs.getObject("updated_by", UUID.class), rs.getTimestamp("updated_at").toInstant());

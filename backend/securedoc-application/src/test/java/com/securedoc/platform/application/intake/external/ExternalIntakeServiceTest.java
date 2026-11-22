@@ -280,14 +280,19 @@ class ExternalIntakeServiceTest {
         final ExternalIntakeService service;
 
         LevelHarness(IntegrationProviderType provider) {
+            this(provider, provider == IntegrationProviderType.SCANNER ? 1 : 10, 100, 1);
+        }
+
+        /** Task 0038: a source whose own limits are above the case limits, and a PDF of {@code pdfPages} pages. */
+        LevelHarness(IntegrationProviderType provider, int maxDocuments, int maxPages, int pdfPages) {
             MutableClock clock = new MutableClock(Instant.parse("2026-09-10T12:00:00Z"));
             AuditService auditService = new AuditService(audits::add);
             FakeConnectionRepository connections = new FakeConnectionRepository();
             connections.save(IntegrationConnection.create(tenant, "Source", null, IntegrationPurpose.INGESTION_SOURCE,
                     IntegrationDirection.INBOUND, provider, provider == IntegrationProviderType.SCANNER
                             ? IntegrationAuthenticationType.NONE : IntegrationAuthenticationType.JWT,
-                    "los-client", null, null, null, 60, 2, 24, provider == IntegrationProviderType.SCANNER ? 1 : 10,
-                    10_000_000L, 100,
+                    "los-client", null, null, null, 60, 2, 24, maxDocuments,
+                    10_000_000L, maxPages,
                     IntegrationAcknowledgementMode.NONE, true, clock.instant()));
             FakeExternalIntakeRepository intakes = new FakeExternalIntakeRepository();
             CreatePackageUseCase create = (command, p) -> {
@@ -305,7 +310,7 @@ class ExternalIntakeServiceTest {
                     new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
             service = new ExternalIntakeService(new IntegrationConnectionService(connections, auditService), intakes,
                     packages, create, upload, (command, p) -> { }, command -> { },
-                    input -> Checksum.sha256("a".repeat(64)), input -> new PdfIntakeValidationPort.PdfInfo(1),
+                    input -> Checksum.sha256("a".repeat(64)), input -> new PdfIntakeValidationPort.PdfInfo(pdfPages),
                     auditService, maintenance, clock);
         }
 
@@ -351,6 +356,40 @@ class ExternalIntakeServiceTest {
         assertEquals("Document manifest fileName is not valid: FileName must not contain path separators", refused.getMessage());
         assertFalse(refused.getMessage().contains("Jane"));
         assertTrue(h.creates.isEmpty());
+    }
+
+    /* Task 0038: the case limits hold for push too, even when the source allows more. */
+
+    @Test
+    void aManifestOfMoreThanFiftyFilesIsRefusedBeforeTheCaseIsMade() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API, 100, 1000, 1);
+        List<PushIntakeCreateInput.ManifestDocumentInput> docs = new ArrayList<>();
+        for (int i = 0; i < 51; i++) docs.add(doc("DOC-" + i, null));
+        ValidationException refused = assertThrows(ValidationException.class, () -> h.service.createPushIntake(
+                new PushIntakeCreateInput("SRC-L1", "1", Map.of("contractNumber", "C-1"), Map.of(), docs),
+                h.principal, CorrelationId.generate()));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.INT_029, refused.lvCode());
+        assertTrue(h.creates.isEmpty(), "no case is created");
+        // Fifty is taken.
+        h.service.createPushIntake(new PushIntakeCreateInput("SRC-L2", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                docs.subList(0, 50)), h.principal, CorrelationId.generate());
+        assertEquals(1, h.creates.size());
+    }
+
+    @Test
+    void aPushedPdfOfMoreThanFiveHundredPagesIsRefusedAndNotTakenIn() {
+        LevelHarness over = new LevelHarness(IntegrationProviderType.PUSH_API, 10, 1000, 501);
+        ExternalIntakeSnapshot created = over.service.createPushIntake(new PushIntakeCreateInput("SRC-L3", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null))), over.principal, CorrelationId.generate());
+        ValidationException refused = assertThrows(ValidationException.class, () -> over.receive(created.packageId(), "DOC-1"));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.INT_028, refused.lvCode());
+        assertTrue(over.uploads.isEmpty(), "nothing taken in");
+
+        LevelHarness atLimit = new LevelHarness(IntegrationProviderType.PUSH_API, 10, 1000, 500);
+        ExternalIntakeSnapshot ok = atLimit.service.createPushIntake(new PushIntakeCreateInput("SRC-L4", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null))), atLimit.principal, CorrelationId.generate());
+        atLimit.receive(ok.packageId(), "DOC-1");
+        assertEquals(1, atLimit.uploads.size(), "500 pages is taken in");
     }
 
     /* Task 0023 D3 (#22) and #357. */

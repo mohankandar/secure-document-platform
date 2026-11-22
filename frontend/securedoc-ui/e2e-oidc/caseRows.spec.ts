@@ -56,7 +56,7 @@ function caseFor(loan: string, status: string, n: string) {
   };
 }
 
-async function mockApi(page: Page, approvals: string[]) {
+async function mockApi(page: Page, approvals: string[], extra: object[] = []) {
   await page.route('**/api/v1/**', async (route: Route) => {
     const url = new URL(route.request().url());
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -64,7 +64,7 @@ async function mockApi(page: Page, approvals: string[]) {
     if (url.pathname === '/api/v1/me') {
       return json({ username: 'rows.user', roles: ENTITY.roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities: SUPERVISOR });
     }
-    if (url.pathname === '/api/v1/packages') return json([REVIEW_CASE, APPROVAL_CASE]);
+    if (url.pathname === '/api/v1/packages') return json([REVIEW_CASE, APPROVAL_CASE, ...extra]);
     const one = [REVIEW_CASE, APPROVAL_CASE].find((c) => url.pathname === `/api/v1/packages/${c.packageId}`);
     if (one) return json(one);
     if (url.pathname.endsWith('/approve-delivery') && route.request().method() === 'POST') {
@@ -133,4 +133,30 @@ test('clicking the rest of the row still opens the case panel', async ({ page })
   const panel = page.getByRole('complementary', { name: 'Case panel' });
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Approve delivery' })).toBeVisible();
+});
+
+// Task 0038: a stopped, a waiting and a rejected case, and one delivered to a named destination.
+const STOPPED_CASE = { ...caseFor('LN-3001', 'FAILED', '0031'), stopReasonCode: 'LV-PRC-004' };
+const WAITING_CASE = { ...caseFor('LN-3002', 'COMPLETED', '0032'), exportState: 'NEEDS_IT', stopReasonCode: 'LV-DLV-004', destinationName: 'Records archive' };
+const REJECTED_CASE = { ...caseFor('LN-3003', 'REJECTED', '0033'), stopReasonCode: null };
+const SENT_CASE = { ...caseFor('LN-3004', 'COMPLETED', '0034'), exportState: 'EXPORTED', destinationName: 'Records archive' };
+const ODD_CASE = { ...caseFor('LN-3005', 'FAILED', '0035'), stopReasonCode: 'Jane Doe 123-45-6789' };
+
+test('task 0038: a stopped, waiting or rejected row says why in plain words, and where the case goes', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, [], [STOPPED_CASE, WAITING_CASE, REJECTED_CASE, SENT_CASE, ODD_CASE]);
+  await signIn(page);
+  await expect(row(page, 'LN-3001').locator('.cf-case-why')).toHaveText('Text reading timed out');
+  await expect(row(page, 'LN-3002').locator('.cf-case-why')).toHaveText('Destination refused the file');
+  await expect(row(page, 'LN-3002').locator('.cf-case-to')).toHaveText('To Records archive');
+  await expect(row(page, 'LN-3003')).toContainText('Not accepted');
+  await expect(row(page, 'LN-3003').locator('.cf-case-why')).toHaveCount(0); // no rejection reason is stored yet
+  await expect(row(page, 'LN-3004').locator('.cf-case-why')).toHaveCount(0);
+  await expect(row(page, 'LN-3004').locator('.cf-case-to')).toHaveText('To Records archive');
+  await expect(row(page, 'LN-3005').locator('.cf-case-why')).toHaveCount(0); // never text that is no known code
+  await expect(page.locator('.cf-desk')).not.toContainText('Jane Doe');
+  await expect(row(page, 'LN-2001').locator('.cf-case-why, .cf-case-to')).toHaveCount(0);
+  if (process.env.P0038_PROOF) {
+    await page.screenshot({ path: '../../docs/work/0038-proof/cases-stopped-waiting-rejected.png', fullPage: true });
+  }
 });

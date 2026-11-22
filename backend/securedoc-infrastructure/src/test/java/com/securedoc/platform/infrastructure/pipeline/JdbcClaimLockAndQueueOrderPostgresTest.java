@@ -7,21 +7,15 @@ import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import liquibase.Contexts;
 import liquibase.Liquibase;
-import liquibase.database.Database;
-import liquibase.database.DatabaseFactory;
-import liquibase.database.jvm.JdbcConnection;
-import liquibase.resource.ClassLoaderResourceAccessor;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class JdbcClaimLockAndQueueOrderPostgresTest {
     private static final Duration LEASE = Duration.ofSeconds(30);
     private static final EnumSet<PipelineStage> EXPORT = EnumSet.of(PipelineStage.EXPORT, PipelineStage.SPLIT_EXPORT);
+    private static PostgresTestDatabase db;
     private static NamedParameterJdbcTemplate jdbc;
 
     private JdbcPipelineJobRepository jobs;
@@ -59,18 +54,14 @@ class JdbcClaimLockAndQueueOrderPostgresTest {
 
     @BeforeAll
     static void migrate() throws Exception {
-        String url = System.getenv("LEXAVAULT_TEST_PG_URL");
-        String user = System.getenv("LEXAVAULT_TEST_PG_USER");
-        String password = System.getenv("LEXAVAULT_TEST_PG_PASSWORD");
-        try (Connection connection = DriverManager.getConnection(url, user, password)) {
-            liquibase(connection).update(new Contexts());
-        }
-        jdbc = new NamedParameterJdbcTemplate(new DriverManagerDataSource(url, user, password));
+        // Task 0038: its own database, so no other test class sees or changes its rows.
+        db = PostgresTestDatabase.migrated("ClaimLockAndQueueOrder");
+        jdbc = db.jdbc();
     }
 
-    private static Liquibase liquibase(Connection connection) throws Exception {
-        Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
-        return new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(), database);
+    @AfterAll
+    static void dropDatabase() throws Exception {
+        if (db != null) db.close();
     }
 
     @BeforeEach
@@ -208,6 +199,64 @@ class JdbcClaimLockAndQueueOrderPostgresTest {
         assertTrue(overLimit.isEmpty(), "never two RUNNING at once: " + overLimit);
     }
 
+    @Test
+    void withALimitOfOneADestinationsJobsGoOutInQueueOrderWhenWorkersClaimAtOnce() throws Exception {
+        // Task 0038: before, the worker that won the destination's lock took the row it had locked first, which could
+        // be the destination's second job while the first was held by a worker still waiting for the lock.
+        List<PipelineJob> queued = new ArrayList<>();
+        for (int i = 0; i < 6; i++) queued.add(queue(destination));
+        for (int cycle = 0; cycle < 5; cycle++) {
+            jdbc.getJdbcOperations().update("UPDATE pipeline_jobs SET status = 'READY', claim_owner = NULL,"
+                    + " claim_until = NULL");
+            for (int i = 0; i < queued.size(); i++) {
+                List<PipelineJob> claimed = claimAtOnce(8, 1);
+                assertEquals(List.of(queued.get(i).id()), claimed.stream().map(PipelineJob::id).toList(),
+                        "cycle " + cycle + ", job " + i + ": the destination's first waiting job, and only that one");
+                jdbc.update("UPDATE pipeline_jobs SET status = 'DONE', claim_owner = NULL, claim_until = NULL"
+                        + " WHERE id = :id", new MapSqlParameterSource("id", queued.get(i).id()));
+            }
+        }
+    }
+
+    @Test
+    void jobsWithoutADestinationHaveNoLimitAndEachIsTakenOnce() throws Exception {
+        List<UUID> queued = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            PackageId pkg = PackageId.generate();
+            TestRows.packageRow(jdbc, tenant, pkg);
+            PipelineJob job = PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, null, null, 1, Instant.now());
+            assertTrue(jobs.enqueue(job));
+            queued.add(job.id());
+        }
+        List<PipelineJob> claimed = claimAtOnce(8, 1);
+        assertEquals(new HashSet<>(queued), new HashSet<>(claimed.stream().map(PipelineJob::id).toList()));
+        assertEquals(3, claimed.size(), "each once");
+    }
+
+    // ---------------------------------------------------------------- 1b. READY is due whatever the clock says
+
+    @Test
+    void aReadyJobIsTakenEvenWhenTheDatabaseClockIsBehindItsTime() {
+        // Task 0038: a READY job is written with the clock of that moment; when the clock then steps back (13 ms in
+        // this task's runs on Docker), the job looked "not due yet" and the claim returned nothing.
+        PipelineJob job = queue(destination);
+        jdbc.update("UPDATE pipeline_jobs SET next_attempt_at = clock_timestamp() + interval '1 minute' WHERE id = :id",
+                new MapSqlParameterSource("id", job.id()));
+        assertEquals(job.id(), jobs.claimNext(EXPORT, "w", LEASE, 1).orElseThrow().id());
+    }
+
+    @Test
+    void aJobWaitingToRetryStillWaitsForItsTime() {
+        PipelineJob job = queue(destination);
+        jdbc.update("UPDATE pipeline_jobs SET status = 'WAITING_RETRY',"
+                + " next_attempt_at = clock_timestamp() + interval '1 minute' WHERE id = :id",
+                new MapSqlParameterSource("id", job.id()));
+        assertTrue(jobs.claimNext(EXPORT, "w", LEASE, 1).isEmpty(), "not due yet");
+        jdbc.update("UPDATE pipeline_jobs SET next_attempt_at = clock_timestamp() - interval '1 second' WHERE id = :id",
+                new MapSqlParameterSource("id", job.id()));
+        assertEquals(job.id(), jobs.claimNext(EXPORT, "w", LEASE, 1).orElseThrow().id());
+    }
+
     // ---------------------------------------------------------------- 2. queue order is queue_seq, not the clock
 
     @Test
@@ -255,22 +304,13 @@ class JdbcClaimLockAndQueueOrderPostgresTest {
 
     @Test
     void migration045NumbersExistingJobsInTheirCreatedAtOrder() throws Exception {
-        String url = System.getenv("LEXAVAULT_TEST_PG_URL");
-        String user = System.getenv("LEXAVAULT_TEST_PG_USER");
-        String password = System.getenv("LEXAVAULT_TEST_PG_PASSWORD");
-        String name = "lv_m045_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-        try (Connection admin = DriverManager.getConnection(url, user, password); Statement s = admin.createStatement()) {
-            s.execute("CREATE DATABASE " + name);
-        }
-        String ownUrl = url.replaceFirst("/[^/?]+(\\?|$)", "/" + name + "$1");
-        try {
-            try (Connection connection = DriverManager.getConnection(ownUrl, user, password)) {
-                Liquibase liquibase = liquibase(connection);
+        try (PostgresTestDatabase m045 = PostgresTestDatabase.empty("m045")) {
+            try (Connection connection = m045.connection()) {
+                Liquibase liquibase = PostgresTestDatabase.liquibase(connection);
                 liquibase.update(new Contexts());
                 liquibase.rollback(1, (String) null); // back to 044: no queue_seq
             }
-            NamedParameterJdbcTemplate own = new NamedParameterJdbcTemplate(
-                    new DriverManagerDataSource(ownUrl, user, password));
+            NamedParameterJdbcTemplate own = m045.jdbc();
             Boolean hasColumn = own.queryForObject("SELECT EXISTS (SELECT 1 FROM information_schema.columns"
                     + " WHERE table_name = 'pipeline_jobs' AND column_name = 'queue_seq')", new MapSqlParameterSource(),
                     Boolean.class);
@@ -295,8 +335,8 @@ class JdbcClaimLockAndQueueOrderPostgresTest {
                         .addValue("ago", ago));
             }
 
-            try (Connection connection = DriverManager.getConnection(ownUrl, user, password)) {
-                liquibase(connection).update(new Contexts());
+            try (Connection connection = m045.connection()) {
+                PostgresTestDatabase.liquibase(connection).update(new Contexts());
             }
 
             List<UUID> byNumber = own.query("SELECT id FROM pipeline_jobs ORDER BY queue_seq",
@@ -326,11 +366,6 @@ class JdbcClaimLockAndQueueOrderPostgresTest {
             List<UUID> expected = new ArrayList<>(byNumber);
             expected.add(later.id());
             assertEquals(expected, taken);
-        } finally {
-            try (Connection admin = DriverManager.getConnection(url, user, password);
-                 Statement s = admin.createStatement()) {
-                s.execute("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)");
-            }
         }
     }
 }

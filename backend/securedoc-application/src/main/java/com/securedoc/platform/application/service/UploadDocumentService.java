@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.service;
 
+import com.securedoc.platform.domain.document.CaseLimits;
 import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.NotFoundException;
@@ -114,14 +115,26 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
             throw new ValidationException(LvErrorCode.INT_006, "The file is empty");
         }
 
+        // 3a. Task 0038: a case holds up to 50 files, however it is filled.
+        if (documentPackage.documents().size() >= CaseLimits.MAX_FILES_PER_CASE) {
+            throw new ValidationException(LvErrorCode.INT_029,
+                    "The case already holds " + CaseLimits.MAX_FILES_PER_CASE + " files");
+        }
+
         // 3b. Task 0023 D4 (#45): a manual or watched-folder file must be a PDF the server can open, the same check
         // machine intake makes before acknowledging (push, scanner and polling files were checked before this point).
         if (documentPackage.packageType() == PackageType.MANUAL_UPLOAD
                 || documentPackage.packageType() == PackageType.FOLDER_INTAKE) {
+            int pages;
             try (InputStream pdfStream = command.content().openStream()) {
-                pdfValidationPort.inspect(pdfStream);
+                pages = pdfValidationPort.inspect(pdfStream).pageCount();
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to read uploaded content", e);
+            }
+            // Task 0038: up to 500 pages per file (machine intake checks it where it counts the pages).
+            if (pages > CaseLimits.MAX_PAGES_PER_FILE) {
+                throw new ValidationException(LvErrorCode.INT_028,
+                        "The PDF has more than " + CaseLimits.MAX_PAGES_PER_FILE + " pages");
             }
         }
 

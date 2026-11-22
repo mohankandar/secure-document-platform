@@ -6,6 +6,7 @@
  */
 import { ACTION_WORDS, NEXT_STEP, findingsToReview, sentenceCase } from './words.ts';
 import { canContinueManually } from './support/supportRules.ts';
+import { isLvCode, lvEntry } from './lvCodes.ts';
 
 export const CAPS = {
   review: 'MANUAL_REVIEW',
@@ -42,6 +43,27 @@ export function nextStepText(status: string, openFindings: number | undefined): 
     case 'REJECTED': return NEXT_STEP.notAccepted;
     default: return NEXT_STEP.unknown;
   }
+}
+
+/** Export states in which a case waits (task 0029), so the row says why. */
+const WAITING_EXPORT = new Set(['NEEDS_IT', 'WAITING_FOR_YOU', 'DESTINATION_PAUSED', 'READY']);
+
+/**
+ * Task 0038: the plain stop reason a row shows under its next step: the title of the case's LV code (the short form
+ * of the case panel's reason), only while the case is stopped, rejected or waiting. Null when the case neither
+ * stopped nor waits, or when the server sent no code it knows: the row never shows text of unknown origin.
+ */
+export function rowReason(pkg: { status: string; exportState?: string; stopReasonCode?: string | null }): string | null {
+  const stoppedOrWaiting = pkg.status === 'FAILED' || pkg.status === 'REJECTED'
+    || (pkg.exportState !== undefined && WAITING_EXPORT.has(pkg.exportState));
+  if (!stoppedOrWaiting || !isLvCode(pkg.stopReasonCode)) return null;
+  return lvEntry(pkg.stopReasonCode).title;
+}
+
+/** Task 0038: the delivery destination once one is chosen ("To Records archive"), else null. */
+export function rowDestination(pkg: { destinationName?: string | null }): string | null {
+  const name = pkg.destinationName?.trim();
+  return name ? `To ${name}` : null;
 }
 
 /** The one action a row shows, or null when this person cannot move the case forward. */

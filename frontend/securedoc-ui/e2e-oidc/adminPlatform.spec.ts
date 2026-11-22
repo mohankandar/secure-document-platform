@@ -85,7 +85,7 @@ const STORAGE = {
 };
 
 const DEPLOYMENT_BRAND = { id: 'b-1', tenantId: null, applicationName: 'LexaVault', shortName: null, organizationName: 'Northwind Title & Escrow', pageTitle: null,
-  accentColor: '#1F6FEB', secondaryColor: null, primaryLogoDataUrl: null, compactLogoDataUrl: null, faviconDataUrl: null, updatedBy: 'ops', updatedAt: minsAgo(500) };
+  secondaryColor: null, primaryLogoDataUrl: null, compactLogoDataUrl: null, faviconDataUrl: null, updatedBy: 'ops', updatedAt: minsAgo(500) };
 const BRANDING = { deployment: DEPLOYMENT_BRAND, tenants: [{ tenantId: 't-nw', tenantName: 'Northwind Commercial', tenantSlug: 'nwc', customBranding: false }] };
 
 const TELEMETRY = {
@@ -204,6 +204,9 @@ test('Branding: one form with Apply to, preview of the top bar; Usage data in pl
   await expect(card.getByRole('img', { name: "Everyone's branding preview" })).toContainText('Cases');
   await card.getByRole('button', { name: 'Save' }).click();
   await expect.poll(() => calls.find((c) => c.path === '/api/v1/platform/branding/deployment')?.body.applicationName).toBe('Northwind Vault');
+  // Task 0038: the accent colour is gone, from the screen and from what is saved.
+  await expect(card.getByText(/accent/i)).toHaveCount(0);
+  expect(Object.keys(calls.find((c) => c.path === '/api/v1/platform/branding/deployment')?.body ?? {})).not.toContain('accentColor');
   await applyTo.selectOption('t-nw');
   await expect(card.getByText("Blank fields use everyone's look.")).toBeVisible();
   await expect(card.getByLabel('Product name')).toHaveAttribute('placeholder', "Everyone's look");

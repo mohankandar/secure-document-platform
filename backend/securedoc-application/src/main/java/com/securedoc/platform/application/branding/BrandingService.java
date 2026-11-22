@@ -25,7 +25,6 @@ public final class BrandingService {
     public static final String DEFAULT_APPLICATION_NAME = "LexaVault";
     public static final String DEFAULT_SHORT_NAME = "LexaVault";
     public static final String DEFAULT_PAGE_TITLE = "LexaVault";
-    public static final String DEFAULT_ACCENT = "#315CF4";
     public static final String DEFAULT_SECONDARY = "#6D5AE6";
     public static final int MAX_LOGO_BYTES = 512 * 1024;
     public static final int MAX_FAVICON_BYTES = 128 * 1024;
@@ -53,7 +52,6 @@ public final class BrandingService {
                 first(tenant == null ? null : tenant.shortName(), deployment == null ? null : deployment.shortName(), DEFAULT_SHORT_NAME),
                 first(tenant == null ? null : tenant.organizationName(), deployment == null ? null : deployment.organizationName(), null),
                 first(tenant == null ? null : tenant.pageTitle(), deployment == null ? null : deployment.pageTitle(), DEFAULT_PAGE_TITLE),
-                first(tenant == null ? null : tenant.accentColor(), deployment == null ? null : deployment.accentColor(), DEFAULT_ACCENT),
                 first(tenant == null ? null : tenant.secondaryColor(), deployment == null ? null : deployment.secondaryColor(), DEFAULT_SECONDARY),
                 firstBytes(tenant == null ? null : tenant.primaryLogo(), deployment == null ? null : deployment.primaryLogo()),
                 first(tenant == null ? null : tenant.primaryLogoMediaType(), deployment == null ? null : deployment.primaryLogoMediaType(), null),
@@ -113,7 +111,6 @@ public final class BrandingService {
         String shortName = text(update.shortName(), 32, "Short name");
         String organization = text(update.organizationName(), 100, "Organization name");
         String pageTitle = text(update.pageTitle(), 100, "Page title");
-        String accent = color(update.accentColor(), "Accent color");
         String secondary = color(update.secondaryColor(), "Secondary color");
 
         Asset primary = asset(current == null ? null : current.primaryLogo(), current == null ? null : current.primaryLogoMediaType(),
@@ -125,7 +122,7 @@ public final class BrandingService {
 
         return new BrandingConfiguration(
                 current == null ? UUID.randomUUID() : current.id(), tenantId,
-                appName, shortName, organization, pageTitle, accent, secondary,
+                appName, shortName, organization, pageTitle, secondary,
                 primary.bytes(), primary.mediaType(), compact.bytes(), compact.mediaType(), favicon.bytes(), favicon.mediaType(),
                 actorId.value(), Instant.now());
     }
@@ -142,22 +139,7 @@ public final class BrandingService {
         if (value == null || value.isBlank()) return null;
         String normalized = value.trim().toUpperCase(Locale.ROOT);
         if (!HEX.matcher(normalized).matches()) throw new ValidationException(LvErrorCode.CFG_001, label + " must be a six-digit hex color such as #315CF4");
-        if ("Accent color".equals(label) && contrastWithWhite(normalized) < 4.5d) {
-            throw new ValidationException(LvErrorCode.CFG_001, "Accent color must provide WCAG AA contrast with white button text");
-        }
         return normalized;
-    }
-
-    private static double contrastWithWhite(String hex) {
-        int r = Integer.parseInt(hex.substring(1, 3), 16);
-        int g = Integer.parseInt(hex.substring(3, 5), 16);
-        int b = Integer.parseInt(hex.substring(5, 7), 16);
-        double luminance = 0.2126d * linear(r / 255d) + 0.7152d * linear(g / 255d) + 0.0722d * linear(b / 255d);
-        return 1.05d / (luminance + 0.05d);
-    }
-
-    private static double linear(double channel) {
-        return channel <= 0.03928d ? channel / 12.92d : Math.pow((channel + 0.055d) / 1.055d, 2.4d);
     }
 
     private static Asset asset(byte[] currentBytes, String currentMediaType, BrandingUpdate.BrandingAssetUpdate update,

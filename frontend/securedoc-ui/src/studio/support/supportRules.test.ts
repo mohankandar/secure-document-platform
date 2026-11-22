@@ -4,7 +4,7 @@ import { problemReason, processingStageWords } from '../words.ts';
 import {
   MORE_ACTIONS, SUPPORT_CAPS, SUPPORT_REASON_CODES, blockingCount, canContinueManually, canFinish, chipCounts, fromIncident, fromTechnical,
   impactChip, inChip, lastSeen, mergeSupportPages, pagesLine, problemActions, reasonFilterOptions, rowWhat, rowWhere, searchPlaceholder,
-  statusWord, supportSearch, technicalProblemText, timelineText, type IncidentLike, type TechnicalLike,
+  statusWord, supportSearch, technicalProblemText, timelineText, documentPositionText, type IncidentLike, type TechnicalLike,
 } from './supportRules.ts';
 
 const when = (iso: string) => `<${iso}>`;
@@ -212,4 +212,17 @@ test('Continue manually: Document Processor and Supervisor only; finish waits fo
   assert.equal(canFinish(false, false), false);
   assert.equal(canFinish(true, true), false);
   assert.equal(canFinish(true, false), true);
+});
+
+// Task 0038: a problem about one document says where it sits in its case, never its file name.
+test('the problem page says which document and page, by position', () => {
+  assert.equal(documentPositionText({ position: 2, count: 3, page: 14 }), 'document 2 of 3, page 14');
+  assert.equal(documentPositionText({ position: 1, count: 3, page: null }), 'document 1 of 3');
+  assert.equal(documentPositionText({ position: 4, count: 3 }), null, 'a position that does not add up is not shown');
+  assert.equal(documentPositionText(null), null);
+  const v = fromIncident({ ...incident(), documentPosition: { position: 2, count: 3, page: 14 } }, when);
+  assert.equal(v.happened, 'Reading text from a page took too long. It stopped at text recognition, in document 2 of 3, page 14. LexaVault tried 3 times, the last at <2026-11-17T17:50:00Z>.');
+  assert.ok(v.technical.some(([k, val]) => k === 'Document position' && val === 'document 2 of 3, page 14'));
+  const whole = fromIncident(incident(), when);
+  assert.ok(!whole.happened.includes('document'), 'a problem without a position says nothing about a document');
 });

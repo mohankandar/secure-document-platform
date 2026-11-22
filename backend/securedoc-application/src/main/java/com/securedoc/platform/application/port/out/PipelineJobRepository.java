@@ -44,10 +44,11 @@ public interface PipelineJobRepository {
     List<PipelineJob> findByTenantIdAndStatus(TenantId tenantId, PipelineJobStatus status, int limit);
 
     /**
-     * Claims the next due job of the stages: READY or WAITING_RETRY whose next try is due, whose destination is
-     * WORKING (or has no state), is not waiting for a 429's Retry-After, and runs fewer jobs than its worker limit
-     * ({@code perDestinationLimit} less its 429 reduction, never below 1). In priority order, then oldest. Jobs
-     * another worker is taking are skipped ({@code FOR UPDATE SKIP LOCKED}). The claim gets a new token.
+     * Claims the next due job of the stages: READY (always due, whatever the clock says; task 0038) or WAITING_RETRY
+     * whose next try is due, whose destination is WORKING (or has no state), is not waiting for a 429's Retry-After,
+     * and runs fewer jobs than its worker limit ({@code perDestinationLimit} less its 429 reduction, never below 1). In
+     * priority order, then queue order; a destination's jobs are taken in its own queue order, also when workers
+     * claim at the same moment. The claim gets a new token.
      */
     Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease, int perDestinationLimit);
 

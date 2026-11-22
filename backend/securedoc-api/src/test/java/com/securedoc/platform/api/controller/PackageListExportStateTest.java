@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -37,14 +38,18 @@ class PackageListExportStateTest {
                 Set.of("DOCUMENT_PROCESSOR")));
         PackageId waiting = PackageId.generate();
         PackageId plain = PackageId.generate();
+        PackageId stopped = PackageId.generate();
         Instant now = Instant.now();
         ListPackagesQuery list = mock(ListPackagesQuery.class);
         when(list.execute(any(), anyInt(), anyInt())).thenReturn(List.of(
                 new PackageSummary(waiting, PackageType.MANUAL_UPLOAD, PackageStatus.IN_REVIEW, List.of(), 1, now, now),
-                new PackageSummary(plain, PackageType.MANUAL_UPLOAD, PackageStatus.PROCESSING, List.of(), 1, now, now)));
+                new PackageSummary(plain, PackageType.MANUAL_UPLOAD, PackageStatus.PROCESSING, List.of(), 1, now, now),
+                new PackageSummary(stopped, PackageType.MANUAL_UPLOAD, PackageStatus.FAILED, List.of(), 1, now, now,
+                        "LV-PRC-002")));
         ExportJobService exportJobs = mock(ExportJobService.class);
-        when(exportJobs.caseExportStates(eq(tenant), any()))
-                .thenReturn(Map.of(waiting, ExportJobService.CaseExportState.WAITING_FOR_YOU));
+        // Task 0038: the list reads the rows (state, reason code, destination name) instead of the states alone.
+        when(exportJobs.caseExportRows(eq(tenant), any())).thenReturn(Map.of(waiting, new ExportJobService.CaseExportRow(
+                ExportJobService.CaseExportState.WAITING_FOR_YOU, "LV-DLV-004", "Records archive")));
 
         PackageController controller = new PackageController(mock(CreatePackageUseCase.class),
                 mock(UploadDocumentUseCase.class), mock(SubmitPackageUseCase.class),
@@ -53,7 +58,12 @@ class PackageListExportStateTest {
 
         assertEquals("WAITING_FOR_YOU", body.get(0).exportState());
         assertEquals("NONE", body.get(1).exportState());
-        verify(exportJobs, times(1)).caseExportStates(eq(tenant), eq(List.of(waiting, plain)));
+        assertEquals("LV-DLV-004", body.get(0).stopReasonCode());
+        assertEquals("Records archive", body.get(0).destinationName());
+        assertNull(body.get(1).stopReasonCode());
+        assertNull(body.get(1).destinationName());
+        assertEquals("LV-PRC-002", body.get(2).stopReasonCode(), "a stopped case: why it stopped");
+        verify(exportJobs, times(1)).caseExportRows(eq(tenant), eq(List.of(waiting, plain, stopped)));
     }
 
     @Test

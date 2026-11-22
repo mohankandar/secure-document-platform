@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intake.external;
 
+import com.securedoc.platform.domain.document.CaseLimits;
 import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
@@ -441,6 +442,11 @@ public final class ExternalIntakeService {
             if (pageCount > source.maxPdfPages()) {
                 throw new ValidationException(LvErrorCode.INT_009, "PDF page count exceeds the configured source limit");
             }
+            if (pageCount > CaseLimits.MAX_PAGES_PER_FILE) {
+                // Task 0038: the case limit holds even when the source allows more.
+                throw new ValidationException(LvErrorCode.INT_028, "The PDF has more than "
+                        + CaseLimits.MAX_PAGES_PER_FILE + " pages");
+            }
         } catch (IOException | java.io.UncheckedIOException e) {
             throw receivedCopyUnreadable(packageId, e);
         }
@@ -581,6 +587,11 @@ public final class ExternalIntakeService {
         if (input.documents().isEmpty()) throw new ValidationException(LvErrorCode.INT_003, "Document manifest must contain at least one PDF");
         if (input.documents().size() > source.maxDocumentsPerIntake()) {
             throw new ValidationException(LvErrorCode.INT_010, "Document manifest exceeds the configured source document limit");
+        }
+        if (input.documents().size() > CaseLimits.MAX_FILES_PER_CASE) {
+            // Task 0038: the case limit holds even when the source allows more.
+            throw new ValidationException(LvErrorCode.INT_029, "Document manifest lists more than "
+                    + CaseLimits.MAX_FILES_PER_CASE + " files");
         }
     }
 
