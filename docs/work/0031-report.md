@@ -79,3 +79,9 @@ The backend build passed with no failures. No code was changed.
 
 ## Suggested next step
 A fix task for items 1, 2, 3 and 5 (adapter against Vero R7's real API, with a contract test using Vero's paths), plus a local setup for item 4. Then run this task again.
+
+## Owner's answers (2026-11-21, recorded by the design chat)
+
+1. **Addresses:** neither app changes for now. Integrations move to a platform-core **integration module** with **Vero R7's ingestion API as a ready-made profile**, built against Vero's pinned specification (`sdv-ingestion-v1.0.0`, after Vero task 0040). LexaVault moves its export onto it in switch-over part 3. See `docs/work/integration-module-decision.md`.
+2. **Sign-in:** OAuth2 client credentials from the customer's login server (Keycloak locally); Vero finds the entity and sending system from the verified client ID. No local-only sign-in is built.
+3. **This live run is deferred,** not abandoned: it is re-run jointly when the module and Vero 0040 are ready.
