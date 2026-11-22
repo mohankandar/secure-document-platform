@@ -105,3 +105,10 @@ Not merged, not pushed.
 ## Suggested next step
 
 Owner review of the keep rules (point 2 of What was done) and questions 1 and 2. Then the next staged-pipeline task.
+
+## Owner's answers (2026-11-22, recorded by the design chat)
+
+1. **One audit record per entity per run:** right, keep it. Each entity's own trail shows its own clean-up.
+2. **Jobs of cases that never reach a final purge:** no deletion rule. A case that never reaches a final state is a problem to surface, not to clean up: backlog item for the Operations tab (P6), "cases stuck outside a final state". Their jobs stay.
+3. **`exports.spec.ts` "Refused today" around midnight:** yes, give it a fixed time. Done in task 0035.
+4. **`FINDING_CONFIRMED` and `FINDING_REDACTED` wording:** yes, separate sentences ("Confirmed a finding" / "Redacted a finding"). Done in task 0035.
