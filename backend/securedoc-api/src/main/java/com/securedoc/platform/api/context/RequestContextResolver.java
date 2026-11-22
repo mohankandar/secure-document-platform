@@ -10,8 +10,7 @@ import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.documentplatform.identity.admission.EntitySelection;
 import com.documentplatform.identity.admission.MachineEntityAdmission;
-import com.documentplatform.identity.admission.SharedIssuerPreflight;
-import com.securedoc.platform.api.security.oidc.ProductEntityRoleCatalog;
+import com.documentplatform.identity.admission.IdentityAdmissionException;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
@@ -51,6 +50,11 @@ public class RequestContextResolver {
     private static final String HEADER_CORRELATION_ID = "X-Correlation-Id";
     private static final String HEADER_ACTOR_ROLES = "X-Actor-Roles";
     private static final String HEADER_INTEGRATION_CLIENT = "X-Integration-Client";
+    private static final String PRINCIPAL_ATTRIBUTE = RequestContextResolver.class.getName() + ".principal";
+    private static final String INTEGRATION_PRINCIPAL_ATTRIBUTE = RequestContextResolver.class.getName() + ".integrationPrincipal";
+
+    /** A person's principal kept for the rest of the request, with the values its display name was bound from. */
+    private record Resolved(AuthenticatedPrincipal principal, String displayNameClaim, String username) { }
 
 
     private final UUID demoTenantId;
@@ -63,7 +67,6 @@ public class RequestContextResolver {
     // Enterprise Identity 0.3.0 admission rules; refusals are mapped to SecurityContextException (403) at each call.
     private final EntitySelection tenantSelection = new EntitySelection();
     private final MachineEntityAdmission machineAdmission = new MachineEntityAdmission();
-    private final SharedIssuerPreflight sharedIssuerPreflight = new SharedIssuerPreflight(new ProductEntityRoleCatalog());
     private final TrustedActorResolver trustedActorResolver;
     private final OidcJwtIdentityNormalizer oidcIdentityNormalizer;
     private final RequestActorDisplayName actorDisplayName;
@@ -109,9 +112,19 @@ public class RequestContextResolver {
     }
 
     public AuthenticatedPrincipal resolvePrincipal(HttpServletRequest request) {
-        AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
-                ? resolveLocalPrincipal(request)
-                : resolveOidcPrincipal(request);
+        // Resolved once per request (task 0037 step 0, A1 redone): the interceptors and the controller all ask, and in
+        // shared-issuer mode each resolution reads the grant and candidate stores. The inputs (verified token,
+        // headers) cannot change within a request, so the first answer is reused; the display name is bound again
+        // from the same values, as each call did before. Refusals are not stored: a later call refuses again.
+        AuthenticatedPrincipal principal;
+        if (request.getAttribute(PRINCIPAL_ATTRIBUTE) instanceof Resolved known) {
+            principal = known.principal();
+            actorDisplayName.bind(principal.actorId(), known.displayNameClaim(), known.username());
+        } else {
+            principal = securityProperties.getMode() == SecurityMode.LOCAL
+                    ? resolveLocalPrincipal(request)
+                    : resolveOidcPrincipal(request);
+        }
         StructuredLogContext.put("tenantId", principal.tenantId());
         StructuredLogContext.put("actorId", principal.actorId());
         return principal;
@@ -123,9 +136,12 @@ public class RequestContextResolver {
      * tenant PUSH_API Integration Connection. Production identity still comes only from the verified JWT.
      */
     public AuthenticatedPrincipal resolveIntegrationPrincipal(HttpServletRequest request) {
-        AuthenticatedPrincipal principal = securityProperties.getMode() == SecurityMode.LOCAL
-                ? resolveLocalIntegrationPrincipal(request)
-                : resolveOidcIntegrationPrincipal();
+        AuthenticatedPrincipal principal = request.getAttribute(INTEGRATION_PRINCIPAL_ATTRIBUTE) instanceof AuthenticatedPrincipal known
+                ? known
+                : securityProperties.getMode() == SecurityMode.LOCAL
+                        ? resolveLocalIntegrationPrincipal(request)
+                        : resolveOidcIntegrationPrincipal();
+        request.setAttribute(INTEGRATION_PRINCIPAL_ATTRIBUTE, principal);
         // A machine client is not a person: its audit records carry no display name.
         actorDisplayName.clear();
         StructuredLogContext.put("tenantId", principal.tenantId());
@@ -182,6 +198,7 @@ public class RequestContextResolver {
                 ActorId.of(actorId), TenantId.of(tenantId), "demo-user", roles);
         // LOCAL has no display-name claim: the username is recorded.
         actorDisplayName.bind(principal.actorId(), null, principal.username());
+        request.setAttribute(PRINCIPAL_ATTRIBUTE, new Resolved(principal, null, principal.username()));
         return principal;
     }
 
@@ -227,12 +244,16 @@ public class RequestContextResolver {
                 throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections", "SHARED_ISSUER_REQUIRES_PERSISTED_CONNECTIONS");
             }
             var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
-            var entities = toEntityKeys(authorized);
-            refusingAsSecurityContext(() -> sharedIssuerPreflight.requireReady(true,
-                    securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled(),
-                    entities.keySet(), entities));
+            // Task 0037 step 0 (A2 redone): the preflight's "enabled" and "persisted" inputs were always true here, its
+            // "candidates contain the memberships" check compared one map with itself, and empty role sets and the
+            // platform role are already refused by the membership resolver. Only "no entity at all" was left; it is
+            // refused here with the message and code the preflight gave.
+            if (authorized.isEmpty()) {
+                throw new SecurityContextException("No verified ACTIVE tenant membership is available",
+                        IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP.name());
+            }
             tenantId = toTenant(refusingAsSecurityContext(
-                    () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), entities)));
+                    () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), toEntityKeys(authorized))));
             roles = authorized.get(tenantId);
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
@@ -248,6 +269,7 @@ public class RequestContextResolver {
         AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
         // The display-name claim (securedoc.security.oidc.display-name-claim), or the username when there is none.
         actorDisplayName.bind(actorId, identity.displayName(), identity.username());
+        request.setAttribute(PRINCIPAL_ATTRIBUTE, new Resolved(principal, identity.displayName(), identity.username()));
         return principal;
     }
 
