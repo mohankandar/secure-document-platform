@@ -192,3 +192,9 @@ Not merged, not pushed.
 ## Suggested next step
 
 Owner review of the pictures in `docs/work/0036-proof/` and the two questions. Then merge `feature/0036-export-p1-fixes` into `feature/lexavault-r1b-tenant-identity` when approved.
+
+## Owner's answers (2026-11-22, recorded by the design chat)
+
+1. **Alert wording with one destination:** yes. With one destination: "LexaVault can't reach <destination>. Its health check is failing." The "likely LexaVault's own network" line only when there are 2 or more destinations. Also: the Support tab shows its red count while this alert is raised (seen in picture 01b). Done at the start of the next task.
+2. **COMPLETED case with an open export under Exporting:** right. A case reads "Exported" only when every export is done.
+- **a11y timeouts at sign-in:** machine asleep / overlapping runs; passed on rerun. No change.
