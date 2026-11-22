@@ -101,7 +101,10 @@ Test changes while getting the new suite to pass (my own new tests only):
 
 ## Commits (hash and message), or "not committed"
 
-- See below (filled in after the commit).
+- `04b1926` test(export): task 0035 export end to end against the folder destination (L5). The suite, profile, scripts, both fixes, the proof pictures and this report.
+- A second commit adds this hash to the report.
+
+Not merged, not pushed.
 
 ## Not done, and why
 
