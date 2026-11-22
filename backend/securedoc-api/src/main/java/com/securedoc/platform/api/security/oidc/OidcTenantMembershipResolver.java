@@ -23,7 +23,7 @@ import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.
 import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toTenantKeys;
 
 /**
- * LexaVault's seam to Enterprise Identity 0.3.0 entity admission. The rules (an entity is admitted only with an
+ * LexaVault's seam to platform-identity entity admission. The rules (an entity is admitted only with an
  * ACTIVE connection AND a matching verified group; roles from that entity's grants only) are the library's
  * {@link EntityMembershipResolver}. This class adapts LexaVault's lookups, ids, roles and refusals to it.
  */

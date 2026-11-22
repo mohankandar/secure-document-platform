@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.message;
 import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.refusingAsSecurityContext;
 import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntities;
 import static com.securedoc.platform.api.security.oidc.IdentityAdmissionMapping.toEntityKeys;
@@ -64,7 +65,7 @@ public class RequestContextResolver {
     private final OidcTenantResolver oidcTenantResolver;
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
     private final ActiveOidcMachineTenantBindings machineTenantBindings;
-    // Enterprise Identity 0.3.0 admission rules; refusals are mapped to SecurityContextException (403) at each call.
+    // platform-identity admission rules; refusals are mapped to SecurityContextException (403) at each call.
     private final EntitySelection tenantSelection = new EntitySelection();
     private final MachineEntityAdmission machineAdmission = new MachineEntityAdmission();
     private final TrustedActorResolver trustedActorResolver;
@@ -249,7 +250,7 @@ public class RequestContextResolver {
             // platform role are already refused by the membership resolver. Only "no entity at all" was left; it is
             // refused here with the message and code the preflight gave.
             if (authorized.isEmpty()) {
-                throw new SecurityContextException("No verified ACTIVE tenant membership is available",
+                throw new SecurityContextException(message(IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP),
                         IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP.name());
             }
             tenantId = toTenant(refusingAsSecurityContext(

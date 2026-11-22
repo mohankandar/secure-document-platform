@@ -69,7 +69,7 @@ Write-Host "npm:  $(& npm --version)"
 
 Write-Host ""
 Write-Host "Enterprise identity: external Maven dependency com.documentplatform.identity:*:0.2.0" -ForegroundColor DarkGray
-Write-Host "This build does not build enterprise-identity-parent; Maven resolves it from the configured/local artifact repository." -ForegroundColor DarkGray
+Write-Host "This build does not build platform-core (C:\dev\platform-core); Maven resolves platform-* 0.1.0-SNAPSHOT from the local repository (mvn install in platform-core)." -ForegroundColor DarkGray
 
 $overallStart = Get-Date
 

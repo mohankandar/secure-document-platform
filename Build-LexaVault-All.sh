@@ -63,7 +63,7 @@ printf '\nMaven:\n'
 mvn -version
 printf '\nNode: %s\nnpm:  %s\n' "$(node --version)" "$(npm --version)"
 printf '\nEnterprise identity: external Maven dependency com.documentplatform.identity:*:0.2.0\n'
-printf 'This build does not build enterprise-identity-parent; Maven resolves it from the configured/local artifact repository.\n'
+printf 'This build does not build platform-core; Maven resolves platform-* 0.1.0-SNAPSHOT from the local repository (mvn install in platform-core).\n'
 
 overall_started=$SECONDS
 

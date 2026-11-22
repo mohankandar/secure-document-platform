@@ -42,9 +42,8 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.documentplatform.identity</groupId>
-            <artifactId>enterprise-identity-core</artifactId>
-            <version>${enterprise.identity.version}</version>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-identity-core</artifactId>
         </dependency>
         <!-- Internal modules -->
         <dependency>
