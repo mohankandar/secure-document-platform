@@ -19,3 +19,13 @@ Owner, 2026-11-21, in the LexaVault design chat, after the 0031 live run found t
 
 ## Effect on the order
 LexaVault moves its intake and export onto the module as **switch-over part 3**, after platform-core builds it (it builds on platform-fields). 0031 is re-run jointly when both are ready. Nothing else in the order changes.
+
+## Catalog of options (owner-approved 2026-11-21)
+
+V1 = build now; Later = when a customer asks; Extension = custom for one customer.
+
+- **Intake:** push API (V1, LexaVault's own API) · polling an API (V1) · watched folder / network share with trigger file (V1) · SFTP pickup (Later, likely early) · cloud storage S3 / Azure Blob / GCS (Later) · SharePoint / OneDrive (Later) · email inbox incl. fax-to-email (Later, with spam/malware/sender checks) · message queue Kafka / IBM MQ / RabbitMQ (Extension). Scanner and manual upload stay in LexaVault.
+- **Export:** API push (V1) · folder / network share with manifest JSON last (V1) · SFTP drop (Later, likely early) · cloud storage (Later) · document management systems SharePoint, Box; legal iManage, NetDocuments (Later, each a profile) · message queue notice (Extension) · email (not offered).
+- **Sign-in:** none, on-premises only (V1) · shared secret: user and password or API key in a header, never in the address (V1) · fixed bearer token (V1) · OAuth2 client credentials / JWT (V1) · private-key JWT (Later) · mutual TLS, uploaded or server keystore (V1) · Windows sign-in Kerberos/NTLM (Later, common on-premises) · SSH key (with SFTP) · cloud access keys / managed identity (with cloud storage) · HMAC-signed requests for callbacks (V1).
+- **Packaging in an API call:** multipart documents + JSON (V1) · two steps, create then upload, Vero's way (V1) · one file per call with details in headers (V1) · JSON with base64 documents (Later) · ZIP bundle (Later) · XML / SOAP incl. MISMO XML for mortgage (Later, likely early).
+- **Behaviours (all V1):** 202 accepted then status check or callback · paging when polling · honouring 429 / Retry-After · the customer's outbound proxy · a private certificate authority · request IDs and checksums · size limits and timeouts per integration.
