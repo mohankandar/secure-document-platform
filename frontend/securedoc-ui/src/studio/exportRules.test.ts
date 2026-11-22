@@ -10,7 +10,7 @@ import {
   destinationStateWords, exportNeedsYou, exportStateOf, exportStatusLabel, exportTone, groupCount, groupKind, isExporting,
   itGroupTitle, jobForState, mostFrequentCode, reasonLabel, refusedHeading, refusedWhen, resendAllLabel, resendConfirmLabel,
   resendReasonLines, resendTitle, resendToast, retentionPlaceholder, retentionValueError, retryAllLabel, showWaitingNav,
-  signInBody, signInTitle, supportBadgeCount, triedLine, waitingText, type ExportJobView,
+  signInBody, signInTitle, supportBadgeCount, reachAlertWords, triedLine, waitingText, type ExportJobView,
   caseTile, checkStillFailing, destinationsNote, everyWords, itCasesLine, itReason, overWords, pausedBody, spanWords, waitingParts, UNTITLED_CASE,
   type ExportTimings,
 } from './exportRules.ts';
@@ -305,4 +305,31 @@ test('0036: Cases page: a case whose chip says "Exporting · …" counts under E
   const tile = /\[data-stage='exporting'\] \{ --stage: ([^;]+); --stage-soft: ([^;]+); \}/.exec(css);
   assert.ok(chip && tile);
   assert.deepEqual(tile.slice(1), chip.slice(1));
+});
+
+test('0037: the "can\'t reach" alert names a single destination; the network line only with 2 or more', () => {
+  assert.deepEqual(reachAlertWords([{ name: 'Local export folder' }]),
+    { title: 'LexaVault can’t reach Local export folder', line: 'Its health check is failing.' });
+  assert.deepEqual(reachAlertWords([{ name: 'Vault' }, { name: 'Folder' }]),
+    { title: 'LexaVault can’t reach its destinations', line: 'The problem is likely LexaVault’s own network, not the destinations.' });
+  assert.deepEqual(reachAlertWords([{ name: 'A' }, { name: 'B' }, { name: 'C' }]).line,
+    'The problem is likely LexaVault’s own network, not the destinations.');
+  // A destination without a name, and destinations not loaded yet: never blame the network on no evidence.
+  assert.equal(reachAlertWords([{ name: null }]).title, 'LexaVault can’t reach Its destination');
+  assert.deepEqual(reachAlertWords(undefined), { title: 'LexaVault can’t reach its destinations', line: null });
+  assert.deepEqual(reachAlertWords([]), { title: 'LexaVault can’t reach its destinations', line: null });
+});
+
+test('0037: Support shows its red count while the "can\'t reach" alert is raised', () => {
+  assert.equal(supportBadgeCount({ groups: [] }, { raised: true }), 1);
+  assert.equal(supportBadgeCount(undefined, { raised: true }), 1);
+  assert.equal(supportBadgeCount({ groups: [{} as never] }, { raised: true }), 2);
+  assert.equal(supportBadgeCount({ groups: [{} as never] }, { raised: false }), 1);
+  assert.equal(supportBadgeCount({ groups: [] }, null), 0);
+  // Both the Support link in the header and the Export tab use the alert in their count.
+  const app = readFileSync(join(here, 'CaseFileApp.tsx'), 'utf8');
+  assert.match(app, /supportBadgeCount\(needsIt, reachAlert\)/);
+  const tabs = readFileSync(join(here, 'support', 'SupportExport.tsx'), 'utf8');
+  assert.match(tabs, /supportBadgeCount\(data, alert\)/);
+  assert.doesNotMatch(tabs, /<p>\{W\.alertLine\}<\/p>/);
 });

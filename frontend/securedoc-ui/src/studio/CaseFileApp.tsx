@@ -4,7 +4,7 @@ import { Search } from 'lucide-react';
 import { SWRConfig } from 'swr';
 import type { CurrentUser, TenantSwitchActions } from '../types';
 import AccountMenu from './AccountMenu';
-import { ADMIN_CAPS, CAP, needsYou, useExportNeedsIt, usePackages, useReviewQueue, useWaitingForYou } from './data';
+import { ADMIN_CAPS, CAP, needsYou, useExportAlert, useExportNeedsIt, usePackages, useReviewQueue, useWaitingForYou } from './data';
 import { showWaitingNav, supportBadgeCount } from './exportRules';
 import WaitingForYou from './WaitingForYou';
 import SupportExport from './support/SupportExport';
@@ -68,7 +68,9 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
   const waitingCount = waiting?.total ?? 0;
   const showWaiting = showWaitingNav(caps, waiting?.total) || location.pathname === '/waiting';
   const { data: needsIt } = useExportNeedsIt(canSupport, true);
-  const itGroups = supportBadgeCount(needsIt);
+  // Task 0037: the raised "can't reach" alert counts too, so Support shows its red count while it is raised.
+  const { data: reachAlert } = useExportAlert(canSupport, true);
+  const itGroups = supportBadgeCount(needsIt, reachAlert);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

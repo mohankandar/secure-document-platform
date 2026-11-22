@@ -299,9 +299,11 @@ export function useExportDestinations(enabled: boolean) {
     { refreshInterval: 15000, shouldRetryOnError: false });
 }
 
-export function useExportAlert(enabled: boolean) {
-  return useSWR(enabled ? 'export-alert' : null,
-    () => checked<ReachabilityAlert>('GET /support/export-destinations/alert', apiClient.getExportAlert(), (v) => isRecord(v) && typeof v.raised === 'boolean'),
+export function useExportAlert(enabled: boolean, badge = false) {
+  const isAlert = (v: unknown) => isRecord(v) && typeof v.raised === 'boolean';
+  return useSWR(enabled ? (badge ? 'export-alert-badge' : 'export-alert') : null,
+    () => (badge ? quietly<ReachabilityAlert>(apiClient.getExportAlert(), isAlert)
+      : checked<ReachabilityAlert>('GET /support/export-destinations/alert', apiClient.getExportAlert(), isAlert)),
     { refreshInterval: 15000, shouldRetryOnError: false });
 }
 

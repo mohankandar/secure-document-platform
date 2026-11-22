@@ -8,7 +8,7 @@ import { LoadErrorCard, TechnicalDetails } from '../failure';
 import { useToast } from '../toast';
 import {
   SUPPORT_EXPORT_WORDS as W, DESTINATION_CODE_LABEL, checkStillFailing, destinationCodesOf, destinationKind, destinationLabel, destinationStateWords, destinationsNote,
-  isSignInGroup, itCasesLine, itGroupTitle, itReason, reasonLabel, retryAllLabel, signInBody, signInTitle, supportBadgeCount, triedLine, waitingParts,
+  isSignInGroup, itCasesLine, itGroupTitle, itReason, reachAlertWords, reasonLabel, retryAllLabel, signInBody, signInTitle, supportBadgeCount, triedLine, waitingParts,
   type DestinationView, type ExportTimings, type ItGroup,
 } from '../exportRules';
 import './support.css';
@@ -16,7 +16,8 @@ import './support.css';
 /** Support's two places: the processing problems and the export (task 0029). */
 export function SupportTabs({ caps }: { caps: string[] }) {
   const { data } = useExportNeedsIt(caps.includes(CAP.technicalView), true);
-  const groups = supportBadgeCount(data);
+  const { data: alert } = useExportAlert(caps.includes(CAP.technicalView), true);
+  const groups = supportBadgeCount(data, alert);
   return (
     <nav className="cf-segment cf-sp-tabs" aria-label="Support">
       <NavLink to="/support/incidents" end className={({ isActive }) => (isActive ? 'is-active' : '')}>{W.tabProblems}</NavLink>
@@ -39,7 +40,8 @@ export default function SupportExport({ caps }: { caps: string[] }) {
   const alert = useExportAlert(true);
   const [now] = useState(() => Date.now());
   const { mutate: refreshKey } = useSWRConfig();
-  const refresh = () => Promise.all([needsIt.mutate(), destinations.mutate(), alert.mutate(), refreshKey('export-needs-it-badge')]);
+  const refresh = () => Promise.all([needsIt.mutate(), destinations.mutate(), alert.mutate(), refreshKey('export-needs-it-badge'), refreshKey('export-alert-badge')]);
+  const alertWords = reachAlertWords(destinations.data);
   const openOf = (id: string | null) => destinations.data?.find((d) => d.destinationId === id)?.openJobs ?? 0;
   // Task 0036: a working destination answers its health check, so a group there is these cases, not the destination.
   const answers = (id: string | null) => destinations.data?.find((d) => d.destinationId === id)?.state === 'WORKING';
@@ -54,8 +56,8 @@ export default function SupportExport({ caps }: { caps: string[] }) {
 
       {alert.data?.raised && (
         <section className="cf-sx-alert" role="alert" aria-labelledby="cf-sx-alert">
-          <h2 id="cf-sx-alert">{W.alertTitle}</h2>
-          <p>{W.alertLine}</p>
+          <h2 id="cf-sx-alert">{alertWords.title}</h2>
+          {alertWords.line && <p>{alertWords.line}</p>}
           <p className="cf-muted">{reasonLabel(alert.data.lvCode ?? 'LV-DLV-001')}</p>
         </section>
       )}

@@ -440,6 +440,7 @@ export const SUPPORT_EXPORT_WORDS = {
   setBackToWorking: 'Set back to working',
   alertTitle: 'LexaVault can’t reach its destinations',
   alertLine: 'The problem is likely LexaVault’s own network, not the destinations.',
+  alertOneLine: 'Its health check is failing.',
   working: 'Working',
   needsItState: 'Needs IT',
   checkPassed: 'answers its health check again. Its waiting exports go out in order.',
@@ -528,9 +529,28 @@ export function retryAllLabel(count: number): string {
   return `Retry all ${count}`;
 }
 
-/** Support's needs-attention badge counts the IT groups, not the cases in them. */
-export function supportBadgeCount(needsIt: Pick<NeedsIt, 'groups'> | null | undefined): number {
-  return needsIt?.groups?.length ?? 0;
+/**
+ * Support's needs-attention badge counts the IT groups, not the cases in them, plus one while the "can't reach" alert
+ * is raised (task 0037: the alert needs IT too, even when no group is waiting).
+ */
+export function supportBadgeCount(needsIt: Pick<NeedsIt, 'groups'> | null | undefined,
+  alert?: Pick<ReachabilityAlert, 'raised'> | null): number {
+  return (needsIt?.groups?.length ?? 0) + (alert?.raised ? 1 : 0);
+}
+
+/**
+ * The "can't reach" alert's words (task 0037). With one destination it names it: the network line would blame
+ * LexaVault's own network on the strength of one failing destination. The network line is only for 2 or more.
+ * While the destinations are not known, the general title is shown without a cause.
+ */
+export function reachAlertWords(destinations: Pick<DestinationView, 'name'>[] | null | undefined): {
+  title: string; line: string | null;
+} {
+  const count = destinations?.length ?? 0;
+  if (count === 1) {
+    return { title: `LexaVault can’t reach ${destinationLabel(destinations?.[0]?.name)}`, line: SUPPORT_EXPORT_WORDS.alertOneLine };
+  }
+  return { title: SUPPORT_EXPORT_WORDS.alertTitle, line: count >= 2 ? SUPPORT_EXPORT_WORDS.alertLine : null };
 }
 
 export function destinationKind(purpose: string | null | undefined): 'full case' | 'split by barcode' {
