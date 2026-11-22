@@ -181,6 +181,10 @@ securedoc:
       workers-per-destination: ${SECUREDOC_EXPORT_JOBS_WORKERS_PER_DESTINATION:4}
       workers-total: ${SECUREDOC_EXPORT_JOBS_WORKERS_TOTAL:8}
       poll-interval-ms: ${SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS:2000}
+      # Task 0034: DONE and STOPPED jobs (and cleared reachability alerts) are removed by the retention purge after
+      # this many days (7 to 3650; outside that LexaVault stops at start with LV-SYS-005). Rows per delete batch.
+      keep-finished-days: ${SECUREDOC_EXPORT_JOBS_KEEP_FINISHED_DAYS:90}
+      cleanup-batch-size: ${SECUREDOC_EXPORT_JOBS_CLEANUP_BATCH_SIZE:1000}
   platform-admin:
     # Unit 24. Provider credentials remain deployment-managed and are never returned by the admin API.
     watched-folder-scheduling-enabled: ${SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED:false}
