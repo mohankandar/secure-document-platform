@@ -6,9 +6,9 @@ import { checked, isArrayOf, isRecord } from './failure';
 import { canContinueManually } from './support/supportRules';
 import { ACTION_WORDS, STAGE_NAMES } from './words';
 import { errorText } from './lvCodes';
-import { exportNeedsYou, exportStateOf, isExporting, type CaseExport, type DestinationView as ExportDestinationView, type NeedsIt, type ReachabilityAlert, type WaitingForYou } from './exportRules';
+import { caseTile, exportNeedsYou, exportStateOf, isExporting, type CaseExport, type DestinationView as ExportDestinationView, type NeedsIt, type ReachabilityAlert, type WaitingForYou } from './exportRules';
 
-export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
+export type StageKey = 'intake' | 'redacting' | 'review' | 'approval' | 'exporting' | 'delivered' | 'stopped' | 'unknown';
 
 /**
  * Every backend PackageStatus the real API can return, mapped explicitly.
@@ -32,13 +32,24 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
 };
 
 export const STAGES: { key: StageKey; label: string }[] = (
-  ['intake', 'redacting', 'review', 'approval', 'delivered', 'stopped', 'unknown'] as StageKey[]
+  ['intake', 'redacting', 'review', 'approval', 'exporting', 'delivered', 'stopped', 'unknown'] as StageKey[]
 ).map((key) => ({ key, label: STAGE_NAMES[key] }));
 
 export const LIFECYCLE: StageKey[] = ['intake', 'redacting', 'review', 'approval', 'delivered'];
 
 export function stageOf(status: string): StageKey {
   return STATUS_INFO[status]?.stage ?? 'unknown';
+}
+
+/** Task 0036: the Cases page tiles, in order: New · Redacting · Review · Approval · Exporting · Exported · Stopped. */
+export const CASE_TILES: StageKey[] = ['intake', 'redacting', 'review', 'approval', 'exporting', 'delivered', 'stopped'];
+
+/**
+ * Task 0036: where a case counts on the Cases page. A case whose chip says "Exporting · …" (an export job is open)
+ * counts under Exporting, whatever its status; every other case by its status, as before.
+ */
+export function tileOf(pkg: { status: string; exportState?: string | null }): StageKey {
+  return caseTile(stageOf(pkg.status), pkg.exportState);
 }
 
 export function statusInfo(status: string, reprocessing = false) {

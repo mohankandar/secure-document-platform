@@ -10,8 +10,8 @@ import {
   usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
 } from './data';
 import {
-  CASE_EXPORT_WORDS, DESTINATION_CODE_LABEL, destinationCodeOf, exportStateOf, internalReasonOf, exportStatusLabel, isExporting, jobForState, pausedHeading, refusedHeading,
-  refusedWhen, type ExportJobView, type ExportState,
+  CASE_EXPORT_WORDS, DESTINATION_CODE_LABEL, destinationCodeOf, exportStateOf, internalReasonOf, exportStatusLabel, isExporting, jobForState, pausedBody, pausedHeading, refusedHeading,
+  refusedWhen, type ExportJobView, type ExportState, type ExportTimings,
 } from './exportRules';
 import { useToast } from './toast';
 import { CodeLabel, Notice, Spinner } from './atoms';
@@ -73,7 +73,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
           {stage !== 'unknown' && <Timeline stage={stage} status={pkg.status} exporting={exporting} />}
 
           {exporting && caseExport.data ? (
-            <ExportStep state={exportState} jobs={caseExport.data.jobs} caps={caps} onChanged={() => Promise.all([caseExport.mutate(), mutate()])} />
+            <ExportStep state={exportState} jobs={caseExport.data.jobs} timings={caseExport.data.timings ?? null} caps={caps} onChanged={() => Promise.all([caseExport.mutate(), mutate()])} />
           ) : <NextStep
             pkg={pkg}
             life={life}
@@ -250,7 +250,9 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
  * Task 0029: the next step while the case is exporting. Waiting for you: who refused it, why ("Title · code"), when, and
  * one "Resend this case" (EXPORT_RESEND only); the destination's own answer stays under Technical details.
  */
-function ExportStep({ state, jobs, caps, onChanged }: { state: ExportState; jobs: ExportJobView[]; caps: string[]; onChanged: () => Promise<unknown> }) {
+function ExportStep({ state, jobs, timings, caps, onChanged }: {
+  state: ExportState; jobs: ExportJobView[]; timings: ExportTimings | null; caps: string[]; onChanged: () => Promise<unknown>;
+}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -287,7 +289,7 @@ function ExportStep({ state, jobs, caps, onChanged }: { state: ExportState; jobs
     body = <>{refusedWhen(job?.since)} {CASE_EXPORT_WORDS.afterRefusal}</>;
   } else if (state === 'DESTINATION_PAUSED') {
     heading = pausedHeading(destination);
-    body = CASE_EXPORT_WORDS.pausedBody;
+    body = pausedBody(timings);
   } else if (state === 'NEEDS_IT') {
     heading = CASE_EXPORT_WORDS.itHeading;
     body = CASE_EXPORT_WORDS.itBody;

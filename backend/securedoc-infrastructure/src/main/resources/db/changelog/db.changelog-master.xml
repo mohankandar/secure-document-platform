@@ -48,4 +48,5 @@
     <include file="db/changelog/042-sensitivity-levels.xml"/>
     <include file="db/changelog/043-pipeline-jobs.xml"/>
     <include file="db/changelog/044-export-followups.xml"/>
+    <include file="db/changelog/045-pipeline-job-queue-seq.xml"/>
 </databaseChangeLog>

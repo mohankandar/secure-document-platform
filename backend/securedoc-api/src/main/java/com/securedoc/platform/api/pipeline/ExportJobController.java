@@ -72,7 +72,8 @@ public class ExportJobController {
     public CaseExportResponse caseExport(@PathVariable String packageId, HttpServletRequest request) {
         var tenantId = context.resolvePrincipal(request).tenantId();
         PackageId id = packageId(packageId);
-        return new CaseExportResponse(service.caseExportState(tenantId, id).name(), service.jobsOfCase(tenantId, id));
+        return new CaseExportResponse(service.caseExportState(tenantId, id).name(), service.jobsOfCase(tenantId, id),
+                service.timings());
     }
 
     /** The IT error queue, grouped: one alert per destination and code. */
@@ -80,7 +81,8 @@ public class ExportJobController {
     @RequireCapability(UserCapability.TECHNICAL_EXCEPTION_VIEW)
     public NeedsItResponse needsIt(HttpServletRequest request) {
         List<ExportJobService.ItGroup> groups = service.needsItGroups(context.resolvePrincipal(request).tenantId());
-        return new NeedsItResponse(groups.stream().mapToInt(ExportJobService.ItGroup::count).sum(), groups);
+        return new NeedsItResponse(groups.stream().mapToInt(ExportJobService.ItGroup::count).sum(), groups,
+                service.timings());
     }
 
     @GetMapping("/support/export-destinations")
@@ -188,9 +190,12 @@ public class ExportJobController {
 
     public record ResendAllResponse(UUID destinationId, int queued, List<UUID> jobIds) { }
 
-    public record NeedsItResponse(int total, List<ExportJobService.ItGroup> groups) { }
+    /** Task 0036: with the timings the Support screen names (probe interval, retry span). */
+    public record NeedsItResponse(int total, List<ExportJobService.ItGroup> groups, ExportJobService.ExportTimings timings) { }
 
-    public record CaseExportResponse(String exportState, List<ExportJobService.JobView> jobs) { }
+    /** Task 0036: with the timings the case panel names (how often a paused destination is checked). */
+    public record CaseExportResponse(String exportState, List<ExportJobService.JobView> jobs,
+                                     ExportJobService.ExportTimings timings) { }
 
     public record DestinationChange(UUID destinationId, String state) { }
 }

@@ -50,13 +50,14 @@ export function screenTitle(pathname: string, product: string): string {
 
 /* ---------- Stages ---------- */
 
-export type StageWordKey = 'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped' | 'unknown';
+export type StageWordKey = 'intake' | 'redacting' | 'review' | 'approval' | 'exporting' | 'delivered' | 'stopped' | 'unknown';
 
 export const STAGE_NAMES: Record<StageWordKey, string> = {
   intake: 'New',
   redacting: 'Redacting',
   review: 'Review',
   approval: 'Approval',
+  exporting: 'Exporting',
   delivered: 'Exported',
   stopped: 'Stopped',
   unknown: 'Unrecognized',

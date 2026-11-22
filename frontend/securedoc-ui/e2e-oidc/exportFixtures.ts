@@ -11,6 +11,9 @@ export const VAULT = 'a0a0a0a0-0000-4000-8000-0000000000d1';
 export const TITLE_CO = 'a0a0a0a0-0000-4000-8000-0000000000d2';
 export const ARCHIVE = 'a0a0a0a0-0000-4000-8000-0000000000d3';
 
+/** Task 0036: the default timings, as the server sends them with the case export and the IT queue. */
+export const DEFAULT_TIMINGS = { probeIntervalSeconds: 300, retrySpanSeconds: 62_400, retries: 5, rebuiltOnce: true, maxInterruptions: 3 };
+
 export interface ExportCase { packageId: string; loan: string; status: string; exportState: string; documents?: string[] }
 
 /** The cases the export screens show, one per state, each with its loan number. */
@@ -58,28 +61,32 @@ export function exportApi(cases: ExportCase[]) {
   const needsIt = {
     total: 13,
     groups: [
-      { destinationId: VAULT, destinationName: 'Document vault', lvCode: 'LV-DLV-007', count: 1, firstFailedAt: minsAgo(90), caseIds: [it.packageId],
+      { destinationId: VAULT, destinationName: 'Document vault', lvCode: 'LV-DLV-007', count: 1, firstFailedAt: minsAgo(90), caseIds: [it.packageId], cases: [{ packageId: it.packageId, caseNumber: it.loan }],
         jobs: [job('j-6990', it, { status: 'NEEDS_IT', lvCode: 'LV-DLV-007', detail: 'DELIVERY_IO; destination=SDV-SUB-017', attempts: 6 })] },
-      { destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005', count: 1, firstFailedAt: minsAgo(30), caseIds: [split.packageId],
+      { destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005', count: 1, firstFailedAt: minsAgo(30), caseIds: [split.packageId], cases: [{ packageId: split.packageId, caseNumber: split.loan }],
         jobs: [job('j-title-auth', split, { stage: 'SPLIT_EXPORT', status: 'NEEDS_IT', destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005' })] },
     ],
+    timings: DEFAULT_TIMINGS,
   };
   const destinations = [
     { destinationId: VAULT, name: 'Document vault', purpose: 'SDV_DELIVERY', enabled: true, state: 'WORKING', pausedAt: null, consecutiveFailures: 0, lastProbeAt: null,
-      lastLvCode: null, lastCheckFailedAt: null, rateLimitedUntil: null, workerLimit: 4, nextCheckAt: null, openJobs: 3 },
+      lastLvCode: null, lastCheckFailedAt: null, rateLimitedUntil: null, workerLimit: 4, nextCheckAt: null, openJobs: 7,
+      waiting: { queued: 3, waitingForYou: 3, needsIt: 1 } },
     { destinationId: ARCHIVE, name: 'Archive service', purpose: 'DERIVED_DOCUMENT_DELIVERY', enabled: true, state: 'PAUSED', pausedAt: minsAgo(18), consecutiveFailures: 0,
-      lastProbeAt: minsAgo(3), lastLvCode: 'LV-DLV-001', lastCheckFailedAt: minsAgo(3), rateLimitedUntil: null, workerLimit: 4, nextCheckAt: minsAhead(2), openJobs: 27 },
+      lastProbeAt: minsAgo(3), lastLvCode: 'LV-DLV-001', lastCheckFailedAt: minsAgo(3), rateLimitedUntil: null, workerLimit: 4, nextCheckAt: minsAhead(2), openJobs: 27,
+      waiting: { queued: 27, waitingForYou: 0, needsIt: 0 } },
     { destinationId: TITLE_CO, name: 'Title company', purpose: 'DERIVED_DOCUMENT_DELIVERY', enabled: true, state: 'NEEDS_IT', pausedAt: minsAgo(30), consecutiveFailures: 0,
-      lastProbeAt: null, lastLvCode: 'LV-DLV-005', lastCheckFailedAt: null, rateLimitedUntil: null, workerLimit: 4, nextCheckAt: null, openJobs: 12 },
+      lastProbeAt: null, lastLvCode: 'LV-DLV-005', lastCheckFailedAt: null, rateLimitedUntil: null, workerLimit: 4, nextCheckAt: null, openJobs: 12,
+      waiting: { queued: 11, waitingForYou: 0, needsIt: 1 } },
   ];
   const caseExport = (packageId: string) => {
     const c = cases.find((x) => x.packageId === packageId);
-    if (!c) return { exportState: 'NONE', jobs: [] };
+    if (!c) return { exportState: 'NONE', jobs: [], timings: DEFAULT_TIMINGS };
     const jobs = [...vaultJobs, ...titleJobs, ...needsIt.groups.flatMap((g) => g.jobs)].filter((j) => j.packageId === packageId);
     if (c.exportState === 'READY') jobs.push(job('j-ready', c, { status: 'READY', lvCode: null, detail: null }));
     if (c.exportState === 'DESTINATION_PAUSED') jobs.push(job('j-paused', c, { status: 'WAITING_RETRY', destinationId: ARCHIVE, destinationName: 'Archive service', lvCode: 'LV-DLV-001', detail: 'DESTINATION_PAUSED' }));
     if (c.exportState === 'EXPORTED') jobs.push(job('j-done', c, { status: 'DONE', lvCode: null, detail: null }));
-    return { exportState: c.exportState, jobs };
+    return { exportState: c.exportState, jobs, timings: DEFAULT_TIMINGS };
   };
   return { waiting, needsIt, destinations, alert: { raised: true, lvCode: 'LV-DLV-001', detail: 'ALL_DESTINATIONS_UNREACHABLE', raisedAt: minsAgo(4), lastCheckAt: minsAgo(1), clearedAt: null }, caseExport };
 }

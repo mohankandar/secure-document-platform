@@ -151,7 +151,10 @@ class ExportJobServiceTest {
         assertTrue(cases.stream().skip(1).allMatch(c -> c.status() == PackageStatus.PROCESSING), "nothing failed");
         assertEquals(ExportJobService.CaseExportState.DESTINATION_PAUSED,
                 f.service.caseExportState(f.tenant, cases.get(5).id()));
-        verify(f.incidents, never()).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
+        // Task 0036: the only destination down raises "can't reach its destinations" (one incident); no case goes to IT.
+        verify(f.incidents, times(1)).recordFailure(any(), any(), any(), any(), any(), any(), any(),
+                argThat(m -> "ALL_DESTINATIONS_UNREACHABLE".equals(m.get("detail"))));
+        verify(f.incidents, times(1)).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
 
         // It comes back: the next probe finds it and every case goes out in its original order.
         f.destination.up();

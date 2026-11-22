@@ -187,17 +187,22 @@ export function testPdf(title: string): Buffer {
   return Buffer.from(pdf, 'latin1');
 }
 
+/** Task 0036: each case's case number (its 12-digit contract number, the main ID the Cases list shows), by package id. */
+export const caseNumbers = new Map<string, string>();
+
 /** Creates a case with one PDF and submits it (after {@code beforeSubmit}, if given). Returns its id. */
 export async function newCase(tenant: string, loan: string, beforeSubmit?: (packageId: string) => void): Promise<string> {
   const who = as(tenant, ROLES.processor);
   // The demo identifier rules: a 12-digit contract number and an 11-digit member number.
   const digits = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');
+  const contract = `35${digits(10)}`;
   const created = await ok(who, 'POST', '/packages', {
     packageType: 'MANUAL_UPLOAD',
-    businessIdentifiers: { contract_number: `35${digits(10)}`, member_number: `9035${digits(7)}`, service_entity: '001' },
+    businessIdentifiers: { contract_number: contract, member_number: `9035${digits(7)}`, service_entity: '001' },
     metadata: { source: 'task-0035-export-e2e', loan },
   });
   const packageId: string = created.packageId;
+  caseNumbers.set(packageId, contract);
   const form = new FormData();
   form.append('file', new Blob([testPdf(`Loan ${loan}`)], { type: 'application/pdf' }), `${loan}.pdf`);
   const up = await fetch(`${BACKEND}/api/v1/packages/${packageId}/documents`, {
@@ -250,7 +255,7 @@ export interface JobRow { id: string; packageId: string; status: string; attempt
 export function jobsOf(tenant: string): JobRow[] {
   return sqlRows(`select id, package_id, status, attempts, coalesce(last_lv_code,''), coalesce(last_detail,''), rebuilt,
       to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US'), to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US')
-      from pipeline_jobs where tenant_id = '${tenant}' and stage = 'EXPORT' order by created_at, id`)
+      from pipeline_jobs where tenant_id = '${tenant}' and stage = 'EXPORT' order by queue_seq`)
     .map(([id, packageId, status, attempts, lvCode, detail, rebuilt, createdAt, updatedAt]) => ({
       id, packageId, status, attempts: Number(attempts), lvCode, detail, rebuilt: rebuilt === 't', createdAt, updatedAt,
     }));
@@ -266,8 +271,23 @@ export function auditCount(tenant: string, action: string, detailLike = '%'): nu
   return Number(sql(`select count(*) from audit_records where tenant_id='${tenant}' and action='${action}' and coalesce(detail,'') like '${detailLike.replace(/'/g, "''")}'`));
 }
 
-/** The cases in LexaVault's own queue order: by their export job's created_at (the database clock). */
+/** The cases in LexaVault's own queue order: by their export job's queue number (task 0036; never the clock). */
 export const queueOrder = (tenant: string) => jobsOf(tenant).map((j) => j.packageId);
+
+/**
+ * Task 0036: the order the cases really went out in, from the folder itself: when each case's exported file was
+ * written (this machine's clock). With one worker per destination a case's file is written only after the one before
+ * it is DONE, so this is the send order whatever the number of workers. Cases with no file yet are left out.
+ */
+export function sentOrder(tenant: string, packageIds: string[]): string[] {
+  const written = packageIds.flatMap((id) => {
+    const files = exportedFiles(tenant, id);
+    if (!files.length) return [];
+    const dir = path.join(tenantFolder(tenant), id);
+    return [{ id, at: Math.min(...files.map((f) => fs.statSync(path.join(dir, f)).mtimeMs)) }];
+  });
+  return written.sort((a, b) => a.at - b.at).map((w) => w.id);
+}
 
 /** How far the database clock is behind (+) or ahead (-) of this machine's clock, in milliseconds. */
 export function dbClockSkewMs(): number {

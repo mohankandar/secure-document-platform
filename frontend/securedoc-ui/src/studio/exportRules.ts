@@ -35,6 +35,9 @@ export interface WaitingGroup {
 }
 export interface WaitingForYou { total: number; destinations: WaitingGroup[] }
 
+/** Task 0036: a case as the IT card lists it, by its case number (null when the case has none). */
+export interface CaseRef { packageId: string; caseNumber: string | null }
+
 export interface ItGroup {
   destinationId: string | null;
   destinationName: string | null;
@@ -42,9 +45,26 @@ export interface ItGroup {
   count: number;
   firstFailedAt?: string | null;
   caseIds: string[];
+  cases?: CaseRef[];
   jobs: ExportJobView[];
 }
-export interface NeedsIt { total: number; groups: ItGroup[] }
+export interface NeedsIt { total: number; groups: ItGroup[]; timings?: ExportTimings | null }
+
+/**
+ * Task 0036: the timings the screens name, from the server's settings (sent with the case's export and with the IT
+ * queue): how often a paused destination is checked, how long a failing case is retried, whether it is rebuilt once,
+ * and how many interruptions send an export to IT.
+ */
+export interface ExportTimings {
+  probeIntervalSeconds: number;
+  retrySpanSeconds: number;
+  retries: number;
+  rebuiltOnce: boolean;
+  maxInterruptions: number;
+}
+
+/** Task 0036: a destination's open exports per state. */
+export interface WaitingCounts { queued: number; waitingForYou: number; needsIt: number }
 
 export interface DestinationView {
   destinationId: string;
@@ -58,11 +78,12 @@ export interface DestinationView {
   lastCheckFailedAt?: string | null;
   nextCheckAt?: string | null;
   openJobs?: number;
+  waiting?: WaitingCounts | null;
 }
 
 export interface ReachabilityAlert { raised: boolean; lvCode?: string | null; raisedAt?: string | null; lastCheckAt?: string | null }
 
-export interface CaseExport { exportState: string; jobs: ExportJobView[] }
+export interface CaseExport { exportState: string; jobs: ExportJobView[]; timings?: ExportTimings | null }
 
 export interface RetentionPeriod { destinationId: string | null; name: string | null; setHours: number | null; hours: number }
 export interface RetentionSettings {
@@ -89,6 +110,14 @@ export function isExporting(state: ExportState): boolean {
 }
 
 export const EXPORTING = 'Exporting';
+
+/**
+ * Task 0036: the Cases page tile of a case. A case whose chip says "Exporting · …" counts under the Exporting tile
+ * (key 'exporting'), whatever its status; any other case under the tile of its status (`stage`).
+ */
+export function caseTile<S extends string>(stage: S, exportState: string | null | undefined): S | 'exporting' {
+  return isExporting(exportStateOf(exportState)) ? 'exporting' : stage;
+}
 export const EXPORTED = 'Exported';
 
 const DETAIL: Record<string, string> = {
@@ -248,12 +277,61 @@ export const CASE_EXPORT_WORDS = {
   afterRefusal: 'Once the destination’s team has fixed it, send it again. It gets one more attempt.',
   readyHeading: 'Waiting to be sent',
   readyBody: 'The case is in the export queue and goes out on its own.',
-  pausedBody: 'The destination isn’t answering. LexaVault checks it every 5 minutes and sends this case on its own when it is back. Nothing is lost.',
   itHeading: 'Waiting for IT',
   itBody: 'IT has been told. Nothing is needed from you.',
   resent: 'Sent again.',
   refusedAgain: 'The destination refused it again, so it went to IT',
 } as const;
+
+/* ---------- Task 0036: timings in words, from the settings ---------- */
+
+const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * A span in plain words: seconds under a minute, minutes under an hour, hours above, rounded, with “about” when
+ * rounding changed it. “5 minutes”, “about 17 hours”, “4 seconds”. Null for no usable value.
+ */
+export function spanWords(seconds: number | null | undefined): { about: boolean; text: string } | null {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return null;
+  const s = Math.round(seconds);
+  if (s < 60) return { about: false, text: unit(Math.max(1, s), 'second') };
+  const minutes = Math.round(s / 60);
+  if (minutes < 60) return { about: minutes * 60 !== s, text: unit(minutes, 'minute') };
+  const hours = Math.round(s / 3600);
+  return { about: hours * 3600 !== s, text: unit(hours, 'hour') };
+}
+
+/** “every 5 minutes”, “every minute”, “about every 2 hours”; null without a usable value. */
+export function everyWords(seconds: number | null | undefined): string | null {
+  const span = spanWords(seconds);
+  if (!span) return null;
+  const text = span.text.startsWith('1 ') ? span.text.slice(2) : span.text;
+  return `${span.about ? 'about ' : ''}every ${text}`;
+}
+
+/** “5 minutes”, “about 17 hours”; null without a usable value. */
+export function overWords(seconds: number | null | undefined): string | null {
+  const span = spanWords(seconds);
+  return span ? `${span.about ? 'about ' : ''}${span.text}` : null;
+}
+
+/** The case panel while its destination is paused. Without the timings it names no number. */
+export function pausedBody(timings: ExportTimings | null | undefined): string {
+  const every = everyWords(timings?.probeIntervalSeconds);
+  return `The destination isn’t answering. LexaVault checks it ${every ?? 'regularly'} and sends this case on its own when it is back. Nothing is lost.`;
+}
+
+/** Support › Destinations, the note under the heading. */
+export function destinationsNote(timings: ExportTimings | null | undefined): string {
+  const every = everyWords(timings?.probeIntervalSeconds);
+  return `A paused destination is checked ${every ?? 'regularly'} and resumes on its own, in order, when it answers.`;
+}
+
+/** “Check now” that failed: “… is checked again in 5 minutes.” */
+export function checkStillFailing(timings: ExportTimings | null | undefined): string {
+  const after = overWords(timings?.probeIntervalSeconds);
+  return `still fails its health check. It stays paused and is checked again ${after ? `in ${after}` : 'on its own'}.`;
+}
 
 /* ---------- Task 0030: the destination's own code, under Technical details ---------- */
 
@@ -355,7 +433,6 @@ export const SUPPORT_EXPORT_WORDS = {
   needsIt: 'Needs IT',
   nothingForIt: 'No export is waiting for IT.',
   destinations: 'Destinations',
-  destinationsNote: 'A paused destination is checked every 5 minutes and resumes on its own, in order, when it answers.',
   columnDestination: 'Destination',
   columnState: 'State',
   columnWaiting: 'Waiting',
@@ -366,21 +443,28 @@ export const SUPPORT_EXPORT_WORDS = {
   working: 'Working',
   needsItState: 'Needs IT',
   checkPassed: 'answers its health check again. Its waiting exports go out in order.',
-  checkStillFailing: 'still fails its health check. It stays paused and is checked again in 5 minutes.',
 } as const;
 
-/** What was already tried for a group, by its code (the retry schedule of task 0028). */
-const TRIED: Record<string, string> = {
-  'LV-DLV-001': 'The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.',
-  'LV-DLV-002': 'The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.',
-  'LV-DLV-007': 'The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.',
-  'LV-DLV-008': 'The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.',
-  'LV-DLV-015': 'A person sent these again after the destination refused them, and it refused them again.',
-  'LV-PRC-008': 'The export was interrupted 3 times while being sent.',
-};
+/** The codes a single failing case is retried for on the schedule (task 0028), then sent to IT. */
+const SCHEDULED_CODES = ['LV-DLV-001', 'LV-DLV-002', 'LV-DLV-007', 'LV-DLV-008'];
 
-export function triedLine(code: string): string | null {
-  return TRIED[code] ?? null;
+/**
+ * What was already tried for a group, by its code. Task 0036: the span and the rebuild come from the settings
+ * (“retried over about 17 hours and rebuilt once” with the default schedule); without them no number is named.
+ */
+export function triedLine(code: string, timings?: ExportTimings | null): string | null {
+  if (SCHEDULED_CODES.includes(code)) {
+    const over = overWords(timings?.retrySpanSeconds);
+    const retried = over ? `retried over ${over}` : 'retried on its schedule';
+    const rebuilt = timings?.rebuiltOnce ? ' and rebuilt once' : '';
+    return `The destination answers its health check, so it’s these cases. Each was ${retried}${rebuilt}.`;
+  }
+  if (code === 'LV-DLV-015') return 'A person sent these again after the destination refused them, and it refused them again.';
+  if (code === 'LV-PRC-008') {
+    const n = timings?.maxInterruptions;
+    return `The export was interrupted ${typeof n === 'number' && n > 0 ? unit(n, 'time') : 'several times'} while being sent.`;
+  }
+  return null;
 }
 
 export const SIGN_IN_CODE = 'LV-DLV-005';
@@ -389,10 +473,47 @@ export function isSignInGroup(group: Pick<ItGroup, 'lvCode'>): boolean {
   return group.lvCode === SIGN_IN_CODE;
 }
 
-/** "4 cases failing to Document vault since 10:00 AM". */
-export function itGroupTitle(group: Pick<ItGroup, 'count' | 'destinationName' | 'firstFailedAt'>, now = Date.now()): string {
+/**
+ * "4 cases failing to Document vault since 10:00 AM". Task 0036: when the destination passes its health check (it
+ * is working), it is these cases, not the destination: "2 cases can't be delivered to Local export folder since
+ * 2:12 AM". While its check fails (paused), the wording stays.
+ */
+export function itGroupTitle(group: Pick<ItGroup, 'count' | 'destinationName' | 'firstFailedAt'>, now = Date.now(), destinationAnswers = false): string {
   const since = group.firstFailedAt ? ` since ${timeOrDay(group.firstFailedAt, now)}` : '';
-  return `${casesWord(group.count)} failing to ${destinationLabel(group.destinationName)}${since}`;
+  const destination = destinationLabel(group.destinationName);
+  return destinationAnswers
+    ? `${casesWord(group.count)} can’t be delivered to ${destination}${since}`
+    : `${casesWord(group.count)} failing to ${destination}${since}`;
+}
+
+/** The codes whose title says the destination can't be reached (a connection failure). */
+const CONNECTION_CODES = ['LV-DLV-001', 'LV-DLV-002'];
+
+/**
+ * The reason line of an IT card. Task 0036: a connection code at a destination that answers its health check is not
+ * "Destination can't be reached": the destination answers, these cases fail. Every other code keeps its title.
+ */
+export function itReason(code: string, destinationAnswers: boolean): { text: string; code: string } {
+  if (destinationAnswers && CONNECTION_CODES.includes(code)) return { text: 'Delivering these cases fails', code };
+  const label = reasonLabel(code);
+  const at = label.lastIndexOf(' · ');
+  return { text: at < 0 ? label : label.slice(0, at), code };
+}
+
+/** A case without a case number, as the Cases list names it. */
+export const UNTITLED_CASE = 'Untitled case';
+const MAX_CASES_LISTED = 5;
+
+/**
+ * Task 0036: the IT card's cases, by case number (never the internal id): "Case 100200300400.", "Cases A, B.",
+ * more than 5 → "Cases A, B, C, D, E and 3 more."
+ */
+export function itCasesLine(cases: readonly CaseRef[] | null | undefined): string | null {
+  const list = cases ?? [];
+  if (!list.length) return null;
+  const names = list.slice(0, MAX_CASES_LISTED).map((c) => c.caseNumber?.trim() || UNTITLED_CASE);
+  const more = list.length - names.length;
+  return `${list.length === 1 ? 'Case' : 'Cases'} ${names.join(', ')}${more > 0 ? ` and ${more} more` : ''}.`;
 }
 
 export function signInTitle(destination: string | null | undefined): string {
@@ -429,11 +550,27 @@ export function destinationStateWords(d: Pick<DestinationView, 'state' | 'paused
   return { tone: 'working', state: SUPPORT_EXPORT_WORDS.working };
 }
 
-/** "3 ready" for a working destination, "27 waiting" otherwise; "Nothing waiting" at 0. */
-export function waitingText(state: string, open: number | null | undefined): string {
-  const n = open ?? 0;
-  if (n <= 0) return 'Nothing waiting';
-  return state === 'WORKING' ? `${n} ready` : `${n} waiting`;
+/**
+ * Task 0036: the Waiting column, each state on its own: "2 ready" (or "27 waiting" while the destination is not
+ * working), "1 waiting for you", "2 need IT" (tone 'it', shown in the red style). Needs IT is never counted as
+ * ready. Without the counts (an older server) the one total as before.
+ */
+export function waitingParts(state: string, open: number | null | undefined, waiting?: WaitingCounts | null): Array<{ text: string; tone: 'plain' | 'it' }> {
+  if (!waiting) {
+    const n = open ?? 0;
+    if (n <= 0) return [{ text: 'Nothing waiting', tone: 'plain' }];
+    return [{ text: state === 'WORKING' ? `${n} ready` : `${n} waiting`, tone: 'plain' }];
+  }
+  const parts: Array<{ text: string; tone: 'plain' | 'it' }> = [];
+  if (waiting.queued > 0) parts.push({ text: state === 'WORKING' ? `${waiting.queued} ready` : `${waiting.queued} waiting`, tone: 'plain' });
+  if (waiting.waitingForYou > 0) parts.push({ text: `${waiting.waitingForYou} waiting for you`, tone: 'plain' });
+  if (waiting.needsIt > 0) parts.push({ text: `${waiting.needsIt} ${waiting.needsIt === 1 ? 'needs' : 'need'} IT`, tone: 'it' });
+  return parts.length ? parts : [{ text: 'Nothing waiting', tone: 'plain' }];
+}
+
+/** The Waiting column as one line: "2 ready · 1 waiting for you · 2 need IT"; "Nothing waiting" at 0. */
+export function waitingText(state: string, open: number | null | undefined, waiting?: WaitingCounts | null): string {
+  return waitingParts(state, open, waiting).map((p) => p.text).join(' · ');
 }
 
 /* ---------- Business Admin: retention per destination ---------- */

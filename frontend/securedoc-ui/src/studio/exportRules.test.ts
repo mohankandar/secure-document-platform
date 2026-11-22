@@ -11,6 +11,8 @@ import {
   itGroupTitle, jobForState, mostFrequentCode, reasonLabel, refusedHeading, refusedWhen, resendAllLabel, resendConfirmLabel,
   resendReasonLines, resendTitle, resendToast, retentionPlaceholder, retentionValueError, retryAllLabel, showWaitingNav,
   signInBody, signInTitle, supportBadgeCount, triedLine, waitingText, type ExportJobView,
+  caseTile, checkStillFailing, destinationsNote, everyWords, itCasesLine, itReason, overWords, pausedBody, spanWords, waitingParts, UNTITLED_CASE,
+  type ExportTimings,
 } from './exportRules.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -112,7 +114,8 @@ test('0029: Support: grouped IT cards, the sign-in card, what was tried, the bad
   const now = new Date(2026, 10, 21, 15, 0).getTime();
   assert.match(itGroupTitle({ count: 4, destinationName: 'Document vault', firstFailedAt: new Date(2026, 10, 21, 10, 0).toISOString() }, now),
     /^4 cases failing to Document vault since 10:00\sAM$/);
-  assert.equal(triedLine('LV-DLV-007'), 'The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.');
+  // Task 0036: the span comes from the settings (the default schedule adds up to 17 h 20 min, not 24 h).
+  assert.equal(triedLine('LV-DLV-007', DEFAULT_TIMINGS), 'The destination answers its health check, so it’s these cases. Each was retried over about 17 hours and rebuilt once.');
   assert.equal(triedLine('LV-DLV-003'), null);
   assert.equal(signInTitle('Title company'), 'Title company refused LexaVault’s sign-in');
   assert.equal(signInBody(12), 'Exports to it are on hold: 12 waiting, nothing lost. Fix the credential in Admin › Integrations, then set it back to working.');
@@ -207,4 +210,99 @@ test('0030: one word for finished cases: "Exported" (the stage, the chip, the st
     const text = readFileSync(join(studio, file), 'utf8');
     assert.doesNotMatch(text, /'Delivered|`Delivered|>Delivered|\bdelivered<\/|\} delivered\b/, `${file} still names a finished case "Delivered"`);
   }
+});
+
+/** The defaults: probe every 5 min; 5 min + 15 min + 1 h + 4 h + 12 h = 17 h 20 min; rebuilt before the 3rd retry; 3 interruptions. */
+const DEFAULT_TIMINGS: ExportTimings = { probeIntervalSeconds: 300, retrySpanSeconds: 62_400, retries: 5, rebuiltOnce: true, maxInterruptions: 3 };
+/** The L5 test profile: probe every 4 s, five 2 s retries. */
+const TEST_TIMINGS: ExportTimings = { probeIntervalSeconds: 4, retrySpanSeconds: 10, retries: 5, rebuiltOnce: true, maxInterruptions: 3 };
+
+test('0036: timings in plain words: seconds under a minute, minutes under an hour, hours above', () => {
+  assert.deepEqual(spanWords(300), { about: false, text: '5 minutes' });
+  assert.deepEqual(spanWords(62_400), { about: true, text: '17 hours' });
+  assert.deepEqual(spanWords(4), { about: false, text: '4 seconds' });
+  assert.deepEqual(spanWords(1), { about: false, text: '1 second' });
+  assert.deepEqual(spanWords(90), { about: true, text: '2 minutes' });
+  assert.deepEqual(spanWords(3600), { about: false, text: '1 hour' });
+  assert.deepEqual(spanWords(3599), { about: true, text: '1 hour' }, '59 min 59 s is about an hour, not 60 minutes');
+  for (const bad of [0, -5, NaN, Infinity, null, undefined]) assert.equal(spanWords(bad as number), null, String(bad));
+  assert.equal(everyWords(300), 'every 5 minutes');
+  assert.equal(everyWords(60), 'every minute');
+  assert.equal(everyWords(3600), 'every hour');
+  assert.equal(everyWords(4), 'every 4 seconds');
+  assert.equal(everyWords(7000), 'about every 2 hours');
+  assert.equal(overWords(62_400), 'about 17 hours');
+  assert.equal(overWords(300), '5 minutes');
+});
+
+test('0036: every sentence that names a probe interval or a retry span takes it from the settings', () => {
+  assert.equal(pausedBody(DEFAULT_TIMINGS), 'The destination isn’t answering. LexaVault checks it every 5 minutes and sends this case on its own when it is back. Nothing is lost.');
+  assert.equal(pausedBody(TEST_TIMINGS), 'The destination isn’t answering. LexaVault checks it every 4 seconds and sends this case on its own when it is back. Nothing is lost.');
+  assert.equal(destinationsNote(DEFAULT_TIMINGS), 'A paused destination is checked every 5 minutes and resumes on its own, in order, when it answers.');
+  assert.equal(destinationsNote(TEST_TIMINGS), 'A paused destination is checked every 4 seconds and resumes on its own, in order, when it answers.');
+  assert.equal(checkStillFailing(DEFAULT_TIMINGS), 'still fails its health check. It stays paused and is checked again in 5 minutes.');
+  assert.equal(triedLine('LV-DLV-001', TEST_TIMINGS), 'The destination answers its health check, so it’s these cases. Each was retried over 10 seconds and rebuilt once.');
+  assert.equal(triedLine('LV-DLV-002', { ...DEFAULT_TIMINGS, rebuiltOnce: false }), 'The destination answers its health check, so it’s these cases. Each was retried over about 17 hours.');
+  assert.equal(triedLine('LV-PRC-008', DEFAULT_TIMINGS), 'The export was interrupted 3 times while being sent.');
+  assert.equal(triedLine('LV-PRC-008', { ...DEFAULT_TIMINGS, maxInterruptions: 1 }), 'The export was interrupted 1 time while being sent.');
+  assert.equal(triedLine('LV-DLV-015', DEFAULT_TIMINGS), 'A person sent these again after the destination refused them, and it refused them again.');
+  // Without the settings (an older server) no sentence names a number it does not know.
+  for (const text of [pausedBody(null), destinationsNote(undefined), checkStillFailing(null), triedLine('LV-DLV-001'), triedLine('LV-PRC-008')]) {
+    assert.doesNotMatch(text ?? '', /\d/, text ?? '');
+  }
+  // No fixed timing is left in the export words.
+  const source = readFileSync(join(here, 'exportRules.ts'), 'utf8');
+  assert.doesNotMatch(source, /every 5 minutes'|over 24 hours|again in 5 minutes'|interrupted 3 times/);
+});
+
+test('0036: Support › Destinations, Waiting: each state on its own; Needs IT is never ready', () => {
+  assert.equal(waitingText('WORKING', 5, { queued: 2, waitingForYou: 1, needsIt: 2 }), '2 ready · 1 waiting for you · 2 need IT');
+  assert.deepEqual(waitingParts('WORKING', 2, { queued: 0, waitingForYou: 0, needsIt: 2 }), [{ text: '2 need IT', tone: 'it' }], '0035 picture 05 said "2 ready"');
+  assert.equal(waitingText('WORKING', 1, { queued: 0, waitingForYou: 0, needsIt: 1 }), '1 needs IT');
+  assert.equal(waitingText('PAUSED', 27, { queued: 27, waitingForYou: 0, needsIt: 0 }), '27 waiting');
+  assert.equal(waitingText('WORKING', 0, { queued: 0, waitingForYou: 0, needsIt: 0 }), 'Nothing waiting');
+  assert.equal(waitingText('WORKING', 3, null), '3 ready', 'an older server: the one total as before');
+});
+
+test('0036: the IT card says the cases can’t be delivered when the destination answers, and lists case numbers', () => {
+  const now = new Date(2026, 10, 22, 15, 0).getTime();
+  const group = { count: 2, destinationName: 'Local export folder', firstFailedAt: new Date(2026, 10, 22, 2, 12).toISOString() };
+  assert.match(itGroupTitle(group, now, true), /^2 cases can’t be delivered to Local export folder since 2:12\sAM$/);
+  assert.match(itGroupTitle(group, now, false), /^2 cases failing to Local export folder since 2:12\sAM$/, 'paused: the wording stays');
+  assert.deepEqual(itReason('LV-DLV-001', true), { text: 'Delivering these cases fails', code: 'LV-DLV-001' });
+  assert.notEqual(itReason('LV-DLV-001', true).text, LV_CODES['LV-DLV-001'].title);
+  assert.deepEqual(itReason('LV-DLV-001', false), { text: LV_CODES['LV-DLV-001'].title, code: 'LV-DLV-001' });
+  assert.deepEqual(itReason('LV-DLV-007', true), { text: LV_CODES['LV-DLV-007'].title, code: 'LV-DLV-007' });
+
+  const ref = (n: number) => ({ packageId: `p-${n}`, caseNumber: `1002003004${String(n).padStart(2, '0')}` });
+  assert.equal(itCasesLine([ref(1)]), 'Case 100200300401.');
+  assert.equal(itCasesLine([ref(1), { packageId: 'p-x', caseNumber: null }]), `Cases 100200300401, ${UNTITLED_CASE}.`);
+  assert.equal(itCasesLine([1, 2, 3, 4, 5, 6, 7, 8].map(ref)),
+    'Cases 100200300401, 100200300402, 100200300403, 100200300404, 100200300405 and 3 more.');
+  assert.equal(itCasesLine([1, 2, 3, 4, 5].map(ref)), 'Cases 100200300401, 100200300402, 100200300403, 100200300404, 100200300405.');
+  assert.equal(itCasesLine([]), null);
+  assert.equal(itCasesLine(undefined), null);
+  const line = itCasesLine([ref(1), { packageId: 'c12725cb-0000-4000-8000-000000000001', caseNumber: null }]);
+  assert.doesNotMatch(line ?? '', /c12725cb/, 'never the internal id');
+});
+
+test('0036: Cases page: a case whose chip says "Exporting · …" counts under Exporting, not Redacting', () => {
+  assert.equal(STAGE_NAMES.exporting, 'Exporting');
+  for (const state of ['READY', 'DESTINATION_PAUSED', 'WAITING_FOR_YOU', 'NEEDS_IT']) {
+    assert.equal(caseTile('redacting', state), 'exporting', state);
+    assert.equal(caseTile('delivered', state), 'exporting', state);
+  }
+  assert.equal(caseTile('redacting', 'NONE'), 'redacting');
+  assert.equal(caseTile('redacting', null), 'redacting');
+  assert.equal(caseTile('delivered', 'EXPORTED'), 'delivered');
+  // The tiles, in order, and the Exporting tile in the Exporting chip's colour family.
+  const data = readFileSync(join(here, 'data.ts'), 'utf8');
+  assert.match(data, /CASE_TILES: StageKey\[\] = \['intake', 'redacting', 'review', 'approval', 'exporting', 'delivered', 'stopped'\]/);
+  const desk = readFileSync(join(here, 'Desk.tsx'), 'utf8');
+  assert.match(desk, /byStage\.set\(tileOf\(p\)/, 'the tiles count by tileOf');
+  const css = readFileSync(join(here, 'studio.css'), 'utf8');
+  const chip = /\.cf-stage\[data-export\] \{ --stage: ([^;]+); --stage-soft: ([^;]+); \}/.exec(css);
+  const tile = /\[data-stage='exporting'\] \{ --stage: ([^;]+); --stage-soft: ([^;]+); \}/.exec(css);
+  assert.ok(chip && tile);
+  assert.deepEqual(tile.slice(1), chip.slice(1));
 });

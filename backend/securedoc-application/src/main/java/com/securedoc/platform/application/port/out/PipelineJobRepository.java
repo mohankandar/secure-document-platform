@@ -113,6 +113,9 @@ public interface PipelineJobRepository {
     /** Task 0029: the tenant's export jobs still to be done (not DONE or STOPPED), counted per destination id. */
     Map<UUID, Integer> countOpenByDestination(TenantId tenantId);
 
+    /** Task 0036: the same jobs counted per destination id and status (Support's "Waiting": each state on its own). */
+    Map<UUID, Map<PipelineJobStatus, Integer>> countOpenByDestinationAndStatus(TenantId tenantId);
+
     /**
      * A worker's result.
      *

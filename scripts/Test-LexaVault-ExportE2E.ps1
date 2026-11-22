@@ -11,8 +11,8 @@
        a mock Ollama that finds nothing, a Vite dev server (LOCAL mode, Case File UI) and the backend jar itself,
        with the "export-e2e" test profile from test-tools/export-e2e (shortened timings; the defaults are unchanged).
        Scenario 6 stops and starts the backend in the middle.
-    3. The proof pictures go to docs/work/0035-proof/. Logs, the export folder and the stored copies stay in the run
-       folder (test values only).
+    3. The proof pictures go to -ProofDir (default docs/work/0036-proof/; task 0035's are in docs/work/0035-proof/).
+       Logs, the export folder and the stored copies stay in the run folder (test values only).
     4. Stops the backend if it is still running and removes only the throwaway container.
 
 .PARAMETER JarPath
@@ -35,6 +35,8 @@ param(
     [int] $AppPort = 18035,
     [int] $OllamaPort = 11535,
     [string] $Grep,
+    # Where the proof pictures go (task 0036: a folder per task, so the earlier pictures stay as they were).
+    [string] $ProofDir,
     # Diagnostics: the throwaway database logs every write statement; its log is saved as postgres.log in the run folder.
     [switch] $LogDatabaseWrites
 )
@@ -44,6 +46,7 @@ Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ui = Join-Path $repoRoot 'frontend\securedoc-ui'
+if (-not $ProofDir) { $ProofDir = Join-Path $repoRoot 'docs\work\0036-proof' }
 if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar' }
 if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first: cd backend; mvn clean install)." }
 $JarPath = (Resolve-Path -LiteralPath $JarPath).Path
@@ -91,7 +94,7 @@ try {
     $env:LEXAVAULT_E2E_DB_PASSWORD = $dbPassword
     $env:LEXAVAULT_E2E_APP_PORT = "$AppPort"
     $env:LEXAVAULT_E2E_OLLAMA_PORT = "$OllamaPort"
-    $env:LEXAVAULT_E2E_PROOF_DIR = (Join-Path $repoRoot 'docs\work\0035-proof')
+    $env:LEXAVAULT_E2E_PROOF_DIR = $ProofDir
     $env:LEXAVAULT_E2E_RESULTS = (Join-Path $runDir 'results.json')
     $playwrightArgs = @('node_modules/@playwright/test/cli.js', 'test', '--config', 'playwright.export-e2e.config.ts')
     if ($Grep) { $playwrightArgs += @('--grep', $Grep) }

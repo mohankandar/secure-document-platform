@@ -171,6 +171,8 @@ tr[data-tone='it'] .cf-sx-dot { background: var(--cf-danger); }
 tr[data-tone='paused'] .cf-sx-state, tr[data-tone='it'] .cf-sx-state { font-weight: 600; }
 .cf-sx-detail { display: block; margin-top: 2px; color: var(--cf-muted); font-size: 12px; }
 tr[data-tone='paused'] .cf-sx-detail { color: var(--cf-ink); }
+/* Task 0036: "2 need IT" in the Waiting column, in the Needs IT red. */
+.cf-sx-waiting-it { color: var(--cf-danger); font-weight: 600; }
 @media (max-width: 768px) { .cf-sx-table thead { display: none; } .cf-sx-table tr { display: grid; } .cf-sx-table th, .cf-sx-table td { border-top: 0; padding: 4px 16px; } .cf-sx-table tr { border-top: 1px solid var(--cf-line); padding: 10px 0; } }
 .cf-sx-kind { color: var(--cf-muted); font-size: 12px; }
 tr[data-tone='paused'] .cf-sx-kind { color: var(--cf-ink); }

@@ -14,11 +14,11 @@ securedoc:
       failing-cases-window-ms: 600000
       # A paused destination is checked every 4 s (default 5 minutes).
       probe-interval-ms: 4000
-      # One export worker in all, so "in the order they finished" can be checked exactly. (workers-per-destination=1
-      # alone is not enough: two workers claiming at the same moment can both run a job of the same destination;
-      # found by this run, see docs/work/0035-report.md.)
+      # Task 0036: 4 export workers, one per destination. The order still holds: the claim takes a lock per (entity,
+      # destination), so one destination never runs two jobs at once, and the queue is numbered (queue_seq), not timed.
+      # (Task 0035 ran with one worker in all because of both findings.)
       workers-per-destination: 1
-      workers-total: 1
+      workers-total: 4
       poll-interval-ms: 300
       claim-lease-ms: 6000
   lifecycle:
