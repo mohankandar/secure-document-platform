@@ -285,7 +285,7 @@ const SENTENCES: Record<string, string> = {
 
 const FINDING_SENTENCES: Record<string, string> = {
   FINDING_DETECTED: 'Found',
-  FINDING_CONFIRMED: 'Redacted',
+  FINDING_CONFIRMED: 'Confirmed',
   FINDING_REDACTED: 'Redacted',
   FINDING_DISMISSED: 'Kept',
   FINDING_OVERRIDDEN: 'Changed the decision on',

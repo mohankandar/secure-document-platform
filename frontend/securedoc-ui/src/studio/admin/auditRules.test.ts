@@ -17,12 +17,12 @@ test('type chips use the design words and the server categories', () => {
 
 test('rows read as sentences, never raw codes', () => {
   assert.equal(whatHappened(rec('PACKAGE_FINAL_APPROVED')), 'Approved delivery');
-  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'Finding confirmed: type=SSN')), 'Redacted a Social Security Number');
-  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'Focused review confirmed finding: type=US_SSN')), 'Redacted a Social Security Number');
+  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'Finding confirmed: type=SSN')), 'Confirmed a Social Security Number');
+  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'Focused review confirmed finding: type=US_SSN')), 'Confirmed a Social Security Number');
   assert.equal(whatHappened(rec('FINDING_DISMISSED', 'Finding dismissed: type=CREDIT_SCORE')), 'Kept a credit score visible');
-  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'type=DATE_OF_BIRTH')), 'Redacted a date of birth');
-  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'type=ACCOUNT_NUMBER')), 'Redacted an account number');
-  assert.equal(whatHappened(rec('FINDING_CONFIRMED')), 'Redacted a finding');
+  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'type=DATE_OF_BIRTH')), 'Confirmed a date of birth');
+  assert.equal(whatHappened(rec('FINDING_CONFIRMED', 'type=ACCOUNT_NUMBER')), 'Confirmed an account number');
+  assert.equal(whatHappened(rec('FINDING_CONFIRMED')), 'Confirmed a finding');
   assert.equal(whatHappened(rec('SENSITIVE_DATA_POLICY_CHANGED')), 'Changed the sensitive-data settings');
   assert.equal(whatHappened(rec('ENTERPRISE_IDENTITY_CONNECTION_TESTED')), 'Tested the sign-in setup');
   // An action this screen doesn't know yet is still words, not a code.
@@ -176,4 +176,16 @@ test('0034: the clean-up of finished jobs reads as a sentence, is in the Action 
   assert.equal(words, 'Removed finished export jobs after their keep time');
   assert.ok(actionOptions().some(([code, w]) => code === 'PIPELINE_JOBS_CLEANED' && w === words));
   assert.equal(actionOptions().filter(([, w]) => w === words).length, 1, 'no other action reads the same');
+});
+
+test('0035: a confirmed finding and a redacted finding read differently', () => {
+  assert.equal(whatHappened(rec('FINDING_CONFIRMED')), 'Confirmed a finding');
+  assert.equal(whatHappened(rec('FINDING_REDACTED')), 'Redacted a finding');
+  assert.equal(whatHappened(rec('FINDING_REDACTED', 'type=SSN')), 'Redacted a Social Security Number');
+  const options = new Map(actionOptions());
+  assert.equal(options.get('FINDING_CONFIRMED'), 'Confirmed a finding');
+  assert.equal(options.get('FINDING_REDACTED'), 'Redacted a finding');
+  // Every action in the Action filter now reads differently from every other.
+  const words = actionOptions().map(([, w]) => w);
+  assert.equal(new Set(words).size, words.length, 'no two actions in the filter read the same');
 });

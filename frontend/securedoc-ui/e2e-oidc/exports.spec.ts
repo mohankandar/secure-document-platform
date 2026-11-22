@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Request } from '@playwright/test';
 import { ENTITY, EXPORT_CASES, go, mockApi, mockIdentityProvider, signInAs } from '../e2e-a11y/harness';
-import { ARCHIVE, TITLE_CO, VAULT, chipProblems, panelLineProblems, retentionSettings } from './exportFixtures';
+import { ARCHIVE, TITLE_CO, VAULT, chipProblems, exportApi, exportCases, panelLineProblems, retentionSettings } from './exportFixtures';
 import { capabilitiesFor } from './policyCapabilities';
 
 /**
@@ -92,15 +92,23 @@ test.describe('Waiting for you (Processor and Supervisor)', () => {
   test('the case panel: waiting for you, one "Resend this case", the destination’s answer under Technical details', async ({ page }) => {
     const writes = recordWrites(page);
     const pkg = caseOf('LN-7004');
-    await signInAs(page, 'processor', `/case/${pkg.packageId}`, { exports: true });
+    // Task 0035: a fixed time, so "Refused today" holds at any hour (the fixture's time is relative to now, and
+    // between 00:00 and about 00:55 it fell on the day before). The page's clock and the refusal are both fixed.
+    const refusedAt = new Date(2026, 10, 20, 14, 5);
+    await page.clock.setFixedTime(new Date(2026, 10, 20, 15, 0));
+    const fixed = exportApi(exportCases('c9c9c9c9')).caseExport(pkg.packageId);
+    fixed.jobs = fixed.jobs.map((j) => (j.jobId === 'j-7004' ? { ...j, since: refusedAt.toISOString(), firstFailedAt: refusedAt.toISOString() } : j));
+    await signInAs(page, 'processor', '/', { exports: true });
+    await answer(page, 'GET', `/packages/${pkg.packageId}/export-jobs`, 200, fixed);
     await answer(page, 'POST', '/export-jobs/resend', 200, [{ jobId: 'j-7004', status: 'DONE', lvCode: null, saved: true }]);
+    await go(page, `/case/${pkg.packageId}`);
 
     const panel = page.getByRole('complementary', { name: 'Case panel' });
     const box = panel.getByRole('region', { name: 'Next step' });
     await expect(box.locator('.cf-eyebrow')).toHaveText('Exporting · waiting for you');
     await expect(box).toContainText('Document vault refused this case');
     await expect(box.getByTestId('export-reason')).toHaveText('Destination refused the sensitivity level · LV-DLV-003');
-    await expect(box).toContainText(/Refused today at .+\. Once the destination’s team has fixed it, send it again\. It gets one more attempt\./);
+    await expect(box).toContainText(/Refused today at 2:05\sPM\. Once the destination’s team has fixed it, send it again\. It gets one more attempt\./);
     await expect(box.getByRole('button')).toHaveText(['Resend this case']);
     await expect(panel.getByRole('list', { name: 'Stages' }).getByRole('listitem').last()).toHaveText('Exporting');
 
