@@ -50,7 +50,7 @@ sleep 2
 export LEXAVAULT_E2E_RUN_DIR="$run_dir" LEXAVAULT_E2E_JAR="$jar" LEXAVAULT_E2E_PROFILE_DIR="$repo_root/test-tools/export-e2e"
 export LEXAVAULT_E2E_DB_CONTAINER="$container" LEXAVAULT_E2E_DB_PORT=55435 LEXAVAULT_E2E_DB_PASSWORD="$db_password"
 export LEXAVAULT_E2E_APP_PORT=18035 LEXAVAULT_E2E_OLLAMA_PORT=11535
-export LEXAVAULT_E2E_PROOF_DIR="$repo_root/docs/work/0035-proof" LEXAVAULT_E2E_RESULTS="$run_dir/results.json"
+export LEXAVAULT_E2E_PROOF_DIR="${LEXAVAULT_E2E_PROOF_DIR:-$repo_root/docs/work/0036-proof}" LEXAVAULT_E2E_RESULTS="$run_dir/results.json"
 
 cd "$repo_root/frontend/securedoc-ui"
 args=(node_modules/@playwright/test/cli.js test --config playwright.export-e2e.config.ts)

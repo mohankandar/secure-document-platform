@@ -9,6 +9,7 @@ import com.securedoc.platform.application.export.result.ExportPackageDocumentsRe
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
 import com.securedoc.platform.application.port.in.RebuildPackageExportUseCase;
+import com.securedoc.platform.application.port.out.CasePrimaryIdentifierLookup;
 import com.securedoc.platform.application.port.out.ExportDestinationProbePort;
 import com.securedoc.platform.application.port.out.ExportDestinationStateRepository;
 import com.securedoc.platform.application.port.out.ExportReachabilityAlertRepository;
@@ -115,6 +116,7 @@ public final class ExportJobService {
     private final ExportJobQueue queue;
     private final ExportJobSettings settings;
     private final Clock clock;
+    private final CasePrimaryIdentifierLookup caseNumbers;
 
     public ExportJobService(PipelineJobRepository jobs, ExportDestinationStateRepository destinations,
                             ExportReachabilityAlertRepository alerts, ExportPackageDocumentsUseCase exportUseCase,
@@ -122,7 +124,8 @@ public final class ExportJobService {
                             PackageRepository packages, PackageLifecycleService lifecycle,
                             MasterExportCompletion completion, ProcessingIncidentService incidents, AuditService audit,
                             ExportDestinationProbePort probe, IntegrationConnectionRepository connections,
-                            ExportJobQueue queue, ExportJobSettings settings, Clock clock) {
+                            ExportJobQueue queue, ExportJobSettings settings, Clock clock,
+                            CasePrimaryIdentifierLookup caseNumbers) {
         this.jobs = Objects.requireNonNull(jobs);
         this.destinations = Objects.requireNonNull(destinations);
         this.alerts = Objects.requireNonNull(alerts);
@@ -139,6 +142,7 @@ public final class ExportJobService {
         this.queue = Objects.requireNonNull(queue);
         this.settings = Objects.requireNonNull(settings);
         this.clock = Objects.requireNonNull(clock);
+        this.caseNumbers = Objects.requireNonNull(caseNumbers);
     }
 
     public ExportJobSettings settings() {
@@ -217,22 +221,20 @@ public final class ExportJobService {
         for (ExportReachabilityAlertRepository.Alert alert : alerts.findRaisedDueForCheck(settings.probeInterval(), 50)) {
             TenantId tenantId = alert.tenantId();
             alerts.recordCheck(tenantId);
-            boolean anyPasses = false;
+            IntegrationConnectionId passed = null;
             for (IntegrationConnectionId destination : knownDestinations(tenantId)) {
                 if (check(tenantId, destination)) {
-                    anyPasses = true;
+                    passed = destination;
                     break;
                 }
                 destinations.recordCheckFailed(tenantId, destination);
             }
-            if (anyPasses && alerts.clear(tenantId)) {
-                int due = jobs.makeNetworkWaitersDueNow(tenantId);
-                audit.recordSuccess(tenantId, ExportJobQueue.SYSTEM_ACTOR,
-                        AuditAction.EXPORT_DESTINATIONS_UNREACHABLE_ALERT_CLEARED, "Tenant", tenantId.toString(),
-                        CorrelationId.generate(), "Destinations reachable again: jobsMadeDue=" + due);
-                log.info("EXPORT_DESTINATIONS_UNREACHABLE_CLEARED tenant={} jobsMadeDue={}", tenantId, due);
-                cleared++;
-            }
+            if (passed == null) continue;
+            // Task 0036: a destination paused for its failed check (the only destination) resumes with the alert;
+            // resume clears it. Otherwise (two or more destinations, none paused) the alert clears here.
+            boolean resumed = resume(tenantId, passed, EnumSet.of(DestinationState.PAUSED), "probe",
+                    ExportJobQueue.SYSTEM_ACTOR, CorrelationId.generate());
+            if (resumed || clearNetworkAlert(tenantId)) cleared++;
         }
         return cleared;
     }
@@ -274,14 +276,22 @@ public final class ExportJobService {
         for (JobView v : needsIt(tenantId)) {
             byKey.computeIfAbsent(v.destinationId() + "|" + v.lvCode(), k -> new ArrayList<>()).add(v);
         }
+        // Task 0036: each case by its case number (the main ID the Cases list shows), one lookup for all groups.
+        Map<PackageId, CasePrimaryIdentifierLookup.CasePrimaryIdentifier> numbers = byKey.isEmpty() ? Map.of()
+                : caseNumbers.findByPackageIds(tenantId, byKey.values().stream().flatMap(List::stream)
+                        .map(v -> PackageId.of(v.packageId())).distinct().toList());
         List<ItGroup> groups = new ArrayList<>();
         for (List<JobView> group : byKey.values()) {
             JobView first = group.get(0);
             Instant firstFailedAt = group.stream().map(v -> v.firstFailedAt() != null ? v.firstFailedAt() : v.since())
                     .filter(Objects::nonNull).min(Comparator.naturalOrder()).orElse(null);
             List<UUID> caseIds = group.stream().map(JobView::packageId).distinct().toList();
+            List<CaseRef> cases = caseIds.stream().map(id -> {
+                CasePrimaryIdentifierLookup.CasePrimaryIdentifier number = numbers.get(PackageId.of(id));
+                return new CaseRef(id, number == null ? null : number.value());
+            }).toList();
             groups.add(new ItGroup(first.destinationId(), first.destinationName(), first.lvCode(), group.size(),
-                    firstFailedAt, caseIds, List.copyOf(group)));
+                    firstFailedAt, caseIds, cases, List.copyOf(group)));
         }
         return groups;
     }
@@ -408,7 +418,7 @@ public final class ExportJobService {
     public List<DestinationView> destinationStates(TenantId tenantId) {
         Map<UUID, ExportDestinationStatus> stored = new HashMap<>();
         destinations.findByTenantId(tenantId).forEach(s -> stored.put(s.connectionId().value(), s));
-        Map<UUID, Integer> open = jobs.countOpenByDestination(tenantId);
+        Map<UUID, Map<PipelineJobStatus, Integer>> open = jobs.countOpenByDestinationAndStatus(tenantId);
         List<DestinationView> views = new ArrayList<>();
         IntegrationConnectionId master = queue.masterDestination(tenantId);
         if (ExportDestinations.isLocalFolder(tenantId, master)) {
@@ -466,11 +476,12 @@ public final class ExportJobService {
     }
 
     private DestinationView view(ExportDestinationStatus s, String name, String purpose, boolean enabled,
-                                 Map<UUID, Integer> open) {
+                                 Map<UUID, Map<PipelineJobStatus, Integer>> open) {
+        WaitingCounts waiting = WaitingCounts.of(open.getOrDefault(s.connectionId().value(), Map.of()));
         return new DestinationView(s.connectionId().value(), name, purpose, enabled, s.state().name(), s.pausedAt(),
                 s.consecutiveFailures(), s.lastProbeAt(), s.lastLvCode(), s.lastCheckFailedAt(), s.rateLimitedUntil(),
                 s.workerLimit(settings.workersPerDestination()), nextCheckAt(s),
-                open.getOrDefault(s.connectionId().value(), 0));
+                waiting.total(), waiting);
     }
 
     /** A paused destination is checked one probe interval after its last check (or after it paused); null otherwise. */
@@ -776,6 +787,13 @@ public final class ExportJobService {
         }
         if (check(tenantId, destination)) return Evidence.CASE;
         destinations.recordCheckFailed(tenantId, destination);
+        if (onlyDestination(tenantId, destination)) {
+            // Task 0036 (owner's answer 1): the entity's only destination is down. It is paused as before, and IT
+            // gets "can't reach its destinations" too; the alert clears when the destination resumes.
+            pause(job, code, "CHECK_FAILED", correlationId);
+            raiseNetworkAlert(job, correlationId);
+            return Evidence.DESTINATION;
+        }
         if (allDestinationsDown(tenantId, destination)) {
             raiseNetworkAlert(job, correlationId);
             return Evidence.NETWORK;
@@ -795,11 +813,22 @@ public final class ExportJobService {
         }
     }
 
-    /** Every known destination (at least 2) failed its check within the window: checked now where needed. */
+    /** The failed destination is the entity's only export destination. */
+    private boolean onlyDestination(TenantId tenantId, IntegrationConnectionId failed) {
+        Set<IntegrationConnectionId> all = knownDestinations(tenantId);
+        all.add(failed);
+        return all.size() == 1;
+    }
+
+    /**
+     * Every known destination failed its check within the window: checked now where needed. With one destination
+     * that is its own failed check ({@link #onlyDestination}); with two or more it raises the alert instead of
+     * pausing.
+     */
     private boolean allDestinationsDown(TenantId tenantId, IntegrationConnectionId failed) {
         Set<IntegrationConnectionId> all = knownDestinations(tenantId);
         all.add(failed);
-        if (all.size() < 2) return false;
+        if (all.size() < 2) return true;
         Instant since = clock.instant().minus(settings.allUnreachableWindow());
         for (IntegrationConnectionId other : all) {
             if (other.equals(failed)) continue;
@@ -901,6 +930,19 @@ public final class ExportJobService {
                 destinationId.value().toString(), correlationId,
                 "Export destination working again: by=" + by + ", jobsMadeDue=" + due);
         log.info("EXPORT_DESTINATION_RESUMED destination={} by={} jobsMadeDue={}", destinationId.value(), by, due);
+        // Task 0036: a destination that answers again clears "can't reach its destinations".
+        clearNetworkAlert(tenantId);
+        return true;
+    }
+
+    /** Clears a raised network alert; the jobs that waited for the network are due again. True when it was raised. */
+    private boolean clearNetworkAlert(TenantId tenantId) {
+        if (!alerts.clear(tenantId)) return false;
+        int due = jobs.makeNetworkWaitersDueNow(tenantId);
+        audit.recordSuccess(tenantId, ExportJobQueue.SYSTEM_ACTOR,
+                AuditAction.EXPORT_DESTINATIONS_UNREACHABLE_ALERT_CLEARED, "Tenant", tenantId.toString(),
+                CorrelationId.generate(), "Destinations reachable again: jobsMadeDue=" + due);
+        log.info("EXPORT_DESTINATIONS_UNREACHABLE_CLEARED tenant={} jobsMadeDue={}", tenantId, due);
         return true;
     }
 
@@ -1017,15 +1059,64 @@ public final class ExportJobService {
     public record WaitingGroup(UUID destinationId, String destinationName, int total, Map<String, Integer> countsByCode,
                                List<JobView> jobs) { }
 
-    /** One IT alert: NEEDS_IT jobs of one destination with one code. */
+    /**
+     * One IT alert: NEEDS_IT jobs of one destination with one code. Task 0036 added {@code cases}: each case with its
+     * case number (null when the case has none).
+     */
     public record ItGroup(UUID destinationId, String destinationName, String lvCode, int count, Instant firstFailedAt,
-                          List<UUID> caseIds, List<JobView> jobs) { }
+                          List<UUID> caseIds, List<CaseRef> cases, List<JobView> jobs) { }
 
-    /** Task 0029 added {@code nextCheckAt} (while paused) and {@code openJobs} (its export jobs still to be done). */
+    /** A case as the IT card lists it: its id (for links) and its case number. */
+    public record CaseRef(UUID packageId, String caseNumber) { }
+
+    /**
+     * Task 0029 added {@code nextCheckAt} (while paused) and {@code openJobs} (its export jobs still to be done); task
+     * 0036 added {@code waiting}: the same jobs counted per state, so Needs IT is never counted as ready.
+     */
     public record DestinationView(UUID destinationId, String name, String purpose, boolean enabled, String state,
                                   Instant pausedAt, int consecutiveFailures, Instant lastProbeAt, String lastLvCode,
                                   Instant lastCheckFailedAt, Instant rateLimitedUntil, int workerLimit,
-                                  Instant nextCheckAt, int openJobs) { }
+                                  Instant nextCheckAt, int openJobs, WaitingCounts waiting) { }
+
+    /**
+     * A destination's open export jobs per state: {@code queued} (READY, WAITING_RETRY, RUNNING: they go out on their
+     * own), {@code waitingForYou} and {@code needsIt}.
+     */
+    public record WaitingCounts(int queued, int waitingForYou, int needsIt) {
+        static WaitingCounts of(Map<PipelineJobStatus, Integer> byStatus) {
+            int queued = 0;
+            int you = 0;
+            int it = 0;
+            for (Map.Entry<PipelineJobStatus, Integer> e : byStatus.entrySet()) {
+                int n = e.getValue() == null ? 0 : e.getValue();
+                switch (e.getKey()) {
+                    case WAITING_FOR_YOU -> you += n;
+                    case NEEDS_IT -> it += n;
+                    case DONE, STOPPED -> { }
+                    default -> queued += n;
+                }
+            }
+            return new WaitingCounts(queued, you, it);
+        }
+
+        public int total() {
+            return queued + waitingForYou + needsIt;
+        }
+    }
+
+    /**
+     * Task 0036: the timings the screens name, from the settings, so no sentence says more than happens: how often a
+     * paused destination is checked, how long a failing case is retried (the sum of the schedule), how many retries,
+     * whether it is rebuilt once on the way, and how many interruptions send a job to IT.
+     */
+    public record ExportTimings(long probeIntervalSeconds, long retrySpanSeconds, int retries, boolean rebuiltOnce,
+                                int maxInterruptions) { }
+
+    public ExportTimings timings() {
+        long span = settings.retrySchedule().stream().mapToLong(Duration::toSeconds).sum();
+        return new ExportTimings(settings.probeInterval().toSeconds(), span, settings.retrySchedule().size(),
+                settings.rebuildBeforeRetry() <= settings.retrySchedule().size(), settings.maxAttempts());
+    }
 
     /** "Check now": whether the check passed, whether that brought the destination back, and its state now. */
     public record CheckNow(UUID destinationId, boolean passed, boolean resumed, String state) { }

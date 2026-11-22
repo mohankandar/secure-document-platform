@@ -8,6 +8,7 @@ import com.securedoc.platform.application.lifecycle.service.PackageLifecycleServ
 import com.securedoc.platform.application.port.in.ProcessDerivedRoutingUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.BusinessRecordRepository;
+import com.securedoc.platform.application.port.out.CasePrimaryIdentifierLookup;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.port.out.DeliverySubmissionRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
@@ -90,6 +91,8 @@ final class ExportJobFixture {
     final Map<PackageId, List<Document>> documents = new HashMap<>();
     final Map<String, Artifact> artifacts = new HashMap<>();
     final Map<PackageId, Integer> nextCycle = new HashMap<>();
+    /** Task 0036: the case number (the main ID) per case, as the IT card lists them; a case without one is left out. */
+    final Map<PackageId, String> caseNumbers = new HashMap<>();
     final Map<String, DeliverySubmission> submissions = new HashMap<>();
 
     final AuditService audit = mock(AuditService.class);
@@ -161,7 +164,16 @@ final class ExportJobFixture {
         queue = new ExportJobQueue(jobs, destination, audit, settings, clock);
         service = new ExportJobService(jobs, states, alerts, export, export, derived, packageRepository, lifecycle,
                 new MasterExportCompletion(packageRepository, routing, incidents, audit), incidents, audit, probe,
-                connections, queue, settings, clock);
+                connections, queue, settings, clock,
+                (tenantId, ids) -> {
+                    Map<PackageId, CasePrimaryIdentifierLookup.CasePrimaryIdentifier> numbers = new HashMap<>();
+                    ids.forEach(id -> {
+                        String number = caseNumbers.get(id);
+                        if (number != null) numbers.put(id, new CasePrimaryIdentifierLookup.CasePrimaryIdentifier(
+                                "Case number", number));
+                    });
+                    return numbers;
+                });
     }
 
     /** A case whose documents are all redacted, still PROCESSING, with its EXPORT job queued. */

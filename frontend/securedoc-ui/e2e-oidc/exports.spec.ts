@@ -178,6 +178,17 @@ test.describe('The "Exporting" status', () => {
     // A reviewed case waiting to go out no longer looks like it needs a reviewer; a refusal needs the person who can resend.
     await expect(page.locator(`#cf-row-${caseOf('LN-7004').packageId}`)).toHaveAttribute('data-you', 'true');
     await expect(page.locator(`#cf-row-${caseOf('LN-7004').packageId} .cf-case-act button`)).toHaveCount(0);
+    // Task 0036: an Exporting tile; every case whose chip says "Exporting · …" counts there, none under Redacting.
+    const band = page.getByRole('group', { name: 'Cases by lifecycle stage' });
+    await expect(band.locator('.cf-band-label')).toHaveText(['New', 'Redacting', 'Review', 'Approval', 'Exporting', 'Exported', 'Stopped']);
+    const exportingCount = await page.locator('.cf-case-stage', { hasText: /^Exporting · / }).count();
+    expect(exportingCount).toBe(7);
+    await expect(band.locator('[data-stage="exporting"] .cf-band-count')).toHaveText(String(exportingCount));
+    await band.locator('[data-stage="exporting"]').click();
+    await expect(page.locator('.cf-case-stage')).toHaveCount(7);
+    await expect(page.locator('.cf-case-stage', { hasText: /^Exporting · / })).toHaveCount(7);
+    await band.locator('[data-stage="redacting"]').click();
+    await expect(page.locator('.cf-case-stage', { hasText: /^Exporting · / })).toHaveCount(0);
   });
 
   for (const [loan, eyebrow, heading] of [
@@ -195,6 +206,8 @@ test.describe('The "Exporting" status', () => {
       const steps = panel.getByRole('list', { name: 'Stages' }).getByRole('listitem');
       await expect(steps).toHaveText(['New', 'Redacting', 'Review', 'Approval', 'Exporting']);
       await expect(steps.last()).toHaveAttribute('aria-current', 'step');
+      // Task 0036: the probe interval comes from the server's settings (here the default, 5 minutes).
+      if (loan === 'LN-7015') await expect(box).toContainText('LexaVault checks it every 5 minutes and sends this case on its own');
     });
   }
 
@@ -255,10 +268,11 @@ test.describe('Support (IT Admin): export', () => {
 
     const cards = page.getByTestId('it-group');
     await expect(cards).toHaveCount(2);
-    await expect(cards.nth(0)).toContainText(/1 case failing to Document vault since /);
+    // Task 0036: the destination is working (it answers its check), so it is this case, not the destination.
+    await expect(cards.nth(0)).toContainText(/1 case can’t be delivered to Document vault since /);
     await expect(cards.nth(0)).toContainText("Destination's answer not understood · LV-DLV-007");
-    await expect(cards.nth(0)).toContainText('The destination answers its health check, so it’s these cases. Each was retried over 24 hours and rebuilt once.');
-    await expect(cards.nth(0)).toContainText('Cases LN-6990.');
+    await expect(cards.nth(0)).toContainText('The destination answers its health check, so it’s these cases. Each was retried over about 17 hours and rebuilt once.');
+    await expect(cards.nth(0).getByTestId('it-cases')).toHaveText('Case LN-6990.');
     // Task 0030: the destination's own code under Technical details.
     await cards.nth(0).getByText('Technical details').click();
     await expect(cards.nth(0).getByTestId('it-destination-codes')).toHaveText('Destination code SDV-SUB-017');
@@ -278,9 +292,12 @@ test.describe('Support (IT Admin): export', () => {
     const rows = page.getByTestId('export-destination');
     await expect(rows.nth(0)).toContainText('Document vault · full case');
     await expect(rows.nth(0)).toContainText('Working');
-    await expect(rows.nth(0)).toContainText('3 ready');
+    // Task 0036: each state on its own; Needs IT never counted as ready, and in the red style.
+    await expect(rows.nth(0).getByTestId('export-waiting')).toHaveText('3 ready · 3 waiting for you · 1 needs IT');
+    await expect(rows.nth(0).locator('.cf-sx-waiting-it')).toHaveText('1 needs IT');
     await expect(rows.nth(1)).toContainText(/Paused since .+Health check failing · next check /);
-    await expect(rows.nth(1)).toContainText('27 waiting');
+    await expect(rows.nth(1).getByTestId('export-waiting')).toHaveText('27 waiting');
+    await expect(page.getByText('A paused destination is checked every 5 minutes and resumes on its own, in order, when it answers.')).toBeVisible();
     await expect(rows.nth(2)).toContainText('Needs IT');
     await expect(rows.nth(2)).toContainText('Sign-in to the destination failed · LV-DLV-005');
     await expect(rows.getByRole('button')).toHaveText(['Check now']);

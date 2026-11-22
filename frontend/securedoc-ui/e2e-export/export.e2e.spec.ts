@@ -2,8 +2,8 @@ import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-  ACTOR, ROLES, as, auditCount, blockCase, call, dbClockSkewMs, destinationState, doneOrder, ensureEntity, exportedCycles,
-  exportedFiles, folderDown, folderUp, jobOf, jobsOf, localFolderDestination, markRefused, newCase, ok, queueOrder, sha256,
+  ACTOR, ROLES, as, auditCount, blockCase, call, caseNumbers, dbClockSkewMs, destinationState, doneOrder, ensureEntity, exportedCycles,
+  exportedFiles, folderDown, folderUp, jobOf, jobsOf, localFolderDestination, markRefused, newCase, ok, queueOrder, sentOrder, sha256,
   sql, sqlRows, startApp, stopApp, tenantFolder, tenantFor, unblockCase, waitFor,
 } from './stack';
 
@@ -41,17 +41,15 @@ async function finishCases(tenant: string, prefix: string, n: number, beforeSubm
 }
 
 /**
- * "In the order they finished": LexaVault orders its queue by the export job's created_at, which is the database's
- * clock. The cases here finish one after the other (the next starts once the last one's job exists), so that order
- * is also the real order unless the database clock stepped back in between (Docker Desktop's VM clock does; see the
- * report). The jobs must go out in LexaVault's own order; a difference from the real order is recorded, not failed.
+ * "In the order they finished", for real (task 0036). The cases here finish one after the other (the next starts
+ * once the last one's job exists). LexaVault numbers its queue (queue_seq, migration 045), so its order is that real
+ * order whatever the database clock does, and the cases go out in it: their files are written in that order and
+ * their jobs become DONE in it, with 4 workers and one per destination.
  */
-function expectQueueOrder(tenant: string, realOrder: string[]): void {
-  const queue = queueOrder(tenant);
-  if (queue.join() !== realOrder.join()) {
-    test.info().annotations.push({ type: 'db-clock', description: `queue order differs from real order (db clock stepped back): ${queue.map((id) => realOrder.indexOf(id) + 1).join(',')}` });
-  }
-  expect(doneOrder(tenant)).toEqual(queue);
+function expectRealOrder(tenant: string, realOrder: string[]): void {
+  expect(queueOrder(tenant)).toEqual(realOrder);
+  expect(sentOrder(tenant, realOrder)).toEqual(realOrder);
+  expect(doneOrder(tenant)).toEqual(realOrder);
 }
 
 const statusOf = (tenant: string, id: string) => jobOf(tenant, id)?.status;
@@ -122,26 +120,39 @@ test('scenario 2: destination down, health check fails: paused, no attempts, res
   expect(held.filter((j) => j.status === 'WAITING_RETRY')).toMatchObject([{ detail: 'DESTINATION_PAUSED', lvCode: 'LV-DLV-001' }]);
   expect(held.filter((j) => j.status === 'READY')).toHaveLength(2);
   expect(auditCount(tenant, 'EXPORT_DESTINATION_PAUSED', '%reason=CHECK_FAILED%')).toBe(1);
-  // The only destination: LexaVault pauses it. The "can't reach its destinations" alert needs at least 2 (see report).
+  // Task 0036 (owner's answer 1): the only destination is "every destination": it stays paused AND IT gets the
+  // "can't reach its destinations" alert, once.
   const alert = await ok(it, 'GET', '/support/export-destinations/alert');
-  expect(alert.raised).toBe(false);
-  expect(auditCount(tenant, 'EXPORT_DESTINATIONS_UNREACHABLE_ALERT')).toBe(0);
+  expect(alert).toMatchObject({ raised: true, lvCode: 'LV-DLV-001', detail: 'ALL_DESTINATIONS_UNREACHABLE' });
+  expect(auditCount(tenant, 'EXPORT_DESTINATIONS_UNREACHABLE_ALERT')).toBe(1);
   const dests = await ok(it, 'GET', '/support/export-destinations');
   expect(dests).toHaveLength(1);
-  expect(dests[0]).toMatchObject({ name: 'Local export folder', state: 'PAUSED', openJobs: 3 });
+  expect(dests[0]).toMatchObject({ name: 'Local export folder', state: 'PAUSED', openJobs: 3, waiting: { queued: 3, waitingForYou: 0, needsIt: 0 } });
 
   await openAs(page, tenant, ROLES.processor, `/case/${ids[1]}`);
-  await expect(panel(page).getByRole('region', { name: 'Next step' })).toContainText('destination paused');
+  const nextStep = panel(page).getByRole('region', { name: 'Next step' });
+  await expect(nextStep).toContainText('destination paused');
+  // Task 0036: the probe interval from the settings (4 s in this profile), not a fixed "5 minutes".
+  await expect(nextStep).toContainText('LexaVault checks it every 4 seconds and sends this case on its own');
+  // Task 0036: the 3 paused exports count under the Exporting tile (0035 picture 01 showed them under Redacting).
+  const band = page.getByRole('group', { name: 'Cases by lifecycle stage' });
+  await expect(band.locator('[data-stage="exporting"] .cf-band-count')).toHaveText('3');
+  await expect(band.locator('[data-stage="redacting"] .cf-band-count')).toHaveText('0');
   await shot(page, '01-case-exporting-destination-paused');
   await openAs(page, tenant, ROLES.itAdmin, '/support/export');
   await expect(page.getByTestId('export-destination').first()).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'LexaVault can’t reach its destinations' })).toBeVisible();
+  await expect(page.getByText('A paused destination is checked every 4 seconds and resumes on its own, in order, when it answers.')).toBeVisible();
+  await expect(page.getByTestId('export-waiting')).toHaveText('3 waiting');
   await shot(page, '01b-support-destination-paused');
 
-  // Back: the probe resumes it on its own, and the cases go out in the order they finished.
+  // Back: the probe resumes it on its own (which clears the alert), and the cases go out in the order they finished.
   folderUp(tenant);
   await waitFor('all 3 DONE after the probe', async () => allDone(tenant, ids), 60_000);
   expect(auditCount(tenant, 'EXPORT_DESTINATION_RESUMED', '%by=probe%')).toBe(1);
-  expectQueueOrder(tenant, ids);
+  expect((await ok(it, 'GET', '/support/export-destinations/alert')).raised).toBe(false);
+  expect(auditCount(tenant, 'EXPORT_DESTINATIONS_UNREACHABLE_ALERT_CLEARED')).toBe(1);
+  expectRealOrder(tenant, ids);
   for (const id of ids) expect(exportedCycles(tenant, id)).toEqual(['cycle-1']);
   expect(jobsOf(tenant).map((j) => j.attempts)).toEqual([1, 1, 1]);
 });
@@ -215,11 +226,26 @@ test('scenario 5a: IT queue: one grouped alert, "Retry all" works @e2e-export', 
   expect(queue.groups[0]).toMatchObject({ destinationName: 'Local export folder', lvCode: 'LV-DLV-001', count: 2 });
   expect(auditCount(tenant, 'EXPORT_JOB_NEEDS_IT_NOTIFICATION')).toBe(1);
 
+  // Task 0036: each case by its case number; the retry span from the settings.
+  expect(queue.groups[0].cases).toEqual(ids.map((id) => ({ packageId: id, caseNumber: caseNumbers.get(id) })));
+  expect(queue.timings).toMatchObject({ probeIntervalSeconds: 4, retrySpanSeconds: 10, retries: 5, rebuiltOnce: true });
+  const dest = (await ok(it, 'GET', '/support/export-destinations'))[0];
+  expect(dest).toMatchObject({ state: 'WORKING', waiting: { queued: 0, waitingForYou: 0, needsIt: 2 } });
+
   for (const id of ids) unblockCase(tenant, id);
   await openAs(page, tenant, ROLES.itAdmin, '/support/export');
   const group = page.getByTestId('it-group');
   await expect(group).toHaveCount(1);
   await expect(group).toContainText('LV-DLV-001');
+  // The folder answers its health check: these cases can't be written, the destination is not "unreachable".
+  await expect(group.locator('.cf-sx-it-title')).toContainText(/^2 cases can’t be delivered to Local export folder since /);
+  await expect(group).not.toContainText('Destination can\'t be reached');
+  await expect(group).toContainText('Each was retried over 10 seconds and rebuilt once.');
+  await expect(group.getByTestId('it-cases')).toHaveText(`Cases ${ids.map((id) => caseNumbers.get(id)).join(', ')}.`);
+  for (const id of ids) await expect(group).not.toContainText(id.slice(0, 8));
+  // Support › Destinations, Waiting: "2 need IT" in the red style, never "2 ready".
+  await expect(page.getByTestId('export-waiting')).toHaveText('2 need IT');
+  await expect(page.getByTestId('export-waiting').locator('.cf-sx-waiting-it')).toHaveText('2 need IT');
   await shot(page, '05-support-it-queue-grouped-alert');
   await group.getByRole('button', { name: /^Retry all 2/ }).click();
   await waitFor('both DONE after Retry all', async () => allDone(tenant, ids), 60_000);
@@ -287,7 +313,7 @@ test('scenario 6: restart while jobs are WAITING_RETRY and PAUSED: nothing lost,
 
   folderUp(tenant);
   await waitFor('all 3 DONE after the restart', async () => allDone(tenant, ids), 60_000);
-  expectQueueOrder(tenant, ids);
+  expectRealOrder(tenant, ids);
   for (const id of ids) {
     expect(exportedCycles(tenant, id)).toEqual(['cycle-1']);
     expect(exportedFiles(tenant, id)).toHaveLength(1);

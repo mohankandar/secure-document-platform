@@ -9,9 +9,14 @@ import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineJobStatus;
 import com.securedoc.platform.domain.pipeline.PipelinePriority;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -49,36 +54,59 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             ON CONFLICT DO NOTHING
             """;
 
-    static final String CLAIM_NEXT_SQL = """
-            WITH next AS (
-                SELECT j.id
-                  FROM pipeline_jobs j
-                  LEFT JOIN export_destination_states d
-                    ON d.connection_id = j.destination_id AND d.tenant_id = j.tenant_id
-                 WHERE j.stage IN (:stages)
-                   AND j.status IN ('READY', 'WAITING_RETRY')
-                   AND j.next_attempt_at <= clock_timestamp()
-                   AND (d.state IS NULL OR d.state = 'WORKING')
-                   AND (d.rate_limited_until IS NULL OR d.rate_limited_until <= clock_timestamp())
-                   AND (j.destination_id IS NULL OR (
-                        SELECT count(*) FROM pipeline_jobs r
-                         WHERE r.destination_id = j.destination_id AND r.status = 'RUNNING')
-                        < GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)))
-                 ORDER BY CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
-                          j.created_at, j.id
-                 LIMIT 1
-                 FOR UPDATE OF j SKIP LOCKED
-            )
-            UPDATE pipeline_jobs j
+    /**
+     * Task 0036: the next due job, in priority then queue order ({@code queue_seq}, never the clock), with the limit
+     * of its destination. The count of the destination's running jobs here is only a first filter: two workers can
+     * both see room. The claim itself takes the destination's lock and counts again (see {@link #claimNext}).
+     */
+    static final String CANDIDATE_SQL = """
+            SELECT j.id, j.tenant_id, j.destination_id,
+                   GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)) AS destination_limit
+              FROM pipeline_jobs j
+              LEFT JOIN export_destination_states d
+                ON d.connection_id = j.destination_id AND d.tenant_id = j.tenant_id
+             WHERE j.stage IN (:stages)
+               AND j.status IN ('READY', 'WAITING_RETRY')
+               AND j.next_attempt_at <= clock_timestamp()
+               AND (d.state IS NULL OR d.state = 'WORKING')
+               AND (d.rate_limited_until IS NULL OR d.rate_limited_until <= clock_timestamp())
+               AND (j.destination_id IS NULL OR (
+                    SELECT count(*) FROM pipeline_jobs r
+                     WHERE r.tenant_id = j.tenant_id AND r.destination_id = j.destination_id
+                       AND r.status = 'RUNNING')
+                    < GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)))
+             ORDER BY CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
+                      j.queue_seq
+             LIMIT 1
+             FOR UPDATE OF j SKIP LOCKED
+            """;
+
+    /**
+     * One lock per (entity, destination), held until the claim's transaction ends: a 64-bit hash of a text that names
+     * this use. Two pairs that happen to share a hash only wait for each other; they never break the limit.
+     */
+    static final String DESTINATION_LOCK_SQL =
+            "SELECT pg_advisory_xact_lock(hashtextextended('lexavault.export-destination:' || :tenantId || ':' "
+                    + "|| :destinationId, 0))";
+
+    static final String RUNNING_AT_DESTINATION_SQL = """
+            SELECT count(*) FROM pipeline_jobs
+             WHERE tenant_id = :tenantId AND destination_id = :destinationId AND status = 'RUNNING'
+            """;
+
+    static final String TAKE_SQL = """
+            UPDATE pipeline_jobs
                SET status = 'RUNNING',
                    claim_owner = :owner,
-                   claim_token = j.claim_token + 1,
+                   claim_token = claim_token + 1,
                    claim_until = clock_timestamp() + (:leaseMillis * interval '1 millisecond'),
                    updated_at = clock_timestamp()
-              FROM next
-             WHERE j.id = next.id
-            RETURNING j.*
+             WHERE id = :id AND status IN ('READY', 'WAITING_RETRY')
+            RETURNING *
             """;
+
+    /** Candidates looked at in one call before waiting for the next poll (each in its own short transaction). */
+    static final int CLAIM_TRIES = 3;
 
     private static final String CLAIM_ONE_SQL = """
             UPDATE pipeline_jobs
@@ -163,9 +191,20 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final TransactionTemplate transactions;
 
+    /** For tests: a transaction manager on the template's own data source. */
     public JdbcPipelineJobRepository(NamedParameterJdbcTemplate jdbc) {
+        this(jdbc, new DataSourceTransactionManager(
+                java.util.Objects.requireNonNull(jdbc.getJdbcTemplate().getDataSource())));
+    }
+
+    @Autowired
+    public JdbcPipelineJobRepository(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
         this.jdbc = jdbc;
+        this.transactions = new TransactionTemplate(transactionManager);
+        // Each claim try is its own short transaction, also when a caller has one open.
+        this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
@@ -195,7 +234,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
         var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
                 .addValue("packageId", packageId.value());
         return jdbc.query("SELECT " + COLUMNS + " FROM pipeline_jobs WHERE tenant_id = :tenantId"
-                + " AND package_id = :packageId ORDER BY created_at, id", params, JdbcPipelineJobRepository::map);
+                + " AND package_id = :packageId ORDER BY queue_seq", params, JdbcPipelineJobRepository::map);
     }
 
     @Override
@@ -203,10 +242,19 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
         var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
                 .addValue("status", status.name()).addValue("limit", Math.max(1, limit));
         return jdbc.query("SELECT " + COLUMNS + " FROM pipeline_jobs WHERE tenant_id = :tenantId"
-                + " AND status = :status ORDER BY updated_at, created_at, id LIMIT :limit", params,
+                + " AND status = :status ORDER BY updated_at, queue_seq LIMIT :limit", params,
                 JdbcPipelineJobRepository::map);
     }
 
+    /**
+     * Task 0036 (finding 1 of task 0035): the per-destination worker limit holds when workers claim at the same moment.
+     * Each try is one short transaction: pick the next due job ({@code SKIP LOCKED}, so workers never wait on each
+     * other's rows), take the advisory lock of its (entity, destination), count that destination's RUNNING jobs again
+     * (a new statement, so it sees every claim committed before the lock was granted), and take the job only while
+     * there is room. A second worker that picked a job of the same destination waits for the first one's transaction
+     * (milliseconds), then sees its RUNNING job. Jobs of other destinations take other locks and do not wait. A try
+     * holds at most one advisory lock, so two workers cannot deadlock on them.
+     */
     @Override
     public Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease,
                                            int perDestinationLimit) {
@@ -216,7 +264,37 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 .addValue("owner", owner)
                 .addValue("leaseMillis", leaseMillis(lease))
                 .addValue("perDestination", Math.max(1, perDestinationLimit));
-        return jdbc.query(CLAIM_NEXT_SQL, params, JdbcPipelineJobRepository::map).stream().findFirst();
+        for (int i = 0; i < CLAIM_TRIES; i++) {
+            ClaimTry result = transactions.execute(status -> claimOnce(params));
+            if (result == null || result.nothingDue()) return Optional.empty();
+            if (result.claimed() != null) return Optional.of(result.claimed());
+            // Its destination was full once the lock was held: look again (the first filter now sees it full).
+        }
+        return Optional.empty();
+    }
+
+    private record ClaimTry(PipelineJob claimed, boolean nothingDue) { }
+
+    private record Candidate(UUID id, UUID tenantId, UUID destinationId, int limit) { }
+
+    private ClaimTry claimOnce(MapSqlParameterSource base) {
+        List<Candidate> found = jdbc.query(CANDIDATE_SQL, base, (rs, n) -> new Candidate(
+                rs.getObject("id", UUID.class), rs.getObject("tenant_id", UUID.class),
+                rs.getObject("destination_id", UUID.class), rs.getInt("destination_limit")));
+        if (found.isEmpty()) return new ClaimTry(null, true);
+        Candidate candidate = found.get(0);
+        if (candidate.destinationId() != null) {
+            jdbc.query(DESTINATION_LOCK_SQL, new MapSqlParameterSource()
+                    .addValue("tenantId", candidate.tenantId().toString())
+                    .addValue("destinationId", candidate.destinationId().toString()), rs -> { });
+            Integer running = jdbc.queryForObject(RUNNING_AT_DESTINATION_SQL, new MapSqlParameterSource()
+                    .addValue("tenantId", candidate.tenantId())
+                    .addValue("destinationId", candidate.destinationId()), Integer.class);
+            if (running != null && running >= candidate.limit()) return new ClaimTry(null, false);
+        }
+        var take = new MapSqlParameterSource(base.getValues()).addValue("id", candidate.id());
+        return jdbc.query(TAKE_SQL, take, JdbcPipelineJobRepository::map).stream().findFirst()
+                .map(job -> new ClaimTry(job, false)).orElse(new ClaimTry(null, false));
     }
 
     @Override
@@ -301,7 +379,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             UPDATE pipeline_jobs
                SET status = 'READY', resend = true, next_attempt_at = clock_timestamp(), updated_at = clock_timestamp()
              WHERE tenant_id = :tenantId AND destination_id = :destinationId AND status = 'WAITING_FOR_YOU'
-            RETURNING id, created_at
+            RETURNING id, queue_seq
             """;
 
     static final String RECENT_FAILING_CASES_SQL = """
@@ -317,7 +395,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 .addValue("packageIds", packageIds.stream().map(PackageId::value).distinct().toList());
         return jdbc.query("SELECT " + COLUMNS + " FROM pipeline_jobs WHERE tenant_id = :tenantId"
                 + " AND package_id IN (:packageIds) AND stage IN ('EXPORT', 'SPLIT_EXPORT')"
-                + " ORDER BY created_at, id", params, JdbcPipelineJobRepository::map);
+                + " ORDER BY queue_seq", params, JdbcPipelineJobRepository::map);
     }
 
     @Override
@@ -329,10 +407,10 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     public List<UUID> resendAll(TenantId tenantId, IntegrationConnectionId destinationId) {
         var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
                 .addValue("destinationId", destinationId.value());
-        record Row(UUID id, Instant createdAt) { }
+        record Row(UUID id, long queueSeq) { }
         return jdbc.query(RESEND_ALL_SQL, params, (rs, n) -> new Row(rs.getObject("id", UUID.class),
-                        instant(rs.getTimestamp("created_at")))).stream()
-                .sorted(java.util.Comparator.comparing(Row::createdAt).thenComparing(Row::id))
+                        rs.getLong("queue_seq"))).stream()
+                .sorted(java.util.Comparator.comparingLong(Row::queueSeq))
                 .map(Row::id).toList();
     }
 
@@ -366,6 +444,21 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                         + " AND stage IN ('EXPORT', 'SPLIT_EXPORT') GROUP BY destination_id",
                 new MapSqlParameterSource("tenantId", tenantId.value()),
                 rs -> { counts.put(rs.getObject("destination_id", UUID.class), rs.getInt("open_jobs")); });
+        return counts;
+    }
+
+    @Override
+    public Map<UUID, Map<PipelineJobStatus, Integer>> countOpenByDestinationAndStatus(TenantId tenantId) {
+        Map<UUID, Map<PipelineJobStatus, Integer>> counts = new HashMap<>();
+        jdbc.query("SELECT destination_id, status, count(*) AS open_jobs FROM pipeline_jobs WHERE tenant_id = :tenantId"
+                        + " AND destination_id IS NOT NULL AND status NOT IN ('DONE', 'STOPPED')"
+                        + " AND stage IN ('EXPORT', 'SPLIT_EXPORT') GROUP BY destination_id, status",
+                new MapSqlParameterSource("tenantId", tenantId.value()),
+                rs -> {
+                    counts.computeIfAbsent(rs.getObject("destination_id", UUID.class),
+                                    k -> new java.util.EnumMap<>(PipelineJobStatus.class))
+                            .put(PipelineJobStatus.valueOf(rs.getString("status")), rs.getInt("open_jobs"));
+                });
         return counts;
     }
 

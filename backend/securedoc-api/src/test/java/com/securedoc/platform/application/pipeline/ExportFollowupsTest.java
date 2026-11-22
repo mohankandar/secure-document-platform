@@ -66,7 +66,10 @@ class ExportFollowupsTest {
         assertEquals(cases.stream().map(DocumentPackage::id).toList(), f.destination.deliveredInOrder,
                 "every case goes out in its original order");
         assertTrue(f.jobs.all().stream().allMatch(j -> j.status() == PipelineJobStatus.DONE && j.attempts() == 1));
-        verify(f.incidents, never()).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
+        // Task 0036: the only destination down raises "can't reach its destinations" (one incident); no case goes to IT.
+        verify(f.incidents, times(1)).recordFailure(any(), any(), any(), any(), any(), any(), any(),
+                argThat(m -> "ALL_DESTINATIONS_UNREACHABLE".equals(m.get("detail"))));
+        verify(f.incidents, times(1)).recordFailure(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -342,13 +345,70 @@ class ExportFollowupsTest {
     }
 
     @Test
-    void aSingleDestinationDownIsAPauseEvenAlone() {
-        ExportJobFixture f = new ExportJobFixture(); // only the master: "all" needs at least 2
+    void theOnlyDestinationDownIsPausedAndRaisesTheAlertWhichClearsWhenItResumes() {
+        // Task 0036 (owner's answer 1): one destination is "every destination". The pause stays; the alert is raised.
+        ExportJobFixture f = new ExportJobFixture(); // only the master
+        List<DocumentPackage> cases = List.of(f.caseReadyForExport(), f.caseReadyForExport());
+        f.destination.down();
+        f.drain();
+
+        assertEquals(DestinationState.PAUSED, f.states.stateOf(f.destination.id), "the pause stays");
+        assertTrue(f.alerts.raised(f.tenant), "and IT gets the alert");
+        assertTrue(f.service.reachabilityAlert(f.tenant).raised());
+        assertTrue(cases.stream().allMatch(c -> f.jobOf(c).attempts() == 0), "no attempts used");
+        verify(f.audit, times(1)).recordFailure(eq(f.tenant), any(), eq(AuditAction.EXPORT_DESTINATION_PAUSED),
+                anyString(), anyString(), any(), contains("reason=CHECK_FAILED"));
+        verify(f.audit, times(1)).recordFailure(eq(f.tenant), any(),
+                eq(AuditAction.EXPORT_DESTINATIONS_UNREACHABLE_ALERT), anyString(), anyString(), any(),
+                contains("code=LV-DLV-001, detail=ALL_DESTINATIONS_UNREACHABLE"));
+
+        // Still down at the next probe: paused, alert still raised.
+        f.clock.advance(minutes(5));
+        assertEquals(0, f.service.probePausedDestinations());
+        assertTrue(f.alerts.raised(f.tenant));
+
+        // Back: the probe resumes it, which clears the alert; the cases go out in order.
+        f.destination.up();
+        f.clock.advance(minutes(5));
+        assertEquals(1, f.service.probePausedDestinations());
+        assertEquals(DestinationState.WORKING, f.states.stateOf(f.destination.id));
+        assertFalse(f.alerts.raised(f.tenant), "cleared when the destination resumes");
+        verify(f.audit, times(1)).recordSuccess(eq(f.tenant), any(),
+                eq(AuditAction.EXPORT_DESTINATIONS_UNREACHABLE_ALERT_CLEARED), anyString(), anyString(), any(),
+                anyString());
+        f.drain();
+        assertEquals(cases.stream().map(DocumentPackage::id).toList(), f.destination.deliveredInOrder);
+    }
+
+    @Test
+    void theOnlyDestinationsAlertCheckResumesItWhenItAnswers() {
+        ExportJobFixture f = new ExportJobFixture();
+        DocumentPackage pkg = f.caseReadyForExport();
+        f.destination.down();
+        f.drain();
+        assertTrue(f.alerts.raised(f.tenant));
+
+        f.destination.up();
+        f.clock.advance(minutes(5));
+        assertEquals(1, f.service.checkUnreachableAlerts(), "the alert's own check finds it back");
+        assertFalse(f.alerts.raised(f.tenant));
+        assertEquals(DestinationState.WORKING, f.states.stateOf(f.destination.id), "resumed with the alert");
+        f.drain();
+        assertEquals(List.of(pkg.id()), f.destination.deliveredInOrder);
+    }
+
+    @Test
+    void checkNowBringingTheOnlyDestinationBackClearsTheAlert() {
+        ExportJobFixture f = new ExportJobFixture();
         f.caseReadyForExport();
         f.destination.down();
-        f.step("w");
+        f.drain();
+        assertTrue(f.alerts.raised(f.tenant));
+        f.destination.up();
+        var result = f.service.checkDestinationNow(f.tenant, f.destination.id, ActorId.generate(),
+                CorrelationId.generate()).orElseThrow();
+        assertTrue(result.resumed());
         assertFalse(f.alerts.raised(f.tenant));
-        assertEquals(DestinationState.PAUSED, f.states.stateOf(f.destination.id));
     }
 
     // ------------------------------------------------------------------ grouped IT alerts

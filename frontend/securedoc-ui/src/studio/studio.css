@@ -193,6 +193,7 @@
 [data-stage='redacting'] { --stage: var(--cf-stage-redacting); --stage-soft: var(--cf-stage-redacting-soft); }
 [data-stage='review'] { --stage: var(--cf-stage-review); --stage-soft: var(--cf-stage-review-soft); }
 [data-stage='approval'] { --stage: var(--cf-stage-approval); --stage-soft: var(--cf-stage-approval-soft); }
+[data-stage='exporting'] { --stage: var(--cf-muted); --stage-soft: var(--cf-fill); } /* Task 0036: the Exporting chip's colour family */
 [data-stage='delivered'] { --stage: var(--cf-stage-delivered); --stage-soft: var(--cf-stage-delivered-soft); }
 [data-stage='stopped'] { --stage: var(--cf-stage-stopped); --stage-soft: var(--cf-stage-stopped-soft); }
 

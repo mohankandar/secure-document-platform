@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Plus, Search, X } from 'lucide-react';
 import type { PackageSummary } from '../types';
 import {
-  CAP, LIFECYCLE, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf,
+  CAP, CASE_TILES, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf, tileOf,
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
 import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits } from './words';
@@ -71,7 +71,7 @@ export default function Desk({ caps }: { caps: string[] }) {
   const all = packages ?? [];
   const counts = useMemo(() => {
     const byStage = new Map<StageKey, number>();
-    for (const p of all) byStage.set(stageOf(p.status), (byStage.get(stageOf(p.status)) ?? 0) + 1);
+    for (const p of all) byStage.set(tileOf(p), (byStage.get(tileOf(p)) ?? 0) + 1);
     return { byStage, you: all.filter((p) => needsYou(p, caps)).length };
   }, [all, caps]);
 
@@ -79,7 +79,7 @@ export default function Desk({ caps }: { caps: string[] }) {
     const q = query.trim().toLowerCase();
     const matches = all
       .filter((p) => !q || p.businessIdentifiers.some((i) => i.value.toLowerCase().includes(q)))
-      .filter((p) => filter === 'all' || (filter === 'you' ? needsYou(p, caps) : stageOf(p.status) === filter))
+      .filter((p) => filter === 'all' || (filter === 'you' ? needsYou(p, caps) : tileOf(p) === filter))
       .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
 
     if (filter !== 'all') {
@@ -89,9 +89,9 @@ export default function Desk({ caps }: { caps: string[] }) {
     const rest = matches.filter((p) => !needsYou(p, caps));
     return [
       { key: 'you', title: CASE_GROUPS.needsYou, note: 'You can move these forward now', cases: you },
-      { key: 'motion', title: CASE_GROUPS.inProgress, note: CASE_GROUPS.inProgressNote, cases: rest.filter((p) => !['delivered', 'stopped'].includes(stageOf(p.status))) },
-      { key: 'stopped', title: CASE_GROUPS.stopped, cases: rest.filter((p) => stageOf(p.status) === 'stopped') },
-      { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => stageOf(p.status) === 'delivered') },
+      { key: 'motion', title: CASE_GROUPS.inProgress, note: CASE_GROUPS.inProgressNote, cases: rest.filter((p) => !['delivered', 'stopped'].includes(tileOf(p))) },
+      { key: 'stopped', title: CASE_GROUPS.stopped, cases: rest.filter((p) => tileOf(p) === 'stopped') },
+      { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => tileOf(p) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
   }, [all, caps, filter, query]);
 
@@ -211,7 +211,7 @@ export default function Desk({ caps }: { caps: string[] }) {
 function LifecycleBand({ counts, active, onSelect }: {
   counts: Map<StageKey, number>; active: Filter; onSelect: (f: StageKey) => void;
 }) {
-  const stages = [...LIFECYCLE, 'stopped' as StageKey];
+  const stages = CASE_TILES;
   return (
     <div className="cf-band" role="group" aria-label="Cases by lifecycle stage">
       {stages.map((key) => {

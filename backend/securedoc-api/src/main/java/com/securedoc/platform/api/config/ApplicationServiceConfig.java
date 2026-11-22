@@ -1258,14 +1258,15 @@ public class ApplicationServiceConfig {
             com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings,
             com.securedoc.platform.application.port.out.ExportReachabilityAlertRepository exportReachabilityAlertRepository,
             com.securedoc.platform.application.port.in.RebuildPackageExportUseCase rebuildPackageExportUseCase,
-            com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue) {
+            com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue,
+            CasePrimaryIdentifierLookup casePrimaryIdentifierLookup) {
         return new com.securedoc.platform.application.pipeline.ExportJobService(pipelineJobRepository,
                 exportDestinationStateRepository, exportReachabilityAlertRepository, exportPackageDocumentsUseCase,
                 rebuildPackageExportUseCase, derivedDeliveryService, packageRepository, packageLifecycleService,
                 new com.securedoc.platform.application.pipeline.MasterExportCompletion(packageRepository,
                         processDerivedRoutingUseCase, processingIncidentService, auditService),
                 processingIncidentService, auditService, exportDestinationProbePort, integrationConnectionRepository,
-                exportJobQueue, exportJobSettings, java.time.Clock.systemUTC());
+                exportJobQueue, exportJobSettings, java.time.Clock.systemUTC(), casePrimaryIdentifierLookup);
     }
 
 

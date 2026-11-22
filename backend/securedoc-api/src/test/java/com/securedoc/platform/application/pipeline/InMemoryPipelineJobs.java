@@ -274,4 +274,14 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
                 .forEach(j -> counts.merge(j.destinationId().value(), 1, Integer::sum));
         return counts;
     }
+
+    @Override
+    public synchronized Map<UUID, Map<PipelineJobStatus, Integer>> countOpenByDestinationAndStatus(TenantId tenantId) {
+        Map<UUID, Map<PipelineJobStatus, Integer>> counts = new LinkedHashMap<>();
+        rows.values().stream().filter(j -> j.tenantId().equals(tenantId) && j.destinationId() != null
+                        && j.status().open() && j.stage().isExport())
+                .forEach(j -> counts.computeIfAbsent(j.destinationId().value(), k -> new java.util.EnumMap<>(
+                        PipelineJobStatus.class)).merge(j.status(), 1, Integer::sum));
+        return counts;
+    }
 }
