@@ -131,7 +131,9 @@ No migration. No new dependency. Nothing in identity, sign-in, setup or platform
 
 ## Commits
 
-Filled in at commit.
+- `29108d2` feat: task 0039, OCR failure page number, source limits capped at the case limits, case lock on upload (with this report and the proof pictures).
+
+Not merged, not pushed.
 
 ## Not done, and why
 
