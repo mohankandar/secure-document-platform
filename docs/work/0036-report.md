@@ -174,7 +174,10 @@ No new dependency. No default setting changed. Migration 037 untouched; shared-i
 
 ## Commits (hash and message), or "not committed"
 
-See the commit after this report is written (hash added in a follow-up commit). Not merged, not pushed.
+- `8047871` fix(export): task 0036 export P1 fixes from the end-to-end run. The code, migration 045, tests, suites, proof pictures and this report.
+- A second commit adds this hash to the report.
+
+Not merged, not pushed.
 
 ## Not done, and why
 
