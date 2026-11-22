@@ -74,6 +74,8 @@ public final class ProcessingIncidentService {
         metadata.putIfAbsent("preferredStage", preferredStage == null ? ProcessingStage.UNKNOWN.name() : preferredStage.name());
         // Task 0025: the LexaVault code, which can be more precise than the reason code (for example DELIVERY_IO).
         metadata.put("lvCode", classification.lvCode().code());
+        // Task 0039: the page a text-reading failure happened on, as a whole number only.
+        TechnicalFailureClassifier.page(failure).ifPresent(page -> metadata.put("page", Integer.toString(page)));
 
         ProcessingIncident incident = ProcessingIncident.open(
                 tenantId, packageId, documentId, stage, component, category, reasonCode,

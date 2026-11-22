@@ -325,6 +325,50 @@ test('Edit a saved connection: Test connection tests the saved settings, and aft
   expect(calls.some((c) => c.method === 'PUT')).toBe(false);
 });
 
+test('0039: a receiving connection stops at the case limits (50 files, 500 pages) and says why; a source stored higher shows and saves the cap', async ({ page }) => {
+  const calls: Call[] = [];
+  // Stored before the cap with higher values (the server now sends them capped; the screen caps them too).
+  const stored = CONNECTIONS.map((c) => (c.connectionId === 'c-los' ? { ...c, maxDocumentsPerIntake: 1000, maxPdfPages: 2000 } : c));
+  await openIntegrations(page, calls, stored);
+  await page.route('**/api/v1/integrations/c-los', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'PUT') return route.fallback();
+    const body = JSON.parse(request.postData() || '{}');
+    calls.push({ method: 'PUT', path: '/api/v1/integrations/c-los', search: '', body });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...stored[0], ...body }) });
+  });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  const los = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Loan origination system' });
+  await los.getByRole('button', { name: 'Edit' }).click();
+  const sheet = page.getByRole('dialog');
+  const advanced = sheet.locator('details').filter({ hasText: 'Advanced (usually leave as is)' });
+  await advanced.locator('summary').click();
+
+  const files = sheet.getByLabel('Files per case, at most');
+  const pages = sheet.getByLabel('Pages per file, at most');
+  await expect(files).toHaveValue('50');
+  await expect(pages).toHaveValue('500');
+  await expect(files).toHaveAttribute('max', '50');
+  await expect(pages).toHaveAttribute('max', '500');
+  await expect(sheet.getByText('A case holds up to 50 files.')).toBeVisible();
+  await expect(sheet.getByText('A case takes PDFs of up to 500 pages.')).toBeVisible();
+  await expect(advanced.locator('.cf-ad-hint')).toContainText('up to 50 files, 50 MB, 500 pages');
+
+  // A value over the limit is marked at once (the server refuses it too, LV-CFG-001).
+  await pages.fill('600');
+  await expect(sheet.getByText('Enter a value from 1 to 500.')).toBeVisible();
+  await pages.fill('500');
+  if (process.env.P0039_PROOF) {
+    await advanced.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: '../../docs/work/0039-proof/integrations-capped-fields.png' });
+  }
+
+  await sheet.getByRole('button', { name: 'Next: test and save' }).click();
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ maxDocumentsPerIntake: 50, maxPdfPages: 500 });
+});
+
 // Task 0022 (A4): proof picture, saved to ../../docs/work/compare/0022/ (not committed). Registered only with P0022_PROOF=1.
 if (process.env.P0022_PROOF) {
   test('proof: Admin › Integrations, the watched-folder "Sensitivity of files from this folder" setting', async ({ page }) => {

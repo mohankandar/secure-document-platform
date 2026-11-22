@@ -257,7 +257,7 @@ public class LocalDemoBootstrap implements ApplicationRunner {
                 24,
                 1,
                 2L * 1024L * 1024L * 1024L,
-                10_000,
+                IntegrationConnection.MAX_PDF_PAGES, // Task 0039: the case limit (500 pages per file)
                 IntegrationAcknowledgementMode.NONE,
                 true,
                 Instant.now());

@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.extraction;
 
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.OcrPort;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
@@ -80,7 +81,14 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     continue;
                 }
 
-                PageText ocrPage = recognizePage(document.getPage(index), renderer, index, pageNumber);
+                PageText ocrPage;
+                try {
+                    ocrPage = recognizePage(document.getPage(index), renderer, index, pageNumber);
+                } catch (TechnicalDependencyException failure) {
+                    // Task 0039: the failure carries the page number (only the number) up to Support. The code,
+                    // retry and outcome are unchanged.
+                    throw failure.page() != null ? failure : failure.withPage(pageNumber);
+                }
                 normalizedPages.add(ocrPage);
                 totalChars += ocrPage.text().length();
                 usedOcr = true;

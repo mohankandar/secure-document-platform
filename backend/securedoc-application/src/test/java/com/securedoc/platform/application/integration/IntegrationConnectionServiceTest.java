@@ -49,12 +49,12 @@ class IntegrationConnectionServiceTest {
         var created = service.create(tenantA, actor, correlation, new IntegrationConnectionService.ConnectionInput(
                 "Title API", null, IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null, "https://title.example.test", null,
-                "vault://tenant-a/title-secret", false, 60, 2, 24, 100, 262144000L, 2000,
+                "vault://tenant-a/title-secret", false, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true));
         var updated = service.update(tenantA, created.id(), actor, correlation,
                 new IntegrationConnectionService.ConnectionInput("Title API", "Updated", IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY,
                         IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null,
-                        "https://title2.example.test", null, null, true, 90, 3, 24, 100, 262144000L, 2000,
+                        "https://title2.example.test", null, null, true, 90, 3, 24, 50, 262144000L, 500,
                         IntegrationAcknowledgementMode.DESTINATION_RECEIPT, false));
         service.setEnabled(tenantA, updated.id(), false, actor, correlation);
 
@@ -64,10 +64,35 @@ class IntegrationConnectionServiceTest {
         assertTrue(audits.stream().allMatch(a -> a.detail() == null || !a.detail().contains("vault://")));
     }
 
+    /** Task 0039: more than a case holds is refused on save, create or update, as LV-CFG-001 with the reason. */
+    @Test
+    void sourceLimitsAboveTheCaseLimitsAreRefusedAsLvCfg001() {
+        ValidationException pages = assertThrows(ValidationException.class,
+                () -> service.create(tenantA, actor, correlation, input("Too many pages", 50, 501)));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.CFG_001, pages.lvCode());
+        assertEquals("Maximum PDF pages must be between 1 and 500: a case takes files of up to 500 pages", pages.getMessage());
+        ValidationException files = assertThrows(ValidationException.class,
+                () -> service.create(tenantA, actor, correlation, input("Too many files", 1000, 500)));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.CFG_001, files.lvCode());
+        assertEquals("Maximum documents per intake must be between 1 and 50: a case holds up to 50 files", files.getMessage());
+
+        var saved = service.create(tenantA, actor, correlation, input("At the limit", 50, 500));
+        ValidationException update = assertThrows(ValidationException.class,
+                () -> service.update(tenantA, saved.id(), actor, correlation, input("At the limit", 50, 2000)));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.CFG_001, update.lvCode());
+        assertEquals(500, service.get(tenantA, saved.id()).maxPdfPages(), "nothing changed");
+        // The draft test goes through the same checks, so a draft over the limit is refused too.
+        assertThrows(ValidationException.class, () -> service.draft(tenantA, null, input("Draft", 51, 500)));
+    }
+
     private IntegrationConnectionService.ConnectionInput input(String name) {
+        return input(name, 50, 500);
+    }
+
+    private IntegrationConnectionService.ConnectionInput input(String name, int files, int pages) {
         return new IntegrationConnectionService.ConnectionInput(name, null, IntegrationPurpose.INGESTION_SOURCE,
                 IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API, IntegrationAuthenticationType.NONE,
-                null, null, null, null, false, 60, 2, 24, 100, 262144000L, 2000,
+                null, null, null, null, false, 60, 2, 24, files, 262144000L, pages,
                 IntegrationAcknowledgementMode.NONE, false);
     }
 

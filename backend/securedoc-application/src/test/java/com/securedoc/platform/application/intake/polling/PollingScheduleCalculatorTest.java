@@ -37,7 +37,7 @@ class PollingScheduleCalculatorTest {
         return IntegrationConnection.create(TenantId.generate(), "Polling Source", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://source.example.test", null, null,
-                60, 2, 24, 100, 262144000L, 2000,
+                60, 2, 24, 50, 262144000L, 500,
                 type, interval, localTime, zone, 100,
                 IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, base);
     }

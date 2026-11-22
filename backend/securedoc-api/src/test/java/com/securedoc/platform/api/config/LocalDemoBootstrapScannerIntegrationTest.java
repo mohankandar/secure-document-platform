@@ -88,7 +88,7 @@ class LocalDemoBootstrapScannerIntegrationTest {
         return IntegrationConnection.create(TENANT_ID, "Scanner " + principal, null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
                 IntegrationAuthenticationType.NONE, principal, null, null, null,
-                60, 2, 24, 1, 2L * 1024L * 1024L * 1024L, 10_000,
+                60, 2, 24, 1, 2L * 1024L * 1024L * 1024L, 500,
                 IntegrationAcknowledgementMode.NONE, enabled, Instant.parse("2026-09-10T12:00:00Z"));
     }
 

@@ -17,6 +17,15 @@ public interface PackageRepository {
 
     Optional<DocumentPackage> findByIdAndTenantId(PackageId id, TenantId tenantId);
 
+    /**
+     * Task 0039: locks the case until the current transaction ends, so a check on its files and the file added after it
+     * can't interleave with another upload to the same case. Call it before the case is read. Without a transaction
+     * there is nothing to hold the lock, and it does nothing. The default does nothing (in-memory copies used in tests
+     * have no concurrent writers).
+     */
+    default void lockForUpdate(PackageId id, TenantId tenantId) {
+    }
+
     List<DocumentPackage> findByTenantId(TenantId tenantId, int offset, int limit);
 
     long countByTenantId(TenantId tenantId);

@@ -13,6 +13,7 @@ import com.securedoc.platform.infrastructure.persistence.repository.SpringDataDo
 import com.securedoc.platform.infrastructure.persistence.repository.SpringDataDocumentRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +46,21 @@ public class JpaPackageRepositoryAdapter implements PackageRepository {
     public Optional<DocumentPackage> findByIdAndTenantId(PackageId id, TenantId tenantId) {
         return packageRepo.findByIdAndTenantId(id.value(), tenantId.value())
                 .map(this::toDomainWithDocuments);
+    }
+
+    /**
+     * Task 0039: a row lock on the case ({@code SELECT … FOR UPDATE}), released when the transaction commits or rolls
+     * back. Taken only inside a read-write transaction: manual upload and push/scanner intake run in one. The scheduled
+     * watched folder and polling run without one; opening one for them would change what their failures roll back, so
+     * they keep their current behaviour (their own case, files counted before the case is made).
+     */
+    @Override
+    public void lockForUpdate(PackageId id, TenantId tenantId) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            return;
+        }
+        packageRepo.lockByIdAndTenantId(id.value(), tenantId.value());
     }
 
     @Override
