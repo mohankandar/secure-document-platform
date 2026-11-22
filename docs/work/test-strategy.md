@@ -47,7 +47,7 @@
 |---|---|
 | **Every task** | L1, L6, L7; L2 if it touches SQL; L5 if it touches another system or the running app |
 | **Merge into the integration branch** | The task's gate, plus the design chat's review of the report and proof pictures |
-| **Before a push / release candidate** | Everything above, plus L5 in full, L8 (live with Vero), L9 baseline unchanged or better |
+| **Before a push / release candidate** | Everything above, plus L5 in full, L8 (live with Vero), L9 baseline unchanged or better, and the **AI model change gate** (owner, 2026-11-22: any change to a model, its digest, a prompt or an AI setting re-runs the model test set and must meet the approved pass marks; the result is recorded for the model register, `Model-Governance-Design.md`) |
 | **Before the first customer** | All of the above, plus L10 (pen test), the install checklist (`First-Install-Success-Criteria.md`), and the vision benchmark part B on their samples |
 
 ## 6. Where the work goes in the order

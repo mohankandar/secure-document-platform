@@ -37,6 +37,7 @@ Alongside: benchmark 0033 whenever the coding session is free. V2 backlog: item 
 | BL4 | On-prem upgrade and rollback procedure: supported versions, upgrades keep settings and data, tested rollback | Planning; the contract depends on it |
 | BL5 | **Per-entity time zone** | **Does not exist today** (checked 2026-11-21): time zones exist only per polling connection (daily schedule) and per compliance report request. The shared part is platform-core's (`docs/design/integration-standards.md`); LexaVault must use it for the Bulk window, Reports' "today" and retention timers. Needed before P5 (Bulk window) |
 | BL6 | V2 AI ideas (item 9) | V2 |
+| BL7 | AI model governance, LexaVault side (owner, 2026-11-22; shared design `Model-Governance-Design.md`): **pin the AI model by digest**, not by name, and refuse to run on a mismatch; **every finding records the model, version and digest** that produced it (check what is stored today, add the rest in R2); default pass marks from benchmark 0033, approved by the owner; register LexaVault's uses with platform-model-governance when it is built | R2 (digest and per-finding record); with the shared build (register) |
 
 ## Benchmark
 Task 0033 (written 2026-11-21): vision benchmark, no product code.
