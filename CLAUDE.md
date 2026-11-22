@@ -96,3 +96,10 @@ The app is at http://localhost:5173 and the backend at http://localhost:8080.
 - The newest (Case File) design has the entity switch at the top right (task 0009). The single-entity sign-in race on the dev server is fixed (task 0008).
 - The Phase 1 containers are kept as the regression environment; start the rest again with `test-tools/phase1-shared-issuer/Start-Phase1.ps1 -JarBuiltFromCommit <sha>`, then `Invoke-Phase1Checks.ps1` (60 checks) and `Invoke-Phase1BrowserSignin.mjs`. Tasks and reports are in `docs/work/`.
 - There is no automatic build on GitHub.
+
+## Independence rule (owner, 2026-11-22)
+
+- LexaVault uses platform-core's libraries. Platform-core never knows about LexaVault, and LexaVault never depends on Vero (SDV) or any other product.
+- No code is written around another product's behaviour. A destination's or sender's specific answers (busy, duplicate, sign-in, status codes) are **profile data**, never code. Code says "destination" or "sender", never "Vero" or "SDV".
+- Known exception, to be removed in switch-over part 3: `SdvDeliveryAdapter`. Don't add to it or copy its approach.
+- Every task report states: "No other product's name or behaviour in code", or lists each exception and its planned fix.
