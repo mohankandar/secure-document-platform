@@ -1,7 +1,6 @@
 package com.securedoc.platform.infrastructure.identity;
 
 import com.documentplatform.identity.OidcConnectionBinding;
-import com.documentplatform.identity.OidcConnectionBindingResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
@@ -15,15 +14,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * The R1 login-connection admin screen's store (draft, test, activate, rollback, known-good recovery) over
+ * {@code enterprise_identity_connections}. Task 0037: sign-in no longer reads this table; it reads platform-identity's
+ * {@code idn_} tables through {@link PlatformIdentityReads}. This screen stays on the old table until platform-identity
+ * holds drafts, test results and rollback (a question in report 0037), so an activation here does not change sign-in.
+ */
 @Repository
-public class JdbcOidcConnectionBindingRepository implements OidcConnectionBindingResolver {
+public class JdbcOidcConnectionBindingRepository {
     private static final Duration ACTIVATION_TEST_MAX_AGE = Duration.ofMinutes(15);
     private final JdbcTemplate jdbc;
     @Value("${securedoc.security.oidc.shared-issuer-tenant-selection-enabled:false}")
     private boolean sharedIssuerEnabled;
     public JdbcOidcConnectionBindingRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
 
-    @Override public Optional<OidcConnectionBinding> findActive(String providerId, URI issuer, String audience) {
+    public Optional<OidcConnectionBinding> findActive(String providerId, URI issuer, String audience) {
         List<OidcConnectionBinding> rows=jdbc.query("""
             select connection_id,tenant_id,provider_id,issuer_uri,api_audience,configuration_version
               from enterprise_identity_connections where provider_id=? and issuer_uri=? and api_audience=? and status='ACTIVE'

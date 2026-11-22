@@ -46,6 +46,12 @@ Measure today's accuracy on real sample documents (the testing phase). The misse
 | C3 | Strict also checks cases with nothing found (owner, 2026-11-20) | Today, under "Every case" (Strict), a case where nothing is found is delivered without a person looking (confirmed in task 0019). An option for customers who want every case checked. Changes frozen V1 processing, so it needs its own task and the owner's go-ahead. |
 | C4 | Draw a redaction box by keyboard, for WCAG 2.1.1 in Review and Continue manually (owner, 2026-11-20, U027) | Arrow keys move and size the box. Until then, marking a region by hand (a finding whose place was not found, and Continue manually) needs a pointer: the documented exception in the accessibility conformance notes (`docs/work/ui/U027-report.md`). |
 
+## D. Clean-up after the platform switch-over
+
+| # | Item | Note |
+|---|---|---|
+| D1 | Drop the old identity tables `enterprise_identity_connections` (+ `_history`) and `tenant_oidc_group_grants` | Task 0037 moved every sign-in read to platform-identity's `idn_` tables and added the one-off `identity-migration` command. The old tables stay for one release so an existing install can still be migrated; drop them in a later release with a new Liquibase changeset, after the R1 connection admin screen has moved to `idn_` (report 0037, questions). Needs the owner's go-ahead (schema change). |
+
 ## Not yet decided
 
 - Whether to survey competing redaction products before committing to the order.

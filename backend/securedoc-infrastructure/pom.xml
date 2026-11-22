@@ -45,6 +45,11 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-identity-core</artifactId>
         </dependency>
+        <!-- Task 0037: the idn_ stores (PostgresIdentityLookup, PostgresMachineEntityBindings) behind the sign-in reads. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-identity-jdbc</artifactId>
+        </dependency>
         <!-- Internal modules -->
         <dependency>
             <groupId>com.securedoc.platform</groupId>
