@@ -289,3 +289,18 @@ Date: 2026-11-22. Task: `docs/work/0037-fix-1.md`. Branch: `feature/0037-switcho
 
 ### Questions for the owner
 1. The export E2E scenario 5a and `JdbcClaimLockAndQueueOrderPostgresTest` both failed once here on queue order. Together with question 4 above, this points at the 0036 claim and queue order code. *Recommendation:* a small follow-up task.
+
+## Owner's run (2026-11-22, recorded by the design chat)
+
+- `Start-LexaVault-OIDC.ps1` on the owner's existing database after fix 1: schema step (identity at V2, licensing V1), setup **0 created, 8 unchanged**, demo step finished the half-done entity ("Local Demo Tenant (ENT-DEMO-0001)", slug `local-demo-ent-demo-0001`; old `0000…0001` entity left as it was), login connection pointed at the given Keycloak issuer. App up.
+- Manual sign-in in a private window as a Keycloak user in group `BusinessUsers`: lands on Cases for the new demo entity.
+- `Test-LexaVault-OidcSessionContinuity.ps1 -Username businessuser -PromptForPassword`: **PASS** (two refreshes, fail-closed sign-out).
+- Note: `platform.ops.admin` failed to sign in at Keycloak ("Invalid username or password"); a Keycloak account matter on the owner's machine, not LexaVault.
+- **Status: 0037 complete. Not merged:** it is moved onto `platform-core-v0.1.0` from GitHub Packages and merged then (board LV-13 / LV-14). Its licensing schema run stays (tables only).
+
+## Owner's answers to the report's questions (design chat, owner approved "as recommended")
+1. Login-connection drafts / test / rollback: platform-core P031; LexaVault's screen is read-only until then.
+2. `http` issuers only for localhost / 127.0.0.1 / [::1] with a development-signed licence: P031.
+3. `aliases` in `product-roles.json`: P031; until then USER / REVIEWER / APPROVER listed as roles.
+4. The two older failing PostgreSQL tests: fixed in LexaVault's next task.
+5. Private Maven repository pinned to a committed platform-core version: kept; platform-core releases to GitHub Packages from v0.1.0.
