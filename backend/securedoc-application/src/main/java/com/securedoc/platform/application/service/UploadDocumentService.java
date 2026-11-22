@@ -96,7 +96,10 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
         capabilityEnforcement.require(tenant, Capability.DOCUMENT_UPLOAD);
         tenantLicensingService.requireDocumentProcessing(principal.tenantId(), principal.actorId(), command.correlationId());
 
-        // 2. Validate package exists and belongs to tenant
+        // 2. Validate package exists and belongs to tenant.
+        // Task 0039: lock the case first, so the file count below and the file added after it can't interleave with
+        // another upload to the same case (two uploads at 49 files would otherwise both pass). Held until commit.
+        packageRepository.lockForUpdate(command.packageId(), principal.tenantId());
         DocumentPackage documentPackage = packageRepository
                 .findByIdAndTenantId(command.packageId(), principal.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));

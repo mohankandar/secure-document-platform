@@ -20,4 +20,13 @@ public class OcrProcessingException extends TechnicalDependencyException {
                                   com.securedoc.platform.domain.error.LvErrorCode lvCode) {
         super(TechnicalDependency.OCR, code, retryable, safeMessage, null, lvCode);
     }
+
+    /**
+     * Task 0039: a failure on one page, with its 1-based page number (only the number; {@code lvCode} may be null,
+     * then the code follows from {@code code}).
+     */
+    public OcrProcessingException(TechnicalFailureCode code, boolean retryable, String safeMessage, Throwable cause,
+                                  com.securedoc.platform.domain.error.LvErrorCode lvCode, int pageNumber) {
+        super(TechnicalDependency.OCR, code, retryable, safeMessage, cause, lvCode, pageNumber);
+    }
 }

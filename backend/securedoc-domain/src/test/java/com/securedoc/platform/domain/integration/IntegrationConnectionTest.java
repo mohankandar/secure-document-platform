@@ -15,7 +15,7 @@ class IntegrationConnectionTest {
     void sdvDeliveryRequiresOutboundHttpAndSubmissionAcknowledgement() {
         var connection = IntegrationConnection.create(tenantId, "Primary SDV", null,
                 IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
-                IntegrationAuthenticationType.NONE, null, "https://sdv.example.test", null, null, 60, 2, 24, 100, 262144000L, 2000,
+                IntegrationAuthenticationType.NONE, null, "https://sdv.example.test", null, null, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, false, now);
         assertEquals(IntegrationPurpose.SDV_DELIVERY, connection.purpose());
         assertFalse(connection.enabled());
@@ -23,7 +23,7 @@ class IntegrationConnectionTest {
 
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad SDV", null,
                 IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.FILE_SHARE,
-                IntegrationAuthenticationType.NONE, null, null, "/share", null, 60, 2, 24, 100, 262144000L, 2000,
+                IntegrationAuthenticationType.NONE, null, null, "/share", null, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.DURABLE_FILE_WRITE, false, now));
     }
 
@@ -32,7 +32,7 @@ class IntegrationConnectionTest {
         var connection = IntegrationConnection.create(tenantId, "Atlanta Share", null,
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.FILE_SHARE, IntegrationAuthenticationType.NONE, null, null, "/secure/title", null,
-                60, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.DURABLE_FILE_WRITE, true, now);
+                60, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.DURABLE_FILE_WRITE, true, now);
         assertTrue(connection.enabled());
         assertEquals(IntegrationHealthStatus.UNKNOWN, connection.healthStatus());
     }
@@ -42,12 +42,12 @@ class IntegrationConnectionTest {
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Title API", null,
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null, "https://title.example.test", null,
-                null, 60, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, now));
+                null, 60, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, now));
 
         var draft = IntegrationConnection.create(tenantId, "Title API", null,
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null, "https://title.example.test", null,
-                null, 60, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, false, now);
+                null, 60, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, false, now);
         assertFalse(draft.secretConfigured());
         assertThrows(IllegalArgumentException.class, () -> draft.setEnabled(true, now.plusSeconds(1)));
     }
@@ -56,21 +56,21 @@ class IntegrationConnectionTest {
     void enabledPushSourceRequiresClientPrincipalAndBoundedIncompleteWindow() {
         var connection = IntegrationConnection.create(tenantId, "LOS API", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API,
-                IntegrationAuthenticationType.NONE, "los-client", null, null, null, 60, 2, 24, 100, 262144000L, 2000,
+                IntegrationAuthenticationType.NONE, "los-client", null, null, null, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.NONE, true, now);
         assertEquals("los-client", connection.clientPrincipal());
         assertEquals(24, connection.incompleteWindowHours());
         assertDoesNotThrow(() -> IntegrationConnection.create(tenantId, "LOS JWT", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API,
                 IntegrationAuthenticationType.JWT, "los-jwt-client", null, null, null, 60, 2, 24,
-                100, 262144000L, 2000, IntegrationAcknowledgementMode.NONE, true, now));
+                50, 262144000L, 500, IntegrationAcknowledgementMode.NONE, true, now));
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad source", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API,
-                IntegrationAuthenticationType.NONE, null, null, null, null, 60, 2, 24, 100, 262144000L, 2000,
+                IntegrationAuthenticationType.NONE, null, null, null, null, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.NONE, true, now));
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Forever source", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API,
-                IntegrationAuthenticationType.NONE, "los-client", null, null, null, 60, 2, 169, 100, 262144000L, 2000,
+                IntegrationAuthenticationType.NONE, "los-client", null, null, null, 60, 2, 169, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.NONE, true, now));
     }
 
@@ -114,10 +114,10 @@ class IntegrationConnectionTest {
         var connection = IntegrationConnection.create(tenantId, "Title API", null,
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null, "https://one.example.test", null,
-                "vault://tenant/title", 60, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, now);
+                "vault://tenant/title", 60, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, now);
         var updated = connection.updateConfiguration("Title API", "Updated", IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY,
                 IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT,
-                null, "https://two.example.test", null, null, true, 90, 3, 24, 100, 262144000L, 2000,
+                null, "https://two.example.test", null, null, true, 90, 3, 24, 50, 262144000L, 500,
                 null, null, null, null, null, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, now.plusSeconds(10));
         assertEquals(2, updated.configurationVersion());
         assertEquals("vault://tenant/title", updated.secretReference());
@@ -129,7 +129,7 @@ class IntegrationConnectionTest {
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(
                 TenantId.generate(), "SDV", null, IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, "should-not-be-here",
-                "https://sdv.example", null, null, 60, 2, 24, 100, 1024L, 100,
+                "https://sdv.example", null, null, 60, 2, 24, 50, 1024L, 100,
                 IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, true, Instant.now()));
     }
     @Test
@@ -137,7 +137,7 @@ class IntegrationConnectionTest {
         var polling = IntegrationConnection.create(tenantId, "Nightly LOS", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://source.example.test", null, null,
-                60, 2, 24, 100, 262144000L, 2000,
+                60, 2, 24, 50, 262144000L, 500,
                 IntegrationPollingScheduleType.DAILY, null, java.time.LocalTime.of(1, 0), "America/New_York", 100,
                 IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, now);
         assertTrue(polling.pollingSource());
@@ -147,7 +147,7 @@ class IntegrationConnectionTest {
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad poll", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://source.example.test", null, null,
-                60, 2, 24, 100, 262144000L, 2000,
+                60, 2, 24, 50, 262144000L, 500,
                 IntegrationPollingScheduleType.INTERVAL, 60, null, null, 100,
                 IntegrationAcknowledgementMode.HTTP_SUCCESS, true, now));
     }
@@ -157,7 +157,7 @@ class IntegrationConnectionTest {
         var connection = IntegrationConnection.create(tenantId, "Nightly Source", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://source.example.test", null, null,
-                60, 2, 24, 100, 262144000L, 2000,
+                60, 2, 24, 50, 262144000L, 500,
                 IntegrationPollingScheduleType.DAILY, null, java.time.LocalTime.of(1, 0), "America/New_York", 100,
                 IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true, now);
         assertTrue(connection.pollingSource());
@@ -166,9 +166,72 @@ class IntegrationConnectionTest {
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad Polling", null,
                 IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://source.example.test", null, null,
-                60, 2, 24, 100, 262144000L, 2000,
+                60, 2, 24, 50, 262144000L, 500,
                 IntegrationPollingScheduleType.DAILY, null, java.time.LocalTime.of(1, 0), "America/New_York", 100,
                 IntegrationAcknowledgementMode.NONE, true, now));
+    }
+
+    /* Task 0039: a source can't promise more than a case holds (CaseLimits: 50 files, 500 pages per file). */
+
+    private IntegrationConnection push(Integer files, Integer pages) {
+        return IntegrationConnection.create(tenantId, "Push " + files + "/" + pages, null,
+                IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.PUSH_API,
+                IntegrationAuthenticationType.NONE, "los-client", null, null, null, 60, 2, 24, files, 262144000L, pages,
+                IntegrationAcknowledgementMode.NONE, true, now);
+    }
+
+    @Test
+    void theSourceLimitsAreTheCaseLimitsAndAreTheDefaults() {
+        assertEquals(com.securedoc.platform.domain.document.CaseLimits.MAX_FILES_PER_CASE, IntegrationConnection.MAX_DOCUMENTS_PER_INTAKE);
+        assertEquals(com.securedoc.platform.domain.document.CaseLimits.MAX_PAGES_PER_FILE, IntegrationConnection.MAX_PDF_PAGES);
+        IntegrationConnection defaults = push(null, null);
+        assertEquals(50, defaults.maxDocumentsPerIntake());
+        assertEquals(500, defaults.maxPdfPages());
+        IntegrationConnection atTheLimit = push(50, 500);
+        assertEquals(50, atTheLimit.maxDocumentsPerIntake());
+        assertEquals(500, atTheLimit.maxPdfPages());
+    }
+
+    @Test
+    void savingMoreThanACaseHoldsIsRefusedWithAMessageThatSaysWhy() {
+        IllegalArgumentException files = assertThrows(IllegalArgumentException.class, () -> push(51, 500));
+        assertEquals("Maximum documents per intake must be between 1 and 50: a case holds up to 50 files", files.getMessage());
+        IllegalArgumentException pages = assertThrows(IllegalArgumentException.class, () -> push(50, 501));
+        assertEquals("Maximum PDF pages must be between 1 and 500: a case takes files of up to 500 pages", pages.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> push(1000, 2000));
+
+        IntegrationConnection saved = push(10, 100);
+        assertThrows(IllegalArgumentException.class, () -> saved.updateConfiguration(saved.name(), null, saved.purpose(),
+                saved.direction(), saved.providerType(), saved.authenticationType(), saved.clientPrincipal(), null, null,
+                null, true, null, null, null, 51, null, null, null, null, null, null, null, null, now));
+        assertThrows(IllegalArgumentException.class, () -> saved.updateConfiguration(saved.name(), null, saved.purpose(),
+                saved.direction(), saved.providerType(), saved.authenticationType(), saved.clientPrincipal(), null, null,
+                null, true, null, null, null, null, null, 2000, null, null, null, null, null, null, now));
+    }
+
+    @Test
+    void aSourceStoredBeforeTheCapWithHigherValuesStillLoadsAndReadsAsTheCap() {
+        IntegrationConnection c = push(10, 100);
+        // As the database adapter builds it from a row saved before task 0039 (1,000 files and 2,000 pages).
+        IntegrationConnection stored = new IntegrationConnection(c.id(), c.tenantId(), c.name(), c.description(), c.purpose(),
+                c.direction(), c.providerType(), c.authenticationType(), c.clientPrincipal(), c.endpoint(), c.fileShareRoot(),
+                c.secretReference(), c.timeoutSeconds(), c.retryMaxAttempts(), c.incompleteWindowHours(), 1000,
+                c.maxPdfSizeBytes(), 2000, c.pollingScheduleType(), c.pollingIntervalMinutes(), c.pollingLocalTime(),
+                c.pollingTimeZone(), c.pollingBatchLimit(), c.acknowledgementMode(), c.enabled(), c.configurationVersion(),
+                c.healthStatus(), c.lastSuccessAt(), c.lastFailureAt(), c.lastFailureCategory(), c.createdAt(), c.updatedAt());
+        assertEquals(50, stored.maxDocumentsPerIntake());
+        assertEquals(500, stored.maxPdfPages());
+        // Saving it again without touching the limits keeps the capped values and is not refused.
+        IntegrationConnection resaved = stored.updateConfiguration(stored.name(), null, stored.purpose(), stored.direction(),
+                stored.providerType(), stored.authenticationType(), stored.clientPrincipal(), null, null, null, true,
+                null, null, null, null, null, null, null, null, null, null, null, null, now);
+        assertEquals(50, resaved.maxDocumentsPerIntake());
+        assertEquals(500, resaved.maxPdfPages());
+        // Switching it on or off is not refused either.
+        assertEquals(500, stored.setEnabled(false, now).maxPdfPages());
+        // Values below 1 are still refused.
+        assertThrows(IllegalArgumentException.class, () -> push(0, 500));
+        assertThrows(IllegalArgumentException.class, () -> push(50, 0));
     }
 
 }

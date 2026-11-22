@@ -165,7 +165,7 @@ class DraftConnectionTestServiceTest {
     void aSystemThatSendsToLexaVaultHasNothingToTest() {
         ConnectionInput push = new ConnectionInput("Push", null, IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND,
                 IntegrationProviderType.PUSH_API, IntegrationAuthenticationType.NONE, null, null, null, null, false,
-                60, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.NONE, false);
+                60, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.NONE, false);
         assertThrows(ValidationException.class, () -> service.test(entityA, null, actor, correlation, push));
     }
 
@@ -195,19 +195,19 @@ class DraftConnectionTestServiceTest {
     private static ConnectionInput sdv(String name, String endpoint, String secretRef, boolean preserve) {
         return new ConnectionInput(name, null, IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.API_KEY, null, endpoint, null, secretRef, preserve,
-                30, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, false);
+                30, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, false);
     }
 
     private static ConnectionInput derivedWeb(String name, String endpoint) {
         return new ConnectionInput(name, null, IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null, endpoint, null, null, false,
-                30, 2, 24, 100, 262144000L, 2000, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, false);
+                30, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.DESTINATION_RECEIPT, false);
     }
 
     private static ConnectionInput poll(String name, String endpoint) {
         return new ConnectionInput(name, null, IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null, endpoint, null, null, false,
-                30, 2, 24, 100, 262144000L, 2000, IntegrationPollingScheduleType.INTERVAL, 15, null, null, 100,
+                30, 2, 24, 50, 262144000L, 500, IntegrationPollingScheduleType.INTERVAL, 15, null, null, 100,
                 IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, false);
     }
 

@@ -28,6 +28,21 @@ public final class TechnicalFailureClassifier {
     }
 
     /**
+     * Task 0039: the 1-based page the failure happened on, from the same failure {@link #classify} reads; empty when
+     * the failure is not about one page. Only a whole number from 1 is returned.
+     */
+    public static java.util.Optional<Integer> page(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof TechnicalDependencyException technical) {
+                return java.util.Optional.ofNullable(technical.page()).filter(p -> p >= 1);
+            }
+            current = current.getCause();
+        }
+        return java.util.Optional.empty();
+    }
+
+    /**
      * The audit detail for a stop (task 0025): {@code "<prefix>: code=LV-…, detail=<TechnicalFailureCode>,
      * dependency=…, retryable=…, attempts=…"}. Codes only, never exception text. {@code TechnicalFailureAuditParser}
      * reads this form and the earlier one without {@code code=LV-…}.

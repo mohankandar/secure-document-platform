@@ -283,17 +283,28 @@ class ExternalIntakeServiceTest {
             this(provider, provider == IntegrationProviderType.SCANNER ? 1 : 10, 100, 1);
         }
 
-        /** Task 0038: a source whose own limits are above the case limits, and a PDF of {@code pdfPages} pages. */
+        /**
+         * Task 0038: a source whose own limits may be above the case limits, and a PDF of {@code pdfPages} pages. Task
+         * 0039: such a source can no longer be saved, so it is built as the database adapter reads a row stored before
+         * the cap (through the record constructor, which reads it as the cap).
+         */
         LevelHarness(IntegrationProviderType provider, int maxDocuments, int maxPages, int pdfPages) {
             MutableClock clock = new MutableClock(Instant.parse("2026-09-10T12:00:00Z"));
             AuditService auditService = new AuditService(audits::add);
             FakeConnectionRepository connections = new FakeConnectionRepository();
-            connections.save(IntegrationConnection.create(tenant, "Source", null, IntegrationPurpose.INGESTION_SOURCE,
+            IntegrationConnection c = IntegrationConnection.create(tenant, "Source", null, IntegrationPurpose.INGESTION_SOURCE,
                     IntegrationDirection.INBOUND, provider, provider == IntegrationProviderType.SCANNER
                             ? IntegrationAuthenticationType.NONE : IntegrationAuthenticationType.JWT,
-                    "los-client", null, null, null, 60, 2, 24, maxDocuments,
-                    10_000_000L, maxPages,
-                    IntegrationAcknowledgementMode.NONE, true, clock.instant()));
+                    "los-client", null, null, null, 60, 2, 24, provider == IntegrationProviderType.SCANNER ? 1 : 10,
+                    10_000_000L, 100,
+                    IntegrationAcknowledgementMode.NONE, true, clock.instant());
+            connections.save(new IntegrationConnection(c.id(), c.tenantId(), c.name(), c.description(), c.purpose(),
+                    c.direction(), c.providerType(), c.authenticationType(), c.clientPrincipal(), c.endpoint(),
+                    c.fileShareRoot(), c.secretReference(), c.timeoutSeconds(), c.retryMaxAttempts(),
+                    c.incompleteWindowHours(), maxDocuments, c.maxPdfSizeBytes(), maxPages, c.pollingScheduleType(),
+                    c.pollingIntervalMinutes(), c.pollingLocalTime(), c.pollingTimeZone(), c.pollingBatchLimit(),
+                    c.acknowledgementMode(), c.enabled(), c.configurationVersion(), c.healthStatus(), c.lastSuccessAt(),
+                    c.lastFailureAt(), c.lastFailureCategory(), c.createdAt(), c.updatedAt()));
             FakeExternalIntakeRepository intakes = new FakeExternalIntakeRepository();
             CreatePackageUseCase create = (command, p) -> {
                 creates.add(command);
@@ -374,6 +385,23 @@ class ExternalIntakeServiceTest {
         h.service.createPushIntake(new PushIntakeCreateInput("SRC-L2", "1", Map.of("contractNumber", "C-1"), Map.of(),
                 docs.subList(0, 50)), h.principal, CorrelationId.generate());
         assertEquals(1, h.creates.size());
+    }
+
+    /** Task 0039: a source set lower than the case limits keeps its own limits and codes (LV-INT-010, LV-INT-009). */
+    @Test
+    void aSourceSetLowerThanTheCaseLimitsKeepsItsOwnLimitsAndCodes() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API, 10, 100, 101);
+        List<PushIntakeCreateInput.ManifestDocumentInput> docs = new ArrayList<>();
+        for (int i = 0; i < 11; i++) docs.add(doc("DOC-" + i, null));
+        ValidationException files = assertThrows(ValidationException.class, () -> h.service.createPushIntake(
+                new PushIntakeCreateInput("SRC-L5", "1", Map.of("contractNumber", "C-1"), Map.of(), docs),
+                h.principal, CorrelationId.generate()));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.INT_010, files.lvCode());
+
+        ExternalIntakeSnapshot created = h.service.createPushIntake(new PushIntakeCreateInput("SRC-L6", "1",
+                Map.of("contractNumber", "C-1"), Map.of(), List.of(doc("DOC-1", null))), h.principal, CorrelationId.generate());
+        ValidationException pages = assertThrows(ValidationException.class, () -> h.receive(created.packageId(), "DOC-1"));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.INT_009, pages.lvCode());
     }
 
     @Test

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  DEFAULT_MAX_PDF_SIZE_BYTES, VIEWS, advancedSummary, ago, folderCheckResult, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
+  DEFAULT_MAX_PDF_SIZE_BYTES, SOURCE_FILES_HINT, SOURCE_MAX_FILES, SOURCE_MAX_PAGES, SOURCE_PAGES_HINT, VIEWS, advancedSummary, capToCaseLimits, ago, folderCheckResult, attentionLine, attentionTitle, connectionStatus, connectionTag, draftTestResult, everyText, failureReason,
   methodOf, pagesText, ruleSentence, slashParts, statusText, watchedFolderStatus,
 } from './integrationRules.ts';
 
@@ -150,7 +150,7 @@ test('0023 C4 / 0025: each split routing and delivery code reads as its LV title
 test('0023 D3: with no size saved, a receiving connection reads 50 MB (the backend default and multipart limit)', () => {
   assert.equal(DEFAULT_MAX_PDF_SIZE_BYTES, 52428800);
   assert.equal(advancedSummary({ acknowledgementMode: 'SOURCE_PICKUP_ACK', purpose: 'INGESTION_SOURCE' }),
-    'wait 60 s · try again up to 2 times · finish incomplete cases within 24 h · up to 100 files, 50 MB, 2000 pages · confirm pickup to the source');
+    'wait 60 s · try again up to 2 times · finish incomplete cases within 24 h · up to 50 files, 50 MB, 500 pages · confirm pickup to the source');
 });
 
 /* ---------- Task 0023: "Check now" on the watched folder says when this server did not check it ---------- */
@@ -170,4 +170,19 @@ test('0023: the folder check toast gives the counts when checked, and a plain li
   // An outcome this screen does not know is not read as "checked", and the code is not shown.
   const unknown = folderCheckResult({ ...counts, outcome: 'SOMETHING_NEW' });
   assert.deepEqual(unknown, { text: 'The folder wasn’t checked.', tone: 'danger' });
+});
+
+/* ---------- Task 0039: receiving connections stop at the case limits ---------- */
+
+test('0039: a receiving connection can promise at most 50 files per case and 500 pages per file, and says why', () => {
+  assert.equal(SOURCE_MAX_FILES, 50);
+  assert.equal(SOURCE_MAX_PAGES, 500);
+  assert.equal(SOURCE_FILES_HINT, 'A case holds up to 50 files.');
+  assert.equal(SOURCE_PAGES_HINT, 'A case takes PDFs of up to 500 pages.');
+});
+
+test('0039: a source saved before the cap reads as the cap; lower and missing values are kept', () => {
+  assert.deepEqual(capToCaseLimits({ maxDocumentsPerIntake: 1000, maxPdfPages: 2000 }), { maxDocumentsPerIntake: 50, maxPdfPages: 500 });
+  assert.deepEqual(capToCaseLimits({ maxDocumentsPerIntake: 1, maxPdfPages: 120 }), { maxDocumentsPerIntake: 1, maxPdfPages: 120 });
+  assert.deepEqual(capToCaseLimits({ maxDocumentsPerIntake: undefined, maxPdfPages: undefined }), { maxDocumentsPerIntake: undefined, maxPdfPages: undefined });
 });

@@ -4,6 +4,7 @@
  * Technical details. Task 0025: a failure shows its LV code ("title · LV-…"), from the generated registry.
  */
 import { lvCodeFor, lvLabel } from '../lvCodes.ts';
+import { MAX_FILES_PER_CASE, MAX_PAGES_PER_FILE } from '../intakeRules.ts';
 import type {
   DerivedDelivery,
   IntegrationAcknowledgementMode,
@@ -253,10 +254,25 @@ export function advancedSummary(d: { timeoutSeconds?: number; retryMaxAttempts?:
   const parts = [`wait ${d.timeoutSeconds ?? 60} s`, `try again up to ${d.retryMaxAttempts ?? 2} time${d.retryMaxAttempts === 1 ? '' : 's'}`];
   if (d.purpose === 'INGESTION_SOURCE') {
     parts.push(`finish incomplete cases within ${d.incompleteWindowHours ?? 24} h`);
-    parts.push(`up to ${d.maxDocumentsPerIntake ?? 100} files, ${Math.round((d.maxPdfSizeBytes ?? DEFAULT_MAX_PDF_SIZE_BYTES) / 1048576)} MB, ${d.maxPdfPages ?? 2000} pages`);
+    parts.push(`up to ${d.maxDocumentsPerIntake ?? MAX_FILES_PER_CASE} files, ${Math.round((d.maxPdfSizeBytes ?? DEFAULT_MAX_PDF_SIZE_BYTES) / 1048576)} MB, ${d.maxPdfPages ?? MAX_PAGES_PER_FILE} pages`);
   }
   parts.push(ackName(d.acknowledgementMode).toLowerCase());
   return parts.join(' · ');
+}
+
+/**
+ * Task 0039: a receiving connection can't promise more than a case holds. The fields stop at these limits, which the
+ * server also enforces (LV-CFG-001 on save), and say why.
+ */
+export const SOURCE_MAX_FILES = MAX_FILES_PER_CASE;
+export const SOURCE_MAX_PAGES = MAX_PAGES_PER_FILE;
+export const SOURCE_FILES_HINT = `A case holds up to ${MAX_FILES_PER_CASE} files.`;
+export const SOURCE_PAGES_HINT = `A case takes PDFs of up to ${MAX_PAGES_PER_FILE} pages.`;
+
+/** Task 0039: a value saved before the cap reads as the cap (the server sends it capped too). Missing stays missing. */
+export function capToCaseLimits<T extends { maxDocumentsPerIntake?: number; maxPdfPages?: number }>(d: T): T {
+  const cap = (v: number | undefined, max: number) => (v === undefined || Number.isNaN(v) ? v : Math.min(v, max));
+  return { ...d, maxDocumentsPerIntake: cap(d.maxDocumentsPerIntake, SOURCE_MAX_FILES), maxPdfPages: cap(d.maxPdfPages, SOURCE_MAX_PAGES) };
 }
 
 /**
