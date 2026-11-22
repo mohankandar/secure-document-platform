@@ -59,7 +59,9 @@ $script:LexaVaultDemoEntityId = '30216241-b724-5a3a-aef3-3034fd546d17'
 
 # A development or test database brought up with the real install steps, in order (task 0037):
 #   1. the schema step (always; safe to rerun),
-#   2. on a fresh database only (no customer stored yet): setup apply with the demo input files (install\demo),
+#   2. while the demo step has not made the demo entity yet ("fresh" in this sense, task 0037 fix 1; it covers a
+#      database from before 0037 and one whose demo step stopped half-way): setup apply with the demo input files
+#      (install\demo); setup is safe to rerun and then changes nothing,
 #   3. the LexaVault demo step (always; a rerun changes nothing), with the local OIDC login connection when -OidcIssuer
 #      is given.
 # -StateDir receives setup's config fragment (platform-tenant.properties) and run log. Throws on any failure.
@@ -84,10 +86,10 @@ function Initialize-LexaVaultDatabase {
         -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_SCHEMA' $DbUrl $DbUser $DbPassword)
     if ($code -ne 0) { throw "The schema step failed (exit $code)." }
 
-    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.SchemaStep' -Arguments @('customer-installed') `
-        -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_SCHEMA' $DbUrl $DbUser $DbPassword)
+    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.DemoStep' -Arguments @('installed') `
+        -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_DEMO' $DbUrl $DbUser $DbPassword)
     if ($code -eq 4) {
-        Write-Host "Database: fresh, so setup runs with the demo input files (install\demo)..." -ForegroundColor Cyan
+        Write-Host "Database: the demo step has not run yet, so setup runs with the demo input files (install\demo)..." -ForegroundColor Cyan
         $setupArgs = @('apply', '--licence', (Join-Path $demo 'licence-demo.json'), '--signin', (Join-Path $demo 'signin-demo.json'),
             '--product', 'LEXAVAULT', '--keys', $keys,
             '--product-roles', (Join-Path $script:LexaVaultRepoRoot 'install\product-roles.json'),
@@ -98,8 +100,8 @@ function Initialize-LexaVaultDatabase {
             -Environment (New-LexaVaultDbEnvironment 'PLATFORM_SETUP' $DbUrl $DbUser $DbPassword)
         if ($code -ne 0) { throw "Setup with the demo files failed (exit $code)." }
     }
-    elseif ($code -ne 0) { throw "The customer check failed (exit $code)." }
-    else { Write-Host "Database: a customer is stored; setup is not run again." -ForegroundColor DarkGray }
+    elseif ($code -ne 0) { throw "The demo step check failed (exit $code)." }
+    else { Write-Host "Database: the demo step has run; setup is not run again." -ForegroundColor DarkGray }
 
     Write-Host "Database: LexaVault demo step..." -ForegroundColor Cyan
     $demoArgs = @('apply', '--keys', $keys)

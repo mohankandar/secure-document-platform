@@ -40,6 +40,12 @@ class DemoStepTest {
         assertEquals(2, run("apply", "--keys", "k.json", "--unknown", "x"));
         assertEquals(2, run("apply", "--keys", "k.json", "--keys", "again.json"));
         assertEquals(2, run("apply", "--keys", Path.of("no-such-file.json").toString()));  // unreadable keys file
+        // installed (task 0037 fix 1) takes only --slot.
+        assertEquals(2, run("installed", "--keys", "k.json"));
+        assertEquals(2, run("installed", "--slot", "not-a-slot"));
+        assertEquals(2, run("installed", "--slot"));
+        assertEquals("ENT-DEMO-0001", DemoStep.parseInstalled(new String[] {"installed"}));
+        assertEquals("ENT-DEMO-0002", DemoStep.parseInstalled(new String[] {"installed", "--slot", "ENT-DEMO-0002"}));
     }
 
     @Test

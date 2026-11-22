@@ -18,8 +18,25 @@ The local start scripts (`Start-LexaVault-Local.ps1`, `Start-LexaVault-OIDC.ps1`
 `scripts/Initialize-LexaVault-LocalDatabase.*`, which runs the real install steps in order:
 
 1. the schema step (`docs/install/SCHEMA_STEP.md`);
-2. on a fresh database only (no customer stored yet): setup with these files;
-3. the LexaVault demo step (`com.securedoc.install.DemoStep`).
+2. while the demo step has not made the demo entity yet (`DemoStep installed` exits 4): setup with these files.
+   That is a fresh database, a database from before task 0037, or one whose demo step stopped half-way; setup is
+   safe to rerun and then changes nothing;
+3. the LexaVault demo step (`com.securedoc.install.DemoStep`), always; a rerun changes nothing.
+
+### On a database from before task 0037
+
+Such a database holds the old fixed demo tenant `00000000-0000-0000-0000-000000000001` (slug `local-demo`, name
+"Local Demo Tenant") and its data. The demo step never changes it. Because `local-demo` is taken (the slug is unique),
+the new demo entity is created as **"Local Demo Tenant (ENT-DEMO-0001)"**, slug **`local-demo-ent-demo-0001`**, and
+the step prints a `note` line saying so. A fresh database keeps the plain name and slug. The old tenant's data stays
+reachable in the LOCAL mode with the header `X-Tenant-Id: 00000000-0000-0000-0000-000000000001`.
+
+### With the OIDC start
+
+Setup takes only `https` issuers, so the sign-in file holds a placeholder (`demo-okta`). With `--oidc-issuer` the demo
+step then points the customer's LexaVault login connection at the issuer and audience that `Start-LexaVault-OIDC.ps1`
+was given (`-IssuerUri`, `-Audience`, `-ProviderId`). That is the connection sign-in uses. Setup is not run again
+after the demo step has run, so it never puts the placeholder back.
 
 ## What the demo step creates
 

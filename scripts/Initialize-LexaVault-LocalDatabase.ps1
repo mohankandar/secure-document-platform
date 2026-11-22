@@ -2,12 +2,14 @@
 <#
 .SYNOPSIS
     Brings a local development database up to date with the real install steps (task 0037), in order: the schema step,
-    then on a fresh database setup with the demo input files (install\demo), then the LexaVault demo step.
+    then, while the demo step has not run, setup with the demo input files (install\demo), then the LexaVault demo step.
 
 .DESCRIPTION
     The same steps an installation runs, not different ones (docs/design/LOGIN_CUSTOMER_ENTITY_DESIGN.md, "the same
     steps everywhere"). The start scripts call this before starting the backend. Running it again is safe: setup runs
-    only while no customer is stored, and the schema and demo steps change nothing the second time.
+    only while the demo step has not made the demo entity (a fresh database, a database from before task 0037, or one
+    whose demo step stopped half-way; setup then changes nothing if it ran before), and the schema and demo steps
+    change nothing the second time. Existing data, such as the old fixed demo tenant 0000...0001, is never changed.
 
     Database: -DbUrl and -DbUser; the password comes from $env:LEXAVAULT_LOCAL_DB_PASSWORD, or, for the default local
     database only, from the development compose file's value. It is passed to each step in its environment only and is

@@ -8,11 +8,12 @@ It runs three things, in this order. Each keeps its own history table:
 | Run | What it creates | Source in the release | History table |
 |---|---|---|---|
 | App tables | LexaVault's own tables (cases, documents, audit, ...) | Liquibase changelog `db/changelog/db.changelog-master.xml` | `databasechangelog` |
-| Identity | Customer, entity slots, login connection, group grants (`idn_` tables) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
+| Identity | Customer, entity slots, login connection, group grants, integration client bindings (`idn_` tables; version 2, platform-core P029) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
 | Licensing | The stored licence, usage ledger (`lic_` tables). Setup stores the licence here | platform-core Flyway location `db/platform/licensing` | `lic_schema_history` |
 
 The platform runs start their own history at version 0 in a schema that already holds the app's tables, so their
-version 1 always runs. Running the step again changes nothing.
+version 1 always runs. A database already at identity version 1 gets version 2 on the next run (platform-core refuses
+a version-1 database). Running the step again changes nothing.
 
 ## Running it
 
@@ -37,8 +38,9 @@ Both run `com.securedoc.install.SchemaStep` from the backend jar.
   nothing on the history tables, and no DDL rights. If the app connects as the schema owner (the local development
   setup does), leave it out.
 - `status` prints the number of app changesets and the version of each platform run.
-- `customer-installed` exits 0 when setup has stored a customer and 4 when not. The local start scripts use it to run
-  setup and the demo step only on a fresh database.
+- `customer-installed` exits 0 when setup has stored a customer and 4 when not. (The local start scripts no longer use
+  it: they run setup with the demo files while `DemoStep installed` says the demo step has not run, task 0037 fix 1.
+  See `install/demo/README.md`.)
 
 Exit codes: 0 done, 1 failed (nothing half-done is left by the platform runs; run it again), 2 refused (a setting or
 option is missing or wrong), 4 no customer (`customer-installed` only). A failure names the run and the SQL state or

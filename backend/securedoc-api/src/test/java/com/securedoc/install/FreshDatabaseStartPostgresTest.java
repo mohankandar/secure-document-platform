@@ -116,6 +116,13 @@ class FreshDatabaseStartPostgresTest {
         Run early = demoStep();
         assertEquals(2, early.exit(), early.output());
         assertTrue(early.output().contains("NO_CUSTOMER"), early.output());
+        assertEquals(4, installed(), "fresh: the demo step has not run");
+    }
+
+    /** The start path's check (task 0037 fix 1): 0 when the demo step has made the demo entity, 4 when not. */
+    private static int installed() {
+        PrintStream quiet = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
+        return new DemoStep(quiet, quiet, Clock.systemUTC()).run(new String[] {"installed"}, db.env(DemoStep.ENV_PREFIX));
     }
 
     @Test
@@ -142,6 +149,8 @@ class FreshDatabaseStartPostgresTest {
         assertEquals("1", one("select count(*) from integration_connections where tenant_id = '" + DEMO_ENTITY
                 + "' and provider_type = 'SCANNER' and client_principal = 'scanner-bridge-local'"));
         assertEquals("1", one("select count(*) from tenants"), "only the demo entity: no fixed demo tenant");
+        assertEquals(0, installed(), "the demo step has run");
+        assertFalse(demo.output().contains("  note "), "a fresh database keeps the plain name and slug: " + demo.output());
 
         Run setupAgain = setup("apply");
         assertEquals(0, setupAgain.exit(), setupAgain.output());

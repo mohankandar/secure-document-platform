@@ -8,6 +8,7 @@ import com.documentplatform.identity.jdbc.PostgresEntityStore;
 import com.documentplatform.identity.jdbc.PostgresLoginConnectionStore;
 import com.documentplatform.identity.store.ActivationOutcome;
 import com.documentplatform.identity.store.ChangeSource;
+import com.documentplatform.identity.store.EntityRecord;
 import com.documentplatform.identity.store.LoginConnection;
 import com.documentplatform.identity.store.SlotActivation;
 import com.documentplatform.licensing.ClockGuard;
@@ -69,9 +70,20 @@ import java.util.UUID;
  * demo-step apply --keys development-trusted-keys.json [--slot ENT-DEMO-0001] [--name "Local Demo Tenant"]
  *                 [--slug local-demo] [--scanner-client-principal scanner-bridge-local]
  *                 [--oidc-issuer URL --oidc-provider-id ID --oidc-audience AUD [--oidc-browser-client-id ID]]
+ * demo-step installed [--slot ENT-DEMO-0001]
  * </pre>
- * Database settings in the environment only: {@code LEXAVAULT_DEMO_DB_URL}, {@code _USER}, {@code _PASSWORD}.
- * Exit codes: 0 done (a rerun changes nothing), 1 failed, 2 refused. Output never holds a password.
+ * {@code installed} answers whether the demo step has made the demo entity (its LexaVault entity row exists): exit 0
+ * yes, 4 no. The local start runs setup with the demo files only while the answer is no (task 0037 fix 1), so a
+ * database whose demo step stopped half-way gets setup again (it changes nothing) and then the demo step again.
+ *
+ * <p>An existing database (task 0037 fix 1) may hold the fixed demo tenant {@code 0000...0001} that
+ * {@code LocalDemoBootstrap} made, with slug {@code local-demo} and name "Local Demo Tenant". That row and its data are
+ * never changed. When the requested slug or name is held by another entity, the demo entity takes
+ * {@code <slug>-<slot>} and {@code <name> (<slot>)} instead ({@link DemoNaming}), so the two can be told apart.
+ *
+ * <p>Database settings in the environment only: {@code LEXAVAULT_DEMO_DB_URL}, {@code _USER}, {@code _PASSWORD}.
+ * Exit codes: 0 done (a rerun changes nothing), 1 failed, 2 refused, 4 not done yet ({@code installed} only). Output
+ * never holds a password.
  */
 public final class DemoStep {
 
@@ -101,6 +113,10 @@ public final class DemoStep {
 
     int run(String[] args, Map<String, String> env) {
         try {
+            if (args.length > 0 && "installed".equals(args[0])) {
+                String slot = parseInstalled(args);
+                return installed(InstallDb.fromEnvironment(ENV_PREFIX, env), slot) ? 0 : 4;
+            }
             Options options = parse(args);
             InstallDb db = InstallDb.fromEnvironment(ENV_PREFIX, env);
             apply(db, options);
@@ -108,6 +124,36 @@ public final class DemoStep {
         } catch (InstallException e) {
             err.println(e.code() + ": " + e.getMessage());
             return e.exitCode();
+        }
+    }
+
+    static String parseInstalled(String[] args) {
+        if (args.length == 1) return DEFAULT_SLOT;
+        if (args.length != 3 || !"--slot".equals(args[1]) || !EntityUuid.isSlotId(args[2])) {
+            throw usage("installed takes only --slot ENT-...");
+        }
+        return args[2];
+    }
+
+    /** Whether the demo step has made the slot's demo entity: its LexaVault entity row exists. */
+    boolean installed(InstallDb db, String slot) {
+        UUID entity = EntityUuid.fromSlotId(slot);
+        try (Connection c = new DriverManagerDataSource(db.url(), db.user(), db.password()).getConnection()) {
+            if (!SchemaStep.tableExists(c, "tenants")) {
+                throw new InstallException(2, "TABLES_NOT_READY", "run the schema step first");
+            }
+            try (PreparedStatement ps = c.prepareStatement("select count(*) from tenants where id = ?")) {
+                ps.setObject(1, entity);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    boolean done = rs.getLong(1) > 0;
+                    out.println("Demo step for entity slot " + slot + " (entity " + entity + "): "
+                            + (done ? "done" : "not done yet"));
+                    return done;
+                }
+            }
+        } catch (SQLException e) {
+            throw new InstallException(1, "DB_UNREACHABLE", "the database could not be read (SQL state " + e.getSQLState() + ")");
         }
     }
 
@@ -157,15 +203,21 @@ public final class DemoStep {
         UUID entity = EntityUuid.fromSlotId(options.slot());
         out.println("Demo step for customer " + tenantId + ", entity slot " + options.slot() + " (entity " + entity + "):");
 
+        // 0. A name and slug no other entity holds (an existing database may hold the old fixed demo tenant).
+        DemoNaming.Choice naming = DemoNaming.choose(ds, entity, options.slot(), options.name(), options.slug());
+        naming.notes().forEach(note -> line("note", note));
+        String name = naming.name();
+
         // 1. Activate the slot under the stored licence, as a Business Admin would.
         LicenceService licences = new LicenceService(new PostgresLicenceStore(ds), new LicenceVerifier(keys),
                 new ClockGuard(clock, new PostgresLastSeenStore(ds)), new PostgresUsageLedger(ds),
                 LexaVaultProduct.CODE, tenantId);
-        ActivationOutcome outcome = new SlotActivation(new PostgresEntityStore(ds), LicenceSlots.of(licences), clock)
-                .activate(options.slot(), options.name(), ACTOR);
+        PostgresEntityStore entities = new PostgresEntityStore(ds);
+        ActivationOutcome outcome = new SlotActivation(entities, LicenceSlots.of(licences), clock)
+                .activate(options.slot(), name, ACTOR);
         switch (outcome.result()) {
-            case ACTIVATED -> line("create", "activation of " + options.slot() + " as \"" + options.name() + "\"");
-            case ALREADY_ACTIVATED -> line("unchanged", "activation of " + options.slot());
+            case ACTIVATED -> line("create", "activation of " + options.slot() + " as \"" + name + "\"");
+            case ALREADY_ACTIVATED -> finishEarlierActivation(entities, outcome, options.slot(), name, naming.entityRowExists());
             default -> throw new InstallException(2, "DEMO_ACTIVATION_REFUSED", options.slot() + ": "
                     + outcome.result() + " (run setup with the demo licence first)");
         }
@@ -178,7 +230,7 @@ public final class DemoStep {
                     ctx.getBean(TenantRedactionPolicyRepository.class),
                     ctx.getBean(IntegrationConnectionRepository.class),
                     new TransactionTemplate(ctx.getBean(PlatformTransactionManager.class)), out)
-                    .ensure(entity, options.name(), options.slug(), options.scannerPrincipal());
+                    .ensure(entity, name, naming.slug(), options.scannerPrincipal());
         } catch (InstallException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -189,6 +241,27 @@ public final class DemoStep {
         // 3. Local OIDC development only: the login connection to the local login system.
         if (options.oidcIssuer() != null) oidcConnection(ds, tenantId, options);
         out.println("Demo step done.");
+    }
+
+    /**
+     * The slot was activated before. When an earlier demo step activated it but stopped before writing the entity row
+     * (task 0037 fix 1: the owner's database), the name it gave may be the one that clashes; it is corrected to the
+     * chosen name. Anything else (a Business Admin's activation or rename, or a finished demo step) is left as it is.
+     */
+    private void finishEarlierActivation(PostgresEntityStore entities, ActivationOutcome outcome, String slot, String name,
+                                         boolean entityRowExists) {
+        EntityRecord record = outcome.entity();
+        if (entityRowExists || record == null || !ACTOR.equals(record.activatedBy()) || name.equals(record.displayName())) {
+            line("unchanged", "activation of " + slot);
+            return;
+        }
+        ActivationOutcome renamed = entities.rename(slot, name);
+        switch (renamed.result()) {
+            case RENAMED -> line("update", "name of " + slot + " from \"" + record.displayName() + "\" to \"" + name
+                    + "\" (an earlier demo step stopped half-way)");
+            case UNCHANGED -> line("unchanged", "activation of " + slot);
+            default -> throw new InstallException(2, "DEMO_ACTIVATION_REFUSED", slot + ": rename " + renamed.result());
+        }
     }
 
     private void oidcConnection(DataSource ds, String tenantId, Options o) {
@@ -276,6 +349,6 @@ public final class DemoStep {
     private static InstallException usage(String why) {
         return new InstallException(2, "BAD_OPTION", why + ". Usage: demo-step apply --keys FILE [--slot ENT-...] "
                 + "[--name NAME] [--slug SLUG] [--scanner-client-principal P] [--oidc-issuer URL --oidc-provider-id ID "
-                + "--oidc-audience AUD [--oidc-browser-client-id ID]]");
+                + "--oidc-audience AUD [--oidc-browser-client-id ID]], or demo-step installed [--slot ENT-...]");
     }
 }
