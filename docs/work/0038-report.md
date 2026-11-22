@@ -188,3 +188,11 @@ Not merged, not pushed.
 ## Suggested next step
 
 The owner reviews the three proof pictures and answers questions 1 to 5. Then merge `feature/0038-ui-backlog-tests` into `feature/lexavault-r1b-tenant-identity`.
+
+## Owner's answers (2026-11-22, recorded by the design chat; owner said "as recommended")
+
+1. **Rejection reason:** no change now (no code path rejects a case today). Backlog: when a reject step is designed, it stores a **reason code** (an `LV-` code), never free text.
+2. **Page number for text-reading failures:** yes. The OCR failure carries its page number (an integer only) into the incident metadata. Owner approves this small change in V1 processing (frozen area). Task 0039.
+3. **Integration source limits:** yes, the Integrations screen and API cap pages per file at 500 and files per case at 50. Task 0039.
+4. **Parallel uploads at 50 files:** yes, a lock on the case while the limit is checked. Task 0039.
+5. **V1 upload change for the limits:** confirmed.
