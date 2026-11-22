@@ -147,3 +147,8 @@ Nothing in the task is left. One limit of item 3, stated above: the case lock is
 ## Suggested next step
 
 The owner reviews `integrations-capped-fields.png` and answers questions 1 and 2. Then merge `feature/0039-limits-followups` into `feature/lexavault-r1b-tenant-identity`.
+
+## Owner's answers (2026-11-22, recorded by the design chat; owner said "as recommended")
+
+1. **Watched folder and polling without a transaction:** leave them as they are (they create their own cases and check the file count before the case exists; frozen V1 behaviour unchanged).
+2. **New connection defaults 50 files / 500 pages:** confirmed.
