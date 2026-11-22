@@ -126,7 +126,7 @@ if (-not (Get-Command "java" -ErrorAction SilentlyContinue)) {
     throw "Required command 'java' was not found in PATH. Java 21 is required for the LexaVault local environment."
 }
 
-$effectiveTenantId = Resolve-Setting $TenantId "SECUREDOC_SCAN_BRIDGE_TENANT_ID" "00000000-0000-0000-0000-000000000001"
+$effectiveTenantId = Resolve-Setting $TenantId "SECUREDOC_SCAN_BRIDGE_TENANT_ID" "30216241-b724-5a3a-aef3-3034fd546d17"
 $effectiveBridgeId = Resolve-Setting $BridgeId "SECUREDOC_SCAN_BRIDGE_ID" "BRIDGE-LOCAL-01"
 $effectiveSiteId = Resolve-Setting $SiteId "SECUREDOC_SCAN_BRIDGE_SITE_ID" "HOME-LAB"
 $effectiveMode = (Resolve-Setting $Mode "SECUREDOC_SCAN_BRIDGE_MODE" "SIMULATOR").ToUpperInvariant()

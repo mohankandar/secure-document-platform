@@ -37,7 +37,7 @@ Set-StrictMode -Version Latest
 if (-not (Test-Path -LiteralPath $FilePath)) { throw "Send-TestDocument: file not found: $FilePath" }
 
 $backend  = if ($env:SECUREDOC_BACKEND_URL) { $env:SECUREDOC_BACKEND_URL.TrimEnd('/') } else { 'http://localhost:8080' }
-$tenantId = if ($env:SECUREDOC_TENANT_ID)   { $env:SECUREDOC_TENANT_ID }   else { '00000000-0000-0000-0000-000000000001' }
+$tenantId = if ($env:SECUREDOC_TENANT_ID)   { $env:SECUREDOC_TENANT_ID }   else { '30216241-b724-5a3a-aef3-3034fd546d17' }
 $actorId  = if ($env:SECUREDOC_ACTOR_ID)    { $env:SECUREDOC_ACTOR_ID }    else { '00000000-0000-0000-0000-000000000099' }
 
 $uri = "$backend/api/v1/packages/$PackageId/documents"

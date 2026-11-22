@@ -80,7 +80,7 @@ All have local/demo defaults; override only if your environment differs.
 | --- | --- |
 | `SECUREDOC_BACKEND_URL` | `http://localhost:8080` |
 | `SECUREDOC_FRONTEND_URL` | `http://localhost:5173` |
-| `SECUREDOC_TENANT_ID` | `00000000-0000-0000-0000-000000000001` |
+| `SECUREDOC_TENANT_ID` | `30216241-b724-5a3a-aef3-3034fd546d17` |
 | `SECUREDOC_ACTOR_ID` | `00000000-0000-0000-0000-000000000099` |
 | `SECUREDOC_DB_CONTAINER` | `securedoc-postgres` |
 | `SECUREDOC_DB_NAME` | `securedoc` |

@@ -177,22 +177,6 @@ public class JdbcOidcConnectionBindingRepository {
         return new ActivationResult(findById(tenantId,candidate.connectionId()).orElseThrow(),previous);
     }
 
-    @Transactional public void bootstrapIfAbsent(UUID tenantId,String providerId,URI issuer,String browserClientId,String audience) {
-        Integer tenantRows=jdbc.queryForObject("select count(*) from enterprise_identity_connections where tenant_id=?",Integer.class,tenantId);
-        if(tenantRows!=null&&tenantRows>0)return; // one-way bootstrap only; never recreate/reactivate after administration begins
-        UUID id=UUID.randomUUID(); Instant now=Instant.now();
-        jdbc.update("""
-                insert into enterprise_identity_connections(
-                    connection_id, tenant_id, provider_id, provider_type, display_name, issuer_uri,
-                    browser_client_id, api_audience, secret_reference, status, configuration_version,
-                    created_at, updated_at
-                ) values (?,?,?,?,?,?,?,?,?,'ACTIVE',1,?,?)
-                """, id, tenantId, clean(providerId), "OIDC", "Bootstrap OIDC connection",
-                normalizeIssuer(issuer), blankToNull(browserClientId), clean(audience), null,
-                Timestamp.from(now), Timestamp.from(now));
-        appendHistory(id,tenantId,clean(providerId),normalizeIssuer(issuer),blankToNull(browserClientId),clean(audience),"ACTIVE",1L,"BOOTSTRAP","SYSTEM",now);
-    }
-
     private Optional<ConnectionAdminView> findForTenantByStatus(UUID tenantId,String status){
         List<ConnectionAdminView> rows=jdbc.query(SELECT_ADMIN+" where tenant_id=? and status=? order by updated_at desc limit 1",this::mapAdmin,tenantId,status); return rows.stream().findFirst();
     }
@@ -208,7 +192,6 @@ public class JdbcOidcConnectionBindingRepository {
     private static Instant toInstant(Timestamp v){return v==null?null:v.toInstant();}
     private static String normalizeIssuer(URI issuer){if(issuer==null)throw new IllegalArgumentException("OIDC issuer is required");String s=issuer.toString().trim();return s.endsWith("/")?s.substring(0,s.length()-1):s;}
     private static String clean(String v){if(v==null||v.isBlank())throw new IllegalArgumentException("OIDC configuration value is required");return v.trim();}
-    private static String blankToNull(String v){return v==null||v.isBlank()?null:v.trim();}
     private static String truncate(String v,int max){if(v==null)return null;return v.length()<=max?v:v.substring(0,max);}
     private static IllegalStateException staleTest(){return new com.securedoc.platform.application.exception.PersonFacingStateException(com.securedoc.platform.domain.error.LvErrorCode.CFG_008, "Identity configuration changed while the connection test was running. The stale test result was discarded; test the current draft again.");}
     public record ConnectionAdminView(UUID connectionId,UUID tenantId,String providerId,String providerType,String displayName,String issuerUri,String browserClientId,String apiAudience,String status,long configurationVersion,Instant createdAt,Instant updatedAt,Instant lastTestedAt,String lastTestStatus,String lastTestMessage){}

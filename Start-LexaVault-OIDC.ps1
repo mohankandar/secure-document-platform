@@ -2,7 +2,7 @@ param(
     [string]$IssuerUri = $env:SECUREDOC_SECURITY_OIDC_ISSUER_URI,
     [string]$Audience = $env:SECUREDOC_SECURITY_OIDC_AUDIENCE,
     [string]$ProviderId = $(if ($env:SECUREDOC_SECURITY_OIDC_PROVIDER_ID) { $env:SECUREDOC_SECURITY_OIDC_PROVIDER_ID } else { "customer-oidc" }),
-    [string]$TenantId = $(if ($env:SECUREDOC_SECURITY_OIDC_TENANT_ID) { $env:SECUREDOC_SECURITY_OIDC_TENANT_ID } else { "00000000-0000-0000-0000-000000000001" }),
+    [string]$TenantId = $(if ($env:SECUREDOC_SECURITY_OIDC_TENANT_ID) { $env:SECUREDOC_SECURITY_OIDC_TENANT_ID } else { "30216241-b724-5a3a-aef3-3034fd546d17" }),
     [string]$TenantClaim = $(if ($env:SECUREDOC_SECURITY_OIDC_TENANT_CLAIM) { $env:SECUREDOC_SECURITY_OIDC_TENANT_CLAIM } else { "tenant_id" }),
     [string]$UsernameClaim = $(if ($env:SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM) { $env:SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM } else { "preferred_username" }),
     [string]$RolesClaim = $(if ($env:SECUREDOC_SECURITY_OIDC_ROLES_CLAIM) { $env:SECUREDOC_SECURITY_OIDC_ROLES_CLAIM } else { "groups" }),
@@ -288,7 +288,8 @@ else {
     Write-Host "Using backend JAR: $($apiJar.FullName)" -ForegroundColor DarkGray
 
     # Task 0037: the schema step, and on a fresh database setup and the demo step, before the backend starts.
-    & (Join-Path $ProjectRoot "scripts\Initialize-LexaVault-LocalDatabase.ps1") -JarPath $apiJar.FullName
+    & (Join-Path $ProjectRoot "scripts\Initialize-LexaVault-LocalDatabase.ps1") -JarPath $apiJar.FullName `
+        -OidcIssuer $IssuerUri -OidcProviderId $ProviderId -OidcAudience $Audience -OidcBrowserClientId $WebClientId
 
     $jarPathEscaped = $apiJar.FullName.Replace("'", "''")
     $backendDirEscaped = $BackendDir.Replace("'", "''")

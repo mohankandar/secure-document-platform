@@ -2,7 +2,7 @@ import { getValidAccessToken, isLocalSecurityMode } from './auth';
 import { selectedOidcTenant } from './tenantContext';
 
 export const API_BASE_URL = '/api/v1';
-export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+export const DEFAULT_TENANT_ID = '30216241-b724-5a3a-aef3-3034fd546d17';
 export const DEFAULT_ACTOR_ID = '00000000-0000-0000-0000-000000000099';
 export const DEFAULT_ACTOR_ROLES = 'DOCUMENT_PROCESSOR';
 

@@ -1,0 +1,10 @@
+{
+  "format": "platform-licence-keys/1",
+  "keys": [
+    {
+      "algorithm": "Ed25519",
+      "keyId": "dev-lexavault-demo-1",
+      "publicKey": "MCowBQYDK2VwAyEA5QI/ye1sV8MzsciW1+BJGG1TiySivKaTHXIYxLIWuuw="
+    }
+  ]
+}

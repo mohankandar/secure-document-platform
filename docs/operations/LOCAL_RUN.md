@@ -34,10 +34,14 @@ The start script:
 2. reuses PostgreSQL on port 5432 or starts the repository Docker Compose PostgreSQL service;
 3. reuses Ollama on port 11434 or starts `ollama serve`;
 4. requires `qwen3.5:4b` by default (or can pull it when `Start-LexaVault-Local.ps1 -PullModelIfMissing` is used);
-5. starts the already-built executable `securedoc-api-*.jar` with the `local` profile on port 8080;
-6. starts the already-built Scanner Bridge on loopback port 10090 in the selected mode;
-7. starts the Vite frontend on port 5173;
-8. records only processes it launched under `.run/`.
+5. brings the database up to date with the real install steps (task 0037, `scripts/Initialize-LexaVault-LocalDatabase.ps1`):
+   the schema step every time; on a fresh database, setup with the demo input files (`install/demo/`); then the
+   LexaVault demo step, which makes the demo entity "Local Demo Tenant" (UUID `30216241-b724-5a3a-aef3-3034fd546d17`,
+   derived from slot `ENT-DEMO-0001`). The app itself inserts nothing at startup. See `install/demo/README.md`;
+6. starts the already-built executable `securedoc-api-*.jar` with the `local` profile on port 8080;
+7. starts the already-built Scanner Bridge on loopback port 10090 in the selected mode;
+8. starts the Vite frontend on port 5173;
+9. records only processes it launched under `.run/`.
 
 If a project-managed Scanner Bridge is already running in the other acquisition mode, the launcher restarts that bridge in the requested mode. `SIMULATOR` is the normal QA/development mode. `PHYSICAL` / `PRINTER` now selects the Windows WIA physical-acquisition candidate; it never silently falls back to the simulator. Full physical readiness still requires successful E2E verification against the target Windows scanner/driver.
 

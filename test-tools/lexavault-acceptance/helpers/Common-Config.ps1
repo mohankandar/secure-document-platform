@@ -66,7 +66,7 @@ function Get-LvConfig {
         FrontendUrl  = (Get-LvEnvOrDefault 'SECUREDOC_FRONTEND_URL' 'http://localhost:5173').TrimEnd('/')
         OllamaUrl    = (Get-LvEnvOrDefault 'SECUREDOC_OLLAMA_URL'   'http://localhost:11434').TrimEnd('/')
 
-        TenantId     = Get-LvEnvOrDefault 'SECUREDOC_TENANT_ID' '00000000-0000-0000-0000-000000000001'
+        TenantId     = Get-LvEnvOrDefault 'SECUREDOC_TENANT_ID' '30216241-b724-5a3a-aef3-3034fd546d17'
         ActorId      = Get-LvEnvOrDefault 'SECUREDOC_ACTOR_ID'  '00000000-0000-0000-0000-000000000099'
 
         DbContainer  = Get-LvEnvOrDefault 'SECUREDOC_DB_CONTAINER' 'securedoc-postgres'

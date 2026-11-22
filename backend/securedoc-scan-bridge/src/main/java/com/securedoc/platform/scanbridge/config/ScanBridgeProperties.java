@@ -9,7 +9,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "securedoc.scan-bridge")
 public class ScanBridgeProperties {
     private boolean enabled = true;
-    private String tenantId = "00000000-0000-0000-0000-000000000001";
+    private String tenantId = "30216241-b724-5a3a-aef3-3034fd546d17";
     private String bridgeId = "BRIDGE-LOCAL-01";
     private String siteId = "HOME-LAB";
     private String scannerId = "SCANNER-SIM-01";

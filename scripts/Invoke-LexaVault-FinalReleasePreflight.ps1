@@ -251,7 +251,7 @@ if ($RequireLocalRuntime) {
     catch { Add-Check -Name "Backend health" -Passed $false -Detail $_.Exception.Message }
 
     $processorHeaders = @{
-        "X-Tenant-Id" = "00000000-0000-0000-0000-000000000001"
+        "X-Tenant-Id" = "30216241-b724-5a3a-aef3-3034fd546d17"
         "X-Actor-Id" = "00000000-0000-0000-0000-000000000099"
         "X-Actor-Roles" = "DOCUMENT_PROCESSOR"
     }

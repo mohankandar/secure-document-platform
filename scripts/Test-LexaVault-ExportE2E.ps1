@@ -11,7 +11,7 @@
        a mock Ollama that finds nothing, a Vite dev server (LOCAL mode, Case File UI) and the backend jar itself,
        with the "export-e2e" test profile from test-tools/export-e2e (shortened timings; the defaults are unchanged).
        Scenario 6 stops and starts the backend in the middle.
-    3. The proof pictures go to -ProofDir (default docs/work/0036-proof/; task 0035's are in docs/work/0035-proof/).
+    3. The proof pictures go to -ProofDir (default docs/work/0037-proof/; tasks 0035 and 0036 kept theirs in docs/work/0035-proof/ and 0036-proof/).
        Logs, the export folder and the stored copies stay in the run folder (test values only).
     4. Stops the backend if it is still running and removes only the throwaway container.
 
@@ -46,7 +46,7 @@ Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ui = Join-Path $repoRoot 'frontend\securedoc-ui'
-if (-not $ProofDir) { $ProofDir = Join-Path $repoRoot 'docs\work\0036-proof' }
+if (-not $ProofDir) { $ProofDir = Join-Path $repoRoot 'docs\work\0037-proof' }
 if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar' }
 if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first: cd backend; mvn clean install)." }
 $JarPath = (Resolve-Path -LiteralPath $JarPath).Path
@@ -84,6 +84,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "throwaway Postgres did not become ready" }
     Start-Sleep -Seconds 2
     Write-Host "Throwaway Postgres ready on 127.0.0.1:$DbPort"
+
+    # --- 1b. the install steps (task 0037): schema step -> setup with the demo files -> demo step -------
+    # The same start-up path as a fresh local start; the app inserts nothing at startup any more.
+    . (Join-Path $repoRoot 'scripts\lib\LexaVaultTools.ps1')
+    Initialize-LexaVaultDatabase -Jar $JarPath -DbUrl "jdbc:postgresql://localhost:$DbPort/securedoc" -DbUser 'securedoc' `
+        -DbPassword $dbPassword -StateDir (Join-Path $runDir 'install')
 
     # --- 2. the suite ------------------------------------------------------------------------
     $env:LEXAVAULT_E2E_RUN_DIR = $runDir

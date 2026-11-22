@@ -31,7 +31,7 @@
 .NOTES
     Environment variables (with defaults):
       SECUREDOC_BACKEND_URL = http://localhost:8080
-      SECUREDOC_TENANT_ID   = 00000000-0000-0000-0000-000000000001
+      SECUREDOC_TENANT_ID   = 30216241-b724-5a3a-aef3-3034fd546d17
       SECUREDOC_ACTOR_ID    = 00000000-0000-0000-0000-000000000099
 #>
 [CmdletBinding()]
@@ -46,7 +46,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $backend  = if ($env:SECUREDOC_BACKEND_URL) { $env:SECUREDOC_BACKEND_URL.TrimEnd('/') } else { 'http://localhost:8080' }
-$tenantId = if ($env:SECUREDOC_TENANT_ID)   { $env:SECUREDOC_TENANT_ID }   else { '00000000-0000-0000-0000-000000000001' }
+$tenantId = if ($env:SECUREDOC_TENANT_ID)   { $env:SECUREDOC_TENANT_ID }   else { '30216241-b724-5a3a-aef3-3034fd546d17' }
 $actorId  = if ($env:SECUREDOC_ACTOR_ID)    { $env:SECUREDOC_ACTOR_ID }    else { '00000000-0000-0000-0000-000000000099' }
 
 $uri = "$backend$Path"

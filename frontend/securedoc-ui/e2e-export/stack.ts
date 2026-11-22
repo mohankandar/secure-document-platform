@@ -229,12 +229,13 @@ export function sqlRows(query: string): string[][] {
 
 /**
  * A scenario's entity in the throwaway database: an ACTIVE tenant with the LOCAL demo entity's set-up copied (its
- * capabilities, identifier rules and sensitive-data policy; LocalDemoBootstrap creates those for the demo entity).
+ * capabilities, identifier rules and sensitive-data policy; the demo step creates those for the demo entity, whose
+ * UUID is derived from demo slot ENT-DEMO-0001 since task 0037).
  */
 export function ensureEntity(tenant: string, name: string): void {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   sql(`DO $$
-DECLARE t text; cols text; sel text; nt uuid := '${tenant}'; demo uuid := '00000000-0000-0000-0000-000000000001';
+DECLARE t text; cols text; sel text; nt uuid := '${tenant}'; demo uuid := '30216241-b724-5a3a-aef3-3034fd546d17';
 BEGIN
   IF EXISTS (SELECT 1 FROM tenants WHERE id = nt) THEN RETURN; END IF;
   INSERT INTO tenants (id, name, slug, status, created_at, updated_at, version)

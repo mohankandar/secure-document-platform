@@ -141,7 +141,14 @@ test('scenario 2: destination down, health check fails: paused, no attempts, res
   await shot(page, '01-case-exporting-destination-paused');
   await openAs(page, tenant, ROLES.itAdmin, '/support/export');
   await expect(page.getByTestId('export-destination').first()).toBeVisible();
-  await expect(page.getByRole('alert').filter({ hasText: 'LexaVault can’t reach its destinations' })).toBeVisible();
+  // Task 0037: with one destination the alert names it, and the "own network" line is only for 2 or more.
+  const reachAlert = page.getByRole('alert').filter({ hasText: 'LexaVault can’t reach Local export folder' });
+  await expect(reachAlert).toBeVisible();
+  await expect(reachAlert).toContainText('Its health check is failing.');
+  await expect(reachAlert).not.toContainText('own network');
+  // Task 0037: Support shows its red count while the alert is raised (no group needs IT here).
+  await expect(page.getByRole('navigation', { name: 'Workspace' }).locator('.cf-nav-count[data-tone="danger"]')).toHaveText('1');
+  await expect(page.getByRole('navigation', { name: 'Support' }).locator('.cf-sp-tab-count')).toHaveText('1');
   await expect(page.getByText('A paused destination is checked every 4 seconds and resumes on its own, in order, when it answers.')).toBeVisible();
   await expect(page.getByTestId('export-waiting')).toHaveText('3 waiting');
   await shot(page, '01b-support-destination-paused');

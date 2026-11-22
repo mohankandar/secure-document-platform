@@ -1,0 +1,46 @@
+{
+  "format": "platform-licence/1",
+  "licence": {
+    "customer": "LexaVault Demo Customer",
+    "deployment": "ON_PREM",
+    "entitySlots": [
+      {
+        "allowances": [
+          {
+            "amount": 1000,
+            "product": "LEXAVAULT",
+            "type": "PAGES_PER_MONTH"
+          }
+        ],
+        "slotId": "ENT-DEMO-0001"
+      },
+      {
+        "allowances": [
+          {
+            "amount": 1000,
+            "product": "LEXAVAULT",
+            "type": "PAGES_PER_MONTH"
+          }
+        ],
+        "slotId": "ENT-DEMO-0002"
+      }
+    ],
+    "issuedAt": "2026-11-22T00:00:00Z",
+    "keyId": "dev-lexavault-demo-1",
+    "kind": "NON_PRODUCTION",
+    "licenceId": "LIC-LV-DEMO-0001",
+    "products": [
+      "LEXAVAULT"
+    ],
+    "startsOn": "2026-01-01",
+    "tenantId": "TEN-DEMO-0001",
+    "type": "PERPETUAL",
+    "updatesUntil": "2036-12-31",
+    "version": 1
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "payloadSha256": "d7eea9ec6af158d965a39482a04f6933fd6707352763327554f18f1923e5bab2",
+    "value": "87LWy045R+UDH6crD9ln0yfjUdIg3fWA3KcU5scwBQ6EVqU4tbcIZ+HeqkznRBsRM0lp3rwgXwI7/3Pgw6PwDw=="
+  }
+}

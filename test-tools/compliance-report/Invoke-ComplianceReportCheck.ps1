@@ -8,7 +8,7 @@
     1. Starts a throwaway Postgres container (lexavault-0017-pg, 127.0.0.1:55417). It never touches
        securedoc-postgres or any other container named in CLAUDE.md, and removes only its own container.
     2. Starts the task 0017 jar (purge scheduler off, so seeded deletions stay as seeded).
-    3. Seeds entity 00000000-0000-0000-0000-000000000001 through the API: sensitive-data policy changes
+    3. Seeds entity 30216241-b724-5a3a-aef3-3034fd546d17 through the API: sensitive-data policy changes
        (and one save with no change), a lifecycle change (and one with no change), 6 cases whose business
        identifier values and file name hold markers, a Reports CSV export and an audit CSV export.
     4. Moves those records 35 days back (SQL on the throwaway database only), so they fall in a past period,
@@ -51,7 +51,7 @@ $Container = 'lexavault-0017-pg'
 $Protected = @('securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db')
 if ($Protected -contains $Container) { throw "Refusing to use a protected container name." }
 
-$tenantId = '00000000-0000-0000-0000-000000000001'
+$tenantId = '30216241-b724-5a3a-aef3-3034fd546d17'
 $actorId = '00000000-0000-0000-0000-000000000099'
 $system = '00000000-0000-0000-0000-000000000000'
 $backend = "http://localhost:$AppPort"
@@ -233,6 +233,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "throwaway Postgres did not become ready" }
     Start-Sleep -Seconds 2
     Write-Host "Throwaway Postgres ready on 127.0.0.1:$DbPort"
+
+    # Task 0037: the install steps (schema step -> setup with the demo files -> demo step). The app no longer inserts
+    # the demo entity at startup; its UUID is derived from demo slot ENT-DEMO-0001.
+    . (Join-Path $repoRoot 'scripts\lib\LexaVaultTools.ps1')
+    Initialize-LexaVaultDatabase -Jar $JarPath -DbUrl "jdbc:postgresql://localhost:${DbPort}/securedoc" -DbUser 'securedoc' `
+        -DbPassword $dbPassword -StateDir (Join-Path $runDir 'install')
 
     # --- 2. app ------------------------------------------------------------------------------
     # A1: a throwaway test licence; the app trusts its public key through the LOCAL development-key override.

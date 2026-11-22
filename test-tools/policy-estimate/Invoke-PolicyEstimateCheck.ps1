@@ -49,7 +49,7 @@ $Container = 'lexavault-0019-pg'
 $Protected = @('securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db')
 if ($Protected -contains $Container) { throw "Refusing to use a protected container name." }
 
-$tenantId = '00000000-0000-0000-0000-000000000001'
+$tenantId = '30216241-b724-5a3a-aef3-3034fd546d17'
 $perfTenant = '00000000-0000-0000-0000-0000000019ff'
 $actorId = '00000000-0000-0000-0000-000000000099'
 $backend = "http://localhost:$AppPort"
@@ -139,6 +139,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "throwaway Postgres did not become ready" }
     Start-Sleep -Seconds 2
     Write-Host "Throwaway Postgres ready on 127.0.0.1:$DbPort"
+
+    # Task 0037: the install steps (schema step -> setup with the demo files -> demo step). The app no longer inserts
+    # the demo entity at startup; its UUID is derived from demo slot ENT-DEMO-0001.
+    . (Join-Path $repoRoot 'scripts\lib\LexaVaultTools.ps1')
+    Initialize-LexaVaultDatabase -Jar $JarPath -DbUrl "jdbc:postgresql://localhost:${DbPort}/securedoc" -DbUser 'securedoc' `
+        -DbPassword $dbPassword -StateDir (Join-Path $runDir 'install')
 
     $ollamaProcess = Start-Process -FilePath 'powershell.exe' -PassThru -WindowStyle Hidden `
         -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',

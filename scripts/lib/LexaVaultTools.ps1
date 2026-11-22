@@ -53,3 +53,61 @@ function Invoke-LexaVaultJarMain {
 function New-LexaVaultDbEnvironment([string] $Prefix, [string] $Url, [string] $User, [string] $Password) {
     return @{ "${Prefix}_DB_URL" = $Url; "${Prefix}_DB_USER" = $User; "${Prefix}_DB_PASSWORD" = $Password }
 }
+
+# The demo entity: the entity UUID derived from demo slot ENT-DEMO-0001 (platform-identity EntityUuid.fromSlotId).
+$script:LexaVaultDemoEntityId = '30216241-b724-5a3a-aef3-3034fd546d17'
+
+# A development or test database brought up with the real install steps, in order (task 0037):
+#   1. the schema step (always; safe to rerun),
+#   2. on a fresh database only (no customer stored yet): setup apply with the demo input files (install\demo),
+#   3. the LexaVault demo step (always; a rerun changes nothing), with the local OIDC login connection when -OidcIssuer
+#      is given.
+# -StateDir receives setup's config fragment (platform-tenant.properties) and run log. Throws on any failure.
+function Initialize-LexaVaultDatabase {
+    param(
+        [Parameter(Mandatory)] [string] $Jar,
+        [Parameter(Mandatory)] [string] $DbUrl,
+        [Parameter(Mandatory)] [string] $DbUser,
+        [Parameter(Mandatory)] [string] $DbPassword,
+        [Parameter(Mandatory)] [string] $StateDir,
+        [string] $OidcIssuer,
+        [string] $OidcProviderId,
+        [string] $OidcAudience,
+        [string] $OidcBrowserClientId
+    )
+    $demo = Join-Path $script:LexaVaultRepoRoot 'install\demo'
+    $keys = Join-Path $demo 'development-trusted-keys.json'
+    New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+
+    Write-Host "Database: schema step..." -ForegroundColor Cyan
+    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.SchemaStep' -Arguments @('apply') `
+        -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_SCHEMA' $DbUrl $DbUser $DbPassword)
+    if ($code -ne 0) { throw "The schema step failed (exit $code)." }
+
+    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.SchemaStep' -Arguments @('customer-installed') `
+        -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_SCHEMA' $DbUrl $DbUser $DbPassword)
+    if ($code -eq 4) {
+        Write-Host "Database: fresh, so setup runs with the demo input files (install\demo)..." -ForegroundColor Cyan
+        $setupArgs = @('apply', '--licence', (Join-Path $demo 'licence-demo.json'), '--signin', (Join-Path $demo 'signin-demo.json'),
+            '--product', 'LEXAVAULT', '--keys', $keys,
+            '--product-roles', (Join-Path $script:LexaVaultRepoRoot 'install\product-roles.json'),
+            '--config-out', (Join-Path $StateDir 'platform-tenant.properties'),
+            '--run-log', (Join-Path $StateDir 'platform-setup-runs.log'),
+            '--no-customer-keys')
+        $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.documentplatform.setup.SetupCommand' -Arguments $setupArgs `
+            -Environment (New-LexaVaultDbEnvironment 'PLATFORM_SETUP' $DbUrl $DbUser $DbPassword)
+        if ($code -ne 0) { throw "Setup with the demo files failed (exit $code)." }
+    }
+    elseif ($code -ne 0) { throw "The customer check failed (exit $code)." }
+    else { Write-Host "Database: a customer is stored; setup is not run again." -ForegroundColor DarkGray }
+
+    Write-Host "Database: LexaVault demo step..." -ForegroundColor Cyan
+    $demoArgs = @('apply', '--keys', $keys)
+    if ($OidcIssuer) {
+        $demoArgs += @('--oidc-issuer', $OidcIssuer, '--oidc-provider-id', $OidcProviderId, '--oidc-audience', $OidcAudience)
+        if ($OidcBrowserClientId) { $demoArgs += @('--oidc-browser-client-id', $OidcBrowserClientId) }
+    }
+    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.DemoStep' -Arguments $demoArgs `
+        -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_DEMO' $DbUrl $DbUser $DbPassword)
+    if ($code -ne 0) { throw "The demo step failed (exit $code)." }
+}

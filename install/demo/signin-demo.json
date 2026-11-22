@@ -1,0 +1,13 @@
+{
+  "format": "platform-signin/1",
+  "tenantId": "TEN-DEMO-0001",
+  "mode": "direct",
+  "loginSystem": { "type": "OIDC", "issuer": "https://login.demo.example/oauth2/default", "providerId": "demo-okta" },
+  "products": {
+    "LEXAVAULT": {
+      "browserClientId": "lexavault-demo-web",
+      "apiAudience": "api://lexavault-demo",
+      "roleMappingFile": "role-mapping-lexavault-demo.csv"
+    }
+  }
+}

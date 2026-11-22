@@ -20,7 +20,7 @@ securedoc:
     environment: ${SECUREDOC_ENVIRONMENT:production}
     node-id: ${SECUREDOC_NODE_ID:unknown}
   demo:
-    tenant-id: "00000000-0000-0000-0000-000000000001"
+    tenant-id: "30216241-b724-5a3a-aef3-3034fd546d17"
     actor-id: "00000000-0000-0000-0000-000000000099"
   licensing:
     # On-prem/SaaS tenant licensing foundation. Production defaults fail closed.

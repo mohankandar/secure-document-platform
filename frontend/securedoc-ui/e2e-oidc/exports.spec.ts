@@ -259,7 +259,8 @@ test.describe('Support (IT Admin): export', () => {
     await answer(page, 'POST', `/support/export-destinations/${TITLE_CO}/working`, 200, { destinationId: TITLE_CO, state: 'WORKING' });
 
     const support = page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: /^Support/ });
-    await expect(support.locator('.cf-nav-count')).toHaveText('2');
+    // Task 0037 step 1: the raised "can't reach" alert counts too: 2 IT groups + the alert = 3 (was 2).
+    await expect(support.locator('.cf-nav-count')).toHaveText('3');
     await page.getByRole('navigation', { name: 'Support' }).getByRole('link', { name: /^Export/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Export' })).toBeVisible();
 
