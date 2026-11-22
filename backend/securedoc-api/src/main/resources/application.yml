@@ -6,6 +6,10 @@ spring:
     name: securedoc-platform
   jpa:
     open-in-view: false
+  # Task 0037: the platform Flyway runs (idn_, lic_) belong to the schema step (com.securedoc.install.SchemaStep),
+  # never to startup. Flyway is on the classpath only for that step.
+  flyway:
+    enabled: false
   servlet:
     multipart:
       max-file-size: 50MB

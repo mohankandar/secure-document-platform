@@ -113,6 +113,8 @@ if "$BACK"; then
     export SECUREDOC_WATCHED_FOLDER_ENABLED=false
     export SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED=false
   fi
+  # Task 0037: the schema step (and on a fresh database setup and the demo step) before the backend starts.
+  LEXAVAULT_JAR="$JAR" bash "$ROOT/scripts/Initialize-LexaVault-LocalDatabase.sh"
   launch backend 8080 "$BACKEND" java -jar "$JAR" --spring.profiles.active=local --spring.main.banner-mode=off
 fi
 if "$FRONT"; then

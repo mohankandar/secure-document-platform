@@ -287,6 +287,9 @@ else {
 
     Write-Host "Using backend JAR: $($apiJar.FullName)" -ForegroundColor DarkGray
 
+    # Task 0037: the schema step, and on a fresh database setup and the demo step, before the backend starts.
+    & (Join-Path $ProjectRoot "scripts\Initialize-LexaVault-LocalDatabase.ps1") -JarPath $apiJar.FullName
+
     $jarPathEscaped = $apiJar.FullName.Replace("'", "''")
     $backendDirEscaped = $BackendDir.Replace("'", "''")
     $effectivePath = $env:PATH.Replace("'", "''")

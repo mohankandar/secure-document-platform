@@ -68,6 +68,27 @@
             <artifactId>platform-identity-spring</artifactId>
         </dependency>
 
+        <!-- Task 0037: the idn_ stores, the setup command and the licensing tables it needs (platform-core). -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-identity-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-setup</artifactId>
+        </dependency>
+
+        <!-- Task 0037: the schema step runs the platform Flyway runs (db/platform/identity, db/platform/licensing), each
+             with its own history table. Never at startup: spring.flyway.enabled is false in application.yml. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
