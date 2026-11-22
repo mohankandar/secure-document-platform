@@ -160,7 +160,7 @@ No migration. No new dependency. `case-file-next/` (not mounted) is unchanged.
 ## Commits
 
 - `317416f` fix(export): task 0038 part A, claim order and READY due time; own database per PostgreSQL test class
-- Part B and this report: the next commit on this branch (`feat: task 0038 part B …`).
+- `25b9e2a` feat: task 0038 part B, Cases stop reason and destination, Support document position, case limits, accent removed, column keys (with this report and the proof pictures).
 
 Not merged, not pushed.
 
