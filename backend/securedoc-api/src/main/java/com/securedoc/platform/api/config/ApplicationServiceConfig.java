@@ -1094,6 +1094,28 @@ public class ApplicationServiceConfig {
                 auditService);
     }
 
+    /**
+     * Task 0034: how long finished jobs and cleared reachability alerts are kept. A value outside its range stops
+     * start-up (LV-SYS-005 by {@link StartupFailureLogger}).
+     */
+    @Bean
+    public com.securedoc.platform.application.pipeline.FinishedJobCleanupSettings finishedJobCleanupSettings(
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.keep-finished-days:90}") int keepFinishedDays,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.cleanup-batch-size:1000}") int cleanupBatchSize) {
+        return new com.securedoc.platform.application.pipeline.FinishedJobCleanupSettings(keepFinishedDays,
+                cleanupBatchSize);
+    }
+
+    /** Task 0034: the clean-up of finished jobs, run by the retention purge scheduler. */
+    @Bean
+    public com.securedoc.platform.application.pipeline.FinishedJobCleanupService finishedJobCleanupService(
+            com.securedoc.platform.application.port.out.FinishedJobCleanupPort finishedJobCleanupPort,
+            AuditService auditService,
+            com.securedoc.platform.application.pipeline.FinishedJobCleanupSettings finishedJobCleanupSettings) {
+        return new com.securedoc.platform.application.pipeline.FinishedJobCleanupService(finishedJobCleanupPort,
+                auditService, finishedJobCleanupSettings);
+    }
+
     // --- Package finalization ---
 
     @Bean

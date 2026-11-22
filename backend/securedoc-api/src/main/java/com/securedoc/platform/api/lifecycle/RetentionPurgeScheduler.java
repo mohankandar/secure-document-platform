@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.lifecycle;
 
 import com.securedoc.platform.application.lifecycle.command.PurgeDueRetentionCommand;
+import com.securedoc.platform.application.pipeline.FinishedJobCleanupService;
 import com.securedoc.platform.application.port.in.PurgeDueRetentionUseCase;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -13,7 +14,10 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Minimal in-process V1 retention maintenance. Durable scheduling can replace this later. */
+/**
+ * Minimal in-process V1 retention maintenance. Durable scheduling can replace this later. Task 0034: after the purge,
+ * the same run removes finished jobs past their keep time (a failure of one never stops the other).
+ */
 @Component
 @ConditionalOnProperty(name = "securedoc.lifecycle.purge-scheduler-enabled", havingValue = "true", matchIfMissing = true)
 public class RetentionPurgeScheduler {
@@ -21,22 +25,34 @@ public class RetentionPurgeScheduler {
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
 
     private final PurgeDueRetentionUseCase purgeUseCase;
+    private final FinishedJobCleanupService jobCleanup;
 
-    public RetentionPurgeScheduler(PurgeDueRetentionUseCase purgeUseCase) {
+    public RetentionPurgeScheduler(PurgeDueRetentionUseCase purgeUseCase, FinishedJobCleanupService jobCleanup) {
         this.purgeUseCase = purgeUseCase;
+        this.jobCleanup = jobCleanup;
     }
 
     @Scheduled(fixedDelayString = "${securedoc.lifecycle.purge-interval-ms:900000}")
     public void purgeDueArtifacts() {
+        Instant now = Instant.now();
+        CorrelationId correlationId = CorrelationId.generate();
         try {
-            var result = purgeUseCase.execute(new PurgeDueRetentionCommand(
-                    Instant.now(), 100, SYSTEM_ACTOR, CorrelationId.generate()));
+            var result = purgeUseCase.execute(new PurgeDueRetentionCommand(now, 100, SYSTEM_ACTOR, correlationId));
             if (result.redactedCachesPurged() > 0 || result.packagesFullyPurged() > 0) {
                 log.info("Retention purge completed: redactedCaches={}, packages={}",
                         result.redactedCachesPurged(), result.packagesFullyPurged());
             }
         } catch (RuntimeException e) {
             log.warn("Retention purge cycle failed; see audit records for item-level sanitized failures");
+        }
+        try {
+            var cleaned = jobCleanup.run(now, SYSTEM_ACTOR, correlationId);
+            if (cleaned.jobsRemoved() > 0 || cleaned.alertsRemoved() > 0) {
+                log.info("Finished job clean-up completed: jobs={}, alerts={}", cleaned.jobsRemoved(),
+                        cleaned.alertsRemoved());
+            }
+        } catch (RuntimeException e) {
+            log.warn("PIPELINE_JOB_CLEANUP_FAILED type={}", e.getClass().getSimpleName());
         }
     }
 }

@@ -224,6 +224,7 @@ const SENTENCES: Record<string, string> = {
   EXPORT_DESTINATIONS_UNREACHABLE_ALERT: 'LexaVault couldn’t reach its destinations',
   EXPORT_DESTINATIONS_UNREACHABLE_ALERT_CLEARED: 'LexaVault could reach its destinations again',
   SPLIT_COPY_PURGED: 'Deleted a split copy after its retention period',
+  PIPELINE_JOBS_CLEANED: 'Removed finished export jobs after their keep time',
   // Settings
   BUSINESS_IDENTIFIER_CONFIGURATION_CHANGED: 'Changed the case identifiers',
   SENSITIVE_DATA_POLICY_CHANGED: 'Changed the sensitive-data settings',

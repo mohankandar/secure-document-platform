@@ -189,5 +189,7 @@ public enum AuditAction {
     /** The Business Admin set or cleared a retention period per export destination. */
     EXPORT_RETENTION_PERIOD_CHANGED,
     /** A split destination's copy was purged after its own retention period from receipt. */
-    SPLIT_COPY_PURGED
+    SPLIT_COPY_PURGED,
+    /** Task 0034: finished export jobs and cleared reachability alerts past their keep time were removed (counts only). */
+    PIPELINE_JOBS_CLEANED
 }

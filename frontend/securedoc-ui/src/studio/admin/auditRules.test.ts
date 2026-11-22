@@ -170,3 +170,10 @@ test('0029: every export action of tasks 0027 and 0028 has its own sentence and 
   assert.equal(whatHappened(rec('EXPORT_JOB_RESEND_ALL_REQUESTED')), 'Sent again every case a destination refused');
   assert.equal(whatHappened(rec('EXPORT_RETENTION_PERIOD_CHANGED')), 'Changed how long exported copies are kept');
 });
+
+test('0034: the clean-up of finished jobs reads as a sentence, is in the Action filter and says no case', () => {
+  const words = whatHappened(rec('PIPELINE_JOBS_CLEANED'));
+  assert.equal(words, 'Removed finished export jobs after their keep time');
+  assert.ok(actionOptions().some(([code, w]) => code === 'PIPELINE_JOBS_CLEANED' && w === words));
+  assert.equal(actionOptions().filter(([, w]) => w === words).length, 1, 'no other action reads the same');
+});
