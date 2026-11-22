@@ -1,0 +1,26 @@
+# Task 0035: the "export-e2e" test profile. Shortened export timings for the end-to-end export run against the folder
+# destination (scripts/Test-LexaVault-ExportE2E.ps1). Loaded only by that run, from this folder, with
+#   --spring.profiles.active=local,export-e2e --spring.config.additional-location=file:<this folder>/
+# It is not in the backend jar and changes no default (the defaults stay in application.yml).
+securedoc:
+  processing:
+    export-mode: job
+    export-jobs:
+      # A single failing case: 6 tries, 2 s apart (default 5m,15m,1h,4h,12h). Rebuilt before the 3rd retry (default).
+      retry-schedule: 2s,2s,2s,2s,2s
+      rebuild-before-retry: 3
+      # The backup rule keeps its default: 3 different cases within 10 minutes.
+      failing-cases-to-pause: 3
+      failing-cases-window-ms: 600000
+      # A paused destination is checked every 4 s (default 5 minutes).
+      probe-interval-ms: 4000
+      # One export worker in all, so "in the order they finished" can be checked exactly. (workers-per-destination=1
+      # alone is not enough: two workers claiming at the same moment can both run a job of the same destination;
+      # found by this run, see docs/work/0035-report.md.)
+      workers-per-destination: 1
+      workers-total: 1
+      poll-interval-ms: 300
+      claim-lease-ms: 6000
+  lifecycle:
+    # The retention scenario calls POST /api/v1/lifecycle/purge-due itself; the scheduler stays on, every 10 s.
+    purge-interval-ms: 10000

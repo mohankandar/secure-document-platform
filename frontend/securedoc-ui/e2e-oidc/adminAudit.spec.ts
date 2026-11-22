@@ -101,7 +101,7 @@ test('rows read as sentences with who, case and result; codes only in an opened 
   await expect(row(page, 'Changed the sensitive-data settings')).toContainText('auto-redact level now 85%');
   await expect(row(page, 'Changed the sensitive-data settings')).toContainText('Person 00000001');
   await expect(row(page, 'Approved delivery')).toContainText('55556666');
-  await expect(row(page, 'Redacted a Social Security Number')).toContainText('LexaVault (automatic)');
+  await expect(row(page, 'Confirmed a Social Security Number')).toContainText('LexaVault (automatic)');
   await expect(row(page, 'Kept a credit score visible')).toContainText('Success');
   await expect(row(page, 'Tested the sign-in setup')).toContainText('Refused');
   const text = await region(page).evaluate((e) => { const c = e.cloneNode(true) as HTMLElement; c.querySelectorAll('details, option').forEach((d) => d.remove()); return c.innerText; });
@@ -112,7 +112,7 @@ test('rows read as sentences with who, case and result; codes only in an opened 
   expect(Math.abs(Date.now() - 7 * 864e5 - from)).toBeLessThan(5 * 60e3);
 
   // A row opens to every recorded field, unchanged.
-  const what = region(page).getByRole('button', { name: 'Redacted a Social Security Number' });
+  const what = region(page).getByRole('button', { name: 'Confirmed a Social Security Number' });
   await what.click();
   await expect(what).toHaveAttribute('aria-expanded', 'true');
   const detail = region(page).locator('.cf-ad-audit-detail');
@@ -190,7 +190,7 @@ test('0019 A2: Who shows the recorded name; the system and older records keep th
   await openAudit(page, queries, named);
   await expect(row(page, 'Changed the sensitive-data settings').getByRole('cell').nth(2)).toHaveText('Dana Reviewer');
   await expect(row(page, 'Approved delivery').getByRole('cell').nth(2)).toHaveText('Person 00000002');
-  await expect(row(page, 'Redacted a Social Security Number').getByRole('cell').nth(2)).toHaveText('LexaVault (automatic)');
+  await expect(row(page, 'Confirmed a Social Security Number').getByRole('cell').nth(2)).toHaveText('LexaVault (automatic)');
 
   // The opened record shows the recorded name next to the id.
   await region(page).getByRole('button', { name: 'Changed the sensitive-data settings' }).click();
