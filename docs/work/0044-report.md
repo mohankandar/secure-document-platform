@@ -88,3 +88,12 @@ What the new tests prove (fake values only):
 Answer questions 1–4. Next R2 parts: hidden-content clean-up of untouched pages.
 
 No other product's name or behaviour in code.
+
+## Owner's answers (2026-11-23, recorded by the design chat; owner said "as recommended")
+1. **Where the switch is stored:** move it out of `tenant_redaction_kinds` into a proper per-entity setting (task 0047), before anything builds on it.
+2. **13 s extra per 60 pages:** too much against the 60 s target. The final check re-reads **only pages with findings** (task 0047).
+3. **Values under 4 characters not compared with the output text:** OK; the box-coverage check proves they are covered.
+4. **A redacted value printed unredacted elsewhere stops the document:** correct (a real leak). Support names the page, never the value.
+5. **"SSN or ITIN" on one box:** **ITIN wins** (an SSN never starts with 9): one finding per box (task 0047).
+6. **"License number" alone:** not enough; require "driver", "DL" or "driver's license/licence" nearby (task 0047).
+- Merged with 0043 into `feature/lexavault-r1b-tenant-identity`.
