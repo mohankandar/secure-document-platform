@@ -103,3 +103,8 @@ The app is at http://localhost:5173 and the backend at http://localhost:8080.
 - No code is written around another product's behaviour. A destination's or sender's specific answers (busy, duplicate, sign-in, status codes) are **profile data**, never code. Code says "destination" or "sender", never "Vero" or "SDV".
 - Known exception, to be removed in switch-over part 3: `SdvDeliveryAdapter`. Don't add to it or copy its approach.
 - Every task report states: "No other product's name or behaviour in code", or lists each exception and its planned fix.
+
+## Test virus files are opt-in (owner, 2026-11-23)
+
+- No file in this repo, no build output and no jar may hold a virus test signature (EICAR or similar): desktop antivirus (Norton on the owner's laptop) blocks it.
+- Scanner tests use a **harmless placeholder** by default. The real EICAR file is built in memory at run time and used only when **`RUN_EICAR_TESTS=true`** (CI sets it). Use platform-core's testkit `Eicar.testFile()`; never write your own copy.
