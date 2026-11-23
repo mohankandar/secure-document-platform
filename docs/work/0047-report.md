@@ -95,3 +95,8 @@ Item 4 loses no real driver's licence number in the samples. The V1 four: 71 / 9
 Review and merge into `feature/lexavault-r1b-tenant-identity`. Migration 048 runs on the next app start (your local database included): it moves any stored switch value and changes nothing you can see on screen.
 
 No other product's name or behaviour in code.
+
+## Owner's answers (2026-11-23, recorded by the design chat; owner said "as recommended")
+1. **"Driver information / License number:"** (driver wording in the heading, bare "License number" label, nothing qualifying the licence): **keep it.** Real forms often carry "Driver" in the section heading; a qualifying word ("business", "contractor", "marriage") still blocks it.
+- **Backlog:** `public-23` stops the benchmark's text path with an `IllegalStateException` (seen since 0033; the product's extraction stops on a poor scan and the harness's in-memory stand-ins throw on the failure path). To be understood in a later task, not hidden.
+- Merged into `feature/lexavault-r1b-tenant-identity`.
