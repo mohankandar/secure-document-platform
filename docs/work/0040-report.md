@@ -274,7 +274,10 @@ Harness only (the product is unchanged).
 
 ## Commits
 
-See the follow-up commit that adds the hash. Not merged, not pushed.
+- `b554183` feat: task 0040, vision benchmark round 2
+- a follow-up commit adding this hash to the report.
+
+Not merged, not pushed.
 
 ## Not done, and why
 
