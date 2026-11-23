@@ -102,3 +102,8 @@ Tests changed, and why:
    - then `.\Test-LexaVault-OidcSessionContinuity.ps1 -Username businessuser -PromptForPassword`.
    Rebuild first (`.\Build-LexaVault-All.ps1`): the jars in this checkout are still the fix-1 ones. Expected on your database: schema step "identity 1 migration(s) run, at version 3"; setup "8 created … 5 unchanged" (your Keycloak's grants), connection unchanged; demo step all unchanged.
 2. The design chat reviews and merges.
+
+## For the owner in the morning
+1. Rebuild (`.\Build-LexaVault-All.ps1`; stop the running app first: its jars are the fix-1 ones), then `.\Start-LexaVault-OIDC.ps1 -IssuerUri http://localhost:8181/realms/document-platform-local -Audience lexavault-api -ScannerMode SIMULATOR -AiModel qwen3.5:9b`, then `.\Test-LexaVault-OidcSessionContinuity.ps1 -Username businessuser -PromptForPassword`.
+2. Note: fast-forwarding this branch in this checkout changed the frontend sources under your running Vite server (it reloads); the backend you are running was not touched.
+3. Questions 1 and 2 above.
