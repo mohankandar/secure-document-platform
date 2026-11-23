@@ -134,6 +134,24 @@ class IdentityMigrationPostgresTest {
         assertEquals(3, count("select count(*) from idn_group_grant"));
     }
 
+    /** Task 0041: an alias grant is stored as the role it stands for, as setup stores it; the history names the command. */
+    @Test
+    void anAliasGrantIsCopiedAsItsRoleAndRecordedInTheGrantHistory() throws SQLException {
+        oldGrant(b, "Legal Reviewers", "REVIEWER");
+        oldGrant(a, "Finance Approvers", "APPROVER");
+        Run apply = run("apply");
+        assertEquals(0, apply.exit(), apply.output());
+        PostgresGroupGrantStore grants = new PostgresGroupGrantStore(rows.ds);
+        assertTrue(grants.grants("ENT-MIG-B", LexaVaultProduct.CODE, ISSUER).contains(new Grant("Legal Reviewers", "DOCUMENT_PROCESSOR")));
+        assertTrue(grants.grants("ENT-MIG-A", LexaVaultProduct.CODE, ISSUER).contains(new Grant("Finance Approvers", "DOCUMENT_SUPERVISOR")));
+        assertEquals(0, count("select count(*) from idn_group_grant where role in ('USER', 'REVIEWER', 'APPROVER')"));
+        assertEquals(5, count("select count(*) from idn_grant_history where change = 'ADDED' and change_source = 'APP' "
+                + "and changed_by = '" + IdentityMigration.CHANGED_BY + "' and setup_run_id is null"));
+        Run again = run("apply");
+        assertTrue(again.output().contains("grants added=0 unchanged=5"), again.output());
+        assertEquals(5, count("select count(*) from idn_grant_history"), "a rerun records nothing more");
+    }
+
     @Test
     void entitiesWhoseConnectionsDifferAreAConflictAndNoConnectionIsCopied() throws SQLException {
         oldConnection(b, "ACTIVE", "api://b-only");

@@ -13,8 +13,13 @@
         PLATFORM_SETUP_DB_URL, PLATFORM_SETUP_DB_USER, PLATFORM_SETUP_DB_PASSWORD
 
     Wired now: --licence, --signin (with its role mapping file), --keys, --product-roles.
+    Setup runs from its own jar (backend\securedoc-setup\target, task 0041): it brings platform-crypto and
+    platform-integration, which the app's classpath may not carry. -JarPath names that setup jar.
+
+    Customer keys: --no-customer-keys is passed. LexaVault encrypts nothing with platform-core yet, and
+    install\product-roles.json says "customerKeys": "optional" (task 0041), so setup accepts it.
+
     Not wired yet (placeholders, each comes with its own task):
-      - customer keys for sensitive case fields: --no-customer-keys is passed until task 0041 (crypto);
       - notifications settings: task 0040;
       - integration client bindings (client ID -> entity -> source): a later task;
       - entity time zones: the sign-in file's optional timeZone / entityTimeZones work today; the app uses them with
@@ -52,10 +57,10 @@ if (-not (Test-Path -LiteralPath $Keys)) {
     throw "Trusted-keys file not found: $Keys. The release's production keys file comes with task 0038; for the demo pass -Keys install\demo\development-trusted-keys.json."
 }
 
-$jar = Resolve-LexaVaultJar $JarPath
+$jar = Resolve-LexaVaultSetupJar $JarPath
 $arguments = @($Command, '--licence', $Licence, '--signin', $Signin, '--product', 'LEXAVAULT',
     '--keys', $Keys, '--product-roles', $ProductRoles,
-    # Placeholder until task 0041 (crypto): LexaVault keeps no sensitive case field values yet.
+    # LexaVault encrypts nothing with platform-core yet ("customerKeys": "optional" in product-roles.json).
     '--no-customer-keys')
 if ($ConfigOut) { $arguments += @('--config-out', $ConfigOut) }
 if ($RunLog) { $arguments += @('--run-log', $RunLog) }

@@ -62,8 +62,7 @@ java -version
 printf '\nMaven:\n'
 mvn -version
 printf '\nNode: %s\nnpm:  %s\n' "$(node --version)" "$(npm --version)"
-printf '\nEnterprise identity: external Maven dependency com.documentplatform.identity:*:0.2.0\n'
-printf 'This build does not build platform-core; Maven resolves platform-* 0.1.0-SNAPSHOT from the local repository (mvn install in platform-core).\n'
+printf '\nplatform-core: released com.documentplatform.platform:platform-bom 0.2.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml; docs/install/BUILD.md).\n'
 
 overall_started=$SECONDS
 
@@ -73,6 +72,19 @@ if "$skip_tests"; then
 else
   run_step 'BACKEND - Maven clean install (all modules)' mvn clean install
 fi
+
+# Task 0041: the app's classpath carries platform-core's identity modules (and licensing, read only) and nothing else of
+# platform-core. Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).
+printf '\nBACKEND - app jar classpath check (task 0041)\n'
+app_jar="$backend_dir/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar"
+platform_libs="$(jar tf "$app_jar" | sed -n 's#^BOOT-INF/lib/\(platform-[^/]*\.jar\)$#\1#p')"
+not_allowed="$(printf '%s\n' "$platform_libs" | grep -Ev '^platform-(identity-core|identity-jdbc|identity-spring|licensing)-[0-9][^-]*\.jar$' | grep -v '^$' || true)"
+if [[ -n "$not_allowed" ]]; then
+  printf 'The app jar carries platform-core modules it may not: %s\n' "$not_allowed" >&2
+  exit 1
+fi
+printf '  app jar platform-core modules: %s\n' "$(printf '%s ' $platform_libs)"
+[[ -f "$backend_dir/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar" ]] || { printf 'The setup jar was not built (backend/securedoc-setup).\n' >&2; exit 1; }
 
 cd -- "$frontend_dir"
 if "$refresh_node_modules" || [[ ! -d node_modules ]]; then

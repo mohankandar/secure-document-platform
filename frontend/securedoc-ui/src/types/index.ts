@@ -1062,25 +1062,34 @@ export interface EnterpriseIdentityConnection {
   apiAudience: string;
   status: 'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'DISABLED';
   configurationVersion: number;
-  createdAt: string;
-  updatedAt: string;
-  lastTestedAt: string | null;
-  lastTestStatus: 'PASSED' | 'FAILED' | null;
-  lastTestMessage: string | null;
+  // Task 0041: the server reads idn_login_connection, which keeps no times or test results; older answers had them.
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  lastTestedAt?: string | null;
+  lastTestStatus?: 'PASSED' | 'FAILED' | null;
+  lastTestMessage?: string | null;
 }
 
+/** Read-only (task 0041): sign-in connections are set through setup. `staged` is always null now. */
 export interface EnterpriseIdentityOverview {
   active: EnterpriseIdentityConnection | null;
   staged: EnterpriseIdentityConnection | null;
   rollbackCandidates: EnterpriseIdentityConnection[];
   activationSupported: boolean;
   activationMaxTestAgeSeconds: number;
+  readOnly?: boolean;
+  managedBy?: string;
 }
 
-export interface EnterpriseIdentityDraftRequest {
-  providerId: string;
-  displayName: string;
-  issuerUri: string;
-  browserClientId: string;
-  apiAudience: string;
+/** One sign-in access change of the entity (platform-identity grant history, task 0041). */
+export interface GrantHistoryRow {
+  changedAt: string;
+  change: 'ADDED' | 'REMOVED' | 'CHANGED';
+  group: string;
+  roleBefore: string | null;
+  roleAfter: string | null;
+  source: 'SETUP' | 'APP';
+  changedBy: string;
+  setupRunId: string | null;
+  issuer: string;
 }

@@ -8,12 +8,14 @@ It runs three things, in this order. Each keeps its own history table:
 | Run | What it creates | Source in the release | History table |
 |---|---|---|---|
 | App tables | LexaVault's own tables (cases, documents, audit, ...) | Liquibase changelog `db/changelog/db.changelog-master.xml` | `databasechangelog` |
-| Identity | Customer, entity slots, login connection, group grants, integration client bindings (`idn_` tables; version 2, platform-core P029) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
+| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history (`idn_` tables; version 3, platform-core 0.2.0) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
 | Licensing | The stored licence, usage ledger (`lic_` tables). Setup stores the licence here | platform-core Flyway location `db/platform/licensing` | `lic_schema_history` |
 
 The platform runs start their own history at version 0 in a schema that already holds the app's tables, so their
-version 1 always runs. A database already at identity version 1 gets version 2 on the next run (platform-core refuses
-a version-1 database). Running the step again changes nothing.
+version 1 always runs. The identity run always goes to the latest version in the release: a database at identity
+version 1 or 2 gets the missing versions on the next run (platform-core 0.2.0 refuses anything older than version 3,
+`IDN_VERSION_OLDER`). Version 3 (`V3__grant_history.sql`) adds `idn_grant_history`, insert-only, which the Audit page
+reads. Running the step again changes nothing.
 
 ## Running it
 

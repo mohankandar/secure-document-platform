@@ -68,8 +68,7 @@ Write-Host "Node: $(& node --version)"
 Write-Host "npm:  $(& npm --version)"
 
 Write-Host ""
-Write-Host "Enterprise identity: external Maven dependency com.documentplatform.identity:*:0.2.0" -ForegroundColor DarkGray
-Write-Host "This build does not build platform-core (C:\dev\platform-core); Maven resolves platform-* 0.1.0-SNAPSHOT from the local repository (mvn install in platform-core)." -ForegroundColor DarkGray
+Write-Host "platform-core: released com.documentplatform.platform:platform-bom 0.2.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml, token from GITHUB_PACKAGES_TOKEN; docs/install/BUILD.md)." -ForegroundColor DarkGray
 
 $overallStart = Get-Date
 
@@ -88,6 +87,29 @@ try {
 }
 finally {
     Pop-Location
+}
+
+# Task 0041: the app's classpath carries platform-core's identity modules (and licensing, read only) and nothing else of
+# platform-core. Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).
+Write-Host ""
+Write-Host "BACKEND - app jar classpath check (task 0041)" -ForegroundColor Cyan
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$appJar = Join-Path $BackendDir 'securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar'
+$zip = [System.IO.Compression.ZipFile]::OpenRead($appJar)
+try {
+    $platformLibs = @($zip.Entries | Where-Object { $_.FullName -like 'BOOT-INF/lib/platform-*' } | ForEach-Object { $_.Name })
+}
+finally {
+    $zip.Dispose()
+}
+$allowed = '^platform-(identity-core|identity-jdbc|identity-spring|licensing)-[0-9][^-]*\.jar$'
+$notAllowed = @($platformLibs | Where-Object { $_ -notmatch $allowed })
+if ($notAllowed.Count -gt 0) {
+    throw "The app jar carries platform-core modules it may not: $($notAllowed -join ', ')."
+}
+Write-Host "  app jar platform-core modules: $($platformLibs -join ', ')"
+if (-not (Test-Path (Join-Path $BackendDir 'securedoc-setup\target\securedoc-setup-0.1.0-SNAPSHOT.jar'))) {
+    throw "The setup jar was not built (backend\securedoc-setup)."
 }
 
 Push-Location $FrontendDir

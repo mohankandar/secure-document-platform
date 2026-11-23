@@ -4,6 +4,7 @@
     {
       "algorithm": "Ed25519",
       "keyId": "dev-lexavault-demo-1",
+      "development": true,
       "publicKey": "MCowBQYDK2VwAyEA5QI/ye1sV8MzsciW1+BJGG1TiySivKaTHXIYxLIWuuw="
     }
   ]

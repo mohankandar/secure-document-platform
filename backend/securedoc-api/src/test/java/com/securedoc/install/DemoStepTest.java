@@ -3,6 +3,8 @@ package com.securedoc.install;
 import com.documentplatform.identity.EntityUuid;
 import com.documentplatform.licensing.LicenceVerifier;
 import com.documentplatform.licensing.TrustedKeys;
+import com.documentplatform.setup.ProductRoles;
+import com.securedoc.platform.infrastructure.identity.LexaVaultProduct;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -12,9 +14,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,6 +39,7 @@ class DemoStepTest {
         assertEquals(2, run("activate"));
         assertEquals(2, run("apply"));  // --keys is required
         assertEquals(2, run("apply", "--keys", "k.json", "--slot", "not-a-slot"));
+        // Task 0041: the --oidc-* options are gone (setup takes the local login system itself).
         assertEquals(2, run("apply", "--keys", "k.json", "--oidc-issuer", "http://localhost:8181/realms/x"));
         assertEquals(2, run("apply", "--keys", "k.json", "--oidc-audience", "a"));
         assertEquals(2, run("apply", "--keys", "k.json", "--unknown", "x"));
@@ -55,7 +60,6 @@ class DemoStepTest {
         assertEquals("Local Demo Tenant", o.name());
         assertEquals("local-demo", o.slug());
         assertEquals("scanner-bridge-local", o.scannerPrincipal());
-        assertEquals(null, o.oidcIssuer());
         // The demo entity's UUID everywhere (scripts, config, the UI's LOCAL default) is the one derived from its slot.
         assertEquals(UUID.fromString("30216241-b724-5a3a-aef3-3034fd546d17"), EntityUuid.fromSlotId("ENT-DEMO-0001"));
         assertEquals(UUID.fromString("2db66f56-f595-5144-8ca7-78831ddd8002"), EntityUuid.fromSlotId("ENT-DEMO-0002"));
@@ -69,18 +73,28 @@ class DemoStepTest {
         assertEquals("TEN-DEMO-0001", verified.tenantId());
         assertTrue(verified.products().contains("LEXAVAULT"));
         assertEquals("NON_PRODUCTION", verified.kind().name());
+        // Task 0041: the demo key is marked as a development key, so setup takes an http issuer on localhost under the
+        // demo licence (platform-core 0.2.0 local test login servers).
+        assertTrue(dev.isDevelopmentKey(verified.keyId()));
         // No production keys file may list the development key.
         assertTrue(!Files.exists(REPO.resolve("install/trusted-keys.json"))
                 || !Files.readString(REPO.resolve("install/trusted-keys.json")).contains("dev-lexavault-demo-1"));
     }
 
     @Test
-    void productRolesListTheRolesTheAliasesAndThePlatformRole() throws Exception {
-        String roles = Files.readString(REPO.resolve("install/product-roles.json"));
-        for (String role : new String[] {"DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR", "BUSINESS_ADMIN", "REPORT_VIEWER",
-                "TENANT_IT_ADMIN", "USER", "REVIEWER", "APPROVER", "PLATFORM_OPERATIONS_ADMIN", "\"LEXAVAULT\""}) {
-            assertTrue(roles.contains(role), role);
-        }
+    void productRolesHoldTheRolesTheAliasesAndThePlatformRole() throws Exception {
+        // Task 0041 (platform-core 0.2.0): USER and REVIEWER stand for Document Processor, APPROVER keeps Document
+        // Supervisor; they are aliases, no longer roles of their own. Customer keys are optional for LexaVault.
+        ProductRoles roles = ProductRoles.parse(Files.readString(REPO.resolve("install/product-roles.json")), "LEXAVAULT");
+        assertEquals(Set.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR", "BUSINESS_ADMIN", "REPORT_VIEWER", "TENANT_IT_ADMIN"),
+                roles.roles());
+        assertEquals(Map.of("USER", "DOCUMENT_PROCESSOR", "REVIEWER", "DOCUMENT_PROCESSOR", "APPROVER", "DOCUMENT_SUPERVISOR"),
+                roles.aliases());
+        assertTrue(roles.isPlatformRole("PLATFORM_OPERATIONS_ADMIN"));
+        assertFalse(roles.customerKeysRequired());
+        // The same names LexaVault accepts when it reads a stored grant.
+        assertEquals(LexaVaultProduct.ENTITY_ROLES, roles.roles());
+        assertEquals(LexaVaultProduct.ROLE_ALIASES, roles.aliases());
         assertThrows(Exception.class, () -> DemoStep.parse(new String[] {"apply"}));
     }
 }

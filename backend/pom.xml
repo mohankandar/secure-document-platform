@@ -22,19 +22,33 @@
         <module>securedoc-infrastructure</module>
         <module>securedoc-worker</module>
         <module>securedoc-api</module>
+        <module>securedoc-setup</module>
         <module>securedoc-test-support</module>
     </modules>
 
     <properties>
         <java.version>21</java.version>
-        <!-- platform-core (C:devplatform-core), one version for all platform-* modules; replaces Enterprise Identity 0.3.0 (task 0037). -->
-        <platform.version>0.1.0-SNAPSHOT</platform.version>
+        <!-- platform-core, one released version for all platform-* modules (task 0041: v0.2.0, tag platform-core-v0.2.0),
+             read from GitHub Packages (repository github-platform-core below; docs/install/BUILD.md). -->
+        <platform.version>0.2.0</platform.version>
         <jackson.version>2.18.9</jackson.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
+
+    <!-- Task 0041: platform-core releases are published to GitHub Packages. Reading them needs the server
+         github-platform-core in your own ~/.m2/settings.xml (username and ${env.GITHUB_PACKAGES_TOKEN}, a token with
+         read:packages); see docs/install/BUILD.md. Only releases: no snapshots from there. -->
+    <repositories>
+        <repository>
+            <id>github-platform-core</id>
+            <url>https://maven.pkg.github.com/mohankandar/platform-core</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>

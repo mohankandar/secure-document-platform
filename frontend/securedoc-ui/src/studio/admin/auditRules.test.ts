@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AUDIT_TYPES, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName, personOptions, recordedFields, resultWord, whatHappened,
+  AUDIT_TYPES, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, grantChangeBy, grantChangeLine, periodStart, personName,
+  personOptions, recordedFields, resultWord, roleWord, whatHappened,
 } from './auditRules.ts';
 
 const PKG = '3f2a91c4-1111-4222-8333-444455556666';
@@ -188,4 +189,21 @@ test('0035: a confirmed finding and a redacted finding read differently', () => 
   // Every action in the Action filter now reads differently from every other.
   const words = actionOptions().map(([, w]) => w);
   assert.equal(new Set(words).size, words.length, 'no two actions in the filter read the same');
+});
+
+test('task 0041: a sign-in access change reads as a sentence, with who made it', () => {
+  const base = { group: 'BusinessUsers', roleBefore: null, roleAfter: null, changedBy: 'platform-setup', setupRunId: 'run-7' } as const;
+  assert.equal(grantChangeLine({ ...base, change: 'ADDED', roleAfter: 'DOCUMENT_PROCESSOR', source: 'SETUP' }),
+    'Group BusinessUsers now gives Document Processor');
+  assert.equal(grantChangeLine({ ...base, change: 'REMOVED', roleBefore: 'REPORT_VIEWER', source: 'SETUP' }),
+    'Group BusinessUsers no longer gives Report Viewer');
+  assert.equal(grantChangeLine({ ...base, change: 'CHANGED', roleBefore: 'DOCUMENT_PROCESSOR', roleAfter: 'DOCUMENT_SUPERVISOR', source: 'APP' }),
+    'Group BusinessUsers now gives Document Supervisor instead of Document Processor');
+  assert.equal(grantChangeBy({ ...base, change: 'ADDED', source: 'SETUP' }), 'Setup, run run-7');
+  assert.equal(grantChangeBy({ ...base, change: 'ADDED', source: 'APP', changedBy: 'app', setupRunId: null }), 'LexaVault');
+  assert.equal(grantChangeBy({ ...base, change: 'ADDED', source: 'APP', changedBy: 'lexavault-identity-migration', setupRunId: null }),
+    'lexavault-identity-migration');
+  // An unknown role is shown exactly as stored, never guessed.
+  assert.equal(roleWord('SOMETHING_ELSE'), 'SOMETHING_ELSE');
+  assert.equal(roleWord(null), '—');
 });

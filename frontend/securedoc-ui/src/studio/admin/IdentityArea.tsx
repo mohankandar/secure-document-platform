@@ -9,7 +9,12 @@ import { HelpTip } from './HelpTip';
  * login system's name and address. Nothing here can be edited, tested or switched on.
  *
  * The server returns no "last used successfully" time (only a last test of a staged draft), so none is shown.
+ *
+ * Task 0041: the connection shown is the ACTIVE one in platform-identity (idn_login_connection), set through setup. The
+ * server has no draft, test, activate or roll-back step any more; nothing here changes sign-in.
  */
+export const SIGN_IN_SET_BY_SETUP = 'Sign-in connections are set through setup.';
+
 export default function IdentityArea() {
   const { data } = useSWR<EnterpriseIdentityOverview>('enterprise-identity', () => apiClient.getEnterpriseIdentityOverview(), { revalidateOnFocus: false });
   const active = data?.active ?? null;
@@ -21,6 +26,7 @@ export default function IdentityArea() {
           <div>
             <div className="cf-ad-title"><h2>Sign-in</h2><HelpTip topic="signIn" /></div>
             <p>Your sign-in is managed through the login hub. To change it, contact LexaVault support.</p>
+            <p className="cf-muted" data-testid="signin-managed-by">{SIGN_IN_SET_BY_SETUP}</p>
           </div>
         </header>
         {active && (

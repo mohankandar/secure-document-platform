@@ -390,6 +390,11 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     // Audit trail
     if (path === '/audit-records/count') return json({ count: RECORDS.length });
     if (path === '/audit-records') return json(RECORDS);
+    // Task 0041: the grant history (sign-in access changes), read-only.
+    if (path === '/audit-records/grant-history') return json([
+      { changedAt: minsAgo(20), change: 'ADDED', group: 'BusinessUsers', roleBefore: null, roleAfter: 'DOCUMENT_PROCESSOR',
+        source: 'SETUP', changedBy: 'platform-setup', setupRunId: 'run-1', issuer: 'https://login.example/realms/nw' },
+    ]);
 
     // Support and the problem page
     if (path === '/support/incidents') return json({ items: INCIDENTS, total: INCIDENTS.length, page: 0, size: 25 });

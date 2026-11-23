@@ -63,7 +63,7 @@ import type {
   BrandingUpdateRequest,
   TenantBrandingDetail,
   EnterpriseIdentityOverview,
-  EnterpriseIdentityDraftRequest,
+  GrantHistoryRow,
 } from '../types';
 
 class ApiClient {
@@ -137,24 +137,9 @@ class ApiClient {
     return this.request('/me', { headers: { 'X-Selected-Tenant-Id': tenantId } });
   }
 
+  /** Read-only (task 0041): sign-in connections are set through setup; the server has no draft or activate step. */
   async getEnterpriseIdentityOverview(): Promise<EnterpriseIdentityOverview> {
     return this.request('/admin/enterprise-identity');
-  }
-
-  async saveEnterpriseIdentityDraft(body: EnterpriseIdentityDraftRequest): Promise<EnterpriseIdentityOverview> {
-    return this.request('/admin/enterprise-identity/draft', { method: 'PUT', body: JSON.stringify(body) });
-  }
-
-  async testEnterpriseIdentityDraft(): Promise<EnterpriseIdentityOverview> {
-    return this.request('/admin/enterprise-identity/draft/test', { method: 'POST' });
-  }
-
-  async activateEnterpriseIdentityDraft(connectionId: string, expectedConfigurationVersion: number): Promise<EnterpriseIdentityOverview> {
-    return this.request('/admin/enterprise-identity/draft/activate', { method: 'POST', body: JSON.stringify({ connectionId, expectedConfigurationVersion, confirmation: 'ACTIVATE' }) });
-  }
-
-  async rollbackEnterpriseIdentity(connectionId: string, expectedConfigurationVersion: number): Promise<EnterpriseIdentityOverview> {
-    return this.request('/admin/enterprise-identity/rollback', { method: 'POST', body: JSON.stringify({ connectionId, expectedConfigurationVersion, confirmation: 'ROLLBACK' }) });
   }
 
   // --- UI branding ---
@@ -855,6 +840,15 @@ class ApiClient {
   }
 
   /** Task 0019 A1: how many records the full audit trail appendix would print for the period. */
+  /** Task 0041: the entity's sign-in access changes (platform-identity grant history), newest first, read-only. */
+  async listGrantHistory(range: { from?: string; to?: string }): Promise<GrantHistoryRow[]> {
+    const params = new URLSearchParams();
+    if (range.from) params.append('from', range.from);
+    if (range.to) params.append('to', range.to);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/audit-records/grant-history${query}`);
+  }
+
   async auditRecordCount(query: Record<string, string>, signal?: AbortSignal): Promise<{ count: number }> {
     const params = new URLSearchParams(query);
     return this.request(`/audit-records/count?${params.toString()}`, { cache: 'no-store', signal });

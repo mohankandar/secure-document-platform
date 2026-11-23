@@ -2,13 +2,14 @@ import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from '
 import useSWR from 'swr';
 import { Search } from 'lucide-react';
 import { apiClient } from '../../api/client';
-import type { ApiError, AuditRecordResult } from '../../types';
+import type { ApiError, AuditRecordResult, GrantHistoryRow } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { SelectField, TextField, when } from './shared';
 import {
-  AUDIT_TYPES, PERIODS, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, periodStart, personName, personOptions,
+  AUDIT_TYPES, PERIODS, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, grantChangeBy, grantChangeLine, periodStart,
+  personName, personOptions,
   recordedFields, resultWord, shortId, whatHappened, type AuditTypeKey, type PeriodKey,
 } from './auditRules';
 import { ComplianceReportButton } from '../compliance/ComplianceReport';
@@ -157,6 +158,7 @@ export default function AuditArea({ caps, entityName }: { caps: string[]; entity
   const routineNote = !applied.includeRoutine && applied.action !== ROUTINE_ACTION ? ' Routine folder checks that found nothing are left out.' : '';
 
   return (
+    <>
     <section className="cf-ad-audit" aria-label="Audit records" aria-busy={isValidating || undefined}>
 
       <div className="cf-ad-audit-bar">
@@ -283,6 +285,50 @@ export default function AuditArea({ caps, entityName }: { caps: string[]; entity
           </table>
         </div>
       )}
+    </section>
+
+    <GrantHistory from={filters.from} to={filters.to} />
+    </>
+  );
+}
+
+/**
+ * Task 0041: the entity's sign-in access changes (platform-identity's grant history), next to LexaVault's own records,
+ * for the same period. Read-only: which login-system group gives which role, changed through setup or the app.
+ */
+function GrantHistory({ from, to }: { from?: string; to?: string }) {
+  const { data: answer, error: loadFailure } = useSWR<GrantHistoryRow[]>(['grant-history', from ?? '', to ?? ''],
+    () => apiClient.listGrantHistory({ from, to }), { revalidateOnFocus: false, keepPreviousData: true });
+  // Fail closed: anything but a list is not shown as "no changes".
+  const data = Array.isArray(answer) ? answer : undefined;
+  const error = loadFailure ?? (answer !== undefined && !Array.isArray(answer) ? new Error('Could not read the sign-in access changes.') : undefined);
+  return (
+    <section className="cf-ad-card" aria-label="Sign-in access changes">
+      <header className="cf-ad-card-head">
+        <div>
+          <div className="cf-ad-title"><h2>Sign-in access changes</h2></div>
+          <p>Which login-system groups give which role in this entity. Sign-in connections are set through setup.</p>
+        </div>
+      </header>
+      {error ? <Notice tone="danger">{loadError(error)}</Notice>
+        : !data ? <p className="cf-muted"><Spinner label="Loading sign-in access changes" /> Loading…</p>
+        : data.length === 0 ? <p className="cf-muted">No sign-in access changes in this period.</p>
+        : (
+          <div className="cf-ad-table-wrap">
+            <table className="cf-ad-table cf-ad-table-left">
+              <thead><tr><th scope="col">When</th><th scope="col">What changed</th><th scope="col">By</th></tr></thead>
+              <tbody>
+                {data.map((c, i) => (
+                  <tr key={`${c.changedAt}-${c.group}-${i}`}>
+                    <td className="cf-ad-audit-when"><time dateTime={c.changedAt}>{when(c.changedAt)}</time></td>
+                    <td>{grantChangeLine(c)}<span className="cf-ad-audit-change cf-mono" title="Login system">{c.issuer}</span></td>
+                    <td>{grantChangeBy(c)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
     </section>
   );
 }

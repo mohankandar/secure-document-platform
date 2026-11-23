@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Makes LexaVault's demo licence and its development trusted-keys file in {@code install/demo/} (task 0037). Runs only
@@ -55,6 +56,7 @@ class DemoFilesGenerator {
         Files.writeString(demo.resolve("licence-demo.json"), LicenceSigner.sign(licence, dev.getPrivate()),
                 StandardCharsets.UTF_8);
         Files.writeString(demo.resolve("development-trusted-keys.json"),
-                TrustedKeys.of(Map.of(DEV_KEY_ID, dev.getPublic())).toJson(), StandardCharsets.UTF_8);
+                // Task 0041: marked as a development key, so setup takes an http issuer on localhost under this licence.
+                TrustedKeys.of(Map.of(DEV_KEY_ID, dev.getPublic()), Set.of(DEV_KEY_ID)).toJson(), StandardCharsets.UTF_8);
     }
 }

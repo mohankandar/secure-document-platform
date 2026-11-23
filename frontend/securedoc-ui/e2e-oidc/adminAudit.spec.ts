@@ -57,6 +57,15 @@ const RECORDS = [
   rec(5, 200, 'ENTERPRISE_IDENTITY_CONNECTION_TESTED', DANA, 'EnterpriseIdentityConnection', 'eic-1', 'DENIED', 'Test older than 15 minutes'),
 ];
 
+// Task 0041: sign-in access changes (platform-identity grant history), newest first as the server sends them.
+const GRANT_HISTORY = [
+  { changedAt: minsAgo(15), change: 'CHANGED', group: 'ElevatedUsers', roleBefore: 'DOCUMENT_PROCESSOR', roleAfter: 'DOCUMENT_SUPERVISOR',
+    source: 'APP', changedBy: 'app', setupRunId: null, issuer: 'https://login.example/realms/ops' },
+  { changedAt: minsAgo(600), change: 'ADDED', group: 'BusinessUsers', roleBefore: null, roleAfter: 'DOCUMENT_PROCESSOR',
+    source: 'SETUP', changedBy: 'platform-setup', setupRunId: 'run-42', issuer: 'https://login.example/realms/ops' },
+];
+const grantQueries: URLSearchParams[] = [];
+
 const pageErrors: string[] = [];
 test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) => pageErrors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(m.text()); }); });
 test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/packages returned/.test(e))).toEqual([]); });
@@ -77,6 +86,11 @@ async function openAudit(page: Page, queries: URLSearchParams[], records: Array<
       return json(records.filter((r) => (!q.get('actorId') || r.actorId === q.get('actorId'))
         && (!q.get('resourceId') || r.resourceId === q.get('resourceId'))
         && (!q.get('action') || r.action === q.get('action'))));
+    }
+    // Task 0041: the grant history, read-only, for the same period.
+    if (url.pathname === '/api/v1/audit-records/grant-history') {
+      grantQueries.push(url.searchParams);
+      return json(GRANT_HISTORY);
     }
     if (url.pathname === '/api/v1/audit-records/export') {
       queries.push(url.searchParams);
@@ -206,4 +220,24 @@ test('0019 A2: Who shows the recorded name; the system and older records keep th
   await person.selectOption({ label: 'Dana Reviewer' });
   await expect.poll(() => queries.at(-1)?.get('actorId')).toBe(DANA);
   await expect(person).toHaveValue(DANA);
+});
+
+test('0041: sign-in access changes are listed next to the records, read-only, for the same period', async ({ page }) => {
+  grantQueries.length = 0;
+  const queries: URLSearchParams[] = [];
+  await openAudit(page, queries);
+  const changes = page.getByRole('region', { name: 'Sign-in access changes' });
+  await expect(changes).toContainText('Sign-in connections are set through setup.');
+  for (const h of ['When', 'What changed', 'By']) await expect(changes.getByRole('columnheader', { name: h })).toBeVisible();
+  const rows = changes.getByRole('row');
+  await expect(rows.nth(1)).toContainText('Group ElevatedUsers now gives Document Supervisor instead of Document Processor');
+  await expect(rows.nth(1)).toContainText('LexaVault');
+  await expect(rows.nth(2)).toContainText('Group BusinessUsers now gives Document Processor');
+  await expect(rows.nth(2)).toContainText('Setup, run run-42');
+  // Nothing to change here.
+  await expect(changes.getByRole('button')).toHaveCount(0);
+  await expect(changes.locator('input, select, textarea')).toHaveCount(0);
+  // The same period as the records: the last 7 days by default.
+  const from = Date.parse(grantQueries.at(-1)?.get('from') || '');
+  expect(Math.abs(Date.now() - 7 * 864e5 - from)).toBeLessThan(5 * 60e3);
 });

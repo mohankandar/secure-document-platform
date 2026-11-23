@@ -1,15 +1,10 @@
 package com.securedoc.install;
 
 import com.documentplatform.identity.EntityUuid;
-import com.documentplatform.identity.IdentityConnectionStatus;
-import com.documentplatform.identity.IdentityProviderType;
 import com.documentplatform.identity.jdbc.LicenceSlots;
 import com.documentplatform.identity.jdbc.PostgresEntityStore;
-import com.documentplatform.identity.jdbc.PostgresLoginConnectionStore;
 import com.documentplatform.identity.store.ActivationOutcome;
-import com.documentplatform.identity.store.ChangeSource;
 import com.documentplatform.identity.store.EntityRecord;
-import com.documentplatform.identity.store.LoginConnection;
 import com.documentplatform.identity.store.SlotActivation;
 import com.documentplatform.licensing.ClockGuard;
 import com.documentplatform.licensing.LicenceService;
@@ -35,7 +30,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,28 +42,24 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
  * LexaVault's demo step (task 0037 step 5): the demo-only records that setup does not make, written once by a command
- * after setup, never at startup. It replaces {@code LocalDemoBootstrap} (and, for the local OIDC start,
- * {@code OidcConnectionBootstrap}).
+ * after setup, never at startup. It replaces {@code LocalDemoBootstrap}.
  *
  * <ol>
  *   <li>Activates the demo entity slot (default {@code ENT-DEMO-0001}) with its name, through platform-identity's
  *       {@link SlotActivation} under the stored licence: what a Business Admin does in the app.</li>
  *   <li>Writes LexaVault's own demo records for that entity ({@link DemoAppRecords}).</li>
- *   <li>With {@code --oidc-issuer} (local OIDC development only): makes the customer's LexaVault login connection point
- *       at the local development login system. Setup cannot load it: the sign-in file takes only {@code https}
- *       issuers, and the local Keycloak runs on {@code http://localhost}.</li>
  * </ol>
+ * Task 0041: the local OIDC login connection is no longer written here. Setup takes the local Keycloak issuer itself
+ * (platform-core 0.2.0: {@code http} on a loopback host under a licence signed by a development key), from the sign-in
+ * file that {@link LocalOidcSignin} writes for the OIDC start.
  *
  * <pre>
  * demo-step apply --keys development-trusted-keys.json [--slot ENT-DEMO-0001] [--name "Local Demo Tenant"]
  *                 [--slug local-demo] [--scanner-client-principal scanner-bridge-local]
- *                 [--oidc-issuer URL --oidc-provider-id ID --oidc-audience AUD [--oidc-browser-client-id ID]]
  * demo-step installed [--slot ENT-DEMO-0001]
  * </pre>
  * {@code installed} answers whether the demo step has made the demo entity (its LexaVault entity row exists): exit 0
@@ -92,8 +82,7 @@ public final class DemoStep {
     static final String DEFAULT_SLOT = "ENT-DEMO-0001";
 
     /** Options of one run. */
-    record Options(Path keys, String slot, String name, String slug, String scannerPrincipal, URI oidcIssuer,
-                   String oidcProviderId, String oidcAudience, String oidcBrowserClientId) {
+    record Options(Path keys, String slot, String name, String slug, String scannerPrincipal) {
     }
 
     private final PrintStream out;
@@ -160,8 +149,7 @@ public final class DemoStep {
     static Options parse(String[] args) {
         if (args.length == 0 || !"apply".equals(args[0])) throw usage("the first word must be apply");
         Map<String, String> o = new HashMap<>();
-        List<String> known = List.of("--keys", "--slot", "--name", "--slug", "--scanner-client-principal",
-                "--oidc-issuer", "--oidc-provider-id", "--oidc-audience", "--oidc-browser-client-id");
+        List<String> known = List.of("--keys", "--slot", "--name", "--slug", "--scanner-client-principal");
         for (int i = 1; i < args.length; i += 2) {
             if (!known.contains(args[i]) || i + 1 >= args.length || o.containsKey(args[i])) {
                 throw usage("unknown, repeated or empty option " + args[i]);
@@ -171,24 +159,8 @@ public final class DemoStep {
         if (!o.containsKey("--keys")) throw usage("--keys is required (the trusted-keys file that verifies the stored licence)");
         String slot = o.getOrDefault("--slot", DEFAULT_SLOT);
         if (!EntityUuid.isSlotId(slot)) throw usage("--slot must be an entity slot ID (ENT-...)");
-        URI issuer = null;
-        if (o.containsKey("--oidc-issuer")) {
-            if (!o.containsKey("--oidc-provider-id") || !o.containsKey("--oidc-audience")) {
-                throw usage("--oidc-issuer needs --oidc-provider-id and --oidc-audience");
-            }
-            try {
-                issuer = URI.create(o.get("--oidc-issuer").trim());
-            } catch (IllegalArgumentException e) {
-                throw usage("--oidc-issuer is not an address");
-            }
-            if (!issuer.isAbsolute() || issuer.getHost() == null) throw usage("--oidc-issuer must be an absolute address");
-        } else if (o.containsKey("--oidc-provider-id") || o.containsKey("--oidc-audience") || o.containsKey("--oidc-browser-client-id")) {
-            throw usage("the --oidc-* options need --oidc-issuer");
-        }
         return new Options(Path.of(o.get("--keys")), slot, o.getOrDefault("--name", "Local Demo Tenant"),
-                o.getOrDefault("--slug", "local-demo"), o.getOrDefault("--scanner-client-principal", "scanner-bridge-local"),
-                issuer, trimmed(o.get("--oidc-provider-id")), trimmed(o.get("--oidc-audience")),
-                trimmed(o.get("--oidc-browser-client-id")));
+                o.getOrDefault("--slug", "local-demo"), o.getOrDefault("--scanner-client-principal", "scanner-bridge-local"));
     }
 
     void apply(InstallDb db, Options options) {
@@ -238,8 +210,6 @@ public final class DemoStep {
                     + e.getClass().getSimpleName());
         }
 
-        // 3. Local OIDC development only: the login connection to the local login system.
-        if (options.oidcIssuer() != null) oidcConnection(ds, tenantId, options);
         out.println("Demo step done.");
     }
 
@@ -262,33 +232,6 @@ public final class DemoStep {
             case UNCHANGED -> line("unchanged", "activation of " + slot);
             default -> throw new InstallException(2, "DEMO_ACTIVATION_REFUSED", slot + ": rename " + renamed.result());
         }
-    }
-
-    private void oidcConnection(DataSource ds, String tenantId, Options o) {
-        PostgresLoginConnectionStore store = new PostgresLoginConnectionStore(ds);
-        Optional<LoginConnection> active = store.active(tenantId, LexaVaultProduct.CODE);
-        String what = "login connection " + LexaVaultProduct.CODE + ": provider " + o.oidcProviderId() + ", issuer "
-                + o.oidcIssuer() + ", API audience " + o.oidcAudience();
-        if (active.isEmpty()) {
-            store.insert(new LoginConnection(UUID.randomUUID(), tenantId, LexaVaultProduct.CODE, o.oidcProviderId(),
-                    IdentityProviderType.OIDC, o.oidcIssuer(), o.oidcBrowserClientId(), o.oidcAudience(), null,
-                    IdentityConnectionStatus.ACTIVE, 1), ChangeSource.APP, ACTOR);
-            line("create", what);
-            return;
-        }
-        LoginConnection c = active.get();
-        if (c.providerId().equals(o.oidcProviderId()) && c.issuer().equals(o.oidcIssuer())
-                && c.apiAudience().equals(o.oidcAudience()) && Objects.equals(c.browserClientId(), o.oidcBrowserClientId())) {
-            line("unchanged", what);
-            return;
-        }
-        LoginConnection changed = new LoginConnection(c.connectionId(), tenantId, LexaVaultProduct.CODE, o.oidcProviderId(),
-                IdentityProviderType.OIDC, o.oidcIssuer(), o.oidcBrowserClientId(), o.oidcAudience(), c.secretReference(),
-                IdentityConnectionStatus.ACTIVE, c.configurationVersion());
-        if (store.update(changed, c.configurationVersion(), ChangeSource.APP, ACTOR).isEmpty()) {
-            throw new InstallException(1, "DEMO_STEP_FAILED", "the login connection changed while the demo step ran; run it again");
-        }
-        line("update", what);
     }
 
     private static String customer(DataSource ds) {
@@ -342,13 +285,8 @@ public final class DemoStep {
         out.println("  " + String.format("%-11s", action) + " " + what);
     }
 
-    private static String trimmed(String s) {
-        return s == null ? null : s.trim();
-    }
-
     private static InstallException usage(String why) {
         return new InstallException(2, "BAD_OPTION", why + ". Usage: demo-step apply --keys FILE [--slot ENT-...] "
-                + "[--name NAME] [--slug SLUG] [--scanner-client-principal P] [--oidc-issuer URL --oidc-provider-id ID "
-                + "--oidc-audience AUD [--oidc-browser-client-id ID]], or demo-step installed [--slot ENT-...]");
+                + "[--name NAME] [--slug SLUG] [--scanner-client-principal P], or demo-step installed [--slot ENT-...]");
     }
 }

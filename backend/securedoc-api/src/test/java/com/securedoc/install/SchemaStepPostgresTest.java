@@ -65,24 +65,26 @@ class SchemaStepPostgresTest {
     void aFreshDatabaseGetsEveryRunEachWithItsOwnHistoryAndARerunChangesNothing() throws SQLException {
         run(2, "customer-installed");  // before the schema step: the identity tables are missing
         String first = run(0, "apply", "--runtime-user", RUNTIME_USER);
-        // platform-core identity V2 (P029, client bindings; task 0037 fix 1): both identity files run.
-        assertTrue(first.contains("identity         2 migration(s) run, at version 2"), first);
+        // platform-core identity V3 (0.2.0, grant history; task 0041): all three identity files run.
+        assertTrue(first.contains("identity         3 migration(s) run, at version 3"), first);
         assertTrue(first.contains("licensing        1 migration(s) run, at version 1"), first);
         try (Connection c = db.connect()) {
             assertEquals(1, count(c, "select count(*) from idn_schema_history where version = '1' and success"));
             assertEquals(1, count(c, "select count(*) from idn_schema_history where version = '2' and success"));
+            assertEquals(1, count(c, "select count(*) from idn_schema_history where version = '3' and success"));
             assertEquals(1, count(c, "select count(*) from lic_schema_history where version = '1' and success"));
-            assertEquals(2, count(c, "select max(version) from idn_schema_version"));
+            assertEquals(3, count(c, "select max(version) from idn_schema_version"));
             assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_machine_binding'"));
+            assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_grant_history'"));
             assertEquals(1, count(c, "select max(version) from lic_schema_version"));
             assertTrue(count(c, "select count(*) from databasechangelog") > 90, "the app's changelog ran");
             assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'tenants'"));
         }
         String second = run(0, "apply");
-        assertTrue(second.contains("identity         0 migration(s) run, at version 2"), second);
+        assertTrue(second.contains("identity         0 migration(s) run, at version 3"), second);
         assertTrue(second.contains("licensing        0 migration(s) run, at version 1"), second);
         String status = run(0, "status");
-        assertTrue(status.contains("identity         version 2") && status.contains("licensing        version 1"), status);
+        assertTrue(status.contains("identity         version 3") &&status.contains("licensing        version 1"), status);
         assertEquals(4, exitOf("customer-installed"));
     }
 
@@ -97,7 +99,15 @@ class SchemaStepPostgresTest {
             s.execute("select count(*) from lic_licence");
             s.execute("select version from idn_schema_version");
             s.execute("select count(*) from idn_machine_binding");
-            assertThrows(SQLException.class, () -> s.execute("update idn_schema_version set version = 3"));
+            // Task 0041: the Audit page reads the grant history; it is insert-only, even for the table's owner.
+            s.execute("insert into idn_grant_history (tenant_id, product_code, slot_id, entity_uuid, issuer_uri, "
+                    + "external_group, role_after, change, change_source, changed_by) values ('TEN-RT-CHECK', 'LEXAVAULT', "
+                    + "'ENT-RT-CHECK', '" + java.util.UUID.randomUUID() + "', 'https://login.example', 'G', "
+                    + "'REPORT_VIEWER', 'ADDED', 'APP', 'app')");
+            s.execute("select count(*) from idn_grant_history");
+            assertThrows(SQLException.class, () -> s.execute("update idn_grant_history set changed_by = 'x'"));
+            assertThrows(SQLException.class, () -> s.execute("delete from idn_grant_history"));
+            assertThrows(SQLException.class, () -> s.execute("update idn_schema_version set version = 4"));
             assertThrows(SQLException.class, () -> s.execute("delete from idn_schema_history"));
             assertThrows(SQLException.class, () -> s.execute("create table lv_not_allowed (id int)"));
         }
@@ -105,11 +115,11 @@ class SchemaStepPostgresTest {
 
     /**
      * Task 0037 fix 1: a database whose schema step ran with identity V1 only (the owner's, after the start that
-     * failed) gets V2 on the next schema step, and setup is not refused for a V1-only database any more.
+     * failed) gets V2 and, from task 0041, V3 on the next schema step.
      */
     @Test
     @Order(3)
-    void aDatabaseAtIdentityVersion1GetsVersion2() throws SQLException {
+    void aDatabaseAtIdentityVersion1GetsTheLatestVersion() throws SQLException {
         try (ThrowawayDatabase v1 = ThrowawayDatabase.create("schemav1")) {
             Flyway.configure(SchemaStep.class.getClassLoader()).dataSource(v1.url, v1.user, v1.password)
                     .locations("classpath:db/platform/identity").table("idn_schema_history")
@@ -121,9 +131,29 @@ class SchemaStepPostgresTest {
             PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
             assertEquals(0, new SchemaStep(print, print).run(new String[] {"apply"}, v1.env(SchemaStep.ENV_PREFIX)));
             String text = out.toString(StandardCharsets.UTF_8);
-            assertTrue(text.contains("identity         1 migration(s) run, at version 2"), text);
+            assertTrue(text.contains("identity         2 migration(s) run, at version 3"), text);
             try (Connection c = v1.connect()) {
-                assertEquals(2, count(c, "select max(version) from idn_schema_version"));
+                assertEquals(3, count(c, "select max(version) from idn_schema_version"));
+            }
+        }
+    }
+
+    /** Task 0041: the owner's database today is at identity V2 (after 0037 fix 1); the schema step adds V3 only. */
+    @Test
+    @Order(4)
+    void aDatabaseAtIdentityVersion2GetsVersion3() throws SQLException {
+        try (ThrowawayDatabase v2 = ThrowawayDatabase.create("schemav2")) {
+            Flyway.configure(SchemaStep.class.getClassLoader()).dataSource(v2.url, v2.user, v2.password)
+                    .locations("classpath:db/platform/identity").table("idn_schema_history")
+                    .baselineOnMigrate(true).baselineVersion("0").target("2").load().migrate();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
+            assertEquals(0, new SchemaStep(print, print).run(new String[] {"apply"}, v2.env(SchemaStep.ENV_PREFIX)));
+            String text = out.toString(StandardCharsets.UTF_8);
+            assertTrue(text.contains("identity         1 migration(s) run, at version 3"), text);
+            try (Connection c = v2.connect()) {
+                assertEquals(3, count(c, "select max(version) from idn_schema_version"));
+                assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_grant_history'"));
             }
         }
     }

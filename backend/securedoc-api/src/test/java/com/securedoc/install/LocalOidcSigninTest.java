@@ -1,0 +1,75 @@
+package com.securedoc.install;
+
+import com.documentplatform.setup.SigninFile;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Task 0041: the local OIDC start's sign-in file, written from the demo one, as setup reads it. */
+class LocalOidcSigninTest {
+
+    static final Path DEMO = DemoStepTest.REPO.resolve("install/demo");
+    static final String KEYCLOAK = "http://localhost:8181/realms/document-platform-local";
+
+    private static int run(String... args) {
+        PrintStream quiet = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
+        return new LocalOidcSignin(quiet, quiet).run(args);
+    }
+
+    static Path write(Path out) {
+        return LocalOidcSignin.write(DEMO.resolve("signin-demo.json"), out, URI.create(KEYCLOAK), "customer-oidc",
+                "lexavault-api", "lexavault-web");
+    }
+
+    @Test
+    void theDemoFileWithTheLocalLoginSystemPutIn(@TempDir Path out) throws Exception {
+        Path file = write(out);
+        assertEquals(out.resolve(LocalOidcSignin.FILE_NAME), file);
+        byte[] bytes = Files.readAllBytes(file);
+        assertFalse(bytes.length >= 3 && bytes[0] == (byte) 0xEF, "no byte order mark");
+
+        SigninFile signin = SigninFile.parse(new String(bytes, StandardCharsets.UTF_8));
+        SigninFile demo = SigninFile.parse(Files.readString(DEMO.resolve("signin-demo.json")));
+        assertEquals(URI.create(KEYCLOAK), signin.issuer());
+        assertEquals("customer-oidc", signin.providerId());
+        SigninFile.Product p = signin.product("LEXAVAULT").orElseThrow();
+        assertEquals("lexavault-web", p.browserClientId());
+        assertEquals("lexavault-api", p.apiAudience());
+        // Everything else is the demo file's: the customer, the mode and the role mapping (copied next to it).
+        assertEquals(demo.tenantId(), signin.tenantId());
+        assertEquals(demo.mode(), signin.mode());
+        assertEquals(demo.product("LEXAVAULT").orElseThrow().roleMappingFile(), p.roleMappingFile());
+        assertArrayEquals(Files.readAllBytes(DEMO.resolve(p.roleMappingFile())), Files.readAllBytes(out.resolve(p.roleMappingFile())));
+        // Written again: the same file.
+        assertEquals(Files.readString(file), Files.readString(write(out)));
+    }
+
+    @Test
+    void everyOptionIsRequiredAndChecked(@TempDir Path out) {
+        String from = DEMO.resolve("signin-demo.json").toString();
+        assertEquals(0, run("--from", from, "--out", out.toString(), "--issuer", KEYCLOAK, "--provider-id", "p",
+                "--audience", "a", "--browser-client-id", "b"));
+        assertTrue(Files.exists(out.resolve(LocalOidcSignin.FILE_NAME)));
+        assertEquals(2, run());
+        assertEquals(2, run("--from", from, "--out", out.toString(), "--issuer", KEYCLOAK, "--provider-id", "p",
+                "--audience", "a"));
+        assertEquals(2, run("--from", from, "--out", out.toString(), "--issuer", "not an address", "--provider-id", "p",
+                "--audience", "a", "--browser-client-id", "b"));
+        assertEquals(2, run("--from", from, "--out", out.toString(), "--issuer", "/relative", "--provider-id", "p",
+                "--audience", "a", "--browser-client-id", "b"));
+        assertEquals(2, run("--from", out.resolve("missing.json").toString(), "--out", out.toString(), "--issuer", KEYCLOAK,
+                "--provider-id", "p", "--audience", "a", "--browser-client-id", "b"));
+        assertEquals(2, run("--from", from, "--from", from));
+    }
+}

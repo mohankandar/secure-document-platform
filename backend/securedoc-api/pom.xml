@@ -68,14 +68,24 @@
             <artifactId>platform-identity-spring</artifactId>
         </dependency>
 
-        <!-- Task 0037: the idn_ stores, the setup command and the licensing tables it needs (platform-core). -->
+        <!-- Task 0037: the idn_ stores. platform-licensing (the licence, read only for identity: slots and the
+             development-licence check; nothing counted or enforced; task 0041) comes with identity-jdbc and is named
+             here because the demo step reads the licence. -->
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-identity-jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-licensing</artifactId>
+        </dependency>
+        <!-- Task 0041: the setup command runs from its own jar (securedoc-setup), because it brings platform-crypto and
+             platform-integration, which the app's classpath may not carry (task 0041). Here only for the tests that
+             run setup before the demo step. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-setup</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <!-- Task 0037: the schema step runs the platform Flyway runs (db/platform/identity, db/platform/licensing), each

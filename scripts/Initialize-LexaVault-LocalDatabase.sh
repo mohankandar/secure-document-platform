@@ -8,12 +8,14 @@
 # Database: LEXAVAULT_LOCAL_DB_URL (default jdbc:postgresql://localhost:5432/securedoc), LEXAVAULT_LOCAL_DB_USER
 # (default securedoc), LEXAVAULT_LOCAL_DB_PASSWORD (required unless the defaults are used: then the development
 # compose file's value). Passed to each step in its environment only; never printed.
-# Optional: LEXAVAULT_JAR.
+# Optional: LEXAVAULT_JAR, LEXAVAULT_SETUP_JAR (task 0041: setup runs from its own jar, backend/securedoc-setup).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 jar="${LEXAVAULT_JAR:-$repo_root/backend/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar}"
 [[ -f "$jar" ]] || { echo "Backend jar not found: $jar (build it first)." >&2; exit 2; }
+setup_jar="${LEXAVAULT_SETUP_JAR:-$repo_root/backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar}"
+[[ -f "$setup_jar" ]] || { echo "Setup jar not found: $setup_jar (build it first)." >&2; exit 2; }
 db_url="${LEXAVAULT_LOCAL_DB_URL:-jdbc:postgresql://localhost:5432/securedoc}"
 db_user="${LEXAVAULT_LOCAL_DB_USER:-securedoc}"
 db_password="${LEXAVAULT_LOCAL_DB_PASSWORD:-}"
@@ -48,7 +50,8 @@ set -e
 if [[ $installed -eq 4 ]]; then
   echo "Local database: the demo step has not run yet, so setup runs with the demo input files (install/demo)..."
   PLATFORM_SETUP_DB_URL="$db_url" PLATFORM_SETUP_DB_USER="$db_user" PLATFORM_SETUP_DB_PASSWORD="$db_password" \
-    run_main com.documentplatform.setup.SetupCommand apply --licence "$demo/licence-demo.json" \
+    java -cp "$setup_jar" -Dloader.main=com.documentplatform.setup.SetupCommand \
+      org.springframework.boot.loader.launch.PropertiesLauncher apply --licence "$demo/licence-demo.json" \
       --signin "$demo/signin-demo.json" --product LEXAVAULT --keys "$keys" \
       --product-roles "$repo_root/install/product-roles.json" \
       --config-out "$state_dir/platform-tenant.properties" --run-log "$state_dir/platform-setup-runs.log" \

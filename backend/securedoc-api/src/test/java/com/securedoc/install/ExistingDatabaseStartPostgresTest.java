@@ -1,5 +1,8 @@
 package com.securedoc.install;
 
+import com.documentplatform.identity.jdbc.PostgresLoginConnectionStore;
+import com.documentplatform.identity.store.ChangeSource;
+import com.documentplatform.identity.store.LoginConnection;
 import com.documentplatform.setup.SetupCommand;
 import com.securedoc.platform.infrastructure.identity.PlatformIdentityReads;
 import org.junit.jupiter.api.AfterAll;
@@ -35,7 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code 0000...0001} that {@code LocalDemoBootstrap} made (slug {@code local-demo}, name "Local Demo Tenant") and its
  * data. The owner's run: setup ran, the demo step activated the slot and then failed on the slug. This test brings the
  * database to that state, then runs the start path again: the demo step must finish, leave the old tenant as it was,
- * and a further run must change nothing. Throwaway server only.
+ * and a further run must change nothing. Task 0041: the OIDC start runs setup with the local login system each time
+ * (platform-core 0.2.0 takes http on localhost under the development-signed demo licence). Throwaway server only.
  */
 @EnabledIfEnvironmentVariable(named = ThrowawayDatabase.URL_VARIABLE, matches = "jdbc:postgresql:.*")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -45,6 +49,7 @@ class ExistingDatabaseStartPostgresTest {
     private static final UUID DEMO_ENTITY = UUID.fromString("30216241-b724-5a3a-aef3-3034fd546d17");
     private static final Path DEMO = DemoStepTest.REPO.resolve("install/demo");
     private static final String KEYCLOAK = "http://localhost:8181/realms/document-platform-local";
+    private static final String DEMO_STEP_PART = "\n--- demo step ---\n";
 
     private static ThrowawayDatabase db;
     @TempDir
@@ -83,17 +88,23 @@ class ExistingDatabaseStartPostgresTest {
     }
 
     private static Run setup() {
+        return setup(DEMO.resolve("signin-demo.json"));
+    }
+
+    private static Run setup(Path signin, String... extra) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
-        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC()).run(List.of("apply",
+        List<String> args = new ArrayList<>(List.of("apply",
                 "--licence", DEMO.resolve("licence-demo.json").toString(),
-                "--signin", DEMO.resolve("signin-demo.json").toString(),
+                "--signin", signin.toString(),
                 "--product", "LEXAVAULT",
                 "--keys", DEMO.resolve("development-trusted-keys.json").toString(),
                 "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(),
-                "--no-customer-keys"), print, print);
+                "--no-customer-keys"));
+        args.addAll(List.of(extra));
+        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC()).run(args, print, print);
         return checked(exit, out);
     }
 
@@ -106,9 +117,13 @@ class ExistingDatabaseStartPostgresTest {
         return checked(exit, out);
     }
 
-    private static Run oidcDemoStep() {
-        return demoStep("apply", "--oidc-issuer", KEYCLOAK, "--oidc-provider-id", "customer-oidc",
-                "--oidc-audience", "lexavault-api", "--oidc-browser-client-id", "lexavault-web");
+    /** The local OIDC start (task 0041): setup with the local login system put in the demo sign-in file, then the demo step. */
+    private static Run oidcStart() {
+        Path signin = LocalOidcSigninTest.write(work.resolve("oidc-signin"));
+        Run setup = setup(signin, "--replace-connection");
+        assertEquals(0, setup.exit(), setup.output());
+        Run demo = demoStep("apply");
+        return new Run(demo.exit(), setup.output() + DEMO_STEP_PART + demo.output());
     }
 
     private static Run checked(int exit, ByteArrayOutputStream out) {
@@ -136,23 +151,23 @@ class ExistingDatabaseStartPostgresTest {
                 + DemoStep.ACTOR + "', activated_at = now(), updated_at = now() where slot_id = 'ENT-DEMO-0001'");
         assertEquals(4, demoStep("installed").exit(), "still not done: the next start runs setup again");
 
-        // The next start: setup again (changes nothing), then the demo step (OIDC start) finishes.
-        Run again = setup();
-        assertEquals(0, again.exit(), again.output());
-        assertTrue(again.output().contains("0 created, 0 updated, 0 removed"), again.output());
-
-        Run demo = oidcDemoStep();
-        assertEquals(0, demo.exit(), demo.output());
+        // The next start (the OIDC start, task 0041): setup with the local login system put in the demo sign-in file
+        // (it switches the connection from the placeholder to the local issuer and adds that issuer's grants), then the
+        // demo step finishes.
+        Run start = oidcStart();
+        assertEquals(0, start.exit(), start.output());
         for (String line : new String[] {
+                "login connection LEXAVAULT (version 1)",
                 "note        slug local-demo is held by entity " + OLD_TENANT + " (left as it is); this entity uses local-demo-ent-demo-0001",
                 "note        name \"Local Demo Tenant\" is held by entity " + OLD_TENANT,
                 "update      name of ENT-DEMO-0001 from \"Local Demo Tenant\" to \"Local Demo Tenant (ENT-DEMO-0001)\"",
                 "create      entity row " + DEMO_ENTITY + " \"Local Demo Tenant (ENT-DEMO-0001)\"",
                 "create      identifier rules", "create      sensitive-data policy",
-                "create      scanner source \"Local Scanner Bridge\"",
-                "update      login connection LEXAVAULT: provider customer-oidc, issuer " + KEYCLOAK}) {
-            assertTrue(demo.output().contains(line), line + "\n" + demo.output());
+                "create      scanner source \"Local Scanner Bridge\""}) {
+            assertTrue(start.output().contains(line), line + "\n" + start.output());
         }
+        String demoPart = start.output().substring(start.output().indexOf(DEMO_STEP_PART));
+        assertFalse(demoPart.contains("login connection"), "the demo step no longer writes it: " + demoPart);
         assertEquals("ACTIVE|Local Demo Tenant (ENT-DEMO-0001)|local-demo-ent-demo-0001",
                 one("select status || '|' || name || '|' || slug from tenants where id = '" + DEMO_ENTITY + "'"));
         assertEquals("Local Demo Tenant (ENT-DEMO-0001)", one("select display_name from idn_entity where slot_id = 'ENT-DEMO-0001'"));
@@ -172,12 +187,40 @@ class ExistingDatabaseStartPostgresTest {
     @Test
     @Order(4)
     void theStartAfterThatChangesNothing() throws SQLException {
-        // The demo step has run, so the start does not run setup again; the demo step changes nothing.
-        Run demo = oidcDemoStep();
-        assertEquals(0, demo.exit(), demo.output());
-        assertFalse(demo.output().contains("  create "), demo.output());
-        assertFalse(demo.output().contains("  update "), demo.output());
-        assertFalse(demo.output().contains("  note "), demo.output());
+        Run start = oidcStart();
+        assertEquals(0, start.exit(), start.output());
+        assertTrue(start.output().contains("0 created, 0 updated, 0 removed"), start.output());
+        assertFalse(start.output().contains("create      "), start.output());
+        assertFalse(start.output().contains("  note "), start.output());
+        assertEquals(oldTenantBefore, oldTenant());
+    }
+
+    /**
+     * The owner's database today (after 0037 fix 1): the 0037 demo step wrote the local connection itself, as a change
+     * in the app. Setup with the same values finds nothing to change; with other values the OIDC start's issuer wins
+     * (--replace-connection), so sign-in always goes through the issuer the start was given.
+     */
+    @Test
+    @Order(5)
+    void aConnectionTheOldDemoStepWroteIsKeptWhenEqualAndReplacedWhenNot() throws SQLException {
+        PostgresLoginConnectionStore store = new PostgresLoginConnectionStore(new IdnRows(db).ds);
+        String customer = one("select tenant_id from idn_customer");
+        LoginConnection now = store.active(customer, "LEXAVAULT").orElseThrow();
+        // As the 0037 demo step did: an update in the app, same values.
+        assertTrue(store.update(now, now.configurationVersion(), ChangeSource.APP, DemoStep.ACTOR).isPresent());
+        Run same = oidcStart();
+        assertTrue(same.output().contains("0 created, 0 updated, 0 removed"), same.output());
+
+        // Changed in the app to something else: the OIDC start replaces it.
+        LoginConnection current = store.active(customer, "LEXAVAULT").orElseThrow();
+        LoginConnection other = new LoginConnection(current.connectionId(), customer, "LEXAVAULT", "customer-oidc",
+                current.providerType(), URI.create("http://localhost:9999/realms/other"), current.browserClientId(),
+                current.apiAudience(), null, current.status(), current.configurationVersion());
+        assertTrue(store.update(other, current.configurationVersion(), ChangeSource.APP, DemoStep.ACTOR).isPresent());
+        Run replaced = oidcStart();
+        assertEquals(0, replaced.exit(), replaced.output());
+        assertTrue(replaced.output().contains("replaces the change made in the app"), replaced.output());
+        assertEquals(URI.create(KEYCLOAK), store.active(customer, "LEXAVAULT").orElseThrow().issuer());
         assertEquals(oldTenantBefore, oldTenant());
     }
 

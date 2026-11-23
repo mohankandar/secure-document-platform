@@ -37,7 +37,9 @@ Identity migration done: connections created=1 unchanged=0 conflict=0; grants ad
   ACTIVE connection, the line says `conflict`, nothing is replaced, and the exit code is 3. Setup's
   `--replace-connection` sets it from your sign-in file.
 - **Grants.** Copied per entity slot, for LexaVault, under the issuer they were recorded for. A grant whose role is not
-  one of LexaVault's entity roles (or is the platform role) is not copied; it never admitted anyone.
+  one of LexaVault's entity roles (or is the platform role) is not copied; it never admitted anyone. An alias
+  (`USER`, `REVIEWER`, `APPROVER`) is stored as the role it stands for (task 0041, as setup stores it), and each copied
+  grant is recorded in the grant history (`idn_grant_history`) as changed by `lexavault-identity-migration`.
 - **Nothing is deleted.** The old tables stay as they are; a later release drops them.
 - Running it again copies nothing more.
 

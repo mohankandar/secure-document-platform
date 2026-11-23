@@ -98,6 +98,8 @@ test('IT Administrator: a read-only card with the login system\'s name and addre
   const card = await openSignInTab(page);
 
   await expect(card).toContainText('Your sign-in is managed through the login hub. To change it, contact LexaVault support.');
+  // Task 0041: the server side is read-only too; sign-in connections are set through setup.
+  await expect(card).toContainText('Sign-in connections are set through setup.');
   const facts = card.getByRole('list', { name: 'Login system' }).or(card.locator('dl'));
   await expect(facts).toContainText('Login system');
   await expect(facts).toContainText('Northwind Entra ID');

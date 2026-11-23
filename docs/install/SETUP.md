@@ -19,15 +19,29 @@ scripts/Setup-LexaVault.ps1 plan  -Licence licence.json -Signin signin.json
 scripts/Setup-LexaVault.ps1 apply -Licence licence.json -Signin signin.json
 ```
 
-(`scripts/Setup-LexaVault.sh plan|apply --licence ... --signin ...` on Linux.) The wrapper passes what LexaVault
+(`scripts/Setup-LexaVault.sh plan|apply --licence ... --signin ...` on Linux.)
+
+Setup runs from its own jar, `backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar` (task 0041), not from
+the app jar: setup brings platform-crypto and platform-integration (customer keys, integration profile checks), and
+the app's classpath does not carry them. The wrapper finds it (`-JarPath` names another one). It passes what LexaVault
 ships:
 
 | Option | File | Note |
 |---|---|---|
 | `--product` | `LEXAVAULT` | |
-| `--product-roles` | `install/product-roles.json` | LexaVault's roles (below) |
-| `--keys` | `install/trusted-keys.json` | The release's production signing keys. **Not shipped yet: it comes with task 0038 (licensing).** Until then pass `-Keys`; the demo uses `install/demo/development-trusted-keys.json` |
-| `--no-customer-keys` | | Placeholder until task 0041 (crypto): LexaVault keeps no sensitive case field values yet |
+| `--product-roles` | `install/product-roles.json` | LexaVault's roles and aliases (below); `"customerKeys": "optional"` |
+| `--keys` | `install/trusted-keys.json` | The release's production signing keys. **Not shipped yet.** Until then pass `-Keys`; the demo uses `install/demo/development-trusted-keys.json` |
+| `--no-customer-keys` | | LexaVault encrypts nothing with platform-core yet. platform-core 0.2.0 refuses this flag only for a product whose `product-roles.json` says `"customerKeys": "required"`; LexaVault's says `optional` |
+
+**Login system on a local machine (platform-core 0.2.0).** The sign-in file's issuer must be `https`, except a local
+test login server: `http` on `localhost`, `127.0.0.1` or `[::1]`, and only under a licence signed by a key marked
+`"development": true` in the trusted-keys file (`SETUP_HTTP_ISSUER_NOT_ALLOWED` otherwise). The demo licence and
+`install/demo/development-trusted-keys.json` are such; production keys never are. The local OIDC start uses this.
+
+**Grant history.** Every grant setup adds or removes is recorded in `idn_grant_history` with setup's run ID (identity
+schema version 3). LexaVault's Audit page lists them under "Sign-in access changes" (read-only).
+
+**Sign-in connections are set through setup.** The app's Admin › Sign-in screen only shows the active connection.
 
 Optional, passed through: `-ConfigOut`, `-RunLog`, `-RemoveUnlistedGrants`, `-ReplaceConnection`.
 
@@ -40,12 +54,13 @@ Optional, passed through: `-ConfigOut`, `-RunLog`, `-RemoveUnlistedGrants`, `-Re
 | `BUSINESS_ADMIN` | Business Admin | |
 | `REPORT_VIEWER` | Report Viewer | |
 | `TENANT_IT_ADMIN` | IT Admin | |
-| `USER`, `REVIEWER` | Document Processor | Today's identity-name aliases, accepted exactly as written |
-| `APPROVER` | Supervisor | Alias, as above |
+| `USER`, `REVIEWER` | Document Processor | Aliases (`"aliases"` in `product-roles.json`, platform-core 0.2.0): setup stores the grant as `DOCUMENT_PROCESSOR` |
+| `APPROVER` | Supervisor | Alias: stored as `DOCUMENT_SUPERVISOR` |
 | `PLATFORM_OPERATIONS_ADMIN` | Platform Operations | The platform role: never granted in a mapping file |
 
-Write role names exactly as above (upper case). Any other spelling is refused by setup, and a grant that reaches the
-database some other way with an unknown role refuses sign-in for that login system (LV-AUT-007), as before.
+Write role and alias names exactly as above (upper case). Any other spelling is refused by setup, and a grant that
+reaches the database some other way with an unknown role refuses sign-in for that login system (LV-AUT-007), as
+before. A grant stored under an alias name before task 0041 is still read as the role it stands for.
 
 ## Not wired yet
 
@@ -55,7 +70,7 @@ These setup inputs come with their own tasks; nothing is needed for them now:
   (`platform.licensing.tenant-id` from `platform-tenant.properties`): task 0038;
 - notifications settings: task 0040;
 - integration client bindings (client ID -> entity -> source): a later task;
-- customer keys for sensitive case fields (`--no-customer-keys` is passed until then): task 0041;
+- customer keys for sensitive case fields: when LexaVault encrypts with platform-core (`--no-customer-keys` until then);
 - entity time zones: the sign-in file's optional `timeZone` and `entityTimeZones` are stored by setup today; the app
   uses them from task 0039.
 

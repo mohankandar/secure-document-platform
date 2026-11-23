@@ -6,6 +6,7 @@ import com.documentplatform.identity.jdbc.PostgresGroupGrantStore;
 import com.documentplatform.identity.jdbc.PostgresLoginConnectionStore;
 import com.documentplatform.identity.mapping.Grant;
 import com.documentplatform.identity.store.ChangeSource;
+import com.documentplatform.identity.store.GrantAuthor;
 import com.documentplatform.identity.store.LoginConnection;
 import com.securedoc.platform.infrastructure.identity.LexaVaultProduct;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -52,6 +53,9 @@ public final class IdentityMigration {
 
     static final String ENV_PREFIX = "LEXAVAULT_MIGRATE";
     static final String CHANGED_BY = "lexavault-identity-migration";
+    /** Task 0041: who the grant history (idn_grant_history) names for the grants this command copies. It is not setup,
+     *  so it writes as the app, by name (the history takes only SETUP or APP). */
+    static final GrantAuthor AUTHOR = GrantAuthor.app(CHANGED_BY);
 
     private final PrintStream out;
     private final PrintStream err;
@@ -201,8 +205,11 @@ public final class IdentityMigration {
             for (var byIssuer : entity.getValue().entrySet()) {
                 Set<Grant> accepted = new LinkedHashSet<>();
                 for (Grant g : byIssuer.getValue()) {
-                    if (LexaVaultProduct.grantRole(g.role()) == null) refused++;
-                    else accepted.add(g);
+                    // Task 0041: an alias (USER, REVIEWER, APPROVER) is stored as the role it stands for, as setup stores
+                    // it (platform-core 0.2.0 role aliases).
+                    String role = LexaVaultProduct.grantRole(g.role());
+                    if (role == null) refused++;
+                    else accepted.add(new Grant(g.group(), role));
                 }
                 Set<Grant> existing = grantStore.grants(slot, LexaVaultProduct.CODE, byIssuer.getKey());
                 int missing = (int) accepted.stream().filter(g -> !existing.contains(g)).count();
@@ -210,7 +217,7 @@ public final class IdentityMigration {
                 if (missing > 0) {
                     out.println("  create      " + missing + " grant(s) " + slot + " " + LexaVaultProduct.CODE + " (issuer "
                             + byIssuer.getKey() + ")");
-                    if (apply) grantStore.add(slot, LexaVaultProduct.CODE, byIssuer.getKey(), accepted);
+                    if (apply) grantStore.add(slot, LexaVaultProduct.CODE, byIssuer.getKey(), accepted, AUTHOR);
                     added += missing;
                 }
             }

@@ -9,16 +9,17 @@
 #   PLATFORM_SETUP_DB_URL, PLATFORM_SETUP_DB_USER, PLATFORM_SETUP_DB_PASSWORD
 # Optional: LEXAVAULT_TRUSTED_KEYS (default install/trusted-keys.json, shipped with task 0038; the demo uses
 #   install/demo/development-trusted-keys.json), LEXAVAULT_PRODUCT_ROLES (default install/product-roles.json),
-#   LEXAVAULT_JAR.
-# Not wired yet (placeholders): customer keys (--no-customer-keys until task 0041), notifications (task 0040),
-#   integration client bindings (later task), the licence in the app (task 0038).
+#   LEXAVAULT_SETUP_JAR (default backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar: setup runs from its own
+#   jar, task 0041, because it brings platform-crypto and platform-integration, which the app's classpath may not carry).
+# Customer keys: --no-customer-keys is passed; LexaVault encrypts nothing with platform-core yet, and product-roles.json
+#   says "customerKeys": "optional" (task 0041). Not wired yet: notifications, integration client bindings.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-jar="${LEXAVAULT_JAR:-$repo_root/backend/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar}"
+jar="${LEXAVAULT_SETUP_JAR:-$repo_root/backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar}"
 keys="${LEXAVAULT_TRUSTED_KEYS:-$repo_root/install/trusted-keys.json}"
 roles="${LEXAVAULT_PRODUCT_ROLES:-$repo_root/install/product-roles.json}"
-[[ -f "$jar" ]] || { echo "Backend jar not found: $jar (build it first)." >&2; exit 2; }
+[[ -f "$jar" ]] || { echo "Setup jar not found: $jar (build it first)." >&2; exit 2; }
 if [[ ! -f "$keys" ]]; then
   echo "Trusted-keys file not found: $keys. The production keys file comes with task 0038; for the demo set" >&2
   echo "LEXAVAULT_TRUSTED_KEYS=install/demo/development-trusted-keys.json." >&2

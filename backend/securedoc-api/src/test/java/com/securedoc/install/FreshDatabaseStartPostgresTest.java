@@ -1,8 +1,11 @@
 package com.securedoc.install;
 
+import com.documentplatform.identity.store.ChangeSource;
+import com.documentplatform.identity.store.GrantChange;
 import com.documentplatform.setup.SetupCommand;
 import com.securedoc.platform.api.SecureDocumentPlatformApplication;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.infrastructure.identity.PlatformIdentityAdminReads;
 import com.securedoc.platform.infrastructure.identity.PlatformIdentityReads;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +34,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -79,17 +83,23 @@ class FreshDatabaseStartPostgresTest {
     }
 
     private static Run setup(String command) {
+        return setup(command, DEMO.resolve("signin-demo.json"));
+    }
+
+    private static Run setup(String command, Path signin, String... extra) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
-        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC()).run(List.of(command,
+        List<String> args = new ArrayList<>(List.of(command,
                 "--licence", DEMO.resolve("licence-demo.json").toString(),
-                "--signin", DEMO.resolve("signin-demo.json").toString(),
+                "--signin", signin.toString(),
                 "--product", "LEXAVAULT",
                 "--keys", DEMO.resolve("development-trusted-keys.json").toString(),
                 "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(),
-                "--no-customer-keys"), print, print);
+                "--no-customer-keys"));
+        args.addAll(List.of(extra));
+        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC()).run(args, print, print);
         return checked(exit, out);
     }
 
@@ -197,16 +207,40 @@ class FreshDatabaseStartPostgresTest {
         assertEquals(DEMO_ENTITY, reads.findActive("demo-okta", issuer, "api://lexavault-demo").orElseThrow().tenantId());
         assertEquals(Set.of(TenantId.of(DEMO_ENTITY)), reads.activeGrants("demo-okta", issuer, "api://lexavault-demo").keySet());
 
-        // The local OIDC start points the connection at the development login system, once; a rerun changes nothing.
-        Run oidc = demoStep("--oidc-issuer", "http://localhost:8181/realms/document-platform-local",
-                "--oidc-provider-id", "customer-oidc", "--oidc-audience", "lexavault-api", "--oidc-browser-client-id", "lexavault-web");
+        // Task 0041: the local OIDC start runs setup with the demo files and the development login system put in
+        // (LocalOidcSignin): platform-core 0.2.0 takes the http issuer on localhost under the development-signed demo
+        // licence. The demo step no longer writes the connection. A rerun changes nothing.
+        URI keycloak = URI.create(LocalOidcSigninTest.KEYCLOAK);
+        Path signin = LocalOidcSigninTest.write(work.resolve("oidc-signin"));
+        Run oidc = setup("apply", signin, "--replace-connection");
         assertEquals(0, oidc.exit(), oidc.output());
-        assertTrue(oidc.output().contains("update      login connection LEXAVAULT"), oidc.output());
-        assertEquals(DEMO_ENTITY, reads.findActive("customer-oidc", URI.create("http://localhost:8181/realms/document-platform-local"),
-                "lexavault-api").orElseThrow().tenantId());
-        Run again = demoStep("--oidc-issuer", "http://localhost:8181/realms/document-platform-local",
-                "--oidc-provider-id", "customer-oidc", "--oidc-audience", "lexavault-api", "--oidc-browser-client-id", "lexavault-web");
-        assertTrue(again.output().contains("unchanged   login connection LEXAVAULT"), again.output());
+        assertTrue(oidc.output().contains("login connection LEXAVAULT (version 1)"), oidc.output());
+        assertEquals(DEMO_ENTITY, reads.findActive("customer-oidc", keycloak, "lexavault-api").orElseThrow().tenantId());
+        assertTrue(reads.findActive("demo-okta", issuer, "api://lexavault-demo").isEmpty(), "the placeholder no longer signs in");
+        Run again = setup("apply", signin, "--replace-connection");
+        assertEquals(0, again.exit(), again.output());
+        assertTrue(again.output().contains("0 created, 0 updated, 0 removed"), again.output());
+        Run demo = demoStep();
+        assertFalse(demo.output().contains("login connection"), demo.output());
+
+        // The admin views (task 0041): the Sign-in screen's connection, and the grant history setup wrote with its run.
+        PlatformIdentityAdminReads admin = new PlatformIdentityAdminReads(new JdbcTemplate(new IdnRows(db).ds));
+        var active = admin.activeConnection(DEMO_ENTITY).orElseThrow();
+        assertEquals(keycloak, active.issuer());
+        assertEquals("lexavault-web", active.browserClientId());
+        var history = admin.grantHistory(DEMO_ENTITY, Instant.now().minusSeconds(3600), Instant.now().plusSeconds(60));
+        // Grants are per login system (issuer): the demo file's 5 for ENT-DEMO-0001, then the same 5 for the local one.
+        assertEquals(10, history.size(), history.toString());
+        assertEquals(5, history.stream().filter(c -> c.issuer().equals(keycloak)).count(), history.toString());
+        assertTrue(history.stream().allMatch(c -> c.change() == GrantChange.Kind.ADDED && c.source() == ChangeSource.SETUP
+                && c.setupRunId() != null), history.toString());
+        assertEquals(Set.of("BusinessUsers", "ElevatedUsers", "BusinessAdmins", "ReportViewers", "TenantITAdmins"),
+                history.stream().filter(c -> c.issuer().equals(keycloak)).map(GrantChange::group)
+                        .collect(java.util.stream.Collectors.toSet()));
+        // Stored as the role, never as an alias (product-roles.json aliases, platform-core 0.2.0).
+        assertTrue(history.stream().allMatch(c -> com.securedoc.platform.infrastructure.identity.LexaVaultProduct.ENTITY_ROLES
+                .contains(c.roleAfter())), history.toString());
+        assertTrue(admin.activeConnection(UUID.fromString("00000000-0000-0000-0000-000000000001")).isEmpty());
     }
 
     private static String rowCounts() throws SQLException {

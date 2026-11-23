@@ -9,6 +9,7 @@
  * short person id otherwise; "Case" shows a short case id where the record points at a case.
  */
 import { findSensitiveType, sentenceCase } from '../words.ts';
+import { ROLE_OPTIONS } from '../../security/uiAuthorization.ts';
 
 export interface AuditRecordLike {
   actorId: string;
@@ -337,4 +338,41 @@ export function actionOptions(): Array<[string, string]> {
   return [...Object.keys(SENTENCES), ...Object.keys(FINDING_SENTENCES)]
     .map((a): [string, string] => [a, whatHappened({ action: a })])
     .sort((x, y) => x[1].localeCompare(y[1]));
+}
+
+/* ---------- Sign-in access changes (task 0041) ---------- */
+
+/**
+ * One change in platform-identity's grant history: which login-system group gives which LexaVault role in this entity.
+ * Read-only; groups and roles are written exactly as stored.
+ */
+export interface GrantChangeLike {
+  change: 'ADDED' | 'REMOVED' | 'CHANGED';
+  group: string;
+  roleBefore: string | null;
+  roleAfter: string | null;
+  source: 'SETUP' | 'APP';
+  changedBy: string;
+  setupRunId: string | null;
+}
+
+/** A role's everyday name; an unknown name is shown as stored. */
+export function roleWord(role: string | null | undefined): string {
+  if (!role) return '—';
+  return ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role;
+}
+
+/** The change as a sentence. */
+export function grantChangeLine(c: GrantChangeLike): string {
+  switch (c.change) {
+    case 'ADDED': return `Group ${c.group} now gives ${roleWord(c.roleAfter)}`;
+    case 'REMOVED': return `Group ${c.group} no longer gives ${roleWord(c.roleBefore)}`;
+    default: return `Group ${c.group} now gives ${roleWord(c.roleAfter)} instead of ${roleWord(c.roleBefore)}`;
+  }
+}
+
+/** Who made it: setup (with its run, so the run log can be found) or the app. */
+export function grantChangeBy(c: GrantChangeLike): string {
+  if (c.source === 'SETUP') return c.setupRunId ? `Setup, run ${c.setupRunId}` : 'Setup';
+  return c.changedBy && c.changedBy !== 'app' ? c.changedBy : 'LexaVault';
 }

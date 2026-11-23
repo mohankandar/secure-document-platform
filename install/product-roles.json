@@ -6,10 +6,13 @@
     "DOCUMENT_SUPERVISOR",
     "BUSINESS_ADMIN",
     "REPORT_VIEWER",
-    "TENANT_IT_ADMIN",
-    "USER",
-    "REVIEWER",
-    "APPROVER"
+    "TENANT_IT_ADMIN"
   ],
-  "platformRoles": ["PLATFORM_OPERATIONS_ADMIN"]
+  "aliases": {
+    "USER": "DOCUMENT_PROCESSOR",
+    "REVIEWER": "DOCUMENT_PROCESSOR",
+    "APPROVER": "DOCUMENT_SUPERVISOR"
+  },
+  "platformRoles": ["PLATFORM_OPERATIONS_ADMIN"],
+  "customerKeys": "optional"
 }
