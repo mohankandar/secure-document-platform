@@ -256,3 +256,14 @@ Not merged, not pushed.
 ## Suggested next step
 
 Part B on the customer samples, with the same command. Then prompt v2 and the R1 check-line patterns, re-measured with this harness.
+
+## Owner's answers (2026-11-22, recorded by the design chat; owner said "as recommended")
+
+1. **Model:** `qwen3-vl:8b-instruct` approved as the **candidate** vision model. Because every model run here is of Chinese origin, the next benchmark round adds **at least one non-Chinese vision model** (for example IBM Granite Vision, Mistral Small 3.1, Google Gemma 3), so a tested second option exists for the customer's vendor-risk review.
+2. **60-second target:** kept. P2 plans vision running alongside the text path.
+3. **Check line (routing / account numbers):** both: R1 adds routing and account patterns with checksums on the check line, and the next round tries prompt v2.
+4. **OCR routing threshold 0.85:** accepted as the provisional default until part B.
+5. **Remove `llama3.2-vision:11b` and `qwen3-vl:8b`:** yes.
+6. **Restart Ollama with `OLLAMA_NUM_PARALLEL=2` to measure requests at once:** yes, and set it back to how it was afterwards.
+7. **Part B:** no customer samples yet; it waits for the first customer's approved samples.
+- **Proposed pass marks:** recorded here as proposed; the owner approves them as LexaVault's thresholds when model governance is integrated.
