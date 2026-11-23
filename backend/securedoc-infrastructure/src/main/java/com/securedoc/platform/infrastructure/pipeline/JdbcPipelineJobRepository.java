@@ -405,6 +405,40 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
         return jdbc.query(RELEASE_EXPIRED_SQL, params, JdbcPipelineJobRepository::map);
     }
 
+    /** Task 0048: the same release, for the jobs of these stages only. */
+    static final String RELEASE_EXPIRED_OF_STAGES_SQL = RELEASE_EXPIRED_SQL.replace(
+            "WHERE status = 'RUNNING' AND claim_until <= clock_timestamp()",
+            "WHERE status = 'RUNNING' AND claim_until <= clock_timestamp() AND stage IN (:stages)");
+
+    @Override
+    public List<PipelineJob> releaseExpiredClaims(Set<PipelineStage> stages, int maxAttempts, String exhaustedLvCode,
+                                                  int limit) {
+        if (stages == null || stages.isEmpty()) return List.of();
+        var params = new MapSqlParameterSource()
+                .addValue("stages", stages.stream().map(Enum::name).toList())
+                .addValue("maxAttempts", Math.max(1, maxAttempts))
+                .addValue("exhaustedCode", exhaustedLvCode)
+                .addValue("limit", Math.max(1, limit));
+        return jdbc.query(RELEASE_EXPIRED_OF_STAGES_SQL, params, JdbcPipelineJobRepository::map);
+    }
+
+    @Override
+    public void lockCaseGate(TenantId tenantId, PackageId packageId) {
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended('lexavault.case-gate:' || :tenantId || ':' "
+                        + "|| :packageId, 0))", new MapSqlParameterSource()
+                        .addValue("tenantId", tenantId.value().toString())
+                        .addValue("packageId", packageId.value().toString()), rs -> { });
+    }
+
+    @Override
+    public boolean hasStageJobs(TenantId tenantId, PackageId packageId) {
+        var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
+                .addValue("packageId", packageId.value());
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pipeline_jobs"
+                + " WHERE package_id = :packageId AND tenant_id = :tenantId"
+                + " AND stage IN ('TEXT', 'FIND', 'REDACT'))", params, Boolean.class));
+    }
+
     @Override
     public boolean changeStatus(TenantId tenantId, UUID id, PipelineJobStatus from, PipelineJobStatus to, int attempts,
                                 String lastLvCode, String lastDetail) {

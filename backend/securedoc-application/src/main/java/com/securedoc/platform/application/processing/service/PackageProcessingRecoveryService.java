@@ -54,8 +54,31 @@ public final class PackageProcessingRecoveryService {
                                             int attempts,
                                             int maxAttempts,
                                             CorrelationId correlationId) {
+        return exhaust(packageId, tenantId, attempts, maxAttempts, correlationId,
+                java.util.EnumSet.of(PackageStatus.PROCESSING));
+    }
+
+    /**
+     * Task 0048: the same stop for a staged case. A Redact job after a review runs while the case is still
+     * PENDING_REVIEW or IN_REVIEW, so a case in those statuses is stopped too (with the same incident, audit and code).
+     */
+    public boolean exhaustStagedCase(PackageId packageId,
+                                     TenantId tenantId,
+                                     int attempts,
+                                     int maxAttempts,
+                                     CorrelationId correlationId) {
+        return exhaust(packageId, tenantId, attempts, maxAttempts, correlationId, java.util.EnumSet.of(
+                PackageStatus.PROCESSING, PackageStatus.PENDING_REVIEW, PackageStatus.IN_REVIEW));
+    }
+
+    private boolean exhaust(PackageId packageId,
+                            TenantId tenantId,
+                            int attempts,
+                            int maxAttempts,
+                            CorrelationId correlationId,
+                            java.util.Set<PackageStatus> from) {
         var pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
-        if (pkg == null || pkg.status() != PackageStatus.PROCESSING) return false;
+        if (pkg == null || !from.contains(pkg.status())) return false;
 
         pkg.fail();
         packageRepository.save(pkg);

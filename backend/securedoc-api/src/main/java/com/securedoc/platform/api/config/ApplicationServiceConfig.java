@@ -1176,6 +1176,89 @@ public class ApplicationServiceConfig {
                 productTelemetryService, exportJobQueue);
     }
 
+    /**
+     * Task 0048: {@code securedoc.processing.pipeline-mode} is inline (default, today's flow) or staged (Text, Find and
+     * Redact as per-document jobs). Staged needs export-mode job: a staged case is Ready for export at its last gate and
+     * its EXPORT jobs are queued (P1). Anything else is refused at start (no silent fallback).
+     */
+    @Bean
+    public com.securedoc.platform.application.pipeline.StagedProcessingSettings stagedProcessingSettings(
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.pipeline-mode:inline}") String pipelineMode,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-mode:inline}") String exportMode,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.claim-lease-ms:120000}") long claimLeaseMs,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.max-attempts:3}") int maxAttempts,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.text-workers:2}") int textWorkers,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.find-workers:2}") int findWorkers,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.redact-workers:2}") int redactWorkers,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.poll-interval-ms:1000}") long pollIntervalMs) {
+        var mode = com.securedoc.platform.application.pipeline.PipelineMode.parse(pipelineMode);
+        if (mode == com.securedoc.platform.application.pipeline.PipelineMode.STAGED
+                && com.securedoc.platform.application.pipeline.ExportMode.parse(exportMode)
+                != com.securedoc.platform.application.pipeline.ExportMode.JOB) {
+            throw new IllegalStateException(
+                    "securedoc.processing.pipeline-mode=staged needs securedoc.processing.export-mode=job");
+        }
+        return new com.securedoc.platform.application.pipeline.StagedProcessingSettings(mode,
+                java.time.Duration.ofMillis(claimLeaseMs), maxAttempts, textWorkers, findWorkers, redactWorkers,
+                java.time.Duration.ofMillis(pollIntervalMs));
+    }
+
+    /** Task 0048: each staged step (and each gate) is one transaction of its own. */
+    @Bean
+    public com.securedoc.platform.application.port.out.TransactionPort transactionPort(
+            org.springframework.transaction.PlatformTransactionManager transactionManager) {
+        var template = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return new com.securedoc.platform.application.port.out.TransactionPort() {
+            @Override
+            public <T> T inNewTransaction(java.util.function.Supplier<T> work) {
+                return template.execute(status -> work.get());
+            }
+        };
+    }
+
+    @Bean
+    public com.securedoc.platform.application.processing.service.StagedProcessingService stagedProcessingService(
+            com.securedoc.platform.application.pipeline.StagedProcessingSettings stagedProcessingSettings,
+            com.securedoc.platform.application.port.out.PipelineJobRepository pipelineJobRepository,
+            PackageRepository packageRepository,
+            DocumentRepository documentRepository,
+            ProcessingLockPort processingLockPort,
+            StartPackageProcessingUseCase startPackageProcessingUseCase,
+            StartDocumentProcessingUseCase startDocumentProcessingUseCase,
+            ExtractDocumentTextUseCase extractDocumentTextUseCase,
+            DetectSensitiveDataUseCase detectSensitiveDataUseCase,
+            RedactDocumentUseCase redactDocumentUseCase,
+            PackageLifecycleService packageLifecycleService,
+            ProcessingIncidentService processingIncidentService,
+            PackageProcessingRecoveryService packageProcessingRecoveryService,
+            AuditService auditService,
+            TenantLicensingService tenantLicensingService,
+            ProductTelemetryService productTelemetryService,
+            TriggerPackageProcessingService triggerPackageProcessingService,
+            com.securedoc.platform.application.port.out.TransactionPort transactionPort,
+            StoragePort storagePort) {
+        return new com.securedoc.platform.application.processing.service.StagedProcessingService(
+                stagedProcessingSettings, pipelineJobRepository, packageRepository, documentRepository,
+                processingLockPort, startPackageProcessingUseCase, startDocumentProcessingUseCase,
+                extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase, packageLifecycleService,
+                processingIncidentService, packageProcessingRecoveryService, auditService, tenantLicensingService,
+                productTelemetryService, triggerPackageProcessingService, transactionPort, storagePort);
+    }
+
+    /**
+     * Task 0048: the trigger the dispatcher runs. A staged case is planned as jobs; every other case runs inline
+     * through {@link TriggerPackageProcessingService}, unchanged.
+     */
+    @Bean
+    @org.springframework.context.annotation.Primary
+    public TriggerPackageProcessingUseCase pipelineModeRouter(
+            TriggerPackageProcessingService triggerPackageProcessingService,
+            com.securedoc.platform.application.processing.service.StagedProcessingService stagedProcessingService) {
+        return new com.securedoc.platform.application.processing.service.PipelineModeRouter(
+                triggerPackageProcessingService, stagedProcessingService);
+    }
+
     /** Task 0027: export job settings. {@code securedoc.processing.export-mode} is inline (default) or job. */
     @Bean
     public com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings(

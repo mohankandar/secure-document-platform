@@ -1,0 +1,628 @@
+package com.securedoc.platform.application.processing.service;
+
+import com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand;
+import com.securedoc.platform.application.error.LvErrorCodes;
+import com.securedoc.platform.application.exception.NotFoundException;
+import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
+import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
+import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.pipeline.StagedProcessingSettings;
+import com.securedoc.platform.application.pipeline.StagedStepScope;
+import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
+import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
+import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
+import com.securedoc.platform.application.port.in.StartDocumentProcessingUseCase;
+import com.securedoc.platform.application.port.in.StartPackageProcessingUseCase;
+import com.securedoc.platform.application.port.out.DocumentRepository;
+import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.PipelineJobRepository;
+import com.securedoc.platform.application.port.out.ProcessingLockPort;
+import com.securedoc.platform.application.port.out.StoragePort;
+import com.securedoc.platform.application.port.out.TransactionPort;
+import com.securedoc.platform.application.processing.command.StartDocumentProcessingCommand;
+import com.securedoc.platform.application.processing.command.StartPackageProcessingCommand;
+import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
+import com.securedoc.platform.application.processing.result.ProcessingWorkItem;
+import com.securedoc.platform.application.processing.result.StartDocumentProcessingResult;
+import com.securedoc.platform.application.processing.result.StartPackageProcessingResult;
+import com.securedoc.platform.application.redaction.command.RedactDocumentCommand;
+import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
+import com.securedoc.platform.application.service.AuditService;
+import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
+import com.securedoc.platform.application.telemetry.ProductTelemetryService;
+import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
+import com.securedoc.platform.domain.audit.AuditAction;
+import com.securedoc.platform.domain.document.Document;
+import com.securedoc.platform.domain.document.DocumentPackage;
+import com.securedoc.platform.domain.document.DocumentStatus;
+import com.securedoc.platform.domain.document.PackageStatus;
+import com.securedoc.platform.domain.error.LvErrorCode;
+import com.securedoc.platform.domain.identity.ActorId;
+import com.securedoc.platform.domain.identity.CorrelationId;
+import com.securedoc.platform.domain.identity.DocumentId;
+import com.securedoc.platform.domain.identity.PackageId;
+import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.domain.pipeline.PipelineJob;
+import com.securedoc.platform.domain.pipeline.PipelineJobStatus;
+import com.securedoc.platform.domain.pipeline.PipelineStage;
+import com.securedoc.platform.domain.processing.ProcessingStage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Task 0048 (staged pipeline P2 part 1): text reading, finding and redaction as per-document jobs (design
+ * docs/work/staged-pipeline-design.md, sections 3 and 4).
+ *
+ * <p>What each step does is unchanged: a step calls the same use cases, with the same failure handling, as
+ * {@link TriggerPackageProcessingService} does inline. What changes is the scheduling:
+ * <ul>
+ *   <li><b>Jobs.</b> A case is started by queuing one TEXT job per document. A TEXT job queues the document's FIND
+ *       job. FIND and REDACT end in the case's gate.</li>
+ *   <li><b>Gates.</b> After a job, the case's gate (one at a time per case, under a lock) looks at its documents: while
+ *       any is still reading or finding, nothing happens; then a failed document fails the case and a finding that
+ *       needs a person sends it to Review (as inline); otherwise every document waiting for redaction gets its REDACT
+ *       job; when all are redacted the case is Ready for export (P1, unchanged: its EXPORT jobs are queued).</li>
+ *   <li><b>Fencing (#342).</b> A step runs in one transaction. Its last write is the job's result, saved only while
+ *       its claim number is still current. If it is not (the worker was paused or cut off and another worker took the
+ *       job), the whole transaction rolls back: none of the step's writes count, and the files it stored are deleted.
+ *       A server that stops mid-step leaves nothing half-saved either: its transaction never commits.</li>
+ *   <li><b>A server stops.</b> Its claims run out; the job goes back to the queue (one attempt). After
+ *       {@code maxAttempts} the case stops with LV-PRC-008.</li>
+ * </ul>
+ * Every job status change is audited with ids and codes only; no content.
+ */
+public final class StagedProcessingService {
+
+    private static final Logger log = LoggerFactory.getLogger(StagedProcessingService.class);
+    private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
+    private static final String DOCUMENT_PROCESSING_LOCK_PREFIX = "doc-processing:";
+
+    /** The stages this service runs. */
+    public static final Set<PipelineStage> STAGES = EnumSet.of(PipelineStage.TEXT, PipelineStage.FIND,
+            PipelineStage.REDACT);
+    private static final Set<PackageStatus> OPEN = EnumSet.of(PackageStatus.PROCESSING, PackageStatus.PENDING_REVIEW,
+            PackageStatus.IN_REVIEW);
+
+    /** What happened to a job a worker ran. */
+    public enum Outcome {
+        /** The result was saved. */
+        DONE,
+        /** The claim was no longer current: nothing was saved. */
+        CLAIM_LOST
+    }
+
+    private final StagedProcessingSettings settings;
+    private final PipelineJobRepository jobs;
+    private final PackageRepository packageRepository;
+    private final DocumentRepository documentRepository;
+    private final ProcessingLockPort processingLockPort;
+    private final StartPackageProcessingUseCase startPackageProcessing;
+    private final StartDocumentProcessingUseCase startDocumentProcessing;
+    private final ExtractDocumentTextUseCase extractDocumentText;
+    private final DetectSensitiveDataUseCase detectSensitiveData;
+    private final RedactDocumentUseCase redactDocument;
+    private final PackageLifecycleService lifecycleService;
+    private final ProcessingIncidentService incidents;
+    private final PackageProcessingRecoveryService recoveryService;
+    private final AuditService audit;
+    private final TenantLicensingService licensing;
+    private final ProductTelemetryService telemetry;
+    private final TriggerPackageProcessingService inline;
+    private final TransactionPort transactions;
+    private final StoragePort storage;
+
+    public StagedProcessingService(StagedProcessingSettings settings,
+                                   PipelineJobRepository jobs,
+                                   PackageRepository packageRepository,
+                                   DocumentRepository documentRepository,
+                                   ProcessingLockPort processingLockPort,
+                                   StartPackageProcessingUseCase startPackageProcessing,
+                                   StartDocumentProcessingUseCase startDocumentProcessing,
+                                   ExtractDocumentTextUseCase extractDocumentText,
+                                   DetectSensitiveDataUseCase detectSensitiveData,
+                                   RedactDocumentUseCase redactDocument,
+                                   PackageLifecycleService lifecycleService,
+                                   ProcessingIncidentService incidents,
+                                   PackageProcessingRecoveryService recoveryService,
+                                   AuditService audit,
+                                   TenantLicensingService licensing,
+                                   ProductTelemetryService telemetry,
+                                   TriggerPackageProcessingService inline,
+                                   TransactionPort transactions,
+                                   StoragePort storage) {
+        this.settings = Objects.requireNonNull(settings);
+        this.jobs = Objects.requireNonNull(jobs);
+        this.packageRepository = Objects.requireNonNull(packageRepository);
+        this.documentRepository = Objects.requireNonNull(documentRepository);
+        this.processingLockPort = Objects.requireNonNull(processingLockPort);
+        this.startPackageProcessing = Objects.requireNonNull(startPackageProcessing);
+        this.startDocumentProcessing = Objects.requireNonNull(startDocumentProcessing);
+        this.extractDocumentText = Objects.requireNonNull(extractDocumentText);
+        this.detectSensitiveData = Objects.requireNonNull(detectSensitiveData);
+        this.redactDocument = Objects.requireNonNull(redactDocument);
+        this.lifecycleService = Objects.requireNonNull(lifecycleService);
+        this.incidents = Objects.requireNonNull(incidents);
+        this.recoveryService = Objects.requireNonNull(recoveryService);
+        this.audit = Objects.requireNonNull(audit);
+        this.licensing = Objects.requireNonNull(licensing);
+        this.telemetry = Objects.requireNonNull(telemetry);
+        this.inline = Objects.requireNonNull(inline);
+        this.transactions = Objects.requireNonNull(transactions);
+        this.storage = Objects.requireNonNull(storage);
+    }
+
+    public StagedProcessingSettings settings() {
+        return settings;
+    }
+
+    // ------------------------------------------------------------------------------------------ routing and planning
+
+    /**
+     * True when this trigger belongs to the staged pipeline: a case that already has stage jobs (whatever the setting
+     * now says, so a staged case is never re-run inline), or, with pipeline-mode staged, a case not started yet.
+     * Every other case, including one started inline before the switch, goes on inline (task item 7).
+     */
+    public boolean handles(TriggerPackageProcessingCommand command) {
+        if (jobs.hasStageJobs(command.tenantId(), command.packageId())) return true;
+        if (!settings.staged()) return false;
+        return packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
+                .map(pkg -> pkg.status() == PackageStatus.SUBMITTED).orElse(false);
+    }
+
+    /**
+     * Plans a staged case instead of running it: queues its next jobs. Runs on the dispatcher's thread under the
+     * case's processing lease, as an inline run does; each change is one transaction.
+     */
+    public void plan(TriggerPackageProcessingCommand command) {
+        Objects.requireNonNull(command, "Command must not be null");
+        licensing.requireDocumentProcessing(command.tenantId(), command.actorId(), command.correlationId());
+        DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
+                .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
+        log.info("STAGED_PROCESSING_PLAN package={} tenant={} status={} correlation={}",
+                command.packageId(), command.tenantId(), pkg.status(), command.correlationId());
+        switch (pkg.status()) {
+            case SUBMITTED -> {
+                inline.ensureDocumentIntelligenceSnapshot(command);
+                transactions.inNewTransaction(() -> {
+                    start(command);
+                    return null;
+                });
+            }
+            case PROCESSING -> {
+                inline.ensureDocumentIntelligenceSnapshot(command);
+                transactions.inNewTransaction(() -> {
+                    queueMissingJobs(command.tenantId(), command.packageId(), command.correlationId());
+                    return null;
+                });
+                gate(command.tenantId(), command.packageId(), command.correlationId());
+            }
+            case PENDING_REVIEW, IN_REVIEW -> {
+                inline.ensureDocumentIntelligenceSnapshot(command);
+                transactions.inNewTransaction(() -> {
+                    continueAfterReview(command);
+                    return null;
+                });
+            }
+            default -> throw new ValidationException(LvErrorCode.PRC_009,
+                    "Cannot trigger processing for package in status: " + pkg.status());
+        }
+    }
+
+    /** SUBMITTED to PROCESSING (the same use case as inline) and one TEXT job per document, in one transaction. */
+    private void start(TriggerPackageProcessingCommand command) {
+        StartPackageProcessingResult result = startPackageProcessing.execute(StartPackageProcessingCommand.of(
+                command.packageId(), command.tenantId(), command.correlationId()));
+        int cycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId());
+        for (ProcessingWorkItem item : result.workItems()) {
+            queue(PipelineStage.TEXT, command.tenantId(), command.packageId(), item.documentId(), cycle,
+                    command.correlationId(), false);
+        }
+    }
+
+    /**
+     * A staged case triggered again while PROCESSING: a document waiting for a stage without a job for it gets one.
+     * Queuing a job that exists adds nothing.
+     */
+    private void queueMissingJobs(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
+        for (Document document : documentRepository.findByPackageIdAndTenantId(packageId, tenantId)) {
+            if (document.status() == DocumentStatus.UPLOADED) {
+                queue(PipelineStage.TEXT, tenantId, packageId, document.id(), cycle, correlationId, false);
+            } else if (document.status() == DocumentStatus.DETECTING) {
+                queue(PipelineStage.FIND, tenantId, packageId, document.id(), cycle, correlationId, false);
+            }
+        }
+    }
+
+    /** As inline: every document waiting for redaction is cleared by its reviewer; then each gets its REDACT job. */
+    private void continueAfterReview(TriggerPackageProcessingCommand command) {
+        List<Document> redacting = documentRepository
+                .findByPackageIdAndTenantId(command.packageId(), command.tenantId()).stream()
+                .filter(document -> document.status() == DocumentStatus.REDACTING)
+                .toList();
+        if (redacting.isEmpty()) {
+            throw new ValidationException(LvErrorCode.REV_003, "No documents in REDACTING status require processing");
+        }
+        for (Document document : redacting) {
+            if (inline.hasDetectedFindings(document.id(), command.tenantId())) {
+                throw new ValidationException(LvErrorCode.REV_003, "Cannot continue redaction: document "
+                        + document.id() + " still has findings requiring review");
+            }
+        }
+        int cycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId());
+        for (Document document : redacting) {
+            queue(PipelineStage.REDACT, command.tenantId(), command.packageId(), document.id(), cycle,
+                    command.correlationId(), true);
+        }
+    }
+
+    /**
+     * Queues a job. Queuing one that exists adds nothing; with {@code again}, a finished one for the same case run is
+     * set back to READY (a document redacted again after a second review).
+     */
+    private void queue(PipelineStage stage, TenantId tenantId, PackageId packageId, DocumentId documentId, int cycle,
+                       CorrelationId correlationId, boolean again) {
+        PipelineJob job = PipelineJob.ready(tenantId, stage, packageId, documentId, null, null, cycle, Instant.now());
+        if (jobs.enqueue(job)) {
+            audit.recordSuccess(tenantId, SYSTEM_ACTOR, AuditAction.PIPELINE_JOB_QUEUED, "DocumentPackage",
+                    packageId.toString(), packageId, correlationId,
+                    "Pipeline job queued: stage=" + stage + ", document=" + documentId + ", cycle=" + cycle);
+            return;
+        }
+        if (!again) return;
+        jobs.findByTenantIdAndPackageId(tenantId, packageId).stream()
+                .filter(existing -> existing.stage() == stage && documentId.equals(existing.documentId())
+                        && existing.exportCycle() == cycle && existing.status() == PipelineJobStatus.DONE)
+                .findFirst()
+                .ifPresent(existing -> {
+                    if (jobs.changeStatus(tenantId, existing.id(), PipelineJobStatus.DONE, PipelineJobStatus.READY, 0,
+                            null, "QUEUED_AGAIN")) {
+                        auditStatus(existing, PipelineJobStatus.DONE, PipelineJobStatus.READY, null, "QUEUED_AGAIN",
+                                correlationId);
+                    }
+                });
+    }
+
+    // ------------------------------------------------------------------------------------------------- workers
+
+    /** The next due job of one stage, claimed with a new claim number. */
+    public Optional<PipelineJob> claimNext(PipelineStage stage, String owner) {
+        if (!STAGES.contains(stage)) throw new IllegalArgumentException("Not a staged processing stage: " + stage);
+        // Stage jobs have no destination, so the per-destination limit does not apply.
+        return jobs.claimNext(EnumSet.of(stage), owner, settings.claimLease(), 1);
+    }
+
+    /** Renews a running job's claim. False when the claim is no longer this worker's. */
+    public boolean renew(PipelineJob job) {
+        return jobs.renew(job.id(), job.claimToken(), settings.claimLease());
+    }
+
+    /**
+     * Runs one claimed job: its step and its result in one transaction (see the class comment), then the case's gate.
+     */
+    public Outcome run(PipelineJob job) {
+        Objects.requireNonNull(job, "job");
+        CorrelationId correlationId = CorrelationId.generate();
+        List<ArtifactStorageReference> stored = new ArrayList<>();
+        try {
+            transactions.inNewTransaction(() -> StagedStepScope.tracking(stored, () -> {
+                runStep(job, correlationId);
+                return null;
+            }));
+        } catch (ClaimLost lost) {
+            deleteStored(stored);
+            log.warn("PIPELINE_JOB_CLAIM_LOST job={} stage={} package={} claimToken={} reasonCode=RESULT_NOT_SAVED",
+                    job.id(), job.stage(), job.packageId(), job.claimToken());
+            return Outcome.CLAIM_LOST;
+        } catch (RuntimeException notSaved) {
+            // The step's writes could not be committed (for example a database error left the transaction unusable).
+            // Record the failure as inline does, in a new transaction, still fenced by the claim number.
+            deleteStored(stored);
+            try {
+                transactions.inNewTransaction(() -> {
+                    Document document = documentRepository.findByIdAndTenantId(job.documentId(), job.tenantId())
+                            .orElse(null);
+                    recordStepFailure(job, document, processingStage(job.stage()), notSaved, correlationId);
+                    finishOrThrow(job, LvErrorCodes.forPlatformFailure(notSaved).code(), "STEP_NOT_SAVED",
+                            correlationId);
+                    return null;
+                });
+            } catch (ClaimLost lost) {
+                log.warn("PIPELINE_JOB_CLAIM_LOST job={} stage={} package={} claimToken={} reasonCode=FAILURE_NOT_SAVED",
+                        job.id(), job.stage(), job.packageId(), job.claimToken());
+                return Outcome.CLAIM_LOST;
+            }
+        }
+        gateSafely(job.tenantId(), job.packageId(), correlationId);
+        return Outcome.DONE;
+    }
+
+    private void runStep(PipelineJob job, CorrelationId correlationId) {
+        if (!jobs.claimIsCurrent(job.id(), job.claimToken())) throw new ClaimLost();
+        DocumentPackage pkg = packageRepository.findByIdAndTenantId(job.packageId(), job.tenantId()).orElse(null);
+        if (pkg == null || !OPEN.contains(pkg.status())) {
+            // The case was stopped (a document failed, LV-PRC-008, cancelled): its remaining jobs do nothing.
+            finishOrThrow(job, PipelineJobStatus.STOPPED, null, "CASE_NOT_OPEN", correlationId);
+            return;
+        }
+        Document document = documentRepository.findByIdAndTenantId(job.documentId(), job.tenantId()).orElse(null);
+        if (document == null) {
+            finishOrThrow(job, PipelineJobStatus.STOPPED, null, "DOCUMENT_NOT_FOUND", correlationId);
+            return;
+        }
+        String code = null;
+        String detail = null;
+        try {
+            detail = switch (job.stage()) {
+                case TEXT -> text(job, document, correlationId);
+                case FIND -> find(job, document, correlationId);
+                case REDACT -> redact(job, document, correlationId);
+                default -> throw new IllegalStateException("Not a staged processing stage: " + job.stage());
+            };
+        } catch (ClaimLost lost) {
+            throw lost;
+        } catch (ValidationException precondition) {
+            if (job.stage() != PipelineStage.REDACT) {
+                recordStepFailure(job, document, processingStage(job.stage()), precondition, correlationId);
+            }
+            // REDACT: a review precondition is not a technical failure (as inline); the gate decides what follows.
+            code = precondition.lvCode() == null ? null : precondition.lvCode().code();
+            detail = job.stage() == PipelineStage.REDACT ? "REVIEW_PRECONDITION" : "STEP_FAILED";
+        } catch (StepFailure failure) {
+            recordStepFailure(job, document, failure.stage, failure.cause, correlationId);
+            code = LvErrorCodes.forPlatformFailure(failure.cause).code();
+            detail = "STEP_FAILED";
+        } catch (RuntimeException failure) {
+            recordStepFailure(job, document, processingStage(job.stage()), failure, correlationId);
+            code = LvErrorCodes.forPlatformFailure(failure).code();
+            detail = "STEP_FAILED";
+        }
+        finishOrThrow(job, code, detail, correlationId);
+    }
+
+    /** TEXT: the document's text is read (native text or OCR), as inline; then its FIND job is queued. */
+    private String text(PipelineJob job, Document document, CorrelationId correlationId) {
+        if (document.status() != DocumentStatus.UPLOADED) {
+            // Already read by an earlier run of this job whose result was saved: only the next job is missing.
+            if (document.status() == DocumentStatus.DETECTING) {
+                queue(PipelineStage.FIND, job.tenantId(), job.packageId(), document.id(), job.exportCycle(),
+                        correlationId, false);
+            }
+            return "ALREADY_" + document.status();
+        }
+        if (job.attempts() > 0) {
+            // A lost run's document lock (an inline run's, or one written outside this transaction) must not refuse
+            // the retry. While this job is claimed no other worker works on this document.
+            processingLockPort.forceRelease(DOCUMENT_PROCESSING_LOCK_PREFIX + document.id().value());
+        }
+        ProcessingStage stage = ProcessingStage.DOCUMENT_PROCESSING;
+        try {
+            StartDocumentProcessingResult start = startDocumentProcessing.execute(StartDocumentProcessingCommand.of(
+                    document.id(), job.packageId(), job.tenantId(), correlationId));
+            stage = ProcessingStage.TEXT_EXTRACTION;
+            extractDocumentText.execute(ExtractDocumentTextCommand.of(document.id(), job.packageId(), job.tenantId(),
+                    start.lockKey(), start.lockToken(), correlationId));
+        } catch (RuntimeException failure) {
+            throw new StepFailure(stage, failure);
+        }
+        queue(PipelineStage.FIND, job.tenantId(), job.packageId(), document.id(), job.exportCycle(), correlationId,
+                false);
+        return null;
+    }
+
+    /** FIND: sensitive data is found (rules and AI), as inline. What follows is the gate's decision. */
+    private String find(PipelineJob job, Document document, CorrelationId correlationId) {
+        if (document.status() != DocumentStatus.DETECTING) return "ALREADY_" + document.status();
+        try {
+            detectSensitiveData.execute(DetectSensitiveDataCommand.of(document.id(), job.packageId(), job.tenantId(),
+                    correlationId));
+        } catch (RuntimeException failure) {
+            throw new StepFailure(ProcessingStage.SENSITIVE_DETECTION, failure);
+        }
+        return null;
+    }
+
+    /** REDACT: the document is redacted with its safety check and the final check (task 0044), as inline. */
+    private String redact(PipelineJob job, Document document, CorrelationId correlationId) {
+        if (document.status() != DocumentStatus.REDACTING) return "ALREADY_" + document.status();
+        if (inline.hasDetectedFindings(document.id(), job.tenantId())) return "WAITING_FOR_REVIEW";
+        try {
+            redactDocument.execute(RedactDocumentCommand.of(document.id(), job.packageId(), job.tenantId(),
+                    correlationId));
+        } catch (ValidationException precondition) {
+            throw precondition;
+        } catch (RuntimeException failure) {
+            throw new StepFailure(ProcessingStage.REDACTION, failure);
+        }
+        return null;
+    }
+
+    /** As inline: a Support incident for the stage, and the document FAILED with a safe reason. */
+    private void recordStepFailure(PipelineJob job, Document document, ProcessingStage stage, Exception failure,
+                                   CorrelationId correlationId) {
+        incidents.recordFailure(job.tenantId(), job.packageId(), job.documentId(), stage, failure, correlationId,
+                job.stage() == PipelineStage.REDACT ? "Document redaction failed" : "Document processing failed",
+                Map.of());
+        if (document != null) {
+            inline.markDocumentFailedIfNeeded(document.id(), job.tenantId(), correlationId,
+                    TechnicalFailureClassifier.safeAuditDetail(failure, job.stage() == PipelineStage.REDACT
+                            ? "Document redaction failed" : "Document processing failed"));
+        }
+    }
+
+    private void finishOrThrow(PipelineJob job, String code, String detail, CorrelationId correlationId) {
+        finishOrThrow(job, PipelineJobStatus.DONE, code, detail, correlationId);
+    }
+
+    /** The fenced save: the job's result, only while its claim number is current; otherwise nothing counts. */
+    private void finishOrThrow(PipelineJob job, PipelineJobStatus status, String code, String detail,
+                               CorrelationId correlationId) {
+        boolean saved = jobs.finish(job.id(), job.claimToken(), new PipelineJobRepository.Finish(status,
+                job.attempts(), null, code, detail, false, false, code != null));
+        if (!saved) throw new ClaimLost();
+        auditStatus(job, PipelineJobStatus.RUNNING, status, code, detail, correlationId);
+    }
+
+    private void deleteStored(List<ArtifactStorageReference> stored) {
+        for (ArtifactStorageReference reference : stored) {
+            try {
+                storage.delete(reference);
+            } catch (RuntimeException failure) {
+                log.warn("PIPELINE_JOB_STORED_FILE_DELETE_FAILED type={}", failure.getClass().getSimpleName());
+            }
+        }
+    }
+
+    // --------------------------------------------------------------------------------------------------- gates
+
+    private void gateSafely(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        try {
+            gate(tenantId, packageId, correlationId);
+        } catch (RuntimeException failure) {
+            // The job's result is saved; the gate runs again after the case's next job, or when it is triggered.
+            log.warn("PIPELINE_CASE_GATE_FAILED package={} type={} code={}", packageId,
+                    failure.getClass().getSimpleName(), LvErrorCodes.forPlatformFailure(failure).code());
+        }
+    }
+
+    /**
+     * The case's gate, one at a time per case. Reads only saved document states, so the last of two documents to
+     * finish always sees both.
+     */
+    void gate(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        PackageStatus before = packageRepository.findByIdAndTenantId(packageId, tenantId)
+                .map(DocumentPackage::status).orElse(null);
+        transactions.inNewTransaction(() -> {
+            jobs.lockCaseGate(tenantId, packageId);
+            decide(tenantId, packageId, correlationId);
+            return null;
+        });
+        PackageStatus after = packageRepository.findByIdAndTenantId(packageId, tenantId)
+                .map(DocumentPackage::status).orElse(null);
+        if (before != after) {
+            log.info("PIPELINE_CASE_GATE_MOVED package={} from={} to={}", packageId, before, after);
+            try {
+                int documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId).size();
+                telemetry.processingFinished(tenantId, packageId, after == null ? "UNKNOWN" : after.name(), 0L,
+                        documents);
+            } catch (RuntimeException ignored) {
+                // Product telemetry must never mask processing outcome.
+            }
+        }
+    }
+
+    private void decide(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
+        DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
+        if (pkg == null || !OPEN.contains(pkg.status())) return;
+        List<Document> documents = documentRepository.findByPackageIdAndTenantId(packageId, tenantId);
+        if (documents.isEmpty()) return;
+        boolean stillReadingOrFinding = documents.stream().anyMatch(document ->
+                document.status() == DocumentStatus.UPLOADED
+                        || document.status() == DocumentStatus.EXTRACTING
+                        || document.status() == DocumentStatus.DETECTING);
+        if (stillReadingOrFinding) return;
+        boolean anyFailed = documents.stream().anyMatch(document -> document.status() == DocumentStatus.FAILED);
+        boolean needsReview = documents.stream().anyMatch(document ->
+                inline.hasDetectedFindings(document.id(), tenantId));
+        if (anyFailed || needsReview) {
+            // Inline's own gate: a failed document fails the case; a finding for a person sends it to Review.
+            inline.completePackageProcessingIfReady(packageId, tenantId, correlationId);
+            return;
+        }
+        List<Document> waitingForRedaction = documents.stream()
+                .filter(document -> document.status() == DocumentStatus.REDACTING).toList();
+        if (!waitingForRedaction.isEmpty()) {
+            int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
+            for (Document document : waitingForRedaction) {
+                queue(PipelineStage.REDACT, tenantId, packageId, document.id(), cycle, correlationId, false);
+            }
+            return;
+        }
+        // Every document is redacted: Ready for export (final approval if the entity asks for it), as inline.
+        inline.completePackageProcessingIfReady(packageId, tenantId, correlationId);
+    }
+
+    // ------------------------------------------------------------------------------------------- expired claims
+
+    /**
+     * Stage jobs whose claim ran out (a server stopped mid-job) go back to the queue; that counts as an attempt. A job
+     * whose claim ran out {@code maxAttempts} times goes to NEEDS_IT with LV-PRC-008 and stops its case.
+     */
+    public int releaseExpiredClaims() {
+        List<PipelineJob> released = jobs.releaseExpiredClaims(STAGES, settings.maxAttempts(),
+                LvErrorCode.PRC_008.code(), 100);
+        for (PipelineJob job : released) {
+            CorrelationId correlationId = CorrelationId.generate();
+            auditStatus(job, PipelineJobStatus.RUNNING, job.status(), job.lastLvCode(), job.lastDetail(),
+                    correlationId);
+            log.warn("PIPELINE_JOB_CLAIM_EXPIRED job={} stage={} package={} attempts={} status={}", job.id(),
+                    job.stage(), job.packageId(), job.attempts(), job.status());
+            if (job.status() == PipelineJobStatus.NEEDS_IT) {
+                try {
+                    transactions.inNewTransaction(() -> recoveryService.exhaustStagedCase(job.packageId(),
+                            job.tenantId(), job.claimExpiries(), settings.maxAttempts(), correlationId));
+                } catch (RuntimeException failure) {
+                    log.error("PIPELINE_CASE_STOP_FAILED package={} type={}", job.packageId(),
+                            failure.getClass().getSimpleName());
+                }
+            }
+        }
+        return released.size();
+    }
+
+    // --------------------------------------------------------------------------------------------------- helpers
+
+    private void auditStatus(PipelineJob job, PipelineJobStatus from, PipelineJobStatus to, String code,
+                             String detail, CorrelationId correlationId) {
+        String text = "Pipeline job status: job=" + job.id() + ", stage=" + job.stage() + ", document="
+                + job.documentId() + ", from=" + from + ", to=" + to + ", attempts=" + job.attempts()
+                + ", claimToken=" + job.claimToken()
+                + (code == null ? "" : ", code=" + code) + (detail == null ? "" : ", detail=" + detail);
+        if (code == null && (to == PipelineJobStatus.DONE || to == PipelineJobStatus.READY)) {
+            audit.recordSuccess(job.tenantId(), SYSTEM_ACTOR, AuditAction.PIPELINE_JOB_STATUS_CHANGED,
+                    "DocumentPackage", job.packageId().toString(), job.packageId(), correlationId, text);
+        } else {
+            audit.recordFailure(job.tenantId(), SYSTEM_ACTOR, AuditAction.PIPELINE_JOB_STATUS_CHANGED,
+                    "DocumentPackage", job.packageId().toString(), job.packageId(), correlationId, text);
+        }
+    }
+
+    private static ProcessingStage processingStage(PipelineStage stage) {
+        return switch (stage) {
+            case TEXT -> ProcessingStage.TEXT_EXTRACTION;
+            case FIND -> ProcessingStage.SENSITIVE_DETECTION;
+            case REDACT -> ProcessingStage.REDACTION;
+            default -> ProcessingStage.DOCUMENT_PROCESSING;
+        };
+    }
+
+    /** The claim is no longer current: the transaction rolls back and nothing of the step counts. */
+    static final class ClaimLost extends RuntimeException {
+        ClaimLost() {
+            super("PIPELINE_JOB_CLAIM_NOT_CURRENT", null, false, false);
+        }
+    }
+
+    /** A step's use case failed in a known stage (the incident records that stage, as inline). */
+    private static final class StepFailure extends RuntimeException {
+        private final ProcessingStage stage;
+        private final RuntimeException cause;
+
+        StepFailure(ProcessingStage stage, RuntimeException cause) {
+            super(cause.getClass().getSimpleName(), cause, false, false);
+            this.stage = stage;
+            this.cause = cause;
+        }
+    }
+}

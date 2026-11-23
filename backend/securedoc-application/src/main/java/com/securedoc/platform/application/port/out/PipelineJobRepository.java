@@ -82,6 +82,31 @@ public interface PipelineJobRepository {
      */
     List<PipelineJob> releaseExpiredClaims(int maxClaimExpiries, String exhaustedLvCode, int limit);
 
+    /**
+     * Task 0048: as {@link #releaseExpiredClaims(int, String, int)}, for jobs of these stages only, so each stage's
+     * sweep handles its own jobs (export jobs and Text/Find/Redact jobs have their own settings and follow-up). This
+     * default releases every stage (a store that holds export jobs only).
+     */
+    default List<PipelineJob> releaseExpiredClaims(Set<PipelineStage> stages, int maxClaimExpiries,
+                                                   String exhaustedLvCode, int limit) {
+        return releaseExpiredClaims(maxClaimExpiries, exhaustedLvCode, limit);
+    }
+
+    /**
+     * Task 0048: holds the case's gate lock until the caller's transaction ends, so two servers finishing the last two
+     * documents of a case at the same moment decide the case's next step one after the other. Must be called inside a
+     * transaction. This default does nothing (a store used by one thread).
+     */
+    default void lockCaseGate(TenantId tenantId, PackageId packageId) {
+    }
+
+    /** Task 0048: true when the case has any TEXT, FIND or REDACT job (it is processed by the staged pipeline). */
+    default boolean hasStageJobs(TenantId tenantId, PackageId packageId) {
+        return findByTenantIdAndPackageId(tenantId, packageId).stream()
+                .anyMatch(job -> job.stage() == PipelineStage.TEXT || job.stage() == PipelineStage.FIND
+                        || job.stage() == PipelineStage.REDACT);
+    }
+
     /** Sets a job that is not running from one status to another, due now. False when it was not in {@code from}. */
     boolean changeStatus(TenantId tenantId, UUID id, PipelineJobStatus from, PipelineJobStatus to, int attempts,
                          String lastLvCode, String lastDetail);

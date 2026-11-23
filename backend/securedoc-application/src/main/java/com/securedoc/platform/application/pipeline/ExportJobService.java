@@ -181,7 +181,9 @@ public final class ExportJobService {
      * claim has run out the maximum number of times goes to NEEDS_IT with LV-PRC-008.
      */
     public int releaseExpiredClaims() {
-        List<PipelineJob> released = jobs.releaseExpiredClaims(settings.maxAttempts(), LvErrorCode.PRC_008.code(), 100);
+        // Task 0048: export jobs only; Text/Find/Redact jobs are released by their own workers.
+        List<PipelineJob> released = jobs.releaseExpiredClaims(EXPORT_STAGES, settings.maxAttempts(),
+                LvErrorCode.PRC_008.code(), 100);
         for (PipelineJob job : released) {
             CorrelationId correlationId = CorrelationId.generate();
             auditStatus(job, PipelineJobStatus.RUNNING, job.status(), job.attempts(), job.lastLvCode(),

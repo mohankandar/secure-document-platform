@@ -229,7 +229,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         }
     }
 
-    private void ensureDocumentIntelligenceSnapshot(TriggerPackageProcessingCommand command) {
+    /* Task 0048: also used by the staged pipeline (same package). */
+    void ensureDocumentIntelligenceSnapshot(TriggerPackageProcessingCommand command) {
         try {
             int processingCycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId());
             documentIntelligenceExecutionService.ensureSnapshot(
@@ -404,7 +405,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         }
     }
 
-    private boolean hasDetectedFindings(DocumentId documentId, TenantId tenantId) {
+    boolean hasDetectedFindings(DocumentId documentId, TenantId tenantId) {
         return findingRepository.findByDocumentIdAndTenantId(documentId, tenantId)
                 .stream()
                 .anyMatch(finding -> finding.status() == FindingStatus.DETECTED);
@@ -414,7 +415,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
      * Resolves review/technical/success package state and performs final batch-gated delivery.
      * Delivery is attempted only after every document is PROCESSED and no finding requires review.
      */
-    private void completePackageProcessingIfReady(PackageId packageId, TenantId tenantId,
+    void completePackageProcessingIfReady(PackageId packageId, TenantId tenantId,
                                                   CorrelationId correlationId) {
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
         if (pkg == null || (pkg.status() != PackageStatus.PROCESSING
@@ -522,7 +523,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         return (System.nanoTime() - startedNanos) / 1_000_000L;
     }
 
-    private void markDocumentFailedIfNeeded(DocumentId documentId, TenantId tenantId,
+    void markDocumentFailedIfNeeded(DocumentId documentId, TenantId tenantId,
                                             CorrelationId correlationId, String safeReason) {
         Document document = documentRepository.findByIdAndTenantId(documentId, tenantId).orElse(null);
         if (document == null || document.status() == DocumentStatus.FAILED) {

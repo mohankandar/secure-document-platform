@@ -162,6 +162,19 @@ securedoc:
     # Task 0027 (staged pipeline P1): inline = today's behaviour (default); job = the case is exported by an
     # export job with retries by code. Rollout stays inline until P2 is proven.
     export-mode: ${SECUREDOC_PROCESSING_EXPORT_MODE:inline}
+    # Task 0048 (staged pipeline P2 part 1): inline = today's flow (default); staged = Text, Find and Redact run as
+    # per-document jobs with a gate per case. Staged needs export-mode job. Rollout stays inline until P2 is proven.
+    pipeline-mode: ${SECUREDOC_PROCESSING_PIPELINE_MODE:inline}
+    stage-jobs:
+      # A claim lasts this long without renewal (renewed every third of it); then the job goes back to the queue.
+      claim-lease-ms: ${SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS:120000}
+      # Claims that may run out (a server stopping mid-job) before the case stops with LV-PRC-008.
+      max-attempts: ${SECUREDOC_STAGE_JOBS_MAX_ATTEMPTS:3}
+      # Workers per stage on this server (fixed until P3).
+      text-workers: ${SECUREDOC_STAGE_JOBS_TEXT_WORKERS:2}
+      find-workers: ${SECUREDOC_STAGE_JOBS_FIND_WORKERS:2}
+      redact-workers: ${SECUREDOC_STAGE_JOBS_REDACT_WORKERS:2}
+      poll-interval-ms: ${SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS:1000}
     export-jobs:
       # Task 0028: retry-delay-ms and pause-after-failures are still read but no longer used (destinations are
       # paused by their own check; a single failing case follows retry-schedule).

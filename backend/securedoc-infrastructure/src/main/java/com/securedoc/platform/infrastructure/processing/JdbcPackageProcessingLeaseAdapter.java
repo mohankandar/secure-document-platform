@@ -109,6 +109,14 @@ public class JdbcPackageProcessingLeaseAdapter implements PackageProcessingLease
                AND NOT EXISTS (SELECT 1 FROM pipeline_jobs j
                                 WHERE j.package_id = p.id AND j.stage = 'EXPORT'
                                   AND j.status NOT IN ('DONE', 'STOPPED'))
+            """
+            // Task 0048: a case processed by the staged pipeline (it has Text, Find or Redact jobs) is recovered by
+            // its jobs (a claim that runs out goes back to the queue), never by re-running the whole case here: that
+            // would rewind documents that are only waiting for their next job. Cases without such jobs (inline, and
+            // every case processed before the switch) are recovered as before.
+            + """
+               AND NOT EXISTS (SELECT 1 FROM pipeline_jobs s
+                                WHERE s.package_id = p.id AND s.stage IN ('TEXT', 'FIND', 'REDACT'))
             """;
 
     private static final String EXPIRED_SQL = """

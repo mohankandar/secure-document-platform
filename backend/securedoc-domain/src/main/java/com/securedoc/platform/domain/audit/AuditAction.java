@@ -191,5 +191,9 @@ public enum AuditAction {
     /** A split destination's copy was purged after its own retention period from receipt. */
     SPLIT_COPY_PURGED,
     /** Task 0034: finished export jobs and cleared reachability alerts past their keep time were removed (counts only). */
-    PIPELINE_JOBS_CLEANED
+    PIPELINE_JOBS_CLEANED,
+
+    // Staged pipeline P2 (task 0048): Text, Find and Redact jobs per document. Codes and ids only.
+    PIPELINE_JOB_QUEUED,
+    PIPELINE_JOB_STATUS_CHANGED
 }

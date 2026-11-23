@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0048 (staged pipeline P2 part 1, owner approved: design sections 10 and 12): TEXT, FIND and REDACT jobs
+        are per document. pipeline_jobs already has the stage, the document, the claim number (claim_token) and the
+        queue number; what is missing is that one case run can hold one job per document and stage.
+        - The identity index also includes the document and a page range, so each document gets its own job.
+        - page_from / page_to: a job may cover a page range of its document (both null = the whole document). Set by
+          nothing in part 1; part 2 (task 0049, page batches) uses them without another change to this table.
+        The gate state is not stored: it is read from the documents' own statuses, which are saved with each job's
+        result in one transaction. No content in any column. With pipeline-mode inline no stage job is ever written.
+    -->
+    <changeSet id="049-01-pipeline-stage-jobs" author="lexavault">
+        <addColumn tableName="pipeline_jobs">
+            <column name="page_from" type="INTEGER"/>
+            <column name="page_to" type="INTEGER"/>
+        </addColumn>
+        <sql>
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_page_range
+                check ((page_from is null and page_to is null)
+                       or (page_from is not null and page_to is not null and page_from &gt;= 1 and page_to &gt;= page_from));
+            -- A stage job (TEXT, FIND, REDACT) always names its document.
+            alter table pipeline_jobs
+                add constraint ck_pipeline_jobs_stage_document
+                check (stage not in ('TEXT', 'FIND', 'REDACT') or document_id is not null);
+            drop index if exists ux_pipeline_jobs_identity;
+            -- One job per stage, case run, document, page range, destination and item: queuing twice adds nothing.
+            -- For export jobs the document stays as before (EXPORT: none; SPLIT_EXPORT: its source document, which
+            -- the item already names), so nothing changes for them.
+            create unique index ux_pipeline_jobs_identity on pipeline_jobs (
+                tenant_id, stage, package_id, export_cycle,
+                coalesce(case when stage in ('TEXT', 'FIND', 'REDACT') then document_id end,
+                         '00000000-0000-0000-0000-000000000000'::uuid),
+                coalesce(page_from, 0),
+                coalesce(destination_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid));
+            -- The recovery scans ask "does this case have stage jobs?".
+            create index idx_pipeline_jobs_stage_package on pipeline_jobs (package_id)
+                where stage in ('TEXT', 'FIND', 'REDACT');
+        </sql>
+        <rollback>
+            <sql>
+                -- Stage jobs exist only with pipeline-mode staged; the old identity has no room for them.
+                delete from pipeline_jobs where stage in ('TEXT', 'FIND', 'REDACT');
+                drop index if exists idx_pipeline_jobs_stage_package;
+                drop index if exists ux_pipeline_jobs_identity;
+                create unique index ux_pipeline_jobs_identity on pipeline_jobs (
+                    tenant_id, stage, package_id, export_cycle,
+                    coalesce(destination_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                    coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid));
+                alter table pipeline_jobs drop constraint if exists ck_pipeline_jobs_stage_document;
+                alter table pipeline_jobs drop constraint if exists ck_pipeline_jobs_page_range;
+            </sql>
+            <dropColumn tableName="pipeline_jobs" columnName="page_to"/>
+            <dropColumn tableName="pipeline_jobs" columnName="page_from"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

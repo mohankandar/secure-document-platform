@@ -50,7 +50,7 @@ public class LocalFileStorageAdapter implements StoragePort {
     public ArtifactStorageReference store(TenantId tenantId, String path,
                                           InputStream content, long sizeBytes, String mimeType) {
         ProcessingStorageProvider provider = effectiveProvider(tenantId);
-        return storeOn(provider, path, content);
+        return recorded(storeOn(provider, path, content));
     }
 
     @Override
@@ -76,7 +76,7 @@ public class LocalFileStorageAdapter implements StoragePort {
                 });
         ProcessingStorageProvider provider = configuration.findProvider(providerId)
                 .orElseThrow(() -> storageFailure(false, "Pinned processing storage provider is unavailable", null));
-        return storeOn(provider, path, content);
+        return recorded(storeOn(provider, path, content));
     }
 
     @Override
@@ -101,6 +101,12 @@ public class LocalFileStorageAdapter implements StoragePort {
         } catch (IOException e) {
             throw storageFailure(true, "Failed to delete artifact", e);
         }
+    }
+
+    /** Task 0048: a staged step deletes the files it stored when its result is not saved (see StagedStepScope). */
+    private static ArtifactStorageReference recorded(ArtifactStorageReference reference) {
+        com.securedoc.platform.application.pipeline.StagedStepScope.recordStored(reference);
+        return reference;
     }
 
     private ArtifactStorageReference storeOn(ProcessingStorageProvider provider, String path, InputStream content) {

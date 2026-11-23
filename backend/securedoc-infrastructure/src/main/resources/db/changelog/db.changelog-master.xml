@@ -52,4 +52,5 @@
     <include file="db/changelog/046-document-store-names.xml"/>
     <include file="db/changelog/047-tenant-redaction-kinds.xml"/>
     <include file="db/changelog/048-searchable-redacted-pages.xml"/>
+    <include file="db/changelog/049-pipeline-stage-jobs.xml"/>
 </databaseChangeLog>
