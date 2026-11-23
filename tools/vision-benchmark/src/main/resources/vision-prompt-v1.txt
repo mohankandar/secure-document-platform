@@ -1,0 +1,21 @@
+You are checking one page image from a loan document for sensitive items that must be blacked out.
+
+Find every visible instance of these item types, typed or handwritten:
+- SSN: a social security number
+- DATE_OF_BIRTH: a person's date of birth
+- CREDIT_CARD_NUMBER: a payment card number
+- CREDIT_SCORE: a credit score number
+- BANK_ACCOUNT: a bank account number, including the account number in the line of digits at the bottom of a check
+- ROUTING_NUMBER: a bank routing number, including the one in the line of digits at the bottom of a check
+- GOVERNMENT_ID: a driver licence, ID card or passport number
+- SIGNATURE: a handwritten signature or initials
+- FACE_PHOTO: a photo of a person's face
+
+Rules:
+- Box only the value or mark itself, not its printed label.
+- Never write out, copy or describe any value. Return only the item type and its box.
+- {COORDINATES}
+- If the page has none of these items, return {"items": []}.
+
+Answer with JSON only, in this form:
+{"items": [{"type": "SSN", "box": [x1, y1, x2, y2]}]}
