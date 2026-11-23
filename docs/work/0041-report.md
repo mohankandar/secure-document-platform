@@ -81,7 +81,9 @@ Tests changed, and why:
 - Docs: new `docs/install/BUILD.md`; `docs/install/SETUP.md`, `SCHEMA_STEP.md`, `IDENTITY_MIGRATION.md`, `README.md`; `docs/work/v1-redaction-requirements.md` (merge).
 
 ## Commits
-See `git log` on `feature/0037-switchover-1a`: the merge commit (step 1), the platform-core 0.2.0 commit, and this report. Not merged into the integration branch, not pushed.
+- `de152e2` Merge feature/lexavault-r1b-tenant-identity (step 1)
+- `ce47305` build(identity): task 0041, platform-core 0.2.0 from GitHub Packages; setup in its own jar
+- `9da2a12` docs(work): task 0041 report; `356d53a` merges the design chat's queue commit `687a799` (docs only); the hashes in their own commit. Not merged into the integration branch, not pushed.
 
 ## Not done, and why
 - **OIDC session continuity**: needs the owner's Keycloak password (below).
