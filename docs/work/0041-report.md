@@ -107,3 +107,8 @@ Tests changed, and why:
 1. Rebuild (`.\Build-LexaVault-All.ps1`; stop the running app first: its jars are the fix-1 ones), then `.\Start-LexaVault-OIDC.ps1 -IssuerUri http://localhost:8181/realms/document-platform-local -Audience lexavault-api -ScannerMode SIMULATOR -AiModel qwen3.5:9b`, then `.\Test-LexaVault-OidcSessionContinuity.ps1 -Username businessuser -PromptForPassword`.
 2. Note: fast-forwarding this branch in this checkout changed the frontend sources under your running Vite server (it reloads); the backend you are running was not touched.
 3. Questions 1 and 2 above.
+
+## Owner's run and answers (2026-11-23, recorded by the design chat)
+- Owner rebuilt and started `feature/0045-document-store-names` (includes 0041): schema step identity at V3, setup "0 created … 8 unchanged", demo step unchanged, app up. **`Test-LexaVault-OidcSessionContinuity.ps1 -Username businessuser`: PASS.**
+1. Setup on every local OIDC start with `--replace-connection`: **yes, keep it** (local development database only).
+2. Delete `OidcDiscoveryTester` and the old table's remaining writers (`OidcKnownGoodRecovery`, `JdbcOidcConnectionBindingRepository` write methods): **yes, when LexaVault takes up platform-core's connection drafts screen** (after the integration release).

@@ -135,3 +135,8 @@ Answer question 1; then the guard is a small change (a baseline file or the rena
   `$env:GITHUB_PACKAGES_TOKEN | gh secret set PLATFORM_CORE_READ_TOKEN -R mohankandar/secure-document-platform`
 - Branch protection for `feature/lexavault-r1b-tenant-identity` with required check `ci-passed` (the design chat's `Setup-GitHubSettings.ps1` can do it), after question 1 is settled.
 - The push and PR commands above, if you want CI to run now.
+
+## Owner's answers (2026-11-23, recorded by the design chat)
+1. **Product-name guard:** option (b), fix first: done in task 0045 (generic "document store" names, migration 046, strict guard, no baseline).
+2. **`case-file-next/` and `integration-reference/`:** checked by the guard (renamed in 0045).
+- Secret `PLATFORM_CORE_READ_TOKEN` added to `mohankandar/secure-document-platform` by the owner.
