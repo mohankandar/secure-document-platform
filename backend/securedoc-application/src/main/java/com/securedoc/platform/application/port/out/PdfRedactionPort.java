@@ -33,6 +33,25 @@ public interface PdfRedactionPort {
     RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets);
 
     /**
+     * Task 0044 (R2 part 1, option B): as {@link #redact(InputStream, List)}, and when {@code options.searchableText()}
+     * is on, every burned page also gets an invisible text layer made by OCR of the already-redacted image, so the
+     * page is searchable while the boxes cannot leak into the text. Off is exactly {@link #redact(InputStream, List)}.
+     * An implementation that cannot add the layer must refuse (fail closed), never silently return image-only pages.
+     */
+    default RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets, RedactionOptions options) {
+        if (options != null && options.searchableText()) {
+            throw new UnsupportedOperationException("This redaction engine cannot add a searchable text layer");
+        }
+        return redact(originalPdf, targets);
+    }
+
+    /** Output options. {@link #IMAGE_ONLY} is today's output: redacted pages are images with no text. */
+    record RedactionOptions(boolean searchableText) {
+        public static final RedactionOptions IMAGE_ONLY = new RedactionOptions(false);
+        public static final RedactionOptions SEARCHABLE = new RedactionOptions(true);
+    }
+
+    /**
      * A single area to redact on a specific page.
      * Coordinates are normalized (0.0-1.0) relative to page dimensions.
      */

@@ -37,6 +37,8 @@ public enum TechnicalFailureCode {
     REDACTION_REGION_NOT_COVERED,
     /** Task 0023 C3, verification: the redacted output could not be read back. */
     REDACTION_OUTPUT_UNPARSABLE,
+    /** Task 0044, verification: a value that was redacted appears in the text of an output page (fail closed). */
+    REDACTION_VALUE_IN_OUTPUT_TEXT,
     UNKNOWN_TECHNICAL_FAILURE;
 
     /** The stable LexaVault code shown to IT Admin, where one is assigned (task 0021). */

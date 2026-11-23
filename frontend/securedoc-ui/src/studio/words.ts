@@ -288,6 +288,12 @@ export function sentenceCase(raw: string): string {
  */
 export const SENSITIVE_TYPES_HEADING = 'Sensitive types';
 
+/** Task 0044: the entity's "searchable redacted pages" switch on the policy screen (on by default). */
+export const SEARCHABLE_PAGES_WORDS = {
+  label: 'Searchable redacted pages',
+  hint: 'When on, a redacted page also gets hidden text read from the blacked-out image, so it can be searched and copied. The redacted values are never in that text. When off, redacted pages are images only.',
+} as const;
+
 /* ---------- Columns on Cases (owner's U007 answer) ---------- */
 
 /** LexaVault's own Cases columns, by the stable key the server sends (DashboardColumnConfigurationService). */

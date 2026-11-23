@@ -12,7 +12,7 @@ import useSWR from 'swr';
 import { RETENTION_WORDS, retentionPlaceholder, retentionValueError, type RetentionSettings } from '../exportRules';
 import { HelpTip } from './HelpTip';
 import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
-import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING } from '../words';
+import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, SEARCHABLE_PAGES_WORDS } from '../words';
 import {
   MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetOf, previewHeadline,
   previewTiles, reviewChanged, saveLabel, type ConfirmWords, type EstimateRunner, type PolicyEstimate,
@@ -169,6 +169,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
             {d.enabledEntityTypes.length === 0 && <p className="cf-ad-warn">Enable at least one category. The policy cannot be saved empty.</p>}
           </fieldset>
           <Toggle label="Treat labeled last-four SSNs as sensitive" hint="When on, a last-four value is also redacted, but only when it is explicitly labeled SSN." checked={d.maskSsnLastFour} disabled={!d.enabledEntityTypes.includes('SSN')} onChange={(v) => set({ ...d, maskSsnLastFour: v })} />
+          <Toggle label={SEARCHABLE_PAGES_WORDS.label} hint={SEARCHABLE_PAGES_WORDS.hint} checked={d.searchableRedactedPages !== false} onChange={(v) => set({ ...d, searchableRedactedPages: v })} />
           </div>
         </fieldset>
         );

@@ -51,6 +51,7 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         repository.save(entity);
         // Same transaction: the policy row and the kind rows change together or not at all.
         kindStore.save(policy.tenantId(), policy.enabledEntityTypes(), policy.updatedAt());
+        kindStore.saveSearchableRedactedPages(policy.tenantId(), policy.searchableRedactedPages(), policy.updatedAt());
     }
 
     private TenantRedactionPolicy toDomain(TenantRedactionPolicyEntity entity) {
@@ -63,6 +64,7 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         enabled.addAll(kindStore.enabledKinds(tenantId));
         return new TenantRedactionPolicy(
                 tenantId, enabled, entity.getAutoRedactThreshold(),
-                ReviewMode.valueOf(entity.getReviewMode()), entity.isMaskSsnLastFour(), entity.getUpdatedAt());
+                ReviewMode.valueOf(entity.getReviewMode()), entity.isMaskSsnLastFour(), entity.getUpdatedAt(),
+                kindStore.searchableRedactedPages(tenantId));
     }
 }

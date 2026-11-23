@@ -113,9 +113,13 @@ public class BusinessAdminController {
         boolean maskSsnLastFour = body.maskSsnLastFour() != null
                 ? body.maskSsnLastFour()
                 : service.getConfiguration(principal.tenantId()).sensitiveDataPolicy().maskSsnLastFour();
+        // Task 0044: a request without the switch keeps the stored value.
+        boolean searchable = body.searchableRedactedPages() != null
+                ? body.searchableRedactedPages()
+                : service.getConfiguration(principal.tenantId()).sensitiveDataPolicy().searchableRedactedPages();
         service.updateSensitiveDataPolicy(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), enabled,
-                body.autoRedactThreshold(), reviewMode, maskSsnLastFour);
+                body.autoRedactThreshold(), reviewMode, maskSsnLastFour, searchable);
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -210,7 +214,8 @@ public class BusinessAdminController {
         var policy = configuration.sensitiveDataPolicy();
         var policyResponse = new BusinessAdminConfigurationResponse.SensitiveDataPolicyResponse(
                 policy.enabledEntityTypes().stream().map(Enum::name).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
-                policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour());
+                policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour(),
+                policy.searchableRedactedPages());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),

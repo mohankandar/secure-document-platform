@@ -16,6 +16,10 @@ import com.securedoc.platform.application.port.out.FindingRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.PdfRedactionPort;
 import com.securedoc.platform.application.port.out.RedactionVerificationPort;
+import com.securedoc.platform.application.port.out.RedactionVerificationPort.RedactedValues;
+import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
+import com.securedoc.platform.application.port.out.TextExtractionPort;
+import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionOutput;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 import com.securedoc.platform.application.port.out.StoragePort;
@@ -85,6 +89,9 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     private final ChecksumPort checksumPort;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
+    /** Task 0044; null in the pre-0044 constructor (image-only output, no value comparison). */
+    private final TenantRedactionPolicyRepository policyRepository;
+    private final TextExtractionPort textExtractionPort;
 
     public DocumentRedactionService(DocumentRepository documentRepository,
                                      PackageRepository packageRepository,
@@ -96,6 +103,29 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                                      ChecksumPort checksumPort,
                                      DomainEventPublisher eventPublisher,
                                      AuditService auditService) {
+        this(documentRepository, packageRepository, artifactRepository, findingRepository, storagePort,
+                pdfRedactionPort, redactionVerificationPort, checksumPort, eventPublisher, auditService, null, null);
+    }
+
+    /**
+     * Task 0044: with the entity's policy (for "searchable redacted pages") and the product's text extraction (to read
+     * the values that were redacted, for the final check). Without them the service behaves as before task 0044:
+     * image-only redacted pages and no value comparison.
+     */
+    public DocumentRedactionService(DocumentRepository documentRepository,
+                                     PackageRepository packageRepository,
+                                     ArtifactRepository artifactRepository,
+                                     FindingRepository findingRepository,
+                                     StoragePort storagePort,
+                                     PdfRedactionPort pdfRedactionPort,
+                                     RedactionVerificationPort redactionVerificationPort,
+                                     ChecksumPort checksumPort,
+                                     DomainEventPublisher eventPublisher,
+                                     AuditService auditService,
+                                     TenantRedactionPolicyRepository policyRepository,
+                                     TextExtractionPort textExtractionPort) {
+        this.policyRepository = policyRepository;
+        this.textExtractionPort = textExtractionPort;
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
@@ -192,6 +222,11 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 .orElseThrow(() -> new NotFoundException("Original artifact for document",
                         command.documentId().toString(), com.securedoc.platform.domain.error.LvErrorCode.PRC_007));
 
+        // Task 0044: the entity's output choice, and the values that were redacted (in memory only, for the final check).
+        boolean searchable = policyRepository != null && policyRepository.findByTenantId(command.tenantId())
+                .map(TenantRedactionPolicy::searchableRedactedPages).orElse(true);
+        RedactedValues redactedValues = readRedactedValues(originalArtifact, confirmedFindings);
+
         // 10. Read original PDF content
         InputStream pdfContent = storagePort.retrieve(originalArtifact.storageReference());
 
@@ -199,7 +234,9 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         //     safe untouched pages may retain native PDF content.
         RedactionOutput redactionOutput;
         try {
-            redactionOutput = pdfRedactionPort.redact(pdfContent, targets);
+            redactionOutput = searchable
+                    ? pdfRedactionPort.redact(pdfContent, targets, PdfRedactionPort.RedactionOptions.SEARCHABLE)
+                    : pdfRedactionPort.redact(pdfContent, targets);
         } finally {
             closeQuietly(pdfContent);
         }
@@ -229,8 +266,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
             RedactionVerificationPort.VerificationResult verification;
             InputStream verificationStream = redactedContent.openStream();
             try {
-                verification = redactionVerificationPort.verify(
-                        verificationStream, expectedSourcePageCount, targets);
+                verification = searchable || !redactedValues.isEmpty()
+                        ? redactionVerificationPort.verify(verificationStream, expectedSourcePageCount, targets,
+                                searchable, redactedValues)
+                        : redactionVerificationPort.verify(verificationStream, expectedSourcePageCount, targets);
             } finally {
                 closeQuietly(verificationStream);
             }
@@ -250,7 +289,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     "Redaction verified: pages=" + verification.pageCount()
                             + ", expectedRedactions=" + verification.expectedRedactionCount()
                             + ", coveredRedactions=" + verification.coveredRedactionCount()
-                            + ", redactedPagesExtractableText=false");
+                            + (searchable
+                                    ? ", redactedPagesText=OCR_LAYER, valuesChecked=" + redactedValues.size()
+                                    : ", redactedPagesExtractableText=false"
+                                            + (redactedValues.isEmpty() ? "" : ", valuesChecked=" + redactedValues.size())));
 
             Checksum redactedChecksum;
             InputStream checksumStream = redactedContent.openStream();
@@ -328,6 +370,34 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     command.documentId(), redactedArtifact.id(),
                     document.status(), redactionOutput.redactionsApplied());
         }
+    }
+
+    /**
+     * Task 0044: the values the confirmed findings cover, read again from the original with the same text extraction
+     * the detection used (findings keep only offsets, never a value: task 0015). Held in memory for the final check
+     * and dropped with this call; never saved or logged. None without the extraction port or without findings.
+     */
+    private RedactedValues readRedactedValues(Artifact originalArtifact, List<Finding> confirmedFindings) {
+        if (textExtractionPort == null || confirmedFindings.isEmpty()) return RedactedValues.none();
+        InputStream original = storagePort.retrieve(originalArtifact.storageReference());
+        TextExtractionPort.TextExtractionOutput extracted;
+        try {
+            extracted = textExtractionPort.extract(original, REDACTED_MIME_TYPE);
+        } finally {
+            closeQuietly(original);
+        }
+        java.util.Map<Integer, String> textByPage = new java.util.HashMap<>();
+        for (TextExtractionPort.PageText page : extracted.pages()) textByPage.put(page.pageNumber(), page.text());
+        List<String> raw = new ArrayList<>();
+        for (Finding finding : confirmedFindings) {
+            FindingLocation location = finding.location();
+            String text = textByPage.get(location.pageNumber());
+            if (text == null) continue;
+            int start = location.startOffset();
+            int end = location.endOffset();
+            if (start >= 0 && end > start && end <= text.length()) raw.add(text.substring(start, end));
+        }
+        return RedactedValues.of(raw);
     }
 
     private List<RedactionTarget> buildRedactionTargets(List<Finding> findings) {

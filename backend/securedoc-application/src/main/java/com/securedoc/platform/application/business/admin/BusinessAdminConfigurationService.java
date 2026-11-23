@@ -183,6 +183,21 @@ public final class BusinessAdminConfigurationService {
                                                             double autoRedactThreshold,
                                                             ReviewMode reviewMode,
                                                             boolean maskSsnLastFour) {
+        // Task 0044: a caller that does not send the searchable switch keeps the stored value (default on).
+        boolean searchable = policyRepository.findByTenantId(tenantId)
+                .map(TenantRedactionPolicy::searchableRedactedPages).orElse(true);
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchable);
+    }
+
+    /** Task 0044: as above, with the "searchable redacted pages" switch. */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -198,12 +213,14 @@ public final class BusinessAdminConfigurationService {
 
         Optional<TenantRedactionPolicy> previous = policyRepository.findByTenantId(tenantId);
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), enabledTypes, autoRedactThreshold,
-                reviewMode, maskSsnLastFour)) {
+                reviewMode, maskSsnLastFour)
+                && previous.get().searchableRedactedPages() == searchableRedactedPages) {
             // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
             return previous.get();
         }
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
-                tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now());
+                tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
+                searchableRedactedPages);
         policyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId,
                 AuditAction.SENSITIVE_DATA_POLICY_CHANGED,
@@ -229,7 +246,9 @@ public final class BusinessAdminConfigurationService {
                 + ", maskSsnLastFour=" + policy.maskSsnLastFour()
                 + ", enabledTypes=" + policy.enabledEntityTypes().stream().map(Enum::name).sorted()
                         .collect(java.util.stream.Collectors.joining(","))
-                + ", preset=" + PolicyPreset.of(policy);
+                + ", preset=" + PolicyPreset.of(policy)
+                // Task 0044: written only when off, so every detail written before stays as it was (no key = on).
+                + (policy.searchableRedactedPages() ? "" : ", searchableRedactedPages=false");
     }
 
     public TenantLifecyclePolicy updateLifecyclePolicy(TenantId tenantId, ActorId actorId,

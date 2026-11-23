@@ -1069,6 +1069,19 @@ Reserved: not used yet.
 1. Check that document storage is available and has free space (run the health checks).
 2. Retry processing from Support.
 
+### LV-RED-005 A redacted value is in the output text
+
+- **Means:** The final check found a value that was redacted in the text of the redacted copy (for example in the searchable text layer). It was not exported.
+- **Kind:** Stopped
+- **Who acts:** IT Admin
+- **HTTP status:** —
+
+**What to do:**
+
+1. Nothing about the value is recorded; open the case in Support to see which document stopped.
+2. Look at the redacted pages: a box may not fully cover the value, or the value may also be printed elsewhere on an untouched page. Add or enlarge the redaction in review and process again.
+3. If the searchable text layer is the cause, turn off "Searchable redacted pages" for the entity (Admin › Policy) and retry: redacted pages are then images only.
+
 ## REV: review and approval
 
 ### LV-REV-001 Someone else already decided this

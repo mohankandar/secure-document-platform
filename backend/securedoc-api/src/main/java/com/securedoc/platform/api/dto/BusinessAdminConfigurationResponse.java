@@ -46,7 +46,9 @@ public record BusinessAdminConfigurationResponse(
             Set<String> enabledEntityTypes,
             double autoRedactThreshold,
             String reviewMode,
-            boolean maskSsnLastFour
+            boolean maskSsnLastFour,
+            /* Task 0044: invisible OCR text on redacted pages (on by default). */
+            boolean searchableRedactedPages
     ) {}
 
     public record LifecyclePolicyResponse(

@@ -6,5 +6,7 @@ public record UpdateSensitiveDataPolicyRequest(
         Set<String> enabledEntityTypes,
         double autoRedactThreshold,
         String reviewMode,
-        Boolean maskSsnLastFour
+        Boolean maskSsnLastFour,
+        /* Task 0044: null keeps the stored value. */
+        Boolean searchableRedactedPages
 ) {}

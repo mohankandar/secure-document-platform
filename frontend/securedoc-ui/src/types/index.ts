@@ -71,6 +71,8 @@ export interface SensitiveDataPolicyConfiguration {
   autoRedactThreshold: number;
   reviewMode: BusinessReviewMode;
   maskSsnLastFour: boolean;
+  /** Task 0044: invisible OCR text on redacted pages; on by default. Not sent = the server keeps its value. */
+  searchableRedactedPages?: boolean;
 }
 
 export interface LifecyclePolicyConfiguration {

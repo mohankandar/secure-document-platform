@@ -8,15 +8,27 @@ import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 
-/** Tenant-owned business policy for what to redact and when review is required. */
+/**
+ * Tenant-owned business policy for what to redact and when review is required.
+ *
+ * <p>Task 0044: {@code searchableRedactedPages} (on by default) adds an invisible OCR text layer to every redacted page
+ * (option B); off gives today's image-only redacted pages.
+ */
 public record TenantRedactionPolicy(
         TenantId tenantId,
         Set<EntityType> enabledEntityTypes,
         double autoRedactThreshold,
         ReviewMode reviewMode,
         boolean maskSsnLastFour,
-        Instant updatedAt
+        Instant updatedAt,
+        boolean searchableRedactedPages
 ) {
+    /** The policy as it was before task 0044, with searchable redacted pages at their default (on). */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt, true);
+    }
+
     private static final Set<EntityType> V1_CONFIGURABLE_TYPES = Set.of(
             EntityType.SSN,
             EntityType.DATE_OF_BIRTH,

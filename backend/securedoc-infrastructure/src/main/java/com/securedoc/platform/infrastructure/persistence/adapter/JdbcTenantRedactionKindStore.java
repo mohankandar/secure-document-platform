@@ -40,7 +40,9 @@ public class JdbcTenantRedactionKindStore {
         EnumSet<EntityType> enabled = EnumSet.noneOf(EntityType.class);
         for (Map<String, Object> row : rows) {
             if (!Boolean.TRUE.equals(row.get("enabled"))) continue;
-            EntityType kind = optInKind(String.valueOf(row.get("kind_key")));
+            String key = String.valueOf(row.get("kind_key"));
+            if (IMAGE_ONLY_REDACTED_PAGES.equals(key)) continue; // an output switch, not a kind
+            EntityType kind = optInKind(key);
             if (kind == null) {
                 log.warn("TENANT_REDACTION_KIND_UNKNOWN takenAs=OFF");
                 continue;
@@ -64,6 +66,34 @@ public class JdbcTenantRedactionKindStore {
                        set enabled = excluded.enabled, updated_at = excluded.updated_at
                     """, params);
         }
+    }
+
+    /**
+     * Task 0044: the redaction-output switch "image-only redacted pages", kept as one more row of this table (no new
+     * migration; the task allows none). Like every row here, no row means off, so searchable redacted pages are on by
+     * default. On means a Business Admin turned searchable redacted pages off.
+     */
+    public static final String IMAGE_ONLY_REDACTED_PAGES = "IMAGE_ONLY_REDACTED_PAGES";
+
+    /** True unless the entity turned searchable redacted pages off. */
+    public boolean searchableRedactedPages(TenantId tenantId) {
+        List<Boolean> rows = jdbc.queryForList(
+                "select enabled from tenant_redaction_kinds where tenant_id = :tenant and kind_key = :key",
+                new MapSqlParameterSource("tenant", tenantId.value()).addValue("key", IMAGE_ONLY_REDACTED_PAGES),
+                Boolean.class);
+        return rows.isEmpty() || !Boolean.TRUE.equals(rows.get(0));
+    }
+
+    public void saveSearchableRedactedPages(TenantId tenantId, boolean searchable, Instant updatedAt) {
+        jdbc.update("""
+                insert into tenant_redaction_kinds (tenant_id, kind_key, enabled, updated_at)
+                values (:tenant, :kind, :enabled, :at)
+                on conflict (tenant_id, kind_key) do update
+                   set enabled = excluded.enabled, updated_at = excluded.updated_at
+                """, new MapSqlParameterSource("tenant", tenantId.value())
+                .addValue("kind", IMAGE_ONLY_REDACTED_PAGES)
+                .addValue("enabled", !searchable)
+                .addValue("at", Timestamp.from(updatedAt)));
     }
 
     private static EntityType optInKind(String key) {
