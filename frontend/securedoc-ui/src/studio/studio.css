@@ -711,8 +711,9 @@
   .cf-search input { align-self: stretch; }
   :is(.cf-intake, .cf-review) .cf-field :is(input, select), .cf-rp-range input, .cf-rp-select select { min-height: 44px; }
 
-  /* Case panel sections and technical details: the whole line is the tap area. */
-  .cf-drawer .cf-disclosure > summary { padding: 13px 0; }
+  /* Case panel sections and technical details: the whole line is the tap area. The 44 px is a fixed minimum with a
+     fixed line height (13 + 18 + 13), so it does not depend on the font's metrics (Linux fonts made it 43 px, task 0046). */
+  .cf-drawer .cf-disclosure > summary { box-sizing: border-box; min-height: 44px; padding: 13px 0; line-height: 18px; }
   .cf-drawer .cf-disclosure { padding-top: 0; }
   :is(.cf-desk, .cf-review, .cf-reports) .cf-tech > summary { min-height: 44px; }
 
