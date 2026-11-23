@@ -24,6 +24,7 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Unit 17 normalization adapter for PDFs.
@@ -53,13 +54,29 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
 
     @Override
     public TextExtractionOutput extract(InputStream content, String mimeType) {
+        return extract(content, mimeType, null);
+    }
+
+    /**
+     * Task 0047: only the given pages, so the redaction step's final check does not OCR pages without findings again.
+     * Each page goes through the same steps as in {@link #extract(InputStream, String)} (native text, the sparse-page
+     * image check, OCR), so its text and offsets are the ones detection used.
+     */
+    @Override
+    public TextExtractionOutput extractPages(InputStream content, String mimeType, Set<Integer> pageNumbers) {
+        return extract(content, mimeType, Set.copyOf(pageNumbers));
+    }
+
+    /** {@code onlyPages} null: every page (the detection path, unchanged). */
+    private TextExtractionOutput extract(InputStream content, String mimeType, Set<Integer> onlyPages) {
         if (!PDF_MIME_TYPE.equals(mimeType)) {
-            return nativeExtractor.extract(content, mimeType);
+            return onlyPages == null ? nativeExtractor.extract(content, mimeType)
+                    : nativeExtractor.extractPages(content, mimeType, onlyPages);
         }
 
         try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTextExtractionAdapter.stageForProcessing(content, "lexavault-hybrid-text-")) {
             PDDocument document = staged.document();
-            TextExtractionOutput nativeOutput = nativeExtractor.extractDocument(document);
+            TextExtractionOutput nativeOutput = onlyPages == null ? nativeExtractor.extractDocument(document) : null;
             PDFRenderer renderer = new PDFRenderer(document);
             List<PageText> normalizedPages = new ArrayList<>(document.getNumberOfPages());
             boolean hasEmbeddedText = false;
@@ -68,7 +85,10 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
 
             for (int index = 0; index < document.getNumberOfPages(); index++) {
                 int pageNumber = index + 1;
-                PageText nativePage = nativePage(nativeOutput.pages(), pageNumber);
+                if (onlyPages != null && !onlyPages.contains(pageNumber)) continue;
+                PageText nativePage = nativeOutput != null
+                        ? nativePage(nativeOutput.pages(), pageNumber)
+                        : nativeExtractor.extractPage(document, pageNumber);
 
                 if (nativePage != null && !nativePage.text().isBlank()) {
                     hasEmbeddedText = true;

@@ -21,6 +21,20 @@ public interface TextExtractionPort {
      */
     TextExtractionOutput extract(InputStream content, String mimeType);
 
+    /**
+     * Task 0047: extracts only the given pages (1-based; numbers outside the document are ignored). Each returned page
+     * is exactly what {@link #extract} returns for that page (same text, so the same offsets), because every page is
+     * normalized on its own. This default extracts everything and keeps the given pages; an adapter that can skip pages
+     * (and their OCR) overrides it.
+     */
+    default TextExtractionOutput extractPages(InputStream content, String mimeType, java.util.Set<Integer> pageNumbers) {
+        TextExtractionOutput all = extract(content, mimeType);
+        List<PageText> kept = all.pages().stream().filter(page -> pageNumbers.contains(page.pageNumber())).toList();
+        long characters = kept.stream().mapToLong(page -> page.text().length()).sum();
+        return new TextExtractionOutput(kept, characters, all.hasEmbeddedText(),
+                kept.stream().anyMatch(page -> page.source() == ExtractionSource.OCR));
+    }
+
     /** Source used to normalize a page into text + coordinates. */
     enum ExtractionSource {
         NATIVE_PDF_TEXT,

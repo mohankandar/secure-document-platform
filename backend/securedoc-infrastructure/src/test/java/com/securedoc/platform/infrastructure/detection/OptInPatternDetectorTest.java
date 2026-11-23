@@ -267,6 +267,50 @@ class OptInPatternDetectorTest {
         }
     }
 
+    // ------------------------------------------------------------------ task 0047
+
+    @Nested
+    class Task0047 {
+        /** Item 3: one field for either; an SSN never starts with 9, so the ITIN detector takes it in both orders. */
+        @Test
+        void itinOrSsnInEitherOrderIsAnItin() {
+            assertSpans("SSN or ITIN: 912-78-1234", OptInPatternDetector.ITIN, "912-78-1234");
+            assertSpans("ITIN or SSN: 912-78-1234", OptInPatternDetector.ITIN, "912-78-1234");
+            assertSpans("Social Security Number or ITIN 912-78-1234", OptInPatternDetector.ITIN, "912-78-1234");
+            assertSpans("SSN/ITIN\n912-78-1234", OptInPatternDetector.ITIN, "912-78-1234");
+            assertNone("SSN: 912-78-1234", OptInPatternDetector.ITIN); // an SSN label alone still never makes an ITIN
+            assertNone("ITIN or SSN: 412-55-7531", OptInPatternDetector.ITIN); // not ITIN-shaped: the SSN detector's
+        }
+
+        /** Item 4: "license number" alone is not a driver's licence label. */
+        @Test
+        void otherLicencesAreNotDriversLicences() {
+            assertNone("Business license number: K7302215", OptInPatternDetector.DRIVERS_LICENSE);
+            assertNone("Contractor license K7302215", OptInPatternDetector.DRIVERS_LICENSE);
+            assertNone("Contractor license number: K7302215", OptInPatternDetector.DRIVERS_LICENSE);
+            assertNone("Marriage license number 44712290", OptInPatternDetector.DRIVERS_LICENSE);
+            assertNone("Marriage license no. 44712290", OptInPatternDetector.DRIVERS_LICENSE);
+            assertNone("License number: K7302215", OptInPatternDetector.DRIVERS_LICENSE); // no driver wording
+            assertNone("License #\nK7302215", OptInPatternDetector.DRIVERS_LICENSE);
+            // Driver wording nearby does not make another licence a driver's licence.
+            assertNone("Driver: test borrower. Business license number: K7302215", OptInPatternDetector.DRIVERS_LICENSE);
+        }
+
+        @Test
+        void driverWordingMakesItADriversLicence() {
+            assertSpans("Driver's license no. K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("Driver’s licence no. K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("DL # K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("D.L. K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("Operator's license number: K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("DMV number: K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            // The driver wording in the label window, the bare "license number" directly before the value.
+            assertSpans("Driver information\nLicense number: K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("Department of Motor Vehicles\nLicense no. K7302215", OptInPatternDetector.DRIVERS_LICENSE,
+                    "K7302215");
+        }
+    }
+
     // ------------------------------------------------------------------ everything together
 
     @Test

@@ -51,4 +51,5 @@
     <include file="db/changelog/045-pipeline-job-queue-seq.xml"/>
     <include file="db/changelog/046-document-store-names.xml"/>
     <include file="db/changelog/047-tenant-redaction-kinds.xml"/>
+    <include file="db/changelog/048-searchable-redacted-pages.xml"/>
 </databaseChangeLog>

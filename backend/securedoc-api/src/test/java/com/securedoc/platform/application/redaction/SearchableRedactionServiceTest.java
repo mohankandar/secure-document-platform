@@ -199,16 +199,58 @@ class SearchableRedactionServiceTest {
         assertNoValueAnywhere();
     }
 
+    /**
+     * Task 0047, item 2: the original is read again only on the pages with findings, and every output page is still
+     * compared: the SSN printed again on page 2 (no finding there, so page 2 is not read again and not redacted) stops
+     * the document with LV-RED-005.
+     */
+    @Test
+    void onlyPagesWithFindingsAreReadAgainAndAValueCopiedOntoAnotherPageStillStopsTheDocument() throws Exception {
+        policy = policy(true);
+        source = sourcePdf(true);
+        Document twoPages = Document.reconstitute(document.id(), tenantId, pkg.id(), FileName.of("a.pdf"), MimeType.pdf(),
+                64, Checksum.sha256("a"), DocumentType.PDF, Instant.now(), DocumentStatus.REDACTING,
+                List.of(Page.of(1, 612, 792), Page.of(2, 612, 792)), Instant.now());
+        when(documents.findByIdAndTenantId(document.id(), tenantId)).thenReturn(Optional.of(twoPages));
+        when(findings.findByDocumentIdAndTenantId(document.id(), tenantId)).thenReturn(confirmedFindings());
+        List<java.util.Set<Integer>> asked = new ArrayList<>();
+        PdfBoxTextExtractionAdapter real = new PdfBoxTextExtractionAdapter();
+        TextExtractionPort recording = new TextExtractionPort() {
+            @Override public TextExtractionOutput extract(InputStream content, String mimeType) {
+                asked.add(null);
+                return real.extract(content, mimeType);
+            }
+            @Override public TextExtractionOutput extractPages(InputStream content, String mimeType,
+                                                               java.util.Set<Integer> pageNumbers) {
+                asked.add(java.util.Set.copyOf(pageNumbers));
+                return real.extractPages(content, mimeType, pageNumbers);
+            }
+        };
+
+        TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
+                () -> service(new PdfBoxBurnFlatRedactionAdapter(ocr()), recording).execute(command()));
+
+        assertEquals(List.of(java.util.Set.of(1)), asked, "only page 1 (the page with findings) is read again");
+        assertEquals(TechnicalFailureCode.REDACTION_VALUE_IN_OUTPUT_TEXT, failure.failureCode());
+        assertEquals(DocumentStatus.FAILED, twoPages.status());
+        assertTrue(stored.isEmpty(), "fail closed: nothing is stored");
+        assertNoValueAnywhere();
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private DocumentRedactionService service(PdfRedactionPort engine) {
+        return service(engine, new PdfBoxTextExtractionAdapter());
+    }
+
+    private DocumentRedactionService service(PdfRedactionPort engine, TextExtractionPort extraction) {
         TenantRedactionPolicyRepository policies = new TenantRedactionPolicyRepository() {
             @Override public Optional<TenantRedactionPolicy> findByTenantId(TenantId t) { return Optional.of(policy); }
             @Override public void save(TenantRedactionPolicy p) { }
         };
         return new DocumentRedactionService(documents, packages, artifacts, findings, storage, engine,
                 new PdfBoxRedactionVerificationAdapter(), checksum, mock(DomainEventPublisher.class),
-                new AuditService(audits::add), policies, new PdfBoxTextExtractionAdapter());
+                new AuditService(audits::add), policies, extraction);
     }
 
     private static TesseractOcrAdapter ocr() {
@@ -260,6 +302,11 @@ class SearchableRedactionServiceTest {
     }
 
     private static byte[] sourcePdf() throws Exception {
+        return sourcePdf(false);
+    }
+
+    /** {@code copyOnPage2}: a second page that prints the SSN again (test only: detection "missed" it). */
+    private static byte[] sourcePdf(boolean copyOnPage2) throws Exception {
         try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDPage page = new PDPage(new PDRectangle(612, 792));
             doc.addPage(page);
@@ -273,6 +320,17 @@ class SearchableRedactionServiceTest {
                     cs.showText(line);
                     cs.endText();
                     y -= 40;
+                }
+            }
+            if (copyOnPage2) {
+                PDPage second = new PDPage(new PDRectangle(612, 792));
+                doc.addPage(second);
+                try (PDPageContentStream cs = new PDPageContentStream(doc, second)) {
+                    cs.beginText();
+                    cs.setFont(FONT, 14);
+                    cs.newLineAtOffset(72, 700);
+                    cs.showText("Summary page, applicant SSN " + SSN);
+                    cs.endText();
                 }
             }
             doc.save(out);

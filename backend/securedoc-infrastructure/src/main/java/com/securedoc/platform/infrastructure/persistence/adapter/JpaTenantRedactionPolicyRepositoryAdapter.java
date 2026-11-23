@@ -15,7 +15,8 @@ import java.util.Optional;
 
 /**
  * The V1 four kinds are columns of tenant_redaction_policies (unchanged); the opt-in kinds of task 0043 are rows of
- * tenant_redaction_kinds (migration 047), where a missing row means off.
+ * tenant_redaction_kinds (migration 047), where a missing row means off. "Searchable redacted pages" is the column
+ * searchable_redacted_pages (migration 048, task 0047; on by default).
  */
 @Component
 public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactionPolicyRepository {
@@ -47,11 +48,11 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         entity.setDateOfBirthEnabled(policy.enabledEntityTypes().contains(EntityType.DATE_OF_BIRTH));
         entity.setCreditCardNumberEnabled(policy.enabledEntityTypes().contains(EntityType.CREDIT_CARD_NUMBER));
         entity.setCreditScoreEnabled(policy.enabledEntityTypes().contains(EntityType.CREDIT_SCORE));
+        entity.setSearchableRedactedPages(policy.searchableRedactedPages());
         entity.setUpdatedAt(policy.updatedAt());
         repository.save(entity);
         // Same transaction: the policy row and the kind rows change together or not at all.
         kindStore.save(policy.tenantId(), policy.enabledEntityTypes(), policy.updatedAt());
-        kindStore.saveSearchableRedactedPages(policy.tenantId(), policy.searchableRedactedPages(), policy.updatedAt());
     }
 
     private TenantRedactionPolicy toDomain(TenantRedactionPolicyEntity entity) {
@@ -65,6 +66,6 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         return new TenantRedactionPolicy(
                 tenantId, enabled, entity.getAutoRedactThreshold(),
                 ReviewMode.valueOf(entity.getReviewMode()), entity.isMaskSsnLastFour(), entity.getUpdatedAt(),
-                kindStore.searchableRedactedPages(tenantId));
+                entity.isSearchableRedactedPages());
     }
 }

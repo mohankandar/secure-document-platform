@@ -20,7 +20,8 @@ import java.util.regex.Pattern;
  *   <li>{@code ITIN}: 9NN-NN-NNNN with the group in 70-88, 90-92 or 94-99, bound to an ITIN label (an SSN label
  *       nearer the value wins, so an SSN stays an SSN).</li>
  *   <li>{@code EIN}: NN-NNNNNNN with a valid IRS prefix, bound to an EIN or tax-ID label.</li>
- *   <li>{@code DRIVERS_LICENSE_NUMBER} and {@code PASSPORT_NUMBER}: a plausible number, only with its label.</li>
+ *   <li>{@code DRIVERS_LICENSE_NUMBER} and {@code PASSPORT_NUMBER}: a plausible number, only with its label. A
+ *       driver's licence label names the driver (task 0047): "license number" alone is not enough.</li>
  * </ul>
  *
  * <p>"Bound to a label": the label is on the same line with only filler between ("number", "no.", "#", ":"), or the
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
 final class OptInPatternDetector {
 
     static final String DETECTOR_NAME = "local-pattern-kinds";
-    static final String DETECTOR_VERSION = "1.0.0";
+    static final String DETECTOR_VERSION = "1.1.0"; // 1.1.0: task 0047 (ITIN or SSN label, driver context)
 
     static final String ROUTING = "BANK_ROUTING_NUMBER";
     static final String ACCOUNT = "BANK_ACCOUNT_NUMBER";
@@ -56,9 +57,24 @@ final class OptInPatternDetector {
             "(?i)(?<![a-z])(?:e\\.?i\\.?n\\.?|f\\.?e\\.?i\\.?n\\.?|employer\\s+identification(?:\\s+number)?|"
                     + "federal\\s+(?:tax|employer)\\s+id(?:entification)?(?:\\s+number)?|federal\\s+id(?:\\s+number)?|"
                     + "tax\\s+id(?:entification)?(?:\\s+number)?|t\\.?i\\.?n\\.?)(?![a-z])");
+    /**
+     * Task 0047, item 4: a driver's licence label names the driver ("driver's license/licence", "DL", "D.L.", or the
+     * DMV wording: driving / operator's / chauffeur's licence, "DMV number"). "License number" alone is
+     * {@link #GENERIC_LICENSE_LABEL}, which counts only with driver wording near it.
+     */
     private static final Pattern DRIVERS_LICENSE_LABEL = Pattern.compile(
-            "(?i)(?<![a-z])(?:driver'?s?\\s*(?:licen[cs]e|lic\\.?)|driving\\s+licen[cs]e|operator'?s?\\s+licen[cs]e|"
-                    + "d\\.?l\\.?(?:\\s*(?:n[o0]\\.?|#|number))?|licen[cs]e[\\s-]*(?:number|n[o0]\\.?|#))(?![a-z])");
+            "(?i)(?<![a-z])(?:dri[vy][eo]r[\u2019']?s?[\\s-]*(?:licen[cs]e|lic\\.?)|driving\\s+licen[cs]e|"
+                    + "(?:operator|chauffeur)[\u2019']?s?\\s+licen[cs]e|d\\.?l\\.?(?:\\s*(?:n[o0]\\.?|#|number))?|"
+                    + "dmv\\s*(?:number|n[o0]\\.?|#))(?![a-z])");
+    /** "License number", "licence no.", "license #": a driver's licence only with {@link #DRIVER_CONTEXT} near it. */
+    private static final Pattern GENERIC_LICENSE_LABEL = Pattern.compile(
+            "(?i)(?<![a-z])licen[cs]e[\\s-]*(?:number|n[o0]\\.?|#)(?![a-z])");
+    private static final Pattern DRIVER_CONTEXT = Pattern.compile(
+            "(?i)(?<![a-z])(?:dri[vy][eo]r[\u2019']?s?|driving|d\\.l\\.|dl|dmv|motor\\s+vehicles?)(?![a-z])");
+    /** "ITIN or SSN", "SSN/ITIN": one field that holds either; the value's shape decides (task 0047, item 3). */
+    private static final Pattern ITIN_OR_SSN_LABEL = Pattern.compile(
+            "(?i)(?<![a-z])(?:itin\\s*(?:or|/|&|and)\\s*(?:ssn|social\\s+security(?:\\s+number)?)|"
+                    + "(?:ssn|social\\s+security(?:\\s+number)?)\\s*(?:or|/|&|and)\\s*itin)(?![a-z])");
     private static final Pattern PASSPORT_LABEL = Pattern.compile("(?i)(?<![a-z])passport(?![a-z])");
 
     private static final Pattern SSN_LABEL = Pattern.compile("(?i)(?<![a-z])(?:ssn|social\\s+security)(?![a-z])");
@@ -137,8 +153,7 @@ final class OptInPatternDetector {
         detectItins(text, pageNumber, found);
         detectEins(text, pageNumber, found);
         detectAccountNumbers(text, pageNumber, found);
-        detectLabelled(text, pageNumber, DRIVERS_LICENSE_VALUE, DRIVERS_LICENSE, DRIVERS_LICENSE_LABEL,
-                OptInPatternDetector::plausibleLicense, found);
+        detectDriversLicenses(text, pageNumber, found);
         detectLabelled(text, pageNumber, PASSPORT_VALUE, PASSPORT, PASSPORT_LABEL,
                 OptInPatternDetector::plausiblePassport, found);
         results.addAll(found);
@@ -186,9 +201,52 @@ final class OptInPatternDetector {
             int start = m.start(), end = m.end();
             if (overlaps(found, start, end)) continue;
             Binding binding = bindOrFollowing(text, start, end, value, ITIN, ITIN_LABEL);
+            // Task 0047, item 3: "ITIN or SSN: 9NN-..." (the SSN label is nearer) is an ITIN too: an SSN never
+            // starts with 9. An SSN label alone still never makes an ITIN.
+            if (binding == Binding.NONE) {
+                binding = bind(text, start, value, owner -> ITIN.equals(owner) || "SSN".equals(owner), ITIN_OR_SSN_LABEL);
+            }
             if (binding == Binding.NONE) continue;
             add(found, ITIN, pageNumber, start, end, binding == Binding.SAME_LINE ? 0.95 : 0.90);
         }
+    }
+
+    /**
+     * Task 0047, item 4: a driver's licence label, or "license number" (no., #) directly before the value with driver
+     * wording earlier in the label window ("Driver information ... License number:"). A word that qualifies the
+     * licence ("business license number", "marriage license no.") is not a driver's licence.
+     */
+    private void detectDriversLicenses(String text, int pageNumber, List<DetectedEntity> found) {
+        Matcher m = DRIVERS_LICENSE_VALUE.matcher(text);
+        while (m.find()) {
+            String value = m.group(1);
+            int start = m.start(1), end = m.end(1);
+            if (!plausibleLicense(value) || overlaps(found, start, end)) continue;
+            Binding binding = bind(text, start, end, value, DRIVERS_LICENSE, DRIVERS_LICENSE_LABEL);
+            double confidence = binding == Binding.SAME_LINE ? 0.90 : 0.85;
+            if (binding == Binding.NONE) {
+                if (!genericLicenseLabelWithDriverContext(text, start)) continue;
+                confidence = 0.85;
+            }
+            add(found, DRIVERS_LICENSE, pageNumber, start, end, confidence);
+        }
+    }
+
+    private static boolean genericLicenseLabelWithDriverContext(String text, int start) {
+        int lineStart = text.lastIndexOf('\n', start - 1) + 1;
+        Matcher label = GENERIC_LICENSE_LABEL.matcher(text);
+        label.region(lineStart, start);
+        int labelStart = -1, labelEnd = -1;
+        while (label.find()) {
+            labelStart = label.start();
+            labelEnd = label.end();
+        }
+        if (labelEnd < 0 || !FILLER.matcher(text.substring(labelEnd, start)).matches()) return false;
+        String before = text.substring(lineStart, labelStart).stripTrailing();
+        if (!before.isEmpty() && Character.isLetter(before.charAt(before.length() - 1))) return false;
+        Matcher context = DRIVER_CONTEXT.matcher(text);
+        context.region(Math.max(0, start - LABEL_WINDOW), labelStart);
+        return context.find();
     }
 
     private void detectEins(String text, int pageNumber, List<DetectedEntity> found) {
@@ -302,6 +360,11 @@ final class OptInPatternDetector {
      * label is on the line above and is the nearest label before the value that could own it.
      */
     private Binding bind(String text, int start, int end, String value, String kind, Pattern ownLabel) {
+        return bind(text, start, value, kind::equals, ownLabel);
+    }
+
+    /** As above; {@code ownerOk} says which nearest owner lets a header-row label count. */
+    private Binding bind(String text, int start, String value, Predicate<String> ownerOk, Pattern ownLabel) {
         int lineStart = text.lastIndexOf('\n', start - 1) + 1;
         Matcher same = ownLabel.matcher(text);
         same.region(lineStart, start);
@@ -310,7 +373,7 @@ final class OptInPatternDetector {
         if (lastEnd >= 0 && FILLER.matcher(text.substring(lastEnd, start)).matches()) return Binding.SAME_LINE;
 
         String owner = nearestOwner(text, start, value);
-        if (!kind.equals(owner)) return Binding.NONE;
+        if (owner == null || !ownerOk.test(owner)) return Binding.NONE;
         int windowStart = Math.max(0, start - LABEL_WINDOW);
         Matcher label = ownLabel.matcher(text);
         label.region(windowStart, start);

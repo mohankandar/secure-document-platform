@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0047, item 1 (owner approved 2026-11-23, 0044 answers 1): "Searchable redacted pages" becomes a column of
+        the entity's sensitive-data policy (tenant_redaction_policies.searchable_redacted_pages, default true). Task
+        0044 kept it as the row IMAGE_ONLY_REDACTED_PAGES in tenant_redaction_kinds (enabled = true meant searchable
+        OFF). This copies every stored value into the new column and removes those rows, so tenant_redaction_kinds
+        holds redaction kinds only.
+
+        Fail closed: an IMAGE_ONLY_REDACTED_PAGES row with no policy row could not be copied (its "off" would be lost
+        and the entity would become searchable), so the migration halts if one exists. The application always writes
+        both rows in one transaction, so none is expected.
+    -->
+    <changeSet id="048-01-searchable-redacted-pages" author="lexavault">
+        <preConditions onFail="HALT" onFailMessage="048: an IMAGE_ONLY_REDACTED_PAGES row has no policy row to copy it to">
+            <sqlCheck expectedResult="0">
+                SELECT count(*) FROM tenant_redaction_kinds k
+                 WHERE k.kind_key = 'IMAGE_ONLY_REDACTED_PAGES'
+                   AND NOT EXISTS (SELECT 1 FROM tenant_redaction_policies p WHERE p.tenant_id = k.tenant_id)
+            </sqlCheck>
+        </preConditions>
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="searchable_redacted_pages" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            UPDATE tenant_redaction_policies p
+               SET searchable_redacted_pages = NOT k.enabled
+              FROM tenant_redaction_kinds k
+             WHERE k.tenant_id = p.tenant_id
+               AND k.kind_key = 'IMAGE_ONLY_REDACTED_PAGES'
+        </sql>
+        <sql>
+            DELETE FROM tenant_redaction_kinds WHERE kind_key = 'IMAGE_ONLY_REDACTED_PAGES'
+        </sql>
+        <rollback>
+            <!-- Back to the 0044 storage: one row per entity that turned searchable off; no row means on. -->
+            <sql>
+                INSERT INTO tenant_redaction_kinds (tenant_id, kind_key, enabled, updated_at)
+                SELECT tenant_id, 'IMAGE_ONLY_REDACTED_PAGES', true, updated_at
+                  FROM tenant_redaction_policies
+                 WHERE searchable_redacted_pages = false
+                ON CONFLICT (tenant_id, kind_key) DO UPDATE SET enabled = true, updated_at = excluded.updated_at
+            </sql>
+            <dropColumn tableName="tenant_redaction_policies" columnName="searchable_redacted_pages"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

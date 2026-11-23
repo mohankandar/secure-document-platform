@@ -16,6 +16,8 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Local/demo PDF text extraction using Apache PDFBox.
@@ -76,24 +78,9 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
         long totalChars = 0;
 
         for (int i = 1; i <= pageCount; i++) {
-            PDPage pdPage = document.getPage(i - 1);
-            PDRectangle mediaBox = pdPage.getMediaBox();
-            float pageWidth = mediaBox.getWidth();
-            float pageHeight = mediaBox.getHeight();
-
-            PositionCapturingStripper stripper = new PositionCapturingStripper(pageWidth, pageHeight);
-            stripper.setStartPage(i);
-            stripper.setEndPage(i);
-            stripper.getText(document);
-
-            String pageText = stripper.getCapturedText();
-            pages.add(new PageText(
-                    i,
-                    Math.round(pageWidth),
-                    Math.round(pageHeight),
-                    pageText,
-                    stripper.getSpans()));
-            totalChars += pageText.length();
+            PageText page = extractPage(document, i);
+            pages.add(page);
+            totalChars += page.text().length();
         }
 
         boolean hasEmbeddedText = totalChars > 0;
@@ -101,6 +88,49 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
             log.info("PDF has no extractable embedded text ({} pages). OCR provider required for scanned documents.", pageCount);
         }
         return new TextExtractionOutput(pages, totalChars, hasEmbeddedText);
+    }
+
+    /** Task 0047: only the given pages, each exactly as {@link #extract} gives it. */
+    @Override
+    public TextExtractionOutput extractPages(InputStream content, String mimeType, Set<Integer> pageNumbers) {
+        if (!"application/pdf".equals(mimeType)) {
+            return extract(content, mimeType);
+        }
+        try (PdfBoxTempFileSupport.StagedPdf staged = stageForProcessing(content, "lexavault-native-text-")) {
+            PDDocument document = staged.document();
+            List<PageText> pages = new ArrayList<>();
+            long totalChars = 0;
+            for (int i : new TreeSet<>(pageNumbers)) {
+                if (i < 1 || i > document.getNumberOfPages()) continue;
+                PageText page = extractPage(document, i);
+                pages.add(page);
+                totalChars += page.text().length();
+            }
+            return new TextExtractionOutput(pages, totalChars, totalChars > 0);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to extract text from PDF", e);
+        }
+    }
+
+    /** One page's embedded text and spans (1-based page number); package-private reuse for the hybrid adapter. */
+    PageText extractPage(PDDocument document, int i) throws IOException {
+        PDPage pdPage = document.getPage(i - 1);
+        PDRectangle mediaBox = pdPage.getMediaBox();
+        float pageWidth = mediaBox.getWidth();
+        float pageHeight = mediaBox.getHeight();
+
+        PositionCapturingStripper stripper = new PositionCapturingStripper(pageWidth, pageHeight);
+        stripper.setStartPage(i);
+        stripper.setEndPage(i);
+        stripper.getText(document);
+
+        String pageText = stripper.getCapturedText();
+        return new PageText(
+                i,
+                Math.round(pageWidth),
+                Math.round(pageHeight),
+                pageText,
+                stripper.getSpans());
     }
 
     /**

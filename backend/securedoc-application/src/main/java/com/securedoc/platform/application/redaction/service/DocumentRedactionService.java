@@ -376,13 +376,17 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
      * Task 0044: the values the confirmed findings cover, read again from the original with the same text extraction
      * the detection used (findings keep only offsets, never a value: task 0015). Held in memory for the final check
      * and dropped with this call; never saved or logged. None without the extraction port or without findings.
+     * Task 0047: only the pages with findings are read again (the values are only there); the final check still
+     * compares every output page's text with them.
      */
     private RedactedValues readRedactedValues(Artifact originalArtifact, List<Finding> confirmedFindings) {
         if (textExtractionPort == null || confirmedFindings.isEmpty()) return RedactedValues.none();
+        java.util.Set<Integer> pagesWithFindings = new java.util.TreeSet<>();
+        for (Finding finding : confirmedFindings) pagesWithFindings.add(finding.location().pageNumber());
         InputStream original = storagePort.retrieve(originalArtifact.storageReference());
         TextExtractionPort.TextExtractionOutput extracted;
         try {
-            extracted = textExtractionPort.extract(original, REDACTED_MIME_TYPE);
+            extracted = textExtractionPort.extractPages(original, REDACTED_MIME_TYPE, pagesWithFindings);
         } finally {
             closeQuietly(original);
         }

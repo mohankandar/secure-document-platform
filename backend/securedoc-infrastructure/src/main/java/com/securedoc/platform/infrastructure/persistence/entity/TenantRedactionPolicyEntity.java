@@ -36,9 +36,15 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "credit_score_enabled", nullable = false)
     private boolean creditScoreEnabled;
 
+    /** Migration 048 (task 0047): "Searchable redacted pages", on by default. */
+    @Column(name = "searchable_redacted_pages", nullable = false)
+    private boolean searchableRedactedPages = true;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    public boolean isSearchableRedactedPages() { return searchableRedactedPages; }
+    public void setSearchableRedactedPages(boolean searchableRedactedPages) { this.searchableRedactedPages = searchableRedactedPages; }
     public UUID getTenantId() { return tenantId; }
     public void setTenantId(UUID tenantId) { this.tenantId = tenantId; }
     public double getAutoRedactThreshold() { return autoRedactThreshold; }

@@ -110,6 +110,7 @@ class OptInPatternKindsDetectionTest {
     private final List<DomainEvent> events = new CopyOnWriteArrayList<>();
     private final List<SensitiveContentAnalysisPort.AnalysisRequest> aiRequests = new CopyOnWriteArrayList<>();
     private TenantRedactionPolicy storedPolicy;
+    private String pageText = PAGE;
     private ListAppender<ILoggingEvent> logs;
     private Logger root;
     private Level rootLevelBefore;
@@ -215,6 +216,65 @@ class OptInPatternKindsDetectionTest {
                 assertFalse(text.contains(needle), "a stored or logged text holds part of a value");
             }
         }
+    }
+
+    /**
+     * Task 0047, item 3 (owner: ITIN wins): an "SSN or ITIN" value starting with 9 is one finding. Both orders of the
+     * label, with both kinds on and with each kind alone. Its box is the value's box either way.
+     */
+    @Test
+    void ssnOrItinOnOneBoxIsOneFindingAndItinWinsWhenBothAreOn() {
+        for (String label : List.of("SSN or ITIN: ", "ITIN or SSN: ")) {
+            pageText = "Tax form for a test borrower\n" + label + ITIN + "\nEnd of page";
+            int start = pageText.indexOf(ITIN);
+
+            Map<EntityType, List<Finding>> both = runWith(EnumSet.of(EntityType.SSN, EntityType.ITIN));
+            assertEquals(Set.of(EntityType.ITIN), both.keySet(), label + "both on: the ITIN only");
+            assertEquals(1, both.get(EntityType.ITIN).size(), label + "both on: one finding");
+            Finding itin = both.get(EntityType.ITIN).get(0);
+            assertEquals(start, itin.location().startOffset());
+            assertEquals(start + ITIN.length(), itin.location().endOffset());
+            assertTrue(itin.location().hasBoundingBox());
+
+            Map<EntityType, List<Finding>> ssnOnly = runWith(EnumSet.of(EntityType.SSN));
+            assertEquals(Set.of(EntityType.SSN), ssnOnly.keySet(), label + "SSN alone: still found, as an SSN");
+            assertEquals(1, ssnOnly.get(EntityType.SSN).size());
+
+            Map<EntityType, List<Finding>> itinOnly = runWith(EnumSet.of(EntityType.ITIN));
+            assertEquals(Set.of(EntityType.ITIN), itinOnly.keySet(), label + "ITIN alone: found as an ITIN");
+            assertEquals(1, itinOnly.get(EntityType.ITIN).size());
+        }
+    }
+
+    @Test
+    void anSsnNextToAnItinStaysAnSsn() {
+        pageText = "Borrower SSN: " + SSN + "\nSpouse ITIN: " + ITIN + "\nEnd of page";
+        Map<EntityType, List<Finding>> found = runWith(EnumSet.of(EntityType.SSN, EntityType.ITIN));
+        assertEquals(1, found.get(EntityType.SSN).size(), "a real SSN is not touched by the ITIN rule");
+        assertEquals(1, found.get(EntityType.ITIN).size());
+    }
+
+    /** Item 4 through the service: only a driver's licence label finds the number. */
+    @Test
+    void onlyADriversLicenceLabelFindsALicenceNumber() {
+        pageText = """
+                Business license number: K7302215
+                Contractor license K7302216
+                Marriage license number 44712290
+                Driver's license no. K7302217
+                DL # K7302218
+                End of page""";
+        List<Finding> found = runWith(EnumSet.of(EntityType.DRIVERS_LICENSE_NUMBER))
+                .getOrDefault(EntityType.DRIVERS_LICENSE_NUMBER, List.of());
+        List<Integer> starts = found.stream().map(f -> f.location().startOffset()).sorted().toList();
+        assertEquals(List.of(pageText.indexOf("K7302217"), pageText.indexOf("K7302218")), starts);
+    }
+
+    private Map<EntityType, List<Finding>> runWith(Set<EntityType> enabled) {
+        savedFindings.clear();
+        storedPolicy = policy(enabled);
+        run();
+        return savedFindings.stream().collect(Collectors.groupingBy(Finding::entityType));
     }
 
     // --- wiring ------------------------------------------------------------------------------
@@ -326,10 +386,10 @@ class OptInPatternKindsDetectionTest {
     }
 
     /** One native-text page with a span per word, so findings get boxes as in a real PDF. */
-    private static final class Extraction implements TextExtractionPort {
+    private final class Extraction implements TextExtractionPort {
         @Override public TextExtractionOutput extract(InputStream content, String mimeType) {
             List<TextSpan> spans = new ArrayList<>();
-            String[] lines = PAGE.split("\n", -1);
+            String[] lines = pageText.split("\n", -1);
             int offset = 0;
             for (int line = 0; line < lines.length; line++) {
                 java.util.regex.Matcher word = java.util.regex.Pattern.compile("\\S+").matcher(lines[line]);
@@ -340,8 +400,8 @@ class OptInPatternKindsDetectionTest {
                 }
                 offset += lines[line].length() + 1;
             }
-            PageText page = new PageText(1, 612, 792, PAGE, spans, ExtractionSource.NATIVE_PDF_TEXT, 1.0);
-            return new TextExtractionOutput(List.of(page), PAGE.length(), true);
+            PageText page = new PageText(1, 612, 792, pageText, spans, ExtractionSource.NATIVE_PDF_TEXT, 1.0);
+            return new TextExtractionOutput(List.of(page), pageText.length(), true);
         }
     }
 }

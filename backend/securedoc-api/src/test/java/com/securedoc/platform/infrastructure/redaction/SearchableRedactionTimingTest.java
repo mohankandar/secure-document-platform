@@ -64,10 +64,22 @@ class SearchableRedactionTimingTest {
         double[] off = redactAndVerify(engine, verification, source, targets, pages, RedactionOptions.IMAGE_ONLY, probe);
         double[] on = redactAndVerify(engine, verification, source, targets, pages, RedactionOptions.SEARCHABLE, probe);
 
+        HybridPdfTextExtractionAdapter extractor = new HybridPdfTextExtractionAdapter(new PdfBoxTextExtractionAdapter(),
+                new TesseractOcrAdapter(ocrProperties), ocrProperties);
         long t = System.nanoTime();
-        new HybridPdfTextExtractionAdapter(new PdfBoxTextExtractionAdapter(), new TesseractOcrAdapter(ocrProperties),
-                ocrProperties).extract(new ByteArrayInputStream(source), "application/pdf");
+        var everyPage = extractor.extract(new ByteArrayInputStream(source), "application/pdf");
         double extraction = (System.nanoTime() - t) / 1e9;
+        // Task 0047: the redaction step now reads again only the pages with findings.
+        java.util.Set<Integer> withFindings = new java.util.TreeSet<>();
+        for (RedactionTarget target : targets) withFindings.add(target.pageNumber());
+        t = System.nanoTime();
+        var onlyThose = extractor.extractPages(new ByteArrayInputStream(source), "application/pdf", withFindings);
+        double pageExtraction = (System.nanoTime() - t) / 1e9;
+        for (var page : onlyThose.pages()) {
+            assertTrue(page.text().equals(everyPage.pages().get(page.pageNumber() - 1).text()),
+                    "page " + page.pageNumber() + " reads the same either way");
+        }
+        assertTrue(onlyThose.pageCount() == withFindings.size());
 
         System.out.println(String.format(Locale.ROOT,
                 "TIMING_0044 pages=%d redactedPages=%d targets=%d | off: redact=%.2fs verify=%.2fs size=%d | "
@@ -75,6 +87,10 @@ class SearchableRedactionTimingTest {
                         + "secondTextExtraction=%.2fs | sizeChange=%+.1f%%",
                 pages, redactedPages, targets.size(), off[0], off[1], (long) off[2], on[0], on[1], (long) on[2],
                 ((on[0] + on[1]) - (off[0] + off[1])) / redactedPages, extraction, 100.0 * (on[2] - off[2]) / off[2]));
+        System.out.println(String.format(Locale.ROOT,
+                "TIMING_0047 secondTextExtraction everyPage=%.2fs (%d pages, %d OCR) pagesWithFindings=%.2fs (%d pages, %d OCR)",
+                extraction, everyPage.pageCount(), everyPage.ocrPageCount(),
+                pageExtraction, onlyThose.pageCount(), onlyThose.ocrPageCount()));
     }
 
     private static double[] redactAndVerify(PdfBoxBurnFlatRedactionAdapter engine, PdfBoxRedactionVerificationAdapter v,

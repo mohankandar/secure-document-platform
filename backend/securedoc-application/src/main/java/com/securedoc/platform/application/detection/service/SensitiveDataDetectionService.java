@@ -195,6 +195,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         OcrSensitiveFieldSafetyPolicy.Evaluation ocrSafety = ocrSensitiveFieldSafetyPolicy.evaluate(
                 pagesByNumber, mergedEntities, enabledTypes);
         mergedEntities = mergeEvidence(mergedEntities, ocrSafety.locatedEntities(), enabledTypes);
+        mergedEntities = itinWinsOverSsn(mergedEntities);
 
         List<Finding> findings = createFindings(new DetectionOutput(mergedEntities), document, pagesByNumber, enabledTypes);
         findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document));
@@ -491,6 +492,43 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     confidence, sourceName, "merged-v1"));
         }
         return merged;
+    }
+
+    /**
+     * Task 0047, item 3 (owner, 0044 answers 5): a value found both as an SSN and as an ITIN ("SSN or ITIN:
+     * 9NN-NN-NNNN") is one finding, the ITIN: an SSN never starts with 9, and an ITIN finding is only made for a
+     * 9NN value in the ITIN groups. The ITIN keeps the union of both spans, so the box never covers less than either.
+     * An ITIN finding exists only when the entity has ITIN on, so with ITIN off the SSN stays as it was.
+     */
+    private List<DetectedEntity> itinWinsOverSsn(List<DetectedEntity> entities) {
+        List<DetectedEntity> itins = new ArrayList<>();
+        for (DetectedEntity e : entities) {
+            if (parseEntityType(e.entityType()) == EntityType.ITIN) itins.add(e);
+        }
+        if (itins.isEmpty()) return entities;
+        java.util.Map<DetectedEntity, int[]> itinSpans = new java.util.IdentityHashMap<>();
+        java.util.Set<DetectedEntity> foldedSsns = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (DetectedEntity ssn : entities) {
+            if (parseEntityType(ssn.entityType()) != EntityType.SSN) continue;
+            for (DetectedEntity itin : itins) {
+                if (itin.pageNumber() != ssn.pageNumber()
+                        || itin.startOffset() >= ssn.endOffset() || ssn.startOffset() >= itin.endOffset()) continue;
+                int[] span = itinSpans.computeIfAbsent(itin, i -> new int[]{i.startOffset(), i.endOffset()});
+                span[0] = Math.min(span[0], ssn.startOffset());
+                span[1] = Math.max(span[1], ssn.endOffset());
+                foldedSsns.add(ssn);
+                break;
+            }
+        }
+        if (foldedSsns.isEmpty()) return entities;
+        List<DetectedEntity> result = new ArrayList<>();
+        for (DetectedEntity e : entities) {
+            if (foldedSsns.contains(e)) continue;
+            int[] span = itinSpans.get(e);
+            result.add(span == null ? e : new DetectedEntity(e.entityType(), e.pageNumber(), span[0], span[1],
+                    e.confidence(), e.detectorName(), e.detectorVersion()));
+        }
+        return result;
     }
 
     private int findOverlappingSameType(List<DetectedEntity> entities, DetectedEntity candidate) {
