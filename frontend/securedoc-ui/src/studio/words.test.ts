@@ -129,7 +129,7 @@ test('Columns on Cases: LexaVault columns by key in sentence case, case fields a
   // An unknown LexaVault column falls back to its label in sentence case.
   assert.equal(sys('newColumn', 'Delivery Folder'), 'Delivery folder');
   // A configured case field is shown exactly as configured.
-  assert.equal(dashboardColumnName({ key: 'identifier:x', label: 'Loan Number SDV', kind: 'IDENTIFIER' }), 'Loan Number SDV');
+  assert.equal(dashboardColumnName({ key: 'identifier:x', label: 'Loan Number ABA', kind: 'IDENTIFIER' }), 'Loan Number ABA');
 });
 
 test('Cases groups and case actions take their words from words.ts, not their own spelling (U018 follow-up)', () => {
@@ -269,10 +269,10 @@ test('0023 C1/C3 / 0025: each processing and redaction-check code reads as its L
   assert.equal(problemReason('REDACTION_LOCATION_MISSING').label, 'A finding has no location · LV-RED-001');
 });
 
-test('0025: the screen words for codes come only from the registry (no second list, no MODEL_TIMEOUT or SDV_UNAVAILABLE)', () => {
+test('0025: the screen words for codes come only from the registry (no second list, no MODEL_TIMEOUT)', () => {
   const source = readFileSync(join(resolve(here), 'words.ts'), 'utf8');
-  assert.doesNotMatch(source, /PROBLEM_REASONS|MODEL_TIMEOUT|SDV_UNAVAILABLE|OCR_TIMEOUT/);
-  for (const gone of ['MODEL_TIMEOUT', 'SDV_UNAVAILABLE']) {
+  assert.doesNotMatch(source, /PROBLEM_REASONS|MODEL_TIMEOUT|OCR_TIMEOUT/);
+  for (const gone of ['MODEL_TIMEOUT']) {
     assert.equal(problemReason(gone).known, false, gone);
     assert.equal(problemReason(gone).code, 'LV-SYS-001', gone);
   }

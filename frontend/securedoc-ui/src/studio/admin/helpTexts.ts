@@ -74,13 +74,13 @@ export const HELP = {
     name: 'Receiving documents',
     text: 'The systems, folders and scanners that bring documents into LexaVault. Each one has its own sign-in details and status. Switching one off stops new documents coming in from it.',
   },
-  sendingToSdv: {
-    name: 'Sending to SDV',
+  sendingToDocumentStore: {
+    name: 'Sending to the document store',
     text: 'Where the full redacted case goes when it is delivered, and the sign-in details LexaVault uses there. Test a change before you save it, so delivery is not interrupted.',
   },
   sendingByBarcode: {
     name: 'Sending by barcode',
-    text: 'Also sends chosen pages, as separate files, to other places, picked by a barcode or text marker on the page. The full redacted case still goes to SDV. Nothing is sent this way until a rule names a place.',
+    text: 'Also sends chosen pages, as separate files, to other places, picked by a barcode or text marker on the page. The full redacted case still goes to the document store. Nothing is sent this way until a rule names a place.',
   },
   allConnections: {
     name: 'All connections',

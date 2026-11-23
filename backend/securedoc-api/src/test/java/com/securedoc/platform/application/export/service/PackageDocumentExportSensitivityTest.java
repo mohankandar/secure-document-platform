@@ -50,10 +50,10 @@ class PackageDocumentExportSensitivityTest {
         when(artifacts.findByDocumentIdAndTenantId(document.id(), tenant)).thenReturn(List.of(artifact));
         when(storage.retrieve(artifact.storageReference())).thenReturn(new ByteArrayInputStream("PDF".getBytes()));
         when(lifecycle.nextExportCycle(pkg.id(), tenant)).thenReturn(1);
-        when(delivery.describe(tenant)).thenReturn(new DeliveryPort.DeliveryDescriptor("sdv", IntegrationConnectionId.generate(), 1));
+        when(delivery.describe(tenant)).thenReturn(new DeliveryPort.DeliveryDescriptor("document-store", IntegrationConnectionId.generate(), 1));
         when(submissions.findByTenantIdAndPackageIdAndExportCycle(tenant, pkg.id(), 1)).thenReturn(Optional.empty());
         when(delivery.deliverBatch(any())).thenThrow(new TechnicalDependencyException(
-                TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "SDV unavailable"));
+                TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Document store unavailable"));
 
         PackageDocumentExportService service = new PackageDocumentExportService(documents, packages,
                 mock(BusinessRecordRepository.class), artifacts, storage, delivery, submissions, lifecycle,

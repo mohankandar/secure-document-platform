@@ -146,7 +146,7 @@ function Overview({ canOperate }: { canOperate: boolean }) {
               <div><dt>Retry attempts</dt><dd>{rs.maxAttempts} · first wait {rs.initialBackoffMs} ms</dd></div>
               <div><dt>Processing attempts</dt><dd>{rs.packageProcessingMaxAttempts}</dd></div>
               <div><dt>AI failover</dt><dd className="cf-ad-mono">{rs.aiSecondaryEnabled ? `${rs.aiSecondaryProvider}${rs.aiSecondaryModel ? ` · ${rs.aiSecondaryModel}` : ''}` : 'Disabled'}</dd></div>
-              <div><dt>Delivery</dt><dd className="cf-ad-mono">{data.integrations.deliveryType} · SDV {data.integrations.sdvConfigured ? 'configured' : 'not configured'}</dd></div>
+              <div><dt>Delivery</dt><dd className="cf-ad-mono">{data.integrations.deliveryType} · Document store {data.integrations.documentStoreConfigured ? 'configured' : 'not configured'}</dd></div>
               <div><dt>Identity mode</dt><dd className="cf-ad-mono">{data.integrations.identityMode}{data.integrations.productionIdentityConfigured ? '' : ' · local/demo'}</dd></div>
             </dl>
           </details>

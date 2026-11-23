@@ -12,7 +12,7 @@ public interface IntegrationConnectionRepository {
     Optional<IntegrationConnection> findByTenantIdAndId(TenantId tenantId, IntegrationConnectionId id);
     Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal);
     Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal);
-    default Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) { return Optional.empty(); }
+    default Optional<IntegrationConnection> findEnabledDocumentStoreByTenantId(TenantId tenantId) { return Optional.empty(); }
     default List<IntegrationConnection> findEnabledPollingSources() { return List.of(); }
     boolean existsByTenantIdAndNameIgnoreCase(TenantId tenantId, String name, IntegrationConnectionId excludeId);
     boolean existsByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal, IntegrationConnectionId excludeId);

@@ -113,7 +113,7 @@ public final class DeliverySubmission {
 
     /**
      * Task 0028: the same case run rebuilt from the stored redacted copies, for one last fresh start before IT. The
-     * identities are kept, so the destination still recognises a repeat (SDV_DELIVERY_V1.md): the same id, the same
+     * identities are kept, so the destination still recognises a repeat (the delivery contract): the same id, the same
      * {@code sourceSubmissionId} (the Idempotency-Key) and each document's {@code sourceDocumentId}. Everything learned
      * from the destination is dropped: its submission reference and every acknowledgement, so the next attempt creates
      * (idempotently) and uploads again. Sizes and checksums are read again from the stored copies. The documents must be

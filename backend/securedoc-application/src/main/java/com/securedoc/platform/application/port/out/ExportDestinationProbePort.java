@@ -5,7 +5,7 @@ import com.securedoc.platform.domain.identity.TenantId;
 
 /**
  * A destination's health check (task 0027; task 0028 runs it at once on a connection failure). The existing connection
- * test for SDV and the split destinations; for the local export folder (its derived id) a test file is written and
+ * test for the document store and the split destinations; for the local export folder (its derived id) a test file is written and
  * deleted.
  */
 public interface ExportDestinationProbePort {

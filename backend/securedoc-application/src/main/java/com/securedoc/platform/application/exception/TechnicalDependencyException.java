@@ -23,7 +23,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     /** Task 0028: the wait a 429 asked for (Retry-After); null when it gave none. */
     private final Duration retryAfter;
     /**
-     * Task 0030: the destination's own error code from its answer (for example {@code SDV-SEN-006}), or null. Only a
+     * Task 0030: the destination's own error code from its answer (for example {@code DS-SEN-006}), or null. Only a
      * code that matches {@link #SAFE_DESTINATION_CODE} is kept; anything else is dropped, never stored or shown.
      */
     private final String destinationCode;

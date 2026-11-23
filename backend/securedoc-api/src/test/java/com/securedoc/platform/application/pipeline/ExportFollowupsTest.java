@@ -146,7 +146,7 @@ class ExportFollowupsTest {
         DeliverySubmission before = f.submissions.get(pkg.id() + "#1");
         // As if the destination had answered part of it: a reference and one acknowledgement.
         before.recordDestinationSubmissionReference("remote-ref", java.time.Instant.now());
-        before.acknowledgeDocument(before.documents().get(0).documentId(), "remote-doc", "sdv://x", java.time.Instant.now());
+        before.acknowledgeDocument(before.documents().get(0).documentId(), "remote-doc", "store://x", java.time.Instant.now());
         f.submissions.put(pkg.id() + "#1", before);
         String sourceDocumentId = before.documents().get(0).sourceDocumentId();
 

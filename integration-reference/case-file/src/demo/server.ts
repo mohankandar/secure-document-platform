@@ -132,7 +132,7 @@ function lifecycle(state: DemoState, pkg: DemoPackage) {
     redactedDeleteAt: exported ? iso(exported + policy.redactedCacheHours * HOUR) : null,
     technicalHoldUntil: pkg.technicalHoldUntil,
     redactedPurgedAt: null, originalPurgedAt: null, purgedAt: null,
-    lastDestinationType: exported ? 'SDV' : null,
+    lastDestinationType: exported ? 'document-store' : null,
   };
 }
 
@@ -348,7 +348,7 @@ function platformOverview(state: DemoState) {
       item('detector', 'Sensitive data detector', 'PROCESSING', 'nw-2026.09'),
       item('ai-secondary', 'Secondary AI review', 'PROCESSING', 'Gateway · structured review', 'DEGRADED', 'p95 latency above 4s in the last hour'),
       item('identity', 'Identity provider', 'SECURITY', 'Northwind Entra ID'),
-      item('sdv', 'Secure delivery vault', 'DELIVERY', 'SharePoint · Underwriting'),
+      item('document-store', 'Secure delivery vault', 'DELIVERY', 'SharePoint · Underwriting'),
     ],
     watchedFolder: {
       enabled: true, schedulingEnabled: true, scanIntervalMs: 30000, rootPath: '\\\\files.northwind.local\\lexavault\\inbox', triggerFileName: 'READY.trigger', incompleteVisibilityMinutes: 30,
@@ -357,7 +357,7 @@ function platformOverview(state: DemoState) {
       leaseExpiresAt: iso(now + 48_000), takeoverCount: 2, lastScanAt: iso(now - 25_000), lastScanOutcome: 'SUCCESS', lastScanResult: { discovered: 3, waitingForTrigger: 1, accepted: 2, rejected: 0, duplicates: 0 },
     },
     resilience: { maxAttempts: 5, initialBackoffMs: 2000, packageProcessingMaxAttempts: 3, aiSecondaryEnabled: true, aiSecondaryProvider: 'Vercel AI Gateway', aiSecondaryModel: 'structured-review-v2' },
-    integrations: { deliveryType: 'SDV', sdvConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
+    integrations: { deliveryType: documentStoreConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
     technicalExceptions: failed.map((p) => ({ packageId: p.packageId, reasonCode: p.failureReason || 'UNKNOWN', status: p.status, documentCount: p.documents.length, failedAt: p.updatedAt, technicalHoldUntil: p.technicalHoldUntil })),
   };
 }
@@ -685,7 +685,7 @@ const testConnection = (s: DemoState, ctx: Ctx, id: string) => {
   audit(s, ctx, 'INTEGRATION_TESTED', 'INTEGRATION', id, healthy ? 'Connection test passed' : 'Destination timed out', healthy ? 'SUCCESS' : 'FAILURE');
   return { connectionId: id, healthStatus: healthy ? 'HEALTHY' : 'DEGRADED', secretConfigured: i.secretConfigured, configurationVersion: i.configurationVersion };
 };
-on('POST', '/integrations/:id/sdv/test-connection', (s, ctx, [id]) => testConnection(s, ctx, id));
+on('POST', '/integrations/:id/document-store/test-connection', (s, ctx, [id]) => testConnection(s, ctx, id));
 on('POST', '/integrations/:id/derived/test-connection', (s, ctx, [id]) => testConnection(s, ctx, id));
 
 on('GET', '/admin/enterprise-identity', (s, ctx) => { require(ctx, 'TENANT_AUTH_MANAGE'); return s.identity; });

@@ -23,7 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Task 0030: the destination's own error code (for example SDV-SEN-006) is stored with the job in {@code last_detail},
+ * Task 0030: the destination's own error code (for example DS-SEN-006) is stored with the job in {@code last_detail},
  * after LexaVault's internal reason, and the job's view (what the screens read) carries it. Only a code that matches the
  * safe pattern (letters, digits, '-', '_', up to 40 characters) is kept; anything else is dropped. One test per
  * destination kind: the full case (main export) and a split document.
@@ -35,24 +35,24 @@ class ExportDestinationCodeTest {
         ExportJobFixture f = new ExportJobFixture();
         DocumentPackage pkg = f.caseReadyForExport();
         f.destination.failWith = LvErrorCode.DLV_003;
-        f.destination.destinationCode = "SDV-SEN-006";
+        f.destination.destinationCode = "DS-SEN-006";
 
         f.drain();
 
         PipelineJob job = f.jobOf(pkg);
         assertEquals(PipelineJobStatus.WAITING_FOR_YOU, job.status());
         assertEquals("LV-DLV-003", job.lastLvCode());
-        assertEquals("DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006", job.lastDetail());
-        assertEquals("DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006",
+        assertEquals("DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006", job.lastDetail());
+        assertEquals("DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006",
                 f.service.jobsOfCase(f.tenant, pkg.id()).get(0).detail());
-        assertEquals("DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006",
+        assertEquals("DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006",
                 f.service.waitingForYou(f.tenant).get(0).jobs().get(0).detail());
     }
 
     @Test
     void theMainExportDropsAnUnsafeDestinationCode() {
-        for (String unsafe : List.of("<b>SDV-SEN-006</b>", "SDV SEN 006", "SDV-SEN-006; destination=X", "SDV-SEN-006\nx",
-                "ÄSDV", "", "a/b", "1234567890123456789012345678901234567890X")) {
+        for (String unsafe : List.of("<b>DS-SEN-006</b>", "DS SEN 006", "DS-SEN-006; destination=X", "DS-SEN-006\nx",
+                "ÄDS", "", "a/b", "1234567890123456789012345678901234567890X")) {
             ExportJobFixture f = new ExportJobFixture();
             DocumentPackage pkg = f.caseReadyForExport();
             f.destination.failWith = LvErrorCode.DLV_003;
@@ -110,10 +110,10 @@ class ExportDestinationCodeTest {
     @Test
     void theCodeSurvivesTheOtherMarksOnTheFailure() {
         TechnicalDependencyException failure = new TechnicalDependencyException(TechnicalDependency.DELIVERY,
-                TechnicalFailureCode.DELIVERY_IO, true, "x").withDestinationCode("SDV-ERR-1");
-        assertEquals("SDV-ERR-1", failure.withLvCode(LvErrorCode.DLV_002).destinationCode());
-        assertEquals("SDV-ERR-1", failure.withAttempts(3).destinationCode());
-        assertEquals("SDV-ERR-1", failure.asRateLimited(null).destinationCode());
+                TechnicalFailureCode.DELIVERY_IO, true, "x").withDestinationCode("DS-ERR-1");
+        assertEquals("DS-ERR-1", failure.withLvCode(LvErrorCode.DLV_002).destinationCode());
+        assertEquals("DS-ERR-1", failure.withAttempts(3).destinationCode());
+        assertEquals("DS-ERR-1", failure.asRateLimited(null).destinationCode());
         assertNull(failure.withDestinationCode("bad code").destinationCode());
     }
 }

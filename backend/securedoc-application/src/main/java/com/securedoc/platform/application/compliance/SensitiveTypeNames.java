@@ -28,7 +28,7 @@ public final class SensitiveTypeNames {
 
     /** words.ts {@code ACRONYMS}. */
     private static final Set<String> ACRONYMS = Set.of("SSN", "ID", "EIN", "ITIN", "IBAN", "TIN", "VIN", "NPI",
-            "ABA", "FICO", "SDV", "PDF", "API", "URL");
+            "ABA", "FICO", "PDF", "API", "URL");
 
     private SensitiveTypeNames() {
     }

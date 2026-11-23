@@ -30,7 +30,7 @@ import java.util.*;
 
 /**
  * Delivers the complete redacted master package. A business export cycle is consumed only after
- * the active provider reaches its durable-success boundary (local atomic write or SDV COMPLETE ACK).
+ * the active provider reaches its durable-success boundary (local atomic write or the document store's COMPLETE acknowledgement).
  * Delivery submission/document identities survive technical retries without rerunning redaction.
  */
 public final class PackageDocumentExportService implements ExportPackageDocumentsUseCase,

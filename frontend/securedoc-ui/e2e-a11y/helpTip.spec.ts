@@ -89,8 +89,8 @@ test('Esc is used by the note first: the note closes, nothing else does', async 
 test('IT Administrator and Platform Operations cards have their "?"', async ({ page }) => {
   await signInAs(page, 'it', '/admin/integrations');
   await expect(help(page, HELP.receiving.name)).toBeVisible();
-  await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to SDV \d/ }).click();
-  await expect(help(page, HELP.sendingToSdv.name)).toBeVisible();
+  await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to the document store \d/ }).click();
+  await expect(help(page, HELP.sendingToDocumentStore.name)).toBeVisible();
   await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending by barcode \d/ }).click();
   await expect(help(page, HELP.sendingByBarcode.name)).toBeVisible();
   await expect(help(page, HELP.routingRules.name)).toBeVisible();

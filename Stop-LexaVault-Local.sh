@@ -41,4 +41,4 @@ stop_owned() {
 echo "=== LexaVault Ubuntu LOCAL shutdown ==="
 stop_owned frontend
 stop_owned backend
-echo "PostgreSQL, Ollama, Docker, Keycloak and SDV were left untouched."
+echo "PostgreSQL, Ollama, Docker, Keycloak and the other Docker containers were left untouched."

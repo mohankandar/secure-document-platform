@@ -158,7 +158,7 @@ function Overview() {
             <div><dt>Package processing attempts</dt><dd>{rs.packageProcessingMaxAttempts}</dd></div>
             <div><dt>AI failover</dt><dd>{rs.aiSecondaryEnabled ? `${rs.aiSecondaryProvider}${rs.aiSecondaryModel ? ` · ${rs.aiSecondaryModel}` : ''}` : 'Disabled'}</dd></div>
             <div><dt>Delivery</dt><dd>{data.integrations.deliveryType}</dd></div>
-            <div><dt>SDV configured</dt><dd>{data.integrations.sdvConfigured ? 'Yes' : 'No'}</dd></div>
+            <div><dt>Document store configured</dt><dd>{data.integrations.documentStoreConfigured ? 'Yes' : 'No'}</dd></div>
             <div><dt>Identity mode</dt><dd>{humanize(data.integrations.identityMode)}</dd></div>
           </dl>
           {!data.integrations.productionIdentityConfigured && (

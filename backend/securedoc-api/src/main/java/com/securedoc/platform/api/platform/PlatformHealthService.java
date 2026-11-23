@@ -123,9 +123,9 @@ public class PlatformHealthService {
                 ai.isSecondaryEnabled(), ai.getSecondaryProvider(), safe(ai.getSecondaryModel()));
         String deliveryType = environment.getProperty("securedoc.delivery.type", "local");
         String identityMode = environment.getProperty("securedoc.security.mode", "OIDC").trim().toUpperCase();
-        boolean sdvConfigured = integrationConnections.findEnabledSdvDeliveryByTenantId(tenantId).isPresent();
+        boolean documentStoreConfigured = integrationConnections.findEnabledDocumentStoreByTenantId(tenantId).isPresent();
         var integrationSummary = new PlatformAdminOverviewResponse.IntegrationSummary(
-                deliveryType, sdvConfigured, identityMode, "OIDC".equals(identityMode));
+                deliveryType, documentStoreConfigured, identityMode, "OIDC".equals(identityMode));
 
         Map<String, TechnicalExceptionItem> exceptionByPackage = new LinkedHashMap<>();
 
@@ -384,17 +384,17 @@ public class PlatformHealthService {
     }
 
     private PlatformHealthItem deliveryHealth(TenantId tenantId, boolean probe) {
-        String type = environment.getProperty("securedoc.delivery.type", "sdv").trim().toLowerCase();
-        if ("sdv".equals(type)) {
-            var configured = integrationConnections.findEnabledSdvDeliveryByTenantId(tenantId);
+        String type = environment.getProperty("securedoc.delivery.type", "document-store").trim().toLowerCase();
+        if ("document-store".equals(type)) {
+            var configured = integrationConnections.findEnabledDocumentStoreByTenantId(tenantId);
             if (configured.isEmpty()) {
-                return item("delivery", "Final delivery", "Delivery", "sdv", "NOT_CONFIGURED", false,
-                        "No enabled tenant SDV delivery connection");
+                return item("delivery", "Final delivery", "Delivery", "document-store", "NOT_CONFIGURED", false,
+                        "No enabled tenant document store connection");
             }
             var c = configured.get();
             String status = c.healthStatus().name();
-            return item("delivery", "Final delivery", "Delivery", "sdv", status, true,
-                    "Tenant SDV connection configured; secrets are protected");
+            return item("delivery", "Final delivery", "Delivery", "document-store", status, true,
+                    "Tenant document store connection configured; secrets are protected");
         }
         Path output = Path.of(localDelivery.getOutputPath()).toAbsolutePath().normalize();
         if (!probe) return item("delivery", "Final delivery", "Delivery", "local", "CONFIGURED", true,

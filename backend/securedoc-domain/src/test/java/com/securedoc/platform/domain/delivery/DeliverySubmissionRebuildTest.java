@@ -17,12 +17,12 @@ class DeliverySubmissionRebuildTest {
     @Test
     void aRebuildKeepsTheIdempotencyIdentitiesAndDropsWhatTheDestinationAnswered() {
         DocumentId doc = DocumentId.generate();
-        DeliverySubmission submission = DeliverySubmission.create(TenantId.generate(), PackageId.generate(), 1, "sdv",
+        DeliverySubmission submission = DeliverySubmission.create(TenantId.generate(), PackageId.generate(), 1, "document-store",
                 List.of(new DeliverySubmission.NewDocument(doc, "a.pdf", 10, Checksum.sha256("a".repeat(64)))),
                 Instant.now());
         submission.startAttempt(Instant.now());
         submission.recordDestinationSubmissionReference("remote-1", Instant.now());
-        submission.acknowledgeDocument(doc, "remote-doc", "sdv://remote-1/remote-doc", Instant.now());
+        submission.acknowledgeDocument(doc, "remote-doc", "store://remote-1/remote-doc", Instant.now());
         submission.markFailure("DELIVERY_IO", true, Instant.now());
 
         DeliverySubmission rebuilt = submission.rebuild(
@@ -42,7 +42,7 @@ class DeliverySubmissionRebuildTest {
     @Test
     void aRebuildRefusesOtherDocumentsAndADeliveredRun() {
         DocumentId doc = DocumentId.generate();
-        DeliverySubmission submission = DeliverySubmission.create(TenantId.generate(), PackageId.generate(), 1, "sdv",
+        DeliverySubmission submission = DeliverySubmission.create(TenantId.generate(), PackageId.generate(), 1, "document-store",
                 List.of(new DeliverySubmission.NewDocument(doc, "a.pdf", 10, Checksum.sha256("a".repeat(64)))),
                 Instant.now());
         assertThrows(IllegalStateException.class, () -> submission.rebuild(List.of(new DeliverySubmission.NewDocument(

@@ -7,5 +7,5 @@ public enum IntegrationAcknowledgementMode {
     DESTINATION_RECEIPT,
     DURABLE_FILE_WRITE,
     SOURCE_PICKUP_ACK,
-    SDV_SUBMISSION_ACK
+    SUBMISSION_ACK
 }

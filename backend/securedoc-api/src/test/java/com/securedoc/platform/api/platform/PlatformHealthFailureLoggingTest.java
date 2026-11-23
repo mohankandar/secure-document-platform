@@ -30,7 +30,7 @@ class PlatformHealthFailureLoggingTest {
         ProcessingStorageConfigurationService storage = mock(ProcessingStorageConfigurationService.class);
         when(storage.overview()).thenThrow(new IllegalStateException("s3 secret key rejected"));
         WatchedFolderScheduler scheduler = mock(WatchedFolderScheduler.class);
-        MockEnvironment environment = new MockEnvironment().withProperty("securedoc.delivery.type", "sdv");
+        MockEnvironment environment = new MockEnvironment().withProperty("securedoc.delivery.type", "document-store");
         PlatformHealthService service = new PlatformHealthService(dataSource, new AiRuntimeProperties(), ocr, storage,
                 new LocalDeliveryProperties(), mock(IntegrationConnectionRepository.class),
                 mock(WatchedFolderProperties.class), new TechnicalResilienceProperties(), environment,

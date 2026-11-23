@@ -45,7 +45,7 @@ if (process.env.P0026_PROOF) {
       providers: [
         { key: 'database', label: 'PostgreSQL', category: 'Database', provider: 'postgresql', status: 'UNHEALTHY', configured: true, detail: 'Connection unavailable', lvCode: 'LV-SYS-006' },
         { key: 'ocr', label: 'OCR', category: 'OCR', provider: 'tesseract', status: 'HEALTHY', configured: true, detail: 'Language: eng', lvCode: null },
-        { key: 'delivery', label: 'Final delivery', category: 'Delivery', provider: 'sdv', status: 'HEALTHY', configured: true, detail: 'Tenant SDV connection configured; secrets are protected', lvCode: null },
+        { key: 'delivery', label: 'Final delivery', category: 'Delivery', provider: 'document-store', status: 'HEALTHY', configured: true, detail: 'Tenant document store connection configured; secrets are protected', lvCode: null },
       ],
       watchedFolder: {
         enabled: true, schedulingEnabled: true, scanIntervalMs: 60000, rootPath: 'D:/LexaVault/inbound', triggerFileName: 'READY', incompleteVisibilityMinutes: 60,
@@ -54,7 +54,7 @@ if (process.env.P0026_PROOF) {
         lastScanAt: minsAgo(1), lastScanOutcome: 'SUCCESS', lastScanResult: { discovered: 3, waitingForTrigger: 1, accepted: 2, rejected: 0, duplicates: 0 },
       },
       resilience: { maxAttempts: 3, initialBackoffMs: 1000, packageProcessingMaxAttempts: 3, aiSecondaryEnabled: false, aiSecondaryProvider: 'none', aiSecondaryModel: '' },
-      integrations: { deliveryType: 'sdv', sdvConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
+      integrations: { deliveryType: 'document-store', documentStoreConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
       technicalExceptions: [],
     };
     await mockIdentityProvider(page);

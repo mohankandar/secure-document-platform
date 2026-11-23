@@ -12,17 +12,17 @@ class IntegrationConnectionTest {
     private final Instant now = Instant.parse("2026-09-02T20:00:00Z");
 
     @Test
-    void sdvDeliveryRequiresOutboundHttpAndSubmissionAcknowledgement() {
-        var connection = IntegrationConnection.create(tenantId, "Primary SDV", null,
-                IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
-                IntegrationAuthenticationType.NONE, null, "https://sdv.example.test", null, null, 60, 2, 24, 50, 262144000L, 500,
-                IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, false, now);
-        assertEquals(IntegrationPurpose.SDV_DELIVERY, connection.purpose());
+    void documentStoreDeliveryRequiresOutboundHttpAndSubmissionAcknowledgement() {
+        var connection = IntegrationConnection.create(tenantId, "Primary store", null,
+                IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
+                IntegrationAuthenticationType.NONE, null, "https://store.example.test", null, null, 60, 2, 24, 50, 262144000L, 500,
+                IntegrationAcknowledgementMode.SUBMISSION_ACK, false, now);
+        assertEquals(IntegrationPurpose.DOCUMENT_STORE_DELIVERY, connection.purpose());
         assertFalse(connection.enabled());
         assertEquals(IntegrationHealthStatus.DISABLED, connection.healthStatus());
 
-        assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad SDV", null,
-                IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.FILE_SHARE,
+        assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(tenantId, "Bad store", null,
+                IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.FILE_SHARE,
                 IntegrationAuthenticationType.NONE, null, null, "/share", null, 60, 2, 24, 50, 262144000L, 500,
                 IntegrationAcknowledgementMode.DURABLE_FILE_WRITE, false, now));
     }
@@ -127,10 +127,10 @@ class IntegrationConnectionTest {
     @Test
     void nonPushConnectionCannotCarryInboundClientPrincipalBinding() {
         assertThrows(IllegalArgumentException.class, () -> IntegrationConnection.create(
-                TenantId.generate(), "SDV", null, IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND,
+                TenantId.generate(), "Store", null, IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, "should-not-be-here",
-                "https://sdv.example", null, null, 60, 2, 24, 50, 1024L, 100,
-                IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, true, Instant.now()));
+                "https://store.example", null, null, 60, 2, 24, 50, 1024L, 100,
+                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now()));
     }
     @Test
     void pollingSourceRequiresTypedScheduleAndSourcePickupAcknowledgement() {

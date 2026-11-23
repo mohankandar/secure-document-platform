@@ -127,7 +127,7 @@ securedoc:
   delivery:
     # Unit 22: one active final-delivery provider per deployment. Business Admin owns
     # retention/approval policy; provider connection details remain IT/Platform configuration.
-    type: ${SECUREDOC_DELIVERY_TYPE:sdv}
+    type: ${SECUREDOC_DELIVERY_TYPE:document-store}
     local:
       output-path: ${SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH:./securedoc-output}
   product-telemetry:

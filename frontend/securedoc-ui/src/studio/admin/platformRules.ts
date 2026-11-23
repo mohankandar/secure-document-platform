@@ -25,14 +25,14 @@ export const SECTION_LABELS = {
 
 /* ---------- Overview: services ---------- */
 
-/** The service in plain words: "Text recognition", "Delivery to Secure Document Vault". */
+/** The service in plain words: "Text recognition", "Delivery to the document store". */
 export function serviceName(item: Pick<PlatformHealthItem, 'key' | 'label' | 'provider'>): string {
   switch (item.key) {
     case 'database': return 'Database';
     case 'ai': return 'AI model';
     case 'ocr': return 'Text recognition';
     case 'storage': return 'Processing storage';
-    case 'delivery': return item.provider === 'local' ? 'Delivery to a local folder' : 'Delivery to Secure Document Vault';
+    case 'delivery': return item.provider === 'local' ? 'Delivery to a local folder' : 'Delivery to the document store';
     default: return item.label;
   }
 }
@@ -53,7 +53,7 @@ const PRODUCTS: Record<string, string> = {
 export const serviceProduct = (item: Pick<PlatformHealthItem, 'provider'>): string => PRODUCTS[(item.provider || '').toLowerCase()] ?? '';
 
 /**
- * The server reports HEALTHY / UNHEALTHY from a check, the SDV connection's own health (HEALTHY, DEGRADED,
+ * The server reports HEALTHY / UNHEALTHY from a check, the document store connection's own health (HEALTHY, DEGRADED,
  * UNAVAILABLE, DISABLED, UNKNOWN), or CONFIGURED / NOT_CONFIGURED when nothing was checked. Anything else is shown
  * as not recognised, never as working.
  */
@@ -172,7 +172,7 @@ export function storageUsedBy(p: Pick<ProcessingStorageProvider, 'id' | 'status'
 
 /** The readiness line above the table: "Ready · 1 server" or why documents can't be processed. */
 export function storageReadiness(o: ProcessingStorageOverview): { ready: boolean; title: string; note: string } {
-  if (o.ready) return { ready: true, title: `Ready · ${servers(o.activeNodeCount)}`, note: 'Documents are worked on here while they are redacted. Delivered copies go to SDV, not here.' };
+  if (o.ready) return { ready: true, title: `Ready · ${servers(o.activeNodeCount)}`, note: 'Documents are worked on here while they are redacted. Delivered copies go to the document store, not here.' };
   const def = o.providers.find((p) => p.id === o.deploymentDefault?.providerId);
   if (!def) return { ready: false, title: 'Not ready · no default storage', note: "Documents can't be taken in or processed until a storage is added, tested from every server and made the default." };
   if (def.providerType === 'LOCAL_FILESYSTEM' && o.activeNodeCount > 1) {

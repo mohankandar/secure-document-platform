@@ -92,10 +92,10 @@ class SdvDeliveryAdapterTest {
 
     private IntegrationConnection sdvConnection(TenantId tenant) {
         return IntegrationConnection.create(tenant, "SDV", null,
-                IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
+                IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://sdv.example.test", null, null,
                 5, 0, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, true, Instant.now());
+                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now());
     }
 
     private static final class FakeConnections implements IntegrationConnectionRepository {
@@ -105,7 +105,7 @@ class SdvDeliveryAdapterTest {
         public Optional<IntegrationConnection> findByTenantIdAndId(TenantId tenantId, IntegrationConnectionId id) { return Optional.of(current); }
         public Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
         public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
-        public Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) { return current.enabled() ? Optional.of(current) : Optional.empty(); }
+        public Optional<IntegrationConnection> findEnabledDocumentStoreByTenantId(TenantId tenantId) { return current.enabled() ? Optional.of(current) : Optional.empty(); }
         public boolean existsByTenantIdAndNameIgnoreCase(TenantId tenantId, String name, IntegrationConnectionId excludeId) { return false; }
         public boolean existsByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal, IntegrationConnectionId excludeId) { return false; }
         public void save(IntegrationConnection connection) { current = connection; }

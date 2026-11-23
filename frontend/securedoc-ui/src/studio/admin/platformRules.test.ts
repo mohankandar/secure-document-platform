@@ -13,7 +13,7 @@ test('section names are the vocabulary words', () => {
 test('services in plain words', () => {
   assert.equal(serviceName({ key: 'ocr', label: 'OCR', provider: 'tesseract' }), 'Text recognition');
   assert.equal(serviceName({ key: 'ai', label: 'Sensitive-content AI', provider: 'ollama' }), 'AI model');
-  assert.equal(serviceName({ key: 'delivery', label: 'Final delivery', provider: 'sdv' }), 'Delivery to Secure Document Vault');
+  assert.equal(serviceName({ key: 'delivery', label: 'Final delivery', provider: 'document-store' }), 'Delivery to the document store');
   assert.equal(serviceName({ key: 'delivery', label: 'Final delivery', provider: 'local' }), 'Delivery to a local folder');
   assert.equal(serviceName({ key: 'new-thing', label: 'New thing', provider: '' }), 'New thing');
   assert.equal(serviceProduct({ provider: 'tesseract' }), 'Tesseract');

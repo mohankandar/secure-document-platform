@@ -65,7 +65,7 @@ function applyMethod(cur: Draft, method: Method): Draft {
       pollingScheduleType: cur.pollingScheduleType || 'INTERVAL', pollingIntervalMinutes: cur.pollingIntervalMinutes || 60,
       pollingLocalTime: cur.pollingLocalTime, pollingTimeZone: cur.pollingTimeZone, pollingBatchLimit: cur.pollingBatchLimit || 100,
     });
-    case 'SDV': return { ...base, purpose: 'SDV_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'SDV_SUBMISSION_ACK' };
+    case 'DOCUMENT_STORE': return { ...base, purpose: 'DOCUMENT_STORE_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'SUBMISSION_ACK' };
     case 'BARCODE_WEB': return { ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'DESTINATION_RECEIPT' };
     case 'BARCODE_SHARE': return { ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'FILE_SHARE', authenticationType: 'NONE', fileShareRoot: cur.fileShareRoot, acknowledgementMode: 'DURABLE_FILE_WRITE' };
   }
@@ -114,8 +114,8 @@ function toPayload(d: Draft): IntegrationConnectionRequest {
 }
 
 /** Which saved connections LexaVault can test: the ones it connects to itself. */
-const testKind = (c: Pick<IntegrationConnection, 'purpose' | 'providerType'>): 'sdv' | 'derived' | 'polling' | null =>
-  c.purpose === 'SDV_DELIVERY' && c.providerType === 'HTTP_API' ? 'sdv'
+const testKind = (c: Pick<IntegrationConnection, 'purpose' | 'providerType'>): 'document-store' | 'derived' | 'polling' | null =>
+  c.purpose === 'DOCUMENT_STORE_DELIVERY' && c.providerType === 'HTTP_API' ? 'document-store'
     : c.purpose === 'DERIVED_DOCUMENT_DELIVERY' ? 'derived'
       : isPolling(c) ? 'polling' : null;
 
@@ -201,7 +201,7 @@ export default function IntegrationsArea() {
 }
 
 /** U026: the "?" note for each view's card (helpTexts.ts). */
-const VIEW_HELP: Record<View, HelpKey> = { INGESTION_SOURCE: 'receiving', SDV_DELIVERY: 'sendingToSdv', DERIVED_DOCUMENT_DELIVERY: 'sendingByBarcode', ALL: 'allConnections' };
+const VIEW_HELP: Record<View, HelpKey> = { INGESTION_SOURCE: 'receiving', DOCUMENT_STORE_DELIVERY: 'sendingToDocumentStore', DERIVED_DOCUMENT_DELIVERY: 'sendingByBarcode', ALL: 'allConnections' };
 
 /* ---------- One connection ---------- */
 
@@ -411,8 +411,8 @@ function ToggleConfirm({ conn, onClose, onDone }: { conn: IntegrationConnection 
   const consequence = !conn ? null : off
     ? conn.purpose === 'INGESTION_SOURCE'
       ? 'It stops receiving or collecting new documents. Cases already received are not affected.'
-      : conn.purpose === 'SDV_DELIVERY'
-        ? "Delivered cases can't be sent to SDV through it until it is switched on again."
+      : conn.purpose === 'DOCUMENT_STORE_DELIVERY'
+        ? "Delivered cases can't be sent to the document store through it until it is switched on again."
         : 'Rules that send pages here stop sending until it is switched on again.'
     : 'It starts again with its saved settings.';
 
@@ -513,7 +513,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => { setTested(null); onChange({ ...d, [k]: v }); };
   const nameMissing = !d.name.trim();
   const outbound = d.direction === 'OUTBOUND';
-  const hasAddress = method === 'POLL' || method === 'SDV' || method === 'BARCODE_WEB';
+  const hasAddress = method === 'POLL' || method === 'DOCUMENT_STORE' || method === 'BARCODE_WEB';
   const kind = testKind(d);
   const unchanged = editing && sameAsSaved(d, original);
 
@@ -541,7 +541,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
     try {
       if (d.connectionId && unchanged) {
         // The saved settings: the existing test, which also updates the connection's status.
-        const r = kind === 'sdv' ? await apiClient.testSdvConnection(d.connectionId)
+        const r = kind === 'document-store' ? await apiClient.testDocumentStoreConnection(d.connectionId)
           : kind === 'derived' ? await apiClient.testDerivedConnection(d.connectionId)
             : await apiClient.testPollingConnection(d.connectionId);
         setTested(r.healthStatus === 'HEALTHY'
@@ -589,11 +589,11 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
             <div className="cf-ad-radios" data-layout="row">
               {([
                 ['receive', 'Receive documents', 'A system sends them, LexaVault collects them, or a folder or scanner supplies them.'],
-                ['send', 'Send documents', 'To SDV, or pages by barcode to another place.'],
+                ['send', 'Send documents', 'To the document store, or pages by barcode to another place.'],
               ] as const).map(([v, label, hint]) => (
                 <label key={v} className="cf-ad-radio">
                   <input type="radio" name="cf-int-direction" checked={(v === 'receive') === receive}
-                    onChange={() => onChange(applyMethod(d, v === 'receive' ? 'PUSH' : 'SDV'))} />
+                    onChange={() => onChange(applyMethod(d, v === 'receive' ? 'PUSH' : 'DOCUMENT_STORE'))} />
                   <span><strong>{label}</strong><span className="cf-ad-hint">{hint}</span></span>
                 </label>
               ))}

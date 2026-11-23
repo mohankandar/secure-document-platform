@@ -16,7 +16,7 @@ public record PlatformAdminOverviewResponse(
                                     boolean aiSecondaryEnabled, String aiSecondaryProvider,
                                     String aiSecondaryModel) {}
 
-    public record IntegrationSummary(String deliveryType, boolean sdvConfigured,
+    public record IntegrationSummary(String deliveryType, boolean documentStoreConfigured,
                                      String identityMode,
                                      boolean productionIdentityConfigured) {}
 }

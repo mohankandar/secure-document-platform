@@ -5,7 +5,7 @@ import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.exception.ValidationException;
-import com.securedoc.platform.application.integration.SdvConnectionTestService;
+import com.securedoc.platform.application.integration.DocumentStoreConnectionTestService;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,13 +15,13 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "sdv")
-@RequestMapping("/api/v1/integrations/{connectionId}/sdv")
-public class SdvIntegrationController {
-    private final SdvConnectionTestService service;
+@ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "document-store")
+@RequestMapping("/api/v1/integrations/{connectionId}/document-store")
+public class DocumentStoreIntegrationController {
+    private final DocumentStoreConnectionTestService service;
     private final RequestContextResolver contextResolver;
 
-    public SdvIntegrationController(SdvConnectionTestService service, RequestContextResolver contextResolver) {
+    public DocumentStoreIntegrationController(DocumentStoreConnectionTestService service, RequestContextResolver contextResolver) {
         this.service = service;
         this.contextResolver = contextResolver;
     }

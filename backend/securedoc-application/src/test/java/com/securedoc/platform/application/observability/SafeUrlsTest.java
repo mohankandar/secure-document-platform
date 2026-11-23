@@ -9,7 +9,7 @@ class SafeUrlsTest {
     @Test
     void userInfoQueryAndFragmentAreRemoved() {
         assertEquals("http://ai-east:11434/api", SafeUrls.forLog("http://admin:s3cret@ai-east:11434/api?key=abc#x"));
-        assertEquals("https://sdv.example.test", SafeUrls.forLog("https://user@sdv.example.test"));
+        assertEquals("https://store.example.test", SafeUrls.forLog("https://user@store.example.test"));
     }
 
     @Test

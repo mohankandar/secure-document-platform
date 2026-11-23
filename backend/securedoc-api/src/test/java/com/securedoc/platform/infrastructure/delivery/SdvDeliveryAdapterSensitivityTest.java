@@ -192,10 +192,10 @@ class SdvDeliveryAdapterSensitivityTest {
 
     private IntegrationConnection connection(int retries) {
         return IntegrationConnection.create(TenantId.generate(), "SDV", null,
-                IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
+                IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API,
                 IntegrationAuthenticationType.NONE, null, "https://sdv.example.test", null, null,
                 5, retries, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, true, Instant.now());
+                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now());
     }
 
     private static final class FakeConnections implements IntegrationConnectionRepository {
@@ -205,7 +205,7 @@ class SdvDeliveryAdapterSensitivityTest {
         public Optional<IntegrationConnection> findByTenantIdAndId(TenantId tenantId, IntegrationConnectionId id) { return Optional.of(current); }
         public Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId t, String p) { return Optional.empty(); }
         public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId t, String p) { return Optional.empty(); }
-        public Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) { return Optional.of(current); }
+        public Optional<IntegrationConnection> findEnabledDocumentStoreByTenantId(TenantId tenantId) { return Optional.of(current); }
         public boolean existsByTenantIdAndNameIgnoreCase(TenantId t, String n, IntegrationConnectionId e) { return false; }
         public boolean existsByTenantIdAndClientPrincipal(TenantId t, String p, IntegrationConnectionId e) { return false; }
         public void save(IntegrationConnection connection) { current = connection; }

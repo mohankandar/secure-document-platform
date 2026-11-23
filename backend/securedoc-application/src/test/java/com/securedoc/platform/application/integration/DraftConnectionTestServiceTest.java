@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** The owner's conditions for testing before saving (U008 answer 1). */
 class DraftConnectionTestServiceTest {
-    private static final String STORED_REF = "env:LEXA_TEST_SDV_KEY_REF";
+    private static final String STORED_REF = "env:LEXA_TEST_STORE_KEY_REF";
     private static final String SECRET_VALUE = "s3cr3t-key-value";
     private static final String REMOTE_BODY = "<html>remote body Set-Cookie: session=abc</html>";
 
@@ -42,60 +42,60 @@ class DraftConnectionTestServiceTest {
     private final List<AuditRecord> audits = new ArrayList<>();
     private final AuditService auditService = new AuditService(audits::add);
     private final IntegrationConnectionService connections = new IntegrationConnectionService(repository, auditService, clock);
-    private final List<IntegrationConnection> sdvProbes = new ArrayList<>();
-    private RuntimeException sdvFailure;
+    private final List<IntegrationConnection> storeProbes = new ArrayList<>();
+    private RuntimeException storeFailure;
     private final FakePolling polling = new FakePolling();
     private final FakeDerived derived = new FakeDerived();
     private final Map<String, String> dns = new HashMap<>(Map.of(
-            "sdv.example.test", "203.0.113.10",
+            "store.example.test", "203.0.113.10",
             "title.example.test", "203.0.113.11",
             "metadata-alias.example.test", "169.254.169.254",
             "v6-metadata.example.test", "fd00:ec2::254"));
 
     private final DraftConnectionTestService service = new DraftConnectionTestService(connections,
-            c -> { sdvProbes.add(c); if (sdvFailure != null) throw sdvFailure; },
+            c -> { storeProbes.add(c); if (storeFailure != null) throw storeFailure; },
             polling, derived, new OutboundAddressGuard(this::resolve), auditService, clock);
 
     @Test
     void storedKeyIsReusedOnlyForAConnectionOfTheCallersOwnEntity() {
-        IntegrationConnection ofB = connections.create(entityB, actor, correlation, sdv("SDV B", "https://sdv.example.test", STORED_REF, true));
+        IntegrationConnection ofB = connections.create(entityB, actor, correlation, store("Store B", "https://store.example.test", STORED_REF, true));
         audits.clear();
 
         assertThrows(NotFoundException.class,
-                () -> service.test(entityA, ofB.id(), actor, correlation, sdv("SDV B", "https://sdv.example.test", null, true)));
-        assertTrue(sdvProbes.isEmpty(), "another entity's connection is never probed");
+                () -> service.test(entityA, ofB.id(), actor, correlation, store("Store B", "https://store.example.test", null, true)));
+        assertTrue(storeProbes.isEmpty(), "another entity's connection is never probed");
         assertTrue(audits.isEmpty());
 
-        IntegrationConnection ofA = connections.create(entityA, actor, correlation, sdv("SDV A", "https://sdv.example.test", STORED_REF, true));
+        IntegrationConnection ofA = connections.create(entityA, actor, correlation, store("Store A", "https://store.example.test", STORED_REF, true));
         audits.clear();
-        var result = service.test(entityA, ofA.id(), actor, correlation, sdv("SDV A", "https://sdv.example.test/v2", null, true));
+        var result = service.test(entityA, ofA.id(), actor, correlation, store("Store A", "https://store.example.test/v2", null, true));
 
         assertTrue(result.works());
         assertNull(result.reasonCode());
-        assertEquals(STORED_REF, sdvProbes.get(0).secretReference(), "an empty key reference reuses the stored key");
-        assertEquals("https://sdv.example.test/v2", sdvProbes.get(0).endpoint(), "the changed settings are what is tested");
+        assertEquals(STORED_REF, storeProbes.get(0).secretReference(), "an empty key reference reuses the stored key");
+        assertEquals("https://store.example.test/v2", storeProbes.get(0).endpoint(), "the changed settings are what is tested");
     }
 
     @Test
     void savesNothingAndLeavesHealthAsItWas() {
-        IntegrationConnection saved = connections.create(entityA, actor, correlation, sdv("SDV A", "https://sdv.example.test", STORED_REF, true));
-        sdvFailure = new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "SDV is unavailable");
+        IntegrationConnection saved = connections.create(entityA, actor, correlation, store("Store A", "https://store.example.test", STORED_REF, true));
+        storeFailure = new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "The document store is unavailable");
 
-        service.test(entityA, saved.id(), actor, correlation, sdv("Renamed", "https://sdv.example.test", null, true));
-        service.test(entityA, null, actor, correlation, sdv("New SDV", "https://sdv.example.test", STORED_REF, false));
+        service.test(entityA, saved.id(), actor, correlation, store("Renamed", "https://store.example.test", null, true));
+        service.test(entityA, null, actor, correlation, store("New store", "https://store.example.test", STORED_REF, false));
 
         assertEquals(List.of(saved), repository.all(), "nothing new stored; the stored one, its health included, unchanged");
-        assertEquals(2, sdvProbes.size());
+        assertEquals(2, storeProbes.size());
     }
 
     @Test
     void answerAndAuditCarryNoSecretNoRemoteTextAndAreMarkedDraft() {
-        IntegrationConnection saved = connections.create(entityA, actor, correlation, sdv("SDV A", "https://sdv.example.test", STORED_REF, true));
+        IntegrationConnection saved = connections.create(entityA, actor, correlation, store("Store A", "https://store.example.test", STORED_REF, true));
         audits.clear();
-        sdvFailure = new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_DESTINATION_INVALID,
+        storeFailure = new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_DESTINATION_INVALID,
                 false, "rejected " + SECRET_VALUE + " " + REMOTE_BODY);
 
-        var result = service.test(entityA, saved.id(), actor, correlation, sdv("SDV A", "https://sdv.example.test", null, true));
+        var result = service.test(entityA, saved.id(), actor, correlation, store("Store A", "https://store.example.test", null, true));
 
         assertFalse(result.works());
         assertEquals("DELIVERY_DESTINATION_INVALID", result.reasonCode());
@@ -107,13 +107,13 @@ class DraftConnectionTestServiceTest {
         assertEquals(saved.id().toString(), audit.resourceId());
         assertTrue(audit.detail().contains("draft=true"), audit.detail());
         assertNoLeak(audit.detail());
-        assertFalse(audit.detail().contains("sdv.example.test"), "no address in the audit line");
+        assertFalse(audit.detail().contains("store.example.test"), "no address in the audit line");
     }
 
     @Test
     void anythingButAFixedCodeBecomesTheGenericCode() {
-        sdvFailure = new IllegalStateException("boom " + SECRET_VALUE + " " + REMOTE_BODY);
-        var generic = service.test(entityA, null, actor, correlation, sdv("SDV A", "https://sdv.example.test", STORED_REF, false));
+        storeFailure = new IllegalStateException("boom " + SECRET_VALUE + " " + REMOTE_BODY);
+        var generic = service.test(entityA, null, actor, correlation, store("Store A", "https://store.example.test", STORED_REF, false));
         assertEquals(DraftConnectionTestService.CONNECTION_TEST_FAILED, generic.reasonCode());
         assertNoLeak(generic.toString());
 
@@ -133,32 +133,32 @@ class DraftConnectionTestServiceTest {
         for (String address : List.of("http://169.254.169.254/latest/meta-data", "http://metadata.google.internal/computeMetadata/v1",
                 "http://METADATA.google.internal./", "http://metadata-alias.example.test/", "http://[fe80::1]/",
                 "http://[fd00:ec2::254]/", "http://v6-metadata.example.test/", "http://100.100.100.200/")) {
-            var sdvResult = service.test(entityA, null, actor, correlation, sdv("SDV", address, STORED_REF, false));
-            assertEquals(DraftConnectionTestService.ADDRESS_NOT_ALLOWED, sdvResult.reasonCode(), address);
+            var storeResult = service.test(entityA, null, actor, correlation, store("Store", address, STORED_REF, false));
+            assertEquals(DraftConnectionTestService.ADDRESS_NOT_ALLOWED, storeResult.reasonCode(), address);
             var derivedResult = service.test(entityA, null, actor, correlation, derivedWeb("Title", address));
             assertEquals(DraftConnectionTestService.ADDRESS_NOT_ALLOWED, derivedResult.reasonCode(), address);
             var pollResult = service.test(entityA, null, actor, correlation, poll("Collect", address));
             assertEquals(DraftConnectionTestService.ADDRESS_NOT_ALLOWED, pollResult.reasonCode(), address);
         }
         assertEquals(DraftConnectionTestService.ADDRESS_NOT_RESOLVED,
-                service.test(entityA, null, actor, correlation, sdv("SDV", "https://nowhere.example.test", STORED_REF, false)).reasonCode());
-        assertTrue(sdvProbes.isEmpty());
+                service.test(entityA, null, actor, correlation, store("Store", "https://nowhere.example.test", STORED_REF, false)).reasonCode());
+        assertTrue(storeProbes.isEmpty());
         assertTrue(polling.calls.isEmpty());
         assertTrue(derived.calls.isEmpty());
     }
 
     @Test
     void theAddressGoesThroughTheSameChecksAsSave() {
-        connections.create(entityA, actor, correlation, sdv("Taken", "https://sdv.example.test", STORED_REF, false));
-        ConnectionInput noAddress = sdv("SDV", null, STORED_REF, false);
-        ConnectionInput duplicate = sdv("taken", "https://sdv.example.test", STORED_REF, false);
+        connections.create(entityA, actor, correlation, store("Taken", "https://store.example.test", STORED_REF, false));
+        ConnectionInput noAddress = store("Store", null, STORED_REF, false);
+        ConnectionInput duplicate = store("taken", "https://store.example.test", STORED_REF, false);
 
         for (ConnectionInput input : List.of(noAddress, duplicate)) {
             ValidationException save = assertThrows(ValidationException.class, () -> connections.create(entityA, actor, correlation, input));
             ValidationException test = assertThrows(ValidationException.class, () -> service.test(entityA, null, actor, correlation, input));
             assertEquals(save.getMessage(), test.getMessage());
         }
-        assertTrue(sdvProbes.isEmpty());
+        assertTrue(storeProbes.isEmpty());
     }
 
     @Test
@@ -192,10 +192,10 @@ class DraftConnectionTestServiceTest {
         return new InetAddress[]{InetAddress.getByName(literal)};
     }
 
-    private static ConnectionInput sdv(String name, String endpoint, String secretRef, boolean preserve) {
-        return new ConnectionInput(name, null, IntegrationPurpose.SDV_DELIVERY, IntegrationDirection.OUTBOUND,
+    private static ConnectionInput store(String name, String endpoint, String secretRef, boolean preserve) {
+        return new ConnectionInput(name, null, IntegrationPurpose.DOCUMENT_STORE_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.API_KEY, null, endpoint, null, secretRef, preserve,
-                30, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, false);
+                30, 2, 24, 50, 262144000L, 500, IntegrationAcknowledgementMode.SUBMISSION_ACK, false);
     }
 
     private static ConnectionInput derivedWeb(String name, String endpoint) {

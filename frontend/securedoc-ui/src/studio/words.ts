@@ -246,7 +246,7 @@ export function firstThatFits(texts: readonly string[], widthOf: (text: string) 
 
 /* ---------- Helpers ---------- */
 
-const ACRONYMS = new Set(['SSN', 'ID', 'EIN', 'ITIN', 'IBAN', 'TIN', 'VIN', 'NPI', 'ABA', 'FICO', 'SDV', 'PDF', 'API', 'URL']);
+const ACRONYMS = new Set(['SSN', 'ID', 'EIN', 'ITIN', 'IBAN', 'TIN', 'VIN', 'NPI', 'ABA', 'FICO', 'PDF', 'API', 'URL']);
 
 /**
  * A configured case field name as it reads inside a sentence (owner, U014 review): "Loan number" becomes
@@ -391,11 +391,11 @@ export const SENSITIVITY_FIELD = {
   folderHint: 'Every file picked up from this folder gets this level.',
 } as const;
 
-/** Where a case was delivered, from the lifecycle's destination type ("sdv", "local-folder"). */
+/** Where a case was delivered, from the lifecycle's destination type ("document-store", "local-folder"). */
 export function destinationName(raw: string | null | undefined): string {
   if (!raw) return 'its destination';
   const key = raw.trim().toLowerCase();
-  if (key === 'sdv' || key.includes('secure-document-vault') || key.includes('secure_document_vault')) return 'Secure Document Vault';
+  if (key === 'document-store') return 'the document store';
   if (key === 'local-folder' || key.includes('folder') || key.includes('filesystem')) return 'the delivery folder';
   return sentenceCase(raw.replace(/-/g, ' '));
 }

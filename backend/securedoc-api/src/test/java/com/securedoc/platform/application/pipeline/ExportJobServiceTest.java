@@ -54,7 +54,7 @@ class ExportJobServiceTest {
         assertEquals(PackageStatus.COMPLETED, pkg.status());
         assertEquals(ExportJobService.CaseExportState.EXPORTED, f.service.caseExportState(f.tenant, pkg.id()));
         assertEquals(List.of(pkg.id()), f.destination.deliveredInOrder);
-        verify(f.lifecycle).recordSuccessfulExport(eq(pkg.id()), eq(f.tenant), eq(1), eq("sdv"), anyList(), any());
+        verify(f.lifecycle).recordSuccessfulExport(eq(pkg.id()), eq(f.tenant), eq(1), eq("document-store"), anyList(), any());
         verify(f.routing).processPackage(eq(pkg.id()), eq(f.tenant), eq(1), any());
         verify(f.audit).recordSuccess(eq(f.tenant), any(), eq(AuditAction.EXPORT_JOB_QUEUED), anyString(), anyString(),
                 eq(pkg.id()), any(), contains("stage=EXPORT"));

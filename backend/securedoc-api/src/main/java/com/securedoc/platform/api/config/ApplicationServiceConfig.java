@@ -27,7 +27,7 @@ import com.securedoc.platform.application.port.out.PdfIntakeValidationPort;
 import com.securedoc.platform.application.port.out.PollingRunRepository;
 import com.securedoc.platform.application.port.out.PollingSourcePort;
 import com.securedoc.platform.application.integration.IntegrationConnectionService;
-import com.securedoc.platform.application.integration.SdvConnectionTestService;
+import com.securedoc.platform.application.integration.DocumentStoreConnectionTestService;
 import com.securedoc.platform.application.routing.service.RoutingRuleService;
 import com.securedoc.platform.application.routing.service.DerivedRoutingService;
 import com.securedoc.platform.application.routing.service.DerivedDeliveryService;
@@ -38,7 +38,7 @@ import com.securedoc.platform.application.port.out.DerivedDeliveryRepository;
 import com.securedoc.platform.application.port.out.RoutingMarkerDetectionPort;
 import com.securedoc.platform.application.port.out.DerivedPdfBuilderPort;
 import com.securedoc.platform.application.port.out.DerivedDestinationDeliveryPort;
-import com.securedoc.platform.application.port.out.SdvConnectionTestPort;
+import com.securedoc.platform.application.port.out.DocumentStoreConnectionTestPort;
 import com.securedoc.platform.infrastructure.intake.WatchedFolderProperties;
 import com.securedoc.platform.application.port.in.CreatePackageUseCase;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
@@ -352,22 +352,22 @@ public class ApplicationServiceConfig {
     @Bean
     public com.securedoc.platform.application.integration.DraftConnectionTestService draftConnectionTestService(
             IntegrationConnectionService integrationConnectionService,
-            org.springframework.beans.factory.ObjectProvider<SdvConnectionTestPort> sdvConnectionTestPort,
+            org.springframework.beans.factory.ObjectProvider<DocumentStoreConnectionTestPort> documentStoreConnectionTestPort,
             PollingSourcePort pollingSourcePort,
             DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
             AuditService auditService) {
         return new com.securedoc.platform.application.integration.DraftConnectionTestService(integrationConnectionService,
-                sdvConnectionTestPort.getIfAvailable(), pollingSourcePort, derivedDestinationDeliveryPort,
+                documentStoreConnectionTestPort.getIfAvailable(), pollingSourcePort, derivedDestinationDeliveryPort,
                 new com.securedoc.platform.application.integration.OutboundAddressGuard(), auditService);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "sdv")
-    public SdvConnectionTestService sdvConnectionTestService(
+    @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "document-store")
+    public DocumentStoreConnectionTestService documentStoreConnectionTestService(
             IntegrationConnectionService integrationConnectionService,
-            SdvConnectionTestPort sdvConnectionTestPort,
+            DocumentStoreConnectionTestPort documentStoreConnectionTestPort,
             AuditService auditService) {
-        return new SdvConnectionTestService(integrationConnectionService, sdvConnectionTestPort, auditService);
+        return new DocumentStoreConnectionTestService(integrationConnectionService, documentStoreConnectionTestPort, auditService);
     }
 
     @Bean
@@ -1221,7 +1221,7 @@ public class ApplicationServiceConfig {
     @Bean
     public com.securedoc.platform.application.port.out.ExportDestinationProbePort exportDestinationProbePort(
             IntegrationConnectionRepository integrationConnectionRepository,
-            org.springframework.beans.factory.ObjectProvider<SdvConnectionTestPort> sdvConnectionTestPort,
+            org.springframework.beans.factory.ObjectProvider<DocumentStoreConnectionTestPort> documentStoreConnectionTestPort,
             DerivedDestinationDeliveryPort derivedDestinationDeliveryPort,
             DeliveryPort deliveryPort) {
         return (tenantId, connectionId) -> {
@@ -1233,10 +1233,10 @@ public class ApplicationServiceConfig {
                     .orElseThrow(() -> new com.securedoc.platform.application.exception.NotFoundException(
                             "IntegrationConnection", connectionId.value().toString()));
             switch (connection.purpose()) {
-                case SDV_DELIVERY -> {
-                    SdvConnectionTestPort sdv = sdvConnectionTestPort.getIfAvailable();
-                    if (sdv == null) throw new IllegalStateException("SDV delivery is not configured");
-                    sdv.testConnection(connection);
+                case DOCUMENT_STORE_DELIVERY -> {
+                    DocumentStoreConnectionTestPort store = documentStoreConnectionTestPort.getIfAvailable();
+                    if (store == null) throw new IllegalStateException("Document store delivery is not configured");
+                    store.testConnection(connection);
                 }
                 case DERIVED_DOCUMENT_DELIVERY -> derivedDestinationDeliveryPort.testConnection(connection);
                 default -> throw new IllegalStateException("Connection is not an export destination");

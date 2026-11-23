@@ -10,7 +10,7 @@ every other job passed.
 |---|---|---|
 | `backend` | Java 21 (Temurin), `tesseract-ocr`, `mvn -B verify` in `backend/` with the PostgreSQL tests on, against a PostgreSQL 16 service container (`LEXAVAULT_TEST_PG_URL`, `_USER`, `_PASSWORD`). platform-core 0.2.0 from GitHub Packages through a `settings.xml` written in the job | Start a throwaway PostgreSQL (never `securedoc-postgres`), set the three `LEXAVAULT_TEST_PG_*` variables, then `cd backend; mvn -B verify` |
 | `frontend` | Node 22, `npm ci`, `npm run build` (typecheck + Vite build), Playwright Chromium and WebKit, `npm run test:standalone` | `cd frontend/securedoc-ui; npm ci; npm run build; npm run test:standalone` |
-| `product-names` | `scripts/ci/check-product-names.sh`: fails if `Vero`, `SDV` or `secure-document-vault` is in tracked code, SQL, JSON, XML, YAML, properties, scripts or install guides | `bash scripts/ci/check-product-names.sh` (Git Bash on Windows) |
+| `product-names` | `scripts/ci/check-product-names.sh`: fails if another product's name (the list in `scripts/ci/product-names.txt`) is in tracked code, SQL, JSON, XML, YAML, properties, scripts, styles or install guides. Strict since task 0045: no baseline | `bash scripts/ci/check-product-names.sh` (Git Bash on Windows) |
 | `ci-passed` | Needs the three jobs above | |
 
 `test:standalone` is every frontend suite that runs without the app: `test:auth`, `test:vocabulary`,
@@ -18,8 +18,17 @@ every other job passed.
 server and mock the API and the identity provider. Not in CI: `test:e2e` and `scripts/Test-LexaVault-ExportE2E.ps1`
 (they need the backend jar, a database and the Ollama mock).
 
-The product-name guard does not check `docs/` (history), `CLAUDE.md` (it states the rule) and the known exception
-`SdvDeliveryAdapter` and its tests (`SdvDeliveryAdapter*Test`), which switch-over part 3 removes.
+The product-name guard does not check:
+- `docs/` (history) and `CLAUDE.md` (it states the rule);
+- the known exception `SdvDeliveryAdapter` and its tests (`SdvDeliveryAdapter*Test`), which switch-over part 3
+  removes; other files may name that class, nothing else;
+- database history that can't change: changelog `017` (Liquibase keeps its file name, so the master changelog's line
+  naming it is allowed), and migration `046` with its test `DocumentStoreNamesMigrationPostgresTest`, which rename the
+  old stored values;
+- the owner's Docker containers `sdv-postgres` and `sdv-vault`, which the safety lists in the scripts name so that no
+  script ever touches them.
+
+The frontend's "no screen names another product" test (`exportRules.test.ts`) reads the same names file.
 
 ## The secret
 

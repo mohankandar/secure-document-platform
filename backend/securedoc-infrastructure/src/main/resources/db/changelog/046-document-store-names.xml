@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0045 (owner approved 2026-11-23): stored values that named another product get the generic name
+        "document store" (independence rule, CLAUDE.md). Values only; no column, table or content changes.
+          integration_connections.purpose                 SDV_DELIVERY               -> DOCUMENT_STORE_DELIVERY
+          integration_connections.acknowledgement_mode    SDV_SUBMISSION_ACK         -> SUBMISSION_ACK
+          integration_connections.last_failure_category   SDV_CONNECTION_TEST_FAILED -> DOCUMENT_STORE_CONNECTION_TEST_FAILED
+          package_export_records.destination_type         sdv                        -> document-store
+          delivery_submissions.destination_type           sdv                        -> document-store
+          index uk_integration_connection_enabled_sdv     -> uk_integration_connection_enabled_document_store
+        Audit records are history and are not rewritten. This file and its test are the only places outside docs/
+        that still spell the old values (the product-name guard lists them).
+    -->
+    <changeSet id="046-01-document-store-names" author="lexavault">
+        <sql>
+            drop index if exists uk_integration_connection_enabled_sdv;
+            update integration_connections set purpose = 'DOCUMENT_STORE_DELIVERY' where purpose = 'SDV_DELIVERY';
+            update integration_connections set acknowledgement_mode = 'SUBMISSION_ACK'
+             where acknowledgement_mode = 'SDV_SUBMISSION_ACK';
+            update integration_connections set last_failure_category = 'DOCUMENT_STORE_CONNECTION_TEST_FAILED'
+             where last_failure_category = 'SDV_CONNECTION_TEST_FAILED';
+            update package_export_records set destination_type = 'document-store' where destination_type = 'sdv';
+            update delivery_submissions set destination_type = 'document-store' where destination_type = 'sdv';
+            create unique index uk_integration_connection_enabled_document_store
+                on integration_connections (tenant_id)
+             where purpose = 'DOCUMENT_STORE_DELIVERY' and enabled = true;
+        </sql>
+        <rollback>
+            <sql>
+                drop index if exists uk_integration_connection_enabled_document_store;
+                update integration_connections set purpose = 'SDV_DELIVERY' where purpose = 'DOCUMENT_STORE_DELIVERY';
+                update integration_connections set acknowledgement_mode = 'SDV_SUBMISSION_ACK'
+                 where acknowledgement_mode = 'SUBMISSION_ACK';
+                update integration_connections set last_failure_category = 'SDV_CONNECTION_TEST_FAILED'
+                 where last_failure_category = 'DOCUMENT_STORE_CONNECTION_TEST_FAILED';
+                update package_export_records set destination_type = 'sdv' where destination_type = 'document-store';
+                update delivery_submissions set destination_type = 'sdv' where destination_type = 'document-store';
+                create unique index uk_integration_connection_enabled_sdv
+                    on integration_connections (tenant_id)
+                 where purpose = 'SDV_DELIVERY' and enabled = true;
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

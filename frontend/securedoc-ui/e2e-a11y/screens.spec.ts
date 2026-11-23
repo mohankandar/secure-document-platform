@@ -185,7 +185,7 @@ test.describe('Admin (IT Administrator)', () => {
     await expect(page.getByRole('region', { name: 'Receiving documents' })).toBeVisible();
     await scan(page, 'Admin: Integrations, Receiving');
     const groups = page.getByRole('group', { name: 'Connection groups' });
-    for (const [view, region] of [['Sending to SDV', 'Sending to SDV'], ['Sending by barcode', 'Sending by barcode'], ['All', 'All connections']] as const) {
+    for (const [view, region] of [['Sending to the document store', 'Sending to the document store'], ['Sending by barcode', 'Sending by barcode'], ['All', 'All connections']] as const) {
       await groups.getByRole('button', { name: new RegExp(`^${view} \\d`) }).click();
       await expect(page.getByRole('region', { name: region })).toBeVisible();
       await scan(page, `Admin: Integrations, ${view}`);

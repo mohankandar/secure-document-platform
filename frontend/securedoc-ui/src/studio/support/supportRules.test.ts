@@ -41,7 +41,7 @@ test('0025: reason codes read as the LV code title and description; unknown code
   assert.equal(problemReason('OCR_TIMEOUT', 'LV-XYZ-999').code, 'LV-PRC-004');
   assert.equal(problemReason(undefined, 'LV-DLV-002').known, true);
   // The two codes the backend never sends have no words any more.
-  for (const gone of ['MODEL_TIMEOUT', 'SDV_UNAVAILABLE']) assert.equal(problemReason(gone).known, false, gone);
+  for (const gone of ['MODEL_TIMEOUT']) assert.equal(problemReason(gone).known, false, gone);
   const unknown = problemReason('NEW_THING_FAILED');
   assert.equal(unknown.label, 'Something went wrong · LV-SYS-001');
   assert.equal(unknown.known, false);

@@ -52,7 +52,7 @@ const OVERVIEW = {
     { key: 'ai', label: 'Sensitive-content AI', category: 'AI', provider: 'ollama', status: 'CONFIGURED', configured: true, detail: 'Default model: qwen3.5:9b; inference pool: disabled; tenant profiles: 0' },
     { key: 'ocr', label: 'OCR', category: 'OCR', provider: 'tesseract', status: 'HEALTHY', configured: true, detail: 'Language: eng' },
     { key: 'storage', label: 'Processing storage', category: 'Storage', provider: 'shared_filesystem', status: 'HEALTHY', configured: true, detail: 'Configured and validated on every active node' },
-    { key: 'delivery', label: 'Final delivery', category: 'Delivery', provider: 'sdv', status: 'DEGRADED', configured: true, detail: 'Tenant SDV connection configured; secrets are protected' },
+    { key: 'delivery', label: 'Final delivery', category: 'Delivery', provider: 'document-store', status: 'DEGRADED', configured: true, detail: 'Tenant document store connection configured; secrets are protected' },
   ],
   watchedFolder: {
     enabled: true, schedulingEnabled: true, scanIntervalMs: 60000, rootPath: 'C:\\LexaVault\\inbound', triggerFileName: 'READY', incompleteVisibilityMinutes: 60,
@@ -61,7 +61,7 @@ const OVERVIEW = {
     lastScanAt: minsAgo(1), lastScanOutcome: 'SUCCESS', lastScanResult: { discovered: 3, waitingForTrigger: 1, accepted: 2, rejected: 0, duplicates: 0 },
   },
   resilience: { maxAttempts: 3, initialBackoffMs: 1000, packageProcessingMaxAttempts: 3, aiSecondaryEnabled: false, aiSecondaryProvider: 'none', aiSecondaryModel: '' },
-  integrations: { deliveryType: 'sdv', sdvConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
+  integrations: { deliveryType: 'document-store', documentStoreConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
   technicalExceptions: [],
 };
 
@@ -139,7 +139,7 @@ test('IT Administrator: services and the watched folder in plain words, no sub-s
   await openPlatform(page, 'TENANT_IT_ADMIN');
   await expect(page.getByRole('group', { name: 'Platform operations sections' })).toHaveCount(0);
   const services = page.getByRole('region', { name: '1 service needs attention' });
-  for (const [name, status] of [['Database', 'Working'], ['AI model', 'Set up · not checked yet'], ['Text recognition', 'Working'], ['Processing storage', 'Working'], ['Delivery to Secure Document Vault', 'Having problems']]) {
+  for (const [name, status] of [['Database', 'Working'], ['AI model', 'Set up · not checked yet'], ['Text recognition', 'Working'], ['Processing storage', 'Working'], ['Delivery to the document store', 'Having problems']]) {
     await expect(services.getByRole('listitem').filter({ hasText: name }).locator('.cf-ad-status')).toHaveText(status);
   }
   await expect(services.getByRole('button', { name: 'Run health checks' })).toHaveCount(0);

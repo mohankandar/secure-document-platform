@@ -41,8 +41,8 @@ export function exportApi(cases: ExportCase[]) {
   const by = (loan: string) => cases.find((c) => c.loan === loan) as ExportCase;
   const vaultJobs = [
     // Task 0030: the destination's own code after LexaVault's reason; j-7011's is not a safe code, so no screen shows it.
-    job('j-7004', by('LN-7004'), { since: minsAgo(50), detail: 'DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006' }),
-    job('j-7011', by('LN-7011'), { since: minsAgo(35), detail: 'DELIVERY_SENSITIVITY_REFUSED; destination=<b>SDV SEN 006</b>' }),
+    job('j-7004', by('LN-7004'), { since: minsAgo(50), detail: 'DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006' }),
+    job('j-7011', by('LN-7011'), { since: minsAgo(35), detail: 'DELIVERY_SENSITIVITY_REFUSED; destination=<b>DS SEN 006</b>' }),
     job('j-6987', by('LN-6987'), { lvCode: 'LV-DLV-004', detail: 'DELIVERY_REJECTED', since: minsAgo(60 * 22) }),
   ];
   const split = by('LN-7002');
@@ -62,14 +62,14 @@ export function exportApi(cases: ExportCase[]) {
     total: 13,
     groups: [
       { destinationId: VAULT, destinationName: 'Document vault', lvCode: 'LV-DLV-007', count: 1, firstFailedAt: minsAgo(90), caseIds: [it.packageId], cases: [{ packageId: it.packageId, caseNumber: it.loan }],
-        jobs: [job('j-6990', it, { status: 'NEEDS_IT', lvCode: 'LV-DLV-007', detail: 'DELIVERY_IO; destination=SDV-SUB-017', attempts: 6 })] },
+        jobs: [job('j-6990', it, { status: 'NEEDS_IT', lvCode: 'LV-DLV-007', detail: 'DELIVERY_IO; destination=DS-SUB-017', attempts: 6 })] },
       { destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005', count: 1, firstFailedAt: minsAgo(30), caseIds: [split.packageId], cases: [{ packageId: split.packageId, caseNumber: split.loan }],
         jobs: [job('j-title-auth', split, { stage: 'SPLIT_EXPORT', status: 'NEEDS_IT', destinationId: TITLE_CO, destinationName: 'Title company', lvCode: 'LV-DLV-005' })] },
     ],
     timings: DEFAULT_TIMINGS,
   };
   const destinations = [
-    { destinationId: VAULT, name: 'Document vault', purpose: 'SDV_DELIVERY', enabled: true, state: 'WORKING', pausedAt: null, consecutiveFailures: 0, lastProbeAt: null,
+    { destinationId: VAULT, name: 'Document vault', purpose: 'DOCUMENT_STORE_DELIVERY', enabled: true, state: 'WORKING', pausedAt: null, consecutiveFailures: 0, lastProbeAt: null,
       lastLvCode: null, lastCheckFailedAt: null, rateLimitedUntil: null, workerLimit: 4, nextCheckAt: null, openJobs: 7,
       waiting: { queued: 3, waitingForYou: 3, needsIt: 1 } },
     { destinationId: ARCHIVE, name: 'Archive service', purpose: 'DERIVED_DOCUMENT_DELIVERY', enabled: true, state: 'PAUSED', pausedAt: minsAgo(18), consecutiveFailures: 0,

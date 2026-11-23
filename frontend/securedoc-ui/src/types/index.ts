@@ -579,11 +579,11 @@ export interface OperationalReports {
 }
 
 
-export type IntegrationPurpose = 'INGESTION_SOURCE' | 'SDV_DELIVERY' | 'DERIVED_DOCUMENT_DELIVERY';
+export type IntegrationPurpose = 'INGESTION_SOURCE' | 'DOCUMENT_STORE_DELIVERY' | 'DERIVED_DOCUMENT_DELIVERY';
 export type IntegrationDirection = 'INBOUND' | 'OUTBOUND';
 export type IntegrationProviderType = 'PUSH_API' | 'HTTP_API' | 'FILE_SHARE' | 'WATCHED_FOLDER' | 'SCANNER';
 export type IntegrationAuthenticationType = 'NONE' | 'BASIC' | 'API_KEY' | 'JWT' | 'OAUTH2_CLIENT_CREDENTIALS' | 'MTLS';
-export type IntegrationAcknowledgementMode = 'NONE' | 'HTTP_SUCCESS' | 'DESTINATION_RECEIPT' | 'DURABLE_FILE_WRITE' | 'SOURCE_PICKUP_ACK' | 'SDV_SUBMISSION_ACK';
+export type IntegrationAcknowledgementMode = 'NONE' | 'HTTP_SUCCESS' | 'DESTINATION_RECEIPT' | 'DURABLE_FILE_WRITE' | 'SOURCE_PICKUP_ACK' | 'SUBMISSION_ACK';
 export type IntegrationPollingScheduleType = 'INTERVAL' | 'DAILY';
 
 export interface IntegrationConnection {
@@ -656,7 +656,7 @@ export interface DraftConnectionTestResult {
   lvCode?: string | null;
 }
 
-export interface SdvConnectionTestResult {
+export interface DocumentStoreConnectionTestResult {
   connectionId: string;
   healthStatus: string;
   secretConfigured: boolean;
@@ -759,7 +759,7 @@ export interface PlatformAdminOverview {
   };
   integrations: {
     deliveryType: string;
-    sdvConfigured: boolean;
+    documentStoreConfigured: boolean;
     identityMode: string;
     productionIdentityConfigured: boolean;
   };

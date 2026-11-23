@@ -311,7 +311,7 @@ export function timelineText(event: IncidentEventLike, fallbackReason?: string |
     const lower = reason.charAt(0).toLowerCase() + reason.slice(1);
     const lead = event.attemptNumber ? `Try ${event.attemptNumber} failed` : 'Failed';
     // A name or an abbreviation keeps its capital ("AI model timed out", "PDF can't be opened", "LexaVault …").
-    const keep = /^(Secure Document Vault|LexaVault|Vero|Scan Bridge)\b/.test(reason) || /^[A-Z]{2}/.test(reason);
+    const keep = /^(LexaVault|Scan Bridge)\b/.test(reason) || /^[A-Z]{2}/.test(reason);
     return `${lead}: ${keep ? reason : lower}`;
   }
   return EVENT_WORDS[type] ?? sentenceCase(type || 'Something happened');

@@ -236,7 +236,7 @@ final class ExportJobFixture {
         }
     }
 
-    /** A destination the test switches between answers. It stores each idempotency key once, as Vero does. */
+    /** A destination the test switches between answers. It stores each idempotency key once, as a real destination does. */
     static final class FakeDestination implements DeliveryPort {
         final IntegrationConnectionId id = IntegrationConnectionId.generate();
         volatile LvErrorCode failWith;
@@ -262,7 +262,7 @@ final class ExportJobFixture {
 
         @Override
         public DeliveryDescriptor describe(TenantId tenantId) {
-            return new DeliveryDescriptor("sdv", id, 1);
+            return new DeliveryDescriptor("document-store", id, 1);
         }
 
         @Override
@@ -282,8 +282,8 @@ final class ExportJobFixture {
             if (failWith != null) throw failure(failWith).withDestinationCode(destinationCode);
             if (stored.add(batch.sourceSubmissionId())) deliveredInOrder.add(batch.packageId());
             List<DeliveryReference> refs = batch.items().stream().map(item -> new DeliveryReference(item.documentId(),
-                    item.sourceDocumentId(), "sdv", "remote-" + item.sourceDocumentId(), "sdv://remote")).toList();
-            return new BatchDeliveryReference("sdv", "remote-" + batch.sourceSubmissionId(), refs,
+                    item.sourceDocumentId(), "document-store", "remote-" + item.sourceDocumentId(), "store://remote")).toList();
+            return new BatchDeliveryReference("document-store", "remote-" + batch.sourceSubmissionId(), refs,
                     answerAlreadyReceived);
         }
 

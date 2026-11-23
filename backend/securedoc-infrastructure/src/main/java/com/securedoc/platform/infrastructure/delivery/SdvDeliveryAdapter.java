@@ -7,7 +7,7 @@ import com.securedoc.platform.application.exception.TechnicalDependencyException
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
-import com.securedoc.platform.application.port.out.SdvConnectionTestPort;
+import com.securedoc.platform.application.port.out.DocumentStoreConnectionTestPort;
 import com.securedoc.platform.domain.integration.IntegrationAuthenticationType;
 import com.securedoc.platform.domain.integration.IntegrationConnection;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -30,9 +30,9 @@ import java.util.*;
  * considers the business export complete only after the SDV submission reports COMPLETE.
  */
 @Component
-@ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "sdv")
-public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
-    private static final String DESTINATION_TYPE = "sdv";
+@ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "document-store")
+public class SdvDeliveryAdapter implements DeliveryPort, DocumentStoreConnectionTestPort {
+    private static final String DESTINATION_TYPE = "document-store";
     private static final String SUBMISSIONS_PATH = "/api/v1/submissions";
     /** Vero's upload header for a document's own level (Vero task 0024). */
     static final String SENSITIVITY_HEADER = "X-SDV-Sensitivity-Level";
@@ -79,7 +79,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
     /** Safe provider probe used by IT administration. No submission or customer PDF is created. */
     @Override
     public void testConnection(IntegrationConnection c) {
-        if (c == null || !c.enabled() || c.purpose() != com.securedoc.platform.domain.integration.IntegrationPurpose.SDV_DELIVERY) {
+        if (c == null || !c.enabled() || c.purpose() != com.securedoc.platform.domain.integration.IntegrationPurpose.DOCUMENT_STORE_DELIVERY) {
             throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false,
                     "Integration connection is not an enabled SDV delivery destination", null);
         }
@@ -234,7 +234,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, SdvConnectionTestPort {
     }
 
     private IntegrationConnection connection(TenantId tenantId) {
-        IntegrationConnection c = connections.findEnabledSdvDeliveryByTenantId(tenantId)
+        IntegrationConnection c = connections.findEnabledDocumentStoreByTenantId(tenantId)
                 .orElseThrow(() -> failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false,
                         "No enabled SDV delivery connection is configured for this tenant", null));
         if (!c.enabled()) throw failure(TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "SDV delivery connection is disabled", null);

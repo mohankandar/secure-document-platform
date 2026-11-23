@@ -22,7 +22,7 @@ import java.util.UUID;
 
 /**
  * Queues export jobs (task 0027). The master destination is the one the delivery port is set up with: LexaVault has
- * one master destination per tenant (SDV, or the local export folder, which has no connection and is given a
+ * one master destination per tenant (the document store, or the local export folder, which has no connection and is given a
  * derived id, see {@link ExportDestinations}). Split documents are queued one job per derived delivery.
  */
 public final class ExportJobQueue implements ExportJobScheduler, SplitExportScheduler {

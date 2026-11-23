@@ -348,7 +348,7 @@ export function internalReasonOf(detail: string | null | undefined): string | nu
   return reason || null;
 }
 
-/** The destination's own code (for example SDV-SEN-006), or null when there is none or it is not a safe code. */
+/** The destination's own code (for example DS-SEN-006), or null when there is none or it is not a safe code. */
 export function destinationCodeOf(detail: string | null | undefined): string | null {
   if (!detail) return null;
   const at = detail.indexOf(DESTINATION_CODE_PREFIX);
@@ -359,7 +359,7 @@ export function destinationCodeOf(detail: string | null | undefined): string | n
 
 export const DESTINATION_CODE_LABEL = 'Destination code';
 
-/** "Destination code SDV-SEN-006". */
+/** "Destination code DS-SEN-006". */
 export function destinationCodeLine(code: string): string {
   return `${DESTINATION_CODE_LABEL} ${code}`;
 }

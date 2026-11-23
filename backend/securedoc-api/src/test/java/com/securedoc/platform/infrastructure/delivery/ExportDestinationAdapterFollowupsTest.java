@@ -82,7 +82,7 @@ class ExportDestinationAdapterFollowupsTest {
     }
 
     @Test
-    void theSdvHealthCheckIsTheSafeConnectionTest() throws Exception {
+    void theDocumentStoreHealthCheckIsTheSafeConnectionTest() throws Exception {
         List<HttpRequest> requests = new ArrayList<>();
         HttpClient client = client(requests, new ArrayDeque<>(List.of(response(200, "{}", null), response(503, "{}", null))));
         SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), new ObjectMapper(),
@@ -143,10 +143,10 @@ class ExportDestinationAdapterFollowupsTest {
     }
 
     private IntegrationConnection connection(int retryMaxAttempts) {
-        return IntegrationConnection.create(tenant, "SDV", null, IntegrationPurpose.SDV_DELIVERY,
+        return IntegrationConnection.create(tenant, "Store", null, IntegrationPurpose.DOCUMENT_STORE_DELIVERY,
                 IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE,
-                null, "https://sdv.example.test", null, null, 5, retryMaxAttempts, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK, true, Instant.now());
+                null, "https://store.example.test", null, null, 5, retryMaxAttempts, 24, 10, 10_000_000L, 100,
+                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now());
     }
 
     private static final class OneConnection implements IntegrationConnectionRepository {
@@ -156,7 +156,7 @@ class ExportDestinationAdapterFollowupsTest {
         public Optional<IntegrationConnection> findByTenantIdAndId(TenantId tenantId, IntegrationConnectionId id) { return Optional.of(current); }
         public Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
         public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
-        public Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) { return Optional.of(current); }
+        public Optional<IntegrationConnection> findEnabledDocumentStoreByTenantId(TenantId tenantId) { return Optional.of(current); }
         public boolean existsByTenantIdAndNameIgnoreCase(TenantId tenantId, String name, IntegrationConnectionId excludeId) { return false; }
         public boolean existsByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal, IntegrationConnectionId excludeId) { return false; }
         public void save(IntegrationConnection connection) { current = connection; }

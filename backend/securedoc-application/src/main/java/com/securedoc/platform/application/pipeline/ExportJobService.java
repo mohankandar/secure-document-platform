@@ -426,7 +426,7 @@ public final class ExportJobService {
                     LOCAL_FOLDER_NAME, "LOCAL_FOLDER", true, open));
         }
         for (IntegrationConnection c : connections.findByTenantId(tenantId)) {
-            if (c.purpose() != IntegrationPurpose.SDV_DELIVERY
+            if (c.purpose() != IntegrationPurpose.DOCUMENT_STORE_DELIVERY
                     && c.purpose() != IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY) continue;
             views.add(view(stored.getOrDefault(c.id().value(), ExportDestinationStatus.working(tenantId, c.id())),
                     c.name(), c.purpose().name(), c.enabled(), open));
@@ -459,11 +459,11 @@ public final class ExportJobService {
         return Optional.of(new CheckNow(destinationId.value(), passed, resumed, state));
     }
 
-    /** The master destination (the local folder too) or one of the tenant's SDV or split delivery connections. */
+    /** The master destination (the local folder too) or one of the tenant's document store or split delivery connections. */
     private boolean isExportDestination(TenantId tenantId, IntegrationConnectionId destinationId) {
         if (destinationId.equals(queue.masterDestination(tenantId))) return true;
         return connections.findByTenantId(tenantId).stream().anyMatch(c -> c.id().equals(destinationId)
-                && (c.purpose() == IntegrationPurpose.SDV_DELIVERY
+                && (c.purpose() == IntegrationPurpose.DOCUMENT_STORE_DELIVERY
                 || c.purpose() == IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY));
     }
 
@@ -698,7 +698,7 @@ public final class ExportJobService {
 
     /**
      * Task 0030: LexaVault's internal reason, then the destination's own code (for example
-     * {@code DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006}). The code is checked again against the safe
+     * {@code DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006}). The code is checked again against the safe
      * pattern; it is dropped (the reason alone is kept) when it is not safe or the whole would not fit the column.
      */
     static String withDestinationCode(String reason, String destinationCode) {
@@ -906,7 +906,7 @@ public final class ExportJobService {
         if (master != null) all.add(master);
         for (IntegrationConnection c : connections.findByTenantId(tenantId)) {
             if (!c.enabled()) continue;
-            if (c.purpose() == IntegrationPurpose.SDV_DELIVERY
+            if (c.purpose() == IntegrationPurpose.DOCUMENT_STORE_DELIVERY
                     || c.purpose() == IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY) {
                 all.add(c.id());
             }

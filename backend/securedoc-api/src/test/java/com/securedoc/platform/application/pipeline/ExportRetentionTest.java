@@ -343,8 +343,8 @@ class ExportRetentionTest {
         }
 
         void exportMaster() {
-            service.recordSuccessfulExport(pkg.id(), tenant, 1, "sdv", List.of(new PackageExportRecord.ExportedDocument(
-                    document.id(), "document-" + document.id(), 3, Checksum.sha256("c".repeat(64)), "sdv://x")),
+            service.recordSuccessfulExport(pkg.id(), tenant, 1, "document-store", List.of(new PackageExportRecord.ExportedDocument(
+                    document.id(), "document-" + document.id(), 3, Checksum.sha256("c".repeat(64)), "store://x")),
                     CorrelationId.generate());
         }
 

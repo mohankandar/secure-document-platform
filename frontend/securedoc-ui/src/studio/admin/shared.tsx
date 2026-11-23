@@ -295,7 +295,7 @@ export function OptionalInt({ label, value, onChange, min, max, disabled, hint }
   );
 }
 
-const ACRONYMS = new Set(['SSN', 'API', 'SFTP', 'OIDC', 'SAML', 'SDV', 'URL', 'ID', 'S3', 'SSO', 'HTTP', 'HTTPS']);
+const ACRONYMS = new Set(['SSN', 'API', 'SFTP', 'OIDC', 'SAML', 'URL', 'ID', 'S3', 'SSO', 'HTTP', 'HTTPS']);
 export const humanize = (s: string) =>
   s.split('_').map((w, i) => (ACRONYMS.has(w) ? w : i === 0 ? w.charAt(0) + w.slice(1).toLowerCase() : w.toLowerCase())).join(' ');
 

@@ -305,13 +305,13 @@ public record IntegrationConnection(
             }
         }
 
-        if (purpose == IntegrationPurpose.SDV_DELIVERY && providerType != IntegrationProviderType.HTTP_API) {
-            throw new IllegalArgumentException("SDV delivery requires HTTP_API provider in V1");
+        if (purpose == IntegrationPurpose.DOCUMENT_STORE_DELIVERY && providerType != IntegrationProviderType.HTTP_API) {
+            throw new IllegalArgumentException("Document store delivery requires HTTP_API provider in V1");
         }
-        if (purpose == IntegrationPurpose.SDV_DELIVERY
+        if (purpose == IntegrationPurpose.DOCUMENT_STORE_DELIVERY
                 && (authenticationType == IntegrationAuthenticationType.OAUTH2_CLIENT_CREDENTIALS
                 || authenticationType == IntegrationAuthenticationType.MTLS)) {
-            throw new IllegalArgumentException("V1 SDV delivery supports NONE, BASIC, API_KEY, or JWT authentication; OAuth2/mTLS require a provider-specific connector");
+            throw new IllegalArgumentException("V1 document store delivery supports NONE, BASIC, API_KEY, or JWT authentication; OAuth2/mTLS require a provider-specific connector");
         }
         if (purpose == IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY
                 && providerType != IntegrationProviderType.HTTP_API
@@ -337,9 +337,9 @@ public record IntegrationConnection(
                 && acknowledgementMode != IntegrationAcknowledgementMode.DURABLE_FILE_WRITE) {
             throw new IllegalArgumentException("FILE_SHARE delivery must use durable-file-write acknowledgement");
         }
-        if (purpose == IntegrationPurpose.SDV_DELIVERY
-                && acknowledgementMode != IntegrationAcknowledgementMode.SDV_SUBMISSION_ACK) {
-            throw new IllegalArgumentException("SDV delivery must use SDV submission acknowledgement");
+        if (purpose == IntegrationPurpose.DOCUMENT_STORE_DELIVERY
+                && acknowledgementMode != IntegrationAcknowledgementMode.SUBMISSION_ACK) {
+            throw new IllegalArgumentException("Document store delivery must use submission acknowledgement");
         }
     }
 

@@ -2,7 +2,7 @@ package com.securedoc.platform.api.security;
 
 import com.securedoc.platform.api.integration.IntegrationConnectionController;
 import com.securedoc.platform.api.integration.PollingIntegrationController;
-import com.securedoc.platform.api.integration.SdvIntegrationController;
+import com.securedoc.platform.api.integration.DocumentStoreIntegrationController;
 import com.securedoc.platform.api.routing.DerivedIntegrationController;
 import com.securedoc.platform.api.routing.RoutingRuleController;
 import com.securedoc.platform.api.routing.DerivedDeliveryController;
@@ -59,8 +59,8 @@ class IntegrationAuthorizationContractTest {
     }
 
     @Test
-    void sdvTestConnectionRequiresTenantIntegrationCapability() {
-        Method method = Arrays.stream(SdvIntegrationController.class.getDeclaredMethods())
+    void documentStoreTestConnectionRequiresTenantIntegrationCapability() {
+        Method method = Arrays.stream(DocumentStoreIntegrationController.class.getDeclaredMethods())
                 .filter(candidate -> candidate.getName().equals("testConnection"))
                 .findFirst().orElseThrow();
         RequireCapability annotation = method.getAnnotation(RequireCapability.class);

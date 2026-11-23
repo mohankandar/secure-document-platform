@@ -1,6 +1,6 @@
 package com.securedoc.platform.domain.routing;
 
-/** Delivery lifecycle for a derived redacted document. Independent of the master SDV export status. */
+/** Delivery lifecycle for a derived redacted document. Independent of the master export status. */
 public enum DerivedDeliveryStatus {
     PENDING,
     DELIVERING,

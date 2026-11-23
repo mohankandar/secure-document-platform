@@ -39,7 +39,7 @@ public final class MasterExportCompletion {
 
     public void complete(DocumentPackage pkg, TenantId tenantId, PackageId packageId,
                          ExportPackageDocumentsResult exportResult, int documentCount, CorrelationId correlationId) {
-        // Option A: master SDV/local export is authoritative for package completion. Derived
+        // Option A: master (document store or local folder) export is authoritative for package completion. Derived
         // routing is an independent post-export track; failures are recorded there and never
         // undo the successful master export or its retention semantics.
         try {

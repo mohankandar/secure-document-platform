@@ -1,0 +1,8 @@
+spring:
+  config:
+    activate:
+      on-profile: local-document-store
+
+securedoc:
+  delivery:
+    type: document-store

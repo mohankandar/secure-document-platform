@@ -1,0 +1,1 @@
+Vero([^a-z]|$)|\bvero\b|VERO|SDV|Sdv|sdv|[Ss]ecure[ _-]?[Dd]ocument[ _-]?[Vv]ault|SECURE_DOCUMENT_VAULT|secure_document_vault

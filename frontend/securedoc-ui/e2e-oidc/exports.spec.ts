@@ -114,9 +114,9 @@ test.describe('Waiting for you (Processor and Supervisor)', () => {
 
     await panel.getByText('Technical details').first().click();
     await expect(panel.getByTestId('export-technical')).toContainText('DELIVERY_SENSITIVITY_REFUSED');
-    // Task 0030: the destination's own code, next to LexaVault's reason ("Destination code" | "SDV-SEN-006").
+    // Task 0030: the destination's own code, next to LexaVault's reason ("Destination code" | "DS-SEN-006").
     await expect(panel.getByTestId('export-destination-code').locator('dt')).toHaveText('Destination code');
-    await expect(panel.getByTestId('export-destination-code').locator('dd')).toHaveText('SDV-SEN-006');
+    await expect(panel.getByTestId('export-destination-code').locator('dd')).toHaveText('DS-SEN-006');
     await expect(panel.getByTestId('export-technical')).not.toContainText('destination=');
 
     await box.getByRole('button', { name: 'Resend this case' }).click();
@@ -276,7 +276,7 @@ test.describe('Support (IT Admin): export', () => {
     await expect(cards.nth(0).getByTestId('it-cases')).toHaveText('Case LN-6990.');
     // Task 0030: the destination's own code under Technical details.
     await cards.nth(0).getByText('Technical details').click();
-    await expect(cards.nth(0).getByTestId('it-destination-codes')).toHaveText('Destination code SDV-SUB-017');
+    await expect(cards.nth(0).getByTestId('it-destination-codes')).toHaveText('Destination code DS-SUB-017');
     await expect(cards.nth(1).getByTestId('it-destination-codes')).toHaveCount(0);
     await expect(cards.nth(1)).toContainText('Title company refused LexaVault’s sign-in');
     await expect(cards.nth(1)).toContainText('Exports to it are on hold: 12 waiting, nothing lost. Fix the credential in Admin › Integrations, then set it back to working.');

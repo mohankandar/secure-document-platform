@@ -100,7 +100,7 @@ export default function StorageSection() {
         <header className="cf-ad-card-head">
           <div>
             <div className="cf-ad-title"><h2 id="cf-st-head">Where LexaVault works on documents</h2><HelpTip topic="storage" /></div>
-            <p>Temporary space used while documents are redacted. Delivered copies go to SDV, not here.</p>
+            <p>Temporary space used while documents are redacted. Delivered copies go to the document store, not here.</p>
           </div>
           <div className="cf-ad-inline-actions">
             <span className="cf-ad-pill" data-tone={readiness.ready ? 'ok' : 'danger'}><span className="cf-ad-health" data-h={readiness.ready ? 'ok' : 'danger'} aria-hidden="true" />{readiness.title}</span>

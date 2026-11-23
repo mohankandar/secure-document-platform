@@ -8,7 +8,7 @@ type Props = {
 
 /**
  * Shared LexaVault horizontal-tab rail. Visual behavior intentionally mirrors
- * the SDV workspace-tab standard while callers retain their own authorization
+ * the shared workspace-tab standard while callers retain their own authorization
  * and state/routing rules.
  */
 export default function HorizontalTabs({ ariaLabel, children, className = '' }: Props) {

@@ -59,8 +59,8 @@ const CONNECTIONS = [
     endpoint: 'https://servicing.northwind.example/api/outbox', pollingScheduleType: 'INTERVAL', pollingIntervalMinutes: 15, pollingBatchLimit: 100,
     acknowledgementMode: 'SOURCE_PICKUP_ACK', healthStatus: 'DEGRADED', lastSuccessAt: minsAgo(60), lastFailureAt: minsAgo(5), lastFailureCategory: 'POLL_SOURCE_UNAVAILABLE' }),
   connection({ connectionId: 'c-folder', name: 'Watched folder', providerType: 'WATCHED_FOLDER' }),
-  connection({ connectionId: 'c-sdv', name: 'Secure Document Vault', purpose: 'SDV_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'OAUTH2_CLIENT_CREDENTIALS',
-    secretConfigured: true, endpoint: 'https://sdv.northwind.example/api', acknowledgementMode: 'SDV_SUBMISSION_ACK', lastSuccessAt: minsAgo(30) }),
+  connection({ connectionId: 'c-store', name: 'Document store', purpose: 'DOCUMENT_STORE_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'OAUTH2_CLIENT_CREDENTIALS',
+    secretConfigured: true, endpoint: 'https://store.northwind.example/api', acknowledgementMode: 'SUBMISSION_ACK', lastSuccessAt: minsAgo(30) }),
   connection({ connectionId: 'c-title', name: 'Title team folder', purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'FILE_SHARE',
     fileShareRoot: '\\\\files01\\title\\inbound', acknowledgementMode: 'DURABLE_FILE_WRITE', enabled: false, healthStatus: 'DISABLED' }),
 ];
@@ -117,7 +117,7 @@ async function openIntegrations(page: Page, calls: Call[], connections: readonly
       const draft = calls.at(-1)!.body as { endpoint?: string };
       return json(draft.endpoint?.includes('169.254.169.254') ? { works: false, reasonCode: 'ADDRESS_NOT_ALLOWED' } : { works: true, reasonCode: null });
     }
-    if (url.pathname === '/api/v1/integrations/c-sdv/sdv/test-connection') return json({ connectionId: 'c-sdv', healthStatus: 'HEALTHY', secretConfigured: true, configurationVersion: 3 });
+    if (url.pathname === '/api/v1/integrations/c-store/document-store/test-connection') return json({ connectionId: 'c-store', healthStatus: 'HEALTHY', secretConfigured: true, configurationVersion: 3 });
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
   });
@@ -135,7 +135,7 @@ const mainText = (card: ReturnType<Page['getByRole']>) =>
 test('Receiving: plain view names, one tag and one status line each, the watched folder once', async ({ page }) => {
   await openIntegrations(page, []);
   const groups = page.getByRole('group', { name: 'Connection groups' });
-  for (const [name, n] of [['Receiving', 3], ['Sending to SDV', 1], ['Sending by barcode', 1], ['All', 5]] as const) {
+  for (const [name, n] of [['Receiving', 3], ['Sending to the document store', 1], ['Sending by barcode', 1], ['All', 5]] as const) {
     await expect(groups.getByRole('button', { name: `${name} ${n}`, exact: true })).toBeVisible();
   }
   const card = page.getByRole('region', { name: 'Receiving documents' });
@@ -258,7 +258,7 @@ test('Add a connection: three steps, plain labels, Advanced closed, and what is 
   await expect(sheet).toContainText('Step 1 of 3');
   await expect(sheet.getByRole('radio', { name: /^Receive documents/ })).toBeChecked();
   await expect(sheet.getByRole('radio', { name: /^Send documents/ })).toBeVisible();
-  await expect(sheet.getByText('To SDV, or pages by barcode to another place.')).toBeVisible();
+  await expect(sheet.getByText('To the document store, or pages by barcode to another place.')).toBeVisible();
   await sheet.getByRole('button', { name: 'Next', exact: true }).click();
 
   await expect(sheet).toContainText('Step 2 of 3');
@@ -296,25 +296,25 @@ test('Add a connection: three steps, plain labels, Advanced closed, and what is 
 test('Edit a saved connection: Test connection tests the saved settings, and after a change tests the new ones before saving', async ({ page }) => {
   const calls: Call[] = [];
   await openIntegrations(page, calls);
-  await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to SDV/ }).click();
-  await page.getByRole('region', { name: 'Sending to SDV' }).getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to the document store/ }).click();
+  await page.getByRole('region', { name: 'Sending to the document store' }).getByRole('button', { name: 'Edit' }).click();
   const sheet = page.getByRole('dialog');
   await expect(sheet).toContainText('Step 2 of 3');
-  await expect(sheet.getByLabel('Where documents go')).toHaveValue('SDV');
+  await expect(sheet.getByLabel('Where documents go')).toHaveValue('DOCUMENT_STORE');
   await sheet.getByRole('button', { name: 'Next: test and save' }).click();
   await sheet.getByRole('button', { name: 'Test connection' }).click();
   await expect(sheet.getByText('The connection works.')).toBeVisible();
-  expect(calls.some((c) => c.path === '/api/v1/integrations/c-sdv/sdv/test-connection')).toBe(true);
+  expect(calls.some((c) => c.path === '/api/v1/integrations/c-store/document-store/test-connection')).toBe(true);
 
   await sheet.getByRole('button', { name: 'Back' }).click();
-  await sheet.getByLabel('Address').fill('https://sdv-new.northwind.example/api');
+  await sheet.getByLabel('Address').fill('https://store-new.northwind.example/api');
   await sheet.getByRole('button', { name: 'Next: test and save' }).click();
   await expect(sheet.getByText('The test uses the settings above. Nothing is saved until you choose Save, and you can save without testing.')).toBeVisible();
   await sheet.getByRole('button', { name: 'Test connection' }).click();
   await expect(sheet.getByText('The connection works.')).toBeVisible();
   const draftTest = calls.find((c) => c.path === '/api/v1/integrations/test-draft');
-  expect(draftTest?.search).toBe('?connectionId=c-sdv');
-  expect(draftTest?.body).toMatchObject({ endpoint: 'https://sdv-new.northwind.example/api' });
+  expect(draftTest?.search).toBe('?connectionId=c-store');
+  expect(draftTest?.body).toMatchObject({ endpoint: 'https://store-new.northwind.example/api' });
 
   await sheet.getByRole('button', { name: 'Back' }).click();
   await sheet.getByLabel('Address').fill('http://169.254.169.254/latest');

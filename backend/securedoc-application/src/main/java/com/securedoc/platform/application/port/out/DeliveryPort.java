@@ -109,7 +109,7 @@ public interface DeliveryPort {
                              String destinationDocumentReference, String location) { }
 
     /**
-     * @param alreadyReceived task 0027: the destination said it already had at least one document (Vero's idempotent
+     * @param alreadyReceived task 0027: the destination said it already had at least one document (the destination's idempotent
      *                        replay or exact duplicate). Still a success; audited with LV-DLV-009.
      */
     record BatchDeliveryReference(String destinationType, String destinationSubmissionReference,

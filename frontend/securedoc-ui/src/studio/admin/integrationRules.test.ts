@@ -9,7 +9,7 @@ const NOW = Date.parse('2026-11-18T12:00:00Z');
 const minsAgo = (m: number) => new Date(NOW - m * 60000).toISOString();
 
 test('view names are the vocabulary words', () => {
-  assert.deepEqual(VIEWS.map((v) => v.label), ['Receiving', 'Sending to SDV', 'Sending by barcode', 'All']);
+  assert.deepEqual(VIEWS.map((v) => v.label), ['Receiving', 'Sending to the document store', 'Sending by barcode', 'All']);
   for (const v of VIEWS) assert.doesNotMatch(`${v.label} ${v.title} ${v.note}`, /intake|master|derived/i);
 });
 
@@ -31,7 +31,7 @@ test('one tag says what each connection does', () => {
   assert.equal(connectionTag({ ...base, purpose: 'INGESTION_SOURCE', providerType: 'HTTP_API', pollingScheduleType: 'DAILY', pollingLocalTime: '01:00' }), 'LexaVault collects daily at 01:00');
   assert.equal(connectionTag({ ...base, purpose: 'INGESTION_SOURCE', providerType: 'WATCHED_FOLDER' }), 'Folder');
   assert.equal(connectionTag({ ...base, purpose: 'INGESTION_SOURCE', providerType: 'SCANNER' }), 'Scanner');
-  assert.equal(connectionTag({ ...base, purpose: 'SDV_DELIVERY', providerType: 'HTTP_API' }), 'Secure Document Vault');
+  assert.equal(connectionTag({ ...base, purpose: 'DOCUMENT_STORE_DELIVERY', providerType: 'HTTP_API' }), 'Document store');
   assert.equal(connectionTag({ ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', providerType: 'FILE_SHARE' }), 'File share');
   assert.equal(connectionTag({ ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', providerType: 'HTTP_API' }), 'Web address');
 });
@@ -46,9 +46,9 @@ test('one plain status line per connection; a failure reads as its LV title and 
   // A failure older than the last success is not shown.
   assert.equal(statusText(connectionStatus({ ...failing, healthStatus: 'HEALTHY', lastFailureAt: minsAgo(120) }, NOW)), 'Working · last collected 1 h ago');
   assert.equal(statusText(connectionStatus({ ...c, enabled: false }, NOW)), 'Switched off');
-  assert.equal(statusText(connectionStatus({ ...c, purpose: 'SDV_DELIVERY', providerType: 'HTTP_API' }, NOW)), 'Working · last sent 14 min ago');
+  assert.equal(statusText(connectionStatus({ ...c, purpose: 'DOCUMENT_STORE_DELIVERY', providerType: 'HTTP_API' }, NOW)), 'Working · last sent 14 min ago');
   assert.equal(connectionStatus({ ...c, providerType: 'PUSH_API', healthStatus: 'UNKNOWN', lastSuccessAt: null }, NOW).word, 'Ready to receive');
-  assert.equal(connectionStatus({ ...c, purpose: 'SDV_DELIVERY', healthStatus: 'UNKNOWN', lastSuccessAt: null }, NOW).word, 'Not checked yet');
+  assert.equal(connectionStatus({ ...c, purpose: 'DOCUMENT_STORE_DELIVERY', healthStatus: 'UNKNOWN', lastSuccessAt: null }, NOW).word, 'Not checked yet');
   assert.equal(connectionStatus({ ...c, healthStatus: 'SOMETHING_NEW' }, NOW).word, 'Status not recognised');
   // An unknown failure code is not shown or guessed at: it reads as LV-SYS-001 (was "reason not recognised").
   const unknown = statusText(connectionStatus({ ...failing, lastFailureCategory: 'NEW_CODE_X' }, NOW));
@@ -91,7 +91,7 @@ test('barcode rules read as a sentence, and failed files name the case by its ma
 test('the editor: method from a saved connection, and the advanced settings in words', () => {
   assert.equal(methodOf({ purpose: 'INGESTION_SOURCE', providerType: 'HTTP_API' }), 'POLL');
   assert.equal(methodOf({ purpose: 'DERIVED_DOCUMENT_DELIVERY', providerType: 'FILE_SHARE' }), 'BARCODE_SHARE');
-  assert.equal(methodOf({ purpose: 'SDV_DELIVERY', providerType: 'HTTP_API' }), 'SDV');
+  assert.equal(methodOf({ purpose: 'DOCUMENT_STORE_DELIVERY', providerType: 'HTTP_API' }), 'DOCUMENT_STORE');
   assert.equal(advancedSummary({ timeoutSeconds: 30, retryMaxAttempts: 5, incompleteWindowHours: 24, maxDocumentsPerIntake: 50, maxPdfSizeBytes: 50 * 1048576, maxPdfPages: 500, acknowledgementMode: 'SOURCE_PICKUP_ACK', purpose: 'INGESTION_SOURCE' }),
     'wait 30 s · try again up to 5 times · finish incomplete cases within 24 h · up to 50 files, 50 MB, 500 pages · confirm pickup to the source');
 });
@@ -108,7 +108,7 @@ test('a test before saving reads as works or the LV title and code, never an int
   assert.equal(unknown.text, "The connection didn't work: Something went wrong · LV-SYS-001. Check the address and sign-in, then test again.");
   assert.doesNotMatch(unknown.text, /SOMETHING_NEW/);
   assert.equal(failureReason('CONNECTION_TEST_FAILED'), 'Connection test failed · LV-CFG-004');
-  assert.equal(failureReason('SDV_TEST_UNAVAILABLE'), 'Connection test failed · LV-CFG-004');
+  assert.equal(failureReason('DOCUMENT_STORE_TEST_UNAVAILABLE'), 'Connection test failed · LV-CFG-004');
 });
 
 test('an address wraps only after a slash, never inside "://" (U020)', () => {

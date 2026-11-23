@@ -43,12 +43,12 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
     }
 
     @Override
-    public Optional<IntegrationConnection> findEnabledSdvDeliveryByTenantId(TenantId tenantId) {
+    public Optional<IntegrationConnection> findEnabledDocumentStoreByTenantId(TenantId tenantId) {
         List<IntegrationConnectionEntity> matches = repository.findByTenantIdAndPurposeAndDirectionAndProviderTypeAndEnabledTrueOrderByNameAsc(
-                tenantId.value(), IntegrationPurpose.SDV_DELIVERY.name(), IntegrationDirection.OUTBOUND.name(),
+                tenantId.value(), IntegrationPurpose.DOCUMENT_STORE_DELIVERY.name(), IntegrationDirection.OUTBOUND.name(),
                 IntegrationProviderType.HTTP_API.name());
         if (matches.size() > 1) {
-            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.CFG_005, "Tenant has more than one enabled SDV delivery connection");
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.CFG_005, "Tenant has more than one enabled document store delivery connection");
         }
         return matches.stream().findFirst().map(this::toDomain);
     }

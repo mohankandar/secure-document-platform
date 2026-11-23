@@ -21,8 +21,8 @@ export type View = IntegrationPurpose | 'ALL';
 
 export const VIEWS: { id: View; label: string; title: string; note: string; empty: string }[] = [
   { id: 'INGESTION_SOURCE', label: 'Receiving', title: 'Receiving documents', note: 'Systems, folders and scanners that bring documents into LexaVault.', empty: 'Nothing is set up to receive documents yet.' },
-  { id: 'SDV_DELIVERY', label: 'Sending to SDV', title: 'Sending to SDV', note: 'Where the full redacted case goes when it is delivered.', empty: 'Nothing is set up to send to SDV yet.' },
-  { id: 'DERIVED_DOCUMENT_DELIVERY', label: 'Sending by barcode', title: 'Sending by barcode', note: 'Pages with a barcode or text marker are also sent, as separate files, to the place their rule names. The full redacted case still goes to SDV.', empty: 'No places to send pages by barcode yet.' },
+  { id: 'DOCUMENT_STORE_DELIVERY', label: 'Sending to the document store', title: 'Sending to the document store', note: 'Where the full redacted case goes when it is delivered.', empty: 'Nothing is set up to send to the document store yet.' },
+  { id: 'DERIVED_DOCUMENT_DELIVERY', label: 'Sending by barcode', title: 'Sending by barcode', note: 'Pages with a barcode or text marker are also sent, as separate files, to the place their rule names. The full redacted case still goes to the document store.', empty: 'No places to send pages by barcode yet.' },
   { id: 'ALL', label: 'All', title: 'All connections', note: 'Every connection, receiving and sending.', empty: 'No connections are set up yet.' },
 ];
 
@@ -62,7 +62,7 @@ export function connectionTag(c: Pick<IntegrationConnection, 'purpose' | 'provid
     if (c.providerType === 'WATCHED_FOLDER') return 'Folder';
     if (c.providerType === 'SCANNER') return 'Scanner';
   }
-  if (c.purpose === 'SDV_DELIVERY') return 'Secure Document Vault';
+  if (c.purpose === 'DOCUMENT_STORE_DELIVERY') return 'Document store';
   if (c.providerType === 'FILE_SHARE') return 'File share';
   if (c.providerType === 'HTTP_API') return 'Web address';
   return 'Connection';
@@ -202,7 +202,7 @@ export const attentionTitle = (n: number) => `${n} file${n === 1 ? '' : 's'} cou
 
 /* ---------- Connection editor ---------- */
 
-export type Method = 'PUSH' | 'POLL' | 'FOLDER' | 'SCANNER' | 'SDV' | 'BARCODE_WEB' | 'BARCODE_SHARE';
+export type Method = 'PUSH' | 'POLL' | 'FOLDER' | 'SCANNER' | 'DOCUMENT_STORE' | 'BARCODE_WEB' | 'BARCODE_SHARE';
 
 export const RECEIVE_METHODS: [Method, string][] = [
   ['PUSH', 'A system sends them to LexaVault'],
@@ -211,13 +211,13 @@ export const RECEIVE_METHODS: [Method, string][] = [
   ['SCANNER', 'From a scanner'],
 ];
 export const SEND_METHODS: [Method, string][] = [
-  ['SDV', 'To Secure Document Vault (the full redacted case)'],
+  ['DOCUMENT_STORE', 'To the document store (the full redacted case)'],
   ['BARCODE_WEB', 'Pages by barcode, to a web address'],
   ['BARCODE_SHARE', 'Pages by barcode, to a file share'],
 ];
 
 export function methodOf(d: { purpose: IntegrationPurpose; providerType: IntegrationProviderType }): Method {
-  if (d.purpose === 'SDV_DELIVERY') return 'SDV';
+  if (d.purpose === 'DOCUMENT_STORE_DELIVERY') return 'DOCUMENT_STORE';
   if (d.purpose === 'DERIVED_DOCUMENT_DELIVERY') return d.providerType === 'FILE_SHARE' ? 'BARCODE_SHARE' : 'BARCODE_WEB';
   if (d.providerType === 'HTTP_API') return 'POLL';
   if (d.providerType === 'WATCHED_FOLDER') return 'FOLDER';
@@ -240,7 +240,7 @@ export const ACK_NAMES: [IntegrationAcknowledgementMode, string][] = [
   ['DESTINATION_RECEIPT', 'Wait for a receipt from the destination'],
   ['DURABLE_FILE_WRITE', 'Confirm once the file is safely written'],
   ['SOURCE_PICKUP_ACK', 'Confirm pickup to the source'],
-  ['SDV_SUBMISSION_ACK', 'SDV confirms it received the case'],
+  ['SUBMISSION_ACK', 'The document store confirms it received the case'],
 ];
 
 export const authName = (a: string) => AUTH_NAMES.find(([k]) => k === a)?.[1] ?? a;

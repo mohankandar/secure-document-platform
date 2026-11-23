@@ -80,7 +80,7 @@ test('0029: every code reads "Title · LV-XXX-NNN" from the generated list', () 
   for (const code of ['LV-DLV-003', 'LV-DLV-004', 'LV-DLV-005', 'LV-DLV-007', 'LV-DLV-015']) {
     assert.equal(reasonLabel(code), `${LV_CODES[code].title} · ${code}`);
   }
-  assert.equal(reasonLabel('SDV-SEN-006'), `${LV_CODES['LV-SYS-001'].title} · LV-SYS-001`, 'a code not in the list is LV-SYS-001');
+  assert.equal(reasonLabel('DS-SEN-006'), `${LV_CODES['LV-SYS-001'].title} · LV-SYS-001`, 'a code not in the list is LV-SYS-001');
 });
 
 test('0029: Resend all: the confirmation and the toast are the approved wording', () => {
@@ -139,7 +139,7 @@ test('0029: Support: destination states and the waiting column', () => {
   assert.equal(waitingText('PAUSED', 27), '27 waiting');
   assert.equal(waitingText('PAUSED', 0), 'Nothing waiting');
   assert.equal(destinationKind('DERIVED_DOCUMENT_DELIVERY'), 'split by barcode');
-  assert.equal(destinationKind('SDV_DELIVERY'), 'full case');
+  assert.equal(destinationKind('DOCUMENT_STORE_DELIVERY'), 'full case');
   assert.equal(destinationKind('LOCAL_FOLDER'), 'full case');
 });
 
@@ -153,10 +153,13 @@ test('0029: retention per destination: the default reads "Same as …"; 1 to 72 
   assert.match(retentionValueError(2.5, 1, 72) ?? '', /whole number/);
 });
 
-test('0029: no screen says "Vero" (the destination is named by its connection)', () => {
-  // No screen word says "Vero" (0030: LV-CFG-005 is "More than one main export destination"). The one line pinned is a
-  // pattern in supportRules.ts that recognises a reason's leading product name; it is code, not a word on screen.
-  const known: Record<string, number> = { [join('studio', 'support', 'supportRules.ts')]: 1 };
+test('0029/0045: no screen names another product (the destination is named by its connection)', () => {
+  // The names are the product-name guard's list (scripts/ci/product-names.txt), so the screens and CI check the same
+  // words. Since task 0045 no source file names another product, not even in a pattern (0030: LV-CFG-005 is "More
+  // than one main export destination").
+  const names = new RegExp(readFileSync(resolve(here, '..', '..', '..', '..', 'scripts', 'ci', 'product-names.txt'), 'utf8')
+    .split(/\r?\n/)[0]);
+  const known: Record<string, number> = {};
   const root = resolve(here, '..');
   const found: Record<string, number> = {};
   const walk = (dir: string) => {
@@ -164,7 +167,7 @@ test('0029: no screen says "Vero" (the destination is named by its connection)',
       const path = join(dir, entry.name);
       if (entry.isDirectory()) { walk(path); continue; }
       if (!/\.tsx?$/.test(entry.name) || /\.test\.ts$/.test(entry.name)) continue;
-      const lines = readFileSync(path, 'utf8').split('\n').filter((l) => /\bVero\b/.test(l)).length;
+      const lines = readFileSync(path, 'utf8').split('\n').filter((l) => names.test(l)).length;
       if (lines) found[path.slice(root.length + 1)] = lines;
     }
   };
@@ -175,9 +178,9 @@ test('0029: no screen says "Vero" (the destination is named by its connection)',
 });
 
 test('0030: the destination’s own code is read from the job’s detail; only a safe code is shown', () => {
-  assert.equal(internalReasonOf('DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006'), 'DELIVERY_SENSITIVITY_REFUSED');
-  assert.equal(destinationCodeOf('DELIVERY_SENSITIVITY_REFUSED; destination=SDV-SEN-006'), 'SDV-SEN-006');
-  assert.equal(destinationCodeLine('SDV-SEN-006'), 'Destination code SDV-SEN-006');
+  assert.equal(internalReasonOf('DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006'), 'DELIVERY_SENSITIVITY_REFUSED');
+  assert.equal(destinationCodeOf('DELIVERY_SENSITIVITY_REFUSED; destination=DS-SEN-006'), 'DS-SEN-006');
+  assert.equal(destinationCodeLine('DS-SEN-006'), 'Destination code DS-SEN-006');
   assert.equal(DESTINATION_CODE_LABEL, 'Destination code');
   // No code, or a detail from before task 0030: the reason alone.
   assert.equal(internalReasonOf('DELIVERY_IO'), 'DELIVERY_IO');
@@ -187,17 +190,17 @@ test('0030: the destination’s own code is read from the job’s detail; only a
     assert.equal(destinationCodeOf(empty), null);
   }
   // Not a safe code (letters, digits, '-', '_', up to 40): dropped.
-  for (const unsafe of ['<b>SDV</b>', 'SDV SEN 006', 'SDV-SEN-006;x', 'A'.repeat(41), '', 'ÄBC', 'a/b']) {
+  for (const unsafe of ['<b>DS</b>', 'DS SEN 006', 'DS-SEN-006;x', 'A'.repeat(41), '', 'ÄBC', 'a/b']) {
     assert.equal(destinationCodeOf(`DELIVERY_SENSITIVITY_REFUSED; destination=${unsafe}`), null, unsafe);
     assert.equal(internalReasonOf(`DELIVERY_SENSITIVITY_REFUSED; destination=${unsafe}`), 'DELIVERY_SENSITIVITY_REFUSED', unsafe);
   }
   assert.equal(destinationCodeOf(`R; destination=${'A'.repeat(40)}`), 'A'.repeat(40));
   // A group's codes, each once, in the order met.
   assert.deepEqual(destinationCodesOf([
-    job({ detail: 'DELIVERY_IO; destination=SDV-SUB-017' }), job({ detail: 'DELIVERY_IO' }),
-    job({ detail: 'DELIVERY_IO; destination=SDV-SUB-017' }), job({ detail: 'DELIVERY_IO; destination=SDV-SUB-018' }),
+    job({ detail: 'DELIVERY_IO; destination=DS-SUB-017' }), job({ detail: 'DELIVERY_IO' }),
+    job({ detail: 'DELIVERY_IO; destination=DS-SUB-017' }), job({ detail: 'DELIVERY_IO; destination=DS-SUB-018' }),
     job({ detail: 'DELIVERY_IO; destination=<x>' }),
-  ]), ['SDV-SUB-017', 'SDV-SUB-018']);
+  ]), ['DS-SUB-017', 'DS-SUB-018']);
 });
 
 test('0030: one word for finished cases: "Exported" (the stage, the chip, the stage tile, the Cases groups)', () => {

@@ -38,7 +38,7 @@ import type {
   IntegrationConnectionRequest,
   PollingConnectionStatus,
   PollingRun,
-  SdvConnectionTestResult,
+  DocumentStoreConnectionTestResult,
   RoutingRule,
   RoutingRuleRequest,
   RoutingDestinationOption,
@@ -273,8 +273,8 @@ class ApiClient {
     return this.request(`/integrations/${connectionId}/polling/run-now`, { method: 'POST' });
   }
 
-  async testSdvConnection(connectionId: string): Promise<SdvConnectionTestResult> {
-    return this.request(`/integrations/${connectionId}/sdv/test-connection`, { method: 'POST' });
+  async testDocumentStoreConnection(connectionId: string): Promise<DocumentStoreConnectionTestResult> {
+    return this.request(`/integrations/${connectionId}/document-store/test-connection`, { method: 'POST' });
   }
 
   async testDerivedConnection(connectionId: string): Promise<{ connectionId: string; healthStatus: string; configurationVersion: number }> {

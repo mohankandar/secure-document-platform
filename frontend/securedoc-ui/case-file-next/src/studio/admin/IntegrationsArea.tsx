@@ -24,20 +24,20 @@ type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfi
 
 const VIEWS: { id: View; label: string; note: string; empty: string }[] = [
   { id: 'INGESTION_SOURCE', label: 'Intake sources', note: 'Trusted sources that send or supply document packages into this tenant.', empty: 'No intake-source connections are configured.' },
-  { id: 'SDV_DELIVERY', label: 'Master delivery', note: 'Destinations for the completed redacted master package.', empty: 'No master-delivery connections are configured.' },
+  { id: 'DOCUMENT_STORE_DELIVERY', label: 'Master delivery', note: 'Destinations for the completed redacted master package.', empty: 'No master-delivery connections are configured.' },
   { id: 'DERIVED_DOCUMENT_DELIVERY', label: 'Derived delivery', note: 'Destinations used by derived-document routing rules.', empty: 'No derived-delivery connections are configured.' },
   { id: 'ALL', label: 'All', note: 'Every configured tenant integration in one place.', empty: 'No tenant integration connections are configured yet.' },
 ];
 
-const PURPOSES: IntegrationPurpose[] = ['INGESTION_SOURCE', 'SDV_DELIVERY', 'DERIVED_DOCUMENT_DELIVERY'];
+const PURPOSES: IntegrationPurpose[] = ['INGESTION_SOURCE', 'DOCUMENT_STORE_DELIVERY', 'DERIVED_DOCUMENT_DELIVERY'];
 const PROVIDERS: IntegrationProviderType[] = ['PUSH_API', 'HTTP_API', 'FILE_SHARE', 'WATCHED_FOLDER', 'SCANNER'];
 const PROVIDERS_BY_PURPOSE: Record<IntegrationPurpose, IntegrationProviderType[]> = {
   INGESTION_SOURCE: ['PUSH_API', 'HTTP_API', 'WATCHED_FOLDER', 'SCANNER'],
-  SDV_DELIVERY: ['HTTP_API'],
+  DOCUMENT_STORE_DELIVERY: ['HTTP_API'],
   DERIVED_DOCUMENT_DELIVERY: ['HTTP_API', 'FILE_SHARE'],
 };
 const AUTH: IntegrationAuthenticationType[] = ['NONE', 'BASIC', 'API_KEY', 'JWT', 'OAUTH2_CLIENT_CREDENTIALS', 'MTLS'];
-const ACK: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SDV_SUBMISSION_ACK'];
+const ACK: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SUBMISSION_ACK'];
 const MB = 1048576;
 
 const isPollingConnection = (c: Pick<IntegrationConnection, 'purpose' | 'providerType' | 'direction'>) =>
@@ -53,7 +53,7 @@ const baseDraft = (): Draft => ({
 
 function draftForPurpose(purpose: IntegrationPurpose): Draft {
   const d = baseDraft();
-  if (purpose === 'SDV_DELIVERY') return { ...d, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' };
+  if (purpose === 'DOCUMENT_STORE_DELIVERY') return { ...d, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SUBMISSION_ACK' };
   if (purpose === 'DERIVED_DOCUMENT_DELIVERY') return { ...d, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'DESTINATION_RECEIPT' };
   return d;
 }
@@ -72,7 +72,7 @@ function toDraft(c: IntegrationConnection): Draft {
 
 /** Purpose change rules, identical to production IntegrationsPage.applyPurpose. */
 function applyPurpose(cur: Draft, purpose: IntegrationPurpose): Draft {
-  if (purpose === 'SDV_DELIVERY') return { ...cur, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' };
+  if (purpose === 'DOCUMENT_STORE_DELIVERY') return { ...cur, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SUBMISSION_ACK' };
   if (purpose === 'DERIVED_DOCUMENT_DELIVERY') {
     const fs = cur.providerType === 'FILE_SHARE';
     return { ...cur, purpose, direction: 'OUTBOUND', providerType: fs ? 'FILE_SHARE' : 'HTTP_API', acknowledgementMode: fs ? 'DURABLE_FILE_WRITE' : 'DESTINATION_RECEIPT' };
@@ -100,7 +100,7 @@ function applyProvider(cur: Draft, providerType: IntegrationProviderType): Draft
   } else {
     next.direction = 'OUTBOUND';
     next.fileShareRoot = '';
-    next.acknowledgementMode = next.purpose === 'SDV_DELIVERY' ? 'SDV_SUBMISSION_ACK' : next.purpose === 'INGESTION_SOURCE' ? 'SOURCE_PICKUP_ACK' : 'DESTINATION_RECEIPT';
+    next.acknowledgementMode = next.purpose === 'DOCUMENT_STORE_DELIVERY' ? 'SUBMISSION_ACK' : next.purpose === 'INGESTION_SOURCE' ? 'SOURCE_PICKUP_ACK' : 'DESTINATION_RECEIPT';
     if (next.purpose === 'INGESTION_SOURCE') {
       next.pollingScheduleType = next.pollingScheduleType || 'INTERVAL';
       next.pollingIntervalMinutes = next.pollingIntervalMinutes || 60;
@@ -210,7 +210,7 @@ function Connection({ c, showPurpose, onChanged, onEdit, onToggle }: {
   const polls = isPollingConnection(c);
   const pollStatus = useSWR<PollingConnectionStatus | null>(polls ? ['polling', c.connectionId] : null,
     () => apiClient.getPollingConnectionStatus(c.connectionId).catch(() => null), { revalidateOnFocus: false });
-  const testable = (c.purpose === 'SDV_DELIVERY' && c.providerType === 'HTTP_API') || c.purpose === 'DERIVED_DOCUMENT_DELIVERY';
+  const testable = (c.purpose === 'DOCUMENT_STORE_DELIVERY' && c.providerType === 'HTTP_API') || c.purpose === 'DERIVED_DOCUMENT_DELIVERY';
   const health = !c.enabled ? 'off' : c.healthStatus === 'HEALTHY' ? 'ok' : 'warn';
   const lastRun = pollStatus.data?.recentRuns?.[0];
 
@@ -221,8 +221,8 @@ function Connection({ c, showPurpose, onChanged, onEdit, onToggle }: {
         const r = await apiClient.runPollingNow(c.connectionId);
         toast(`${c.name} polling finished: ${humanize(r.status).toLowerCase()}, ${r.packagesDiscovered} package${r.packagesDiscovered === 1 ? '' : 's'} found.`, r.status === 'SUCCESS' ? undefined : 'danger');
       } else {
-        const r = c.purpose === 'SDV_DELIVERY' ? await apiClient.testSdvConnection(c.connectionId) : await apiClient.testDerivedConnection(c.connectionId);
-        const label = c.purpose === 'SDV_DELIVERY' ? 'SDV connection' : 'derived destination';
+        const r = c.purpose === 'DOCUMENT_STORE_DELIVERY' ? await apiClient.testDocumentStoreConnection(c.connectionId) : await apiClient.testDerivedConnection(c.connectionId);
+        const label = c.purpose === 'DOCUMENT_STORE_DELIVERY' ? 'document store connection' : 'derived destination';
         toast(`${c.name}: ${label} ${humanize(r.healthStatus).toLowerCase()}.`, r.healthStatus === 'HEALTHY' ? undefined : 'danger');
       }
       await onChanged();
@@ -295,7 +295,7 @@ function ToggleConfirm({ conn, onClose, onDone }: { conn: IntegrationConnection 
   const consequence = !conn ? null : disabling
     ? conn.purpose === 'INGESTION_SOURCE'
       ? 'This source stops accepting or polling new packages. Cases already received are unaffected.'
-      : conn.purpose === 'SDV_DELIVERY'
+      : conn.purpose === 'DOCUMENT_STORE_DELIVERY'
         ? 'Completed master packages cannot be delivered through this destination until it is enabled again.'
         : 'Routing rules pointing at this destination stop delivering derived documents until it is enabled again.'
     : 'The connection resumes using its saved configuration immediately.';

@@ -26,20 +26,20 @@ class PackageDocumentExportServiceTest {
     @Test
     void successfulDurableDeliveryIsTheOnlyPathThatStartsRetentionClock() {
         Fixture f = fixture();
-        var ref = new DeliveryPort.DeliveryReference(f.document.id(), "source-doc-1", "sdv", "sdv-doc-1", "sdv://sub/doc");
-        when(f.delivery.deliverBatch(any())).thenReturn(new DeliveryPort.BatchDeliveryReference("sdv", "sdv-sub-1", List.of(ref)));
+        var ref = new DeliveryPort.DeliveryReference(f.document.id(), "source-doc-1", "document-store", "store-doc-1", "store://sub/doc");
+        when(f.delivery.deliverBatch(any())).thenReturn(new DeliveryPort.BatchDeliveryReference("document-store", "store-sub-1", List.of(ref)));
 
         var result = f.service.execute(ExportPackageDocumentsCommand.of(f.pkg.id(), f.tenant, CorrelationId.generate()));
 
         assertEquals(1, result.exportCycle());
-        verify(f.lifecycle).recordSuccessfulExport(eq(f.pkg.id()), eq(f.tenant), eq(1), eq("sdv"), anyList(), any());
+        verify(f.lifecycle).recordSuccessfulExport(eq(f.pkg.id()), eq(f.tenant), eq(1), eq("document-store"), anyList(), any());
     }
 
     @Test
     void technicalDeliveryFailureDoesNotStartRetentionClock() {
         Fixture f = fixture();
         when(f.delivery.deliverBatch(any())).thenThrow(new TechnicalDependencyException(
-                TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "SDV unavailable"));
+                TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Document store unavailable"));
 
         assertThrows(TechnicalDependencyException.class,
                 () -> f.service.execute(ExportPackageDocumentsCommand.of(f.pkg.id(), f.tenant, CorrelationId.generate())));
@@ -74,7 +74,7 @@ class PackageDocumentExportServiceTest {
         when(artifacts.findByDocumentIdAndTenantId(document.id(), tenant)).thenReturn(List.of(artifact));
         when(storage.retrieve(artifact.storageReference())).thenReturn(new ByteArrayInputStream("PDF-CONTENT".getBytes()));
         when(lifecycle.nextExportCycle(pkg.id(), tenant)).thenReturn(1);
-        when(delivery.describe(tenant)).thenReturn(new DeliveryPort.DeliveryDescriptor("sdv", IntegrationConnectionId.generate(), 1));
+        when(delivery.describe(tenant)).thenReturn(new DeliveryPort.DeliveryDescriptor("document-store", IntegrationConnectionId.generate(), 1));
         when(submissions.findByTenantIdAndPackageIdAndExportCycle(tenant, pkg.id(), 1)).thenReturn(Optional.empty());
 
         PackageDocumentExportService service = new PackageDocumentExportService(documents, packages, businesses, artifacts,

@@ -7,7 +7,7 @@ import com.securedoc.platform.application.intake.polling.PollingSourceException;
 import com.securedoc.platform.application.integration.IntegrationConnectionService.ConnectionInput;
 import com.securedoc.platform.application.port.out.DerivedDestinationDeliveryPort;
 import com.securedoc.platform.application.port.out.PollingSourcePort;
-import com.securedoc.platform.application.port.out.SdvConnectionTestPort;
+import com.securedoc.platform.application.port.out.DocumentStoreConnectionTestPort;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.identity.ActorId;
@@ -41,7 +41,7 @@ public final class DraftConnectionTestService {
 
     public static final String ADDRESS_NOT_ALLOWED = "ADDRESS_NOT_ALLOWED";
     public static final String ADDRESS_NOT_RESOLVED = "ADDRESS_NOT_RESOLVED";
-    public static final String SDV_TEST_UNAVAILABLE = "SDV_TEST_UNAVAILABLE";
+    public static final String DOCUMENT_STORE_TEST_UNAVAILABLE = "DOCUMENT_STORE_TEST_UNAVAILABLE";
     public static final String CONNECTION_TEST_FAILED = "CONNECTION_TEST_FAILED";
     private static final Pattern SAFE_CODE = Pattern.compile("[A-Z][A-Z0-9_]{0,79}");
 
@@ -51,24 +51,24 @@ public final class DraftConnectionTestService {
     }
 
     private final IntegrationConnectionService connections;
-    private final SdvConnectionTestPort sdvPort;            // null when SDV delivery is not configured
+    private final DocumentStoreConnectionTestPort documentStorePort;            // null when document store delivery is not configured
     private final PollingSourcePort pollingPort;
     private final DerivedDestinationDeliveryPort derivedPort;
     private final OutboundAddressGuard addressGuard;
     private final AuditService audit;
     private final Clock clock;
 
-    public DraftConnectionTestService(IntegrationConnectionService connections, SdvConnectionTestPort sdvPortOrNull,
+    public DraftConnectionTestService(IntegrationConnectionService connections, DocumentStoreConnectionTestPort documentStorePortOrNull,
                                       PollingSourcePort pollingPort, DerivedDestinationDeliveryPort derivedPort,
                                       OutboundAddressGuard addressGuard, AuditService audit) {
-        this(connections, sdvPortOrNull, pollingPort, derivedPort, addressGuard, audit, Clock.systemUTC());
+        this(connections, documentStorePortOrNull, pollingPort, derivedPort, addressGuard, audit, Clock.systemUTC());
     }
 
-    DraftConnectionTestService(IntegrationConnectionService connections, SdvConnectionTestPort sdvPortOrNull,
+    DraftConnectionTestService(IntegrationConnectionService connections, DocumentStoreConnectionTestPort documentStorePortOrNull,
                                PollingSourcePort pollingPort, DerivedDestinationDeliveryPort derivedPort,
                                OutboundAddressGuard addressGuard, AuditService audit, Clock clock) {
         this.connections = Objects.requireNonNull(connections);
-        this.sdvPort = sdvPortOrNull;
+        this.documentStorePort = documentStorePortOrNull;
         this.pollingPort = Objects.requireNonNull(pollingPort);
         this.derivedPort = Objects.requireNonNull(derivedPort);
         this.addressGuard = Objects.requireNonNull(addressGuard);
@@ -121,9 +121,9 @@ public final class DraftConnectionTestService {
         }
         try {
             switch (kind) {
-                case SDV -> {
-                    if (sdvPort == null) return Result.failed(SDV_TEST_UNAVAILABLE);
-                    sdvPort.testConnection(probe);
+                case DOCUMENT_STORE -> {
+                    if (documentStorePort == null) return Result.failed(DOCUMENT_STORE_TEST_UNAVAILABLE);
+                    documentStorePort.testConnection(probe);
                 }
                 case POLLING -> pollingPort.discoverAvailable(probe, 1);  // the list is discarded; nothing is collected
                 case DERIVED -> derivedPort.testConnection(probe);
@@ -141,10 +141,10 @@ public final class DraftConnectionTestService {
         return code != null && SAFE_CODE.matcher(code).matches() ? code : CONNECTION_TEST_FAILED;
     }
 
-    private enum Kind { SDV, POLLING, DERIVED }
+    private enum Kind { DOCUMENT_STORE, POLLING, DERIVED }
 
     private static Kind kindOf(IntegrationConnection c) {
-        if (c.purpose() == IntegrationPurpose.SDV_DELIVERY && c.providerType() == IntegrationProviderType.HTTP_API) return Kind.SDV;
+        if (c.purpose() == IntegrationPurpose.DOCUMENT_STORE_DELIVERY && c.providerType() == IntegrationProviderType.HTTP_API) return Kind.DOCUMENT_STORE;
         if (c.purpose() == IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY) return Kind.DERIVED;
         if (c.pollingSource()) return Kind.POLLING;
         return null;

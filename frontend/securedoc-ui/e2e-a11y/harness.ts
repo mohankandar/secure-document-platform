@@ -195,8 +195,8 @@ const CONNECTIONS = [
   connection({ connectionId: 'c-poll', name: 'Servicing outbox', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'API_KEY', secretConfigured: true,
     endpoint: 'https://servicing.northwind.example/api/outbox', pollingScheduleType: 'INTERVAL', pollingIntervalMinutes: 15, pollingBatchLimit: 100,
     acknowledgementMode: 'SOURCE_PICKUP_ACK', healthStatus: 'DEGRADED', lastSuccessAt: minsAgo(60), lastFailureAt: minsAgo(5), lastFailureCategory: 'POLL_SOURCE_UNAVAILABLE' }),
-  connection({ connectionId: 'c-sdv', name: 'Secure Document Vault', purpose: 'SDV_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'OAUTH2_CLIENT_CREDENTIALS',
-    secretConfigured: true, endpoint: 'https://sdv.northwind.example/api', acknowledgementMode: 'SDV_SUBMISSION_ACK', lastSuccessAt: minsAgo(30) }),
+  connection({ connectionId: 'c-store', name: 'Document store', purpose: 'DOCUMENT_STORE_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', authenticationType: 'OAUTH2_CLIENT_CREDENTIALS',
+    secretConfigured: true, endpoint: 'https://store.northwind.example/api', acknowledgementMode: 'SUBMISSION_ACK', lastSuccessAt: minsAgo(30) }),
   connection({ connectionId: 'c-title', name: 'Title team folder', purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'FILE_SHARE',
     fileShareRoot: '\\\\files01\\title\\inbound', acknowledgementMode: 'DURABLE_FILE_WRITE', enabled: false, healthStatus: 'DISABLED' }),
 ];
@@ -221,7 +221,7 @@ const OVERVIEW = {
   providers: [
     { key: 'database', label: 'PostgreSQL', category: 'Database', provider: 'postgresql', status: 'HEALTHY', configured: true, detail: 'Connection valid' },
     { key: 'ocr', label: 'OCR', category: 'OCR', provider: 'tesseract', status: 'HEALTHY', configured: true, detail: 'Language: eng' },
-    { key: 'delivery', label: 'Final delivery', category: 'Delivery', provider: 'sdv', status: 'DEGRADED', configured: true, detail: 'Tenant SDV connection configured; secrets are protected' },
+    { key: 'delivery', label: 'Final delivery', category: 'Delivery', provider: 'document-store', status: 'DEGRADED', configured: true, detail: 'Tenant document store connection configured; secrets are protected' },
   ],
   watchedFolder: {
     enabled: true, schedulingEnabled: true, scanIntervalMs: 60000, rootPath: 'C:\\LexaVault\\inbound', triggerFileName: 'READY', incompleteVisibilityMinutes: 60,
@@ -230,7 +230,7 @@ const OVERVIEW = {
     lastScanAt: minsAgo(1), lastScanOutcome: 'SUCCESS', lastScanResult: { discovered: 3, waitingForTrigger: 1, accepted: 2, rejected: 0, duplicates: 0 },
   },
   resilience: { maxAttempts: 3, initialBackoffMs: 1000, packageProcessingMaxAttempts: 3, aiSecondaryEnabled: false, aiSecondaryProvider: 'none', aiSecondaryModel: '' },
-  integrations: { deliveryType: 'sdv', sdvConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
+  integrations: { deliveryType: 'document-store', documentStoreConfigured: true, identityMode: 'OIDC', productionIdentityConfigured: true },
   technicalExceptions: [],
 };
 const TENANTS = [{ tenantId: 't-nw', name: 'Northwind Commercial', slug: 'nwc', status: 'ACTIVE' }, { tenantId: 't-co', name: 'Contoso Lending', slug: 'col', status: 'ACTIVE' }];
@@ -291,7 +291,7 @@ const summary = (n: number, loan: string, reasonCode: string, stage: string, sta
 });
 const INCIDENTS = [
   summary(1, 'LN-3003', 'OCR_TIMEOUT', 'OCR', 'OPEN', 'BLOCKED', 3, 180),
-  summary(2, 'LN204864', 'SDV_UNAVAILABLE', 'DELIVERY', 'BUSINESS_CONTINUED', 'CONTINUED', 1, 185),
+  summary(2, 'LN204864', 'DESTINATION_UNAVAILABLE', 'DELIVERY', 'BUSINESS_CONTINUED', 'CONTINUED', 1, 185),
   summary(3, 'LN204867', 'AI_TIMEOUT', 'AI_ANALYSIS', 'RESOLVED', 'COMPLETED', 1, 60),
 ];
 const INCIDENT_DETAIL = {

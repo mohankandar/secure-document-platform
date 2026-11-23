@@ -76,7 +76,7 @@ public final class IntegrationConnectionService {
         Objects.requireNonNull(input, "Integration connection input is required");
         ensureUniqueName(tenantId, input.name(), null);
         ensureUniqueClientPrincipal(tenantId, input, null);
-        ensureSingleEnabledSdv(tenantId, input.purpose(), input.enabled(), null);
+        ensureSingleEnabledDocumentStore(tenantId, input.purpose(), input.enabled(), null);
         try {
             return IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
                     input.direction(), input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(),
@@ -93,7 +93,7 @@ public final class IntegrationConnectionService {
         IntegrationConnection existing = get(tenantId, id);
         ensureUniqueName(tenantId, input.name(), id);
         ensureUniqueClientPrincipal(tenantId, input, id);
-        ensureSingleEnabledSdv(tenantId, input.purpose(), existing.enabled(), id);
+        ensureSingleEnabledDocumentStore(tenantId, input.purpose(), existing.enabled(), id);
         try {
             return existing.updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
                     input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(), input.fileShareRoot(),
@@ -109,7 +109,7 @@ public final class IntegrationConnectionService {
                                             ActorId actorId, CorrelationId correlationId) {
         IntegrationConnection existing = get(tenantId, id);
         if (existing.enabled() == enabled) return existing;
-        ensureSingleEnabledSdv(tenantId, existing.purpose(), enabled, id);
+        ensureSingleEnabledDocumentStore(tenantId, existing.purpose(), enabled, id);
         IntegrationConnection updated;
         try {
             updated = existing.setEnabled(enabled, Instant.now(clock));
@@ -174,12 +174,12 @@ public final class IntegrationConnectionService {
         }
     }
 
-    private void ensureSingleEnabledSdv(TenantId tenantId, IntegrationPurpose purpose, boolean enabled, IntegrationConnectionId excludeId) {
-        if (!enabled || purpose != IntegrationPurpose.SDV_DELIVERY) return;
+    private void ensureSingleEnabledDocumentStore(TenantId tenantId, IntegrationPurpose purpose, boolean enabled, IntegrationConnectionId excludeId) {
+        if (!enabled || purpose != IntegrationPurpose.DOCUMENT_STORE_DELIVERY) return;
         boolean another = repository.findByTenantId(tenantId).stream()
-                .anyMatch(c -> c.enabled() && c.purpose() == IntegrationPurpose.SDV_DELIVERY
+                .anyMatch(c -> c.enabled() && c.purpose() == IntegrationPurpose.DOCUMENT_STORE_DELIVERY
                         && (excludeId == null || !c.id().equals(excludeId)));
-        if (another) throw new ValidationException(LvErrorCode.CFG_005, "Only one SDV delivery connection may be enabled per tenant");
+        if (another) throw new ValidationException(LvErrorCode.CFG_005, "Only one document store delivery connection may be enabled per tenant");
     }
 
     private String safeAuditDetail(IntegrationConnection connection) {

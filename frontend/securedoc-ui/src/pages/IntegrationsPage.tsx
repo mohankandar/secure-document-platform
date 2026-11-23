@@ -46,28 +46,28 @@ const emptyDraft = (): Draft => ({
   enabled: false,
 });
 
-const purposeOptions: IntegrationPurpose[] = ['INGESTION_SOURCE', 'SDV_DELIVERY', 'DERIVED_DOCUMENT_DELIVERY'];
+const purposeOptions: IntegrationPurpose[] = ['INGESTION_SOURCE', 'DOCUMENT_STORE_DELIVERY', 'DERIVED_DOCUMENT_DELIVERY'];
 const providerOptions: IntegrationProviderType[] = ['PUSH_API', 'HTTP_API', 'FILE_SHARE', 'WATCHED_FOLDER', 'SCANNER'];
 
 const providersByPurpose: Record<IntegrationPurpose, IntegrationProviderType[]> = {
   INGESTION_SOURCE: ['PUSH_API', 'HTTP_API', 'WATCHED_FOLDER', 'SCANNER'],
-  SDV_DELIVERY: ['HTTP_API'],
+  DOCUMENT_STORE_DELIVERY: ['HTTP_API'],
   DERIVED_DOCUMENT_DELIVERY: ['HTTP_API', 'FILE_SHARE'],
 };
 const authOptions: IntegrationAuthenticationType[] = ['NONE', 'BASIC', 'API_KEY', 'JWT', 'OAUTH2_CLIENT_CREDENTIALS', 'MTLS'];
-const acknowledgementOptions: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SDV_SUBMISSION_ACK'];
+const acknowledgementOptions: IntegrationAcknowledgementMode[] = ['NONE', 'HTTP_SUCCESS', 'DESTINATION_RECEIPT', 'DURABLE_FILE_WRITE', 'SOURCE_PICKUP_ACK', 'SUBMISSION_ACK'];
 
 const integrationViews: Array<{ id: IntegrationView; label: string; description: string; empty: string }> = [
   { id: 'INGESTION_SOURCE', label: 'Intake Sources', description: 'Trusted sources that send or supply document packages into this tenant.', empty: 'No intake-source connections are configured.' },
-  { id: 'SDV_DELIVERY', label: 'Master Delivery', description: 'Destinations for the completed redacted master package.', empty: 'No master-delivery connections are configured.' },
+  { id: 'DOCUMENT_STORE_DELIVERY', label: 'Master Delivery', description: 'Destinations for the completed redacted master package.', empty: 'No master-delivery connections are configured.' },
   { id: 'DERIVED_DOCUMENT_DELIVERY', label: 'Derived Delivery', description: 'Destinations used by derived-document routing rules.', empty: 'No derived-delivery connections are configured.' },
   { id: 'ALL', label: 'All Connections', description: 'Review every configured tenant integration in one place.', empty: 'No tenant integration connections are configured yet.' },
 ];
 
 function emptyDraftForPurpose(purpose: IntegrationPurpose): Draft {
   const draft = emptyDraft();
-  if (purpose === 'SDV_DELIVERY') {
-    return { ...draft, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' };
+  if (purpose === 'DOCUMENT_STORE_DELIVERY') {
+    return { ...draft, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SUBMISSION_ACK' };
   }
   if (purpose === 'DERIVED_DOCUMENT_DELIVERY') {
     return { ...draft, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'DESTINATION_RECEIPT' };
@@ -160,7 +160,7 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
   );
   const viewCounts = useMemo(() => ({
     INGESTION_SOURCE: connections.filter((connection) => connection.purpose === 'INGESTION_SOURCE').length,
-    SDV_DELIVERY: connections.filter((connection) => connection.purpose === 'SDV_DELIVERY').length,
+    DOCUMENT_STORE_DELIVERY: connections.filter((connection) => connection.purpose === 'DOCUMENT_STORE_DELIVERY').length,
     DERIVED_DOCUMENT_DELIVERY: connections.filter((connection) => connection.purpose === 'DERIVED_DOCUMENT_DELIVERY').length,
     ALL: connections.length,
   }), [connections]);
@@ -200,8 +200,8 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
   };
 
   const applyPurpose = (purpose: IntegrationPurpose) => {
-    if (purpose === 'SDV_DELIVERY') {
-      setDraft((current) => ({ ...current, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SDV_SUBMISSION_ACK' }));
+    if (purpose === 'DOCUMENT_STORE_DELIVERY') {
+      setDraft((current) => ({ ...current, purpose, direction: 'OUTBOUND', providerType: 'HTTP_API', acknowledgementMode: 'SUBMISSION_ACK' }));
     } else if (purpose === 'DERIVED_DOCUMENT_DELIVERY') {
       setDraft((current) => ({ ...current, purpose, direction: 'OUTBOUND', providerType: current.providerType === 'FILE_SHARE' ? 'FILE_SHARE' : 'HTTP_API', acknowledgementMode: current.providerType === 'FILE_SHARE' ? 'DURABLE_FILE_WRITE' : 'DESTINATION_RECEIPT' }));
     } else {
@@ -247,7 +247,7 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
       } else {
         next.direction = 'OUTBOUND';
         next.fileShareRoot = '';
-        next.acknowledgementMode = next.purpose === 'SDV_DELIVERY' ? 'SDV_SUBMISSION_ACK'
+        next.acknowledgementMode = next.purpose === 'DOCUMENT_STORE_DELIVERY' ? 'SUBMISSION_ACK'
           : next.purpose === 'INGESTION_SOURCE' ? 'SOURCE_PICKUP_ACK' : 'DESTINATION_RECEIPT';
         if (next.purpose === 'INGESTION_SOURCE') {
           next.pollingScheduleType = next.pollingScheduleType || 'INTERVAL';
@@ -313,14 +313,14 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
     } catch (err) { setError((err as { message?: string }).message || 'Unable to run polling source'); }
   };
 
-  const testSdv = async (connection: IntegrationConnection) => {
+  const testDocumentStore = async (connection: IntegrationConnection) => {
     setError(''); setMessage('');
     try {
-      const result = await apiClient.testSdvConnection(connection.connectionId);
-      setMessage(`${connection.name}: SDV connection ${human(result.healthStatus)}.`);
+      const result = await apiClient.testDocumentStoreConnection(connection.connectionId);
+      setMessage(`${connection.name}: document store connection ${human(result.healthStatus)}.`);
       await load();
     } catch (err) {
-      setError((err as { message?: string }).message || 'SDV connection test failed');
+      setError((err as { message?: string }).message || 'Document store connection test failed');
     }
   };
 
@@ -418,7 +418,7 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
                   <div className="integration-card-actions">
                     <button className="ui-button secondary" onClick={() => { setDraft(toDraft(connection)); setEditorOpen(true); }}>Edit</button>
                     {connection.purpose === 'INGESTION_SOURCE' && connection.providerType === 'HTTP_API' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void runNow(connection)}>Run now</button>}
-                    {connection.purpose === 'SDV_DELIVERY' && connection.providerType === 'HTTP_API' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void testSdv(connection)}>Test connection</button>}
+                    {connection.purpose === 'DOCUMENT_STORE_DELIVERY' && connection.providerType === 'HTTP_API' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void testDocumentStore(connection)}>Test connection</button>}
                     {connection.purpose === 'DERIVED_DOCUMENT_DELIVERY' && <button className="ui-button secondary" disabled={!connection.enabled} onClick={() => void testDerived(connection)}>Test connection</button>}
                     <button className="ui-button secondary" onClick={() => void toggle(connection)}>{connection.enabled ? 'Disable' : 'Enable'}</button>
                   </div>
@@ -473,7 +473,7 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
         </section> : null}
 
         {showDerivedAttention && <section className="ui-card platform-section-layout integration-attention">
-          <div className="platform-section-heading compact"><div><h2>Derived delivery attention</h2><p>Technical destination failures are independent of the completed master SDV export.</p></div><span className="platform-count">{derivedAttention.length}</span></div>
+          <div className="platform-section-heading compact"><div><h2>Derived delivery attention</h2><p>Technical destination failures are independent of the completed master export.</p></div><span className="platform-count">{derivedAttention.length}</span></div>
           <div className="integration-list">{derivedAttention.map((d) => <div className="platform-provider-card" key={d.derivedDeliveryId}>
             <div className="platform-provider-top"><div><div className="platform-provider-category">{d.destinationLabel || 'Routing attention'}</div><h3>{d.failureCategory || d.status}</h3></div><StatusBadge value={d.status} label={human(d.status)} /></div>
             <dl className="platform-definition-list"><div><dt>Package</dt><dd>{d.packageId}</dd></div><div><dt>Pages</dt><dd>{d.pageNumbers.length ? d.pageNumbers.join(', ') : '—'}</dd></div><div><dt>Attempts</dt><dd>{d.attemptCount}</dd></div></dl>

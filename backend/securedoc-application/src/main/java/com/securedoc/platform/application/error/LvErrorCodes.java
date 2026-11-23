@@ -427,8 +427,8 @@ public final class LvErrorCodes {
         m.put("ADDRESS_NOT_RESOLVED", CFG_004);
         m.put("CONNECTION_TEST_FAILED", CFG_004);
         m.put("CONNECTION_UNAVAILABLE", CFG_004);
-        m.put("SDV_TEST_UNAVAILABLE", CFG_004);
-        m.put("SDV_CONNECTION_TEST_FAILED", CFG_004);
+        m.put("DOCUMENT_STORE_TEST_UNAVAILABLE", CFG_004);
+        m.put("DOCUMENT_STORE_CONNECTION_TEST_FAILED", CFG_004);
         m.put("DERIVED_CONNECTION_TEST_FAILED", CFG_004);
         return m;
     }

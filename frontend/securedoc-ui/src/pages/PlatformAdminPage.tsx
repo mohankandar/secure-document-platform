@@ -175,7 +175,7 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false,
                 <div><dt>Package processing attempts</dt><dd>{data.resilience.packageProcessingMaxAttempts}</dd></div>
                 <div><dt>AI failover</dt><dd>{data.resilience.aiSecondaryEnabled ? `${data.resilience.aiSecondaryProvider}${data.resilience.aiSecondaryModel ? ` · ${data.resilience.aiSecondaryModel}` : ''}` : 'Disabled'}</dd></div>
                 <div><dt>Delivery</dt><dd>{data.integrations.deliveryType}</dd></div>
-                <div><dt>SDV configured</dt><dd>{data.integrations.sdvConfigured ? 'Yes' : 'No'}</dd></div>
+                <div><dt>Document store configured</dt><dd>{data.integrations.documentStoreConfigured ? 'Yes' : 'No'}</dd></div>
                 <div><dt>Identity mode</dt><dd>{data.integrations.identityMode.replace(/_/g, ' ')}</dd></div>
               </dl>
               {!data.integrations.productionIdentityConfigured && (
