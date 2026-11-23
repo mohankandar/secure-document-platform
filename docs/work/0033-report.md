@@ -230,7 +230,10 @@ Harness only (the product is unchanged):
 
 ## Commits
 
-See the branch `feature/0033-vision-benchmark`: one commit with the harness and this report. Not merged, not pushed.
+- `c2d20b7` feat: task 0033, vision benchmark harness and part A report
+- a follow-up commit adding this hash to the report.
+
+Not merged, not pushed.
 
 ## Not done, and why
 
