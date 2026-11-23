@@ -42,5 +42,27 @@ public enum EntityType {
     IP_ADDRESS,
 
     /** Custom/tenant-defined entity type. */
-    CUSTOM
+    CUSTOM,
+
+    // Task 0043 (R1 part 1): specific pattern kinds, each off by default for every entity. The names are stable
+    // keys (stored in findings and in tenant_redaction_kinds); never rename one. FINANCIAL_ACCOUNT and GOVERNMENT_ID
+    // above stay unused (owner, 0043 answers); the catalog task decides whether to remove them.
+
+    /** US bank routing number (ABA: 9 digits, 3-7-1 checksum), by its label or on a check's MICR line. */
+    BANK_ROUTING_NUMBER,
+
+    /** Bank account number (4-17 digits), by its label or in the account field of a check's MICR line. */
+    BANK_ACCOUNT_NUMBER,
+
+    /** US Individual Taxpayer Identification Number (9NN-NN-NNNN with the ITIN group ranges); personal. */
+    ITIN,
+
+    /** US Employer Identification Number (NN-NNNNNNN with a valid IRS prefix); a business number. */
+    EIN,
+
+    /** Driver's license number, only next to a driver's license label. */
+    DRIVERS_LICENSE_NUMBER,
+
+    /** Passport number, only next to a passport label. */
+    PASSPORT_NUMBER
 }

@@ -23,7 +23,11 @@ param(
     [string]$Ollama = "http://localhost:11434",
     [ValidatePattern('^v[0-9]{1,3}$')]
     [string]$Prompt = "v1",
-    [string]$Boxes = ""
+    [string]$Boxes = "",
+    # Task 0043: v1 = the product's default kinds; all = also the opt-in pattern kinds (routing, account, tax IDs, IDs).
+    [ValidateSet("v1", "all")]
+    [string]$TextKinds = "v1",
+    [switch]$SkipVision
 )
 $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
@@ -36,8 +40,9 @@ try {
     } else {
         $extra = @()
         if ($Boxes) { $extra = @("--boxes", $Boxes) }
+        if ($SkipVision) { $extra += @("--skip-vision") }
         java -cp $cp com.securedoc.benchmark.BenchmarkMain run --root $Root --set $Set --text-model $TextModel `
-            --models $Models --threshold $Threshold --ollama $Ollama --prompt $Prompt @extra
+            --models $Models --threshold $Threshold --ollama $Ollama --prompt $Prompt --text-kinds $TextKinds @extra
     }
     if ($LASTEXITCODE -ne 0) { throw "Benchmark stopped (exit $LASTEXITCODE)." }
 } finally {

@@ -161,8 +161,9 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
             </dl>
             <p className="cf-ad-hint">
               Detection works on text values, not document types. Each finding blacks out only the matched value on the page.
-              There is no whole-document or image-region redaction. A driver’s license, for example, is not a sensitive type,
-              though an SSN or date of birth printed on one is found like any other text.
+              There is no whole-document or image-region redaction. A copy of a driver’s license, for example, is not blacked
+              out as a whole: its number is found only when Driver’s license number is on, and an SSN or date of birth printed
+              on it is found like any other text.
             </p>
             {unsupported.length > 0 && <p className="cf-ad-warn">{unsupported.map(typeName).join(', ')} {unsupported.length === 1 ? 'is' : 'are'} not acted on by the detection engine. Turn {unsupported.length === 1 ? 'it' : 'them'} off to keep the policy accurate.</p>}
             {d.enabledEntityTypes.length === 0 && <p className="cf-ad-warn">Enable at least one category. The policy cannot be saved empty.</p>}

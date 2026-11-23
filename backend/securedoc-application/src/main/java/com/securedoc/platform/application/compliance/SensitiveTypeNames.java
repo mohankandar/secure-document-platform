@@ -18,7 +18,13 @@ public final class SensitiveTypeNames {
             Map.entry("SSN", "Social Security Number"),
             Map.entry("DATE_OF_BIRTH", "Date of birth"),
             Map.entry("CREDIT_CARD_NUMBER", "Credit card number"),
-            Map.entry("CREDIT_SCORE", "Credit score"));
+            Map.entry("CREDIT_SCORE", "Credit score"),
+            Map.entry("BANK_ROUTING_NUMBER", "Bank routing number"),
+            Map.entry("BANK_ACCOUNT_NUMBER", "Bank account number"),
+            Map.entry("ITIN", "ITIN"),
+            Map.entry("EIN", "EIN"),
+            Map.entry("DRIVERS_LICENSE_NUMBER", "Driver’s license number"),
+            Map.entry("PASSPORT_NUMBER", "Passport number"));
 
     /** words.ts {@code SENSITIVE_ALIASES}. */
     private static final Map<String, String> ALIASES = Map.of(

@@ -186,7 +186,7 @@ public final class BusinessAdminConfigurationService {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
-        if (!TenantRedactionPolicy.v1ConfigurableTypes().containsAll(enabledTypes)) {
+        if (!TenantRedactionPolicy.configurableTypes().containsAll(enabledTypes)) {
             throw new ValidationException(LvErrorCode.CFG_001, "Sensitive-data policy contains an unsupported V1 category");
         }
         if (autoRedactThreshold < MIN_THRESHOLD || autoRedactThreshold > MAX_THRESHOLD) {

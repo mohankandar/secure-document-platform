@@ -29,6 +29,13 @@ public record Truth(int version, List<PageTruth> pages) {
     public static final Set<String> TEXT_PATH_TYPES = Set.of(
             "SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE");
 
+    /** Answer-file types the task 0043 pattern kinds cover (routing, account, driver's license and passport). */
+    public static final Set<String> R1_PATTERN_TYPES = Set.of("BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID");
+
+    /** The text path's types with the task 0043 kinds switched on ({@code --text-kinds all}). */
+    public static final Set<String> TEXT_PATH_R1_TYPES = Set.of(
+            "SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE", "BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID");
+
     /** Page kinds the report breaks results down by. */
     public static final List<String> PAGE_KINDS = List.of("TYPED", "HANDWRITTEN", "ID", "CHECK", "FAX");
 

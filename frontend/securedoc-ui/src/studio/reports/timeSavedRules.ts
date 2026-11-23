@@ -22,6 +22,12 @@ export const SHORT_TYPE_NAMES: Readonly<Record<string, string>> = {
   DATE_OF_BIRTH: 'date of birth',
   CREDIT_CARD_NUMBER: 'card',
   CREDIT_SCORE: 'credit score',
+  BANK_ROUTING_NUMBER: 'routing number',
+  BANK_ACCOUNT_NUMBER: 'account number',
+  ITIN: 'ITIN',
+  EIN: 'EIN',
+  DRIVERS_LICENSE_NUMBER: 'license number',
+  PASSPORT_NUMBER: 'passport number',
 };
 
 /** One vocabulary name ("Social Security Number") as its short name ("SSN"). An unknown name stays as sent. */
