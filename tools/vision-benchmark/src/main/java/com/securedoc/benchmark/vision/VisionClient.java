@@ -21,6 +21,8 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Sends one page image to a local vision model with the versioned prompt and keeps only item types and
@@ -29,19 +31,24 @@ import java.util.Locale;
  */
 public final class VisionClient {
 
-    public static final String PROMPT_VERSION = "vision-prompt-v1";
+    /** The prompt of round 1 (task 0033); still the default. */
+    public static final String DEFAULT_PROMPT = "v1";
     /** Pages are sent with their longer side at this many pixels (about 127 dpi for a Letter page). */
     public static final int MAX_SIDE = 1400;
 
     /** How a model writes boxes. Each model gets its own trained convention; the rest of the prompt is the same. */
     public enum BoxConvention {
-        PIXELS("Give each box as [x1, y1, x2, y2] in pixels of this image, which is {W} pixels wide and {H} pixels high, with the origin at the top left."),
-        PER_MILLE("Give each box as [x1, y1, x2, y2] on a 0 to 1000 scale of the image width and height, with the origin at the top left.");
+        PIXELS("Give each box as [x1, y1, x2, y2] in pixels of this image, which is {W} pixels wide and {H} pixels high, with the origin at the top left.", 0),
+        PER_MILLE("Give each box as [x1, y1, x2, y2] on a 0 to 1000 scale of the image width and height, with the origin at the top left.", 1000),
+        UNIT("Give each box as [x1, y1, x2, y2] as fractions from 0 to 1 of the image width and height, with the origin at the top left.", 1);
 
         final String sentence;
+        /** The scale of one box value; 0 means pixels of the image. */
+        final double scale;
 
-        BoxConvention(String sentence) {
+        BoxConvention(String sentence, double scale) {
             this.sentence = sentence;
+            this.scale = scale;
         }
 
         public static BoxConvention forModel(String model) {
@@ -52,35 +59,74 @@ public final class VisionClient {
     public record Answer(List<Prediction> items, double seconds, boolean parseFailed, int promptTokens, int outputTokens) {
     }
 
-    private static final String TEMPLATE = loadTemplate();
+    private static final Map<String, String> TEMPLATES = new ConcurrentHashMap<>();
 
     private final Ollama ollama;
+    private final String promptVersion;
+    private final Map<String, BoxConvention> boxOverrides;
 
     public VisionClient(Ollama ollama) {
+        this(ollama, DEFAULT_PROMPT, Map.of());
+    }
+
+    /**
+     * @param promptVersion {@code v1}, {@code v2}, ... ({@code src/main/resources/vision-prompt-<version>.txt})
+     * @param boxOverrides  box convention per model name, where the model's trained convention is not the default
+     */
+    public VisionClient(Ollama ollama, String promptVersion, Map<String, BoxConvention> boxOverrides) {
         this.ollama = ollama;
+        this.promptVersion = promptVersion;
+        this.boxOverrides = Map.copyOf(boxOverrides);
+        template(promptVersion); // refuse an unknown version now, not at the first page
+    }
+
+    public BoxConvention convention(String model) {
+        return boxOverrides.getOrDefault(model, BoxConvention.forModel(model));
+    }
+
+    /** The name recorded with results, for example {@code vision-prompt-v2}. */
+    public static String promptName(String version) {
+        return "vision-prompt-" + version;
     }
 
     public static String promptTemplate() {
-        return TEMPLATE;
+        return template(DEFAULT_PROMPT);
     }
 
-    /** sha256 of the prompt template file, recorded with every result. */
+    /** One version's prompt template, line ends normalised to \n. An unknown version is refused. */
+    public static String template(String version) {
+        if (version == null || !version.matches("v[0-9]{1,3}")) {
+            throw new IllegalArgumentException("prompt version must look like v1, v2, ...");
+        }
+        return TEMPLATES.computeIfAbsent(version, VisionClient::loadTemplate);
+    }
+
+    /** sha256 of the v1 prompt template. */
     public static String promptSha256() {
+        return promptSha256(DEFAULT_PROMPT);
+    }
+
+    /** sha256 of a prompt template file (after line-end normalisation), recorded with every result. */
+    public static String promptSha256(String version) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(TEMPLATE.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(template(version).getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
     }
 
     static String prompt(BoxConvention convention, int width, int height) {
+        return prompt(DEFAULT_PROMPT, convention, width, height);
+    }
+
+    static String prompt(String version, BoxConvention convention, int width, int height) {
         String coords = convention.sentence.replace("{W}", Integer.toString(width)).replace("{H}", Integer.toString(height));
-        return TEMPLATE.replace("{COORDINATES}", coords);
+        return template(version).replace("{COORDINATES}", coords);
     }
 
     public Answer ask(String model, boolean thinks, BufferedImage page, int pageNumber) throws IOException, InterruptedException {
         BufferedImage image = fit(page);
-        BoxConvention convention = BoxConvention.forModel(model);
+        BoxConvention convention = convention(model);
         ByteArrayOutputStream png = new ByteArrayOutputStream();
         ImageIO.write(image, "png", png);
 
@@ -92,7 +138,7 @@ public final class VisionClient {
         ArrayNode messages = body.putArray("messages");
         ObjectNode message = messages.addObject();
         message.put("role", "user");
-        message.put("content", prompt(convention, image.getWidth(), image.getHeight()));
+        message.put("content", prompt(promptVersion, convention,image.getWidth(), image.getHeight()));
         message.putArray("images").add(Base64.getEncoder().encodeToString(png.toByteArray()));
         // No JSON-schema "format": in a trial it made qwen2.5vl answer {"items": []} on pages with items.
         // The answer is parsed leniently instead (the JSON object inside the reply).
@@ -146,8 +192,8 @@ public final class VisionClient {
             JsonNode box = node.path("box");
             if (!Truth.ITEM_TYPES.contains(type) || !box.isArray() || box.size() != 4) continue;
             double x1 = box.get(0).asDouble(), y1 = box.get(1).asDouble(), x2 = box.get(2).asDouble(), y2 = box.get(3).asDouble();
-            double sx = convention == BoxConvention.PER_MILLE ? 1000 : width;
-            double sy = convention == BoxConvention.PER_MILLE ? 1000 : height;
+            double sx = convention.scale == 0 ? width : convention.scale;
+            double sy = convention.scale == 0 ? height : convention.scale;
             double l = clamp(Math.min(x1, x2) / sx), r = clamp(Math.max(x1, x2) / sx);
             double t = clamp(Math.min(y1, y2) / sy), b = clamp(Math.max(y1, y2) / sy);
             if (r - l <= 0 || b - t <= 0) continue;
@@ -160,9 +206,10 @@ public final class VisionClient {
         return Math.max(0, Math.min(1, v));
     }
 
-    private static String loadTemplate() {
-        try (InputStream in = VisionClient.class.getResourceAsStream("/vision-prompt-v1.txt")) {
-            if (in == null) throw new IllegalStateException("vision-prompt-v1.txt missing");
+    private static String loadTemplate(String version) {
+        String file = promptName(version) + ".txt";
+        try (InputStream in = VisionClient.class.getResourceAsStream("/" + file)) {
+            if (in == null) throw new IllegalArgumentException(file + " missing");
             return new String(in.readAllBytes(), StandardCharsets.UTF_8).replace("\r\n", "\n");
         } catch (IOException e) {
             throw new IllegalStateException(e);

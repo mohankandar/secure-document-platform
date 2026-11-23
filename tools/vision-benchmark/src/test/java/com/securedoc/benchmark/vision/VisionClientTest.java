@@ -67,6 +67,45 @@ class VisionClientTest {
     }
 
     @Test
+    void promptV2KeepsTheOutputContractAndHasItsOwnHash() {
+        String v1 = VisionClient.template("v1");
+        String v2 = VisionClient.template("v2");
+        for (String line : List.of("- {COORDINATES}", "- If the page has none of these items, return {\"items\": []}.",
+                "Answer with JSON only, in this form:", "{\"items\": [{\"type\": \"SSN\", \"box\": [x1, y1, x2, y2]}]}",
+                "- Never write out, copy or describe any value. Return only the item type and its box.")) {
+            assertTrue(v1.contains(line), "v1: " + line);
+            assertTrue(v2.contains(line), "v2: " + line);
+        }
+        for (String type : com.securedoc.benchmark.truth.Truth.ITEM_TYPES) assertTrue(v2.contains("- " + type + ":"), type);
+        assertTrue(v2.contains("bottom edge of a check"));
+        assertFalse(v2.contains("\r"));
+        assertEquals(64, VisionClient.promptSha256("v2").length());
+        assertFalse(VisionClient.promptSha256("v1").equals(VisionClient.promptSha256("v2")));
+        assertEquals(VisionClient.promptSha256(), VisionClient.promptSha256("v1"));
+        assertEquals("vision-prompt-v2", VisionClient.promptName("v2"));
+    }
+
+    @Test
+    void unknownPromptVersionsAreRefused() {
+        assertThrows(IllegalArgumentException.class, () -> VisionClient.template("v99"));
+        assertThrows(IllegalArgumentException.class, () -> VisionClient.template("../logback"));
+        assertThrows(IllegalArgumentException.class, () -> new VisionClient(new Ollama("http://localhost:11434"), "v99", java.util.Map.of()));
+    }
+
+    @Test
+    void unitBoxesAndPerModelOverrides() {
+        var parsed = VisionClient.parse("{\"items\":[{\"type\":\"SSN\",\"box\":[0.1,0.2,0.3,0.25]}]}",
+                VisionClient.BoxConvention.UNIT, 1000, 500, 1, "m");
+        assertArrayEquals(new double[]{0.1, 0.2, 0.2, 0.05}, parsed.items().get(0).box(), 1e-9);
+        var client = new VisionClient(new Ollama("http://localhost:11434"), "v2",
+                java.util.Map.of("gemma3:12b", VisionClient.BoxConvention.PER_MILLE));
+        assertEquals(VisionClient.BoxConvention.PER_MILLE, client.convention("gemma3:12b"));
+        assertEquals(VisionClient.BoxConvention.PER_MILLE, client.convention("qwen3-vl:8b-instruct"));
+        assertEquals(VisionClient.BoxConvention.PIXELS, client.convention("granite3.2-vision:2b"));
+        assertTrue(VisionClient.prompt("v2", VisionClient.BoxConvention.UNIT, 10, 10).contains("fractions from 0 to 1"));
+    }
+
+    @Test
     void onlyALocalOllamaIsAccepted() {
         assertThrows(IllegalArgumentException.class, () -> new Ollama("https://example.com"));
         new Ollama("http://localhost:11434");

@@ -19,6 +19,8 @@ public final class Results {
     public String ollamaNumParallel;
     public String promptVersion;
     public String promptSha256;
+    /** Box convention used per vision model (round 2 onwards; absent in round 1 results). */
+    public Map<String, String> boxConventions = new LinkedHashMap<>();
     public double threshold;
     public List<Double> sweep = new ArrayList<>();
     public double visionThreshold;

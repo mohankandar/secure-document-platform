@@ -32,7 +32,9 @@ final class Summary {
                 .append(", OLLAMA_NUM_PARALLEL ").append(r.ollamaNumParallel).append(".\n");
         md.append("Prompt ").append(r.promptVersion).append(" (sha256 ").append(r.promptSha256).append("). Routing threshold for the tables: OCR confidence below ")
                 .append(f2(r.threshold)).append(". Vision ran on the pages routed at ").append(f2(r.visionThreshold))
-                .append(" (the widest threshold of the sweep), so every threshold can be scored.\n\n");
+                .append(" (the widest threshold of the sweep), so every threshold can be scored.\n");
+        if (r.boxConventions != null && !r.boxConventions.isEmpty()) md.append("Box convention per model: ").append(r.boxConventions).append(".\n");
+        md.append('\n');
 
         models(md, r);
         routing(md, r);

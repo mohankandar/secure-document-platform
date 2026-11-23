@@ -38,9 +38,11 @@ import java.util.concurrent.Future;
  *   generate  --root C:\dev\benchmark-samples                 build the part A samples in root\public
  *   run       --root ... --set public|customer [options]      run the benchmark on one set
  *   summarize --results path\results.json                     rewrite summary.md from saved results
+ *   probe     --root ... --models a,b [--with-text m]         requests at once, and text + vision resident (task 0040)
  * </pre>
  * Options for run: {@code --text-model qwen3.5:9b}, {@code --models a,b,c}, {@code --threshold 0.75},
- * {@code --ollama http://localhost:11434}, {@code --skip-text}, {@code --skip-vision}, {@code --only id,id}.
+ * {@code --ollama http://localhost:11434}, {@code --skip-text}, {@code --skip-vision}, {@code --only id,id},
+ * {@code --prompt v1|v2}, {@code --boxes model=PIXELS|PER_MILLE|UNIT,...}.
  *
  * <p>Console output and results hold ids, numbers, types and boxes only.
  */
@@ -58,6 +60,7 @@ public final class BenchmarkMain {
         switch (args[0]) {
             case "generate" -> generate(Path.of(required(opts, "root")));
             case "run" -> run(opts);
+            case "probe" -> Probe.run(opts);
             case "summarize" -> {
                 Path file = Path.of(required(opts, "results"));
                 Results results = JSON.readValue(file.toFile(), Results.class);
@@ -102,8 +105,12 @@ public final class BenchmarkMain {
         results.set = set;
         results.gpu = GpuSampler.gpuName();
         results.ollamaNumParallel = System.getenv().getOrDefault("OLLAMA_NUM_PARALLEL", "not set (server default)");
-        results.promptVersion = VisionClient.PROMPT_VERSION;
-        results.promptSha256 = VisionClient.promptSha256();
+        String promptVersion = opts.getOrDefault("prompt", VisionClient.DEFAULT_PROMPT);
+        Map<String, VisionClient.BoxConvention> boxes = boxOverrides(opts.get("boxes"));
+        VisionClient client = new VisionClient(ollama, promptVersion, boxes);
+        results.promptVersion = VisionClient.promptName(promptVersion);
+        results.promptSha256 = VisionClient.promptSha256(promptVersion);
+        for (String m : visionModels) results.boxConventions.put(m, client.convention(m).name());
         results.threshold = Double.parseDouble(opts.getOrDefault("threshold", "0.75"));
         results.sweep = SWEEP;
         results.visionThreshold = Math.max(results.threshold, SWEEP.get(SWEEP.size() - 1));
@@ -171,7 +178,6 @@ public final class BenchmarkMain {
 
         // 3. Vision path on the routed pages, one model at a time.
         if (!opts.containsKey("skip-vision")) {
-            VisionClient client = new VisionClient(ollama);
             for (String model : visionModels) {
                 Results.ModelRun run = new Results.ModelRun();
                 run.info = ollama.modelInfo(model);
@@ -293,6 +299,18 @@ public final class BenchmarkMain {
 
     private static void save(Results results, Path out) throws IOException {
         JSON.writeValue(out.resolve("results.json").toFile(), results);
+    }
+
+    /** {@code model=PIXELS|PER_MILLE|UNIT,...}: a box convention for a model whose trained convention is not the default. */
+    static Map<String, VisionClient.BoxConvention> boxOverrides(String spec) {
+        Map<String, VisionClient.BoxConvention> out = new LinkedHashMap<>();
+        if (spec == null || spec.isBlank()) return out;
+        for (String part : spec.split(",")) {
+            int eq = part.lastIndexOf('=');
+            if (eq <= 0) throw new IllegalArgumentException("--boxes wants model=PIXELS|PER_MILLE|UNIT, got " + part);
+            out.put(part.substring(0, eq).trim(), VisionClient.BoxConvention.valueOf(part.substring(eq + 1).trim()));
+        }
+        return out;
     }
 
     static Map<String, String> options(String[] args) {

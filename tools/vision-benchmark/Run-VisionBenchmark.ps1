@@ -20,7 +20,10 @@ param(
     [string]$TextModel = "qwen3.5:9b",
     [string]$Models = "qwen2.5vl:7b,qwen3-vl:8b-instruct,minicpm-v:8b",
     [double]$Threshold = 0.75,
-    [string]$Ollama = "http://localhost:11434"
+    [string]$Ollama = "http://localhost:11434",
+    [ValidatePattern('^v[0-9]{1,3}$')]
+    [string]$Prompt = "v1",
+    [string]$Boxes = ""
 )
 $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
@@ -31,8 +34,10 @@ try {
     if ($Generate) {
         java -cp $cp com.securedoc.benchmark.BenchmarkMain generate --root $Root
     } else {
+        $extra = @()
+        if ($Boxes) { $extra = @("--boxes", $Boxes) }
         java -cp $cp com.securedoc.benchmark.BenchmarkMain run --root $Root --set $Set --text-model $TextModel `
-            --models $Models --threshold $Threshold --ollama $Ollama
+            --models $Models --threshold $Threshold --ollama $Ollama --prompt $Prompt @extra
     }
     if ($LASTEXITCODE -ne 0) { throw "Benchmark stopped (exit $LASTEXITCODE)." }
 } finally {
