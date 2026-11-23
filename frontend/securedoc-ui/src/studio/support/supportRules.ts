@@ -188,6 +188,8 @@ export interface IncidentLike {
   tenantId: string;
   packageId: string;
   documentId?: string | null;
+  /** Task 0038: where the problem's document sits in its case; absent when the problem is about the whole case. */
+  documentPosition?: { position: number; count: number; page?: number | null } | null;
   packageStatus?: string | null;
   primaryIdentifierLabel?: string | null;
   primaryIdentifierValue?: string | null;
@@ -330,7 +332,19 @@ function timelineOf(events: readonly IncidentEventLike[] | undefined, reason: st
   };
 }
 
+/**
+ * Task 0038: "document 2 of 3, page 14" (the page only when the problem recorded one). Never the file name. Null for a
+ * problem about the whole case, or a position that does not add up.
+ */
+export function documentPositionText(p: IncidentLike['documentPosition']): string | null {
+  if (!p || !Number.isInteger(p.position) || !Number.isInteger(p.count) || p.position < 1 || p.position > p.count) return null;
+  const page = Number.isInteger(p.page) && (p.page as number) > 0 ? `, page ${p.page}` : '';
+  return `document ${p.position} of ${p.count}${page}`;
+}
+
 const field = (label: string, value: unknown): [string, string] => [label, value == null || value === '' ? '—' : String(value)];
+
+const where = (p: IncidentLike['documentPosition']) => { const text = documentPositionText(p); return text ? `, in ${text}` : ''; };
 
 /** The problem page from a support incident (Support › a row). */
 export function fromIncident(d: IncidentLike, when: When): ProblemView {
@@ -349,7 +363,7 @@ export function fromIncident(d: IncidentLike, when: When): ProblemView {
     blocked: (d.businessImpact ?? '').toUpperCase() === 'BLOCKED',
     packageStatus: d.packageStatus ?? undefined,
     retryable: d.retryable,
-    happened: `${reason.sentence} It stopped at ${processingStageWords(d.stage)}.${tries(d.attemptCount, d.lastObservedAt, when)}`,
+    happened: `${reason.sentence} It stopped at ${processingStageWords(d.stage)}${where(d.documentPosition)}.${tries(d.attemptCount, d.lastObservedAt, when)}`,
     meaning: meaningFor(d.businessImpact ?? '', closed, d.technicalAttentionRetainedUntil, purged, when),
     timeline: t.timeline,
     earlierSteps: t.earlierSteps,
@@ -369,6 +383,7 @@ export function fromIncident(d: IncidentLike, when: When): ProblemView {
       field('Case', d.packageId),
       field('Case status', d.packageStatus),
       field('Document', d.documentId),
+      field('Document position', documentPositionText(d.documentPosition)),
       field('Organization', d.tenantId),
       field('First seen', d.firstObservedAt),
       field('Last seen', d.lastObservedAt),

@@ -3,6 +3,7 @@ package com.securedoc.install;
 import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
+import com.securedoc.platform.domain.document.CaseLimits;
 import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
 import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
@@ -126,7 +127,7 @@ final class DemoAppRecords {
                         "LOCAL/demo scanner source used by the workstation Scanner Bridge",
                         IntegrationPurpose.INGESTION_SOURCE, IntegrationDirection.INBOUND, IntegrationProviderType.SCANNER,
                         IntegrationAuthenticationType.NONE, principal, null, null, null, 60, 2, 24, 1,
-                        2L * 1024L * 1024L * 1024L, 10_000, IntegrationAcknowledgementMode.NONE, true, Instant.now()));
+                        2L * 1024L * 1024L * 1024L, CaseLimits.MAX_PAGES_PER_FILE, IntegrationAcknowledgementMode.NONE, true, Instant.now()));
                 line("create", "scanner source \"Local Scanner Bridge\"");
             }
         });

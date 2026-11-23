@@ -110,7 +110,8 @@ final class InMemoryPipelineJobs implements PipelineJobRepository {
         Optional<PipelineJob> next = rows.values().stream()
                 .filter(j -> stages.contains(j.stage()))
                 .filter(j -> j.status() == PipelineJobStatus.READY || j.status() == PipelineJobStatus.WAITING_RETRY)
-                .filter(j -> !j.nextAttemptAt().isAfter(now))
+                // Task 0038, as in the PostgreSQL queue: READY is due now; only WAITING_RETRY waits for its time.
+                .filter(j -> j.status() == PipelineJobStatus.READY || !j.nextAttemptAt().isAfter(now))
                 .filter(j -> j.destinationId() == null || takes(j, now, perDestinationLimit))
                 .min(Comparator.comparingInt((PipelineJob j) -> j.priority().rank())
                         .thenComparing(PipelineJob::createdAt).thenComparing(PipelineJob::id));

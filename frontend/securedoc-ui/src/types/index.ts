@@ -196,6 +196,10 @@ export interface PackageSummary {
   updatedAt: string;
   /** Task 0029: the case's export state (GET /packages); absent from an older server and on the detail (= NONE). */
   exportState?: string;
+  /** Task 0038: why the case stopped or waits, as an LV code (GET /packages); null or absent when it doesn't. */
+  stopReasonCode?: string | null;
+  /** Task 0038: the delivery destination's name once one is chosen (GET /packages). */
+  destinationName?: string | null;
 }
 
 export interface PackageDetail extends PackageSummary {
@@ -929,6 +933,8 @@ export interface SupportIncidentDetail {
   tenantId: string;
   packageId: string;
   documentId?: string | null;
+  /** Task 0038: where the problem's document sits in its case ("document 2 of 3, page 14"). */
+  documentPosition?: { position: number; count: number; page?: number | null } | null;
   packageStatus?: string | null;
   primaryIdentifierLabel?: string | null;
   primaryIdentifierValue?: string | null;
@@ -990,7 +996,6 @@ export interface EffectiveBranding {
   shortName: string;
   organizationName?: string | null;
   pageTitle: string;
-  accentColor: string;
   secondaryColor: string;
   primaryLogoDataUrl?: string | null;
   compactLogoDataUrl?: string | null;
@@ -1004,7 +1009,6 @@ export interface BrandingConfiguration {
   shortName?: string | null;
   organizationName?: string | null;
   pageTitle?: string | null;
-  accentColor?: string | null;
   secondaryColor?: string | null;
   primaryLogoDataUrl?: string | null;
   compactLogoDataUrl?: string | null;
@@ -1041,7 +1045,6 @@ export interface BrandingUpdateRequest {
   shortName?: string | null;
   organizationName?: string | null;
   pageTitle?: string | null;
-  accentColor?: string | null;
   secondaryColor?: string | null;
   primaryLogo?: BrandingAssetUpdate | null;
   compactLogo?: BrandingAssetUpdate | null;

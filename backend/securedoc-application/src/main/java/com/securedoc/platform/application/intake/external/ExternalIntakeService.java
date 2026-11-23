@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.intake.external;
 
+import com.securedoc.platform.domain.document.CaseLimits;
 import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
@@ -33,6 +34,11 @@ import java.util.*;
 /** Canonical manifest-first push API intake facade. */
 public final class ExternalIntakeService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ExternalIntakeService.class);
+    /**
+     * Task 0039: the sanity bound for the page count a scanner reports in its metadata (LV-SCN-003). It was the old
+     * source page limit and stays as it was; a scan over the case limit is refused when its pages are counted (LV-INT-028).
+     */
+    private static final int SCANNER_REPORTED_PAGES_MAX = 10000;
     private final IntegrationConnectionService integrationConnectionService;
     private final ExternalIntakeRepository externalIntakeRepository;
     private final PackageRepository packageRepository;
@@ -221,9 +227,9 @@ public final class ExternalIntakeService {
         if (reportedPages != null && !reportedPages.isBlank()) {
             try {
                 int pages = Integer.parseInt(reportedPages.trim());
-                if (pages < 1 || pages > IntegrationConnection.MAX_PDF_PAGES) throw new NumberFormatException();
+                if (pages < 1 || pages > SCANNER_REPORTED_PAGES_MAX) throw new NumberFormatException();
             } catch (NumberFormatException ex) {
-                throw new ValidationException(LvErrorCode.SCN_003, "scannerReportedPageCount must be between 1 and " + IntegrationConnection.MAX_PDF_PAGES);
+                throw new ValidationException(LvErrorCode.SCN_003, "scannerReportedPageCount must be between 1 and " + SCANNER_REPORTED_PAGES_MAX);
             }
         }
 
@@ -438,6 +444,12 @@ public final class ExternalIntakeService {
         final int pageCount;
         try (InputStream pdfStream = content.openStream()) {
             pageCount = pdfValidationPort.inspect(pdfStream).pageCount();
+            if (pageCount > CaseLimits.MAX_PAGES_PER_FILE) {
+                // Task 0038: the case limit holds even when the source allows more. Task 0039: checked first, so a
+                // source stored earlier above the limit (now read as the limit) still gets this code, not LV-INT-009.
+                throw new ValidationException(LvErrorCode.INT_028, "The PDF has more than "
+                        + CaseLimits.MAX_PAGES_PER_FILE + " pages");
+            }
             if (pageCount > source.maxPdfPages()) {
                 throw new ValidationException(LvErrorCode.INT_009, "PDF page count exceeds the configured source limit");
             }
@@ -579,6 +591,12 @@ public final class ExternalIntakeService {
         normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId");
         normalizeRequired(input.sourceRevision(), "sourceRevision");
         if (input.documents().isEmpty()) throw new ValidationException(LvErrorCode.INT_003, "Document manifest must contain at least one PDF");
+        if (input.documents().size() > CaseLimits.MAX_FILES_PER_CASE) {
+            // Task 0038: the case limit holds even when the source allows more. Task 0039: checked first, so a source
+            // stored earlier above the limit (now read as the limit) still gets this code, not LV-INT-010.
+            throw new ValidationException(LvErrorCode.INT_029, "Document manifest lists more than "
+                    + CaseLimits.MAX_FILES_PER_CASE + " files");
+        }
         if (input.documents().size() > source.maxDocumentsPerIntake()) {
             throw new ValidationException(LvErrorCode.INT_010, "Document manifest exceeds the configured source document limit");
         }

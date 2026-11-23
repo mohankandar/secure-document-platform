@@ -10,7 +10,6 @@ type EditableBranding = {
   shortName: string;
   organizationName: string;
   pageTitle: string;
-  accentColor: string;
   secondaryColor: string;
   primaryLogoDataUrl: string | null;
   compactLogoDataUrl: string | null;
@@ -23,7 +22,9 @@ type EditableBranding = {
   faviconClear: boolean;
 };
 
-const FALLBACK = { applicationName: 'LexaVault', shortName: 'LexaVault', organizationName: '', pageTitle: 'LexaVault', accentColor: '#315CF4', secondaryColor: '#6D5AE6' };
+const FALLBACK = { applicationName: 'LexaVault', shortName: 'LexaVault', organizationName: '', pageTitle: 'LexaVault', secondaryColor: '#6D5AE6' };
+/** Task 0038: the accent colour is no longer a setting; older screens keep this one. */
+const ACCENT = '#315CF4';
 
 function fromConfig(config?: BrandingConfiguration | null): EditableBranding {
   return {
@@ -31,7 +32,6 @@ function fromConfig(config?: BrandingConfiguration | null): EditableBranding {
     shortName: config?.shortName || '',
     organizationName: config?.organizationName || '',
     pageTitle: config?.pageTitle || '',
-    accentColor: config?.accentColor || '',
     secondaryColor: config?.secondaryColor || '',
     primaryLogoDataUrl: config?.primaryLogoDataUrl || null,
     compactLogoDataUrl: config?.compactLogoDataUrl || null,
@@ -47,28 +47,11 @@ function toRequest(value: EditableBranding): BrandingUpdateRequest {
     shortName: value.shortName || null,
     organizationName: value.organizationName || null,
     pageTitle: value.pageTitle || null,
-    accentColor: value.accentColor || null,
     secondaryColor: value.secondaryColor || null,
     primaryLogo: value.primaryLogoChanged ? { dataUrl: value.primaryLogoDataUrl, clear: value.primaryLogoClear } : null,
     compactLogo: value.compactLogoChanged ? { dataUrl: value.compactLogoDataUrl, clear: value.compactLogoClear } : null,
     favicon: value.faviconChanged ? { dataUrl: value.faviconDataUrl, clear: value.faviconClear } : null,
   };
-}
-
-function luminance(hex: string) {
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
-  const values = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((v) => parseInt(v, 16) / 255).map((v) => v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4));
-  return values[0] * .2126 + values[1] * .7152 + values[2] * .0722;
-}
-
-function contrast(hex: string, white = true) {
-  const l = luminance(hex); if (l == null) return 0;
-  const other = white ? 1 : 0;
-  return (Math.max(l, other) + .05) / (Math.min(l, other) + .05);
-}
-
-function accessibleAccent(hex: string) {
-  return /^#[0-9a-fA-F]{6}$/.test(hex) && contrast(hex, true) >= 4.5;
 }
 
 async function readImage(file: File, maxBytes: number): Promise<string> {
@@ -100,8 +83,6 @@ function AssetField({ label, help, value, onChange, maxBytes }: { label: string;
 }
 
 function BrandingForm({ value, onChange, tenantMode = false }: { value: EditableBranding; onChange: (value: EditableBranding) => void; tenantMode?: boolean }) {
-  const accent = value.accentColor || (tenantMode ? '#315CF4' : FALLBACK.accentColor);
-  const accentOk = !value.accentColor || accessibleAccent(value.accentColor);
   return (
     <div className="branding-form">
       {tenantMode && <div className="ui-callout neutral">Leave a field blank to inherit the deployment brand.</div>}
@@ -112,7 +93,6 @@ function BrandingForm({ value, onChange, tenantMode = false }: { value: Editable
         <label className="ui-field"><span>Browser/page title</span><input value={value.pageTitle} maxLength={100} placeholder={tenantMode ? 'Inherit' : FALLBACK.pageTitle} onChange={(e) => onChange({ ...value, pageTitle: e.target.value })} /></label>
       </div>
       <div className="branding-color-grid">
-        <label className="ui-field color-field"><span>Primary accent</span><div className="color-input-row"><input type="color" value={accent} onChange={(e) => onChange({ ...value, accentColor: e.target.value.toUpperCase() })} /><input value={value.accentColor} placeholder={tenantMode ? 'Inherit' : FALLBACK.accentColor} onChange={(e) => onChange({ ...value, accentColor: e.target.value.toUpperCase() })} /></div><small className={accentOk ? 'field-success' : 'field-error'}>{accentOk ? 'Accessible contrast can be generated for UI surfaces.' : 'Choose a color with sufficient contrast.'}</small></label>
         <label className="ui-field color-field"><span>Secondary brand color</span><div className="color-input-row"><input type="color" value={value.secondaryColor || FALLBACK.secondaryColor} onChange={(e) => onChange({ ...value, secondaryColor: e.target.value.toUpperCase() })} /><input value={value.secondaryColor} placeholder={tenantMode ? 'Inherit' : FALLBACK.secondaryColor} onChange={(e) => onChange({ ...value, secondaryColor: e.target.value.toUpperCase() })} /></div><small>Used sparingly for branded accents, never for semantic success/warning/error.</small></label>
       </div>
       <div className="branding-assets-grid">
@@ -128,11 +108,10 @@ function Preview({ value, inherited }: { value: EditableBranding; inherited?: Br
   const appName = value.applicationName || inherited?.applicationName || FALLBACK.applicationName;
   const shortName = value.shortName || inherited?.shortName || appName;
   const org = value.organizationName || inherited?.organizationName || 'Customer organization';
-  const accent = value.accentColor || inherited?.accentColor || FALLBACK.accentColor;
   const primaryLogo = value.primaryLogoDataUrl || inherited?.primaryLogoDataUrl;
   const compactLogo = value.compactLogoDataUrl || inherited?.compactLogoDataUrl || primaryLogo;
   return (
-    <div className="branding-preview" style={{ '--preview-accent': accent } as CSSProperties}>
+    <div className="branding-preview" style={{ '--preview-accent': ACCENT } as CSSProperties}>
       <div className="branding-preview-toolbar"><span className="preview-menu-lines">☰</span><div className="preview-brand-mark">{compactLogo ? <img src={compactLogo} alt="" /> : appName.slice(0, 1).toUpperCase()}</div><strong>{shortName}</strong><span className="preview-avatar">U</span></div>
       <div className="branding-preview-body"><aside>
         {primaryLogo ? <img className="preview-primary-logo" src={primaryLogo} alt="" /> : <div className="preview-inline-brand"><div className="preview-brand-mark large">{compactLogo ? <img src={compactLogo} alt="" /> : appName.slice(0, 1).toUpperCase()}</div><strong>{appName}</strong></div>}
@@ -178,7 +157,6 @@ export default function BrandingPanel() {
   };
 
   const saveDeployment = async () => {
-    if (deployment.accentColor && !accessibleAccent(deployment.accentColor)) { setError('Primary accent does not meet the branding contrast requirement.'); return; }
     setSaving(true); setError(''); setNotice('');
     try { await apiClient.updateDeploymentBranding(toRequest(deployment)); setNotice('Deployment branding saved.'); await load(); await refreshBranding(); }
     catch (e) { setError((e as { message?: string }).message || 'Unable to save deployment branding'); }
@@ -187,7 +165,6 @@ export default function BrandingPanel() {
 
   const saveTenant = async () => {
     if (!selectedTenantId) return;
-    if (tenantValue.accentColor && !accessibleAccent(tenantValue.accentColor)) { setError('Primary accent does not meet the branding contrast requirement.'); return; }
     setSaving(true); setError(''); setNotice('');
     try { await apiClient.updateTenantBranding(selectedTenantId, toRequest(tenantValue)); setNotice('Tenant branding override saved.'); await load(); await refreshBranding(); }
     catch (e) { setError((e as { message?: string }).message || 'Unable to save tenant branding'); }

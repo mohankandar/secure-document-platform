@@ -8,22 +8,14 @@ import com.securedoc.platform.domain.pipeline.DestinationState;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineJobStatus;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
-import liquibase.Contexts;
-import liquibase.Liquibase;
-import liquibase.database.Database;
-import liquibase.database.DatabaseFactory;
-import liquibase.database.jvm.JdbcConnection;
-import liquibase.resource.ClassLoaderResourceAccessor;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -50,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named = "LEXAVAULT_TEST_PG_URL", matches = "jdbc:postgresql:.*")
 class JdbcPipelineJobRepositoryPostgresTest {
     private static final Duration LEASE = Duration.ofSeconds(30);
+    private static PostgresTestDatabase db;
     private static NamedParameterJdbcTemplate jdbc;
 
     private JdbcPipelineJobRepository jobs;
@@ -59,16 +52,14 @@ class JdbcPipelineJobRepositoryPostgresTest {
 
     @BeforeAll
     static void migrate() throws Exception {
-        String url = System.getenv("LEXAVAULT_TEST_PG_URL");
-        String user = System.getenv("LEXAVAULT_TEST_PG_USER");
-        String password = System.getenv("LEXAVAULT_TEST_PG_PASSWORD");
-        try (Connection connection = DriverManager.getConnection(url, user, password)) {
-            Database database = DatabaseFactory.getInstance()
-                    .findCorrectDatabaseImplementation(new JdbcConnection(connection));
-            new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(), database)
-                    .update(new Contexts());
-        }
-        jdbc = new NamedParameterJdbcTemplate(new DriverManagerDataSource(url, user, password));
+        // Task 0038: its own database, so no other test class sees or changes its rows.
+        db = PostgresTestDatabase.migrated("PipelineJobRepository");
+        jdbc = db.jdbc();
+    }
+
+    @AfterAll
+    static void dropDatabase() throws Exception {
+        if (db != null) db.close();
     }
 
     @BeforeEach

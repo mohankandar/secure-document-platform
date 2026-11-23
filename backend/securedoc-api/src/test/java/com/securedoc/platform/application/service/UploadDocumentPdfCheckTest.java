@@ -109,6 +109,51 @@ class UploadDocumentPdfCheckTest {
         assertEquals("FileName must not contain path separators", name.getMessage());
     }
 
+    /* Task 0038: the case limits, however the case is filled. */
+
+    @Test
+    void aManualOrWatchedPdfOfMoreThanFiveHundredPagesIsRefusedBeforeItIsStored() throws Exception {
+        byte[] over = pdfOf(501);
+        for (PackageType type : new PackageType[] {PackageType.MANUAL_UPLOAD, PackageType.FOLDER_INTAKE}) {
+            PackageId id = packageOf(type);
+            ValidationException refused = assertThrows(ValidationException.class, () -> service(realPdfCheck).execute(
+                    UploadDocumentCommand.of(id, "big.pdf", "application/pdf", content(over)), principal));
+            assertEquals(com.securedoc.platform.domain.error.LvErrorCode.INT_028, refused.lvCode(), type.name());
+            assertFalse(refused.getMessage().contains("big"), "never the file name");
+        }
+        verify(storage, never()).storeForPackage(any(), any(), anyString(), any(), anyLong(), anyString());
+        PackageId id = packageOf(PackageType.MANUAL_UPLOAD);
+        assertNotNull(service(realPdfCheck).execute(
+                UploadDocumentCommand.of(id, "limit.pdf", "application/pdf", content(pdfOf(500))), principal).documentId(),
+                "500 pages is taken in");
+    }
+
+    @Test
+    void aCaseHoldsUpToFiftyFilesHoweverItIsFilled() {
+        PdfIntakeValidationPort onePage = in -> new PdfIntakeValidationPort.PdfInfo(1);
+        for (PackageType type : new PackageType[] {PackageType.MANUAL_UPLOAD, PackageType.FOLDER_INTAKE,
+                PackageType.API_SUBMISSION, PackageType.SCANNER_INTAKE}) {
+            PackageId id = packageOf(type);
+            UploadDocumentService service = service(onePage);
+            for (int i = 0; i < 50; i++) {
+                service.execute(UploadDocumentCommand.of(id, "f" + i + ".pdf", "application/pdf", content("x".getBytes())),
+                        principal);
+            }
+            ValidationException refused = assertThrows(ValidationException.class, () -> service.execute(
+                    UploadDocumentCommand.of(id, "f50.pdf", "application/pdf", content("x".getBytes())), principal));
+            assertEquals(com.securedoc.platform.domain.error.LvErrorCode.INT_029, refused.lvCode(), type.name());
+            assertEquals("The case already holds 50 files", refused.getMessage());
+        }
+    }
+
+    private static byte[] pdfOf(int pages) throws Exception {
+        try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            for (int i = 0; i < pages; i++) document.addPage(new PDPage());
+            document.save(out);
+            return out.toByteArray();
+        }
+    }
+
     private static UploadContent content(byte[] bytes) {
         return new UploadContent() {
             @Override public InputStream openStream() { return new ByteArrayInputStream(bytes); }

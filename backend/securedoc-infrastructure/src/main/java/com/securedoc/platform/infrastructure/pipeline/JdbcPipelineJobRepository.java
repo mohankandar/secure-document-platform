@@ -55,9 +55,26 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             """;
 
     /**
-     * Task 0036: the next due job, in priority then queue order ({@code queue_seq}, never the clock), with the limit
-     * of its destination. The count of the destination's running jobs here is only a first filter: two workers can
-     * both see room. The claim itself takes the destination's lock and counts again (see {@link #claimNext}).
+     * Task 0038: when a job is due. READY means due now: it is only ever written with the database's clock at that
+     * moment, and that clock can step back (Docker's virtual machine stepped it back 13 ms in task 0038's test runs),
+     * so a READY job is never held back by its {@code next_attempt_at}. Only WAITING_RETRY waits for its time.
+     */
+    static final String DUE = """
+            (j.status = 'READY' OR (j.status = 'WAITING_RETRY' AND j.next_attempt_at <= clock_timestamp()))""";
+
+    /** A destination that takes jobs now: WORKING (or no state yet) and not waiting for a 429's Retry-After. */
+    private static final String DESTINATION_OPEN = """
+            (d.state IS NULL OR d.state = 'WORKING')
+               AND (d.rate_limited_until IS NULL OR d.rate_limited_until <= clock_timestamp())""";
+
+    private static final String ORDER = """
+            CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, j.queue_seq""";
+
+    /**
+     * Task 0036, changed in 0038: the next due job, in priority then queue order ({@code queue_seq}, never the clock),
+     * with the limit of its destination. It locks no row: it only says which destination to try. The count of the
+     * destination's running jobs is a first filter; the claim takes the destination's lock, counts again and then
+     * takes that destination's first due job (see {@link #claimNext}).
      */
     static final String CANDIDATE_SQL = """
             SELECT j.id, j.tenant_id, j.destination_id,
@@ -67,19 +84,49 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 ON d.connection_id = j.destination_id AND d.tenant_id = j.tenant_id
              WHERE j.stage IN (:stages)
                AND j.status IN ('READY', 'WAITING_RETRY')
-               AND j.next_attempt_at <= clock_timestamp()
-               AND (d.state IS NULL OR d.state = 'WORKING')
-               AND (d.rate_limited_until IS NULL OR d.rate_limited_until <= clock_timestamp())
+               AND %s
+               AND %s
                AND (j.destination_id IS NULL OR (
                     SELECT count(*) FROM pipeline_jobs r
                      WHERE r.tenant_id = j.tenant_id AND r.destination_id = j.destination_id
                        AND r.status = 'RUNNING')
                     < GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)))
-             ORDER BY CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
-                      j.queue_seq
+             ORDER BY %s
+             LIMIT 1
+            """.formatted(DUE, DESTINATION_OPEN, ORDER);
+
+    /**
+     * Task 0038: under the destination's lock, its first due job in queue order. {@code FOR UPDATE} without
+     * {@code SKIP LOCKED}: no other claim can hold one of this destination's rows now (a claim locks a destination's
+     * rows only while it holds that destination's lock), so it waits at most for a short status update.
+     */
+    static final String FIRST_AT_DESTINATION_SQL = """
+            SELECT j.id
+              FROM pipeline_jobs j
+              LEFT JOIN export_destination_states d
+                ON d.connection_id = j.destination_id AND d.tenant_id = j.tenant_id
+             WHERE j.tenant_id = :tenantId AND j.destination_id = :destinationId
+               AND j.stage IN (:stages)
+               AND j.status IN ('READY', 'WAITING_RETRY')
+               AND %s
+               AND %s
+             ORDER BY %s
+             LIMIT 1
+             FOR UPDATE OF j
+            """.formatted(DUE, DESTINATION_OPEN, ORDER);
+
+    /** A job without a destination has no limit: the first due one no other worker is taking. */
+    static final String FIRST_WITHOUT_DESTINATION_SQL = """
+            SELECT j.id
+              FROM pipeline_jobs j
+             WHERE j.destination_id IS NULL
+               AND j.stage IN (:stages)
+               AND j.status IN ('READY', 'WAITING_RETRY')
+               AND %s
+             ORDER BY %s
              LIMIT 1
              FOR UPDATE OF j SKIP LOCKED
-            """;
+            """.formatted(DUE, ORDER);
 
     /**
      * One lock per (entity, destination), held until the claim's transaction ends: a 64-bit hash of a text that names
@@ -248,12 +295,14 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
 
     /**
      * Task 0036 (finding 1 of task 0035): the per-destination worker limit holds when workers claim at the same moment.
-     * Each try is one short transaction: pick the next due job ({@code SKIP LOCKED}, so workers never wait on each
-     * other's rows), take the advisory lock of its (entity, destination), count that destination's RUNNING jobs again
-     * (a new statement, so it sees every claim committed before the lock was granted), and take the job only while
-     * there is room. A second worker that picked a job of the same destination waits for the first one's transaction
-     * (milliseconds), then sees its RUNNING job. Jobs of other destinations take other locks and do not wait. A try
-     * holds at most one advisory lock, so two workers cannot deadlock on them.
+     * Task 0038: and a destination's jobs go out in queue order. Each try is one short transaction: find the next due
+     * job without locking it (that only names the destination), take the advisory lock of its (entity, destination),
+     * count that destination's RUNNING jobs again (a new statement, so it sees every claim committed before the lock
+     * was granted), and, while there is room, lock and take that destination's first due job. A second worker of the
+     * same destination waits for the first one's transaction (milliseconds), then sees its RUNNING job. Before 0038 the
+     * row was locked first, with {@code SKIP LOCKED}, so the worker that won the lock could take the destination's
+     * second job while the first was held by a worker still waiting. A try holds at most one advisory lock and locks a
+     * destination's rows only while holding its lock, so two workers cannot deadlock.
      */
     @Override
     public Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease,
@@ -283,7 +332,10 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 rs.getObject("destination_id", UUID.class), rs.getInt("destination_limit")));
         if (found.isEmpty()) return new ClaimTry(null, true);
         Candidate candidate = found.get(0);
-        if (candidate.destinationId() != null) {
+        List<UUID> first;
+        if (candidate.destinationId() == null) {
+            first = jdbc.queryForList(FIRST_WITHOUT_DESTINATION_SQL, base, UUID.class);
+        } else {
             jdbc.query(DESTINATION_LOCK_SQL, new MapSqlParameterSource()
                     .addValue("tenantId", candidate.tenantId().toString())
                     .addValue("destinationId", candidate.destinationId().toString()), rs -> { });
@@ -291,8 +343,13 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                     .addValue("tenantId", candidate.tenantId())
                     .addValue("destinationId", candidate.destinationId()), Integer.class);
             if (running != null && running >= candidate.limit()) return new ClaimTry(null, false);
+            first = jdbc.queryForList(FIRST_AT_DESTINATION_SQL, new MapSqlParameterSource(base.getValues())
+                    .addValue("tenantId", candidate.tenantId())
+                    .addValue("destinationId", candidate.destinationId()), UUID.class);
         }
-        var take = new MapSqlParameterSource(base.getValues()).addValue("id", candidate.id());
+        // Nothing left there (another worker took it, or the destination stopped taking jobs): look again.
+        if (first.isEmpty()) return new ClaimTry(null, false);
+        var take = new MapSqlParameterSource(base.getValues()).addValue("id", first.get(0));
         return jdbc.query(TAKE_SQL, take, JdbcPipelineJobRepository::map).stream().findFirst()
                 .map(job -> new ClaimTry(job, false)).orElse(new ClaimTry(null, false));
     }

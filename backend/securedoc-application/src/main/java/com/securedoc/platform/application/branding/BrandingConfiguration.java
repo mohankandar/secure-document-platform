@@ -13,7 +13,6 @@ public record BrandingConfiguration(
         String shortName,
         String organizationName,
         String pageTitle,
-        String accentColor,
         String secondaryColor,
         byte[] primaryLogo,
         String primaryLogoMediaType,

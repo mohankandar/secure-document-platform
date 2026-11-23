@@ -18,6 +18,7 @@ public class SupportIncidentQueryService {
     private final SupportIncidentSearchRepository searchRepository;
     private final ProcessingIncidentRepository incidentRepository;
     private final PackageLifecycleRepository lifecycleRepository;
+    private final com.securedoc.platform.application.port.out.DocumentRepository documentRepository;
 
     public SupportIncidentQueryService(SupportIncidentSearchRepository searchRepository,
                                        ProcessingIncidentRepository incidentRepository) {
@@ -27,9 +28,18 @@ public class SupportIncidentQueryService {
     public SupportIncidentQueryService(SupportIncidentSearchRepository searchRepository,
                                        ProcessingIncidentRepository incidentRepository,
                                        PackageLifecycleRepository lifecycleRepository) {
+        this(searchRepository, incidentRepository, lifecycleRepository, null);
+    }
+
+    /** Task 0038: with the documents, a problem about one document says where it sits in its case. */
+    public SupportIncidentQueryService(SupportIncidentSearchRepository searchRepository,
+                                       ProcessingIncidentRepository incidentRepository,
+                                       PackageLifecycleRepository lifecycleRepository,
+                                       com.securedoc.platform.application.port.out.DocumentRepository documentRepository) {
         this.searchRepository = searchRepository;
         this.incidentRepository = incidentRepository;
         this.lifecycleRepository = lifecycleRepository;
+        this.documentRepository = documentRepository;
     }
 
     public SupportIncidentSearchPage search(SupportIncidentSearchCriteria criteria) {
@@ -64,7 +74,7 @@ public class SupportIncidentQueryService {
                         event.occurredAt()))
                 .toList();
 
-        return new SupportIncidentDetail(
+        SupportIncidentDetail detail = new SupportIncidentDetail(
                 incident.id(),
                 incident.tenantId().value(),
                 incident.packageId().value(),
@@ -93,6 +103,11 @@ public class SupportIncidentQueryService {
                 incident.lastObservedAt(),
                 incident.resolvedAt(),
                 events);
+        if (documentRepository == null || incident.documentId() == null) return detail;
+        return com.securedoc.platform.application.support.model.DocumentPosition.of(
+                        documentRepository.findByPackageIdAndTenantId(incident.packageId(), tenantId), incident.documentId(),
+                        incident.safeMetadata())
+                .map(detail::withDocumentPosition).orElse(detail);
     }
 
     static String businessImpact(ProcessingIncident incident) {

@@ -509,19 +509,77 @@ public final class ExportJobService {
      */
     public Map<PackageId, CaseExportState> caseExportStates(TenantId tenantId, Collection<PackageId> packageIds) {
         Map<PackageId, CaseExportState> states = new HashMap<>();
-        if (packageIds == null || packageIds.isEmpty()) return states;
+        caseExportRows(tenantId, packageIds).forEach((id, row) -> states.put(id, row.state()));
+        return states;
+    }
+
+    /**
+     * Task 0038: what the Cases list shows of a case's export: its state, the LV code of why it waits (Waiting for IT,
+     * Waiting for you, destination paused, or a retry on its own schedule) and the name of its delivery destination once
+     * one is chosen. Only codes and the destination's name: never a document value, a file name or a detail. The same
+     * two queries as before, plus one name lookup per destination.
+     */
+    public Map<PackageId, CaseExportRow> caseExportRows(TenantId tenantId, Collection<PackageId> packageIds) {
+        Map<PackageId, CaseExportRow> rows = new HashMap<>();
+        if (packageIds == null || packageIds.isEmpty()) return rows;
         Map<PackageId, List<PipelineJob>> byCase = new HashMap<>();
         for (PipelineJob job : jobs.findExportJobsByPackageIds(tenantId, packageIds)) {
             byCase.computeIfAbsent(job.packageId(), k -> new ArrayList<>()).add(job);
         }
-        Map<IntegrationConnectionId, DestinationState> stateOf = new HashMap<>();
-        destinations.findByTenantId(tenantId).forEach(s -> stateOf.put(s.connectionId(), s.state()));
-        Function<IntegrationConnectionId, DestinationState> lookup = id -> id == null ? DestinationState.WORKING
-                : stateOf.getOrDefault(id, DestinationState.WORKING);
+        Map<IntegrationConnectionId, ExportDestinationStatus> statusOf = new HashMap<>();
+        destinations.findByTenantId(tenantId).forEach(s -> statusOf.put(s.connectionId(), s));
+        Function<IntegrationConnectionId, DestinationState> lookup = id -> id == null || !statusOf.containsKey(id)
+                ? DestinationState.WORKING : statusOf.get(id).state();
+        Map<UUID, Optional<String>> names = new HashMap<>();
         for (PackageId id : packageIds) {
-            states.put(id, caseExportState(byCase.getOrDefault(id, List.of()), lookup));
+            List<PipelineJob> caseJobs = byCase.getOrDefault(id, List.of());
+            CaseExportState state = caseExportState(caseJobs, lookup);
+            rows.put(id, new CaseExportRow(state, reasonCode(state, caseJobs, statusOf, lookup),
+                    destinationName(tenantId, caseJobs, names)));
         }
-        return states;
+        return rows;
+    }
+
+    /** Task 0038: one case's row facts for the Cases list (see {@link #caseExportRows}). */
+    public record CaseExportRow(CaseExportState state, String reasonCode, String destinationName) { }
+
+    private static String reasonCode(CaseExportState state, List<PipelineJob> caseJobs,
+                                     Map<IntegrationConnectionId, ExportDestinationStatus> statusOf,
+                                     Function<IntegrationConnectionId, DestinationState> lookup) {
+        List<PipelineJob> open = caseJobs.stream().filter(j -> j.status().open()).toList();
+        java.util.stream.Stream<String> candidates = switch (state) {
+            case NEEDS_IT -> open.stream().filter(j -> j.status() == PipelineJobStatus.NEEDS_IT)
+                    .map(PipelineJob::lastLvCode);
+            case WAITING_FOR_YOU -> open.stream().filter(j -> j.status() == PipelineJobStatus.WAITING_FOR_YOU)
+                    .map(PipelineJob::lastLvCode);
+            case DESTINATION_PAUSED -> open.stream()
+                    .filter(j -> lookup.apply(j.destinationId()) != DestinationState.WORKING)
+                    .flatMap(j -> java.util.stream.Stream.of(j.lastLvCode(), statusOf.containsKey(j.destinationId())
+                            ? statusOf.get(j.destinationId()).lastLvCode() : null));
+            case READY -> open.stream().filter(j -> j.status() == PipelineJobStatus.WAITING_RETRY)
+                    .map(PipelineJob::lastLvCode);
+            default -> java.util.stream.Stream.empty();
+        };
+        // Only a code LexaVault knows; anything else is left out (fail closed: no text of unknown origin).
+        return candidates.map(c -> com.securedoc.platform.domain.error.LvErrorCode.fromCode(c).orElse(null))
+                .filter(java.util.Objects::nonNull).map(com.securedoc.platform.domain.error.LvErrorCode::code)
+                .findFirst().orElse(null);
+    }
+
+    /** The main export's destination (split exports go to their own), else the only destination there is. */
+    private String destinationName(TenantId tenantId, List<PipelineJob> caseJobs, Map<UUID, Optional<String>> names) {
+        PipelineJob main = caseJobs.stream().filter(j -> j.destinationId() != null && j.stage() == PipelineStage.EXPORT)
+                .reduce((first, second) -> second).orElse(null);
+        if (main == null) {
+            List<IntegrationConnectionId> all = caseJobs.stream().map(PipelineJob::destinationId)
+                    .filter(java.util.Objects::nonNull).distinct().toList();
+            if (all.size() != 1) return null;
+            main = caseJobs.stream().filter(j -> all.get(0).equals(j.destinationId())).findFirst().orElseThrow();
+        }
+        IntegrationConnectionId destination = main.destinationId();
+        if (ExportDestinations.isLocalFolder(tenantId, destination)) return LOCAL_FOLDER_NAME;
+        return names.computeIfAbsent(destination.value(), id -> connections.findByTenantIdAndId(tenantId, destination)
+                .map(IntegrationConnection::name)).orElse(null);
     }
 
     static CaseExportState caseExportState(List<PipelineJob> exportJobs,

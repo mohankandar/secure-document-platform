@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.integration;
 
+import com.securedoc.platform.domain.document.CaseLimits;
 import com.securedoc.platform.domain.identity.IntegrationConnectionId;
 import com.securedoc.platform.domain.identity.TenantId;
 
@@ -55,13 +56,18 @@ public record IntegrationConnection(
     public static final int MAX_RETRY_ATTEMPTS = 10;
     public static final int DEFAULT_INCOMPLETE_WINDOW_HOURS = 24;
     public static final int MAX_INCOMPLETE_WINDOW_HOURS = 7 * 24;
-    public static final int DEFAULT_MAX_DOCUMENTS_PER_INTAKE = 100;
-    public static final int MAX_DOCUMENTS_PER_INTAKE = 1000;
+    /**
+     * Task 0039: a source can never promise more than a case holds ({@link CaseLimits}): up to 50 files per case and
+     * 500 pages per file. Higher values are refused on save (LV-CFG-001). A source stored earlier with a higher value
+     * is read as the cap, which is what intake already enforced.
+     */
+    public static final int MAX_DOCUMENTS_PER_INTAKE = CaseLimits.MAX_FILES_PER_CASE;
+    public static final int DEFAULT_MAX_DOCUMENTS_PER_INTAKE = MAX_DOCUMENTS_PER_INTAKE;
     /** Task 0023 D3: the push API takes files as multipart uploads, capped at 50 MB (spring.servlet.multipart.max-file-size), so the default promises no more. */
     public static final long DEFAULT_MAX_PDF_SIZE_BYTES = 50L * 1024L * 1024L;
     public static final long MAX_PDF_SIZE_BYTES = 2L * 1024L * 1024L * 1024L;
-    public static final int DEFAULT_MAX_PDF_PAGES = 2000;
-    public static final int MAX_PDF_PAGES = 10000;
+    public static final int MAX_PDF_PAGES = CaseLimits.MAX_PAGES_PER_FILE;
+    public static final int DEFAULT_MAX_PDF_PAGES = MAX_PDF_PAGES;
     public static final int DEFAULT_POLLING_INTERVAL_MINUTES = 60;
     public static final int MIN_POLLING_INTERVAL_MINUTES = 5;
     public static final int MAX_POLLING_INTERVAL_MINUTES = 24 * 60;
@@ -90,6 +96,10 @@ public record IntegrationConnection(
         if (incompleteWindowHours < 1 || incompleteWindowHours > MAX_INCOMPLETE_WINDOW_HOURS) {
             throw new IllegalArgumentException("Incomplete intake window must be between 1 and " + MAX_INCOMPLETE_WINDOW_HOURS + " hours");
         }
+        // Task 0039: a source stored before the cap with a higher value is read as the cap (no migration). Saving a
+        // higher value is refused in create and updateConfiguration, before this point.
+        if (maxDocumentsPerIntake > MAX_DOCUMENTS_PER_INTAKE) maxDocumentsPerIntake = MAX_DOCUMENTS_PER_INTAKE;
+        if (maxPdfPages > MAX_PDF_PAGES) maxPdfPages = MAX_PDF_PAGES;
         if (maxDocumentsPerIntake < 1 || maxDocumentsPerIntake > MAX_DOCUMENTS_PER_INTAKE) {
             throw new IllegalArgumentException("Maximum documents per intake must be between 1 and " + MAX_DOCUMENTS_PER_INTAKE);
         }
@@ -135,6 +145,7 @@ public record IntegrationConnection(
             IntegrationPollingScheduleType pollingScheduleType, Integer pollingIntervalMinutes, LocalTime pollingLocalTime,
             String pollingTimeZone, Integer pollingBatchLimit,
             IntegrationAcknowledgementMode acknowledgementMode, boolean enabled, Instant now) {
+        refuseAboveCaseLimits(maxDocumentsPerIntake, maxPdfPages);
         return new IntegrationConnection(
                 IntegrationConnectionId.generate(), tenantId, name, description, purpose, direction, providerType,
                 authenticationType, clientPrincipal, endpoint, fileShareRoot, secretReference,
@@ -164,6 +175,7 @@ public record IntegrationConnection(
             Long maxPdfSizeBytes, Integer maxPdfPages, IntegrationPollingScheduleType pollingScheduleType,
             Integer pollingIntervalMinutes, LocalTime pollingLocalTime, String pollingTimeZone, Integer pollingBatchLimit,
             IntegrationAcknowledgementMode acknowledgementMode, Instant now) {
+        refuseAboveCaseLimits(maxDocumentsPerIntake, maxPdfPages);
         String effectiveSecretReference = preserveSecretReference ? secretReference : newSecretReference;
         return new IntegrationConnection(id, tenantId, name, description, purpose, direction, providerType,
                 authenticationType, clientPrincipal, endpoint, fileShareRoot, effectiveSecretReference,
@@ -177,6 +189,18 @@ public record IntegrationConnection(
                 acknowledgementMode == null ? this.acknowledgementMode : acknowledgementMode,
                 enabled, configurationVersion + 1, enabled ? IntegrationHealthStatus.UNKNOWN : IntegrationHealthStatus.DISABLED,
                 lastSuccessAt, lastFailureAt, lastFailureCategory, createdAt, now);
+    }
+
+    /** Task 0039: a value given on save above the case limits is refused, never quietly lowered. */
+    private static void refuseAboveCaseLimits(Integer maxDocumentsPerIntake, Integer maxPdfPages) {
+        if (maxDocumentsPerIntake != null && maxDocumentsPerIntake > MAX_DOCUMENTS_PER_INTAKE) {
+            throw new IllegalArgumentException("Maximum documents per intake must be between 1 and "
+                    + MAX_DOCUMENTS_PER_INTAKE + ": a case holds up to " + CaseLimits.MAX_FILES_PER_CASE + " files");
+        }
+        if (maxPdfPages != null && maxPdfPages > MAX_PDF_PAGES) {
+            throw new IllegalArgumentException("Maximum PDF pages must be between 1 and " + MAX_PDF_PAGES
+                    + ": a case takes files of up to " + CaseLimits.MAX_PAGES_PER_FILE + " pages");
+        }
     }
 
     public IntegrationConnection setEnabled(boolean enabled, Instant now) {

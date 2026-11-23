@@ -27,6 +27,11 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
      * code that matches {@link #SAFE_DESTINATION_CODE} is kept; anything else is dropped, never stored or shown.
      */
     private final String destinationCode;
+    /**
+     * Task 0039: the 1-based page a text-reading (OCR) failure happened on, or null. Only the number is kept: never
+     * text, an image, a file name or the provider's output.
+     */
+    private final Integer page;
 
     /** Task 0030: letters, digits, '-' and '_', 1 to 40 characters. */
     public static final java.util.regex.Pattern SAFE_DESTINATION_CODE = java.util.regex.Pattern.compile("[A-Za-z0-9_-]{1,40}");
@@ -53,7 +58,18 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                            String safeMessage,
                                            Throwable cause,
                                            LvErrorCode lvCode) {
-        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode, false, null, null);
+        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode, false, null, null, null);
+    }
+
+    /** Task 0039: as above, for a failure on one page (1-based; a number below 1 is dropped). */
+    protected TechnicalDependencyException(TechnicalDependency dependency,
+                                           TechnicalFailureCode failureCode,
+                                           boolean retryable,
+                                           String safeMessage,
+                                           Throwable cause,
+                                           LvErrorCode lvCode,
+                                           Integer page) {
+        this(dependency, failureCode, retryable, safeMessage, cause, 1, lvCode, false, null, null, page);
     }
 
     private TechnicalDependencyException(TechnicalDependency dependency,
@@ -62,7 +78,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                          String safeMessage,
                                          Throwable cause,
                                          int attempts) {
-        this(dependency, failureCode, retryable, safeMessage, cause, attempts, null, false, null, null);
+        this(dependency, failureCode, retryable, safeMessage, cause, attempts, null, false, null, null, null);
     }
 
     private TechnicalDependencyException(TechnicalDependency dependency,
@@ -74,8 +90,10 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
                                          LvErrorCode lvCode,
                                          boolean rateLimited,
                                          Duration retryAfter,
-                                         String destinationCode) {
+                                         String destinationCode,
+                                         Integer page) {
         super(safeMessage, cause);
+        this.page = page != null && page >= 1 ? page : null;
         this.lvCode = lvCode;
         this.destinationCode = safeDestinationCode(destinationCode);
         this.dependency = Objects.requireNonNull(dependency);
@@ -105,7 +123,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     public TechnicalDependencyException withAttempts(int attemptCount) {
         return new TechnicalDependencyException(
                 dependency, failureCode, retryable, getMessage(), this, attemptCount, lvCode, rateLimited, retryAfter,
-                destinationCode);
+                destinationCode, page);
     }
 
     /**
@@ -114,7 +132,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
      */
     public TechnicalDependencyException withLvCode(LvErrorCode code) {
         return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
-                code, rateLimited, retryAfter, destinationCode);
+                code, rateLimited, retryAfter, destinationCode, page);
     }
 
     /**
@@ -124,7 +142,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     public TechnicalDependencyException asRateLimited(Duration wait) {
         Duration safeWait = wait == null || wait.isNegative() ? null : wait;
         return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
-                lvCode, true, safeWait, destinationCode);
+                lvCode, true, safeWait, destinationCode, page);
     }
 
     /** The precise LexaVault code, or {@code null}: then the code follows from {@link #failureCode()}. */
@@ -149,7 +167,7 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
      */
     public TechnicalDependencyException withDestinationCode(String code) {
         return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
-                lvCode, rateLimited, retryAfter, code);
+                lvCode, rateLimited, retryAfter, code, page);
     }
 
     /** Task 0030: the destination's own code (safe pattern only), or null. */
@@ -160,5 +178,19 @@ public class TechnicalDependencyException extends RuntimeException implements Lv
     /** Task 0030: the code when it matches the safe pattern, else null. */
     public static String safeDestinationCode(String raw) {
         return raw != null && SAFE_DESTINATION_CODE.matcher(raw).matches() ? raw : null;
+    }
+
+    /**
+     * Task 0039: the same failure marked with the 1-based page it happened on. A number below 1 is dropped. The code,
+     * retry, attempts and message are unchanged.
+     */
+    public TechnicalDependencyException withPage(int pageNumber) {
+        return new TechnicalDependencyException(dependency, failureCode, retryable, getMessage(), getCause(), attempts,
+                lvCode, rateLimited, retryAfter, destinationCode, pageNumber);
+    }
+
+    /** Task 0039: the 1-based page of a text-reading failure, or null when the failure is not about one page. */
+    public Integer page() {
+        return page;
     }
 }

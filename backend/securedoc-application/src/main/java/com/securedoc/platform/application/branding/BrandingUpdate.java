@@ -6,7 +6,6 @@ public record BrandingUpdate(
         String shortName,
         String organizationName,
         String pageTitle,
-        String accentColor,
         String secondaryColor,
         BrandingAssetUpdate primaryLogo,
         BrandingAssetUpdate compactLogo,

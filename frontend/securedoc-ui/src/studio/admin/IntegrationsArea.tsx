@@ -19,7 +19,8 @@ import { useToast } from '../toast';
 import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
 import { MINUTE_UNITS } from './adminRules';
 import {
-  ACK_NAMES, AUTH_NAMES, DEFAULT_MAX_PDF_SIZE_BYTES, RECEIVE_METHODS, SEND_METHODS, VIEWS, advancedSummary, attentionLine, attentionTitle, authName,
+  ACK_NAMES, AUTH_NAMES, DEFAULT_MAX_PDF_SIZE_BYTES, RECEIVE_METHODS, SEND_METHODS, SOURCE_FILES_HINT, SOURCE_MAX_FILES, SOURCE_MAX_PAGES, SOURCE_PAGES_HINT, VIEWS,
+  advancedSummary, attentionLine, attentionTitle, authName, capToCaseLimits,
   connectionStatus, connectionTag, draftTestResult, failureReason, folderCheckResult, isPolling, methodOf, slashParts, watchedFolderStatus,
   type Method, type StatusLine, type View,
 } from './integrationRules';
@@ -35,7 +36,7 @@ const MB = 1048576;
 const baseDraft = (): Draft => ({
   name: '', description: '', purpose: 'INGESTION_SOURCE', direction: 'INBOUND', providerType: 'PUSH_API', authenticationType: 'NONE',
   clientPrincipal: '', endpoint: '', fileShareRoot: '', secretReference: '', timeoutSeconds: 60, retryMaxAttempts: 2,
-  incompleteWindowHours: 24, maxDocumentsPerIntake: 100, maxPdfSizeBytes: DEFAULT_MAX_PDF_SIZE_BYTES, maxPdfPages: 2000,
+  incompleteWindowHours: 24, maxDocumentsPerIntake: SOURCE_MAX_FILES, maxPdfSizeBytes: DEFAULT_MAX_PDF_SIZE_BYTES, maxPdfPages: SOURCE_MAX_PAGES,
   pollingScheduleType: undefined, pollingIntervalMinutes: undefined, pollingLocalTime: undefined, pollingTimeZone: undefined, pollingBatchLimit: undefined,
   acknowledgementMode: 'NONE', enabled: false,
 });
@@ -58,7 +59,7 @@ function applyMethod(cur: Draft, method: Method): Draft {
   switch (method) {
     case 'PUSH': return receive('PUSH_API');
     case 'FOLDER': return receive('WATCHED_FOLDER', { clientPrincipal: '' });
-    case 'SCANNER': return receive('SCANNER', { maxDocumentsPerIntake: 1, maxPdfSizeBytes: 2147483648, maxPdfPages: 10000 });
+    case 'SCANNER': return receive('SCANNER', { maxDocumentsPerIntake: 1, maxPdfSizeBytes: 2147483648, maxPdfPages: SOURCE_MAX_PAGES });
     case 'POLL': return receive('HTTP_API', {
       direction: 'OUTBOUND', clientPrincipal: '', endpoint: cur.endpoint, acknowledgementMode: 'SOURCE_PICKUP_ACK',
       pollingScheduleType: cur.pollingScheduleType || 'INTERVAL', pollingIntervalMinutes: cur.pollingIntervalMinutes || 60,
@@ -71,7 +72,7 @@ function applyMethod(cur: Draft, method: Method): Draft {
 }
 
 function toDraft(c: IntegrationConnection): Draft {
-  return {
+  return capToCaseLimits({
     connectionId: c.connectionId, name: c.name, description: c.description || '', purpose: c.purpose, direction: c.direction,
     providerType: c.providerType, authenticationType: c.authenticationType, clientPrincipal: c.clientPrincipal || '', endpoint: c.endpoint || '',
     fileShareRoot: c.fileShareRoot || '', timeoutSeconds: c.timeoutSeconds, retryMaxAttempts: c.retryMaxAttempts,
@@ -79,7 +80,7 @@ function toDraft(c: IntegrationConnection): Draft {
     maxPdfPages: c.maxPdfPages, pollingScheduleType: c.pollingScheduleType || undefined, pollingIntervalMinutes: c.pollingIntervalMinutes || undefined,
     pollingLocalTime: c.pollingLocalTime || undefined, pollingTimeZone: c.pollingTimeZone || undefined, pollingBatchLimit: c.pollingBatchLimit || undefined,
     acknowledgementMode: c.acknowledgementMode, enabled: c.enabled, secretReference: '', secretConfigured: c.secretConfigured,
-  };
+  });
 }
 
 function toPayload(d: Draft): IntegrationConnectionRequest {
@@ -660,10 +661,11 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
               {receive && <>
                 <NumberField label="Finish incomplete cases within" suffix="hours" min={1} max={168} value={d.incompleteWindowHours ?? 24} onChange={(v) => set('incompleteWindowHours', v)}
                   hint="A case still missing documents after this is refused." />
-                <NumberField label="Files per case, at most" min={1} max={1000} value={method === 'SCANNER' ? 1 : (d.maxDocumentsPerIntake ?? 100)} onChange={(v) => { if (method !== 'SCANNER') set('maxDocumentsPerIntake', v); }}
-                  hint={method === 'SCANNER' ? 'A scanner sends one PDF per case.' : undefined} />
+                <NumberField label="Files per case, at most" min={1} max={SOURCE_MAX_FILES} value={method === 'SCANNER' ? 1 : (d.maxDocumentsPerIntake ?? SOURCE_MAX_FILES)} onChange={(v) => { if (method !== 'SCANNER') set('maxDocumentsPerIntake', v); }}
+                  hint={method === 'SCANNER' ? 'A scanner sends one PDF per case.' : SOURCE_FILES_HINT} />
                 <NumberField label="File size, at most" suffix="MB" min={1} max={2048} value={Math.round((d.maxPdfSizeBytes ?? DEFAULT_MAX_PDF_SIZE_BYTES) / MB)} onChange={(v) => set('maxPdfSizeBytes', v * MB)} />
-                <NumberField label="Pages per file, at most" min={1} max={10000} value={d.maxPdfPages ?? 2000} onChange={(v) => set('maxPdfPages', v)} />
+                <NumberField label="Pages per file, at most" min={1} max={SOURCE_MAX_PAGES} value={d.maxPdfPages ?? SOURCE_MAX_PAGES} onChange={(v) => set('maxPdfPages', v)}
+                  hint={SOURCE_PAGES_HINT} />
               </>}
               {method === 'POLL' && <NumberField label="Cases per collection, at most" min={1} max={1000} value={d.pollingBatchLimit || 100} onChange={(v) => set('pollingBatchLimit', v)} />}
               {method !== 'SCANNER' && <SelectField label="Confirmation" value={d.acknowledgementMode} options={ACK_NAMES} onChange={(v) => set('acknowledgementMode', v)}

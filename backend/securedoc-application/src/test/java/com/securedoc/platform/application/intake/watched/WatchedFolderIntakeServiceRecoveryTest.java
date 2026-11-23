@@ -238,6 +238,25 @@ class WatchedFolderIntakeServiceRecoveryTest {
         assertEquals(WatchedFolderDropReference.of("case-legacy"), harness.observations.latest.sourceReference());
     }
 
+    /* Task 0038: a drop with more files than a case holds is refused before a case is made. */
+
+    @Test
+    void aDropOfMoreThanFiftyFilesIsRefusedBeforeACaseIsMade() {
+        WatchedFolderDocument[] files = new WatchedFolderDocument[51];
+        for (int i = 0; i < files.length; i++) files[i] = doc("f" + i + ".pdf", "c" + i);
+        Fresh fresh = fresh(candidate("drop-51", files), (command, p) -> null);
+
+        assertEquals(1, fresh.service.scan(principal, correlationId).rejected());
+        assertTrue(fresh.creates.isEmpty(), "no case is made");
+        assertEquals(IntakeRejectionCode.INVALID_FILE, fresh.observations.latest.reasonCode());
+        var rejected = fresh.audits.stream().filter(r -> r.action()
+                == com.securedoc.platform.domain.audit.AuditAction.INTAKE_REJECTED).findFirst().orElseThrow();
+        assertTrue(rejected.detail().startsWith("code=LV-INT-029, "), rejected.detail());
+
+        Fresh fifty = fresh(candidate("drop-50", java.util.Arrays.copyOf(files, 50)), (command, p) -> null);
+        assertEquals(1, fifty.service.scan(principal, correlationId).accepted(), "fifty files are taken in");
+    }
+
     /* Task 0023 C2: the real reason for each refused drop, as a code in the observation and the audit. */
 
     @Test

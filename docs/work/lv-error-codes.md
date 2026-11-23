@@ -51,6 +51,8 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-INT-025 | Case not found | No case with this id exists in this entity. | Refused | Source system, person | 404 | 14, 44 |
 | LV-INT-026 | Case can't take documents now | The case was already submitted, or has no documents to submit. | Refused | Person | 409 | 43, 47, 48, 1 |
 | LV-INT-027 | Busy, try again later | LexaVault is full for now; nothing was lost. Send again after the time given. *(Reserved for the capacity work.)* | Refused | Source system | 429 | — |
+| LV-INT-028 | Too many pages in one file | A PDF in a case can have up to 500 pages. Nothing was taken in from this file. | Refused | Person, source system | 400 | — (task 0038) |
+| LV-INT-029 | Too many files in one case | A case can hold up to 50 files. Nothing more was taken in. | Refused | Person, source system | 400 | — (task 0038) |
 | LV-INT-030 | Waiting for the trigger file | The folder drop has no trigger file yet, so it isn't taken in. | Waiting | Source system | — | 37 |
 | LV-INT-031 | Trigger file can't be read | The trigger file isn't in the expected format, or names a file outside the folder. | Refused | Source system, IT Admin | — | 61 |
 | LV-INT-032 | File named in the trigger file is missing | The trigger file lists a document that isn't in the folder. | Refused | Source system | — | 58 |
@@ -214,7 +216,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-008 | Item not found | The item asked for (a rule, a connection, a file) doesn't exist in this entity. | Refused | Person, IT Admin | 404 | 0025 (not-found other than a case) |
 | LV-SYS-009 | Unknown request | The address or method isn't one LexaVault offers. | Refused | Source system | 404 / 405 | 0025 (unknown endpoint, wrong method) |
 
-**Totals:** INT 38 · SCN 21 · PRC 9 · AI 7 · RED 4 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **137 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025.)*
+**Totals:** INT 40 · SCN 21 · PRC 9 · AI 7 · RED 4 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **139 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits.)*
 
 ## 3. Rows with no code on purpose
 

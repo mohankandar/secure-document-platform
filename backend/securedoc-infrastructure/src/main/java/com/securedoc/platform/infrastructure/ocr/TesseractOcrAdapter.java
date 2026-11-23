@@ -70,7 +70,7 @@ public class TesseractOcrAdapter implements OcrPort {
                 process.destroyForcibly();
                 log.warn("OCR_PROCESS_FAILED reasonCode=OCR_TIMEOUT timeoutSeconds={}",
                         Math.max(1, properties.getTimeoutSeconds()));
-                throw new OcrProcessingException(TechnicalFailureCode.OCR_TIMEOUT, true, "OCR provider timed out");
+                throw onPage(input, TechnicalFailureCode.OCR_TIMEOUT, true, "OCR provider timed out", null);
             }
             int exitStatus = process.exitValue();
             if (exitStatus != 0) {
@@ -78,13 +78,13 @@ public class TesseractOcrAdapter implements OcrPort {
                 // document. Log the exit status for IT; stderr stays discarded because it can echo input.
                 log.warn("OCR_PROCESS_FAILED reasonCode=OCR_NON_ZERO_EXIT exitStatus={} language={} psm={}",
                         exitStatus, properties.getLanguage(), properties.getPageSegmentationMode());
-                throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR provider returned a non-zero exit status");
+                throw onPage(input, TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR provider returned a non-zero exit status", null);
             }
 
             Path tsv = Path.of(outputBase + ".tsv");
             if (!Files.isRegularFile(tsv)) {
                 log.warn("OCR_PROCESS_FAILED reasonCode=OCR_OUTPUT_MISSING");
-                throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR provider did not produce expected output");
+                throw onPage(input, TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR provider did not produce expected output", null);
             }
 
             return parseTsv(Files.readAllLines(tsv, StandardCharsets.UTF_8),
@@ -92,15 +92,21 @@ public class TesseractOcrAdapter implements OcrPort {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("OCR_PROCESS_FAILED reasonCode=OCR_INTERRUPTED");
-            throw new OcrProcessingException(TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR processing interrupted", e);
+            throw onPage(input, TechnicalFailureCode.OCR_PROCESS_FAILED, false, "OCR processing interrupted", e);
         } catch (IOException e) {
             // The exception message can hold the executable path or a temp path: log the type only.
             log.warn("OCR_PROCESS_FAILED reasonCode=OCR_UNAVAILABLE failureType={}", e.getClass().getSimpleName());
-            throw new OcrProcessingException(TechnicalFailureCode.OCR_UNAVAILABLE, false, "OCR provider could not be executed", e);
+            throw onPage(input, TechnicalFailureCode.OCR_UNAVAILABLE, false, "OCR provider could not be executed", e);
         } finally {
             // Task 0023 B9 (#370): the folder holds the page image and the recognized text.
             TempFileCleanup.deleteTreeQuietly(tempDir, "OCR");
         }
+    }
+
+    /** Task 0039: every failure carries the page number it happened on, and nothing else about the page. */
+    private static OcrProcessingException onPage(OcrPageInput input, TechnicalFailureCode code, boolean retryable,
+                                                 String safeMessage, Throwable cause) {
+        return new OcrProcessingException(code, retryable, safeMessage, cause, null, input.pageNumber());
     }
 
     OcrPageOutput parseTsv(List<String> lines, int pixelWidth, int pixelHeight) {

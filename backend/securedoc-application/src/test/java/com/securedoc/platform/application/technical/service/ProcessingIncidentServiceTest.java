@@ -252,6 +252,50 @@ class ProcessingIncidentServiceTest {
         assertEquals(ProcessingStage.REDACTION, locationIncident.stage());
     }
 
+    /** Task 0039: a text-reading failure on one page records that page, as a whole number only. */
+    @Test
+    void aFailingPageRecordsItsPageNumberOnly() {
+        ProcessingIncidentService service = new ProcessingIncidentService(new InMemoryRepository(), (t, p) -> Map.of());
+        TechnicalDependencyException timeout = new TechnicalDependencyException(TechnicalDependency.OCR,
+                TechnicalFailureCode.OCR_TIMEOUT, true, "OCR provider timed out").withPage(14).withAttempts(3);
+        // The extraction step wraps the failure, as TextExtractionService does.
+        RuntimeException wrapped = new RuntimeException("Text extraction failed", timeout);
+
+        ProcessingIncident incident = service.recordFailure(TenantId.generate(), PackageId.generate(),
+                DocumentId.generate(), ProcessingStage.TEXT_EXTRACTION, wrapped, CorrelationId.generate(),
+                "Document processing failed", Map.of());
+
+        assertEquals("14", incident.safeMetadata().get("page"));
+        assertTrue(incident.safeMetadata().get("page").matches("[1-9][0-9]*"));
+        // Behaviour unchanged: same code, retry and attempts as without a page.
+        assertEquals("OCR_TIMEOUT", incident.reasonCode());
+        assertEquals("LV-PRC-004", incident.safeMetadata().get("lvCode"));
+        assertTrue(incident.retryable());
+        assertEquals(3, incident.attempts());
+    }
+
+    @Test
+    void aFailureNotAboutOnePageRecordsNoPage() {
+        ProcessingIncidentService service = new ProcessingIncidentService(new InMemoryRepository(), (t, p) -> Map.of());
+        ProcessingIncident noPage = service.recordFailure(TenantId.generate(), PackageId.generate(),
+                DocumentId.generate(), ProcessingStage.TEXT_EXTRACTION,
+                new TechnicalDependencyException(TechnicalDependency.OCR, TechnicalFailureCode.OCR_UNAVAILABLE, false,
+                        "OCR provider could not be executed"), CorrelationId.generate(), "Document processing failed",
+                Map.of());
+        ProcessingIncident unclassified = service.recordFailure(TenantId.generate(), PackageId.generate(),
+                DocumentId.generate(), ProcessingStage.TEXT_EXTRACTION, new IllegalStateException("x"),
+                CorrelationId.generate(), "Document processing failed", Map.of());
+        ProcessingIncident belowOne = service.recordFailure(TenantId.generate(), PackageId.generate(),
+                DocumentId.generate(), ProcessingStage.TEXT_EXTRACTION,
+                new TechnicalDependencyException(TechnicalDependency.OCR, TechnicalFailureCode.OCR_TIMEOUT, true,
+                        "OCR provider timed out").withPage(0), CorrelationId.generate(), "Document processing failed",
+                Map.of());
+
+        assertFalse(noPage.safeMetadata().containsKey("page"));
+        assertFalse(unclassified.safeMetadata().containsKey("page"));
+        assertFalse(belowOne.safeMetadata().containsKey("page"));
+    }
+
     private static class InMemoryRepository implements ProcessingIncidentRepository {
         Optional<ProcessingIncident> latest = Optional.empty();
         final List<ProcessingIncidentEvent> events = new ArrayList<>();

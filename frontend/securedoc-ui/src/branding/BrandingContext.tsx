@@ -8,7 +8,6 @@ const FALLBACK: EffectiveBranding = {
   shortName: 'LexaVault',
   organizationName: null,
   pageTitle: 'LexaVault',
-  accentColor: '#315CF4',
   secondaryColor: '#6D5AE6',
   primaryLogoDataUrl: null,
   compactLogoDataUrl: null,
@@ -16,6 +15,9 @@ const FALLBACK: EffectiveBranding = {
 };
 
 type BrandingContextValue = { branding: EffectiveBranding; refreshBranding: () => Promise<void> };
+/** Task 0038: the accent colour is no longer a setting; the older screens keep the one they always had. */
+const ACCENT = '#315CF4';
+
 const BrandingContext = createContext<BrandingContextValue>({ branding: FALLBACK, refreshBranding: async () => {} });
 
 function hexToRgb(hex: string) {
@@ -38,8 +40,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--brand-accent', branding.accentColor || FALLBACK.accentColor);
-    root.style.setProperty('--brand-accent-rgb', hexToRgb(branding.accentColor || FALLBACK.accentColor));
+    root.style.setProperty('--brand-accent', ACCENT);
+    root.style.setProperty('--brand-accent-rgb', hexToRgb(ACCENT));
     root.style.setProperty('--brand-secondary', branding.secondaryColor || FALLBACK.secondaryColor);
     document.title = branding.pageTitle || branding.applicationName || FALLBACK.pageTitle;
     let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"][data-runtime-branding]');

@@ -24,9 +24,9 @@ class BrandingServiceTest {
         BrandingService service = service(tenant, repo);
         ActorId actor = ActorId.generate();
 
-        service.updateDeployment(update("Acme Document Platform", "Acme Docs", "Acme Mortgage", "Acme Docs", "#315CF4", "#6D5AE6"),
+        service.updateDeployment(update("Acme Document Platform", "Acme Docs", "Acme Mortgage", "Acme Docs", "#6D5AE6"),
                 actor, tenant.id(), CorrelationId.generate());
-        service.updateTenant(tenant.id(), update("Contract Document Center", null, null, null, "#5B2C83", null),
+        service.updateTenant(tenant.id(), update("Contract Document Center", null, null, null, "#5B2C83"),
                 actor, CorrelationId.generate());
 
         EffectiveBranding effective = service.effective(tenant.id());
@@ -34,8 +34,7 @@ class BrandingServiceTest {
         assertEquals("Contract Document Center", effective.applicationName());
         assertEquals("Acme Docs", effective.shortName());
         assertEquals("Acme Mortgage", effective.organizationName());
-        assertEquals("#5B2C83", effective.accentColor());
-        assertEquals("#6D5AE6", effective.secondaryColor());
+        assertEquals("#5B2C83", effective.secondaryColor());
     }
 
     @Test
@@ -44,19 +43,29 @@ class BrandingServiceTest {
         BrandingService service = service(tenant, new InMemoryBrandingRepository());
         EffectiveBranding effective = service.effective(tenant.id());
         assertEquals("LexaVault", effective.applicationName());
-        assertEquals("#315CF4", effective.accentColor());
+        assertEquals("#6D5AE6", effective.secondaryColor());
     }
 
     @Test
-    void primaryAccentMustKeepAccessibleWhiteTextContrast() {
-        Tenant tenant = Tenant.create("Local Demo", "local-demo-branding-contrast");
-        BrandingService service = service(tenant, new InMemoryBrandingRepository());
-        assertThrows(ValidationException.class, () -> service.updateDeployment(
-                update("Brand", "Brand", null, null, "#FFF59D", null), ActorId.generate(), tenant.id(), CorrelationId.generate()));
+    void theAccentColourIsGoneFromBranding() {
+        // Task 0038: the unused accent colour was removed from the setting, the API and the screens. Its database
+        // column stays, unused (no migration).
+        for (Class<?> type : new Class<?>[] {BrandingUpdate.class, BrandingConfiguration.class, EffectiveBranding.class}) {
+            assertTrue(java.util.Arrays.stream(type.getRecordComponents())
+                    .noneMatch(c -> c.getName().toLowerCase(java.util.Locale.ROOT).contains("accent")), type.getName());
+        }
     }
 
-    private static BrandingUpdate update(String app, String shortName, String org, String title, String accent, String secondary) {
-        return new BrandingUpdate(app, shortName, org, title, accent, secondary, null, null, null);
+    @Test
+    void aColourMustBeASixDigitHexColour() {
+        Tenant tenant = Tenant.create("Local Demo", "local-demo-branding-hex");
+        BrandingService service = service(tenant, new InMemoryBrandingRepository());
+        assertThrows(ValidationException.class, () -> service.updateDeployment(
+                update("Brand", "Brand", null, null, "blue"), ActorId.generate(), tenant.id(), CorrelationId.generate()));
+    }
+
+    private static BrandingUpdate update(String app, String shortName, String org, String title, String secondary) {
+        return new BrandingUpdate(app, shortName, org, title, secondary, null, null, null);
     }
 
     private static BrandingService service(Tenant tenant, InMemoryBrandingRepository repo) {

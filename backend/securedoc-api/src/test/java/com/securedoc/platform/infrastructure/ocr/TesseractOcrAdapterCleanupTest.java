@@ -68,6 +68,19 @@ class TesseractOcrAdapterCleanupTest {
         assertTrue(logs.list.stream().noneMatch(e -> e.getFormattedMessage().contains("definitely-not-installed")));
     }
 
+    /** Task 0039: the failure carries the page number it happened on, and the message names no page content. */
+    @Test
+    void aFailureCarriesThePageNumberOnly() {
+        TesseractOcrAdapter adapter = adapter("definitely-not-installed-ocr-" + System.nanoTime());
+        OcrProcessingException failure = assertThrows(OcrProcessingException.class,
+                () -> adapter.recognize(new OcrPort.OcrPageInput(7, new byte[]{1, 2, 3, 4}, "image/png", 10, 10)));
+
+        assertEquals(7, failure.page());
+        assertEquals(TechnicalFailureCode.OCR_UNAVAILABLE, failure.failureCode());
+        assertFalse(failure.retryable());
+        assertEquals("OCR provider could not be executed", failure.getMessage());
+    }
+
     private TesseractOcrAdapter adapter(String executable) {
         TesseractOcrProperties properties = new TesseractOcrProperties();
         properties.setExecutable(executable);

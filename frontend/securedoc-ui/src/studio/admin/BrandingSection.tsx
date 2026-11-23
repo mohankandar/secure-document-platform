@@ -10,18 +10,18 @@ import { HelpTip } from './HelpTip';
 
 type Asset = 'primaryLogo' | 'compactLogo' | 'favicon';
 type Editable = {
-  applicationName: string; shortName: string; organizationName: string; pageTitle: string; accentColor: string; secondaryColor: string;
+  applicationName: string; shortName: string; organizationName: string; pageTitle: string; secondaryColor: string;
   assets: Record<Asset, { dataUrl: string | null; changed: boolean; clear: boolean }>;
 };
 
-const FALLBACK = { applicationName: 'LexaVault', shortName: 'LexaVault', pageTitle: 'LexaVault', accentColor: '#315CF4', secondaryColor: '#6D5AE6' };
+const FALLBACK = { applicationName: 'LexaVault', shortName: 'LexaVault', pageTitle: 'LexaVault', secondaryColor: '#6D5AE6' };
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 function fromConfig(c?: BrandingConfiguration | null): Editable {
   const asset = (v?: string | null) => ({ dataUrl: v || null, changed: false, clear: false });
   return {
     applicationName: c?.applicationName || '', shortName: c?.shortName || '', organizationName: c?.organizationName || '', pageTitle: c?.pageTitle || '',
-    accentColor: c?.accentColor || '', secondaryColor: c?.secondaryColor || '',
+    secondaryColor: c?.secondaryColor || '',
     assets: { primaryLogo: asset(c?.primaryLogoDataUrl), compactLogo: asset(c?.compactLogoDataUrl), favicon: asset(c?.faviconDataUrl) },
   };
 }
@@ -30,17 +30,11 @@ function toRequest(v: Editable): BrandingUpdateRequest {
   const asset = (k: Asset) => (v.assets[k].changed ? { dataUrl: v.assets[k].dataUrl, clear: v.assets[k].clear } : null);
   return {
     applicationName: v.applicationName || null, shortName: v.shortName || null, organizationName: v.organizationName || null, pageTitle: v.pageTitle || null,
-    accentColor: v.accentColor || null, secondaryColor: v.secondaryColor || null,
+    secondaryColor: v.secondaryColor || null,
     primaryLogo: asset('primaryLogo'), compactLogo: asset('compactLogo'), favicon: asset('favicon'),
   };
 }
 
-function contrastWithWhite(hex: string) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  const l = r * 0.2126 + g * 0.7152 + b * 0.0722;
-  return 1.05 / (l + 0.05);
-}
-const accessibleAccent = (hex: string) => HEX.test(hex) && contrastWithWhite(hex) >= 4.5;
 
 async function readImage(file: File, maxBytes: number): Promise<string> {
   if (!['image/png', 'image/webp'].includes(file.type)) throw new Error('Use a PNG or WebP image.');
@@ -96,7 +90,6 @@ function ColorField({ label, value, fallback, onChange, hint, invalid }: { label
 
 function BrandingForm({ value, onChange, tenantMode }: { value: Editable; onChange: (v: Editable) => void; tenantMode?: boolean }) {
   const inherit = (fallback: string) => (tenantMode ? "Everyone's look" : fallback);
-  const accentOk = !value.accentColor || accessibleAccent(value.accentColor);
   const setAsset = (k: Asset) => (dataUrl: string | null, clear: boolean) => onChange({ ...value, assets: { ...value.assets, [k]: { dataUrl, clear, changed: true } } });
   return (
     <div className="cf-ad-form">
@@ -106,8 +99,6 @@ function BrandingForm({ value, onChange, tenantMode }: { value: Editable; onChan
           hint="Shown in the account menu, above the entity switch." />
       </div>
       <div className="cf-ad-grid">
-      <ColorField label="Accent colour" value={value.accentColor} fallback={FALLBACK.accentColor} invalid={!accentOk} onChange={(v) => onChange({ ...value, accentColor: v })}
-        hint={accentOk ? 'Used for highlights on a few older screens. Status colours never change.' : 'Pick a darker colour: white text on it must be easy to read (4.5 to 1).'} />
       <AssetField label="Logo" help="PNG or WebP, up to 512 KB. Shown at the left of the top bar." value={value.assets.primaryLogo.dataUrl} maxBytes={512 * 1024} onChange={setAsset('primaryLogo')} />
       </div>
       <details className="cf-disclosure">
@@ -211,7 +202,6 @@ function Editor({ config, inherited, tenantMode, label, save, savedMessage, clea
   const changed = JSON.stringify(value) !== JSON.stringify(initial);
 
   async function act(kind: 'save' | 'clear') {
-    if (kind === 'save' && value.accentColor && !accessibleAccent(value.accentColor)) { setErr('Pick a darker accent colour before saving.'); return; }
     setErr(''); setBusy(kind);
     try {
       if (kind === 'save') { await save(toRequest(value)); toast(savedMessage); }

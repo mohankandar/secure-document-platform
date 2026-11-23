@@ -15,6 +15,7 @@ import type {
 import PageScaffold from '../components/ui/PageScaffold';
 import HorizontalTabs from '../components/ui/HorizontalTabs';
 import StatusBadge from '../components/ui/StatusBadge';
+import { SOURCE_FILES_HINT, SOURCE_MAX_FILES, SOURCE_MAX_PAGES, SOURCE_PAGES_HINT } from '../studio/admin/integrationRules';
 
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
 type IntegrationView = IntegrationPurpose | 'ALL';
@@ -33,9 +34,9 @@ const emptyDraft = (): Draft => ({
   timeoutSeconds: 60,
   retryMaxAttempts: 2,
   incompleteWindowHours: 24,
-  maxDocumentsPerIntake: 100,
+  maxDocumentsPerIntake: SOURCE_MAX_FILES,
   maxPdfSizeBytes: 52428800, // 50 MB, the backend default (task 0023 D3)
-  maxPdfPages: 2000,
+  maxPdfPages: SOURCE_MAX_PAGES,
   pollingScheduleType: undefined,
   pollingIntervalMinutes: undefined,
   pollingLocalTime: undefined,
@@ -94,9 +95,9 @@ function toDraft(connection: IntegrationConnection): Draft {
     timeoutSeconds: connection.timeoutSeconds,
     retryMaxAttempts: connection.retryMaxAttempts,
     incompleteWindowHours: connection.incompleteWindowHours,
-    maxDocumentsPerIntake: connection.maxDocumentsPerIntake,
+    maxDocumentsPerIntake: Math.min(connection.maxDocumentsPerIntake, SOURCE_MAX_FILES),
     maxPdfSizeBytes: connection.maxPdfSizeBytes,
-    maxPdfPages: connection.maxPdfPages,
+    maxPdfPages: Math.min(connection.maxPdfPages, SOURCE_MAX_PAGES),
     pollingScheduleType: connection.pollingScheduleType || undefined,
     pollingIntervalMinutes: connection.pollingIntervalMinutes || undefined,
     pollingLocalTime: connection.pollingLocalTime || undefined,
@@ -233,7 +234,7 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
         if (providerType === 'SCANNER') {
           next.maxDocumentsPerIntake = 1;
           next.maxPdfSizeBytes = 2147483648;
-          next.maxPdfPages = 10000;
+          next.maxPdfPages = SOURCE_MAX_PAGES;
         }
         next.pollingScheduleType = undefined; next.pollingIntervalMinutes = undefined; next.pollingLocalTime = undefined; next.pollingTimeZone = undefined; next.pollingBatchLimit = undefined;
       } else if (providerType === 'FILE_SHARE') {
@@ -448,9 +449,9 @@ export default function IntegrationsPage({ administrationTabs }: { administratio
             <label><span>Retry attempts</span><input type="number" min={0} max={10} value={draft.retryMaxAttempts ?? 2} onChange={(e) => update('retryMaxAttempts', Number(e.target.value))} /></label>
             {draft.purpose === 'INGESTION_SOURCE' && <>
               <label><span>Incomplete window (hours)</span><input type="number" min={1} max={168} value={draft.incompleteWindowHours ?? 24} onChange={(e) => update('incompleteWindowHours', Number(e.target.value))} /></label>
-              <label><span>Max documents / intake</span><input type="number" min={1} max={1000} disabled={isScannerSource} value={isScannerSource ? 1 : (draft.maxDocumentsPerIntake ?? 100)} onChange={(e) => update('maxDocumentsPerIntake', Number(e.target.value))} />{isScannerSource && <small>Scanner Intake is one consolidated PDF per physical package.</small>}</label>
+              <label><span>Max documents / intake</span><input type="number" min={1} max={SOURCE_MAX_FILES} disabled={isScannerSource} value={isScannerSource ? 1 : (draft.maxDocumentsPerIntake ?? SOURCE_MAX_FILES)} onChange={(e) => update('maxDocumentsPerIntake', Number(e.target.value))} /><small>{isScannerSource ? 'Scanner Intake is one consolidated PDF per physical package.' : SOURCE_FILES_HINT}</small></label>
               <label><span>Max PDF size (MB)</span><input type="number" min={1} max={2048} value={Math.round((draft.maxPdfSizeBytes ?? 52428800) / 1048576)} onChange={(e) => update('maxPdfSizeBytes', Number(e.target.value) * 1048576)} /></label>
-              <label><span>Max PDF pages</span><input type="number" min={1} max={10000} value={draft.maxPdfPages ?? 2000} onChange={(e) => update('maxPdfPages', Number(e.target.value))} /></label>
+              <label><span>Max PDF pages</span><input type="number" min={1} max={SOURCE_MAX_PAGES} value={draft.maxPdfPages ?? SOURCE_MAX_PAGES} onChange={(e) => update('maxPdfPages', Number(e.target.value))} /><small>{SOURCE_PAGES_HINT}</small></label>
             </>}
             {isPollingSource && <>
               <label><span>Polling schedule</span><select value={draft.pollingScheduleType || 'INTERVAL'} onChange={(e) => update('pollingScheduleType', e.target.value as IntegrationPollingScheduleType)}><option value="INTERVAL">Interval</option><option value="DAILY">Daily</option></select></label>
