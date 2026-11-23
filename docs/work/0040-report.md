@@ -296,3 +296,11 @@ Not merged, not pushed.
 ## Suggested next step
 
 The R1 check-line patterns with checksums, then re-run this benchmark with prompt v2 (and a v3 that boxes the check line once) to see whether the check-line misses and false flags both reach zero.
+
+## Owner's answers (2026-11-22, recorded by the design chat; owner said "as recommended")
+
+1. **Models:** the owner removes all five unusable models himself (`llama3.2-vision:11b`, `qwen3-vl:8b`, `gemma3:12b`, `granite3.2-vision:2b`, and the Ministral model); they can be downloaded again if needed.
+2. **Prompt v2:** adopted as the candidate prompt with `qwen3-vl:8b-instruct`. Provisional false-flag mark raised to **≤ 0.25 per routed (vision) page** (a miss leaks data; a false flag only goes to review). Re-checked on real documents (part B).
+3. **No non-Chinese model passes:** the vendor-risk material says so plainly and offers the design's answer: **the customer may bring its own model**, which the model-governance change gate validates against the same test set before it goes live. Larger models on bigger hardware are tested only when a customer asks.
+4. **Speed target:** stays **60 s per 60-page package on the customer's recommended server hardware**; ~65 s recorded for this laptop. P3 (performance proof) measures it on target hardware.
+5. **`OLLAMA_NUM_PARALLEL=2`:** set as a setting in the P2 task, with tests.
