@@ -31,6 +31,27 @@ test('every sensitive type the policy can enable has a name in the vocabulary', 
   }
 });
 
+test('task 0043: every opt-in pattern kind has a name, a plural and a one-line "off by default" description', () => {
+  const source = readFileSync(resolve(repoRoot, 'backend', 'securedoc-domain', 'src', 'main', 'java', 'com', 'securedoc',
+    'platform', 'domain', 'business', 'TenantRedactionPolicy.java'), 'utf8');
+  const block = /OPT_IN_TYPES\s*=\s*Set\.of\(([^)]*)\)/s.exec(source);
+  assert.ok(block, 'OPT_IN_TYPES must be readable from TenantRedactionPolicy.java');
+  const kinds = [...block[1].matchAll(/EntityType\.([A-Z_]+)/g)].map((m) => m[1]);
+  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'ITIN', 'PASSPORT_NUMBER']);
+  for (const kind of kinds) {
+    const known = findSensitiveType(kind);
+    assert.ok(known, `${kind} has no name in words.ts`);
+    assert.ok(known.plural.length > 0);
+    assert.ok(known.detects.endsWith('Off by default.'), `${kind}: the policy screen says it starts off`);
+    assert.ok(!known.detects.includes('\n'), `${kind}: one line`);
+  }
+  assert.equal(sensitiveTypeName('BANK_ROUTING_NUMBER'), 'Bank routing number');
+  assert.equal(sensitiveTypeName('ITIN'), 'ITIN');
+  assert.equal(sensitiveTypeName('DRIVERS_LICENSE_NUMBER'), 'Driver’s license number');
+  // The four V1 kinds come first, in their old order.
+  assert.deepEqual(SENSITIVE_TYPES.slice(0, 4).map((t) => t.key), ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE']);
+});
+
 test('one plain name per sensitive type, whatever spelling the server sends', () => {
   for (const spelling of ['SSN', 'Ssn', 'ssn', 'US_SSN', 'Us SSN']) assert.equal(sensitiveTypeName(spelling), 'Social Security Number');
   assert.equal(sensitiveTypeName('DATE_OF_BIRTH'), 'Date of birth');

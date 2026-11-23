@@ -171,9 +171,14 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Truly blank pages were already safely inspected by native extraction/OCR and do not need
         // a meaningless model call.
         boolean hasTextBearingPage = pagesByNumber.values().stream().anyMatch(page -> !page.text().isBlank());
+        // Task 0043: the semantic analyzer is asked only for the V1 kinds it knows. The opt-in pattern kinds
+        // (routing, account, ITIN, EIN, driver's license, passport) come from the deterministic detectors only.
+        Set<EntityType> semanticTypes = java.util.EnumSet.noneOf(EntityType.class);
+        semanticTypes.addAll(enabledTypes);
+        semanticTypes.retainAll(TenantRedactionPolicy.v1ConfigurableTypes());
         SensitiveContentAnalysisPort.AnalysisPolicy analysisPolicy =
-                new SensitiveContentAnalysisPort.AnalysisPolicy(enabledTypes, tenantPolicy.maskSsnLastFour());
-        SensitiveContentAnalysisPort.AnalysisOutput semanticOutput = hasTextBearingPage
+                new SensitiveContentAnalysisPort.AnalysisPolicy(semanticTypes, tenantPolicy.maskSsnLastFour());
+        SensitiveContentAnalysisPort.AnalysisOutput semanticOutput = hasTextBearingPage && !semanticTypes.isEmpty()
                 ? semanticAnalysisPort.analyze(new SensitiveContentAnalysisPort.AnalysisRequest(
                         command.tenantId(), semanticInputs, analysisPolicy))
                 : new SensitiveContentAnalysisPort.AnalysisOutput(List.of());

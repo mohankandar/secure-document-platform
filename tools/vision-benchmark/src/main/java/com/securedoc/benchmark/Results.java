@@ -21,6 +21,8 @@ public final class Results {
     public String promptSha256;
     /** Box convention used per vision model (round 2 onwards; absent in round 1 results). */
     public Map<String, String> boxConventions = new LinkedHashMap<>();
+    /** Task 0043: "v1" (product default kinds) or "all" (opt-in pattern kinds on too); absent before 0043 = v1. */
+    public String textKinds = "v1";
     public double threshold;
     public List<Double> sweep = new ArrayList<>();
     public double visionThreshold;

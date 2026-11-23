@@ -929,11 +929,14 @@ public class ApplicationServiceConfig {
             RedactionVerificationPort redactionVerificationPort,
             ChecksumPort checksumPort,
             DomainEventPublisher eventPublisher,
-            AuditService auditService) {
+            AuditService auditService,
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+            TextExtractionPort textExtractionPort) {
+        // Task 0044: the entity policy (searchable redacted pages) and the same text extraction as the detection.
         return new DocumentRedactionService(
                 documentRepository, packageRepository, artifactRepository,
                 findingRepository, storagePort, pdfRedactionPort, redactionVerificationPort, checksumPort,
-                eventPublisher, auditService);
+                eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort);
     }
 
     @Bean

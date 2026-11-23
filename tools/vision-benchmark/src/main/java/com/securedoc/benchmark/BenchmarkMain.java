@@ -111,6 +111,12 @@ public final class BenchmarkMain {
         results.promptVersion = VisionClient.promptName(promptVersion);
         results.promptSha256 = VisionClient.promptSha256(promptVersion);
         for (String m : visionModels) results.boxConventions.put(m, client.convention(m).name());
+        // Task 0043: "v1" (default) runs the text path with the product's default kinds; "all" also switches on the
+        // opt-in pattern kinds (routing, account, ITIN, EIN, driver's license, passport).
+        results.textKinds = opts.getOrDefault("text-kinds", "v1");
+        if (!List.of("v1", "all").contains(results.textKinds)) {
+            throw new IllegalArgumentException("--text-kinds must be v1 or all");
+        }
         results.threshold = Double.parseDouble(opts.getOrDefault("threshold", "0.75"));
         results.sweep = SWEEP;
         results.visionThreshold = Math.max(results.threshold, SWEEP.get(SWEEP.size() - 1));
@@ -154,7 +160,7 @@ public final class BenchmarkMain {
             results.textModel.gpuBaselineMiB = GpuSampler.usedMiB();
             results.textModel.loadSeconds = ollama.load(textModel);
             results.textModel.vramBytes = ollama.loadedVram();
-            TextPathRunner text = new TextPathRunner(ollama.baseUrl(), textModel);
+            TextPathRunner text = new TextPathRunner(ollama.baseUrl(), textModel, "all".equals(results.textKinds));
             try (GpuSampler gpu = new GpuSampler()) {
                 for (SampleSet.Sample sample : chosen) {
                     Results.DocResult doc = find(results, sample.id());

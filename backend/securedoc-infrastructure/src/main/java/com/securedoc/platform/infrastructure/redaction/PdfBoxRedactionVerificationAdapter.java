@@ -3,6 +3,7 @@ package com.securedoc.platform.infrastructure.redaction;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
 import com.securedoc.platform.application.port.out.RedactionVerificationPort;
+import com.securedoc.platform.application.port.out.RedactionVerificationPort.RedactedValues;
 import com.securedoc.platform.infrastructure.pdf.PdfBoxTempFileSupport;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -39,6 +40,21 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
     public VerificationResult verify(InputStream pdfContent,
                                      int expectedSourcePageCount,
                                      List<RedactionTarget> expectedTargets) {
+        return verify(pdfContent, expectedSourcePageCount, expectedTargets, false, RedactedValues.none());
+    }
+
+    /**
+     * Task 0044. Image-only output (searchable off): redacted pages must have no extractable text, as before. Searchable
+     * output: redacted pages hold the OCR layer. In both: the text of every output page (original text on untouched
+     * pages, the layer on redacted ones) must not contain any redacted value. Compared in memory; nothing is kept.
+     */
+    @Override
+    public VerificationResult verify(InputStream pdfContent,
+                                     int expectedSourcePageCount,
+                                     List<RedactionTarget> expectedTargets,
+                                     boolean searchableText,
+                                     RedactedValues redactedValues) {
+        RedactedValues values = redactedValues == null ? RedactedValues.none() : redactedValues;
         List<RedactionTarget> targets = expectedTargets == null ? List.of() : List.copyOf(expectedTargets);
         if (pdfContent == null) {
             return VerificationResult.failed(0, targets.size(), 0, false,
@@ -60,7 +76,7 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
             }
 
             Set<Integer> redactedPages = targetPages(targets);
-            if (hasExtractableTextOnPages(document, redactedPages)) {
+            if (!searchableText && hasExtractableTextOnPages(document, redactedPages)) {
                 return VerificationResult.failed(pageCount, targets.size(), 0, true,
                         TechnicalFailureCode.REDACTION_TEXT_LAYER_REMAINS,
                         "A redacted page still contains an extractable text layer");
@@ -76,6 +92,12 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
                 return VerificationResult.failed(pageCount, targets.size(), covered, false,
                         TechnicalFailureCode.REDACTION_REGION_NOT_COVERED,
                         "One or more expected redaction regions are not visually covered");
+            }
+
+            if (redactedValueInText(document, values)) {
+                return VerificationResult.failed(pageCount, targets.size(), covered, true,
+                        TechnicalFailureCode.REDACTION_VALUE_IN_OUTPUT_TEXT,
+                        "A redacted value appears in the output text");
             }
 
             return VerificationResult.safe(pageCount, targets.size(), covered);
@@ -100,6 +122,18 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
             stripper.setEndPage(pageNumber);
             String extracted = stripper.getText(document);
             if (extracted != null && !extracted.isBlank()) return true;
+        }
+        return false;
+    }
+
+    /** Page by page, so the text of at most one page is held at a time; the text is never kept or logged. */
+    private boolean redactedValueInText(PDDocument document, RedactedValues values) throws IOException {
+        if (values.isEmpty()) return false;
+        PDFTextStripper stripper = new PDFTextStripper();
+        for (int pageNumber = 1; pageNumber <= document.getNumberOfPages(); pageNumber++) {
+            stripper.setStartPage(pageNumber);
+            stripper.setEndPage(pageNumber);
+            if (values.appearsIn(stripper.getText(document))) return true;
         }
         return false;
     }

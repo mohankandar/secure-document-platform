@@ -101,6 +101,8 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
             "(?i)\\b(?:credit\\s+card|debit\\s+card|card\\s*(?:number|no\\.?|#)|payment\\s+card|"
                     + "pan|visa|master\\s*card|mastercard|amex|american\\s+express|discover)\\b");
 
+    private final OptInPatternDetector optInPatterns = new OptInPatternDetector();
+
     @Override
     public DetectionOutput detect(List<PageInput> pages) {
         List<DetectedEntity> entities = new ArrayList<>();
@@ -256,6 +258,9 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         detectDatesOfBirth(text, page.pageNumber(), results);
         detectCreditCards(text, page.pageNumber(), results);
         detectCreditScores(text, page.pageNumber(), results);
+        // Task 0043: the opt-in pattern kinds, after the V1 detectors and independent of them. Their findings carry
+        // their own detector name, and the detection service drops them unless the entity switched the kind on.
+        optInPatterns.detect(text, page.pageNumber(), results);
     }
 
     private void detectDatesOfBirth(String text, int pageNumber, List<DetectedEntity> results) {

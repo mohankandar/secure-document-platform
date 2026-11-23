@@ -54,7 +54,7 @@ cd tools\vision-benchmark
 .\Run-VisionBenchmark.ps1 -Set customer      # part B, same command, no code change
 ```
 
-Options: `-Models`, `-TextModel`, `-Threshold` (OCR confidence below which a page goes to vision; the summary also sweeps 0.55 to 0.90), `-Ollama`, `-Prompt v1|v2` (default `v1`), `-Boxes model=PIXELS|PER_MILLE|UNIT,...` (box convention for a model whose trained convention is not the default). Models must already be pulled (`ollama pull <name>`).
+Options: `-TextKinds v1|all` (task 0043; default `v1`, the product's default kinds; `all` also switches on the opt-in pattern kinds: bank routing and account numbers, ITIN, EIN, driver's license and passport numbers, scored as `ROUTING_NUMBER`, `BANK_ACCOUNT` and `GOVERNMENT_ID`), `-SkipVision` (routing and text path only), `-Models`, `-TextModel`, `-Threshold` (OCR confidence below which a page goes to vision; the summary also sweeps 0.55 to 0.90), `-Ollama`, `-Prompt v1|v2` (default `v1`), `-Boxes model=PIXELS|PER_MILLE|UNIT,...` (box convention for a model whose trained convention is not the default). Models must already be pulled (`ollama pull <name>`).
 
 Probe only (task 0040), without the full run: requests at once per model, and the text model and one vision model resident together:
 

@@ -257,6 +257,8 @@ public final class LvErrorCodes {
                 case REDACTION_SOURCE_PAGES_UNKNOWN, REDACTION_PAGE_COUNT_MISMATCH, REDACTION_TARGETS_NOT_APPLIED,
                      REDACTION_OUTPUT_EMPTY, REDACTION_TEXT_LAYER_REMAINS, REDACTION_ANNOTATIONS_REMAIN,
                      REDACTION_REGION_NOT_COVERED, REDACTION_OUTPUT_UNPARSABLE -> RED_002;
+                // Task 0044: the final check found a redacted value in the output text.
+                case REDACTION_VALUE_IN_OUTPUT_TEXT -> RED_005;
                 case UNKNOWN_TECHNICAL_FAILURE -> SYS_001;
             });
         }

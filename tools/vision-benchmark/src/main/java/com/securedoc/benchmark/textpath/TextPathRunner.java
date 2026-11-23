@@ -72,10 +72,30 @@ public final class TextPathRunner {
 
     private final String ollamaUrl;
     private final String model;
+    private final boolean allKinds;
 
     public TextPathRunner(String ollamaUrl, String model) {
+        this(ollamaUrl, model, false);
+    }
+
+    /**
+     * @param allKinds task 0043: true switches the opt-in pattern kinds on (routing, account, ITIN, EIN, driver's
+     *                 license, passport) next to the V1 four, as a Business Admin would; false is the product default.
+     */
+    public TextPathRunner(String ollamaUrl, String model, boolean allKinds) {
         this.ollamaUrl = ollamaUrl;
         this.model = model;
+        this.allKinds = allKinds;
+    }
+
+    /** The answer-file type for a product finding type (task 0043 kinds map onto the answer files' types). */
+    public static String answerType(String productType) {
+        return switch (productType) {
+            case "BANK_ROUTING_NUMBER" -> "ROUTING_NUMBER";
+            case "BANK_ACCOUNT_NUMBER" -> "BANK_ACCOUNT";
+            case "DRIVERS_LICENSE_NUMBER", "PASSPORT_NUMBER" -> "GOVERNMENT_ID";
+            default -> productType;
+        };
     }
 
     public static TesseractOcrProperties productOcrProperties() {
@@ -130,7 +150,7 @@ public final class TextPathRunner {
         LocalRuleBasedDetectionAdapter rules = new LocalRuleBasedDetectionAdapter();
         SensitiveDataDetectionService service = new SensitiveDataDetectionService(
                 new Documents(document), new Packages(pkg), new Artifacts(original), new Storage(pdf),
-                timedAi, rules, rules, new Policies(), timedExtraction, new Findings(saved),
+                timedAi, rules, rules, new Policies(allKinds), timedExtraction, new Findings(saved),
                 event -> { }, new AuditService(record -> { }));
 
         long started = System.nanoTime();
@@ -145,7 +165,7 @@ public final class TextPathRunner {
         List<Prediction> predictions = new ArrayList<>();
         for (Finding f : saved) {
             var box = f.location().boundingBox();
-            predictions.add(new Prediction(f.location().pageNumber(), f.entityType().name(),
+            predictions.add(new Prediction(f.location().pageNumber(), answerType(f.entityType().name()),
                     box == null ? null : new double[]{box.left(), box.top(), box.width(), box.height()},
                     "text:" + f.detectorSource().detectorName()));
         }
@@ -187,8 +207,14 @@ public final class TextPathRunner {
         @Override public void delete(ArtifactStorageReference r) { }
     }
 
-    private static final class Policies implements TenantRedactionPolicyRepository {
-        @Override public Optional<TenantRedactionPolicy> findByTenantId(TenantId t) { return Optional.empty(); }
+    /** No stored policy (the product default), or the default with every configurable kind switched on. */
+    private record Policies(boolean allKinds) implements TenantRedactionPolicyRepository {
+        @Override public Optional<TenantRedactionPolicy> findByTenantId(TenantId t) {
+            if (!allKinds) return Optional.empty();
+            TenantRedactionPolicy d = TenantRedactionPolicy.defaults(t);
+            return Optional.of(new TenantRedactionPolicy(t, TenantRedactionPolicy.configurableTypes(),
+                    d.autoRedactThreshold(), d.reviewMode(), d.maskSsnLastFour(), d.updatedAt()));
+        }
         @Override public void save(TenantRedactionPolicy p) { }
     }
 

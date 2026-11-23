@@ -148,6 +148,22 @@ final class Summary {
         }
         md.append("All pages, the text path's four types:\n\n");
         table(md, all);
+
+        // Task 0043: the answer-file types the new pattern kinds cover, and the tax-ID kinds the samples never hold.
+        String kinds = r.textKinds == null ? "v1" : r.textKinds;
+        Scorer.Score r1 = new Scorer.Score();
+        int taxIdFindings = 0;
+        for (Results.DocResult d : docs) {
+            r1.add(Scorer.score(truths.get(d.id), d.text.findings, p -> true, Truth.R1_PATTERN_TYPES));
+            taxIdFindings += (int) d.text.findings.stream()
+                    .filter(p -> p.type().equals("ITIN") || p.type().equals("EIN")).count();
+        }
+        md.append("Text kinds: ").append(kinds).append(" (").append("all".equals(kinds)
+                ? "the task 0043 pattern kinds switched on" : "product default: the four V1 kinds only").append(").\n\n");
+        md.append("All pages, the types the task 0043 kinds cover (routing, account, driver's license or passport):\n\n");
+        table(md, r1);
+        md.append("ITIN and EIN findings (the samples hold none, so each one is a false flag): ").append(taxIdFindings)
+                .append(".\n\n");
     }
 
     // --- vision ------------------------------------------------------------------------------------

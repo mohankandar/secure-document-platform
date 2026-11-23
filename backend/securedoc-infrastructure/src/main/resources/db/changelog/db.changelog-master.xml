@@ -50,4 +50,5 @@
     <include file="db/changelog/044-export-followups.xml"/>
     <include file="db/changelog/045-pipeline-job-queue-seq.xml"/>
     <include file="db/changelog/046-document-store-names.xml"/>
+    <include file="db/changelog/047-tenant-redaction-kinds.xml"/>
 </databaseChangeLog>

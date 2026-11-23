@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0043 (owner approved 2026-11-23, 0043 answers, option 2): one row per entity and redaction kind, with its
+        on/off switch, so a new kind never needs another schema change. Used now only for the opt-in pattern kinds
+        (BANK_ROUTING_NUMBER, BANK_ACCOUNT_NUMBER, ITIN, EIN, DRIVERS_LICENSE_NUMBER, PASSPORT_NUMBER); a kind with
+        no row is off. The four V1 kinds keep their columns on tenant_redaction_policies, unchanged. No data is moved.
+        kind_key is the stable EntityType name; no check constraint, so later kinds need no migration (the
+        application refuses a key it does not know).
+    -->
+    <changeSet id="047-01-tenant-redaction-kinds" author="lexavault">
+        <createTable tableName="tenant_redaction_kinds">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="kind_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="tenant_redaction_kinds" columnNames="tenant_id,kind_key"
+                       constraintName="pk_tenant_redaction_kinds"/>
+        <addForeignKeyConstraint baseTableName="tenant_redaction_kinds" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_redaction_kinds_tenant"/>
+        <rollback>
+            <dropTable tableName="tenant_redaction_kinds"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

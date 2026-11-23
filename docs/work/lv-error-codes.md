@@ -125,6 +125,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-RED-002 | Redacted copy failed the safety check | The redacted copy didn't pass verification (for example readable text left under a box). It was not exported. | Stopped | IT Admin | — | 138, 139, 140, 142 |
 | LV-RED-003 | Redaction couldn't be applied | The PDF engine couldn't apply the redactions. | Stopped | IT Admin | — | 141 |
 | LV-RED-004 | Redacted copy couldn't be stored | Storing the redacted copy failed. | System | IT Admin | — | 364 |
+| LV-RED-005 | A redacted value is in the output text | The final check found a value that was redacted in the text of the redacted copy (for example in the searchable text layer). It was not exported. | Stopped | IT Admin | — | task 0044 |
 
 ### REV: review and approval (001–019)
 

@@ -94,6 +94,13 @@ export const SENSITIVE_TYPES: readonly SensitiveType[] = [
   { key: 'DATE_OF_BIRTH', name: 'Date of birth', plural: 'Dates of birth', detects: 'A person’s birth date only. Signature, payment, effective and other dates are excluded.' },
   { key: 'CREDIT_CARD_NUMBER', name: 'Credit card number', plural: 'Credit card numbers', detects: 'Full 13–19 digit payment card numbers. Masked or last-four displays and account numbers are excluded.' },
   { key: 'CREDIT_SCORE', name: 'Credit score', plural: 'Credit scores', detects: 'A consumer credit or FICO score tied to a person or report. Bare three-digit numbers are excluded.' },
+  // Task 0043: pattern kinds that are off for every entity until a Business Admin switches them on.
+  { key: 'BANK_ROUTING_NUMBER', name: 'Bank routing number', plural: 'Bank routing numbers', detects: 'A 9-digit ABA routing number with a valid checksum, next to a routing label or on a check’s bottom line. Off by default.' },
+  { key: 'BANK_ACCOUNT_NUMBER', name: 'Bank account number', plural: 'Bank account numbers', detects: 'A 4–17 digit number next to an account label, or the account field on a check’s bottom line. Phone numbers, dates and amounts are excluded. Off by default.' },
+  { key: 'ITIN', name: 'ITIN', plural: 'ITINs', detects: 'An Individual Taxpayer Identification Number (9NN-NN-NNNN) next to an ITIN label. Kept apart from SSNs. Off by default.' },
+  { key: 'EIN', name: 'EIN', plural: 'EINs', detects: 'A business’s Employer Identification Number (NN-NNNNNNN) next to an EIN or tax ID label. Off by default.' },
+  { key: 'DRIVERS_LICENSE_NUMBER', name: 'Driver’s license number', plural: 'Driver’s license numbers', detects: 'A driver’s license number, only next to a driver’s license or DL label. Off by default.' },
+  { key: 'PASSPORT_NUMBER', name: 'Passport number', plural: 'Passport numbers', detects: 'A passport number, only next to a passport label. Off by default.' },
 ];
 
 /** Other spellings the server or older data use for the same types. */
@@ -280,6 +287,12 @@ export function sentenceCase(raw: string): string {
  * legal entity (the entity switch), never a kind of sensitive data.
  */
 export const SENSITIVE_TYPES_HEADING = 'Sensitive types';
+
+/** Task 0044: the entity's "searchable redacted pages" switch on the policy screen (on by default). */
+export const SEARCHABLE_PAGES_WORDS = {
+  label: 'Searchable redacted pages',
+  hint: 'When on, a redacted page also gets hidden text read from the blacked-out image, so it can be searched and copied. The redacted values are never in that text. When off, redacted pages are images only.',
+} as const;
 
 /* ---------- Columns on Cases (owner's U007 answer) ---------- */
 

@@ -54,6 +54,7 @@ final class TechnicalFailureTaxonomy {
             case "STORAGE_IO" -> "Internal document storage was temporarily unavailable.";
             case "PROCESSING_DISPATCH_EXHAUSTED" -> "Processing could not be started after 3 tries, so the case was stopped. Automatic retries have ended.";
             case "PROCESSING_LICENSE_DENIED" -> "The tenant licence does not allow document processing, so the case was stopped. Check the licence, then retry.";
+            case "REDACTION_VALUE_IN_OUTPUT_TEXT" -> "The final check found a value that was redacted in the text of the output, so the document was stopped and not delivered (LV-RED-005). Nothing about the value is recorded. Check the redacted pages, or turn searchable redacted pages off for the entity, then retry.";
             case "REDACTION_LOCATION_MISSING" -> "A confirmed finding has no location on the page, so it could not be covered. Locate or dismiss the finding.";
             case "REDACTION_SOURCE_PAGES_UNKNOWN", "REDACTION_PAGE_COUNT_MISMATCH", "REDACTION_TARGETS_NOT_APPLIED",
                  "REDACTION_OUTPUT_EMPTY", "REDACTION_TEXT_LAYER_REMAINS", "REDACTION_ANNOTATIONS_REMAIN",
