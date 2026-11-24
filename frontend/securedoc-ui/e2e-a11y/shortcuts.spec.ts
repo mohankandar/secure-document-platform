@@ -86,6 +86,8 @@ test.describe('Review shortcuts (A2)', () => {
     await page.keyboard.press('Control+k');
     const find = page.getByRole('dialog');
     await expect(find).toBeVisible();
+    // The dialog focuses its field just after it shows; a key typed before that goes nowhere.
+    await expect(find.locator('input')).toBeFocused();
     await page.keyboard.type('rvj');
     await expect(find.locator('input')).toHaveValue('rvj');
     await page.keyboard.press('Escape');
