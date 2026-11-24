@@ -2022,86 +2022,6 @@ button.small { padding: .35rem .55rem; font-size: var(--type-sm); }
   
 }
 
-/* Tenant Licensing — Platform Operations */
-.licensing-readiness { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border: 1px solid var(--ui-border); border-radius: 14px; padding: 1rem 1.1rem; margin-bottom: 1rem; }
-.licensing-readiness.enforced { background: var(--ui-bg); border-color: var(--ui-sidebar-text); }
-.licensing-readiness.not-enforced { background: var(--ui-warning-bg); border-color: var(--ui-border-strong); }
-.licensing-readiness h2 { margin: .15rem 0 .25rem; font-size: var(--type-card-title); }
-.licensing-readiness p { margin: 0; color: var(--ui-text-muted); max-width: 850px; }
-.licensing-readiness-meta { display: flex; flex-direction: column; align-items: flex-end; gap: .45rem; min-width: 190px; }
-.licensing-key-ok { color: var(--ui-success); font-size: var(--type-sm); font-weight: 700; }
-.licensing-key-bad { color: var(--ui-danger); font-size: var(--type-sm); font-weight: 700; }
-.licensing-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
-.licensing-summary-grid > div { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--ui-border); border-radius: 10px; padding: .75rem .9rem; background: white; }
-.licensing-summary-grid span { color: var(--ui-text-muted); font-size: var(--type-sm); }
-.licensing-summary-grid strong { font-size: var(--type-section-title); }
-.licensing-summary-grid .needs-attention { border-color: var(--ui-border-strong); background: var(--ui-danger-bg); }
-.licensing-tenant-table { border: 1px solid var(--ui-border); border-radius: 10px; overflow: hidden; }
-.licensing-tenant-header, .licensing-tenant-row { display: grid; grid-template-columns: minmax(230px, 1.2fr) minmax(120px, .55fr) minmax(120px, .55fr) minmax(120px, .55fr) minmax(240px, 1fr); gap: .8rem; align-items: center; }
-.licensing-tenant-header { padding: .65rem .8rem; background: var(--ui-surface-subtle); color: var(--ui-text-muted); font-size: var(--type-sm); font-weight: 700; text-transform: uppercase; }
-.licensing-tenant-row { width: 100%; appearance: none; border: 0; border-top: 1px solid var(--ui-border-soft); background: white; text-align: left; padding: .72rem .8rem; cursor: pointer; color: inherit; font: inherit; }
-.licensing-tenant-row:hover { background: var(--ui-surface-subtle); }
-.licensing-tenant-row.selected { background: var(--ui-bg); box-shadow: inset 3px 0 var(--brand-secondary); }
-.licensing-tenant-identity { display: grid; gap: .1rem; }
-.licensing-tenant-identity small { color: var(--ui-text-disabled); }
-.licensing-allowed { color: var(--ui-success); font-weight: 700; font-size: var(--type-body-sm); }
-.licensing-denied { color: var(--ui-danger); font-weight: 700; font-size: var(--type-body-sm); }
-.licensing-expiry { font-size: var(--type-sm); }
-.licensing-expiry-danger { color: var(--ui-danger); font-weight: 700; }
-.licensing-expiry-warning { color: var(--ui-warning); font-weight: 700; }
-.licensing-expiry-notice { color: var(--ui-warning); font-weight: 700; }
-.licensing-expiry-neutral { color: var(--ui-text-muted); }
-.licensing-two-column { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); gap: 1rem; }
-.licensing-detail-card, .licensing-install-card { min-width: 0; }
-.licensing-processing-banner { display: grid; gap: .15rem; border-radius: 10px; padding: .75rem .85rem; margin: .75rem 0; }
-.licensing-processing-banner.allowed { background: var(--ui-success-bg); color: var(--ui-success); }
-.licensing-processing-banner.blocked { background: var(--ui-danger-bg); color: var(--ui-danger); }
-.licensing-processing-banner span { font-size: var(--type-sm); }
-.licensing-definition-list code { font-size: var(--type-sm); overflow-wrap: anywhere; }
-.licensing-entitlements { border-top: 1px solid var(--ui-border-soft); margin-top: .8rem; padding-top: .8rem; }
-.licensing-entitlements h3 { margin: 0 0 .5rem; font-size: var(--type-body); }
-.licensing-chip-list { display: flex; flex-wrap: wrap; gap: .4rem; }
-.licensing-chip { display: inline-flex; border-radius: 999px; padding: .3rem .55rem; background: var(--ui-surface-subtle); color: var(--ui-text-secondary); font-size: var(--type-xs); font-weight: 700; }
-.licensing-chip.primary { background: var(--ui-success-bg); color: var(--ui-success); }
-.licensing-muted { color: var(--ui-text-disabled); font-size: var(--type-sm); }
-.licensing-limit-grid { display: grid; grid-template-columns: repeat(2, minmax(130px, 1fr)); gap: .45rem; }
-.licensing-limit-grid > div { display: flex; justify-content: space-between; border: 1px solid var(--ui-border-soft); border-radius: 8px; padding: .5rem .6rem; font-size: var(--type-sm); }
-.licensing-token-field { display: grid; gap: .35rem; color: var(--ui-text-muted); font-size: var(--type-sm); }
-.licensing-token-field textarea { width: 100%; resize: vertical; border: 1px solid var(--ui-border); border-radius: 8px; padding: .65rem .7rem; font: .78rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--ui-text); }
-.licensing-security-note { margin: .6rem 0; color: var(--ui-text-muted); background: var(--ui-surface-subtle); border-radius: 8px; padding: .6rem .7rem; font-size: var(--type-sm); }
-.licensing-connected-validation { display: grid; gap: .18rem; border-top: 1px solid var(--ui-border-soft); margin-top: 1rem; padding-top: .8rem; }
-.licensing-connected-validation span { color: var(--ui-text-secondary); font-size: var(--type-sm); }
-.licensing-connected-validation small { color: var(--ui-text-disabled); }
-.licensing-history-list { display: grid; gap: .6rem; }
-.licensing-history-row { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; border: 1px solid var(--ui-border); border-radius: 10px; padding: .75rem .85rem; }
-.licensing-history-row.active { border-color: var(--ui-sidebar-text); background: var(--ui-surface-subtle); }
-.licensing-history-main { display: grid; gap: .2rem; min-width: 0; }
-.licensing-history-title { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
-.licensing-history-main > span, .licensing-history-meta > span, .licensing-history-meta > small { color: var(--ui-text-muted); font-size: var(--type-sm); }
-.licensing-history-main code { color: var(--ui-text-muted); font-size: var(--type-xs); overflow-wrap: anywhere; }
-.licensing-history-meta { display: grid; justify-items: end; gap: .25rem; text-align: right; }
-.licensing-no-license { display: grid; gap: .2rem; }
-
-
-
-
-@media (max-width: 1024px) {
-  .licensing-summary-grid { grid-template-columns: 1fr 1fr; }
-  .licensing-two-column { grid-template-columns: 1fr; }
-  .licensing-tenant-header, .licensing-tenant-row { grid-template-columns: minmax(200px, 1.2fr) minmax(110px, .6fr) minmax(110px, .6fr) minmax(180px, 1fr); }
-  .licensing-tenant-header span:nth-child(4), .licensing-tenant-row > span:nth-child(4) { display: none; }
-}
-@media (max-width: 640px) {
-  .licensing-readiness, .licensing-history-row { flex-direction: column; align-items: stretch; }
-  .licensing-readiness-meta, .licensing-history-meta { align-items: flex-start; justify-items: start; text-align: left; }
-  .licensing-summary-grid { grid-template-columns: 1fr; }
-  .licensing-tenant-header { display: none; }
-  .licensing-tenant-row { grid-template-columns: 1fr; gap: .35rem; }
-  .licensing-tenant-row > span:nth-child(4) { display: block; }
-}
-
-
-.licensing-history-evidence {
   display: inline-flex;
   align-items: center;
   padding: 0.18rem 0.45rem;
@@ -2353,7 +2273,6 @@ input, select, textarea { border-color: var(--ui-border-strong); }
   .branding-preview::after { content: 'Tablet portrait content preview'; display: grid; place-items: center; min-height: 240px; color: var(--ui-text-disabled); font-size: var(--type-sm); }
   .branding-tenant-actions { width: 100%; }
   .branding-tenant-actions .ui-button { flex: 1; }
-  .licensing-summary-grid, .processing-storage-form, .processing-storage-override-form { grid-template-columns: 1fr !important; }
   .platform-two-column, .licensing-two-column { grid-template-columns: 1fr !important; }
   .platform-section-layout { padding-left: 13px; padding-right: 13px; }
   table { font-size: var(--type-sm); }

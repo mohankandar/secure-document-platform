@@ -31,6 +31,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Component
 public class WatchedFolderScheduler {
     private static final Logger log = LoggerFactory.getLogger(WatchedFolderScheduler.class);
+    /** Task 0057: the outcome of a scan that the licence stopped. */
+    static final String LICENCE_STOPPED = "LICENCE_STOPPED";
 
     private final WatchedFolderIntakeService intakeService;
     private final WatchedFolderProperties watchedFolder;
@@ -131,6 +133,20 @@ public class WatchedFolderScheduler {
             if ("MANUAL".equals(mode)) {
                 log.warn("WATCHED_FOLDER_SCAN_SKIPPED mode={} nodeId={} reasonCode={}", mode, logicalNodeId(), scannerRole.get());
             }
+            return response;
+        }
+
+        // Task 0057: intake stopped by the licence. A person who asked for the scan is told; the schedule only notes it.
+        var stopped = intakeService.licenceRefusal(principal.tenantId());
+        if (stopped.isPresent()) {
+            Snapshot before = last.get();
+            if (before == null || !LICENCE_STOPPED.equals(before.outcome())) {
+                log.warn("WATCHED_FOLDER_SCAN_STOPPED_BY_LICENCE mode={} nodeId={} reasonCode={}", mode, logicalNodeId(),
+                        stopped.get().errorCode());
+            }
+            WatchedFolderScanResponse response = emptyResponse(LICENCE_STOPPED);
+            last.set(new Snapshot(Instant.now(), LICENCE_STOPPED, response));
+            if ("MANUAL".equals(mode)) intakeService.requireLicence(principal, correlationId);
             return response;
         }
 

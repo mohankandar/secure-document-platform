@@ -92,6 +92,9 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     /** Task 0044; null in the pre-0044 constructor (image-only output, no value comparison). */
     private final TenantRedactionPolicyRepository policyRepository;
     private final TextExtractionPort textExtractionPort;
+    private java.util.function.BooleanSupplier nonProductionOutput = () -> false;
+    private com.securedoc.platform.application.licensing.UsageMeter usageMeter =
+            com.securedoc.platform.application.licensing.UsageMeter.NONE;
 
     public DocumentRedactionService(DocumentRepository documentRepository,
                                      PackageRepository packageRepository,
@@ -136,6 +139,18 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         this.checksumPort = Objects.requireNonNull(checksumPort);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
+    }
+
+    /** Task 0057: the same service marking its outputs while {@code nonProduction} says the licence is for tests. */
+    public DocumentRedactionService withNonProductionMark(java.util.function.BooleanSupplier nonProduction) {
+        this.nonProductionOutput = Objects.requireNonNull(nonProduction);
+        return this;
+    }
+
+    /** Task 0057: the same service counting each document's pages for the licence. */
+    public DocumentRedactionService withUsageMeter(com.securedoc.platform.application.licensing.UsageMeter meter) {
+        this.usageMeter = Objects.requireNonNull(meter);
+        return this;
     }
 
     @Override
@@ -231,6 +246,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 foundValues);
         long keptLastFour = targets.stream().filter(t -> t.kept() != null).count();
 
+        // Task 0057: under a licence for tests the output is marked. Asked before anything is made; a licence that was
+        // never readable stops the document here.
+        boolean marked = nonProductionOutput.getAsBoolean();
+
         // 10. Read original PDF content
         InputStream pdfContent = storagePort.retrieve(originalArtifact.storageReference());
 
@@ -238,8 +257,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         //     safe untouched pages may retain native PDF content.
         RedactionOutput redactionOutput;
         try {
-            redactionOutput = searchable
-                    ? pdfRedactionPort.redact(pdfContent, targets, PdfRedactionPort.RedactionOptions.SEARCHABLE)
+            redactionOutput = searchable || marked
+                    ? pdfRedactionPort.redact(pdfContent, targets, new PdfRedactionPort.RedactionOptions(searchable, marked))
                     : pdfRedactionPort.redact(pdfContent, targets);
         } finally {
             closeQuietly(pdfContent);
@@ -341,6 +360,11 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
 
             redactedArtifact.markAvailable(storageRef);
             document.completeProcessing();
+
+            // Task 0057: the meter point, once per document; before the document is saved as processed, so a stop in
+            // between can only leave it counted and processed again, never processed and not counted.
+            usageMeter.documentProcessed(command.tenantId(), command.packageId(), command.documentId(),
+                    expectedSourcePageCount);
 
             for (Finding finding : confirmedFindings) {
                 finding.markRedacted(SYSTEM_ACTOR);

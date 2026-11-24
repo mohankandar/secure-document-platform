@@ -54,9 +54,8 @@ import type {
   ProcessingStorageOverview,
   ProcessingStorageProvider,
   CreateProcessingStorageProviderRequest,
-  LicensingOverview,
-  TenantLicenseStatus,
-  LicenseHistoryItem,
+  LicensingView,
+  SupportStatusView,
   EffectiveBranding,
   BrandingOverview,
   BrandingConfiguration,
@@ -426,25 +425,22 @@ class ApiClient {
     return this.request(`/platform/processing-storage/providers/${providerId}/retire`, { method: 'POST' });
   }
 
-  // --- Tenant licensing ---
+  // --- Support, Status (task 0057) ---
 
-  async getLicensingOverview(): Promise<LicensingOverview> {
-    return this.request('/platform/licensing');
+  async getSupportStatus(): Promise<SupportStatusView> {
+    return this.request('/support/status');
   }
 
-  async getTenantLicenseStatus(tenantId: string): Promise<TenantLicenseStatus> {
-    return this.request(`/platform/licensing/tenants/${tenantId}`);
+  /** The diagnostic bundle (IT Admin): a zip without document data or secrets. */
+  async downloadDiagnosticBundle(): Promise<Blob> {
+    const response = (await this.request<unknown>('/support/diagnostic-bundle')) as Response;
+    return response.blob();
   }
 
-  async installTenantLicense(tenantId: string, licenseToken: string): Promise<TenantLicenseStatus> {
-    return this.request(`/platform/licensing/tenants/${tenantId}/licenses`, {
-      method: 'POST',
-      body: JSON.stringify({ licenseToken }),
-    });
-  }
+  // --- Licensing (task 0057): read only ---
 
-  async getTenantLicenseHistory(tenantId: string): Promise<LicenseHistoryItem[]> {
-    return this.request(`/platform/licensing/tenants/${tenantId}/history`);
+  async getLicensing(): Promise<LicensingView> {
+    return this.request('/licensing');
   }
 
   async getTechnicalException(packageId: string): Promise<TechnicalExceptionDetail> {

@@ -25,7 +25,9 @@ The task says both "locked items always on" and "existing entities keep exactly 
 | `npm run test:standalone` suites, 1 run | auth 10, vocabulary 194, ui-framework 17, oidc-signin 170, a11y 156: pass. tablet: 94 pass, **1 failed**, see below |
 | no-redacted-value check | PASS, 0 matches |
 | compliance report check (4 new lines: packs, styles and their changes) | 120 checks, 0 failed |
-| product-name guard | clean (1709 files) |
+| product-name guard | clean |
+| after merging the integration branch (0057): `mvn -B -o -Pdev-build clean verify`, PostgreSQL on | BUILD SUCCESS: domain 84, application 303, scan bridge 136, infrastructure 116, API 767 (1 skipped), 0 failures |
+| after that merge: type check, `test:vocabulary` | pass (200) |
 
 - `SchemaStepPostgresTest`: my throwaway database had the same word as user and password, so "the password is never printed" matched the user name. Passes with a different password.
 - `OllamaModelPreloaderTest`: failed in the full run, passes alone; taken as a timeout on a loaded machine, not traced.
@@ -33,6 +35,7 @@ The task says both "locked items always on" and "existing entities keep exactly 
 - The tablet failure: the first page load timed out (60 s) before the card showed, on a loaded machine. Repeated 3 times on each of 5 sizes: 15 of 15 pass.
 
 ## Existing tests changed
+- `PostgresTestDatabase.backTo050()` counts the change sets itself, so later migrations don't break it.
 - Rollback counts (one more change set) and tests of migrations 047, 048 and 050, which now look at the storage of 050. The old table's store test is replaced by the catalog's.
 - Expected audit and report texts now include CVV, PIN and the card (locked): `OptInKindsPolicySaveTest`, `SensitiveDataPolicyAuditDetailTest`, `ComplianceReportServiceTest`. `OptInPatternKindsDetectionTest` reads the catalog. `words.test.ts` reads `RedactionCatalog.java`.
 

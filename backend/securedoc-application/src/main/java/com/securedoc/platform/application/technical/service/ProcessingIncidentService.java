@@ -48,6 +48,15 @@ public final class ProcessingIncidentService {
                 ProductTelemetryService.noop());
     }
 
+    /** Task 0057: the same service; {@code references} logs a failure's code and gives its reference. */
+    public ProcessingIncidentService withFailureReferences(
+            java.util.function.Function<com.securedoc.platform.domain.error.LvErrorCode, String> references) {
+        this.failureReferences = Objects.requireNonNull(references);
+        return this;
+    }
+
+    private java.util.function.Function<com.securedoc.platform.domain.error.LvErrorCode, String> failureReferences = code -> null;
+
     public ProcessingIncident recordFailure(TenantId tenantId,
                                             PackageId packageId,
                                             DocumentId documentId,
@@ -74,6 +83,9 @@ public final class ProcessingIncidentService {
         metadata.putIfAbsent("preferredStage", preferredStage == null ? ProcessingStage.UNKNOWN.name() : preferredStage.name());
         // Task 0025: the LexaVault code, which can be more precise than the reason code (for example DELIVERY_IO).
         metadata.put("lvCode", classification.lvCode().code());
+        // Task 0057: one reference for the log line, the recent failures and the incident (nothing without a source of them).
+        String reference = failureReferences.apply(classification.lvCode());
+        if (reference != null) metadata.put("reference", reference);
         // Task 0039: the page a text-reading failure happened on, as a whole number only.
         TechnicalFailureClassifier.page(failure).ifPresent(page -> metadata.put("page", Integer.toString(page)));
 

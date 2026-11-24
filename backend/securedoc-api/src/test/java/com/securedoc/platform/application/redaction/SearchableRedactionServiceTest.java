@@ -183,6 +183,39 @@ class SearchableRedactionServiceTest {
         assertTrue(verified.detail().endsWith("redactedPagesExtractableText=false, valuesChecked=3"), verified.detail());
     }
 
+    /** Task 0057: only under a licence for tests, with the final check on the marked file; counted once with its pages. */
+    @Test
+    void aTestLicenceMarksTheStoredCopyAndAnyOtherDoesNot() throws Exception {
+        policy = policy(true);
+        List<Integer> counted = new ArrayList<>();
+        service(new PdfBoxBurnFlatRedactionAdapter(ocr())).withNonProductionMark(() -> true)
+                .withUsageMeter((t, p, d, pages) -> counted.add(pages)).execute(command());
+        assertEquals(DocumentStatus.PROCESSED, document.status());
+        try (PDDocument out = Loader.loadPDF(stored.get(0))) {
+            assertTrue(out.getDocumentInformation().getCOSObject().getBoolean("NonProduction", false));
+            assertTrue(new PDFTextStripper().getText(out).toLowerCase().contains("borrower"), "still searchable");
+        }
+        assertNoValueAnywhere();
+        assertEquals(List.of(document.pageCount()), counted);
+    }
+
+    @Test
+    void aProductionLicenceLeavesTheStoredCopyAsItIs() throws Exception {
+        policy = policy(false);
+        service(new PdfBoxBurnFlatRedactionAdapter(ocr())).withNonProductionMark(() -> false).execute(command());
+        try (PDDocument out = Loader.loadPDF(stored.get(0))) {
+            assertFalse(out.getDocumentInformation().getCOSObject().containsKey("NonProduction"));
+        }
+    }
+
+    @Test
+    void aLicenceNeverReadStopsTheDocumentBeforeAnythingIsMade() {
+        policy = policy(true);
+        assertThrows(IllegalStateException.class, () -> service(new PdfBoxBurnFlatRedactionAdapter(ocr()))
+                .withNonProductionMark(() -> { throw new IllegalStateException("not read"); }).execute(command()));
+        assertEquals(0, stored.size());
+    }
+
     @Test
     void aPlantedLeakStopsTheDocumentWithItsOwnCodeAndStoresNothing() {
         policy = policy(true);

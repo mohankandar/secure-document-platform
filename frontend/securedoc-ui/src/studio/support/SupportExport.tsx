@@ -24,6 +24,7 @@ export function SupportTabs({ caps }: { caps: string[] }) {
       <NavLink to="/support/export" className={({ isActive }) => (isActive ? 'is-active' : '')}>
         {W.tabExport}{groups > 0 && <span className="cf-sp-tab-count" aria-label={`${groups} need IT`}>{groups}</span>}
       </NavLink>
+      <NavLink to="/support/status" className={({ isActive }) => (isActive ? 'is-active' : '')}>Status</NavLink>
     </nav>
   );
 }

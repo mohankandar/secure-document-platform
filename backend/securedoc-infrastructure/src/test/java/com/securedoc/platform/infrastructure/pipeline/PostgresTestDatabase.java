@@ -88,10 +88,12 @@ final class PostgresTestDatabase implements AutoCloseable {
         liquibase.rollback(changeSets, (String) null);
     }
 
-    /** Back to 050, the storage before the redaction catalog (070, task 0062): undoes the last change set. */
+    /** Back to 050, the storage before the redaction catalog (070, task 0062): undoes every change set after it. */
     void backTo050() throws Exception {
         try (Connection connection = connection()) {
-            rollback(liquibase(connection), connection, 1);
+            Integer later = jdbc.getJdbcOperations().queryForObject("SELECT count(*) FROM databasechangelog WHERE orderexecuted >"
+                    + " (SELECT orderexecuted FROM databasechangelog WHERE id = '050-01-page-batches')", Integer.class);
+            rollback(liquibase(connection), connection, later);
         }
     }
 

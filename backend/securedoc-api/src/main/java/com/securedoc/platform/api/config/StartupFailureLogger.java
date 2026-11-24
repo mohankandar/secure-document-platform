@@ -28,13 +28,36 @@ public class StartupFailureLogger implements ApplicationListener<ApplicationFail
     public void onApplicationEvent(ApplicationFailedEvent event) {
         Throwable failure = event.getException();
         Throwable root = root(failure);
-        log.error("LV_STARTUP_FAILED code={} type={} origin={}", codeFor(failure).code(),
-                root == null ? "unknown" : root.getClass().getSimpleName(), origin(failure));
+        // Task 0057: the shared platform's own codes of the refusal (several for start-up checks), never its message.
+        log.error("LV_STARTUP_FAILED code={} type={} origin={} platformCode={}", codeFor(failure).code(),
+                root == null ? "unknown" : root.getClass().getSimpleName(), origin(failure), platformCodes(failure));
+    }
+
+    static String platformCodes(Throwable failure) {
+        int depth = 0;
+        for (Throwable t = failure; t != null && depth < MAX_DEPTH; t = t.getCause(), depth++) {
+            if (t instanceof com.documentplatform.monitoring.StartupChecks.Refused refused) {
+                return refused.down().stream().map(r -> r.name() + ":" + r.code().code())
+                        .collect(java.util.stream.Collectors.joining(","));
+            }
+            if (t.getCause() == t) break;
+        }
+        return com.securedoc.platform.api.error.PlatformRefusals.codeOf(failure)
+                .map(com.documentplatform.errors.PlatformCode::code).orElse("none");
     }
 
     /** The code for a start-up failure, by type and origin only. */
     static LvErrorCode codeFor(Throwable failure) {
         int depth = 0;
+        // Task 0057: a refused licence has LexaVault's own code; the platform's is beside it in the log line.
+        for (Throwable current = failure; current != null && depth < MAX_DEPTH; current = current.getCause(), depth++) {
+            if (current instanceof com.documentplatform.licensing.LicenceException licence) {
+                return licence.code() == com.documentplatform.licensing.LicenceRefusal.LICENCE_MISSING
+                        ? LvErrorCode.LIC_001 : LvErrorCode.LIC_003;
+            }
+            if (current.getCause() == current) break;
+        }
+        depth = 0;
         for (Throwable current = failure; current != null && depth < MAX_DEPTH; current = current.getCause(), depth++) {
             if (LvErrorCodes.forPlatformFailure(current) == LvErrorCode.SYS_003) return LvErrorCode.SYS_003;
             if (current.getCause() == current) break;

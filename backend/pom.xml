@@ -28,9 +28,9 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- platform-core, one released version for all platform-* modules (task 0056: v0.8.1, tag platform-core-v0.8.1),
+        <!-- platform-core, one released version for all platform-* modules (task 0057: v1.0.0, tag platform-core-v1.0.0),
              read from GitHub Packages (repository github-platform-core below; docs/install/BUILD.md). -->
-        <platform.version>0.8.1</platform.version>
+        <platform.version>1.0.0</platform.version>
         <!-- Task 0054 (platform-core 0.7.0, SEC-12): the licence keys a build trusts are inside its jars, from
              backend/licence-build/<licence.build>/META-INF/platform (securedoc-api and securedoc-setup; docs/install/BUILD.md).
              production is the default and carries no development key; only -Pdev-build does. -->

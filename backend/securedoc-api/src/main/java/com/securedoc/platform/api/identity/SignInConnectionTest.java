@@ -39,7 +39,8 @@ public class SignInConnectionTest {
      * {@code IDN_HTTP_ISSUER_NOT_ALLOWED}, {@code IDN_VALUES_INVALID}); {@code message} its words; {@code reason} the
      * outbound rule's code when a call was refused ({@code OUT_…}, {@code HTTP_404}, …).
      */
-    public record Result(boolean passed, String code, String message, String reason, Instant testedAt) {
+    public record Result(boolean passed, String code, String message, String reason, Instant testedAt,
+                         String whatToDo) {
     }
 
     private record Kept(long version, Result result) {
@@ -83,10 +84,10 @@ public class SignInConnectionTest {
         TestReport report = tester.run(connection.issuer(), connection.apiAudience(), TestSignIn.issuerOnly(),
                 LocalTestIssuers.isLocalHttp(connection.issuer()));
         return new Result(report.passed(), report.failureCode().map(Enum::name).orElse(null), report.message(),
-                report.reason(), clock.instant());
+                report.reason(), clock.instant(), report.failureCode().map(com.documentplatform.errors.PlatformCode::fix).orElse(null));
     }
 
     private Result refused(ConnectionOutcome.Result code) {
-        return new Result(false, code.name(), code.cause() + " " + code.fix(), null, clock.instant());
+        return new Result(false, code.name(), code.cause(), null, clock.instant(), code.fix());
     }
 }

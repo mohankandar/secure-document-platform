@@ -18,7 +18,6 @@ export type StatusLine = { tone: Tone; word: string; rest: string[] };
 export const SECTION_LABELS = {
   overview: 'Overview',
   storage: 'Processing storage',
-  licensing: 'Licensing',
   branding: 'Branding',
   telemetry: 'Usage data',
 } as const;

@@ -834,47 +834,10 @@ export interface CreateProcessingStorageProviderRequest {
   rootPath: string;
 }
 
-export interface LicenseClaims {
-  schemaVersion: number;
-  licenseId: string;
-  tenantId: string;
-  customerName: string;
-  edition: string;
-  issuedAt: string;
-  notBefore?: string | null;
-  expiresAt?: string | null;
-  entitlements: string[];
-  limits: Record<string, number>;
-}
-
-export interface TenantLicenseStatus {
-  tenantId: string;
-  tenantName: string;
-  tenantSlug: string;
-  status: string;
-  processingAllowed: boolean;
-  licenseRecordId?: string | null;
-  claims?: LicenseClaims | null;
-  reasonCode: string;
-}
-
-export interface LicensingOverview {
-  enforcementEnabled: boolean;
-  verificationKeyConfigured: boolean;
-  tenants: TenantLicenseStatus[];
-}
-
-export interface LicenseHistoryItem {
-  recordId: string;
-  licenseId: string;
-  installedAt: string;
-  installedBy: string;
-  active: boolean;
-  status: string;
-  claims?: LicenseClaims | null;
-  reasonCode: string;
-  verificationEvidence?: 'CURRENT_KEY' | 'VERIFIED_AT_INSTALL' | 'UNAVAILABLE' | string;
-}
+/** Task 0057: Support, Status (GET /api/v1/support/status). */
+export type { SupportStatusShown as SupportStatusView } from '../studio/support/statusRules';
+/** Task 0057: the Licensing screen's read (GET /api/v1/licensing). */
+export type { LicensingShown as LicensingView } from '../studio/admin/licensingRules';
 
 /** An organization the signed-in person may choose, as listed by GET /api/v1/me/tenants. */
 export interface TenantChoice {
@@ -1104,6 +1067,8 @@ export interface SignInTestAnswer {
   message: string;
   reason: string | null;
   testedAt: string | null;
+  /** Task 0057: what to do about a failed test. */
+  whatToDo?: string | null;
 }
 
 /** One sign-in access change of the entity (platform-identity grant history, task 0041). */
