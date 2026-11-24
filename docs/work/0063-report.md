@@ -16,10 +16,10 @@ Outcome: **DONE** (3 questions)
 ## Commands run and results
 | Command | Result |
 |---|---|
-| `mvn -B -o -Pdev-build clean verify`, PostgreSQL on (throwaway), after merging 0062 | BUILD_RESULT |
+| `mvn -B -o -Pdev-build clean verify`, PostgreSQL on (throwaway), after merging 0062 | BUILD SUCCESS in an isolated copy of the commit: domain 84, application 303, scan bridge 136, infrastructure 121, API 773 (1 skipped), 0 failures. The run before it, in the worktree, had 8 API failures (`NoClassDefFoundError`, `NoSuchMethodError` for our own classes, and a 500): class files were replaced while it ran, probably by the editor; cause not traced |
 | real app, no-redacted-value check extended with a locked AES-256 PDF | PASS: no password 400, wrong 400, in the address 400, right 201, retry 200; case COMPLETED; 1 audit record; 0 matches of either password (also base64) in database, logs, audit exports and answers; 0 files on disk holding one; 0 encrypted PDFs left |
-| `npm run test:vocabulary` (the only frontend change is the generated code list and its count) | pass |
-| product-name guard | GUARD_RESULT |
+| `npm run test:vocabulary` (the only frontend change is the generated code list and its count) | pass (200) |
+| product-name guard | clean |
 
 New tests: `PdfBoxDecryptionAdapterTest` (4 ciphers, both passwords, wrong ones, temporary files, logs), `PdfPasswordUploadTest` (body only, HTTPS, cleared, not repeated, in-memory setting).
 
