@@ -82,6 +82,12 @@ jobs:
       - run: npm ci
       - name: Typecheck and build
         run: npm run build
+      # The browsers change only with the Playwright version, which is in the lock file. The install step below downloads only
+      # what the cache does not hold, and always installs the system packages.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-ubuntu-24.04-${{ hashFiles('frontend/securedoc-ui/package-lock.json') }}
       - name: Browsers for the mocked browser suites
         run: npx playwright install --with-deps chromium webkit
       # Every test:standalone suite runs without a running app (own Vite server, API and identity provider mocked):
