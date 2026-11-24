@@ -38,13 +38,16 @@ public class OperationsController {
     private final AuditService auditService;
     private final ProductAuthorizationPolicy authorizationPolicy;
     private final com.securedoc.platform.application.pipeline.ExportJobService exportJobs;
+    private final com.securedoc.platform.application.port.out.EntityTimeZonePort zones;
 
     public OperationsController(GetOperationsDashboardQuery dashboardQuery,
                                 GetOperationalReportsQuery reportsQuery,
                                 RequestContextResolver contextResolver,
                                 AuditService auditService,
                                 ProductAuthorizationPolicy authorizationPolicy,
-                                com.securedoc.platform.application.pipeline.ExportJobService exportJobs) {
+                                com.securedoc.platform.application.pipeline.ExportJobService exportJobs,
+                                com.securedoc.platform.application.port.out.EntityTimeZonePort zones) {
+        this.zones = zones;
         this.dashboardQuery = dashboardQuery;
         this.reportsQuery = reportsQuery;
         this.contextResolver = contextResolver;
@@ -126,6 +129,7 @@ public class OperationsController {
                 row("Generated at", report.generatedAt(), "") +
                 row("Period from", report.period().from(), "") +
                 row("Period to", report.period().to(), "") +
+                row("Time zone of the days", zones.effective(principal.tenantId()).map(java.time.ZoneId::getId).orElse("not set"), "") +
                 row("Source filter", report.period().source(), "") +
                 row("Outcome filter", report.period().outcome(), "") +
                 row("Period batches", report.executive().batches(), "") +

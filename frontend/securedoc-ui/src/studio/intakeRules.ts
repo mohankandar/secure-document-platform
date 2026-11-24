@@ -98,3 +98,13 @@ export function prefillIdentifier(params: URLSearchParams): string | null {
 
 /** The Scan tab's name for the scanner: the bridge offers no friendly name, so it is named by its site. */
 export const scannerDisplayName = (siteId: string) => `Scanner at ${siteId}`;
+
+/** Task 0058: the result names the entity: "3 files uploaded to Acme Mortgage." */
+export function uploadedWords(files: number, entity: string): string {
+  return `${files} ${files === 1 ? 'file' : 'files'} uploaded to ${entity}.`;
+}
+
+/** A scan: the entity is named only when the case is known to be in it. */
+export function scannedWords(entity: string, inThisEntity: boolean): string {
+  return inThisEntity ? `The scan was handed to ${entity}.` : 'The scan was handed to LexaVault.';
+}

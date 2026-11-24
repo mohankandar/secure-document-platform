@@ -72,7 +72,7 @@ class PlatformIdentityReadsTest {
         assertTrue(reads.findEnabledPushTenants(" ", issuer, "lexavault-api", "client").isEmpty());
         assertTrue(reads.findCandidates("customer-oidc", issuer, "").isEmpty());
         assertTrue(reads.activeGrants("customer-oidc", issuer, " ").isEmpty());
-        assertTrue(reads.findActive("customer-oidc", null, "lexavault-api").isEmpty());
+        assertTrue(reads.findCandidates("customer-oidc", null, "lexavault-api").isEmpty());
         assertNull(jdbc.sql);
     }
 }

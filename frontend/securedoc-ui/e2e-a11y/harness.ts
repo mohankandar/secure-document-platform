@@ -333,7 +333,21 @@ export interface MockOptions {
   exports?: boolean;
   /** Task 0057: the Licensing read. */
   licensing?: unknown;
+  /** Task 0058: the entity's time zone. */
+  timeZone?: string;
+  /** Task 0058: Admin › Sign-in. */
+  identity?: unknown;
 }
+
+/** Task 0058: Admin › Entities. */
+export const ENTITY_SLOTS = {
+  entities: [
+    { slotId: 'ENT-LEX-0001', name: 'Residential lending', status: 'ACTIVE', current: true, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: '2026-01-05T09:00:00Z' },
+    { slotId: 'ENT-LEX-0002', name: 'Commercial lending', status: 'ACTIVE', current: false, timeZone: 'Europe/London', customerTimeZone: 'America/Chicago', activatedAt: '2026-02-05T09:00:00Z' },
+    { slotId: 'ENT-LEX-0003', name: null, status: 'NOT_ACTIVATED', current: false, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: null },
+    { slotId: 'ENT-LEX-0004', name: 'Northwind Trust', status: 'SUSPENDED', current: false, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: '2026-03-05T09:00:00Z' },
+  ],
+};
 
 export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
   const roles = [...ROLES[who]];
@@ -348,7 +362,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (options.broken?.includes(path)) return json({ message: 'Something went wrong', correlationId: 'c0ffee00-0000-4000-8000-0000000000ff' }, 500);
 
     if (path === '/me/tenants') return json(entities);
-    if (path === '/me') return json({ username: `${who}.user@example.test`, roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities });
+    if (path === '/me') return json({ username: `${who}.user@example.test`, roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities, timeZone: options.timeZone ?? null });
     if (path.startsWith('/branding')) return json({});
 
     // Cases, the case panel, Approve
@@ -395,7 +409,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     }
     if (path === '/business-admin/routing-rules/destinations') return json([{ connectionId: 'c-title', name: 'Title team folder', providerType: 'FILE_SHARE', enabled: false, healthStatus: 'DISABLED' }]);
     if (path === '/integrations/c-poll/polling') return json({ connectionId: 'c-poll', name: 'Servicing outbox', enabled: true, healthStatus: 'DEGRADED', nextScheduledAt: minsAgo(-10), recentRuns: [] });
-    if (path === '/admin/enterprise-identity') return json(IDENTITY);
+    if (path === '/admin/enterprise-identity') return json(options.identity ?? IDENTITY);
 
     // Admin › Platform operations
     if (path === '/platform-admin/overview' || path === '/platform-admin/health-check') return json(OVERVIEW);
@@ -403,6 +417,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (path === '/platform/branding') return json(BRANDING);
     if (path === '/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });
     if (path === '/platform/product-telemetry/status') return json(TELEMETRY);
+    if (path === '/admin/entities') return json(ENTITY_SLOTS);
     if (path === '/licensing') return json(options.licensing ?? LICENSING);
     if (path === '/support/status') return json(SUPPORT_STATUS);
 

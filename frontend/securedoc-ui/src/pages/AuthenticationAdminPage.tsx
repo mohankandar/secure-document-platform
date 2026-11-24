@@ -5,8 +5,8 @@ import type { EnterpriseIdentityOverview } from '../types';
 import './AuthenticationAdminPage.css';
 
 /**
- * Task 0041: read-only. Sign-in connections are set through setup (platform-identity's idn_login_connection); the
- * server has no draft, test, activate or roll-back step any more, so this page only shows the ACTIVE connection.
+ * Task 0041: read-only. Sign-in connections are set through setup (platform-identity's idn_login_connection). The Case File
+ * Admin › Sign-in can change it (task 0058); this older page only shows the ACTIVE connection.
  */
 const SET_BY_SETUP = 'Sign-in connections are set through setup.';
 

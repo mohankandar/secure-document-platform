@@ -37,6 +37,21 @@ class IntegrationConnectionServiceTest {
         assertThrows(NotFoundException.class, () -> service.get(tenantB, a.id()));
     }
 
+    /** Task 0058: a daily schedule without a zone is taken only for an entity that has one; nothing is guessed. */
+    @Test
+    void aDailyScheduleWithoutAZoneNeedsAnEntityThatHasOne() {
+        var daily = new IntegrationConnectionService.ConnectionInput("Daily source", null, IntegrationPurpose.INGESTION_SOURCE,
+                IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null,
+                "https://source.example.test", null, null, false, 60, 2, 24, 50, 262144000L, 500,
+                com.securedoc.platform.domain.integration.IntegrationPollingScheduleType.DAILY, null, java.time.LocalTime.of(1, 0), " ", 100,
+                IntegrationAcknowledgementMode.SOURCE_PICKUP_ACK, true);
+        var refused = assertThrows(ValidationException.class, () -> service.create(tenantA, actor, correlation, daily));
+        assertEquals("Daily polling requires a time zone", refused.getMessage());
+        service.withEntityTimeZones(entity -> entity.equals(tenantA) ? java.util.Optional.of(java.time.ZoneId.of("Europe/London")) : java.util.Optional.empty());
+        assertNull(service.create(tenantA, actor, correlation, daily).pollingTimeZone(), "it follows the entity's, also when that changes");
+        assertThrows(ValidationException.class, () -> service.create(tenantB, actor, correlation, daily));
+    }
+
     @Test
     void duplicateNameWithinTenantIsRejectedCaseInsensitively() {
         service.create(tenantA, actor, correlation, input("Mortgage Source"));

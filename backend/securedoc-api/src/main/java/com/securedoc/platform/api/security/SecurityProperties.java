@@ -4,8 +4,6 @@ import com.documentplatform.identity.push.PushCallerSettings;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @Component
 @ConfigurationProperties(prefix = "securedoc.security")
@@ -27,16 +25,13 @@ public class SecurityProperties {
         private String issuerUri = "";
         private String audience = "";
         private String browserClientId = "";
+        /** Sign-in is through the stored connection only (task 0058). False refuses everybody; nothing takes its place. */
         private boolean persistentConnectionEnabled = true;
-        private boolean sharedIssuerTenantSelectionEnabled = false;
-        private String tenantId = "";
-        private String tenantClaim = "tenant_id";
         private String usernameClaim = "preferred_username";
         private String rolesClaim = "groups";
         private String providerId = "customer-oidc";
         private String emailClaim = "email";
         private String displayNameClaim = "name";
-        private final Map<String, String> roleMappings = new LinkedHashMap<>();
         private java.util.List<String> machineUserClaims = DEFAULT_MACHINE_USER_CLAIMS;
 
         public String getIssuerUri() { return issuerUri; }
@@ -46,13 +41,7 @@ public class SecurityProperties {
         public String getBrowserClientId() { return browserClientId; }
         public void setBrowserClientId(String browserClientId) { this.browserClientId = safe(browserClientId); }
         public boolean isPersistentConnectionEnabled() { return persistentConnectionEnabled; }
-        public boolean isSharedIssuerTenantSelectionEnabled() { return sharedIssuerTenantSelectionEnabled; }
-        public void setSharedIssuerTenantSelectionEnabled(boolean value) { sharedIssuerTenantSelectionEnabled = value; }
         public void setPersistentConnectionEnabled(boolean persistentConnectionEnabled) { this.persistentConnectionEnabled = persistentConnectionEnabled; }
-        public String getTenantId() { return tenantId; }
-        public void setTenantId(String tenantId) { this.tenantId = safe(tenantId); }
-        public String getTenantClaim() { return tenantClaim; }
-        public void setTenantClaim(String tenantClaim) { this.tenantClaim = safeOrDefault(tenantClaim, "tenant_id"); }
         public String getUsernameClaim() { return usernameClaim; }
         public void setUsernameClaim(String usernameClaim) { this.usernameClaim = safeOrDefault(usernameClaim, "preferred_username"); }
         public String getRolesClaim() { return rolesClaim; }
@@ -63,7 +52,6 @@ public class SecurityProperties {
         public void setEmailClaim(String emailClaim) { this.emailClaim = safeOrDefault(emailClaim, "email"); }
         public String getDisplayNameClaim() { return displayNameClaim; }
         public void setDisplayNameClaim(String displayNameClaim) { this.displayNameClaim = safeOrDefault(displayNameClaim, "name"); }
-        public Map<String, String> getRoleMappings() { return roleMappings; }
         public java.util.List<String> getMachineUserClaims() { return machineUserClaims; }
         /** An empty list keeps the default: the check cannot be switched off, only told this login system's claims. */
         public void setMachineUserClaims(java.util.List<String> claims) {

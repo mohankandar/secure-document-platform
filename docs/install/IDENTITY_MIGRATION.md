@@ -5,6 +5,11 @@ in `tenant_oidc_group_grants`. Since task 0037 it reads both from platform-ident
 connection per customer and product (shared by all the customer's entities), and grants per entity slot and product.
 A new install gets them from setup. An existing install copies them once with this command.
 
+**Task 0058:** the schema step of this release drops `enterprise_identity_connections` (migration 062), and stops with
+`OLD_SIGN_IN_CONNECTION_NOT_CARRIED_OVER` while an entity of your installation has an ACTIVE connection there and your
+customer has none in `idn_login_connection`. So an install that never ran this command runs it with the release **before**
+this one first. `enterprise_identity_connection_history` and `tenant_oidc_group_grants` stay.
+
 ## Before you run it
 
 1. The schema step has run (`docs/install/SCHEMA_STEP.md`).
@@ -40,14 +45,12 @@ Identity migration done: connections created=1 unchanged=0 conflict=0; grants ad
   one of LexaVault's entity roles (or is the platform role) is not copied; it never admitted anyone. An alias
   (`USER`, `REVIEWER`, `APPROVER`) is stored as the role it stands for (task 0041, as setup stores it), and each copied
   grant is recorded in the grant history (`idn_grant_history`) as changed by `lexavault-identity-migration`.
-- **Nothing is deleted.** The old tables stay as they are; a later release drops them.
+- **Nothing is deleted by this command.**
 - Running it again copies nothing more.
 
 Exit codes: 0 done, 1 failed (run it again), 2 refused (tables missing, no customer, more than one customer, bad
 option), 3 done except conflicts.
 
-## Not covered
+## After the table is dropped
 
-The R1 login-connection admin screen (`/api/v1/admin/enterprise-identity`) still keeps its drafts, tests and rollback in
-`enterprise_identity_connections`. Sign-in no longer reads that table, so a change made on that screen does not take
-effect until the screen is moved to `idn_` (report 0037).
+The command still copies grants. Login connections are changed in Admin › Sign-in or by setup.

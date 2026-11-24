@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0058 (owner approved dropping this table): sign-in has read platform-identity's idn_login_connection since task
+        0037, and nothing reads or writes enterprise_identity_connections any more. Its ACTIVE connection was carried over by
+        setup or by the identity migration; this refuses to drop it (and the app does not start) while an entity of this
+        installation has an ACTIVE one here and its customer has none in idn_login_connection. A row of an entity that is not
+        a slot of this installation was never carried over and never admitted anyone since then; it goes.
+
+        enterprise_identity_connection_history stays: it is the only record of who changed the old connections, and it is not
+        carried over anywhere. Nothing reads or writes it. tenant_oidc_group_grants (036) also stays.
+    -->
+    <changeSet id="062-01-drop-old-identity-connections" author="lexavault">
+        <sql splitStatements="false">
+            do $drop$
+            declare
+                missing integer := 0;
+            begin
+                if exists (select 1 from enterprise_identity_connections where status = 'ACTIVE') then
+                    if to_regclass('idn_entity') is null or to_regclass('idn_login_connection') is null then
+                        raise exception 'OLD_SIGN_IN_CONNECTION_NOT_CARRIED_OVER: run the schema step, setup and the identity migration first';
+                    end if;
+                    select count(*) into missing
+                      from enterprise_identity_connections old
+                      join idn_entity e on e.entity_uuid = old.tenant_id
+                     where old.status = 'ACTIVE'
+                       and not exists (select 1 from idn_login_connection c
+                                        where c.tenant_id = e.tenant_id and c.product_code = 'LEXAVAULT'
+                                          and c.status = 'ACTIVE');
+                    if missing &gt; 0 then
+                        raise exception 'OLD_SIGN_IN_CONNECTION_NOT_CARRIED_OVER: % connection(s); run the identity migration of the release before this one, or setup, first', missing;
+                    end if;
+                end if;
+                drop table enterprise_identity_connections;
+            end $drop$;
+        </sql>
+        <rollback>
+            <sql>
+                create table enterprise_identity_connections (
+                    connection_id uuid primary key,
+                    tenant_id uuid not null references tenants(id),
+                    provider_id varchar(100) not null,
+                    provider_type varchar(20) not null,
+                    display_name varchar(200) not null,
+                    issuer_uri varchar(1000) not null,
+                    browser_client_id varchar(300),
+                    api_audience varchar(300) not null,
+                    secret_reference varchar(500),
+                    status varchar(20) not null,
+                    configuration_version bigint not null,
+                    created_at timestamptz not null,
+                    updated_at timestamptz not null,
+                    last_tested_at timestamptz,
+                    last_test_status varchar(20),
+                    last_test_message varchar(500),
+                    constraint ck_eic_provider_type check (provider_type in ('OIDC','SAML','LDAP_AD')),
+                    constraint ck_eic_status check (status in ('DRAFT','VALIDATED','ACTIVE','DISABLED')),
+                    constraint ck_eic_version check (configuration_version &gt; 0),
+                    constraint ck_eic_test_status check (last_test_status is null or last_test_status in ('PASSED','FAILED'))
+                );
+                create unique index uq_eic_active_binding on enterprise_identity_connections(provider_id, issuer_uri, api_audience) where status='ACTIVE';
+                create index ix_eic_active_lookup on enterprise_identity_connections(provider_id, issuer_uri, api_audience) where status='ACTIVE';
+                create unique index uq_eic_staged_per_tenant_provider on enterprise_identity_connections(tenant_id) where status in ('DRAFT','VALIDATED');
+                create unique index uq_eic_active_per_tenant on enterprise_identity_connections(tenant_id) where status='ACTIVE';
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

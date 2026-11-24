@@ -81,30 +81,16 @@ securedoc:
       issuer-uri: ${SECUREDOC_SECURITY_OIDC_ISSUER_URI:}
       audience: ${SECUREDOC_SECURITY_OIDC_AUDIENCE:}
       provider-id: ${SECUREDOC_SECURITY_OIDC_PROVIDER_ID:customer-oidc}
-      # Internal tenant mapping owned by this OIDC connection. Customer IdP does not need to emit it.
-      tenant-id: ${SECUREDOC_SECURITY_OIDC_TENANT_ID:}
-      # Backward-compatible fallback only for older deployments.
-      tenant-claim: ${SECUREDOC_SECURITY_OIDC_TENANT_CLAIM:tenant_id}
       username-claim: ${SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM:preferred_username}
       email-claim: ${SECUREDOC_SECURITY_OIDC_EMAIL_CLAIM:email}
       display-name-claim: ${SECUREDOC_SECURITY_OIDC_DISPLAY_NAME_CLAIM:name}
-      # External customer groups are normalized by the shared identity module; LexaVault owns role mapping.
+      # The claim that carries a person's groups. Which group gives which role in which entity is in platform-identity's
+      # grants, loaded by setup (task 0058: the configured role mapping is gone).
       roles-claim: ${SECUREDOC_SECURITY_OIDC_ROLES_CLAIM:groups}
       # Task 0054 (SEC-7): the claims only a person's token carries; a token with one of them is refused on the machine
       # paths (push and scanner intake). Empty keeps platform-identity's list. Name your own when your login system puts
       # one of those into its machine tokens.
       machine-user-claims: ${SECUREDOC_SECURITY_OIDC_MACHINE_USER_CLAIMS:}
-      role-mappings:
-        DOCUMENT_PROCESSOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_PROCESSOR:securedoc-document-processor}
-        DOCUMENT_SUPERVISOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_SUPERVISOR:securedoc-document-supervisor}
-        BUSINESS_ADMIN: ${SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN:securedoc-business-admin}
-        REPORT_VIEWER: ${SECUREDOC_SECURITY_ROLE_REPORT_VIEWER:securedoc-report-viewer}
-        TENANT_IT_ADMIN: ${SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN:securedoc-tenant-it-admin}
-        # PLATFORM_OPERATIONS_ADMIN comes only from a platform-wide grant (task 0054), never from a mapping here.
-        # Narrow transition aliases for existing IdP groups. Remove after tenant IdP assignments migrate.
-        USER: ${SECUREDOC_SECURITY_LEGACY_ROLE_USER:securedoc-user}
-        REVIEWER: ${SECUREDOC_SECURITY_LEGACY_ROLE_REVIEWER:securedoc-reviewer}
-        APPROVER: ${SECUREDOC_SECURITY_LEGACY_ROLE_APPROVER:securedoc-approver}
   # Task 0057: which of LexaVault's own checks refuse a start while down (and make the app not ready).
   monitoring:
     storage-required: ${SECUREDOC_MONITORING_STORAGE_REQUIRED:true}

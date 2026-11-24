@@ -94,7 +94,12 @@ export const HELP = {
   // Admin › Sign-in
   signIn: {
     name: 'Sign-in',
-    text: 'Shows the login system your people use to sign in to LexaVault. It is managed through the login hub and cannot be changed here. Test sign-in checks that it answers; it changes nothing. To change it, contact LexaVault support.',
+    text: 'The login system your people use to sign in to LexaVault. Test sign-in checks that it answers; it changes nothing.',
+  },
+
+  signInDraft: {
+    name: 'Change the sign-in',
+    text: 'A draft is a copy of the connection in use. Change it, test it, then switch. The test reads your login system\'s published details, and checks a token if you paste one. A change of login system, provider ID or audience also needs the server\'s settings, so it is switched at a restart.',
   },
 
   // Admin › Platform operations
@@ -109,6 +114,10 @@ export const HELP = {
   telemetry: {
     name: 'Usage data',
     text: 'Whether LexaVault sends counts about how the product is used, so it can be improved. Only the items listed are sent, never document content or who did what. It is set when LexaVault is installed and cannot be changed here.',
+  },
+  entities: {
+    name: 'Entities',
+    text: 'The entities your licence gives you. A new one is activated and named here once. A suspended one lets nobody in and takes nothing new in until it is resumed; its cases are finished and nothing is deleted. You see the entities you are a Business Admin of.',
   },
   licensing: {
     name: 'Licensing',

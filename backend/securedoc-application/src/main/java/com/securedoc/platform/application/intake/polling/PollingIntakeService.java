@@ -31,6 +31,7 @@ public final class PollingIntakeService {
     private final AuditService auditService;
     private final Clock clock;
     private com.securedoc.platform.application.licensing.IntakeLicence licence;
+    private com.securedoc.platform.application.port.out.EntityTimeZonePort zones = com.securedoc.platform.application.port.out.EntityTimeZonePort.NONE;
 
     public PollingIntakeService(IntegrationConnectionService connectionService, PollingRunRepository runRepository,
                                 PollingSourcePort sourcePort, ExternalIntakeService externalIntakeService,
@@ -42,6 +43,18 @@ public final class PollingIntakeService {
     public PollingIntakeService withLicence(com.securedoc.platform.application.licensing.IntakeLicence licence) {
         this.licence = Objects.requireNonNull(licence);
         return this;
+    }
+
+    /** Task 0058: the entity's time zone, for daily schedules without one of their own. */
+    public PollingIntakeService withEntityTimeZones(com.securedoc.platform.application.port.out.EntityTimeZonePort zones) {
+        this.zones = Objects.requireNonNull(zones);
+        return this;
+    }
+
+    /** Asked only where a schedule needs it. */
+    private java.time.ZoneId entityZone(IntegrationConnection source) {
+        return source.pollingScheduleType() == com.securedoc.platform.domain.integration.IntegrationPollingScheduleType.DAILY
+                && source.pollingTimeZone() == null ? zones.effective(source.tenantId()).orElse(null) : null;
     }
 
     PollingIntakeService(IntegrationConnectionService connectionService, PollingRunRepository runRepository,
@@ -61,7 +74,7 @@ public final class PollingIntakeService {
         List<PollingSourceRef> result = new ArrayList<>();
         for (IntegrationConnection source : connectionService.listEnabledPollingSources()) {
             Instant latestStarted = runRepository.findLatest(source.id()).map(PollingRun::startedAt).orElse(null);
-            if (PollingScheduleCalculator.isDue(source, latestStarted, now)) {
+            if (PollingScheduleCalculator.isDue(source, latestStarted, now, entityZone(source))) {
                 result.add(new PollingSourceRef(source.tenantId(), source.id()));
             }
         }
@@ -120,7 +133,7 @@ public final class PollingIntakeService {
         if (!source.pollingSource()) throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not a polling source");
         List<PollingRun> runs = runRepository.findRecent(tenantId, connectionId, 20);
         Instant latest = runs.isEmpty() ? null : runs.get(0).startedAt();
-        Instant next = source.enabled() ? PollingScheduleCalculator.nextRunAt(source, latest, Instant.now(clock)) : null;
+        Instant next = source.enabled() ? PollingScheduleCalculator.nextRunAt(source, latest, Instant.now(clock), entityZone(source)) : null;
         return new PollingConnectionStatus(connectionId.value(), source.name(), source.enabled(), source.healthStatus().name(), next,
                 runs.stream().map(this::snapshot).toList());
     }

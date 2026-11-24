@@ -84,7 +84,7 @@ public class OidcTenantMembershipResolver {
                 key -> toEntityKeys(grants.activeGrants(key.providerId(), key.issuer(), key.audience())),
                 key -> toEntities(candidates.findCandidates(key.providerId(), key.issuer(), key.audience())),
                 new ProductEntityRoleCatalog(),
-                new AdmissionSettings(oidc.isSharedIssuerTenantSelectionEnabled(), oidc.isPersistentConnectionEnabled(),
+                new AdmissionSettings(true, oidc.isPersistentConnectionEnabled(),
                         oidc.getProviderId(), oidc.getAudience()));
     }
 
@@ -125,6 +125,14 @@ public class OidcTenantMembershipResolver {
         }
         return refusingAsSecurityContext(() -> platformAuthorization.platformRoles(
                 new ConnectionKey(providerId, issuer, audience), authenticatedGroups));
+    }
+
+    /** The customer's only ACTIVE entity behind the verified token's connection; empty when there are several, none, or it can't be read. */
+    public Optional<TenantId> onlyEntity(Jwt verifiedJwt) {
+        URI issuer = verifiedJwt == null ? null : issuer(verifiedJwt);
+        if (issuer == null) return Optional.empty();
+        Set<TenantId> entities = candidates.findCandidates(providerId, issuer, audience);
+        return entities == null || entities.size() != 1 ? Optional.empty() : Optional.of(entities.iterator().next());
     }
 
     private static URI issuer(Jwt jwt) {
