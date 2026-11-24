@@ -95,13 +95,17 @@ before. A grant stored under an alias name before task 0041 is still read as the
 
 These setup inputs come with their own tasks; nothing is needed for them now:
 
-- the release's production licence keys (`docs/install/BUILD.md`), and the licence used by the app itself
-  (`platform.licensing.tenant-id` from `platform-tenant.properties`): task 0038;
-- notifications settings: task 0040;
+- the release's production licence keys (`docs/install/BUILD.md`);
+- notifications settings;
 - integration client bindings (client ID -> entity -> source): a later task;
 - customer keys for sensitive case fields: when LexaVault encrypts with platform-core (`--no-customer-keys` until then);
 - entity time zones: the sign-in file's optional `timeZone` and `entityTimeZones` are stored by setup today; the app
   uses them from task 0039.
+
+## The licence is live (task 0057)
+
+LexaVault itself uses the licence setup stores: it does not start without a valid one, takes in new work on its word and
+counts pages. Give the app `platform-tenant.properties` (`-ConfigOut`): see `LICENSING.md`.
 
 ## After setup
 
