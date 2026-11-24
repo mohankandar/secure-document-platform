@@ -68,13 +68,6 @@ public class EntitySlotStore implements EntityTimeZonePort {
         jdbc.queryForList("select 1 from idn_customer where tenant_id = ? for update", customer);
     }
 
-    /** How many of the customer's entities are active. */
-    public int activeEntities(String customer) {
-        Integer n = jdbc.queryForObject("select count(*) from idn_entity where tenant_id = ? and status = 'ACTIVE'",
-                Integer.class, customer);
-        return n == null ? 0 : n;
-    }
-
     /**
      * The customer's slots in which one of the groups has the Business Admin role by that entity's own grants, also slots
      * nobody has activated yet (setup loads their grants before). Group names are compared exactly. The caller gives the

@@ -1082,5 +1082,5 @@ export interface EntitySlot {
   customerTimeZone: string | null;
   activatedAt: string | null;
 }
-export interface EntitySlotsOverview { entities: EntitySlot[]; entityChoiceOn: boolean }
+export interface EntitySlotsOverview { entities: EntitySlot[] }
 export interface EntityChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null }

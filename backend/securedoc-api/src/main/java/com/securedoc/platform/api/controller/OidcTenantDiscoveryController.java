@@ -27,7 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Bootstrap endpoint for shared-issuer users before selecting a tenant.
+ * The entities the person may enter, before one is chosen (task 0058: in OIDC mode always, with one entity too).
  * SecurityConfig still requires valid OIDC JWT. RequestContextResolver performs
  * ACTIVE connection and tenant-scoped group authorization.
  *

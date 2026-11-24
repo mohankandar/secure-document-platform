@@ -3,7 +3,6 @@ package com.securedoc.platform.api.identity;
 import com.documentplatform.errors.PlatformCode;
 import com.documentplatform.identity.store.ActivationOutcome;
 import com.documentplatform.identity.store.EntityRecord;
-import com.documentplatform.identity.store.EntityStatus;
 import com.documentplatform.identity.store.EntityStore;
 import com.documentplatform.identity.store.EntityTimeZones;
 import com.documentplatform.identity.store.LicensedSlots;
@@ -12,7 +11,6 @@ import com.documentplatform.identity.store.TimeZoneOutcome;
 import com.documentplatform.licensing.EntitySlot;
 import com.securedoc.platform.api.context.RequestContextResolver.VerifiedSignIn;
 import com.securedoc.platform.api.licensing.PlatformLicence;
-import com.securedoc.platform.api.security.SecurityProperties;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.AccessDeniedException;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
@@ -45,8 +43,6 @@ import java.util.stream.Collectors;
  *       groups have the Business Admin role by that slot's own grants. A slot they don't manage is neither shown nor
  *       changed, and the refusal does not say whether it exists.</li>
  *   <li>The entity the person is in can't be suspended by them: someone signed in elsewhere must be able to resume it.</li>
- *   <li>While sign-in to more than one entity is off (shared-issuer selection), a second entity is not made active: with
- *       two, sign-in would find no single entity and refuse everybody.</li>
  *   <li>LexaVault's own entity row follows the slot in the same transaction.</li>
  * </ul>
  * Every call is audited with its result code, in the log of the entity the person is in and of the entity concerned.
@@ -57,7 +53,6 @@ public class EntitySlotService {
 
     /** LexaVault's own refusals; the platform's are {@link ActivationOutcome.Result} and {@link TimeZoneOutcome.Result}. */
     static final String ENTITY_IN_USE_HERE = "ENTITY_IN_USE_HERE";
-    static final String SECOND_ENTITY_NEEDS_ENTITY_CHOICE = "SECOND_ENTITY_NEEDS_ENTITY_CHOICE";
 
     /** One change's answer. {@code whatToDo} is null when it was done. */
     public record Answer(boolean done, String code, String message, String whatToDo) {
@@ -68,31 +63,28 @@ public class EntitySlotService {
                            String customerTimeZone, Instant activatedAt) {
     }
 
-    public record Overview(List<SlotView> entities, boolean entityChoiceOn) {
+    public record Overview(List<SlotView> entities) {
     }
 
     private final EntitySlotStore slots;
     private final LicensedSlots licensed;
     private final TenantRedactionPolicyRepository policies;
     private final AuditService audit;
-    private final boolean entityChoiceOn;
     private final Clock clock;
 
     @Autowired
     public EntitySlotService(EntitySlotStore slots, PlatformLicence licence, TenantRedactionPolicyRepository policies,
-                             AuditService audit, SecurityProperties security) {
-        this(slots, licensedSlots(licence), policies, audit,
-                security.getOidc().isSharedIssuerTenantSelectionEnabled(), Clock.systemUTC());
+                             AuditService audit) {
+        this(slots, licensedSlots(licence), policies, audit, Clock.systemUTC());
     }
 
     /** For tests: the licence, the setting and the clock given. */
     public EntitySlotService(EntitySlotStore slots, LicensedSlots licensed, TenantRedactionPolicyRepository policies,
-                      AuditService audit, boolean entityChoiceOn, Clock clock) {
+                      AuditService audit, Clock clock) {
         this.slots = Objects.requireNonNull(slots);
         this.licensed = Objects.requireNonNull(licensed);
         this.policies = Objects.requireNonNull(policies);
         this.audit = Objects.requireNonNull(audit);
-        this.entityChoiceOn = entityChoiceOn;
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -110,7 +102,7 @@ public class EntitySlotService {
     @Transactional(readOnly = true)
     public Overview overview(AuthenticatedPrincipal principal, Optional<VerifiedSignIn> signIn) {
         Optional<String> customer = slots.customerOf(principal.tenantId());
-        if (customer.isEmpty()) return new Overview(List.of(), entityChoiceOn);
+        if (customer.isEmpty()) return new Overview(List.of());
         Set<String> managed = managed(customer.get(), principal, signIn);
         List<SlotView> out = new ArrayList<>();
         for (EntityRecord r : slots.slots(customer.get())) {
@@ -121,16 +113,13 @@ public class EntitySlotService {
                     zone.map(z -> z.own() == null ? null : z.own().getId()).orElse(null),
                     zone.map(z -> z.customer() == null ? null : z.customer().getId()).orElse(null), r.activatedAt()));
         }
-        return new Overview(List.copyOf(out), entityChoiceOn);
+        return new Overview(List.copyOf(out));
     }
 
     @Transactional
     public Answer activate(AuthenticatedPrincipal principal, Optional<VerifiedSignIn> signIn, CorrelationId correlation,
                            String slotId, String name) {
         EntityRecord before = requireManaged(principal, signIn, correlation, slotId, AuditAction.ENTITY_ACTIVATED);
-        if (before.status() == EntityStatus.NOT_ACTIVATED && wouldBeSecond(before)) {
-            return secondEntity(principal, correlation, before, AuditAction.ENTITY_ACTIVATED);
-        }
         ActivationOutcome outcome = withActivation(a -> a.activate(slotId, name, actor(principal)));
         return finish(principal, correlation, before, AuditAction.ENTITY_ACTIVATED, outcome);
     }
@@ -159,9 +148,6 @@ public class EntitySlotService {
     public Answer resume(AuthenticatedPrincipal principal, Optional<VerifiedSignIn> signIn, CorrelationId correlation,
                          String slotId) {
         EntityRecord before = requireManaged(principal, signIn, correlation, slotId, AuditAction.ENTITY_RESUMED);
-        if (before.status() == EntityStatus.SUSPENDED && wouldBeSecond(before)) {
-            return secondEntity(principal, correlation, before, AuditAction.ENTITY_RESUMED);
-        }
         ActivationOutcome outcome = withActivation(a -> a.resume(slotId, actor(principal)));
         return finish(principal, correlation, before, AuditAction.ENTITY_RESUMED, outcome);
     }
@@ -192,17 +178,6 @@ public class EntitySlotService {
         }
         record(principal, correlation, before, action, outcome.result(), outcome.refused(), "");
         return answer(outcome.result(), outcome.refused());
-    }
-
-    private boolean wouldBeSecond(EntityRecord slot) {
-        return !entityChoiceOn && slots.activeEntities(slot.tenantId()) > 0;
-    }
-
-    private Answer secondEntity(AuthenticatedPrincipal principal, CorrelationId correlation, EntityRecord slot,
-                                AuditAction action) {
-        return refused(principal, correlation, slot, action, SECOND_ENTITY_NEEDS_ENTITY_CHOICE,
-                "Only one entity can be active until people can choose an entity when they sign in.",
-                "Ask the IT Admin to switch on sign-in to more than one entity.");
     }
 
     private Answer refused(AuthenticatedPrincipal principal, CorrelationId correlation, EntityRecord slot,

@@ -341,7 +341,6 @@ export interface MockOptions {
 
 /** Task 0058: Admin › Entities. */
 export const ENTITY_SLOTS = {
-  entityChoiceOn: true,
   entities: [
     { slotId: 'ENT-LEX-0001', name: 'Residential lending', status: 'ACTIVE', current: true, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: '2026-01-05T09:00:00Z' },
     { slotId: 'ENT-LEX-0002', name: 'Commercial lending', status: 'ACTIVE', current: false, timeZone: 'Europe/London', customerTimeZone: 'America/Chicago', activatedAt: '2026-02-05T09:00:00Z' },

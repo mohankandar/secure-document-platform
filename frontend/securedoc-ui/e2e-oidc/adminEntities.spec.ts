@@ -94,11 +94,6 @@ test('a time zone is chosen by name, or the customer’s again', async ({ page }
   ]);
 });
 
-test('while people can’t choose an entity at sign-in, the screen says only one can be active', async ({ page }) => {
-  await open(page, {}, { ...ENTITY_SLOTS, entityChoiceOn: false });
-  await expect(page.getByText('Only one entity can be active until people can choose an entity when they sign in.')).toBeVisible();
-});
-
 test('nobody but a Business Admin has the area', async ({ page }) => {
   await signInAs(page, 'it', '/admin/entities');
   await expect(page.getByRole('navigation', { name: 'Administration areas' }).getByRole('link', { name: /Entities/ })).toHaveCount(0);

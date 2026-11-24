@@ -239,14 +239,25 @@ class FreshDatabaseStartPostgresTest {
     /** Task 0058: the entities, their time zone, and a suspended entity, in the running app. */
     private static void entitiesInTheRunningApp(int port) throws Exception {
         String entities = call(port, "GET", "/api/v1/admin/entities", null).body();
-        assertTrue(entities.contains("ENT-DEMO-0001") && entities.contains("ENT-DEMO-0002")
-                && entities.contains("\"entityChoiceOn\":false"), entities);
+        assertTrue(entities.contains("ENT-DEMO-0001") && entities.contains("ENT-DEMO-0002"), entities);
         assertEquals(403, callAs(port, "TENANT_IT_ADMIN", "/api/v1/admin/entities").statusCode());
-        // Shared-issuer selection is off by default: a second entity is not made active (sign-in would find no single one).
-        HttpResponse<String> second = call(port, "POST", "/api/v1/admin/entities/ENT-DEMO-0002/activate", "{\"name\":\"Second\"}");
-        assertEquals(200, second.statusCode(), second.body());
-        assertTrue(second.body().contains("SECOND_ENTITY_NEEDS_ENTITY_CHOICE"), second.body());
-        assertEquals("NOT_ACTIVATED", one("select status from idn_entity where slot_id = 'ENT-DEMO-0002'"));
+        // Task 0058: a second entity is activated and named while the app runs; it has its own row, and the first is unchanged.
+        HttpResponse<String> second = call(port, "POST", "/api/v1/admin/entities/ENT-DEMO-0002/activate", "{\"name\":\"Second Entity\"}");
+        assertTrue(second.body().contains("\"code\":\"ACTIVATED\""), second.body());
+        assertEquals("ACTIVE", one("select status from idn_entity where slot_id = 'ENT-DEMO-0002'"));
+        assertEquals("Second Entity", one("select name from tenants where slug = 'ent-demo-0002'"));
+        assertTrue(call(port, "POST", "/api/v1/admin/entities/ENT-DEMO-0002/suspend", null).body().contains("\"code\":\"SUSPENDED\""));
+        assertEquals("SUSPENDED", one("select status from tenants where slug = 'ent-demo-0002'"));
+        // Put back as it was: the tests after this one count rows and read that slot.
+        try (Connection c = db.connect(); Statement s = c.createStatement()) {
+            String second2 = "(select id from tenants where slug = 'ent-demo-0002')";
+            for (String table : List.of("audit_records", "tenant_capabilities", "tenant_redaction_kinds", "tenant_redaction_policies")) {
+                s.execute("delete from " + table + " where tenant_id = " + second2);
+            }
+            s.execute("delete from tenants where slug = 'ent-demo-0002'");
+            s.execute("update idn_entity set status = 'NOT_ACTIVATED', display_name = null, activated_by = null, activated_at = null"
+                    + " where slot_id = 'ENT-DEMO-0002'");
+        }
         assertEquals(403, call(port, "POST", "/api/v1/admin/entities/ENT-NOWHERE/activate", "{\"name\":\"x\"}").statusCode());
 
         assertTrue(call(port, "GET", "/api/v1/me", null).body().contains("\"timeZone\":null"));
@@ -399,7 +410,7 @@ class FreshDatabaseStartPostgresTest {
     void signInFindsTheSingleActiveDemoEntityThroughTheIdnTables() {
         PlatformIdentityReads reads = new PlatformIdentityReads(new JdbcTemplate(new IdnRows(db).ds));
         URI issuer = URI.create("https://login.demo.example/oauth2/default");
-        assertEquals(DEMO_ENTITY, reads.findActive("demo-okta", issuer, "api://lexavault-demo").orElseThrow().tenantId());
+        assertEquals(Set.of(TenantId.of(DEMO_ENTITY)), reads.findCandidates("demo-okta", issuer, "api://lexavault-demo"));
         assertEquals(Set.of(TenantId.of(DEMO_ENTITY)), reads.activeGrants("demo-okta", issuer, "api://lexavault-demo").keySet());
 
         // Task 0041: the local OIDC start runs setup with the demo files and the development login system put in
@@ -412,8 +423,8 @@ class FreshDatabaseStartPostgresTest {
         assertEquals(3, oidc.exit(), oidc.output());
         assertTrue(oidc.output().contains("Setup done except 8 item(s)"), oidc.output());
         assertTrue(oidc.output().contains("login connection LEXAVAULT (version 1)"), oidc.output());
-        assertEquals(DEMO_ENTITY, reads.findActive("customer-oidc", keycloak, "lexavault-api").orElseThrow().tenantId());
-        assertTrue(reads.findActive("demo-okta", issuer, "api://lexavault-demo").isEmpty(), "the placeholder no longer signs in");
+        assertEquals(Set.of(TenantId.of(DEMO_ENTITY)), reads.findCandidates("customer-oidc", keycloak, "lexavault-api"));
+        assertTrue(reads.findCandidates("demo-okta", issuer, "api://lexavault-demo").isEmpty(), "the placeholder no longer signs in");
         Run again = setup("apply", signin, "--replace-connection");
         assertEquals(0, again.exit(), again.output());
         assertTrue(again.output().contains("0 created, 0 updated, 0 removed"), again.output());

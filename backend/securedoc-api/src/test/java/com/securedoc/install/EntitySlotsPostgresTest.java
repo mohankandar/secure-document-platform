@@ -112,7 +112,7 @@ class EntitySlotsPostgresTest {
         if (db != null) db.close();
     }
 
-    private EntitySlotService service(boolean entityChoiceOn) {
+    private EntitySlotService service() {
         TenantRedactionPolicyRepository repository = new TenantRedactionPolicyRepository() {
             @Override
             public Optional<TenantRedactionPolicy> findByTenantId(TenantId tenantId) {
@@ -126,7 +126,7 @@ class EntitySlotsPostgresTest {
         };
         return new EntitySlotService(store, () -> licence
                 ? Optional.of(new LicensedSlots.Current(CUSTOMER, Set.of(A, B), standing)) : Optional.empty(),
-                repository, new AuditService(audits::add), entityChoiceOn, Clock.systemUTC());
+                repository, new AuditService(audits::add), Clock.systemUTC());
     }
 
     private static AuthenticatedPrincipal in(TenantId entity) {
@@ -148,7 +148,7 @@ class EntitySlotsPostgresTest {
 
     @Test
     void aSlotIsActivatedNamedSuspendedAndResumedAndLexaVaultsOwnRowFollows() {
-        EntitySlotService service = service(true);
+        EntitySlotService service = service();
         Answer done = inTx(() -> service.activate(in(a), groups("Both"), CORRELATION, B, "  Northwind Trust  "));
         assertTrue(done.done(), done.toString());
         assertEquals("ACTIVATED", done.code());
@@ -184,7 +184,7 @@ class EntitySlotsPostgresTest {
 
     @Test
     void aSlotTheyDontManageIsNotShownNotChangedAndTheRefusalDoesNotSayWhetherItExists() {
-        EntitySlotService service = service(true);
+        EntitySlotService service = service();
         // Admins A have the Business Admin role in A only (in B they are processors).
         assertEquals(List.of(A), inTx(() -> service.overview(in(a), groups("Admins A"))).entities().stream()
                 .map(EntitySlotService.SlotView::slotId).toList());
@@ -207,7 +207,7 @@ class EntitySlotsPostgresTest {
 
     @Test
     void activatingAndResumingFollowTheLicenceAndSuspendingIsAlwaysAllowed() {
-        EntitySlotService service = service(true);
+        EntitySlotService service = service();
         licence = false;
         assertEquals("NO_LICENCE", inTx(() -> service.activate(in(a), groups("Both"), CORRELATION, B, "B")).code());
         licence = true;
@@ -225,7 +225,7 @@ class EntitySlotsPostgresTest {
 
     @Test
     void theEntityAPersonIsInIsNotSuspendedByThem() {
-        EntitySlotService service = service(true);
+        EntitySlotService service = service();
         Answer refused = inTx(() -> service.suspend(in(a), groups("Both"), CORRELATION, A));
         assertFalse(refused.done());
         assertEquals("ENTITY_IN_USE_HERE", refused.code());
@@ -233,28 +233,26 @@ class EntitySlotsPostgresTest {
         assertEquals(AuditOutcome.FAILURE, audits.get(audits.size() - 1).outcome());
     }
 
+    /** Task 0058: two active entities behind one login system: each group decides its own entity, and nobody is locked out. */
     @Test
-    void whileEntityChoiceIsOffNoSecondEntityBecomesActive() {
-        // With two active entities and no choice, sign-in finds no single binding and refuses everybody.
-        assertTrue(reads.findActive("slots-okta", ISSUER, audience).isPresent());
-        EntitySlotService service = service(false);
-        Answer refused = inTx(() -> service.activate(in(a), groups("Both"), CORRELATION, B, "B"));
-        assertEquals("SECOND_ENTITY_NEEDS_ENTITY_CHOICE", refused.code());
-        assertFalse(refused.done());
-        assertTrue(reads.findActive("slots-okta", ISSUER, audience).isPresent(), "sign-in goes on");
-        // The same for a resume.
-        assertTrue(inTx(() -> service(true).activate(in(a), groups("Both"), CORRELATION, B, "B")).done());
-        assertTrue(inTx(() -> service(true).suspend(in(a), groups("Both"), CORRELATION, B)).done());
-        assertEquals("SECOND_ENTITY_NEEDS_ENTITY_CHOICE",
-                inTx(() -> service.resume(in(a), groups("Both"), CORRELATION, B)).code());
-        assertFalse(store.active(b));
-        // The only entity can still be named.
-        assertTrue(inTx(() -> service.rename(in(a), groups("Admins A"), CORRELATION, A, "Only one")).done());
+    void aSecondActiveEntityKeepsEveryoneSigningInToTheirOwn() {
+        EntitySlotService service = service();
+        assertTrue(inTx(() -> service.activate(in(a), groups("Both"), CORRELATION, B, "B")).done());
+        var properties = new com.securedoc.platform.api.security.SecurityProperties();
+        properties.getOidc().setProviderId("slots-okta");
+        properties.getOidc().setAudience(audience);
+        var signIn = new com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver(reads, reads, reads, properties);
+        var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("t").header("alg", "none").issuer(ISSUER.toString()).subject("s").build();
+        assertEquals(Map.of(a, Set.of("BUSINESS_ADMIN"), b, Set.of("DOCUMENT_PROCESSOR")), signIn.authorizedTenants(jwt, Set.of("Admins A")));
+        assertEquals(Map.of(a, Set.of("BUSINESS_ADMIN"), b, Set.of("BUSINESS_ADMIN")), signIn.authorizedTenants(jwt, Set.of("Both")));
+        assertEquals(Map.of(), signIn.authorizedTenants(jwt, Set.of("Nobody")));
+        assertTrue(inTx(() -> service.suspend(in(a), groups("Both"), CORRELATION, B)).done());
+        assertEquals(Map.of(a, Set.of("BUSINESS_ADMIN")), signIn.authorizedTenants(jwt, Set.of("Both")), "a suspended entity lets nobody in");
     }
 
     @Test
     void aChangeThatFailsLaterChangesNothing() {
-        EntitySlotService service = service(true);
+        EntitySlotService service = service();
         assertThrows(IllegalStateException.class, () -> tx.executeWithoutResult(status -> {
             assertTrue(service.activate(in(a), groups("Both"), CORRELATION, B, "B").done());
             throw new IllegalStateException("the audit record could not be written");
@@ -279,7 +277,7 @@ class EntitySlotsPostgresTest {
 
     @Test
     void theEntitysTimeZoneIsItsOwnElseTheCustomers() throws SQLException {
-        EntitySlotService service = service(true);
+        EntitySlotService service = service();
         assertTrue(store.effective(a).isEmpty());
         rows.exec("update idn_customer set time_zone = 'America/Chicago' where tenant_id = ?", CUSTOMER);
         assertEquals(ZoneId.of("America/Chicago"), store.effective(a).orElseThrow());

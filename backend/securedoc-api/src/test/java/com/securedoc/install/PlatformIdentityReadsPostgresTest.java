@@ -95,9 +95,7 @@ class PlatformIdentityReadsPostgresTest {
     }
 
     @Test
-    void aSingleActiveEntityGivesABindingSeveralGiveNone() throws SQLException {
-        // Two ACTIVE entities share the connection: the person chooses, so there is no single binding.
-        assertTrue(reads.findActive(PROVIDER, ISSUER, AUDIENCE).isEmpty());
+    void oneActiveEntityIsTheOnlyCandidateAndOtherSlotsAreNone() throws SQLException {
         ThrowawayDatabase one = ThrowawayDatabase.create("bind");
         try (one) {
             PrintStream quiet = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
@@ -109,8 +107,8 @@ class PlatformIdentityReadsPostgresTest {
             r.lexaTenant(only, "ACTIVE");
             r.connection(TENANT, PROVIDER, ISSUER, AUDIENCE);
             PlatformIdentityReads single = new PlatformIdentityReads(new JdbcTemplate(r.ds));
-            assertEquals(only, single.findActive(PROVIDER, ISSUER, AUDIENCE).orElseThrow().tenantId());
-            assertTrue(single.findActive(PROVIDER, ISSUER, "api://other").isEmpty());
+            assertEquals(Set.of(TenantId.of(only)), single.findCandidates(PROVIDER, ISSUER, AUDIENCE));
+            assertTrue(single.findCandidates(PROVIDER, ISSUER, "api://other").isEmpty());
         }
     }
 
@@ -180,7 +178,6 @@ class PlatformIdentityReadsPostgresTest {
             var properties = new com.securedoc.platform.api.security.SecurityProperties();
             properties.getOidc().setProviderId(PROVIDER);
             properties.getOidc().setAudience(AUDIENCE);
-            properties.getOidc().setSharedIssuerTenantSelectionEnabled(true);
             var signIn = new com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver(ownReads, ownReads, ownReads, properties);
             var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("t").header("alg", "none").issuer(ISSUER.toString())
                     .subject("s").build();

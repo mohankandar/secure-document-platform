@@ -12,7 +12,6 @@
 
         enterprise_identity_connection_history stays: it is the only record of who changed the old connections, and it is not
         carried over anywhere. Nothing reads or writes it. tenant_oidc_group_grants (036) also stays.
-        Migration 037, which was never registered, changes an index of the dropped table and can no longer be used.
     -->
     <changeSet id="062-01-drop-old-identity-connections" author="lexavault">
         <sql splitStatements="false">

@@ -79,4 +79,18 @@ class DropOldConnectionsPostgresTest {
         assertTrue(!exists("enterprise_identity_connections"));
         assertEquals(0, schemaStep(), "a second run changes nothing");
     }
+
+    /** The never-registered migration 037 only removed an index of the table: with it or without it, the table goes. */
+    @Test
+    void theTableGoesWithTheOldIndexesAndWithoutTheOne037Removed() throws SQLException {
+        rows.exec("create unique index uq_eic_active_binding on enterprise_identity_connections(provider_id, issuer_uri, api_audience) where status='ACTIVE'");
+        rows.exec("create unique index uq_eic_active_per_tenant on enterprise_identity_connections(tenant_id) where status='ACTIVE'");
+        assertEquals(0, schemaStep(), output);
+        assertTrue(!exists("enterprise_identity_connections") && !exists("uq_eic_active_binding"));
+        rows.exec(OldConnectionTable.CREATE);
+        rows.exec("create unique index uq_eic_active_per_tenant on enterprise_identity_connections(tenant_id) where status='ACTIVE'");
+        rows.exec("delete from databasechangelog where id = '062-01-drop-old-identity-connections'");
+        assertEquals(0, schemaStep(), output);
+        assertTrue(!exists("enterprise_identity_connections"));
+    }
 }

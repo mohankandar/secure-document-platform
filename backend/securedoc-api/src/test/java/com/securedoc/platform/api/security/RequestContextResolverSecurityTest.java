@@ -1,14 +1,10 @@
 package com.securedoc.platform.api.security;
 
 import com.documentplatform.identity.IdentityClaimConfig;
-import com.documentplatform.identity.OidcConnectionBinding;
-import com.documentplatform.identity.OidcConnectionBindingResolver;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.context.SecurityContextException;
-import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
-import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
 import com.securedoc.platform.application.port.out.ActiveOidcTenantCandidates;
@@ -64,7 +60,7 @@ class RequestContextResolverSecurityTest {
     }
 
     @Test
-    void oidcUsesConnectionOwnedTenantAndFailsClosedForUnmappedRole() {
+    void oidcUsesTheEntityOfTheStoredConnectionAndFailsClosedForAGroupWithoutAGrant() {
         SecurityProperties properties = oidcProperties();
         RequestContextResolver resolver = resolver(properties);
         SecurityContextHolder.getContext().setAuthentication(authenticated(jwt(null, List.of("securedoc-user"))));
@@ -119,23 +115,10 @@ class RequestContextResolverSecurityTest {
         }
     }
 
-    /** Task 0054, decision 2: a configured mapping to the platform role gives nothing; only a platform-wide grant does. */
-    @Test
-    void aConfiguredMappingNeverGivesThePlatformRole() {
-        SecurityProperties oidc = oidcProperties();
-        assertEquals("securedoc-platform-operations-admin", oidc.getOidc().getRoleMappings().get("PLATFORM_OPERATIONS_ADMIN"));
-        signIn(List.of("securedoc-platform-operations-admin"));
-        assertThrows(SecurityContextException.class, () -> resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)));
-        signIn(List.of("securedoc-platform-operations-admin", "securedoc-report-viewer"));
-        assertEquals(java.util.Set.of("REPORT_VIEWER"),
-                resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
-    }
-
     /** Task 0054: with one configured entity too, the platform role comes through a platform-wide grant alone. */
     @Test
     void aPlatformWideGrantGivesThePlatformRoleInTheConfiguredEntity() {
         SecurityProperties oidc = oidcProperties();
-        oidc.getOidc().getRoleMappings().remove("PLATFORM_OPERATIONS_ADMIN");
         java.util.Map<String, java.util.Set<String>> grants = java.util.Map.of("ops", java.util.Set.of("PLATFORM_OPERATIONS_ADMIN"),
                 "wrong", java.util.Set.of("BUSINESS_ADMIN"));
         RequestContextResolver resolver = resolver(oidc, (provider, issuer, audience) -> grants);
@@ -164,9 +147,7 @@ class RequestContextResolverSecurityTest {
                 "securedoc-report-viewer,other", "other securedoc-report-viewer")) {
             signIn(List.of(almost));
             assertThrows(SecurityContextException.class, () -> resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)), almost);
-            assertThrows(SecurityContextException.class, () -> new OidcRoleMapper(oidc).map(almost), almost);
         }
-        assertEquals(java.util.Set.of("REPORT_VIEWER"), new OidcRoleMapper(oidc).map("securedoc-report-viewer"));
     }
 
     private void signIn(List<String> groups) {
@@ -240,7 +221,7 @@ class RequestContextResolverSecurityTest {
 
         SecurityContextException refused = assertThrows(SecurityContextException.class,
                 () -> resolver.resolvePrincipal(mock(HttpServletRequest.class)));
-        assertEquals("NO_MAPPED_ROLE", refused.reasonCode());
+        assertEquals("NO_VERIFIED_MEMBERSHIP", refused.reasonCode());
         assertEquals("00000000-0000-0000-0000-000000000001", refused.tenantId().toString());
         assertEquals(new TrustedActorResolver().resolve(jwt), refused.actorId());
         assertEquals(Optional.of(new TrustedActorResolver().resolve(jwt)), resolver.currentOidcActor());
@@ -273,10 +254,8 @@ class RequestContextResolverSecurityTest {
                 "00000000-0000-0000-0000-000000000001",
                 "00000000-0000-0000-0000-000000000099",
                 properties,
-                new OidcRoleMapper(properties),
-                new OidcTenantResolver(properties, persistedConnectionResolver(properties)),
-                new OidcTenantMembershipResolver(mock(TenantOidcGroupGrantRepository.class),
-                        mock(ActiveOidcTenantCandidates.class), platformGrants, properties),
+                new OidcTenantMembershipResolver((p, i, a) -> expected(properties, p, i, a) ? java.util.Map.of(ENTITY, GRANTS) : java.util.Map.of(),
+                        (p, i, a) -> expected(properties, p, i, a) ? java.util.Set.of(ENTITY) : java.util.Set.of(), platformGrants, properties),
                 mock(ActiveOidcMachineTenantBindings.class),
                 new TrustedActorResolver(),
                 new OidcJwtIdentityNormalizer(
@@ -288,35 +267,25 @@ class RequestContextResolverSecurityTest {
                                 properties.getOidc().getRolesClaim())));
     }
 
-    private OidcConnectionBindingResolver persistedConnectionResolver(SecurityProperties properties) {
-        return (providerId, issuer, audience) -> {
-            if (!properties.getOidc().getProviderId().equals(providerId)
-                    || !URI.create("https://identity.example.test").equals(issuer)
-                    || !properties.getOidc().getAudience().equals(audience)) {
-                return Optional.empty();
-            }
-            return Optional.of(new OidcConnectionBinding(
-                    UUID.fromString("00000000-0000-0000-0000-000000000010"),
-                    UUID.fromString("00000000-0000-0000-0000-000000000001"),
-                    providerId, issuer, audience, 1));
-        };
+    private static final com.securedoc.platform.domain.identity.TenantId ENTITY = com.securedoc.platform.domain.identity.TenantId.of(
+            UUID.fromString("00000000-0000-0000-0000-000000000001"));
+
+    /** Task 0058: the entity's grants (roles as platform-identity's store gives them) take the place of the configured mapping. */
+    private static final java.util.Map<String, java.util.Set<String>> GRANTS = java.util.Map.of(
+            "securedoc-document-processor", java.util.Set.of("DOCUMENT_PROCESSOR"), "securedoc-user", java.util.Set.of("DOCUMENT_PROCESSOR"),
+            "securedoc-reviewer", java.util.Set.of("DOCUMENT_PROCESSOR"), "securedoc-approver", java.util.Set.of("DOCUMENT_SUPERVISOR"),
+            "securedoc-document-supervisor", java.util.Set.of("DOCUMENT_SUPERVISOR"), "securedoc-business-admin", java.util.Set.of("BUSINESS_ADMIN"),
+            "securedoc-tenant-it-admin", java.util.Set.of("TENANT_IT_ADMIN"), "securedoc-report-viewer", java.util.Set.of("REPORT_VIEWER"));
+
+    private static boolean expected(SecurityProperties properties, String provider, URI issuer, String audience) {
+        return properties.getOidc().getProviderId().equals(provider) && URI.create("https://identity.example.test").equals(issuer)
+                && properties.getOidc().getAudience().equals(audience);
     }
 
     private SecurityProperties oidcProperties() {
         SecurityProperties properties = new SecurityProperties();
         properties.setMode(SecurityMode.OIDC);
         properties.getOidc().setAudience("lexavault-api");
-        properties.getOidc().setTenantId("00000000-0000-0000-0000-000000000001");
-        properties.getOidc().getRoleMappings().put("DOCUMENT_PROCESSOR", "securedoc-document-processor");
-        properties.getOidc().getRoleMappings().put("DOCUMENT_SUPERVISOR", "securedoc-document-supervisor");
-        properties.getOidc().getRoleMappings().put("USER", "securedoc-user");
-        properties.getOidc().getRoleMappings().put("REVIEWER", "securedoc-reviewer");
-        properties.getOidc().getRoleMappings().put("APPROVER", "securedoc-approver");
-        properties.getOidc().getRoleMappings().put("BUSINESS_ADMIN", "securedoc-business-admin");
-        properties.getOidc().getRoleMappings().put("TENANT_IT_ADMIN", "securedoc-tenant-it-admin");
-        properties.getOidc().getRoleMappings().put("PLATFORM_OPERATIONS_ADMIN", "securedoc-platform-operations-admin");
-        properties.getOidc().getRoleMappings().put("REPORT_VIEWER", "securedoc-report-viewer");
-        properties.getOidc().getRoleMappings().put("ADMIN", "securedoc-admin");
         return properties;
     }
 

@@ -30,9 +30,6 @@ export default function EntitiesArea() {
             <p>Each entity keeps its own cases, rules and people. The licence gives the entities; you activate and name them.</p>
           </div>
         </header>
-        {!data.entityChoiceOn && data.entities.length > 1 && (
-          <Notice>Only one entity can be active until people can choose an entity when they sign in. Ask the IT Admin to switch that on.</Notice>
-        )}
         {data.entities.length === 0 ? <p className="cf-muted">No entities to show. They are stored when LexaVault is set up with the licence.</p> : (
           <div className="cf-ad-table-wrap">
             <table className="cf-ad-table cf-ad-table-left">

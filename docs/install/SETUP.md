@@ -112,14 +112,25 @@ These setup inputs come with their own tasks; nothing is needed for them now:
 LexaVault itself uses the licence setup stores: it does not start without a valid one, takes in new work on its word and
 counts pages. Give the app `platform-tenant.properties` (`-ConfigOut`): see `LICENSING.md`.
 
+## Who gets in (task 0058)
+
+There is one way to sign in: the login system's groups and the **grants setup loads** (`idn_group_grant`, the role mapping
+file) decide the entities a person may enter and their roles in each. One entity: straight in. More than one: the entity used
+last, else a chooser. A sending system's entity is the one whose enabled push connection names its client.
+
+These settings are gone and are **ignored** when still set, whatever their value:
+`securedoc.security.oidc.shared-issuer-tenant-selection-enabled`, `.tenant-id`, `.tenant-claim`, `.role-mappings.*`
+(and `SECUREDOC_SECURITY_OIDC_TENANT_ID`, `_TENANT_CLAIM`, `SECUREDOC_SECURITY_ROLE_*`, `SECUREDOC_SECURITY_LEGACY_ROLE_*`).
+**Before this upgrade, check that every group named in `role-mappings` is in the role mapping file setup loaded**: a role
+that came only from the setting is gone. `securedoc.security.oidc.persistent-connection-enabled=false` refuses everybody.
+A web app on another origin now sends `X-Selected-Tenant-Id`, which the API allows.
+
 ## After setup
 
 Your entity slots are stored as `NOT_ACTIVATED`. A Business Admin activates, names,
 suspends and resumes them in Admin › Entities (task 0058): the entity they are in, and every other slot whose mapping rows
 give one of their groups BUSINESS_ADMIN, also before it is activated. The **first** entity of a new customer still needs a
-command (nobody can sign in while none is active). While sign-in to more than one entity is off
-(`securedoc.security.oidc.shared-issuer-tenant-selection-enabled`, the default), a second entity is not made active
-(`SECOND_ENTITY_NEEDS_ENTITY_CHOICE`): sign-in would refuse everybody. On a
+command (nobody can sign in while none is active). On a
 development or demo machine, the LexaVault demo step activates the demo entity (`install/demo/README.md`).
 
 An install that existed before task 0037 copies its login connection and grants once with the identity migration

@@ -1,5 +1,7 @@
 # LexaVault R1B — Trusted Tenant Identity: implementation contract (draft)
 
+> **Superseded (task 0058, owner 2026-11-24).** Sign-in with several entities through platform-core's identity is the normal path and has no setting. The `shared-issuer-tenant-selection-enabled` setting, the single-entity path, migration 037 and the `enterprise_identity_connections` table are gone. What follows is history.
+
 Status: SOURCE-REVIEWED DESIGN / NOT IMPLEMENTED / NOT TESTED
 Branch: feature/lexavault-r1b-tenant-identity
 Baseline: 9c66ea74340587458d4156dba3d7b55aec14c020

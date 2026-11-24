@@ -5,8 +5,6 @@ import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.SecurityProperties;
 import com.securedoc.platform.api.security.ProductRole;
-import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
-import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.documentplatform.identity.admission.EntitySelection;
 import com.documentplatform.identity.admission.MachineEntityAdmission;
@@ -61,8 +59,6 @@ public class RequestContextResolver {
     private final UUID demoTenantId;
     private final UUID demoActorId;
     private final SecurityProperties securityProperties;
-    private final OidcRoleMapper oidcRoleMapper;
-    private final OidcTenantResolver oidcTenantResolver;
     private final OidcTenantMembershipResolver oidcTenantMembershipResolver;
     private final ActiveOidcMachineTenantBindings machineTenantBindings;
     // platform-identity admission rules; refusals are mapped to SecurityContextException (403) at each call.
@@ -77,14 +73,12 @@ public class RequestContextResolver {
             String demoTenantId,
             String demoActorId,
             SecurityProperties securityProperties,
-            OidcRoleMapper oidcRoleMapper,
-            OidcTenantResolver oidcTenantResolver,
             OidcTenantMembershipResolver oidcTenantMembershipResolver,
             ActiveOidcMachineTenantBindings machineTenantBindings,
             TrustedActorResolver trustedActorResolver,
             OidcJwtIdentityNormalizer oidcIdentityNormalizer) {
-        this(demoTenantId, demoActorId, securityProperties, oidcRoleMapper, oidcTenantResolver,
-                oidcTenantMembershipResolver, machineTenantBindings, trustedActorResolver, oidcIdentityNormalizer,
+        this(demoTenantId, demoActorId, securityProperties, oidcTenantMembershipResolver,
+                machineTenantBindings, trustedActorResolver, oidcIdentityNormalizer,
                 new RequestActorDisplayName());
     }
 
@@ -93,8 +87,6 @@ public class RequestContextResolver {
             @Value("${securedoc.demo.tenant-id}") String demoTenantId,
             @Value("${securedoc.demo.actor-id}") String demoActorId,
             SecurityProperties securityProperties,
-            OidcRoleMapper oidcRoleMapper,
-            OidcTenantResolver oidcTenantResolver,
             OidcTenantMembershipResolver oidcTenantMembershipResolver,
             ActiveOidcMachineTenantBindings machineTenantBindings,
             TrustedActorResolver trustedActorResolver,
@@ -103,8 +95,6 @@ public class RequestContextResolver {
         this.demoTenantId = UUID.fromString(demoTenantId);
         this.demoActorId = UUID.fromString(demoActorId);
         this.securityProperties = securityProperties;
-        this.oidcRoleMapper = oidcRoleMapper;
-        this.oidcTenantResolver = oidcTenantResolver;
         this.oidcTenantMembershipResolver = oidcTenantMembershipResolver;
         this.machineTenantBindings = machineTenantBindings;
         this.trustedActorResolver = trustedActorResolver;
@@ -152,12 +142,11 @@ public class RequestContextResolver {
 
     /**
      * Bootstrap tenant choices before a selected tenant exists.
-     * Only available in explicitly enabled OIDC shared-issuer mode.
+     * Only in OIDC mode, through the stored connection (task 0058: always, whether the customer has one entity or several).
      * Does not create a business principal or assign any tenant context.
      */
     public Map<TenantId, Set<String>> resolveAvailableOidcTenants() {
         if (securityProperties.getMode() != SecurityMode.OIDC
-                || !securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()
                 || !securityProperties.getOidc().isPersistentConnectionEnabled()) {
             throw new SecurityContextException("OIDC tenant discovery is not enabled", "TENANT_DISCOVERY_NOT_ENABLED");
         }
@@ -216,21 +205,15 @@ public class RequestContextResolver {
         var jwt = token.getToken();
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
         requireMachine(jwt);
-        TenantId tenantId;
-        if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
-            if (!securityProperties.getOidc().isPersistentConnectionEnabled()
-                    || jwt.getIssuer() == null || securityProperties.getOidc().getAudience().isBlank()) {
-                throw new SecurityContextException("Shared-issuer machine identity configuration is incomplete", "MACHINE_IDENTITY_CONFIGURATION_INCOMPLETE");
-            }
-            // Preserve existing integration client-principal matching semantics.
-            // This candidate lookup never trusts human tenant-selection headers.
-            var candidates = machineTenantBindings.findEnabledPushTenants(
-                    securityProperties.getOidc().getProviderId(), java.net.URI.create(jwt.getIssuer().toString()),
-                    securityProperties.getOidc().getAudience(), identity.username());
-            tenantId = toTenant(refusingAsSecurityContext(() -> machineAdmission.requireUnique(toEntities(candidates))));
-        } else {
-            tenantId = oidcTenantResolver.resolve(jwt);
+        if (!securityProperties.getOidc().isPersistentConnectionEnabled()
+                || jwt.getIssuer() == null || securityProperties.getOidc().getAudience().isBlank()) {
+            throw new SecurityContextException("Shared-issuer machine identity configuration is incomplete", "MACHINE_IDENTITY_CONFIGURATION_INCOMPLETE");
         }
+        // The entity is the one whose enabled push connection names this client; no header chooses it.
+        var candidates = machineTenantBindings.findEnabledPushTenants(
+                securityProperties.getOidc().getProviderId(), java.net.URI.create(jwt.getIssuer().toString()),
+                securityProperties.getOidc().getAudience(), identity.username());
+        TenantId tenantId = toTenant(refusingAsSecurityContext(() -> machineAdmission.requireUnique(toEntities(candidates))));
         ActorId actorId = trustedActorResolver.resolve(jwt);
         return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), Set.of());
     }
@@ -254,34 +237,20 @@ public class RequestContextResolver {
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
-        TenantId tenantId;
-        Set<String> roles;
-        if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
-            if (!securityProperties.getOidc().isPersistentConnectionEnabled()) {
-                throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections", "SHARED_ISSUER_REQUIRES_PERSISTED_CONNECTIONS");
-            }
-            var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
-            // Task 0037 step 0 (A2 redone): the preflight's "enabled" and "persisted" inputs were always true here, its
-            // "candidates contain the memberships" check compared one map with itself, and empty role sets and the
-            // platform role are already refused by the membership resolver. Only "no entity at all" was left; it is
-            // refused here with the message and code the preflight gave.
-            if (authorized.isEmpty()) {
-                throw new SecurityContextException(message(IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP),
-                        IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP.name());
-            }
-            tenantId = toTenant(refusingAsSecurityContext(
-                    () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), toEntityKeys(authorized))));
-            roles = authorized.get(tenantId);
-        } else {
-            tenantId = oidcTenantResolver.resolve(jwt);
-            try {
-                roles = singleEntityRoles(jwt, identity);
-            } catch (SecurityContextException refused) {
-                // Task 0023 C5: the entity comes from trusted configuration and the person from the verified token,
-                // so this refusal (most often "no LexaVault group") is audited in that entity's log.
-                throw attributed(refused, tenantId, jwt);
-            }
+        if (!securityProperties.getOidc().isPersistentConnectionEnabled()) {
+            throw new SecurityContextException("Shared-issuer mode requires persisted OIDC connections", "SHARED_ISSUER_REQUIRES_PERSISTED_CONNECTIONS");
         }
+        var authorized = oidcTenantMembershipResolver.authorizedTenants(jwt, identity.groups());
+        if (authorized.isEmpty()) {
+            SecurityContextException refused = new SecurityContextException(message(IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP),
+                    IdentityAdmissionException.Reason.NO_VERIFIED_MEMBERSHIP.name());
+            // Task 0023 C5: with one entity it is clear whose log the refusal belongs in (the entity comes from the stored
+            // connection, the person from the verified token). With several it belongs in none.
+            throw oidcTenantMembershipResolver.onlyEntity(jwt).map(only -> attributed(refused, only, jwt)).orElse(refused);
+        }
+        TenantId tenantId = toTenant(refusingAsSecurityContext(
+                () -> tenantSelection.select(request.getHeader("X-Selected-Tenant-Id"), toEntityKeys(authorized))));
+        Set<String> roles = authorized.get(tenantId);
         ActorId actorId = trustedActorResolver.resolve(jwt);
         AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), roles);
         // The display-name claim (securedoc.security.oidc.display-name-claim), or the username when there is none.
@@ -290,23 +259,6 @@ public class RequestContextResolver {
         return principal;
     }
 
-
-    /**
-     * Roles with one configured entity: the configured role mapping, plus the platform role from the customer's
-     * platform-wide grants (task 0054, with persisted connections). A platform-wide grant alone is enough.
-     */
-    private Set<String> singleEntityRoles(org.springframework.security.oauth2.jwt.Jwt jwt, AuthenticatedIdentity identity) {
-        Set<String> platformRoles = securityProperties.getOidc().isPersistentConnectionEnabled()
-                ? oidcTenantMembershipResolver.platformRoles(jwt, identity.groups()) : Set.of();
-        if (platformRoles.isEmpty()) return oidcRoleMapper.map(identity.groups());
-        Set<String> roles = new LinkedHashSet<>(platformRoles);
-        try {
-            roles.addAll(oidcRoleMapper.map(identity.groups()));
-        } catch (SecurityContextException noMappedRole) {
-            // The platform role is all this person has.
-        }
-        return Set.copyOf(roles);
-    }
 
     /**
      * The verified person of the current OIDC request, when there is one (task 0023 C5: to audit a refusal that
