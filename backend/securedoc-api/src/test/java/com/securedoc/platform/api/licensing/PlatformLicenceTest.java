@@ -113,6 +113,25 @@ class PlatformLicenceTest {
     }
 
     @Test
+    void onlyATestLicenceMarksOutputs() {
+        for (LicenceKind kind : LicenceKind.values()) {
+            assertEquals(kind == LicenceKind.NON_PRODUCTION,
+                    licence(() -> TestLicence.on("2026-03-01", kind)).testEnvironment(), kind.name());
+        }
+        PlatformLicence never = licence(() -> { throw new LicenceException(LicenceRefusal.LICENCE_MISSING); });
+        assertThrows(LicenseEnforcementException.class, never::testEnvironment);
+        AtomicReference<RuntimeException> broken = new AtomicReference<>();
+        PlatformLicence known = licence(() -> {
+            if (broken.get() != null) throw broken.get();
+            return TestLicence.on("2026-03-01", LicenceKind.NON_PRODUCTION);
+        });
+        broken.set(new LicenceException(LicenceRefusal.LICENCE_TAMPERED));
+        known.read();
+        assertTrue(known.testEnvironment(), "the last licence that could be read");
+        assertTrue(known.refusal(ENTITY).isPresent(), "while intake is refused");
+    }
+
+    @Test
     void theCustomerIsTheLicences() {
         assertEquals("Test Customer", on("2026-03-01").customerName().orElseThrow());
     }

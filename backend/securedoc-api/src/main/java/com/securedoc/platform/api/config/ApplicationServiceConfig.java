@@ -881,13 +881,14 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             TextExtractionPort textExtractionPort,
-            com.securedoc.platform.application.licensing.UsageMeter usageMeter) {
+            com.securedoc.platform.application.licensing.UsageMeter usageMeter,
+            com.securedoc.platform.api.licensing.PlatformLicence licence) {
         // Task 0044: the entity policy (searchable redacted pages) and the same text extraction as the detection.
         return new DocumentRedactionService(
                 documentRepository, packageRepository, artifactRepository,
                 findingRepository, storagePort, pdfRedactionPort, redactionVerificationPort, checksumPort,
                 eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort)
-                .withUsageMeter(usageMeter);
+                .withUsageMeter(usageMeter).withNonProductionMark(licence::testEnvironment);
     }
 
     @Bean

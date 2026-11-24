@@ -56,6 +56,7 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
     private final AuditService audit;
     private final LongSupplier nanos;
     private volatile Reading last;
+    private volatile LicenceStatus lastGood;
     private volatile String lastState;
     private Runnable afterReading = () -> { };
     private ScheduledExecutorService reader;
@@ -109,6 +110,7 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
         try {
             LicenceStatus status = licence.get();
             last = new Reading(status, null, productLicensed.test(status), nanos.getAsLong());
+            lastGood = status;
         } catch (LicenceException refused) {
             last = new Reading(null, refused.code(), false, nanos.getAsLong());
         } catch (RuntimeException unreadable) {
@@ -126,6 +128,20 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
     /** The licence in force, if it can be read now and is not refused. */
     public Optional<LicenceStatus> status() {
         return reading().map(Reading::status);
+    }
+
+    /**
+     * Whether the licence is for tests only (kind NON_PRODUCTION): outputs are then marked. The last licence that could be
+     * read counts, however old the reading: the app does not start without one, and a database that is away for a moment
+     * must not decide what an output looks like.
+     */
+    public boolean testEnvironment() {
+        LicenceStatus known = lastGood;
+        if (known == null) {
+            throw new LicenseEnforcementException("LICENSE_CONFIGURATION_ERROR", "The licence could not be read yet",
+                    LicenseValidationStatus.CONFIGURATION_ERROR, "LICENCE_NOT_READABLE");
+        }
+        return known.licence().kind().testEnvironment();
     }
 
     /** The entity's slot in the licence in force. */
