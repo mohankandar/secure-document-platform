@@ -1,9 +1,9 @@
 # Building LexaVault: platform-core from GitHub Packages
 
-LexaVault's backend uses platform-core's released libraries (task 0054: **0.7.0**, tag `platform-core-v0.7.0`, the last one for Spring Boot 3). The
+LexaVault's backend uses platform-core's released libraries (task 0056: **0.8.1**, tag `platform-core-v0.8.1`, which needs Spring Boot 4.2 and Java 21). The
 version is one property, `platform.version` in `backend/pom.xml`, which imports `platform-bom`. LexaVault uses the
 identity modules only: `platform-identity-core`, `-jdbc` and `-spring` in the app, `platform-licensing` (read only, for
-identity), what identity 0.7.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
+identity), what identity 0.8.1 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
 Apache HttpClient 5), and `platform-setup` in the setup jar (`backend/securedoc-setup`). Never a snapshot, never a private local
 repository.
 
@@ -39,6 +39,19 @@ from an environment variable.
 Once downloaded, the artifacts stay in `~/.m2/repository/com/documentplatform/platform/`, so later builds also work
 offline (`mvn -o`).
 
+## Versions (task 0056)
+
+| What | Version | Where it is set |
+|---|---|---|
+| Java | 21 | `java.version`, `backend/pom.xml` |
+| Spring Boot (app, scan bridge, setup jar) | 4.2.0 | `spring-boot.version`, `backend/pom.xml`; its BOM brings Framework 7.1, Security 7.2, Hibernate 7.4, Tomcat 11, Flyway 12 |
+| Jackson | 3.1.8 (Spring Boot's) | `jackson.version` names it for `securedoc-ai`, which does not import the BOM. No Jackson 2 but its annotations, which Jackson 3 uses |
+| Liquibase | 4.29.2, not Spring Boot's 5.0.4 | `liquibase.version`, `backend/pom.xml`. 5.x is FSL-1.1-ALv2, not open source; 4.30 and later report usage to the vendor unless switched off |
+| platform-core | 0.8.1 | `platform.version`, `backend/pom.xml` |
+
+JSON: `spring.jackson` in both `application.yml` files keeps the app's JSON byte for byte as with Spring Boot 3
+(`JsonSettingsContractTest`). Code that makes its own mapper uses `JsonMapper.builderWithJackson2Defaults()`.
+
 ## Development and production builds (task 0054)
 
 Since platform-core 0.7.0 the licence keys a build trusts are inside its own jars: `META-INF/platform/licence-keys.json`
@@ -63,11 +76,11 @@ mvn -B dependency:tree -pl securedoc-api,securedoc-setup -am "-Dincludes=com.doc
 ```
 
 - `securedoc-api` (the app): `platform-identity-core`, `platform-identity-jdbc`, `platform-identity-spring`,
-  `platform-licensing`, `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `0.7.0`, compile scope.
+  `platform-licensing`, `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `0.8.1`, compile scope.
   `platform-setup` and `platform-identity-testkit` only in test scope. `platform-notifications`, which platform-outbound
   declares for a proxy password's secret reference, is excluded and not in the app: the app makes its own outbound rules
-  (`OutboundRulesConfig`) and refuses a proxy with sign-in. HttpClient is pinned to platform-core's own versions
-  (5.6.5, core 5.4.4), which Spring Boot's BOM would take back.
+  (`OutboundRulesConfig`) and refuses a proxy with sign-in. HttpClient (5.6.5, core 5.4.4) comes from Spring Boot's BOM,
+  the same versions platform-core is built with.
 - `securedoc-setup`: `platform-setup` with `platform-crypto` and `platform-integration` (which bring
   `platform-notifications` and `platform-fields`). These are never on the app's classpath; `Build-LexaVault-All`
   checks the app jar (`BOOT-INF/lib`) for them.

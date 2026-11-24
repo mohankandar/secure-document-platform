@@ -16,6 +16,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.web.OAuth2ProtectedResourceMetadataFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -63,7 +64,7 @@ public class SecurityConfig {
     @Bean
     @ConditionalOnProperty(name = "securedoc.security.mode", havingValue = "OIDC", matchIfMissing = true)
     SecurityFilterChain oidcSecurityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
-        return commonHeaders(http)
+        SecurityFilterChain chain = commonHeaders(http)
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -73,9 +74,14 @@ public class SecurityConfig {
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(resource -> resource
                         .jwt(Customizer.withDefaults())
+                        .bearerTokenResolver(new OneBearerTokenResolver())
                         // Task 0023 C5 (#252): same 401 code and text, plus correlationId; the reason is logged.
                         .authenticationEntryPoint(new BearerTokenRefusalEntryPoint(objectMapper)))
                 .build();
+        // Task 0056: Spring Security 7 adds a public address, /.well-known/oauth-protected-resource, with no setting to leave
+        // it out. LexaVault has never had it.
+        chain.getFilters().removeIf(OAuth2ProtectedResourceMetadataFilter.class::isInstance);
+        return chain;
     }
 
     @Bean

@@ -1,11 +1,13 @@
 server:
   port: 8080
+  # Task 0056: as with Spring Boot 3.3; Spring Boot 4 would wait for running requests at a stop.
+  shutdown: immediate
 
 spring:
   application:
     name: securedoc-platform
   # Task 0056: Spring Boot 4 uses Jackson 3, whose defaults differ. These keep the JSON byte for byte as with Spring Boot 3
-  # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its size limits.
+  # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its text size limit.
   jackson:
     use-jackson2-defaults: true
     mapper:
@@ -17,9 +19,6 @@ spring:
       constraints:
         read:
           max-string-length: 20000000
-          max-nesting-depth: 1000
-        write:
-          max-nesting-depth: 1000
   jpa:
     open-in-view: false
   # Task 0037: the platform Flyway runs (idn_, lic_) belong to the schema step (com.securedoc.install.SchemaStep),
@@ -261,6 +260,8 @@ logging:
     root: ${SECUREDOC_LOG_LEVEL_ROOT:INFO}
     com.securedoc.platform: ${SECUREDOC_LOG_LEVEL_APP:INFO}
     org.springframework: ${SECUREDOC_LOG_LEVEL_SPRING:WARN}
+    # Task 0056: Hibernate 7 logs the database address at each start; LexaVault did not log it before.
+    org.hibernate.orm.connections.pooling: WARN
 ---
 spring:
   config:

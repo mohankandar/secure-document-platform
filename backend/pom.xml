@@ -41,8 +41,9 @@
         <spring-boot.version>4.2.0</spring-boot.version>
         <!-- Jackson 3 at the version Spring Boot manages, named for securedoc-ai, which does not import its BOM. -->
         <jackson.version>3.1.8</jackson.version>
-        <!-- The last Apache-2.0 release. Spring Boot 4.2 manages 5.0.4, which is FSL-1.1-ALv2 (not open source). -->
-        <liquibase.version>4.33.0</liquibase.version>
+        <!-- Open source (Apache-2.0). Spring Boot 4.2 manages 5.0.4, which is FSL-1.1-ALv2 (not open source); 4.30 and later
+             report usage to the vendor unless switched off, so this is the last release that does not. -->
+        <liquibase.version>4.29.2</liquibase.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

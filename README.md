@@ -9,8 +9,8 @@ LexaVault is the mortgage/real-estate secure-document processing application bui
 - Browser OIDC session continuity: **VERIFIED / FROZEN**.
 - SecureDocs UI Framework implementation/consolidation: **VERIFIED / FROZEN** with framework contract **17/17 PASS**.
 - Market-Ready Visual Design R1 (R1A-R1D): **VERIFIED / FROZEN** after desktop/laptop/iPad acceptance and independent review.
-- Dependency Security Hardening R1: **VERIFIED / FROZEN WITH 2 ACCEPTED MODERATE FRONTEND FINDINGS**. Jackson is aligned at `2.18.9`; frontend Vite is `6.4.3`; no critical findings are known from the completed checks. See `SECURITY-DEPS.md` for scope and limitations.
-- Shared identity comes from platform-core (`com.documentplatform.platform:platform-identity-*`, released `0.7.0`, through `platform-bom`), read from GitHub Packages: see `docs/install/BUILD.md` for the `~/.m2/settings.xml` entry. It replaced Enterprise Identity 0.3.0 in task 0037; task 0041 moved it to the release. Setup runs from its own jar (`backend/securedoc-setup`).
+- Dependency Security Hardening R1: **VERIFIED / FROZEN WITH 2 ACCEPTED MODERATE FRONTEND FINDINGS**. Jackson was aligned at `2.18.9` (task 0056: Jackson 3, with Spring Boot 4.2); frontend Vite is `6.4.3`; no critical findings are known from the completed checks. See `SECURITY-DEPS.md` for scope and limitations.
+- Shared identity comes from platform-core (`com.documentplatform.platform:platform-identity-*`, released `0.8.1`, through `platform-bom`), read from GitHub Packages: see `docs/install/BUILD.md` for the `~/.m2/settings.xml` entry. It replaced Enterprise Identity 0.3.0 in task 0037; task 0041 moved it to the release. Setup runs from its own jar (`backend/securedoc-setup`).
 - Current Liquibase master includes migrations through `034-enterprise-identity-activation.xml` (**76 changeSets** in this source snapshot).
 
 ## Start here

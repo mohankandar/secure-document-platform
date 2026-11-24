@@ -72,7 +72,7 @@ Write-Host "Node: $(& node --version)"
 Write-Host "npm:  $(& npm --version)"
 
 Write-Host ""
-Write-Host "platform-core: released com.documentplatform.platform:platform-bom 0.7.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml, token from GITHUB_PACKAGES_TOKEN; docs/install/BUILD.md)." -ForegroundColor DarkGray
+Write-Host "platform-core: released com.documentplatform.platform:platform-bom 0.8.1 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml, token from GITHUB_PACKAGES_TOKEN; docs/install/BUILD.md)." -ForegroundColor DarkGray
 
 $profileArgs = @()
 if (-not $Production) { $profileArgs += '-Pdev-build' }
@@ -98,7 +98,7 @@ finally {
 }
 
 # Task 0041: the app's classpath carries platform-core's identity modules (and licensing, read only) and nothing else of
-# platform-core. Task 0054 decision 1: and what platform-identity 0.7.0 itself needs (outbound rules, error shape).
+# platform-core. Task 0054 decision 1: and what platform-identity 0.8.1 itself needs (outbound rules, error shape).
 # Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).
 Write-Host ""
 Write-Host "BACKEND - app jar classpath check (task 0041)" -ForegroundColor Cyan

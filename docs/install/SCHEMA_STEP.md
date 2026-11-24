@@ -8,7 +8,7 @@ It runs three things, in this order. Each keeps its own history table:
 | Run | What it creates | Source in the release | History table |
 |---|---|---|---|
 | App tables | LexaVault's own tables (cases, documents, audit, ...) | Liquibase changelog `db/changelog/db.changelog-master.xml` | `databasechangelog` |
-| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history, platform-wide grants (`idn_` tables; version 5, platform-core 0.7.0) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
+| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history, platform-wide grants (`idn_` tables; version 5, platform-core 0.8.1) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
 | Licensing | The stored licence, usage ledger (`lic_` tables; version 2). Setup stores the licence here | platform-core Flyway location `db/platform/licensing` | `lic_schema_history` |
 
 The platform runs start their own history at version 0 in a schema that already holds the app's tables, so their

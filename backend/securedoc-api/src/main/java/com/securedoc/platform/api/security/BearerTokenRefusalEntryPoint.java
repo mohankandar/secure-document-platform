@@ -82,6 +82,8 @@ public final class BearerTokenRefusalEntryPoint implements AuthenticationEntryPo
     private static String validationReason(JwtValidationException invalid) {
         for (OAuth2Error error : invalid.getErrors()) {
             String description = lower(error.getDescription());
+            // Spring Security 7 checks the token type here; before, it failed as unreadable.
+            if (description.contains("typ value")) return "MALFORMED";
             if (description.contains("expired")) return "EXPIRED";
             if (description.contains("used before")) return "NOT_YET_VALID";
             if (description.contains("iss claim") || description.contains("issuer")) return "ISSUER";

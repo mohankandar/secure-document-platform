@@ -61,6 +61,7 @@ class BearerTokenRefusalEntryPointTest {
         assertEquals("AUDIENCE", reasonFor(token(keys, ISSUER, "other-api", now.minusSeconds(5), now.plusSeconds(300))));
         assertEquals("SIGNATURE", reasonFor(token(keyPair(), ISSUER, AUDIENCE, now.minusSeconds(5), now.plusSeconds(300))));
         assertEquals("MALFORMED", reasonFor("not-a-jwt"));
+        assertEquals("MALFORMED", reasonFor(token(keys, ISSUER, AUDIENCE, now.minusSeconds(5), now.plusSeconds(300), "at+jwt")));
     }
 
     @Test
@@ -122,12 +123,17 @@ class BearerTokenRefusalEntryPointTest {
     }
 
     private static String token(KeyPair signing, String issuer, String audience, Instant nbf, Instant exp) {
+        return token(signing, issuer, audience, nbf, exp, null);
+    }
+
+    private static String token(KeyPair signing, String issuer, String audience, Instant nbf, Instant exp, String type) {
         RSAKey jwk = new RSAKey.Builder((RSAPublicKey) signing.getPublic())
                 .privateKey((RSAPrivateKey) signing.getPrivate()).keyID("test-key").build();
         NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<SecurityContext>(new JWKSet(jwk)));
         JwtClaimsSet claims = JwtClaimsSet.builder().issuer(issuer).subject("user-123").audience(List.of(audience))
                 .notBefore(nbf).issuedAt(nbf).expiresAt(exp).claim("email", "person@example.test").build();
-        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId("test-key").build();
+        JwsHeader.Builder builder = JwsHeader.with(SignatureAlgorithm.RS256).keyId("test-key");
+        JwsHeader header = (type == null ? builder : builder.type(type)).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 }

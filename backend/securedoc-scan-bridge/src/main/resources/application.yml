@@ -2,12 +2,14 @@ server:
   # Local bridge is loopback-only. A runtime guard rejects wildcard/LAN overrides fail-closed.
   address: ${SECUREDOC_SCAN_BRIDGE_BIND_ADDRESS:127.0.0.1}
   port: ${SECUREDOC_SCAN_BRIDGE_PORT:10090}
+  # Task 0056: as with Spring Boot 3.3; Spring Boot 4 would wait for running requests at a stop.
+  shutdown: immediate
 
 spring:
   application:
     name: securedoc-scan-bridge
   # Task 0056: Spring Boot 4 uses Jackson 3, whose defaults differ. These keep the JSON byte for byte as with Spring Boot 3
-  # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its size limits.
+  # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its text size limit.
   jackson:
     use-jackson2-defaults: true
     mapper:
@@ -19,9 +21,6 @@ spring:
       constraints:
         read:
           max-string-length: 20000000
-          max-nesting-depth: 1000
-        write:
-          max-nesting-depth: 1000
   servlet:
     multipart:
       # Simulator QA acquisition and large scanner packages must stream/spool instead of relying on tiny defaults.
