@@ -234,7 +234,9 @@ test('scenario 5a: IT queue: one grouped alert, "Retry all" works @e2e-export', 
   expect(auditCount(tenant, 'EXPORT_JOB_NEEDS_IT_NOTIFICATION')).toBe(1);
 
   // Task 0036: each case by its case number; the retry span from the settings.
-  expect(queue.groups[0].cases).toEqual(ids.map((id) => ({ packageId: id, caseNumber: caseNumbers.get(id) })));
+  // The two cases run side by side (staged), so either can reach IT first.
+  const byId = (a: { packageId: string }, b: { packageId: string }) => a.packageId.localeCompare(b.packageId);
+  expect([...queue.groups[0].cases].sort(byId)).toEqual(ids.map((id) => ({ packageId: id, caseNumber: caseNumbers.get(id) })).sort(byId));
   expect(queue.timings).toMatchObject({ probeIntervalSeconds: 4, retrySpanSeconds: 10, retries: 5, rebuiltOnce: true });
   const dest = (await ok(it, 'GET', '/support/export-destinations'))[0];
   expect(dest).toMatchObject({ state: 'WORKING', waiting: { queued: 0, waitingForYou: 0, needsIt: 2 } });
@@ -248,7 +250,8 @@ test('scenario 5a: IT queue: one grouped alert, "Retry all" works @e2e-export', 
   await expect(group.locator('.cf-sx-it-title')).toContainText(/^2 cases can’t be delivered to Local export folder since /);
   await expect(group).not.toContainText('Destination can\'t be reached');
   await expect(group).toContainText('Each was retried over 10 seconds and rebuilt once.');
-  await expect(group.getByTestId('it-cases')).toHaveText(`Cases ${ids.map((id) => caseNumbers.get(id)).join(', ')}.`);
+  const shown = (await group.getByTestId('it-cases').innerText()).replace(/^Cases /, '').replace(/\.$/, '').split(', ');
+  expect(shown.sort()).toEqual(ids.map((id) => caseNumbers.get(id)).sort());
   for (const id of ids) await expect(group).not.toContainText(id.slice(0, 8));
   // Support › Destinations, Waiting: "2 need IT" in the red style, never "2 ready".
   await expect(page.getByTestId('export-waiting')).toHaveText('2 need IT');
