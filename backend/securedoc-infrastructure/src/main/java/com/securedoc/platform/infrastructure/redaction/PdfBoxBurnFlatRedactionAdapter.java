@@ -70,6 +70,9 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
      */
     private static final int OCR_UPSCALE = 2;
 
+    /** The dates of the output (task 0050). Fixed by tests that compare two outputs byte for byte. */
+    java.time.Clock clock = java.time.Clock.systemUTC();
+
     /** Null when built without OCR (tests of today's output); a searchable request then refuses. */
     private final OcrPort ocr;
 
@@ -135,7 +138,7 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
             }
 
             boolean signed = !sourceDoc.getSignatureDictionaries().isEmpty();
-            PdfOutputCleaner.clean(outputDoc);
+            PdfOutputCleaner.clean(outputDoc, clock.instant());
             outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-redaction-output-");
             outputDoc.save(outputPath.toFile());
             content = TempFileReplayableContent.owned(outputPath);
