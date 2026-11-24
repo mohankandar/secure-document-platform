@@ -50,9 +50,11 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  * UTC+5:30). Rounding to the nearest UTC midnight gives that day for any zone within 12 hours of UTC, whatever zone
  * the browser is in. Unreadable values stay as sent.
  */
-export function bucketDate(bucket: string): string {
+export function bucketDate(bucket: string, zone?: string | null): string {
   const ms = new Date(bucket).getTime();
   if (Number.isNaN(ms)) return bucket;
+  // Task 0058: the buckets are days of the entity's zone, when it has one.
+  if (zone) return new Intl.DateTimeFormat('en-US', { timeZone: zone, month: 'short', day: 'numeric' }).format(new Date(ms));
   const d = new Date(ms + 12 * 3600_000);
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }

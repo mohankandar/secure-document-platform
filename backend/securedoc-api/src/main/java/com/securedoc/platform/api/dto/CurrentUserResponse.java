@@ -8,5 +8,7 @@ public record CurrentUserResponse(
         String tenantName,
         String tenantSlug,
         String authenticationMode,
-        Set<String> capabilities
+        Set<String> capabilities,
+        /** Task 0058: the entity's time zone (its own, else the customer's); null when none is set. */
+        String timeZone
 ) {}

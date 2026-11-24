@@ -104,3 +104,25 @@ test('nobody but a Business Admin has the area', async ({ page }) => {
   await expect(page.getByRole('navigation', { name: 'Administration areas' }).getByRole('link', { name: /Entities/ })).toHaveCount(0);
   await expect(page.getByRole('table', { name: 'Entities you administer' })).toHaveCount(0);
 });
+
+/* ---------- Reports and the compliance report use the entity's days ---------- */
+
+test('Reports asks for the entity\u2019s days, not the browser\u2019s, and says which zone they are in', async ({ page }) => {
+  const asked: URL[] = [];
+  page.on('request', (r) => { if (r.url().includes('/operations/reports?')) asked.push(new URL(r.url())); });
+  await signInAs(page, 'business', '/reports', { timeZone: 'Pacific/Kiritimati' });
+  await expect(page.getByText('days in Pacific/Kiritimati')).toBeVisible();
+  // Midnight there is 10:00 UTC, whatever zone this browser is in.
+  expect(asked.at(-1)!.searchParams.get('from')).toMatch(/T10:00:00\.000Z$/);
+  expect(asked.at(-1)!.searchParams.get('to')).toMatch(/T10:00:00\.000Z$/);
+});
+
+test('the compliance report is made in the entity\u2019s time zone', async ({ page }) => {
+  await signInAs(page, 'business', '/reports', { timeZone: 'Pacific/Kiritimati' });
+  const sent: unknown[] = [];
+  await page.route('**/api/v1/compliance-reports', (route) => { sent.push(route.request().postDataJSON()); return route.fulfill({ status: 500, body: '{}' }); });
+  await page.getByRole('button', { name: 'Compliance report' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: /create|download/i }).first().click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect((sent[0] as { timeZone: string }).timeZone).toBe('Pacific/Kiritimati');
+});

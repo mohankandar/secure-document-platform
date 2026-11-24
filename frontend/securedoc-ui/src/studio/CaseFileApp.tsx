@@ -5,6 +5,7 @@ import { SWRConfig } from 'swr';
 import type { CurrentUser, TenantSwitchActions } from '../types';
 import AccountMenu from './AccountMenu';
 import EntityMenu from './EntityMenu';
+import { EntityZoneContext } from './EntityZoneContext';
 import { ADMIN_CAPS, CAP, needsYou, useExportAlert, useExportNeedsIt, usePackages, useReviewQueue, useWaitingForYou } from './data';
 import { showWaitingNav, supportBadgeCount } from './exportRules';
 import WaitingForYou from './WaitingForYou';
@@ -41,7 +42,9 @@ export default function CaseFileApp({ me, onSignOut, localMode, selectedRole, on
           can be shown in another. SWR's default cache is global and its keys carry no organization. */}
       <SWRConfig value={{ provider: () => swrCache }}>
         <ToastProvider>
-          <Workspace me={me} caps={caps} onSignOut={onSignOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={onRoleChange} tenantSwitch={tenantSwitch} />
+          <EntityZoneContext.Provider value={me.timeZone ?? null}>
+            <Workspace me={me} caps={caps} onSignOut={onSignOut} localMode={localMode} selectedRole={selectedRole} onRoleChange={onRoleChange} tenantSwitch={tenantSwitch} />
+          </EntityZoneContext.Provider>
         </ToastProvider>
       </SWRConfig>
     </div>

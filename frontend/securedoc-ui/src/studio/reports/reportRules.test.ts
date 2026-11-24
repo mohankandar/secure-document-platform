@@ -59,3 +59,9 @@ test('a bucket reads as its day in the database zone, whatever the offset', () =
   assert.equal(bucketDate('2026-12-31T00:00:00Z'), 'Dec 31');
   assert.equal(bucketDate('not a date'), 'not a date');
 });
+
+test('with the entity\'s time zone a bucket is the day it starts there, in every zone', () => {
+  assert.equal(bucketDate('2026-11-03T05:00:00Z', 'America/New_York'), 'Nov 3');
+  assert.equal(bucketDate('2026-10-31T10:00:00Z', 'Pacific/Kiritimati'), 'Nov 1'); // UTC+14
+  assert.equal(bucketDate('2026-11-01T11:00:00Z', 'Pacific/Pago_Pago'), 'Nov 1'); // UTC-11
+});

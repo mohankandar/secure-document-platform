@@ -14,6 +14,8 @@ import com.securedoc.platform.domain.identity.TenantId;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
+import com.securedoc.platform.application.port.out.EntityTimeZonePort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
@@ -34,6 +36,14 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
 
     @PersistenceContext
     private EntityManager entityManager;
+
+    /** Task 0058: the entity's time zone, whose days the trend counts. */
+    private EntityTimeZonePort zones = EntityTimeZonePort.NONE;
+
+    @Autowired(required = false)
+    void useEntityTimeZones(EntityTimeZonePort zones) {
+        this.zones = zones;
+    }
 
     @Override
     public DashboardPage loadDashboard(TenantId tenantId, DashboardStage stage, String search,
@@ -227,18 +237,26 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         retentionQuery.setParameter("due", due).setParameter("now", now);
         Object[] retention = row(retentionQuery.getSingleResult());
 
+        // The days of the entity's time zone (task 0058), each from its own start to the next day's: 23 or 25 hours long where
+        // the clocks change. Without a zone the database session's days, as before.
+        String zone = zones.effective(tenantId).map(java.time.ZoneId::getId).orElse("");
         Query trendQuery = entityManager.createNativeQuery("""
-                select day,
+                select lower_bound,
                        (select count(*) from reporting_package_facts f where f.tenant_id=:tenant
-                         and f.received_at>=day and f.received_at<day+interval '1 day'%s%s),
+                         and f.received_at>=lower_bound and f.received_at<upper_bound%s%s),
                        (select count(*) from reporting_package_facts f where f.tenant_id=:tenant
-                         and f.first_delivered_at>=day and f.first_delivered_at<day+interval '1 day'%s%s)
-                  from generate_series(date_trunc('day',cast(:from as timestamptz)),
-                       date_trunc('day',cast(:to as timestamptz)-interval '1 second'), interval '1 day') day
-                 order by day
+                         and f.first_delivered_at>=lower_bound and f.first_delivered_at<upper_bound%s%s)
+                  from (select local_day at time zone z.name as lower_bound,
+                               (local_day + interval '1 day') at time zone z.name as upper_bound
+                          from (select coalesce(nullif(cast(:zone as text), ''), current_setting('TimeZone')) as name) z,
+                               generate_series(date_trunc('day', cast(:from as timestamptz) at time zone z.name),
+                                   date_trunc('day', (cast(:to as timestamptz) - interval '1 second') at time zone z.name),
+                                   interval '1 day') local_day) days
+                 order by lower_bound
                 """.formatted(sourceClause("f", source), outcomeClause("f", outcome),
                         sourceClause("f", source), outcomeClause("f", outcome)));
         bindReport(trendQuery, tenant, from, to, source);
+        trendQuery.setParameter("zone", zone);
         @SuppressWarnings("unchecked")
         List<Object[]> trendRows = trendQuery.getResultList();
         List<OperationalReportSnapshot.TrendPoint> trend = trendRows.stream().map(r ->

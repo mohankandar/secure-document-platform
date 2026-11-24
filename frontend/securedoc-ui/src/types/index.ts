@@ -847,6 +847,8 @@ export interface TenantSwitchActions {
 
 export interface CurrentUser {
   username: string;
+  /** Task 0058: the entity's time zone; null or absent when none is set. */
+  timeZone?: string | null;
   roles: string[];
   tenantName: string;
   tenantSlug: string;

@@ -6,6 +6,8 @@
  * works it out only to show the range and to stop a request the server would refuse; the server decides.
  */
 
+import { dayIn, dayText } from '../entityZone.ts';
+
 export const COMPLIANCE_SUMMARY_CAP = 'COMPLIANCE_REPORT_SUMMARY';
 export const COMPLIANCE_FULL_CAP = 'COMPLIANCE_REPORT_FULL';
 
@@ -70,8 +72,9 @@ export function daysInclusive(from: Day, to: Day): number {
   return Math.round((Date.UTC(b[0], b[1] - 1, b[2]) - Date.UTC(a[0], a[1] - 1, a[2])) / 86_400_000) + 1;
 }
 
-/** Today in the browser's time zone: the zone sent to the server as `timeZone`. */
-export function localToday(now: Date = new Date()): Day {
+/** Today in the zone sent to the server as `timeZone`: the entity's (task 0058), else the browser's. */
+export function localToday(now: Date = new Date(), zone?: string): Day {
+  if (zone) return dayText(dayIn(now, zone));
   return format(now.getFullYear(), now.getMonth() + 1, now.getDate());
 }
 

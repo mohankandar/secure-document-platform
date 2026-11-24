@@ -15,6 +15,7 @@ import {
 } from './exportRules';
 import { useToast } from './toast';
 import { CodeLabel, Notice, Spinner, StageChip } from './atoms';
+import { useEntityZone } from './EntityZoneContext';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import { CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
@@ -480,6 +481,7 @@ function DeliveriesSection({ packageId, documents }: { packageId: string; docume
 }
 
 function RetentionSection({ life }: { life: PackageLifecycleSummary }) {
+  const zone = useEntityZone();
   const now = Date.now();
   const redactedMs = life.redactedDeleteAt ? new Date(life.redactedDeleteAt).getTime() - now : null;
   const soon = redactedMs !== null && redactedMs > 0 && redactedMs < 24 * 3_600_000 && !life.redactedPurgedAt;
@@ -500,18 +502,19 @@ function RetentionSection({ life }: { life: PackageLifecycleSummary }) {
         <div><dt>Final approval</dt><dd>{!life.finalApprovalRequired ? 'Not required' : life.finalApprovalGranted ? 'Granted' : 'Required'}</dd></div>
         <RetentionRow label="Redacted copy" deleteAt={life.redactedDeleteAt} purgedAt={life.redactedPurgedAt} />
         <RetentionRow label="Kept original" deleteAt={life.originalDeleteAt} purgedAt={life.originalPurgedAt ?? life.purgedAt} />
-        {life.technicalHoldUntil && <div><dt>Kept while stopped</dt><dd>Until <time dateTime={life.technicalHoldUntil}>{formatDate(life.technicalHoldUntil)}</time></dd></div>}
+        {life.technicalHoldUntil && <div><dt>Kept while stopped</dt><dd>Until <time dateTime={life.technicalHoldUntil}>{formatDate(life.technicalHoldUntil, zone)}</time></dd></div>}
       </dl>
     </details>
   );
 }
 
 function RetentionRow({ label, deleteAt, purgedAt }: { label: string; deleteAt?: string | null; purgedAt?: string | null }) {
+  const zone = useEntityZone();
   let value: JSX.Element | string = 'No deletion scheduled';
   if (purgedAt) value = <>Deleted <time dateTime={purgedAt}>{relativeTime(purgedAt)}</time></>;
   else if (deleteAt) value = new Date(deleteAt).getTime() <= Date.now()
     ? 'Deletion pending'
-    : <>Deleted <time dateTime={deleteAt}>{relativeFuture(deleteAt)}</time></>;
+    : <>Deleted <time dateTime={deleteAt} title={formatDate(deleteAt, zone)}>{relativeFuture(deleteAt)}</time></>;
   return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
@@ -524,8 +527,8 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+function formatDate(value: string, timeZone?: string) {
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone });
 }
 
 function formatDay(value: string) {

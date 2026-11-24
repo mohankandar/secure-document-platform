@@ -195,6 +195,7 @@ class FreshDatabaseStartPostgresTest {
             assertTrue(byDefault.body().contains("\"tenantName\":\"Local Demo Tenant\""), byDefault.body());
             licensingInTheRunningApp(app, port);
             supportStatusInTheRunningApp(app, port);
+            entitiesInTheRunningApp(port);
         }
         assertEquals(tablesBefore, rowCounts(), "startup inserted nothing into the identity, entity or set-up tables");
     }
@@ -233,6 +234,53 @@ class FreshDatabaseStartPostgresTest {
                 .header("X-Actor-Roles", "BUSINESS_ADMIN,DOCUMENT_PROCESSOR").header("Content-Type", "application/json")
                 .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body))
                 .build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    /** Task 0058: the entities, their time zone, and a suspended entity, in the running app. */
+    private static void entitiesInTheRunningApp(int port) throws Exception {
+        String entities = call(port, "GET", "/api/v1/admin/entities", null).body();
+        assertTrue(entities.contains("ENT-DEMO-0001") && entities.contains("ENT-DEMO-0002")
+                && entities.contains("\"entityChoiceOn\":false"), entities);
+        assertEquals(403, callAs(port, "TENANT_IT_ADMIN", "/api/v1/admin/entities").statusCode());
+        // Shared-issuer selection is off by default: a second entity is not made active (sign-in would find no single one).
+        HttpResponse<String> second = call(port, "POST", "/api/v1/admin/entities/ENT-DEMO-0002/activate", "{\"name\":\"Second\"}");
+        assertEquals(200, second.statusCode(), second.body());
+        assertTrue(second.body().contains("SECOND_ENTITY_NEEDS_ENTITY_CHOICE"), second.body());
+        assertEquals("NOT_ACTIVATED", one("select status from idn_entity where slot_id = 'ENT-DEMO-0002'"));
+        assertEquals(403, call(port, "POST", "/api/v1/admin/entities/ENT-NOWHERE/activate", "{\"name\":\"x\"}").statusCode());
+
+        assertTrue(call(port, "GET", "/api/v1/me", null).body().contains("\"timeZone\":null"));
+        assertTrue(call(port, "PUT", "/api/v1/admin/entities/ENT-DEMO-0001/time-zone", "{\"timeZone\":\"America/New_York\"}")
+                .body().contains("\"done\":true"));
+        assertTrue(call(port, "GET", "/api/v1/me", null).body().contains("\"timeZone\":\"America/New_York\""));
+        // The trend's days are the entity's: March 8, 2026 is 23 hours long there.
+        String report = call(port, "GET", "/api/v1/operations/reports?from=2026-03-07T05:00:00Z&to=2026-03-10T04:00:00Z", null).body();
+        for (String day : List.of("2026-03-07T05:00:00Z", "2026-03-08T05:00:00Z", "2026-03-09T04:00:00Z")) {
+            assertTrue(report.contains("\"bucket\":\"" + day), day + " in " + report);
+        }
+        assertEquals(3, report.split("\"bucket\"", -1).length - 1, report);
+        String csv = call(port, "GET", "/api/v1/operations/reports/export?from=2026-03-07T05:00:00Z&to=2026-03-10T04:00:00Z", null).body();
+        assertTrue(csv.contains("Time zone of the days,America/New_York"), csv);
+        assertTrue(call(port, "PUT", "/api/v1/admin/entities/ENT-DEMO-0001/time-zone", "{\"timeZone\":\"\"}")
+                .body().contains("\"done\":true"));
+
+        String newCase = "{\"packageType\":\"MANUAL_UPLOAD\",\"businessIdentifiers\":{\"contract_number\":\"123456789012\"},\"metadata\":{}}";
+        String cases = one("select count(*) from document_packages");
+        try {
+            change("update idn_entity set status = 'SUSPENDED' where slot_id = 'ENT-DEMO-0001'");
+            HttpResponse<String> refused = call(port, "POST", "/api/v1/packages", newCase);
+            assertEquals(403, refused.statusCode(), refused.body());
+            assertTrue(refused.body().contains("LV-AUT-005"), refused.body());
+            change("update tenants set status = 'SUSPENDED' where id = '" + DEMO_ENTITY + "'");
+            for (String path : List.of("/api/v1/packages", "/api/v1/me", "/api/v1/admin/entities")) {
+                assertEquals(403, call(port, "GET", path, null).statusCode(), path);
+            }
+        } finally {
+            change("update idn_entity set status = 'ACTIVE' where slot_id = 'ENT-DEMO-0001'");
+            change("update tenants set status = 'ACTIVE' where id = '" + DEMO_ENTITY + "'");
+        }
+        assertEquals(cases, one("select count(*) from document_packages"), "nothing half-made");
+        assertEquals(200, call(port, "GET", "/api/v1/packages", null).statusCode());
     }
 
     /** Task 0057: the Licensing read, and intake stopped by a licence that is no longer valid while the app runs. */
@@ -434,7 +482,7 @@ class FreshDatabaseStartPostgresTest {
         return one("select (select count(*) from tenants) || '/' || (select count(*) from tenant_capabilities) || '/' || "
                 + "(select count(*) from business_identifier_definitions) || '/' || (select count(*) from integration_connections) "
                 + "|| '/' || (select count(*) from idn_entity) || '/' || (select count(*) from idn_login_connection) || '/' || "
-                + "(select count(*) from enterprise_identity_connections)");
+                + "(select count(*) from enterprise_identity_connection_history)");
     }
 
     private static String one(String sql) throws SQLException {

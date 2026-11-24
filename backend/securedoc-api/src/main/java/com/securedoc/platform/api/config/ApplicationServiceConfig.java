@@ -292,8 +292,10 @@ public class ApplicationServiceConfig {
     @Bean
     public IntegrationConnectionService integrationConnectionService(
             IntegrationConnectionRepository integrationConnectionRepository,
-            AuditService auditService) {
-        return new IntegrationConnectionService(integrationConnectionRepository, auditService);
+            AuditService auditService,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones) {
+        return new IntegrationConnectionService(integrationConnectionRepository, auditService)
+                .withEntityTimeZones(entityTimeZones);
     }
 
     @Bean
@@ -354,9 +356,10 @@ public class ApplicationServiceConfig {
             PollingSourcePort pollingSourcePort,
             ExternalIntakeService externalIntakeService,
             AuditService auditService,
-            IntakeLicence intakeLicence) {
+            IntakeLicence intakeLicence,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones) {
         return new PollingIntakeService(integrationConnectionService, pollingRunRepository, pollingSourcePort,
-                externalIntakeService, auditService).withLicence(intakeLicence);
+                externalIntakeService, auditService).withLicence(intakeLicence).withEntityTimeZones(entityTimeZones);
     }
 
     @Bean
@@ -504,11 +507,12 @@ public class ApplicationServiceConfig {
             TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
             AuditService auditService,
             RequestActorDisplayName requestActorDisplayName,
-            IntakeLicence intakeLicence) {
+            IntakeLicence intakeLicence,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones) {
         return new com.securedoc.platform.application.compliance.ComplianceReportService(complianceReportReadPort,
                 complianceReportPdfPort, operationsQueryService, tenantRepository, tenantRedactionPolicyRepository,
                 tenantLifecyclePolicyRepository, auditService, requestActorDisplayName,
-                tenant -> intakeLicence.customerName(), java.time.Clock.systemUTC());
+                tenant -> intakeLicence.customerName(), java.time.Clock.systemUTC()).withEntityTimeZones(entityTimeZones);
     }
 
     /** Task 0019: the policy estimate (counts only, read-only). */

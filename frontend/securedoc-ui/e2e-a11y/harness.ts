@@ -333,6 +333,8 @@ export interface MockOptions {
   exports?: boolean;
   /** Task 0057: the Licensing read. */
   licensing?: unknown;
+  /** Task 0058: the entity's time zone. */
+  timeZone?: string;
 }
 
 /** Task 0058: Admin › Entities. */
@@ -359,7 +361,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (options.broken?.includes(path)) return json({ message: 'Something went wrong', correlationId: 'c0ffee00-0000-4000-8000-0000000000ff' }, 500);
 
     if (path === '/me/tenants') return json(entities);
-    if (path === '/me') return json({ username: `${who}.user@example.test`, roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities });
+    if (path === '/me') return json({ username: `${who}.user@example.test`, roles, tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities, timeZone: options.timeZone ?? null });
     if (path.startsWith('/branding')) return json({});
 
     // Cases, the case panel, Approve
