@@ -6,7 +6,6 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.pipeline.PageBatch;
 import com.securedoc.platform.application.pipeline.PageBatchCommand;
 import com.securedoc.platform.application.pipeline.PageBatchPlan;
@@ -125,7 +124,6 @@ public final class StagedProcessingService {
     private final ProcessingIncidentService incidents;
     private final PackageProcessingRecoveryService recoveryService;
     private final AuditService audit;
-    private final TenantLicensingService licensing;
     private final ProductTelemetryService telemetry;
     private final TriggerPackageProcessingService inline;
     private final TransactionPort transactions;
@@ -174,14 +172,13 @@ public final class StagedProcessingService {
                                    ProcessingIncidentService incidents,
                                    PackageProcessingRecoveryService recoveryService,
                                    AuditService audit,
-                                   TenantLicensingService licensing,
                                    ProductTelemetryService telemetry,
                                    TriggerPackageProcessingService inline,
                                    TransactionPort transactions,
                                    StoragePort storage) {
         this(settings, jobs, packageRepository, documentRepository, processingLockPort, startPackageProcessing,
                 startDocumentProcessing, extractDocumentText, detectSensitiveData, redactDocument, lifecycleService,
-                incidents, recoveryService, audit, licensing, telemetry, inline, transactions, storage, null);
+                incidents, recoveryService, audit, telemetry, inline, transactions, storage, null);
     }
 
     public StagedProcessingService(StagedProcessingSettings settings,
@@ -198,7 +195,6 @@ public final class StagedProcessingService {
                                    ProcessingIncidentService incidents,
                                    PackageProcessingRecoveryService recoveryService,
                                    AuditService audit,
-                                   TenantLicensingService licensing,
                                    ProductTelemetryService telemetry,
                                    TriggerPackageProcessingService inline,
                                    TransactionPort transactions,
@@ -219,7 +215,6 @@ public final class StagedProcessingService {
         this.incidents = Objects.requireNonNull(incidents);
         this.recoveryService = Objects.requireNonNull(recoveryService);
         this.audit = Objects.requireNonNull(audit);
-        this.licensing = Objects.requireNonNull(licensing);
         this.telemetry = Objects.requireNonNull(telemetry);
         this.inline = Objects.requireNonNull(inline);
         this.transactions = Objects.requireNonNull(transactions);
@@ -250,7 +245,6 @@ public final class StagedProcessingService {
      */
     public void plan(TriggerPackageProcessingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
-        licensing.requireDocumentProcessing(command.tenantId(), command.actorId(), command.correlationId());
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         log.info("STAGED_PROCESSING_PLAN package={} tenant={} status={} correlation={}",

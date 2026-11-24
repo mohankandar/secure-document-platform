@@ -4,7 +4,6 @@ import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
 import com.securedoc.platform.application.port.in.ExportPackageDocumentsUseCase;
@@ -109,7 +108,7 @@ class UnlocatedFindingCreatesIncidentTest {
                 mock(ExportPackageDocumentsUseCase.class), mock(ProcessDerivedRoutingUseCase.class),
                 mock(SelectiveRetryExecutor.class), mock(PackageLifecycleService.class),
                 mock(DocumentIntelligenceExecutionService.class), new AuditService(audits::add), incidentService,
-                mock(TenantLicensingService.class), ProductTelemetryService.noop());
+                ProductTelemetryService.noop());
 
         service.execute(TriggerPackageProcessingCommand.of(pkg.id(), tenantId, ActorId.generate(),
                 CorrelationId.generate()));

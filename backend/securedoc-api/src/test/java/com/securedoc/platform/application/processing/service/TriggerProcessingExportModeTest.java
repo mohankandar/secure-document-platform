@@ -2,7 +2,6 @@ package com.securedoc.platform.application.processing.service;
 
 import com.securedoc.platform.application.export.result.ExportPackageDocumentsResult;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.pipeline.ExportJobScheduler;
 import com.securedoc.platform.application.port.in.*;
@@ -133,7 +132,6 @@ class TriggerProcessingExportModeTest {
                 mock(StartDocumentProcessingUseCase.class), mock(ExtractDocumentTextUseCase.class),
                 mock(DetectSensitiveDataUseCase.class), mock(RedactDocumentUseCase.class), export, routing,
                 new SelectiveRetryExecutor(1, Duration.ZERO), lifecycle, mock(DocumentIntelligenceExecutionService.class),
-                mock(AuditService.class), incidents, mock(TenantLicensingService.class),
-                mock(ProductTelemetryService.class), scheduler);
+                mock(AuditService.class), incidents, mock(ProductTelemetryService.class), scheduler);
     }
 }

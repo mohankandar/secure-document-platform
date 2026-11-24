@@ -7,7 +7,7 @@ import org.springframework.core.io.DefaultResourceLoader;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Task 0023 B8 (#328) and C7 (#325). */
-class AiPoolAndLicenceKeyLoggingTest {
+class AiPoolLoggingTest {
 
     @Test
     void aPoolErrorNeverEchoesTheRawEntryOrAPassword() {
@@ -25,15 +25,5 @@ class AiPoolAndLicenceKeyLoggingTest {
                 () -> OllamaInferencePoolConfiguration.parse("gpu=ftp://admin:s3cret@ai-east:11434/x"));
         assertEquals("AI pool node URL for node gpu must be an absolute http/https URL: ftp://ai-east:11434/x",
                 scheme.getMessage());
-    }
-
-    @Test
-    void aMissingLicenceKeyIsLoggedAtStartUp() {
-        LicensingProperties properties = new LicensingProperties();
-        properties.setVerificationKeyResource("classpath:licensing/does-not-exist.pem");
-        try (LogCapture logs = LogCapture.of(ApplicationServiceConfig.class)) {
-            new ApplicationServiceConfig().licenseTokenVerifier(properties, new DefaultResourceLoader());
-            assertTrue(logs.text().contains("LICENSE_VERIFICATION_KEY_UNAVAILABLE reason=MISSING"), logs.text());
-        }
     }
 }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0057 (owner approved the migrations the task needs): one row per document whose pages were counted for the
+        licence. The document id is the key, so a document is counted once, whatever is retried or processed again. Ids,
+        page counts and times only; no foreign keys, because the row outlives the document.
+        recorded_at is empty while the pages could not be put into the usage ledger of the licence yet.
+    -->
+    <changeSet id="060-01-licence-usage" author="lexavault">
+        <createTable tableName="licence_metered_documents">
+            <column name="document_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="pages" type="INTEGER"><constraints nullable="false"/></column>
+            <column name="processed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="slot_id" type="VARCHAR(64)"/>
+        </createTable>
+        <sql>
+            alter table licence_metered_documents
+                add constraint ck_licence_metered_documents_pages check (pages &gt; 0);
+            create index idx_licence_metered_documents_waiting on licence_metered_documents (processed_at)
+                where recorded_at is null;
+        </sql>
+        <rollback>
+            <dropTable tableName="licence_metered_documents"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -5,7 +5,7 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ReprocessPackageCommand;
 import com.securedoc.platform.application.lifecycle.result.ReprocessPackageResult;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.port.in.ReprocessPackageUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
@@ -35,7 +35,7 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
     private final PackageLifecycleService lifecycleService;
     private final PackageProcessingDispatcher packageProcessingDispatcher;
     private final AuditService auditService;
-    private final TenantLicensingService tenantLicensingService;
+    private final IntakeLicence intakeLicence;
 
     public ReprocessPackageService(PackageRepository packageRepository,
                                    DocumentRepository documentRepository,
@@ -44,7 +44,7 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
                                    PackageLifecycleService lifecycleService,
                                    PackageProcessingDispatcher packageProcessingDispatcher,
                                    AuditService auditService,
-                                   TenantLicensingService tenantLicensingService) {
+                                   IntakeLicence intakeLicence) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.findingRepository = Objects.requireNonNull(findingRepository);
@@ -52,12 +52,12 @@ public final class ReprocessPackageService implements ReprocessPackageUseCase {
         this.lifecycleService = Objects.requireNonNull(lifecycleService);
         this.packageProcessingDispatcher = Objects.requireNonNull(packageProcessingDispatcher);
         this.auditService = Objects.requireNonNull(auditService);
-        this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
+        this.intakeLicence = Objects.requireNonNull(intakeLicence);
     }
 
     @Override
     public ReprocessPackageResult execute(ReprocessPackageCommand command) {
-        tenantLicensingService.requireDocumentProcessing(command.tenantId(), command.actorId(), command.correlationId());
+        intakeLicence.requireIntake(command.tenantId(), command.actorId(), command.correlationId());
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));
         if (pkg.status() != PackageStatus.COMPLETED) {

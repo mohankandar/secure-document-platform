@@ -92,6 +92,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     /** Task 0044; null in the pre-0044 constructor (image-only output, no value comparison). */
     private final TenantRedactionPolicyRepository policyRepository;
     private final TextExtractionPort textExtractionPort;
+    private com.securedoc.platform.application.licensing.UsageMeter usageMeter =
+            com.securedoc.platform.application.licensing.UsageMeter.NONE;
 
     public DocumentRedactionService(DocumentRepository documentRepository,
                                      PackageRepository packageRepository,
@@ -136,6 +138,12 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         this.checksumPort = Objects.requireNonNull(checksumPort);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
+    }
+
+    /** Task 0057: the same service counting each document's pages for the licence. */
+    public DocumentRedactionService withUsageMeter(com.securedoc.platform.application.licensing.UsageMeter meter) {
+        this.usageMeter = Objects.requireNonNull(meter);
+        return this;
     }
 
     @Override
@@ -337,6 +345,11 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
 
             redactedArtifact.markAvailable(storageRef);
             document.completeProcessing();
+
+            // Task 0057: the meter point, once per document; before the document is saved as processed, so a stop in
+            // between can only leave it counted and processed again, never processed and not counted.
+            usageMeter.documentProcessed(command.tenantId(), command.packageId(), command.documentId(),
+                    expectedSourcePageCount);
 
             for (Finding finding : confirmedFindings) {
                 finding.markRedacted(SYSTEM_ACTOR);
