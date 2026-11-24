@@ -195,5 +195,8 @@ public enum AuditAction {
 
     // Staged pipeline P2 (task 0048): Text, Find and Redact jobs per document. Codes and ids only.
     PIPELINE_JOB_QUEUED,
-    PIPELINE_JOB_STATUS_CHANGED
+    PIPELINE_JOB_STATUS_CHANGED,
+
+    /** Task 0049: stored text and redacted files that no record points to were removed (counts only). */
+    UNRECORDED_FILES_CLEANED
 }

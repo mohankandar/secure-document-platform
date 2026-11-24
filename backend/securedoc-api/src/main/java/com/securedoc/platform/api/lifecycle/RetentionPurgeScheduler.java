@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.lifecycle;
 
 import com.securedoc.platform.application.lifecycle.command.PurgeDueRetentionCommand;
+import com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService;
 import com.securedoc.platform.application.pipeline.FinishedJobCleanupService;
 import com.securedoc.platform.application.port.in.PurgeDueRetentionUseCase;
 import com.securedoc.platform.domain.identity.ActorId;
@@ -16,7 +17,7 @@ import java.util.UUID;
 
 /**
  * Minimal in-process V1 retention maintenance. Durable scheduling can replace this later. Task 0034: after the purge,
- * the same run removes finished jobs past their keep time (a failure of one never stops the other).
+ * the same run removes finished jobs past their keep time, and (task 0049) stored files without a record (a failure of one never stops the other).
  */
 @Component
 @ConditionalOnProperty(name = "securedoc.lifecycle.purge-scheduler-enabled", havingValue = "true", matchIfMissing = true)
@@ -26,8 +27,11 @@ public class RetentionPurgeScheduler {
 
     private final PurgeDueRetentionUseCase purgeUseCase;
     private final FinishedJobCleanupService jobCleanup;
+    private final UnrecordedFileSweepService fileSweep;
 
-    public RetentionPurgeScheduler(PurgeDueRetentionUseCase purgeUseCase, FinishedJobCleanupService jobCleanup) {
+    public RetentionPurgeScheduler(PurgeDueRetentionUseCase purgeUseCase, FinishedJobCleanupService jobCleanup,
+                                   UnrecordedFileSweepService fileSweep) {
+        this.fileSweep = fileSweep;
         this.purgeUseCase = purgeUseCase;
         this.jobCleanup = jobCleanup;
     }
@@ -53,6 +57,12 @@ public class RetentionPurgeScheduler {
             }
         } catch (RuntimeException e) {
             log.warn("PIPELINE_JOB_CLEANUP_FAILED type={}", e.getClass().getSimpleName());
+        }
+        try {
+            int files = fileSweep.run(now, SYSTEM_ACTOR, correlationId);
+            if (files > 0) log.info("UNRECORDED_FILES_CLEANED files={}", files);
+        } catch (RuntimeException e) {
+            log.warn("UNRECORDED_FILE_SWEEP_FAILED type={}", e.getClass().getSimpleName());
         }
     }
 }

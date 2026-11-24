@@ -144,6 +144,8 @@ securedoc:
     # Unit 22 in-process V1 retention maintenance. Can be replaced with durable scheduling later.
     purge-scheduler-enabled: ${SECUREDOC_LIFECYCLE_PURGE_SCHEDULER_ENABLED:true}
     purge-interval-ms: ${SECUREDOC_LIFECYCLE_PURGE_INTERVAL_MS:900000}
+    # Task 0049: stored text and redacted files that no record points to are removed after this many hours (1 to 8760).
+    unrecorded-files-keep-hours: ${SECUREDOC_LIFECYCLE_UNRECORDED_FILES_KEEP_HOURS:24}
   resilience:
     # Unit 18: retry only explicitly transient dependency failures. Business/content review is never retried.
     max-attempts: ${SECUREDOC_RETRY_MAX_ATTEMPTS:2}

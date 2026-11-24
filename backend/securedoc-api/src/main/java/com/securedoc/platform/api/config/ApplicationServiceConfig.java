@@ -1113,6 +1113,16 @@ public class ApplicationServiceConfig {
                 cleanupBatchSize);
     }
 
+    /** Task 0049: the sweep of stored files without a record, run by the retention purge scheduler. */
+    @Bean
+    public com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService unrecordedFileSweepService(
+            com.securedoc.platform.application.port.out.UnrecordedFileSweepPort unrecordedFileSweepPort,
+            AuditService auditService,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.lifecycle.unrecorded-files-keep-hours:24}") int keepHours) {
+        return new com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService(
+                unrecordedFileSweepPort, auditService, keepHours);
+    }
+
     /** Task 0034: the clean-up of finished jobs, run by the retention purge scheduler. */
     @Bean
     public com.securedoc.platform.application.pipeline.FinishedJobCleanupService finishedJobCleanupService(
