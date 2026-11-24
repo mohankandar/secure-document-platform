@@ -76,6 +76,7 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
 
         try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTextExtractionAdapter.stageForProcessing(content, "lexavault-hybrid-text-")) {
             PDDocument document = staged.document();
+            PdfBoxTextExtractionAdapter.refuseUnreadableForm(document);
             TextExtractionOutput nativeOutput = onlyPages == null ? nativeExtractor.extractDocument(document) : null;
             PDFRenderer renderer = new PDFRenderer(document);
             List<PageText> normalizedPages = new ArrayList<>(document.getNumberOfPages());
@@ -96,8 +97,10 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
 
                 if (hasMeaningfulNativeText(nativePage)
                         && !shouldOcrSparseNativePage(renderer, index, nativePage)) {
-                    normalizedPages.add(nativePage);
-                    totalChars += nativePage.text().length();
+                    // Task 0053: with the form fields; whether the page needs OCR was decided by its own text.
+                    PageText withFields = PdfFormFieldText.with(document, document.getPage(index), nativePage);
+                    normalizedPages.add(withFields);
+                    totalChars += withFields.text().length();
                     continue;
                 }
 
@@ -109,8 +112,9 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     // retry and outcome are unchanged.
                     throw failure.page() != null ? failure : failure.withPage(pageNumber);
                 }
-                normalizedPages.add(ocrPage);
-                totalChars += ocrPage.text().length();
+                PageText withFields = PdfFormFieldText.with(document, document.getPage(index), ocrPage);
+                normalizedPages.add(withFields);
+                totalChars += withFields.text().length();
                 usedOcr = true;
             }
 

@@ -179,6 +179,11 @@ final class PdfOutputCleaner {
             appearance = annotation.getNormalAppearanceStream();
         }
         PDRectangle place = annotation.getRectangle();
+        // Task 0053: nobody sees what is outside the page, and extraction does not read it: it is not drawn.
+        PDRectangle shown = page.getCropBox();
+        if (place != null && (place.getUpperRightX() <= shown.getLowerLeftX()
+                || place.getLowerLeftX() >= shown.getUpperRightX() || place.getUpperRightY() <= shown.getLowerLeftY()
+                || place.getLowerLeftY() >= shown.getUpperRightY())) return;
         if (appearance == null || place == null || appearance.getBBox() == null) return;
         PDRectangle box = appearance.getBBox();
         if (box.getWidth() <= 0 || box.getHeight() <= 0 || place.getWidth() <= 0 || place.getHeight() <= 0) return;

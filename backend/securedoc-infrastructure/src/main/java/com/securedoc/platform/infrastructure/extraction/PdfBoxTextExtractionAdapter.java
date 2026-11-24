@@ -47,7 +47,9 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
         }
 
         try (PdfBoxTempFileSupport.StagedPdf staged = stageForProcessing(content, "lexavault-native-text-")) {
-            return extractDocument(staged.document());
+            refuseUnreadableForm(staged.document());
+            TextExtractionOutput pages = extractDocument(staged.document());
+            return withFields(staged.document(), pages);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to extract text from PDF", e);
         }
@@ -98,6 +100,7 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
         }
         try (PdfBoxTempFileSupport.StagedPdf staged = stageForProcessing(content, "lexavault-native-text-")) {
             PDDocument document = staged.document();
+            refuseUnreadableForm(document);
             List<PageText> pages = new ArrayList<>();
             long totalChars = 0;
             for (int i : new TreeSet<>(pageNumbers)) {
@@ -106,9 +109,46 @@ public class PdfBoxTextExtractionAdapter implements TextExtractionPort {
                 pages.add(page);
                 totalChars += page.text().length();
             }
-            return new TextExtractionOutput(pages, totalChars, totalChars > 0);
+            return withFields(document, new TextExtractionOutput(pages, totalChars, totalChars > 0));
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to extract text from PDF", e);
+        }
+    }
+
+    /** Task 0053: the same pages with their form fields' text (the routing to OCR looks at the page's own text only). */
+    private static TextExtractionOutput withFields(PDDocument document, TextExtractionOutput output) throws IOException {
+        List<PageText> pages = new ArrayList<>(output.pages().size());
+        long totalChars = 0;
+        for (PageText page : output.pages()) {
+            PageText withFields = PdfFormFieldText.with(document, document.getPage(page.pageNumber() - 1), page);
+            pages.add(withFields);
+            totalChars += withFields.text().length();
+        }
+        return new TextExtractionOutput(pages, totalChars, totalChars > 0, output.usedOcr());
+    }
+
+    /**
+     * Task 0053: a form that exists only as XFA (made by the viewer, not drawn on the pages) can't be read here: the
+     * document stops with LV-PRC-010. A form that has both XFA and ordinary fields is read by its fields; its XFA part
+     * is not shown on a page and never reaches the output.
+     */
+    static void refuseUnreadableForm(PDDocument document) {
+        var catalog = document.getDocumentCatalog();
+        var form = catalog.getAcroForm(null);
+        if (form == null || form.getXFA() == null) return;
+        boolean shownField = false;
+        for (PDPage page : document.getPages()) {
+            try {
+                shownField |= page.getAnnotations().stream().anyMatch(
+                        org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget.class::isInstance);
+            } catch (IOException unreadable) {
+                throw new com.securedoc.platform.infrastructure.pdf.PdfFormUnreadableException();
+            }
+        }
+        boolean madeByTheViewer = catalog.getCOSObject().getBoolean(
+                org.apache.pdfbox.cos.COSName.getPDFName("NeedsRendering"), false);
+        if (madeByTheViewer || !shownField) {
+            throw new com.securedoc.platform.infrastructure.pdf.PdfFormUnreadableException();
         }
     }
 
