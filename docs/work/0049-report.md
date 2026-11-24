@@ -103,3 +103,10 @@ My own first versions of three new tests were wrong and were corrected: one page
 Answer the questions; then P2b (document summary and case instructions), or the continuous queue.
 
 No other product's name or behaviour in code.
+
+## Decisions (2026-11-24, design chat, decided as recommended under the owner's continuous-work rule LV-19; for his later review)
+1. **Overlap with one page per AI request:** the overlap applies **only when one AI request covers more than one page**; with one page per request the effective overlap is 0 (no repeated AI work). The policy setting stays (default 2) for multi-page requests. Task 0052.
+2. **Batch settings screen:** with P3 (Admin settings for workers), not earlier.
+3. **`export-mode` back to inline:** same rule as the pipeline (0048 answer 1): the export workers **finish the export jobs already queued**; only new cases export inline. Task 0052.
+4. **A case that was ever staged stays staged when reprocessed:** keep it (one case, one flow).
+- **Merge approved** into `feature/lexavault-r1b-tenant-identity` (see the queue's "Approved merges").
