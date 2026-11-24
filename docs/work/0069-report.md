@@ -20,8 +20,9 @@ Built in an isolated copy with `mvn verify`, nothing installed, shared repositor
 | Command | Result |
 |---|---|
 | `mvn -B -o -Pdev-build verify`, PostgreSQL on (throwaway, removed) | BUILD SUCCESS: domain 84, application 314, scan bridge 136, infrastructure 133, API 793 (1 skipped), 0 failures |
-| no-redacted-value check | PASS, 0 matches |
-| compliance report check | 126 checks, 0 failed |
+| the same after merging 0058 (before the PR was merged; the PR was opened one merge too early) | BUILD SUCCESS: domain 85, application 318, scan bridge 136, infrastructure 130, API 805 (1 skipped), 0 failures |
+| no-redacted-value check (before that merge) | PASS, 0 matches |
+| compliance report check (before that merge) | 126 checks, 0 failed |
 | product-name guard | clean |
 
 Two builds before it failed on expectations this task changes (GLBA pack, report rows, allow-list count); see below.
