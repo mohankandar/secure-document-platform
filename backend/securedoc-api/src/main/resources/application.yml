@@ -65,7 +65,7 @@ securedoc:
         BUSINESS_ADMIN: ${SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN:securedoc-business-admin}
         REPORT_VIEWER: ${SECUREDOC_SECURITY_ROLE_REPORT_VIEWER:securedoc-report-viewer}
         TENANT_IT_ADMIN: ${SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN:securedoc-tenant-it-admin}
-        PLATFORM_OPERATIONS_ADMIN: ${SECUREDOC_SECURITY_ROLE_PLATFORM_OPERATIONS_ADMIN:securedoc-platform-operations-admin}
+        # PLATFORM_OPERATIONS_ADMIN comes only from a platform-wide grant (task 0054), never from a mapping here.
         # Narrow transition aliases for existing IdP groups. Remove after tenant IdP assignments migrate.
         USER: ${SECUREDOC_SECURITY_LEGACY_ROLE_USER:securedoc-user}
         REVIEWER: ${SECUREDOC_SECURITY_LEGACY_ROLE_REVIEWER:securedoc-reviewer}

@@ -332,7 +332,6 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN = 'BusinessAdmins'
 `$env:SECUREDOC_SECURITY_ROLE_REPORT_VIEWER = 'ReportViewers'
 `$env:SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN = 'TenantITAdmins'
-`$env:SECUREDOC_SECURITY_ROLE_PLATFORM_OPERATIONS_ADMIN = 'PlatformOperationsAdmins'
 # Local OIDC diagnostics only. Do not enable verbose Spring Security logging in deployed profiles.
 `$env:LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY = 'DEBUG'
 `$env:LOGGING_LEVEL_COM_SECUREDOC_PLATFORM_API_SECURITY = 'DEBUG'
