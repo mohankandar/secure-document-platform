@@ -27,6 +27,8 @@ if (($Ports | Sort-Object -Unique).Count -ne $Ports.Count) { throw "Ports must b
 if (@($Ports | Where-Object { $_ -lt 1024 -or $_ -gt 65535 }).Count -gt 0) { throw "Ports must be between 1024 and 65535." }
 
 $Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:4b" }
+. (Join-Path $PSScriptRoot "LexaVault-OllamaParallel.ps1")
+$AiRequestsAtOnce = Get-LexaVaultAiRequestsAtOnce
 $AiKeepAlive = if ($env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE) { $env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE } else { "30m" }
 $AiParallelism = if ($env:SECUREDOC_AI_PARALLELISM) { $env:SECUREDOC_AI_PARALLELISM } else { "2" }
 $AiPageBatchSize = if ($env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE) { $env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE } elseif ($Model -eq "qwen3.5:4b") { "4" } else { "2" }
@@ -136,10 +138,13 @@ Write-Host "PostgreSQL ready on localhost:5432." -ForegroundColor Green
 # Ollama. This R3 local cluster deliberately shares one measured GPU endpoint so app-tier scaling and AI saturation are visible separately.
 if (-not (Test-TcpPort -HostName "127.0.0.1" -Port 11434)) {
     Write-Host "Starting Ollama..."
-    Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Minimized | Out-Null
+    Start-LexaVaultOllama -RequestsAtOnce $AiRequestsAtOnce | Out-Null
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $deadline -and -not (Test-TcpPort -HostName "127.0.0.1" -Port 11434)) { Start-Sleep -Seconds 1 }
     if (-not (Test-TcpPort -HostName "127.0.0.1" -Port 11434)) { throw "Ollama did not become ready." }
+}
+else {
+    Write-RunningOllamaParallel -RequestsAtOnce $AiRequestsAtOnce
 }
 
 $tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5
@@ -198,6 +203,7 @@ Set-Location -LiteralPath '$backendEscaped'
 `$env:SECUREDOC_AI_OLLAMA_BASE_URL = 'http://localhost:11434'
 `$env:SECUREDOC_AI_OLLAMA_MODEL = '$Model'
 `$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
+`$env:SECUREDOC_AI_REQUESTS_AT_ONCE = '$AiRequestsAtOnce'
 `$env:SECUREDOC_AI_PARALLELISM = '$AiParallelism'
 `$env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE = '$AiPageBatchSize'
 `$env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS = '$AiPageBatchMaxCharacters'

@@ -377,7 +377,8 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         final HttpResponse<String> response;
         providerCallCount.incrementAndGet();
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            response = AiServerRequestLimit.send(chatEndpoint,
+                    () -> httpClient.send(request, HttpResponse.BodyHandlers.ofString()));
         } catch (HttpTimeoutException e) {
             throw technical(TechnicalFailureCode.AI_TIMEOUT, true,
                     "Local AI provider timed out", e);

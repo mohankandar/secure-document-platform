@@ -206,7 +206,8 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
 
         final HttpResponse<String> response;
         try {
-            response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            response = AiServerRequestLimit.send(httpRequest.uri(),
+                    () -> httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString()));
         } catch (HttpTimeoutException e) {
             throw technical(TechnicalFailureCode.AI_TIMEOUT, true, "AI provider timed out", e);
         } catch (ConnectException e) {

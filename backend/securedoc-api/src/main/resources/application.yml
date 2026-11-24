@@ -70,6 +70,9 @@ securedoc:
     # Page-level execution is bounded and configurable. Transient failures retry only the
     # affected page; successful pages are not replayed.
     parallelism: ${SECUREDOC_AI_PARALLELISM:2}
+    # Task 0049: requests at once per AI server, with pipeline-mode staged. Limits the Find workers of this server and
+    # the requests it sends to one AI server. The start scripts give Ollama the same number (OLLAMA_NUM_PARALLEL).
+    requests-at-once: ${SECUREDOC_AI_REQUESTS_AT_ONCE:2}
     page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
     page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
     # Requirement 5 Ollama inference tuning. These are deployment/profile settings; tenant profiles

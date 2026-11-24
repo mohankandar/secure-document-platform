@@ -95,6 +95,16 @@ if "$BACK"; then
     exit 1
   fi
   export SECUREDOC_AI_MODEL="$MODEL"
+  # Task 0049: AI requests at once per AI server. This script never starts Ollama; it says so if its setting differs.
+  export SECUREDOC_AI_REQUESTS_AT_ONCE="${SECUREDOC_AI_REQUESTS_AT_ONCE:-2}"
+  [[ "$SECUREDOC_AI_REQUESTS_AT_ONCE" =~ ^[0-9]+$ ]] && (( 10#$SECUREDOC_AI_REQUESTS_AT_ONCE >= 1 && 10#$SECUREDOC_AI_REQUESTS_AT_ONCE <= 64 )) || {
+    echo "SECUREDOC_AI_REQUESTS_AT_ONCE must be an integer between 1 and 64." >&2
+    exit 1
+  }
+  OLLAMA_PARALLEL="$(systemctl show ollama -p Environment 2>/dev/null | grep -o 'OLLAMA_NUM_PARALLEL=[0-9]*' | cut -d= -f2 || true)"
+  if [[ "$OLLAMA_PARALLEL" != "$SECUREDOC_AI_REQUESTS_AT_ONCE" ]]; then
+    echo "LexaVault sends $SECUREDOC_AI_REQUESTS_AT_ONCE AI requests at once; the Ollama service has OLLAMA_NUM_PARALLEL ${OLLAMA_PARALLEL:-not set}. It was not restarted."
+  fi
   export SECUREDOC_AI_PROVIDER=ollama
   export SECUREDOC_AI_OLLAMA_BASE_URL="http://localhost:11434"
   export SECUREDOC_LOGGING_CONFIG="classpath:logback-json-rolling.xml"

@@ -46,6 +46,8 @@ if ($scannerModeCandidate -notin @("SIMULATOR", "PHYSICAL")) {
 }
 $EffectiveScannerMode = $scannerModeCandidate
 $Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:4b" }
+. (Join-Path $PSScriptRoot "scripts\LexaVault-OllamaParallel.ps1")
+$AiRequestsAtOnce = Get-LexaVaultAiRequestsAtOnce
 $AiKeepAlive = if ($env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE) { $env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE } else { "30m" }
 $aiParallelismText = if ($env:SECUREDOC_AI_PARALLELISM) { $env:SECUREDOC_AI_PARALLELISM } else { "2" }
 $AiParallelism = 0
@@ -225,10 +227,11 @@ else {
 # Ollama
 if (Test-TcpPort -HostName "localhost" -Port 11434) {
     Write-Host "Ollama already available on localhost:11434." -ForegroundColor Green
+    Write-RunningOllamaParallel -RequestsAtOnce $AiRequestsAtOnce
 }
 else {
     Write-Host "Starting Ollama..."
-    $ollamaProcess = Start-Process -FilePath "ollama" -ArgumentList "serve" -PassThru -WindowStyle Minimized
+    $ollamaProcess = Start-LexaVaultOllama -RequestsAtOnce $AiRequestsAtOnce
     Set-Content -Path (Join-Path $RunDir "ollama.pid") -Value $ollamaProcess.Id
     Set-Content -Path (Join-Path $RunDir "ollama-started-by-script") -Value "true"
     Wait-ForPort -Name "Ollama" -HostName "localhost" -Port 11434 -MaxSeconds 30
@@ -307,6 +310,7 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_AI_OLLAMA_MODEL = '$Model'
 `$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
 `$env:SECUREDOC_AI_PARALLELISM = '$AiParallelism'
+`$env:SECUREDOC_AI_REQUESTS_AT_ONCE = '$AiRequestsAtOnce'
 `$env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE = '$AiPageBatchSize'
 `$env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_MAX_CHARACTERS = '$AiPageBatchMaxCharacters'
 # This launcher already performs (or explicitly skips) warmup above; prevent a duplicate in-app preload.

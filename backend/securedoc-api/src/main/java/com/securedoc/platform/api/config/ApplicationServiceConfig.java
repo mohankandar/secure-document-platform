@@ -1191,6 +1191,8 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.max-attempts:3}") int maxAttempts,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.text-workers:2}") int textWorkers,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.find-workers:2}") int findWorkers,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.requests-at-once:2}") int aiRequestsAtOnce,
+            AiRuntimeProperties ai,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.redact-workers:2}") int redactWorkers,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.poll-interval-ms:1000}") long pollIntervalMs) {
         var mode = com.securedoc.platform.application.pipeline.PipelineMode.parse(pipelineMode);
@@ -1200,8 +1202,19 @@ public class ApplicationServiceConfig {
             throw new IllegalStateException(
                     "securedoc.processing.pipeline-mode=staged needs securedoc.processing.export-mode=job");
         }
+        // Task 0049: no more Find workers than the AI servers take requests at once, and never more requests at once.
+        if (aiRequestsAtOnce < 1 || aiRequestsAtOnce > 64) {
+            throw new IllegalStateException("securedoc.ai.requests-at-once must be between 1 and 64");
+        }
+        boolean staged = mode == com.securedoc.platform.application.pipeline.PipelineMode.STAGED;
+        com.securedoc.platform.ai.analysis.AiServerRequestLimit.set(staged ? aiRequestsAtOnce : 0);
+        int findLimit = ai.isPoolEnabled()
+                ? OllamaInferencePoolConfiguration.parse(ai.getPoolNodeUrls()).size()
+                        * Math.min(aiRequestsAtOnce, Math.max(1, ai.getPoolMaxConcurrentPerNode()))
+                : aiRequestsAtOnce;
         return new com.securedoc.platform.application.pipeline.StagedProcessingSettings(mode,
-                java.time.Duration.ofMillis(claimLeaseMs), maxAttempts, textWorkers, findWorkers, redactWorkers,
+                java.time.Duration.ofMillis(claimLeaseMs), maxAttempts, textWorkers,
+                Math.min(findWorkers, Math.max(1, findLimit)), redactWorkers,
                 java.time.Duration.ofMillis(pollIntervalMs));
     }
 
