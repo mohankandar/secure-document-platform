@@ -149,7 +149,7 @@ test('task 0038: a stopped, waiting or rejected row says why in plain words, and
   await expect(row(page, 'LN-3001').locator('.cf-case-why')).toHaveText('Text reading timed out');
   await expect(row(page, 'LN-3002').locator('.cf-case-why')).toHaveText('Destination refused the file');
   await expect(row(page, 'LN-3002').locator('.cf-case-to')).toHaveText('To Records archive');
-  await expect(row(page, 'LN-3003')).toContainText('Not accepted');
+  await expect(row(page, 'LN-3003')).toContainText('Rejected, nothing more to do');
   await expect(row(page, 'LN-3003').locator('.cf-case-why')).toHaveCount(0); // no rejection reason is stored yet
   await expect(row(page, 'LN-3004').locator('.cf-case-why')).toHaveCount(0);
   await expect(row(page, 'LN-3004').locator('.cf-case-to')).toHaveText('To Records archive');
@@ -182,7 +182,7 @@ test('task 0071: Reject case in the case panel: the dialog names the case and th
     await expect(dialog).toContainText('Duplicate');
     if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-${step}.png` });
     await dialog.getByRole('button', { name: 'Reject case' }).click();
-    await expect(page.getByText('Case rejected.')).toBeVisible();
+    await expect(page.getByText('Case rejected.').first()).toBeVisible();
     expect(sent.at(-1)).toEqual({ path: `/api/v1/packages/${kase.packageId}/${step}/reject`, body: { reasonCode: 'LV-REV-013' } });
     await page.getByRole('button', { name: 'Close case' }).click();
   }

@@ -140,6 +140,19 @@ class RejectCaseServiceTest {
         }
     }
 
+    /** By role: the Processor in Review only, the Supervisor in both, everyone else nowhere. */
+    @Test
+    void onlyReviewersAndApproversHoldThePermissions() {
+        var policy = new com.securedoc.platform.api.security.ProductAuthorizationPolicy();
+        for (String[] row : new String[][]{{"DOCUMENT_PROCESSOR", "true", "false"}, {"DOCUMENT_SUPERVISOR", "true", "true"},
+                {"BUSINESS_ADMIN", "false", "false"}, {"REPORT_VIEWER", "false", "false"}, {"TENANT_IT_ADMIN", "false", "false"},
+                {"PLATFORM_OPERATIONS_ADMIN", "false", "false"}}) {
+            var held = policy.capabilitiesFor(java.util.Set.of(row[0]));
+            assertEquals(Boolean.valueOf(row[1]), held.contains(permission("inReview")), row[0]);
+            assertEquals(Boolean.valueOf(row[2]), held.contains(permission("inApproval")), row[0]);
+        }
+    }
+
     private static UserCapability permission(String name) {
         return method(name).getAnnotation(RequireCapability.class).value()[0];
     }

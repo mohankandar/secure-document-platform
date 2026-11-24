@@ -49,6 +49,8 @@ class ReviewAlreadyDecidedTest {
         when(findings.findByIdAndTenantId(finding.id(), tenant)).thenReturn(Optional.of(finding));
         when(documents.findByIdAndTenantId(document.id(), tenant)).thenReturn(Optional.of(document));
         when(packages.findByIdAndTenantId(pkg.id(), tenant)).thenReturn(Optional.of(pkg));
+        // Task 0071: the case is still waiting when the decision is saved.
+        when(packages.changeStatus(any(), any())).thenReturn(true);
         service = new FocusedReviewService(packages, documents, findings, mock(TenantRedactionPolicyRepository.class),
                 mock(PackageProcessingDispatcher.class), audit, mock(ReviewFoundTextReader.class));
     }

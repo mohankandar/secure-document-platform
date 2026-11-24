@@ -253,7 +253,7 @@ export default function Review({ caps }: { caps: string[] }) {
       )}
 
       {selected && (
-        <div className="cf-next-action">
+        <div className="cf-review-reject">
           <RejectCase key={selected.packageId} packageId={selected.packageId} step="review" small
             caseName={titles.get(selected.packageId) ?? queueTitles.get(selected.packageId) ?? 'this case'} />
         </div>

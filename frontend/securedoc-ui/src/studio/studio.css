@@ -853,3 +853,6 @@
   .cf-desk.has-drawer .cf-case-time { display: none; }
   .cf-desk.has-drawer .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Task 0071: Reject case, above the queue. */
+.cf-review-reject { display: flex; justify-content: flex-end; margin-bottom: 8px; }

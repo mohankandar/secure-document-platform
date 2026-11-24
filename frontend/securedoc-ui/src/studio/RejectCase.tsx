@@ -5,6 +5,7 @@ import { ConfirmDialog } from './admin/shared';
 import { errorMessage } from './data';
 import { REJECTION_CODES, REJECT_WORDS, rejectionName } from './rejectRules';
 import { useToast } from './toast';
+import './admin/admin.css';
 
 /** Task 0071: the "Reject case" button and its confirmation, the same in the case panel and in Review. */
 export function RejectCase({ packageId, caseName, step, onRejected, small }: {
