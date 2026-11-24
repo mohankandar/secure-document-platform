@@ -259,10 +259,27 @@ class NoRedactedValueSavedTest {
         return needles;
     }
 
+    private static final java.util.regex.Pattern ID_OR_TIME = java.util.regex.Pattern.compile(
+            "\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"
+                    + "|\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z");
+
+    /** The shapes left out are exactly an id and a time; the last 4 anywhere else are still found. */
+    @Test
+    void theLastFourAreStillFoundOutsideIdsAndTimes() {
+        assertNoValueIn("ok", List.of("at=2026-11-24T05:58:19.637957531Z id=03fe7531-6f6e-46cf-857c-75183b064848"));
+        for (String leak : List.of("last4=7531", "***-**-7531", "ref-7531-x", "2026-11-24 7531Z", SSN)) {
+            assertThrows(AssertionError.class, () -> assertNoValueIn("leak", List.of(leak)), leak);
+        }
+    }
+
     private static void assertNoValueIn(String where, List<String> texts) {
         for (String text : texts) {
+            // Four digits also occur by chance in a random id or in a time's nanoseconds (CI, 2026-11-24:
+            // "637957531Z" holds "7531"). Only those two exact shapes are left out, and only for the last-4 needles.
+            String withoutIdsAndTimes = ID_OR_TIME.matcher(text).replaceAll("#");
             for (String needle : forbidden()) {
-                assertFalse(text.contains(needle),
+                String searched = needle.length() == 4 ? withoutIdsAndTimes : text;
+                assertFalse(searched.contains(needle),
                         () -> where + " holds '" + needle + "': " + text);
             }
         }
