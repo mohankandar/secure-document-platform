@@ -79,7 +79,7 @@ test('0025: the no-access heading is the title and code only; LV-AUT-002 when th
 });
 
 test('task 0026: 137 codes (139 with LV-INT-028 and 029 of task 0038); the 8 new ones and their mappings come from the registry', () => {
-  assert.equal(Object.keys(LV_CODES).length, 140); // task 0044: + LV-RED-005
+  assert.equal(Object.keys(LV_CODES).length, 141); // task 0044: + LV-RED-005; task 0053: + LV-PRC-010
   assert.equal(LV_BY_DETAIL.REDACTION_VALUE_IN_OUTPUT_TEXT, 'LV-RED-005');
   for (const code of ['LV-INT-035', 'LV-SCN-019', 'LV-SCN-020', 'LV-SCN-021', 'LV-REV-009', 'LV-CFG-011', 'LV-SYS-008', 'LV-SYS-009']) {
     assert.ok(LV_CODES[code], code);

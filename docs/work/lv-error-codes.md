@@ -104,6 +104,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-PRC-007 | Original document missing | The original file isn't in storage. | System | IT Admin | — | 355, 363 |
 | LV-PRC-008 | Processing stopped after repeated failures | Processing failed 3 times, so it stopped. | Stopped | IT Admin | — | 346, 347 |
 | LV-PRC-009 | Document already being processed | Another process is working on this document. | Stopped | Nobody | — | 360 |
+| LV-PRC-010 | Form type can't be read | The document is a form made for one PDF viewer (XFA), which LexaVault can't read. It was not processed. | Stopped | Processor | — | task 0053 |
 
 ### AI: AI model (001–019)
 
@@ -217,7 +218,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-008 | Item not found | The item asked for (a rule, a connection, a file) doesn't exist in this entity. | Refused | Person, IT Admin | 404 | 0025 (not-found other than a case) |
 | LV-SYS-009 | Unknown request | The address or method isn't one LexaVault offers. | Refused | Source system | 404 / 405 | 0025 (unknown endpoint, wrong method) |
 
-**Totals:** INT 40 · SCN 21 · PRC 9 · AI 7 · RED 4 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **139 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits.)*
+**Totals:** INT 40 · SCN 21 · PRC 10 · AI 7 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **141 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053.)*
 
 ## 3. Rows with no code on purpose
 

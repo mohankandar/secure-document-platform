@@ -925,6 +925,19 @@ Reserved: not used yet.
 2. Wait a few minutes and refresh.
 3. If the case stays stuck, tell your IT Admin.
 
+### LV-PRC-010 Form type can't be read
+
+- **Means:** The document is a form made for one PDF viewer (XFA), which LexaVault can't read. It was not processed.
+- **Kind:** Stopped
+- **Who acts:** Processor
+- **HTTP status:** —
+
+**What to do:**
+
+1. Ask the sender for the form printed to an ordinary PDF.
+2. Open a new case with that file.
+3. If it stops again, give your IT Admin the reference number.
+
 ## AI: AI model
 
 ### LV-AI-001 AI model not available
