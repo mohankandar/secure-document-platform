@@ -54,6 +54,8 @@ class TenantAiPolicyAndRoutingTest {
         assertEquals("864f32ea6faceb6d9f503e1ae1e81f1151b141e00f2ff742f1993a82af1ebdad", sha(builder.buildCompact(four)));
         assertEquals("32422f7338a07f8174546b71074e8b9839ab545043eddaa00229f9de189a6a05", sha(builder.build(four)));
         assertEquals("5c1cc58ac9eaf55ed266eb80a7a6c84d49f5946e337b6fc4c2a77d1e5df9a4a3", sha(builder.buildNames()), "a change of the names prompt needs a new version and the gate");
+        assertTrue((SensitiveContentPromptBuilder.NAMES_VERSION + ";validation=NOT_APPLICABLE;plausibility=PASS").length() <= 50,
+                "findings.detector_version");
         java.util.Set<EntityType> five = java.util.EnumSet.copyOf(four.enabledEntityTypes());
         five.add(EntityType.PERSON_NAME);
         assertEquals(builder.buildCompact(four), builder.buildCompact(new AnalysisPolicy(five, true)));

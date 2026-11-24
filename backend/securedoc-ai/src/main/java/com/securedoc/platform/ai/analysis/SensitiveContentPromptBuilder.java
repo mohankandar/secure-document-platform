@@ -15,8 +15,11 @@ import java.util.Objects;
  */
 public final class SensitiveContentPromptBuilder {
 
-    /** Task 0072 (BL7): the recorded version of {@link #buildNames()}; any change of that text is a new one. */
-    static final String NAMES_VERSION = "person-name-v1";
+    /**
+     * Task 0072 (BL7): the recorded version of {@link #buildNames()}; any change of that text is a new one. At most 6
+     * characters: a finding stores it with what was checked, in 50.
+     */
+    public static final String NAMES_VERSION = "name1";
 
     /** Task 0072: names have a request of their own; beside the other kinds the model returned none. */
     static boolean asksForNames(AnalysisPolicy policy) {
