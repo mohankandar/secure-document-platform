@@ -102,6 +102,7 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
                     + "pan|visa|master\\s*card|mastercard|amex|american\\s+express|discover)\\b");
 
     private final OptInPatternDetector optInPatterns = new OptInPatternDetector();
+    private final LockedItemDetector lockedItems = new LockedItemDetector();
 
     @Override
     public DetectionOutput detect(List<PageInput> pages) {
@@ -122,7 +123,7 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         String type = candidate.entityType().trim().toUpperCase(Locale.ROOT);
         return switch (type) {
             case "SSN", "SOCIAL_SECURITY_NUMBER" -> validateSsn(candidate.matchedText(), candidate.contextText());
-            case "CREDIT_CARD", "CREDIT_CARD_NUMBER", "FINANCIAL_ACCOUNT" ->
+            case "CREDIT_CARD", "CREDIT_CARD_NUMBER" ->
                     validateCreditCard(candidate.matchedText());
             case "DATE_OF_BIRTH", "DOB" -> validateDob(candidate.matchedText(), candidate.contextText());
             case "CREDIT_SCORE", "FICO_SCORE" -> validateCreditScore(candidate.matchedText(), candidate.contextText());
@@ -261,6 +262,8 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         // Task 0043: the opt-in pattern kinds, after the V1 detectors and independent of them. Their findings carry
         // their own detector name, and the detection service drops them unless the entity switched the kind on.
         optInPatterns.detect(text, page.pageNumber(), results);
+        // Task 0062: card security codes and PINs, dropped the same way for an entity without the locked items.
+        lockedItems.detect(text, page.pageNumber(), results);
     }
 
     private void detectDatesOfBirth(String text, int pageNumber, List<DetectedEntity> results) {

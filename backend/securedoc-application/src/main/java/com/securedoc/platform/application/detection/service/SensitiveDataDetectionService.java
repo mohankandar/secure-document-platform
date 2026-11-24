@@ -300,11 +300,11 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Truly blank pages were already safely inspected by native extraction/OCR and do not need
         // a meaningless model call.
         boolean hasTextBearingPage = pagesByNumber.values().stream().anyMatch(page -> !page.text().isBlank());
-        // Task 0043: the semantic analyzer is asked only for the V1 kinds it knows. The opt-in pattern kinds
-        // (routing, account, ITIN, EIN, driver's license, passport) come from the deterministic detectors only.
+        // Task 0043: the semantic analyzer is asked only for the kinds it knows. The pattern kinds
+        // (routing, account, ITIN, EIN, driver's license, passport, CVV, PIN) come from the deterministic detectors only.
         Set<EntityType> semanticTypes = java.util.EnumSet.noneOf(EntityType.class);
         semanticTypes.addAll(enabledTypes);
-        semanticTypes.retainAll(TenantRedactionPolicy.v1ConfigurableTypes());
+        semanticTypes.retainAll(com.securedoc.platform.domain.business.RedactionCatalog.askedOfAi());
         SensitiveContentAnalysisPort.AnalysisPolicy analysisPolicy =
                 new SensitiveContentAnalysisPort.AnalysisPolicy(semanticTypes, tenantPolicy.maskSsnLastFour());
         SensitiveContentAnalysisPort.AnalysisOutput semanticOutput = hasTextBearingPage && !semanticTypes.isEmpty()
@@ -350,6 +350,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Per-finding policy. Only findings that individually meet confidence AND have a trusted
         // location are auto-confirmed. Low-confidence/unlocated findings remain DETECTED for review.
         for (Finding finding : findings) {
+            // Task 0062: the style of this moment goes with the finding, so a later change reaches new documents only.
+            finding.applyStyle(tenantPolicy.styleOf(finding.entityType()));
             boolean autoConfirmAllowed = tenantPolicy.reviewMode() == ReviewMode.UNCERTAIN_ONLY;
             if (autoConfirmAllowed
                     && finding.confidence().value() >= tenantPolicy.autoRedactThreshold()

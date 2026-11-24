@@ -81,6 +81,8 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
   color: var(--cf-muted); background: transparent; border: 1px dashed var(--cf-line-strong);
 }
 .cf-ad-chip[aria-pressed='true'] { color: var(--cf-paper); background: var(--cf-redact); border: 1px solid var(--cf-redact); }
+.cf-ad-chip[data-locked] { cursor: default; }
+.cf-admin p.cf-ad-pack-off { margin: 2px 0 0 40px; }
 .cf-ad-chip:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; }
 
 .cf-ad-toggle { display: inline-flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; }

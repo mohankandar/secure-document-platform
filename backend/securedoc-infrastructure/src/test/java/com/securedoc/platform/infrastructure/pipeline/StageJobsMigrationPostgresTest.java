@@ -137,7 +137,7 @@ class StageJobsMigrationPostgresTest {
             jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, destination, null, 1, Instant.now()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 3); // 060, 050, then 049
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 4); // 070, 060, 050, then 049
             }
             assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM pipeline_jobs", new MapSqlParameterSource(),
                     Integer.class), "the export job stays; the stage jobs are removed");
@@ -158,6 +158,7 @@ class StageJobsMigrationPostgresTest {
     @Test
     void migration050GivesPoliciesTheDefaultsAndRefusesImpossibleBatches() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m050")) {
+            db.backTo050();
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = TenantId.generate();
             TestRows.tenant(jdbc, tenant);
@@ -191,7 +192,7 @@ class StageJobsMigrationPostgresTest {
             assertFalse(jobs.claimIsCurrent(claimed.id(), claimed.claimToken()), "a removed job saves nothing");
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 2); // 060, then 050
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 1); // 050
             }
             assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_name ="
                     + " 'tenant_redaction_policies' AND column_name LIKE 'page_batch%'", new MapSqlParameterSource(),

@@ -28,6 +28,8 @@ export const SHORT_TYPE_NAMES: Readonly<Record<string, string>> = {
   EIN: 'EIN',
   DRIVERS_LICENSE_NUMBER: 'license number',
   PASSPORT_NUMBER: 'passport number',
+  CVV: 'card code',
+  PIN: 'PIN',
 };
 
 /** One vocabulary name ("Social Security Number") as its short name ("SSN"). An unknown name stays as sent. */
