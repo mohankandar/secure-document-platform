@@ -101,6 +101,8 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
         entity.setConfidence(finding.confidence().value());
         entity.setDetectorName(finding.detectorSource().detectorName());
         entity.setDetectorVersion(finding.detectorSource().version());
+        entity.setFoundBy(finding.origin().encodePaths());
+        entity.setAiModels(finding.origin().encodeModels());
         persistBoundingBox(finding.location(), entity);
         entity.setStatus(finding.status().name());
         entity.setRedactionStyle(finding.redactionStyle().name());
@@ -145,6 +147,7 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
                 FindingStatus.valueOf(entity.getStatus()),
                 List.of(), // evidence history not persisted in this table
                 entity.getUpdatedAt(),
+                com.securedoc.platform.domain.finding.FindingOrigin.decode(entity.getFoundBy(), entity.getAiModels()),
                 // A style this version doesn't know removes the value in full.
                 RedactionStyle.KEEP_LAST_FOUR.name().equals(entity.getRedactionStyle())
                         ? RedactionStyle.KEEP_LAST_FOUR : RedactionStyle.REMOVE_FULLY

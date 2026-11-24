@@ -57,7 +57,10 @@ public record BusinessAdminConfigurationResponse(
             Set<String> enabledPacks,
             Set<String> keepLastFourKinds,
             /* Task 0062: false for an entity from before the catalog, until its policy is saved. */
-            boolean lockedItemsOn
+            boolean lockedItemsOn,
+            /* Task 0064: routed pages are read by the vision model (on by default), and the routing threshold. */
+            boolean visionEnabled,
+            double visionOcrThreshold
     ) {}
 
     /** Task 0062: the redaction catalog and the regulation packs; the same for every entity. */

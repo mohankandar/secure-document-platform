@@ -579,11 +579,15 @@ public class ApplicationServiceConfig {
             ChecksumPort checksumPort,
             ProcessingLockPort processingLockPort,
             DomainEventPublisher eventPublisher,
-            AuditService auditService) {
+            AuditService auditService,
+            com.securedoc.platform.application.port.out.PageRouteRepository pageRouteRepository,
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository) {
+        // Task 0064: the pages are routed while their text is read.
         return new TextExtractionService(
                 documentRepository, packageRepository, artifactRepository,
                 storagePort, textExtractionPort, checksumPort,
-                processingLockPort, eventPublisher, auditService);
+                processingLockPort, eventPublisher, auditService,
+                new TextExtractionService.PageRouting(pageRouteRepository, tenantRedactionPolicyRepository));
     }
 
     @Bean
@@ -861,12 +865,33 @@ public class ApplicationServiceConfig {
             FindingRepository findingRepository,
             DomainEventPublisher eventPublisher,
             AuditService auditService,
-            ChecksumPort checksumPort) {
-        // Task 0049: the checksum port is the page batch results'.
+            ChecksumPort checksumPort,
+            com.securedoc.platform.application.port.out.PageRouteRepository pageRouteRepository,
+            com.securedoc.platform.application.port.out.PageImagePort pageImagePort,
+            com.securedoc.platform.application.port.out.VisionModelPort visionModelPort) {
+        // Task 0049: the checksum port is the page batch results'. Task 0064: routed pages are read by vision.
         return new SensitiveDataDetectionService(
                 documentRepository, packageRepository, artifactRepository,
                 storagePort, semanticAnalysisPort, detectionPort, validationPort, tenantRedactionPolicyRepository, textExtractionPort, findingRepository,
-                eventPublisher, auditService, checksumPort);
+                eventPublisher, auditService, checksumPort,
+                new SensitiveDataDetectionService.Vision(pageRouteRepository,
+                        new com.securedoc.platform.application.vision.VisionPageReader(artifactRepository, storagePort,
+                                pageImagePort, visionModelPort)));
+    }
+
+    /**
+     * Task 0064: the local vision model, pinned by digest. A model name without a 64-character digest is refused at
+     * start (fail closed); a missing or different model on the server sends the routed pages to a person.
+     */
+    @Bean
+    public com.securedoc.platform.application.port.out.VisionModelPort visionModelPort(
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.base-url}") String baseUrl,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model}") String model,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model-digest}") String digest,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.timeout-seconds}") int timeoutSeconds,
+            AiRuntimeProperties ai) {
+        return new com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter(baseUrl, model, digest,
+                Duration.ofSeconds(Math.max(1, timeoutSeconds)), ai.getOllamaKeepAlive());
     }
 
     // --- Redaction service ---
@@ -1157,6 +1182,7 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.requests-at-once:2}") int aiRequestsAtOnce,
             AiRuntimeProperties ai,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.redact-workers:2}") int redactWorkers,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.vision-workers:2}") int visionWorkers,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.poll-interval-ms:1000}") long pollIntervalMs) {
         var mode = com.securedoc.platform.application.pipeline.PipelineMode.parse(pipelineMode);
         if (mode == com.securedoc.platform.application.pipeline.PipelineMode.STAGED
@@ -1178,7 +1204,9 @@ public class ApplicationServiceConfig {
         return new com.securedoc.platform.application.pipeline.StagedProcessingSettings(mode,
                 java.time.Duration.ofMillis(claimLeaseMs), maxAttempts, textWorkers,
                 Math.min(findWorkers, Math.max(1, findLimit)), redactWorkers,
-                java.time.Duration.ofMillis(pollIntervalMs));
+                java.time.Duration.ofMillis(pollIntervalMs),
+                // Task 0064: the vision model is one server; no more workers than it takes requests at once.
+                visionWorkers < 1 ? visionWorkers : Math.min(visionWorkers, aiRequestsAtOnce));
     }
 
     /** Task 0048: each staged step (and each gate) is one transaction of its own. */

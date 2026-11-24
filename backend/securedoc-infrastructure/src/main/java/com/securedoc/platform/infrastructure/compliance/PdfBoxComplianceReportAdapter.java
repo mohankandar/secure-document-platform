@@ -192,6 +192,7 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
             newPage();
             sectionCases();
             sectionActivity();
+            if (!c.reading().empty()) sectionReading();
             if (c.edition() == ComplianceEdition.FULL) appendix();
             close();
             decorate();
@@ -445,6 +446,28 @@ public class PdfBoxComplianceReportAdapter implements ComplianceReportPdfPort {
                     ? "The full audit trail follows as an appendix, with cases by case ID only."
                     : "The full audit trail edition, created by the IT Administrator, adds every record as an appendix, with cases by case ID only.";
             y = paragraph(f.sans, 9.75f, MUTED, SIDE, y, CONTENT_W, closing, 1.5f);
+        }
+
+        /** Task 0064. */
+        private void sectionReading() throws IOException {
+            y -= 16.5f;
+            ensure(150f);
+            heading("5 · How pages were read");
+            countTable("Pages searched in the period", "Pages", c.reading().pages(), true);
+            if (!c.reading().models().isEmpty()) {
+                y -= 7.5f;
+                float[] cols = {140f, 100f, CONTENT_W - 300f, 60f};
+                boolean[] right = {false, false, false, true};
+                tableHeader(cols, new String[]{"AI model", "Version", "Digest", "Documents"}, right);
+                for (ComplianceReportContent.ModelRow m : c.reading().models()) {
+                    tableRow(cols, new Cell[]{new Cell(f.sans, m.name()), new Cell(f.sans, m.version()),
+                            new Cell(f.mono, m.digest()), new Cell(f.mono, Long.toString(m.documents()))}, right, 8.25f);
+                }
+            }
+            if (c.reading().note() != null) {
+                y -= 4.5f;
+                y = paragraph(f.sans, 8.25f, MUTED, SIDE, y, CONTENT_W, c.reading().note(), 1.5f);
+            }
         }
 
         private void appendix() throws IOException {

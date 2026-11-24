@@ -17,6 +17,9 @@ public enum ArtifactType {
     /** Task 0049: the places one page batch found (no value, no text), until the document's batches are gathered. */
     FINDINGS_BATCH,
 
+    /** Task 0064: what the vision model found on one page (kinds and boxes; no value), until it is gathered. */
+    VISION_PAGE,
+
     /** OCR-extracted text output (scanned image documents). */
     OCR_TEXT,
 

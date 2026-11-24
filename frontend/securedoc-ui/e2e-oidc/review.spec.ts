@@ -295,3 +295,30 @@ test('0023 D5: a page preview answered with REVIEW_ALREADY_DECIDED moves the per
   await expect(queue(page).locator('.cf-queue-item[aria-current="true"]')).toContainText('7741');
   await expect(page.getByText('SERVER-TEXT-MARKER')).toHaveCount(0);
 });
+
+/** Task 0064: Review says which path found an item, and what to do with a page the vision model could not read. */
+test('a vision finding says what found it; a page that was not read asks for the whole page', async ({ page }) => {
+  const items = [
+    { ...finding('v1', CASE_A.packageId, 'SSN', null), confidence: 0.75, foundBy: ['VISION'] },
+    { ...finding('v2', CASE_A.packageId, 'DATE_OF_BIRTH', '03/14/1979'), foundBy: ['TEXT', 'VISION'] },
+    { ...finding('v3', CASE_A.packageId, 'UNREAD_PAGE', null, false), confidence: 0, pageNumber: 4, foundBy: ['PAGE_CHECK'] },
+    { ...finding('v4', CASE_A.packageId, 'SSN', '518-22-7741'), foundBy: ['SOMETHING_NEW'] },
+  ];
+  await openReview(page, [], [], items);
+  const foundBy = panel(page).locator('.cf-facts div').filter({ hasText: 'Found by' }).locator('dd');
+  await expect(foundBy).toHaveText('Vision model');
+  if (process.env.P0064_PROOF) await page.screenshot({ path: '../../docs/work/0064-proof/review-vision-finding.png' });
+  await queue(page).locator('#cf-q-v2').click();
+  await expect(foundBy).toHaveText('Page text and Vision model');
+  await queue(page).locator('#cf-q-v3').click();
+  await expect(foundBy).toHaveText('Page check');
+  await expect(panel(page).getByRole('heading', { name: 'Page to check' })).toBeVisible();
+  await expect(panel(page)).toContainText('Nothing on it was passed unread: look over the whole page.');
+  await expect(panel(page)).toContainText('drag one mark that covers all of it');
+  await expect(panel(page).getByRole('button', { name: /^Redact/ }).first()).toBeDisabled();
+  await expect(queue(page).locator('#cf-q-v3')).not.toContainText('%');
+  if (process.env.P0064_PROOF) await page.screenshot({ path: '../../docs/work/0064-proof/review-page-to-check.png' });
+  await queue(page).locator('#cf-q-v4').click();
+  await expect(panel(page)).not.toContainText('Found by');
+  await expect(panel(page)).not.toContainText('SOMETHING_NEW');
+});

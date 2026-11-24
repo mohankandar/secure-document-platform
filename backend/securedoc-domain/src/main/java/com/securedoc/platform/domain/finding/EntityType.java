@@ -66,5 +66,19 @@ public enum EntityType {
     CVV,
 
     /** Personal identification number (4 to 6 digits), only next to its label. */
-    PIN
+    PIN,
+
+    // Task 0064 (vision): stable keys, as above.
+
+    /** A handwritten signature or initials. Off by default (an entity switches it on). */
+    SIGNATURE,
+
+    /** A photo of a person's face. Off by default; only the vision path finds it. */
+    FACE_PHOTO,
+
+    /**
+     * Not a redaction kind: a page that had to be read by the vision model and was not (switched off, no model, wrong
+     * model, unusable answer). It has no place and always waits for a person. Never configurable.
+     */
+    UNREAD_PAGE
 }

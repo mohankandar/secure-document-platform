@@ -20,6 +20,8 @@ import java.util.Set;
  * {@code keepLastFour} are the kinds whose last four digits stay visible. With {@code lockedItemsOn} the locked items
  * are always enabled. It is off only for an entity from before the catalog whose policy was not saved since, which
  * keeps exactly the behaviour it had.
+ *
+ * <p>Task 0064: {@code vision} says whether routed pages are read by the vision model, and the routing threshold.
  */
 public record TenantRedactionPolicy(
         TenantId tenantId,
@@ -32,8 +34,18 @@ public record TenantRedactionPolicy(
         PageBatchSettings pageBatches,
         Set<RegulationPack> packs,
         Set<EntityType> keepLastFour,
-        boolean lockedItemsOn
+        boolean lockedItemsOn,
+        VisionSettings vision
 ) {
+    /** The policy as it was before task 0064, with the default vision settings. */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages, PageBatchSettings pageBatches,
+                                 Set<RegulationPack> packs, Set<EntityType> keepLastFour, boolean lockedItemsOn) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, pageBatches, packs, keepLastFour, lockedItemsOn, VisionSettings.DEFAULTS);
+    }
+
     /** A policy from before the catalog (task 0062): no packs, every value removed in full, no locked items. */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
@@ -62,6 +74,7 @@ public record TenantRedactionPolicy(
         Objects.requireNonNull(reviewMode, "reviewMode must not be null");
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         Objects.requireNonNull(pageBatches, "pageBatches must not be null");
+        Objects.requireNonNull(vision, "vision must not be null");
         Objects.requireNonNull(packs, "packs must not be null");
         Objects.requireNonNull(keepLastFour, "keepLastFour must not be null");
         if (autoRedactThreshold < 0.0 || autoRedactThreshold > 1.0) {

@@ -19,7 +19,7 @@ import java.io.File;
  * task 0015 check (no real person), the other pages ordinary text. "typed" pages carry PDF text; "scanned" pages are
  * a picture of the text only, so reading them needs OCR (a Text job that takes a few seconds).
  *
- * Run with PDFBox on the class path:  java -cp <pdfbox jars> MakeCasePdf.java out.pdf typed|scanned <pages>
+ * Run with PDFBox on the class path:  java -cp <pdfbox jars> MakeCasePdf.java out.pdf typed|scanned|marked <pages>
  */
 public class MakeCasePdf {
     private static final String[] VALUES = {
@@ -33,6 +33,8 @@ public class MakeCasePdf {
     public static void main(String[] args) throws Exception {
         if (args.length != 3) throw new IllegalArgumentException("usage: MakeCasePdf <out.pdf> typed|scanned <pages>");
         boolean scanned = "scanned".equals(args[1]);
+        // Task 0064: every page from the second also carries a pen mark, which the routing checks send to vision.
+        boolean marked = "marked".equals(args[1]);
         int pages = Integer.parseInt(args[2]);
         try (PDDocument document = new PDDocument()) {
             for (int n = 1; n <= pages; n++) {
@@ -58,6 +60,12 @@ public class MakeCasePdf {
                             content.newLine();
                         }
                         content.endText();
+                        if (marked && n > 1) {
+                            content.setLineWidth(1.6f);
+                            content.moveTo(300, 190);
+                            for (int i = 1; i <= 8; i++) content.lineTo(300 + 9 * i, i % 2 == 0 ? 187 + i : 206 - i);
+                            content.stroke();
+                        }
                     }
                 }
             }

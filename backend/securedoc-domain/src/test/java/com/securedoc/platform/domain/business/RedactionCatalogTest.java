@@ -21,7 +21,7 @@ class RedactionCatalogTest {
 
     @Test
     void theCatalogHasTwelveKindsAndTheRetiredOnesAreGone() {
-        assertEquals(12, RedactionCatalog.entries().size());
+        assertEquals(14, RedactionCatalog.entries().size());
         assertTrue(Arrays.stream(EntityType.values()).map(Enum::name)
                 .noneMatch(Set.of("FINANCIAL_ACCOUNT", "GOVERNMENT_ID")::contains));
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
@@ -71,7 +71,7 @@ class RedactionCatalogTest {
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.ITIN, EntityType.DATE_OF_BIRTH,
                 EntityType.BANK_ACCOUNT_NUMBER, EntityType.CREDIT_CARD_NUMBER, EntityType.DRIVERS_LICENSE_NUMBER,
                 EntityType.PASSPORT_NUMBER), EnumSet.copyOf(RegulationPack.HIPAA.kinds()));
-        assertEquals(EnumSet.complementOf(notIn(EntityType.EIN)), EnumSet.copyOf(RegulationPack.GLBA.kinds()));
+        assertEquals(EnumSet.complementOf(notIn(EntityType.EIN, EntityType.SIGNATURE, EntityType.FACE_PHOTO)), EnumSet.copyOf(RegulationPack.GLBA.kinds()));
         for (RegulationPack pack : RegulationPack.values()) {
             assertTrue(RedactionCatalog.kinds().containsAll(pack.kinds()), pack.name());
             assertFalse(pack.covers().isBlank());
@@ -79,11 +79,11 @@ class RedactionCatalogTest {
         }
     }
 
-    /** Everything that is not a catalog kind, and one kind. */
-    private static EnumSet<EntityType> notIn(EntityType kind) {
+    /** Everything that is not a catalog kind, and these kinds. */
+    private static EnumSet<EntityType> notIn(EntityType... kinds) {
         EnumSet<EntityType> out = EnumSet.allOf(EntityType.class);
         out.removeAll(RedactionCatalog.kinds());
-        out.add(kind);
+        out.addAll(java.util.List.of(kinds));
         return out;
     }
 

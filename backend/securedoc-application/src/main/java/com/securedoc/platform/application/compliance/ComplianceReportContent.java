@@ -26,8 +26,37 @@ public record ComplianceReportContent(
         Retention retention,
         Cases cases,
         List<CountRow> activity,
-        List<AppendixRow> appendix
+        List<AppendixRow> appendix,
+        Reading reading
 ) {
+    /** The report without section 5 (nothing recorded in the period). */
+    public ComplianceReportContent(ComplianceEdition edition, String customerName, String entityName,
+                                   String periodWords, String periodEndWords, String createdBy, String createdAt,
+                                   Policy policy, Retention retention, Cases cases, List<CountRow> activity,
+                                   List<AppendixRow> appendix) {
+        this(edition, customerName, entityName, periodWords, periodEndWords, createdBy, createdAt, policy, retention,
+                cases, activity, appendix, Reading.NONE);
+    }
+
+    /**
+     * Section 5 (task 0064): how pages were read, and the AI models that took part. Printed only when anything is
+     * recorded in the period.
+     */
+    public record Reading(List<CountRow> pages, List<ModelRow> models, String note) {
+        public static final Reading NONE = new Reading(List.of(), List.of(), null);
+
+        public Reading {
+            pages = List.copyOf(pages);
+            models = List.copyOf(models);
+        }
+
+        public boolean empty() {
+            return pages.isEmpty() && models.isEmpty();
+        }
+    }
+
+    /** One AI model: its name, version and digest, and the documents it took part in. */
+    public record ModelRow(String name, String version, String digest, long documents) { }
 
     public ComplianceReportContent {
         Objects.requireNonNull(edition);
@@ -39,6 +68,7 @@ public record ComplianceReportContent(
         Objects.requireNonNull(policy);
         Objects.requireNonNull(retention);
         Objects.requireNonNull(cases);
+        Objects.requireNonNull(reading);
         activity = List.copyOf(activity);
         appendix = appendix == null ? List.of() : List.copyOf(appendix);
         if (edition == ComplianceEdition.SUMMARY && !appendix.isEmpty()) {
@@ -134,6 +164,11 @@ public record ComplianceReportContent(
         }
         if (cases.didForYouNote() != null) line(out, "cases.didForYouNote", cases.didForYouNote());
         for (CountRow r : activity) line(out, "activity", count(r));
+        for (CountRow r : reading.pages()) line(out, "reading.pages", count(r));
+        for (ModelRow m : reading.models()) {
+            line(out, "reading.model", m.name() + "|" + m.version() + "|" + m.digest() + "|" + m.documents());
+        }
+        if (reading.note() != null) line(out, "reading.note", reading.note());
         for (AppendixRow r : appendix) {
             line(out, "appendix", r.time() + "|" + r.action() + "|" + r.person() + "|" + r.result() + "|"
                     + r.caseId() + "|" + r.detail());

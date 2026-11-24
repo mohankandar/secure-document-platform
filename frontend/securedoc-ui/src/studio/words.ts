@@ -116,9 +116,18 @@ export const SENSITIVE_TYPES: readonly SensitiveType[] = [
   { key: 'EIN', name: 'EIN', plural: 'EINs', detects: 'A business’s Employer Identification Number (NN-NNNNNNN) next to an EIN or tax ID label. Off by default.' },
   { key: 'DRIVERS_LICENSE_NUMBER', name: 'Driver’s license number', plural: 'Driver’s license numbers', detects: 'A driver’s license number, only next to a driver’s license or DL label. Off by default.' },
   { key: 'PASSPORT_NUMBER', name: 'Passport number', plural: 'Passport numbers', detects: 'A passport number, only next to a passport label. Off by default.' },
+  // Task 0064: found on the page image, not in its text.
+  { key: 'SIGNATURE', name: 'Signature or initials', plural: 'Signatures and initials', detects: 'A handwritten signature or initials next to a signature or initials label, and any the vision model finds. Off by default.' },
+  { key: 'FACE_PHOTO', name: 'Face photo', plural: 'Face photos', detects: 'A photo of a person’s face, for example on an ID copy. Found by the vision model only. Off by default.' },
   // Task 0062: locked items with the credit card number: always on, always removed in full.
   { key: 'CVV', name: 'Card security code (CVV)', plural: 'Card security codes', detects: 'A 3 or 4 digit card security code (CVV, CVC), only next to its label. Always on.' },
   { key: 'PIN', name: 'PIN', plural: 'PINs', detects: 'A 4 to 6 digit PIN, only next to a PIN label. Always on.' },
+];
+
+/** Task 0064: not a type to switch on: a page LexaVault could not read and a person must look at. */
+export const UNREAD_PAGE = 'UNREAD_PAGE';
+const NOT_CONFIGURABLE: readonly SensitiveType[] = [
+  { key: UNREAD_PAGE, name: 'Page to check', plural: 'Pages to check', detects: 'A page the vision model could not read.' },
 ];
 
 /** Other spellings the server or older data use for the same types. */
@@ -139,7 +148,7 @@ function normalizeTypeKey(raw: string): string {
 export function findSensitiveType(raw: string | null | undefined): SensitiveType | undefined {
   if (!raw) return undefined;
   const key = normalizeTypeKey(raw);
-  return SENSITIVE_TYPES.find((t) => t.key === key);
+  return SENSITIVE_TYPES.find((t) => t.key === key) ?? NOT_CONFIGURABLE.find((t) => t.key === key);
 }
 
 /** The name for a sensitive type. An unknown type is shown in sentence case, never as a raw code. */
@@ -164,6 +173,25 @@ export function sensitiveTypeKey(raw: string | null | undefined): string {
 export const REVIEW_WORDS = {
   placeNotFound: 'place not found',
   textFound: 'Text found',
+} as const;
+
+/** Task 0064: which path found an item, in words. Null when the server sent nothing usable (older findings). */
+const FOUND_BY: Record<string, string> = {
+  TEXT: 'Page text',
+  SIGNATURE: 'Signature detector',
+  VISION: 'Vision model',
+  PAGE_CHECK: 'Page check',
+};
+export function foundByText(foundBy: readonly string[] | null | undefined): string | null {
+  if (!Array.isArray(foundBy)) return null;
+  const names = foundBy.map((path) => FOUND_BY[path]).filter((name): name is string => Boolean(name));
+  return names.length > 0 ? names.join(' and ') : null;
+}
+
+/** Task 0064: what a person is asked about a page the vision model did not read. */
+export const UNREAD_PAGE_WORDS = {
+  why: 'This page needs the vision model, and it could not be read that way. Nothing on it was passed unread: look over the whole page.',
+  hint: 'If it holds something to redact, drag one mark that covers all of it, then redact. If it holds nothing, keep it visible.',
 } as const;
 
 /* ---------- Continue manually ---------- */
@@ -326,6 +354,13 @@ export const CATALOG_WORDS = {
 export const SEARCHABLE_PAGES_WORDS = {
   label: 'Searchable redacted pages',
   hint: 'When on, a redacted page also gets hidden text read from the blacked-out image, so it can be searched and copied. The redacted values are never in that text. When off, redacted pages are images only.',
+} as const;
+
+/** Task 0064: the entity's vision settings. */
+export const VISION_WORDS = {
+  label: 'Read hard pages with the vision model',
+  hint: 'Handwriting, ID copies, checks, photos and poor scans are read from the page image by a model on your own servers. When off, or when the model is not available, those pages go to a person. No page passes unread.',
+  threshold: 'A scanned page is hard when its text-reading confidence is below',
 } as const;
 
 /* ---------- Columns on Cases (owner's U007 answer) ---------- */

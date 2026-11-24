@@ -14,7 +14,11 @@ param(
     [string]$Model = "qwen3.5:9b",
     # Task 0048: how long each chat answer takes (the two-server check keeps Find jobs running long enough to stop a
     # server in the middle of one). 0, the default, answers at once, as before.
-    [int]$DelayMs = 0
+    [int]$DelayMs = 0,
+    # Task 0064: also a vision model with this name and digest. Its answer names one SSN place (a box, never a value).
+    [string]$VisionModel = "",
+    [string]$VisionDigest = "",
+    [int]$VisionDelayMs = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +30,7 @@ $answer = '{"findings":[' +
     '{"pageNumber":1,"entityType":"CREDIT_CARD_NUMBER","matchedText":"4000 0566 5566 5556","contextText":"","confidence":0.97},' +
     '{"pageNumber":1,"entityType":"DATE_OF_BIRTH","matchedText":"03/14/1962","contextText":"","confidence":0.97}' +
     ']}'
+$visionBody = '{"done":true,"done_reason":"stop","message":{"content":"{@items@:[{@type@:@SSN@,@box@:[480,740,640,780]}]}"}}'.Replace('@', '\"')
 $escapedAnswer = $answer.Replace('\', '\\').Replace('"', '\"')
 $chatBody = '{"message":{"content":"' + $escapedAnswer + '"},"done_reason":"stop"}'
 
@@ -43,6 +48,10 @@ public sealed class LexaVaultFakeValueOllama
     private readonly string model;
     private readonly string chatBody;
     public int DelayMs;
+    public string VisionModel = "";
+    public string VisionDigest = "";
+    public string VisionBody = "";
+    public int VisionDelayMs;
     private TcpListener listener;
 
     public LexaVaultFakeValueOllama(int port, string model, string chatBody)
@@ -76,10 +85,18 @@ public sealed class LexaVaultFakeValueOllama
             using (client)
             using (NetworkStream stream = client.GetStream())
             {
-                string path = ReadRequestPath(stream);
+                string body;
+                string path = ReadRequestPath(stream, out body);
                 if (path == "/api/tags")
                 {
-                    Send(stream, 200, "{\"models\":[{\"name\":\"" + model + "\",\"model\":\"" + model + "\"}]}");
+                    Send(stream, 200, "{\"models\":[{\"name\":\"" + model + "\",\"model\":\"" + model + "\"}"
+                        + (VisionModel == "" ? "" : ",{\"name\":\"" + VisionModel + "\",\"model\":\"" + VisionModel
+                            + "\",\"digest\":\"" + VisionDigest + "\"}") + "]}");
+                }
+                else if (path == "/api/chat" && VisionModel != "" && body.Contains("\"model\":\"" + VisionModel + "\""))
+                {
+                    if (VisionDelayMs > 0) Thread.Sleep(VisionDelayMs);
+                    Send(stream, 200, VisionBody);
                 }
                 else if (path == "/api/chat")
                 {
@@ -95,8 +112,9 @@ public sealed class LexaVaultFakeValueOllama
         catch { try { client.Close(); } catch { } }
     }
 
-    private static string ReadRequestPath(NetworkStream stream)
+    private static string ReadRequestPath(NetworkStream stream, out string body)
     {
+        body = "";
         StreamReader reader = new StreamReader(stream, Encoding.ASCII, false, 4096, true);
         string requestLine = reader.ReadLine();
         if (String.IsNullOrWhiteSpace(requestLine)) return null;
@@ -116,6 +134,7 @@ public sealed class LexaVaultFakeValueOllama
             if (read <= 0) break;
             offset += read;
         }
+        body = new string(buffer, 0, offset);
         string[] parts = requestLine.Split(' ');
         return parts.Length < 2 ? null : parts[1];
     }
@@ -136,6 +155,10 @@ public sealed class LexaVaultFakeValueOllama
 Add-Type -TypeDefinition $source -Language CSharp
 $server = New-Object LexaVaultFakeValueOllama($Port, $Model, $chatBody)
 $server.DelayMs = $DelayMs
+$server.VisionModel = $VisionModel
+$server.VisionDigest = $VisionDigest
+$server.VisionBody = $visionBody
+$server.VisionDelayMs = $VisionDelayMs
 $server.Start()
 Write-Host "Fake-value mock Ollama listening on http://127.0.0.1:$Port (model $Model)"
 while ($true) { Start-Sleep -Seconds 1 }

@@ -34,6 +34,31 @@ public interface ComplianceReportReadPort {
     /** Section 3 counts that Reports does not show: see {@link CaseCounts}. */
     CaseCounts cases(TenantId tenantId, Instant start, Instant endExclusive);
 
+    /** Section 5 (task 0064): how pages were read, and the AI models that took part. */
+    default PageReading pageReading(TenantId tenantId, Instant start, Instant endExclusive) {
+        return PageReading.NONE;
+    }
+
+    /**
+     * From the {@code DOCUMENT_DETECTION_COMPLETED} successes that say how the pages were read.
+     *
+     * @param models the AI models (in their text form, {@code name|version|digest}) and the documents each took part in
+     */
+    record PageReading(long textPages, long signaturePages, long visionPages, long visionPagesToPerson,
+                       List<ModelUse> models) {
+        public static final PageReading NONE = new PageReading(0, 0, 0, 0, List.of());
+
+        public PageReading {
+            models = List.copyOf(models);
+        }
+
+        public boolean nothing() {
+            return textPages + visionPages + visionPagesToPerson == 0 && models.isEmpty();
+        }
+    }
+
+    record ModelUse(String model, long documents) { }
+
     /**
      * Records counted by one section 4 row: any of {@code actions} (empty = any action) with any of {@code outcomes}
      * (empty = any outcome); optionally not by the system actor; optionally only with this resource id.

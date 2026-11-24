@@ -137,7 +137,8 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                     "provider", PROVIDER, "model", model, "pageCount", nonBlankPages.size(),
                     "findingCount", discoveries.size(), "pageRetries", pageRetryCount.get(),
                     "durationMs", elapsedMillis(startedNanos)), "AI analysis completed");
-            return new AnalysisOutput(discoveries);
+            return new AnalysisOutput(discoveries, List.of(com.securedoc.platform.domain.finding.AiModel.of(
+                    model, "text-" + VERSION, null)));
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
                     ? technical.failureCode().name()

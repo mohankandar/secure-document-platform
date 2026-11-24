@@ -5,6 +5,8 @@ import com.securedoc.platform.application.detection.result.DetectSensitiveDataRe
 import com.securedoc.platform.application.pipeline.PageBatch;
 import com.securedoc.platform.application.pipeline.PageBatchCommand;
 
+import com.securedoc.platform.domain.vision.VisionPageResult;
+
 import java.util.List;
 
 /**
@@ -29,5 +31,27 @@ public interface DetectSensitiveDataUseCase {
     default DetectSensitiveDataResult completeFromBatches(DetectSensitiveDataCommand command,
                                                           List<PageBatch> batches) {
         throw new UnsupportedOperationException("Page batches are not supported");
+    }
+
+    /** Task 0064: the pages of a read document that the vision model is to read, each as its own job. */
+    default List<Integer> pagesForVision(DetectSensitiveDataCommand command) {
+        return List.of();
+    }
+
+    /** Task 0064: reads one page with the vision model. Changes nothing, so it may run outside a transaction. */
+    default VisionPageResult readVisionPage(DetectSensitiveDataCommand command, int page) {
+        throw new UnsupportedOperationException("Vision is not supported");
+    }
+
+    /** Task 0064: keeps one page's vision result for {@link #completeFromBatches}. */
+    default void saveVisionPage(PageBatchCommand command, VisionPageResult result) {
+        throw new UnsupportedOperationException("Vision is not supported");
+    }
+
+    /** Task 0064: as above, with the results of the document's vision jobs. */
+    default DetectSensitiveDataResult completeFromBatches(DetectSensitiveDataCommand command,
+                                                          List<PageBatch> batches, List<PageBatch> visionPages) {
+        if (!visionPages.isEmpty()) throw new UnsupportedOperationException("Vision is not supported");
+        return completeFromBatches(command, batches);
     }
 }

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0064 (vision-based redaction with page routing; owner approved). No value and no document text in any
+        column: settings, page numbers, path and reason names, boxes, codes, and AI model names, versions and digests.
+        - tenant_redaction_policies: vision on/off (on) and the routing threshold (0.85) of an entity.
+        - findings: which path(s) found it and the AI model(s) that took part (BL7). Null for findings saved before.
+        - document_page_routes: how each page is read and why; deleted with its document.
+        - pipeline_jobs: the VISION stage, one job per routed page.
+    -->
+    <changeSet id="080-01-vision-routing" author="lexavault">
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="vision_enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="vision_ocr_threshold" type="DOUBLE PRECISION" defaultValueNumeric="0.85">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <addColumn tableName="findings">
+            <column name="found_by" type="VARCHAR(64)"/>
+            <column name="ai_models" type="VARCHAR(2000)"/>
+        </addColumn>
+        <createTable tableName="document_page_routes">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="document_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="page_number" type="INTEGER"><constraints nullable="false"/></column>
+            <column name="path" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="reasons" type="VARCHAR(200)"><constraints nullable="false"/></column>
+            <column name="ocr_confidence" type="DOUBLE PRECISION"/>
+            <!-- Boxes the signature detector found: left,top,width,height of the page, ; between boxes. -->
+            <column name="signature_boxes" type="TEXT"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="document_page_routes" columnNames="document_id,page_number"
+                       constraintName="pk_document_page_routes"/>
+        <addForeignKeyConstraint baseTableName="document_page_routes" baseColumnNames="document_id"
+                                 referencedTableName="documents" referencedColumnNames="id"
+                                 constraintName="fk_document_page_routes_document" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="document_page_routes" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_document_page_routes_tenant"/>
+        <sql>
+                alter table tenant_redaction_policies
+                    add constraint ck_tenant_redaction_policies_vision
+                    check (vision_ocr_threshold between 0.50 and 0.99);
+                alter table document_page_routes
+                    add constraint ck_document_page_routes_path check (path in ('FAST', 'FAST_SIGNATURE', 'VISION'));
+                drop index if exists idx_pipeline_jobs_stage_package;
+                create index idx_pipeline_jobs_stage_package on pipeline_jobs (package_id)
+                    where stage in ('TEXT', 'FIND', 'VISION', 'REDACT');
+                drop index if exists ux_pipeline_jobs_identity;
+                create unique index ux_pipeline_jobs_identity on pipeline_jobs (
+                    tenant_id, stage, package_id, export_cycle,
+                    coalesce(case when stage in ('TEXT', 'FIND', 'VISION', 'REDACT') then document_id end,
+                             '00000000-0000-0000-0000-000000000000'::uuid),
+                    coalesce(page_from, 0),
+                    coalesce(destination_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                    coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid));
+                alter table pipeline_jobs drop constraint ck_pipeline_jobs_stage_document;
+                alter table pipeline_jobs
+                    add constraint ck_pipeline_jobs_stage_document
+                    check (stage not in ('TEXT', 'FIND', 'VISION', 'REDACT') or document_id is not null);
+                alter table pipeline_jobs drop constraint ck_pipeline_jobs_stage;
+                alter table pipeline_jobs
+                    add constraint ck_pipeline_jobs_stage
+                    check (stage in ('TEXT', 'FIND', 'VISION', 'REDACT', 'EXPORT', 'SPLIT_EXPORT'));
+                -- A VISION job always names its one page.
+                alter table pipeline_jobs
+                    add constraint ck_pipeline_jobs_vision_page
+                    check (stage &lt;&gt; 'VISION' or (page_from is not null and page_from = page_to));
+        </sql>
+        <rollback>
+            <sql>
+                delete from pipeline_jobs where stage = 'VISION';
+                alter table pipeline_jobs drop constraint if exists ck_pipeline_jobs_vision_page;
+                drop index if exists idx_pipeline_jobs_stage_package;
+                create index idx_pipeline_jobs_stage_package on pipeline_jobs (package_id)
+                    where stage in ('TEXT', 'FIND', 'REDACT');
+                drop index if exists ux_pipeline_jobs_identity;
+                create unique index ux_pipeline_jobs_identity on pipeline_jobs (
+                    tenant_id, stage, package_id, export_cycle,
+                    coalesce(case when stage in ('TEXT', 'FIND', 'REDACT') then document_id end,
+                             '00000000-0000-0000-0000-000000000000'::uuid),
+                    coalesce(page_from, 0),
+                    coalesce(destination_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                    coalesce(item_id, '00000000-0000-0000-0000-000000000000'::uuid));
+                alter table pipeline_jobs drop constraint ck_pipeline_jobs_stage_document;
+                alter table pipeline_jobs
+                    add constraint ck_pipeline_jobs_stage_document
+                    check (stage not in ('TEXT', 'FIND', 'REDACT') or document_id is not null);
+                alter table pipeline_jobs drop constraint ck_pipeline_jobs_stage;
+                alter table pipeline_jobs
+                    add constraint ck_pipeline_jobs_stage
+                    check (stage in ('TEXT', 'FIND', 'REDACT', 'EXPORT', 'SPLIT_EXPORT'));
+                alter table tenant_redaction_policies drop constraint if exists ck_tenant_redaction_policies_vision;
+                -- The kinds this task added have no place in the version before it. Open findings of these kinds
+                -- must be decided before a rollback: the older version cannot read them, so it fails closed.
+                delete from tenant_redaction_catalog where kind_key in ('SIGNATURE', 'FACE_PHOTO');
+            </sql>
+            <dropTable tableName="document_page_routes"/>
+            <dropColumn tableName="findings" columnName="ai_models"/>
+            <dropColumn tableName="findings" columnName="found_by"/>
+            <dropColumn tableName="tenant_redaction_policies" columnName="vision_ocr_threshold"/>
+            <dropColumn tableName="tenant_redaction_policies" columnName="vision_enabled"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

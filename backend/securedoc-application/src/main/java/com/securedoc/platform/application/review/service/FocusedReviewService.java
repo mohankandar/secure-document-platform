@@ -246,7 +246,8 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         return new ReviewItemSummary(
                 finding.id(), packageId, document.id(), document.fileName().value(), finding.entityType(),
                 finding.confidence().value(), finding.location().pageNumber(),
-                finding.location().hasBoundingBox(), boxSummary, reason, null);
+                finding.location().hasBoundingBox(), boxSummary, reason, null,
+                finding.origin().paths().stream().map(Enum::name).toList());
     }
 
     private boolean packageHasPendingFindings(PackageId packageId, TenantId tenantId) {

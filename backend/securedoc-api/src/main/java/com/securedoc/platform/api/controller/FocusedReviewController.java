@@ -171,7 +171,9 @@ public class FocusedReviewController {
             boolean hasBoundingBox,
             ReviewBoundingBoxSummary boundingBox,
             String reason,
-            FoundTextResponse foundText
+            FoundTextResponse foundText,
+            /* Task 0064: TEXT, SIGNATURE, VISION, PAGE_CHECK; empty for findings saved before. */
+            java.util.List<String> foundBy
     ) {
         /** Redacted so the sensitive text cannot reach a log line through this DTO. */
         @Override
@@ -193,7 +195,8 @@ public class FocusedReviewController {
                     item.boundingBox(),
                     item.reason().name(),
                     item.foundText() == null ? null : new FoundTextResponse(
-                            item.foundText().text(), item.foundText().before(), item.foundText().after()));
+                            item.foundText().text(), item.foundText().before(), item.foundText().after()),
+                    item.foundBy());
         }
     }
 

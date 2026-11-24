@@ -155,7 +155,8 @@ public final class VaultService implements RegisterVaultEntryUseCase, DownloadAr
         // 1. Deny EXTRACTED_TEXT access by default
         if (command.artifactType() == ArtifactType.EXTRACTED_TEXT
                 || command.artifactType() == ArtifactType.EXTRACTED_TEXT_BATCH
-                || command.artifactType() == ArtifactType.FINDINGS_BATCH) {
+                || command.artifactType() == ArtifactType.FINDINGS_BATCH
+                || command.artifactType() == ArtifactType.VISION_PAGE) {
             auditService.recordDenied(command.tenantId(), command.actorId(),
                     AuditAction.DOCUMENT_DOWNLOADED, "Artifact", command.documentId().toString(),
                     command.correlationId(), "Extracted text access denied by policy");

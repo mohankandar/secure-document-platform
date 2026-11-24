@@ -21,7 +21,9 @@ public final class RedactionCatalog {
         /** The AI and the pattern detectors. */
         AI_AND_PATTERN,
         /** Pattern detectors only. */
-        PATTERN
+        PATTERN,
+        /** On the page image: the signature detector and the vision model (task 0064). */
+        IMAGE
     }
 
     /**
@@ -52,6 +54,8 @@ public final class RedactionCatalog {
             optIn(EntityType.EIN, "EIN"),
             optIn(EntityType.DRIVERS_LICENSE_NUMBER, "Driver’s license number"),
             optIn(EntityType.PASSPORT_NUMBER, "Passport number"),
+            image(EntityType.SIGNATURE, "Signature or initials"),
+            image(EntityType.FACE_PHOTO, "Face photo"),
             locked(EntityType.CVV, "Card security code (CVV)", DetectionMethod.PATTERN),
             locked(EntityType.PIN, "PIN", DetectionMethod.PATTERN));
 
@@ -99,6 +103,10 @@ public final class RedactionCatalog {
 
     private static Entry optIn(EntityType kind, String name) {
         return new Entry(kind, name, DetectionMethod.PATTERN, RedactionStyle.REMOVE_FULLY, false, false, true);
+    }
+
+    private static Entry image(EntityType kind, String name) {
+        return new Entry(kind, name, DetectionMethod.IMAGE, RedactionStyle.REMOVE_FULLY, false, false, false);
     }
 
     private static Entry locked(EntityType kind, String name, DetectionMethod detection) {
