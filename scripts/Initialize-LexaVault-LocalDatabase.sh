@@ -8,6 +8,8 @@
 # Database: LEXAVAULT_LOCAL_DB_URL (default jdbc:postgresql://localhost:5432/securedoc), LEXAVAULT_LOCAL_DB_USER
 # (default securedoc), LEXAVAULT_LOCAL_DB_PASSWORD (required unless the defaults are used: then the development
 # compose file's value). Passed to each step in its environment only; never printed.
+# The jars must be a development build (bash Build-LexaVault-All.sh, or mvn -Pdev-build): only that one trusts the demo
+# licence's key (task 0054); any other build refuses here.
 # Optional: LEXAVAULT_JAR, LEXAVAULT_SETUP_JAR (task 0041: setup runs from its own jar, backend/securedoc-setup).
 set -euo pipefail
 
@@ -40,7 +42,6 @@ LEXAVAULT_SCHEMA_DB_URL="$db_url" LEXAVAULT_SCHEMA_DB_USER="$db_user" LEXAVAULT_
 state_dir="${LEXAVAULT_STATE_DIR:-$repo_root/.run}"
 mkdir -p -- "$state_dir"
 demo="$repo_root/install/demo"
-keys="$demo/development-trusted-keys.json"
 
 set +e
 LEXAVAULT_DEMO_DB_URL="$db_url" LEXAVAULT_DEMO_DB_USER="$db_user" LEXAVAULT_DEMO_DB_PASSWORD="$db_password" \
@@ -52,7 +53,7 @@ if [[ $installed -eq 4 ]]; then
   PLATFORM_SETUP_DB_URL="$db_url" PLATFORM_SETUP_DB_USER="$db_user" PLATFORM_SETUP_DB_PASSWORD="$db_password" \
     java -cp "$setup_jar" -Dloader.main=com.documentplatform.setup.SetupCommand \
       org.springframework.boot.loader.launch.PropertiesLauncher apply --licence "$demo/licence-demo.json" \
-      --signin "$demo/signin-demo.json" --product LEXAVAULT --keys "$keys" \
+      --signin "$demo/signin-demo.json" --product LEXAVAULT \
       --product-roles "$repo_root/install/product-roles.json" \
       --config-out "$state_dir/platform-tenant.properties" --run-log "$state_dir/platform-setup-runs.log" \
       --no-customer-keys
@@ -63,4 +64,4 @@ fi
 
 echo "Local database: LexaVault demo step..."
 LEXAVAULT_DEMO_DB_URL="$db_url" LEXAVAULT_DEMO_DB_USER="$db_user" LEXAVAULT_DEMO_DB_PASSWORD="$db_password" \
-  run_main com.securedoc.install.DemoStep apply --keys "$keys"
+  run_main com.securedoc.install.DemoStep apply

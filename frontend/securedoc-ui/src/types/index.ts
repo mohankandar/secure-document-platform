@@ -1085,6 +1085,15 @@ export interface EnterpriseIdentityOverview {
   managedBy?: string;
 }
 
+/** The answer of the read-only sign-in test (task 0054). `code` is null when it passed. */
+export interface SignInTestAnswer {
+  passed: boolean;
+  code: string | null;
+  message: string;
+  reason: string | null;
+  testedAt: string | null;
+}
+
 /** One sign-in access change of the entity (platform-identity grant history, task 0041). */
 export interface GrantHistoryRow {
   changedAt: string;

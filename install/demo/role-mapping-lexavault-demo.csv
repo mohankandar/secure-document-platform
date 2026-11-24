@@ -1,6 +1,7 @@
 # Format: platform-role-mapping/1
 # Product: LEXAVAULT
 # Demo values only. The group names are the local development Keycloak's (Start-LexaVault-OIDC.ps1).
+# A row with * as its entity_id is a platform-wide grant: the platform role, in every entity (task 0054).
 # entity_name stays empty: the Business Admin names each entity when activating it.
 entity_id,entity_name,group,role
 ENT-DEMO-0001,,BusinessUsers,DOCUMENT_PROCESSOR
@@ -10,3 +11,4 @@ ENT-DEMO-0001,,ReportViewers,REPORT_VIEWER
 ENT-DEMO-0001,,TenantITAdmins,TENANT_IT_ADMIN
 ENT-DEMO-0002,,BusinessUsers,DOCUMENT_PROCESSOR
 ENT-DEMO-0002,,BusinessAdmins,BUSINESS_ADMIN
+*,,PlatformOperationsAdmins,PLATFORM_OPERATIONS_ADMIN

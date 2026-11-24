@@ -63,6 +63,7 @@ import type {
   BrandingUpdateRequest,
   TenantBrandingDetail,
   EnterpriseIdentityOverview,
+  SignInTestAnswer,
   GrantHistoryRow,
 } from '../types';
 
@@ -140,6 +141,11 @@ class ApiClient {
   /** Read-only (task 0041): sign-in connections are set through setup; the server has no draft or activate step. */
   async getEnterpriseIdentityOverview(): Promise<EnterpriseIdentityOverview> {
     return this.request('/admin/enterprise-identity');
+  }
+
+  /** Tests the ACTIVE sign-in connection (task 0054): no input, and nothing is stored or changed. */
+  async testSignInConnection(): Promise<SignInTestAnswer> {
+    return this.request('/admin/enterprise-identity/test-sign-in', { method: 'POST' });
   }
 
   // --- UI branding ---

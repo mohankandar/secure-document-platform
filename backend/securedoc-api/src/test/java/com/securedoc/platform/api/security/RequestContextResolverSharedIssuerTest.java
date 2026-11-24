@@ -101,10 +101,15 @@ class RequestContextResolverSharedIssuerTest {
     }
 
     private static void signedIn(String username, List<String> groups) {
+        signedIn(username, groups, Map.of());
+    }
+
+    private static void signedIn(String username, List<String> groups, Map<String, Object> more) {
         Jwt jwt = Jwt.withTokenValue("pinned").header("alg", "none")
                 .issuer(ISSUER).subject("subject-" + username)
                 .issuedAt(Instant.now().minusSeconds(5)).expiresAt(Instant.now().plusSeconds(300))
                 .claim("preferred_username", username).claim("groups", groups)
+                .claims(claims -> claims.putAll(more))
                 .audience(List.of(AUDIENCE)).build();
         SecurityContextHolder.getContext().setAuthentication(
                 new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_AUTHENTICATED"))));
@@ -198,6 +203,77 @@ class RequestContextResolverSharedIssuerTest {
         assertRefused("Platform Operations cannot be granted through tenant IdP groups", () -> resolver.resolvePrincipal(choosing(null)));
     }
 
+    // ------------------------------------------------------------------ platform-wide grants (task 0054)
+
+    private static RequestContextResolver withPlatformGrants(Map<String, Set<String>> platformGrants, Set<TenantId> activeCandidates) {
+        SecurityProperties properties = sharedIssuerProperties();
+        return new RequestContextResolver(
+                "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000099", properties,
+                new OidcRoleMapper(properties), new OidcTenantResolver(properties, (p, i, a) -> Optional.empty()),
+                new OidcTenantMembershipResolver((p, i, a) -> expected(p, i, a) ? GRANTS : Map.of(),
+                        (p, i, a) -> expected(p, i, a) ? activeCandidates : Set.of(),
+                        (p, i, a) -> expected(p, i, a) ? platformGrants : Map.of(), properties),
+                (p, i, a, client) -> Set.of(), new TrustedActorResolver(),
+                new OidcJwtIdentityNormalizer(properties.getOidc().getProviderId(),
+                        new IdentityClaimConfig(properties.getOidc().getUsernameClaim(), properties.getOidc().getEmailClaim(),
+                                properties.getOidc().getDisplayNameClaim(), properties.getOidc().getRolesClaim())));
+    }
+
+    private static final Map<String, Set<String>> PLATFORM = Map.of("lv-ops", Set.of("PLATFORM_OPERATIONS_ADMIN"));
+
+    @Test
+    void aPlatformWideGrantGivesThePlatformRoleInEveryActiveEntityOnTopOfItsOwnRoles() {
+        signedIn("olga.ops", List.of("lv-ops", "lv-a-staff"));
+        RequestContextResolver resolver = withPlatformGrants(PLATFORM, Set.of(A, B));
+        assertEquals(Map.of(A, Set.of("DOCUMENT_SUPERVISOR", "PLATFORM_OPERATIONS_ADMIN"), B, Set.of("PLATFORM_OPERATIONS_ADMIN")),
+                resolver.resolveAvailableOidcTenants());
+        assertEquals(Set.of("PLATFORM_OPERATIONS_ADMIN"), resolver.resolvePrincipal(choosing(B.value().toString())).roles());
+        assertEquals(Set.of("DOCUMENT_SUPERVISOR", "PLATFORM_OPERATIONS_ADMIN"),
+                resolver.resolvePrincipal(choosing(A.value().toString())).roles());
+        assertRefused("A unique authorized tenant context is required", () -> resolver.resolvePrincipal(choosing(null)));
+    }
+
+    @Test
+    void aPlatformWideGrantNeverOpensAnEntityThatIsNotActive() {
+        signedIn("olga.ops", List.of("lv-ops"));
+        RequestContextResolver resolver = withPlatformGrants(PLATFORM, Set.of(A));
+        assertEquals(Map.of(A, Set.of("PLATFORM_OPERATIONS_ADMIN")), resolver.resolveAvailableOidcTenants());
+        assertRefused("Authenticated identity is not authorized for the requested tenant",
+                () -> resolver.resolvePrincipal(choosing(B.value().toString())));
+    }
+
+    @Test
+    void withoutThePlatformGroupNothingChanges() {
+        signedIn("alice.a", List.of("lv-a-staff"));
+        assertEquals(Map.of(A, Set.of("DOCUMENT_SUPERVISOR")), withPlatformGrants(PLATFORM, Set.of(A, B)).resolveAvailableOidcTenants());
+        // Group names are compared exactly (platform-core 0.7.0, SEC-44).
+        for (String almost : List.of("LV-OPS", "lv-ops ", "/lv-ops", "lv-ops,lv-a-staff")) {
+            signedIn("eve", List.of(almost));
+            assertRefused("No verified ACTIVE tenant membership is available",
+                    () -> withPlatformGrants(PLATFORM, Set.of(A, B)).resolvePrincipal(choosing(null)));
+        }
+    }
+
+    @Test
+    void aPlatformWideGrantOfAnEntityRoleOrAnUnknownNameIsRefused() {
+        signedIn("olga.ops", List.of("lv-ops"));
+        for (String role : List.of("BUSINESS_ADMIN", "DOCUMENT_SUPERVISOR")) {
+            assertRefused("Only Platform Operations can be granted through a platform-wide grant",
+                    () -> withPlatformGrants(Map.of("lv-ops", Set.of(role)), Set.of(A)).resolvePrincipal(choosing(null)));
+        }
+        for (String role : List.of("platform_operations_admin", " PLATFORM_OPERATIONS_ADMIN", "USER", "ROOT")) {
+            assertRefused("Invalid tenant role configuration",
+                    () -> withPlatformGrants(Map.of("lv-ops", Set.of(role)), Set.of(A)).resolvePrincipal(choosing(null)));
+        }
+    }
+
+    @Test
+    void platformWideGrantsThatCannotBeReadRefuseTheSignIn() {
+        signedIn("alice.a", List.of("lv-a-staff"));
+        assertRefused("Tenant has no trusted group admission policy",
+                () -> withPlatformGrants(null, Set.of(A)).resolvePrincipal(choosing(null)));
+    }
+
     @Test
     void theActorIdIsStablePerIssuerAndSubject() {
         signedIn("alice.a", List.of("lv-a-staff"));
@@ -216,6 +292,20 @@ class RequestContextResolverSharedIssuerTest {
         assertEquals(A, machine.tenantId(), "a machine never uses a human entity choice");
         assertEquals("service-account-intake", machine.username());
         assertEquals(Set.of(), machine.roles());
+    }
+
+    /** Task 0054 (platform-core 0.7.0, SEC-7): whatever user name a person's token names, it is no machine. */
+    @Test
+    void aPersonsTokenIsNeverAMachineCaller() {
+        RequestContextResolver resolver = resolver(GRANTS, Set.of(A, B), Map.of("service-account-intake", Set.of(A)));
+        for (Map.Entry<String, Object> person : Map.<String, Object>of("email", "alice@example.test", "name", "Alice",
+                "given_name", "Alice", "auth_time", 1_700_000_000L, "groups", List.of("lv-a-staff"), "nonce", "n", "sid", "s").entrySet()) {
+            signedIn("service-account-intake", List.of(), Map.of(person.getKey(), person.getValue()));
+            assertRefused("A person's sign-in cannot be used as an integration client",
+                    () -> resolver.resolveIntegrationPrincipal(choosing(null)));
+        }
+        signedIn("service-account-intake", List.of(), Map.of("azp", "intake", "client_id", "intake", "name", " "));
+        assertEquals(A, resolver.resolveIntegrationPrincipal(choosing(null)).tenantId());
     }
 
     @Test

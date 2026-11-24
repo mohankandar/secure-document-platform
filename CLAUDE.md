@@ -78,7 +78,7 @@ Tasks and reports live in `docs/work/`. When the owner says "do the next task", 
 | Task | Command (from the repository root) |
 |---|---|
 | Full build with tests | `.\Build-LexaVault-All.ps1` |
-| Backend only | `cd backend; mvn clean install` |
+| Backend only (local build, accepts the demo licence) | `cd backend; mvn -Pdev-build clean install` (a production build omits `-Pdev-build`; it carries no development key and refuses the demo) |
 | Start locally | `.\Start-LexaVault-Local.ps1 -ScannerMode SIMULATOR -AiModel qwen3.5:9b` |
 | Stop locally | `.\Stop-LexaVault-Local.ps1` (stops the apps and leaves the database running) |
 | Restart the frontend only | `.\restart-ui.cmd` |

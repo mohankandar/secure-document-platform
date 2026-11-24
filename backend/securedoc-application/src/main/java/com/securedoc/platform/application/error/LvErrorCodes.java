@@ -396,6 +396,8 @@ public final class LvErrorCodes {
         m.put("UNKNOWN_ROLE", AUT_002);
         m.put("INVALID_ROLE_GRANT", AUT_002);
         m.put("PLATFORM_ROLE_IN_ENTITY_GRANT", AUT_002);
+        // Task 0054 (platform-core 0.7.0): a platform-wide grant that names an entity role.
+        m.put("ENTITY_ROLE_IN_PLATFORM_GRANT", AUT_002);
         m.put("GROUPS_NOT_A_COLLECTION", AUT_002);
         m.put("NO_ADMISSION_POLICY", AUT_002);
         m.put("AMBIGUOUS_SELECTION", AUT_004);
@@ -404,6 +406,8 @@ public final class LvErrorCodes {
         m.put("CONTEXT_UNAVAILABLE", AUT_007);
         m.put("POLICY_UNAVAILABLE", AUT_007);
         m.put("MACHINE_BINDING_NOT_UNIQUE", AUT_008);
+        // Task 0054 (SEC-7): a person's token on a machine path.
+        m.put("MACHINE_IDENTITY_IS_A_PERSON", AUT_008);
         // Processing recovery (#347).
         m.put("PROCESSING_RECOVERY_EXHAUSTED", PRC_008);
         // Routing and derived delivery (#183 to #192, #196, #221, #227).

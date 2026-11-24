@@ -40,7 +40,7 @@ docker compose -f docker/compose/postgres.yml up -d
 
 # Build
 cd backend
-mvn clean package
+mvn clean package -Pdev-build
 
 # Run (when application is implemented)
 java -jar securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar

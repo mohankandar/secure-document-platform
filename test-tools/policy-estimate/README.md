@@ -5,7 +5,7 @@
 other container named in `CLAUDE.md`, and removes only its own container and processes at the end.
 
 ```powershell
-cd backend; mvn -o clean install; cd ..
+cd backend; mvn -o clean install -Pdev-build; cd ..
 .\test-tools\policy-estimate\Invoke-PolicyEstimateCheck.ps1
 ```
 

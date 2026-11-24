@@ -4,7 +4,7 @@ import { capabilitiesFor } from './policyCapabilities';
 /**
  * UI task U009: Admin › Sign-in (UI spec finding 15), owner's decision B. Sign-in is managed through the login hub,
  * so the tab is a read-only card for the IT Administrator: the words, and the login system's name and address as plain
- * text. No edit, test, switch-on or roll-back control. Other roles don't see the tab.
+ * text. No edit, switch-on or roll-back control. Other roles don't see the tab. Task 0054: one read-only "Test sign-in".
  *
  * Same harness as adminIntegrations.spec.ts: the real app on the Vite dev server (OIDC mode), identity provider and API mocked.
  */
@@ -58,7 +58,7 @@ test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) 
 // Other screens get thin mock answers; only errors from the Sign-in tab count here.
 test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/(packages|operations\/reports|business-admin\/configuration|platform-admin\/overview) returned/.test(e))).toEqual([]); });
 
-type Who = { roles: string[]; caps: string[]; overview?: object };
+type Who = { roles: string[]; caps: string[]; overview?: object; test?: () => { status?: number; body: object } };
 
 async function signIn(page: Page, who: Who, writes: string[]) {
   await mockIdentityProvider(page);
@@ -73,6 +73,11 @@ async function signIn(page: Page, who: Who, writes: string[]) {
     }
     if (url.pathname === '/api/v1/admin/enterprise-identity') {
       return who.overview ? json(who.overview) : json({ code: 'NOT_FOUND', message: 'none' }, 404);
+    }
+    if (url.pathname === '/api/v1/admin/enterprise-identity/test-sign-in' && request.method() === 'POST' && who.test) {
+      expect(request.postData()).toBeNull(); // no token, no address: nothing is sent
+      const answer = who.test();
+      return json(answer.body, answer.status ?? 200);
     }
     // The Admin screen opens its first area (Integrations) before the Sign-in tab is chosen.
     if (url.pathname === '/api/v1/integrations' || url.pathname === '/api/v1/derived-deliveries/attention') return json([]);
@@ -108,10 +113,11 @@ test('IT Administrator: a read-only card with the login system\'s name and addre
 
   const main = page.locator('.cf-admin');
   await expect(main.locator('input, textarea, select')).toHaveCount(0);
-  // U026: the card's only button is its "?" help; it changes nothing.
-  await expect(card.getByRole('button')).toHaveCount(1);
+  // U026: the "?" help; task 0054: the read-only test. Neither changes anything.
+  await expect(card.getByRole('button')).toHaveCount(2);
   await expect(card.getByRole('button', { name: 'About Sign-in', exact: true })).toBeVisible();
-  for (const name of [/save/i, /test/i, /activate/i, /switch on/i, /roll back/i, /edit/i]) {
+  await expect(card.getByRole('button', { name: 'Test sign-in', exact: true })).toBeVisible();
+  for (const name of [/save/i, /activate/i, /switch on/i, /roll back/i, /edit/i]) {
     await expect(main.getByRole('button', { name })).toHaveCount(0);
   }
   const text = await main.innerText();
@@ -120,6 +126,36 @@ test('IT Administrator: a read-only card with the login system\'s name and addre
   }
   await expect(page.getByText('How people sign in. It is managed through the login hub.')).toBeVisible();
   expect(writes).toEqual([]);
+});
+
+test('IT Administrator: Test sign-in says it passed, or gives the exact code and its words; nothing else is written', async ({ page }) => {
+  const writes: string[] = [];
+  const answers = [
+    { body: { passed: true, code: null, message: 'Its key set holds 2 signing key(s). No token was checked.', reason: null, testedAt: new Date().toISOString() } },
+    { body: { passed: false, code: 'IDN_TEST_ISSUER_UNREACHABLE', message: "The issuer's discovery document could not be fetched (OUT_TLS_FAILED).", reason: 'OUT_TLS_FAILED', testedAt: new Date().toISOString() } },
+    { status: 403, body: { errorCode: 'ACCESS_DENIED', code: 'LV-AUT-006', message: 'Not allowed' } },
+  ];
+  let at = 0;
+  await signIn(page, { roles: ['TENANT_IT_ADMIN'], caps: IT_CAPS, test: () => answers[at++], overview: { active: ACTIVE, staged: null, rollbackCandidates: [], activationSupported: false, activationMaxTestAgeSeconds: 0 } }, writes);
+  const card = await openSignInTab(page);
+  const button = card.getByRole('button', { name: 'Test sign-in' });
+  const answer = card.getByRole('status');
+
+  await button.click();
+  await expect(answer).toContainText('The login system answers.');
+  await expect(answer).toContainText('Its key set holds 2 signing key(s). No token was checked.');
+  await expect(answer).toContainText('Tested Today');
+
+  await button.click();
+  await expect(answer).toContainText('Sign-in test failed: IDN_TEST_ISSUER_UNREACHABLE');
+  await expect(answer).toContainText("The issuer's discovery document could not be fetched (OUT_TLS_FAILED).");
+  await expect(answer).not.toContainText('The login system answers.');
+
+  await button.click();
+  await expect(answer).toContainText('The test could not be run.');
+  await expect(button).toBeEnabled();
+  await expect(page.locator('.cf-admin').locator('input, textarea, select')).toHaveCount(0);
+  expect(writes).toEqual(Array(3).fill('POST /api/v1/admin/enterprise-identity/test-sign-in'));
 });
 
 test('IT Administrator with no login system details: the card alone', async ({ page }) => {

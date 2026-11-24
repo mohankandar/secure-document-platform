@@ -24,8 +24,11 @@ This runs the whole backend Maven reactor from the single backend root:
 
 ```text
 backend\
-  mvn clean install
+  mvn clean install -Pdev-build
 ```
+
+`-Pdev-build` is the local development build (it accepts the demo licence). `Build-LexaVault-All.ps1 -Production` leaves it
+out: every jar for a customer is built that way (`docs/install/BUILD.md`).
 
 Then it verifies and builds the frontend:
 

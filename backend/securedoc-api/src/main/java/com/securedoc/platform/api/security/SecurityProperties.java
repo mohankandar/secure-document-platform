@@ -1,5 +1,6 @@
 package com.securedoc.platform.api.security;
 
+import com.documentplatform.identity.push.PushCallerSettings;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +20,10 @@ public class SecurityProperties {
     public Cors getCors() { return cors; }
 
     public static class Oidc {
+        /** Task 0054: the claims only a person's token has; platform-identity's push-caller default, so the rule is the same. */
+        static final java.util.List<String> DEFAULT_MACHINE_USER_CLAIMS =
+                PushCallerSettings.DEFAULT_USER_CLAIMS.stream().sorted().toList();
+
         private String issuerUri = "";
         private String audience = "";
         private String browserClientId = "";
@@ -32,6 +37,7 @@ public class SecurityProperties {
         private String emailClaim = "email";
         private String displayNameClaim = "name";
         private final Map<String, String> roleMappings = new LinkedHashMap<>();
+        private java.util.List<String> machineUserClaims = DEFAULT_MACHINE_USER_CLAIMS;
 
         public String getIssuerUri() { return issuerUri; }
         public void setIssuerUri(String issuerUri) { this.issuerUri = safe(issuerUri); }
@@ -58,6 +64,13 @@ public class SecurityProperties {
         public String getDisplayNameClaim() { return displayNameClaim; }
         public void setDisplayNameClaim(String displayNameClaim) { this.displayNameClaim = safeOrDefault(displayNameClaim, "name"); }
         public Map<String, String> getRoleMappings() { return roleMappings; }
+        public java.util.List<String> getMachineUserClaims() { return machineUserClaims; }
+        /** An empty list keeps the default: the check cannot be switched off, only told this login system's claims. */
+        public void setMachineUserClaims(java.util.List<String> claims) {
+            java.util.List<String> given = claims == null ? java.util.List.of()
+                    : claims.stream().filter(c -> c != null && !c.isBlank()).map(String::trim).toList();
+            this.machineUserClaims = given.isEmpty() ? DEFAULT_MACHINE_USER_CLAIMS : given;
+        }
 
         private static String safe(String value) { return value == null ? "" : value.trim(); }
         private static String safeOrDefault(String value, String fallback) {

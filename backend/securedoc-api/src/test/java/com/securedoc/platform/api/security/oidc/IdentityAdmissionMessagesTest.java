@@ -30,6 +30,8 @@ class IdentityAdmissionMessagesTest {
             Map.entry(Reason.UNKNOWN_ROLE, "Invalid tenant role configuration"),
             Map.entry(Reason.INVALID_ROLE_GRANT, "Invalid tenant-scoped role grant"),
             Map.entry(Reason.PLATFORM_ROLE_IN_ENTITY_GRANT, "Platform Operations cannot be granted through tenant IdP groups"),
+            // Task 0054: new in platform-core 0.3.0 (platform-wide grants).
+            Map.entry(Reason.ENTITY_ROLE_IN_PLATFORM_GRANT, "Only Platform Operations can be granted through a platform-wide grant"),
             Map.entry(Reason.GROUPS_NOT_A_COLLECTION, "Trusted IdP group collection is required"),
             Map.entry(Reason.NO_ADMISSION_POLICY, "Tenant has no trusted group admission policy"),
             Map.entry(Reason.CONTEXT_UNAVAILABLE, "Verified OIDC tenant membership context is unavailable"),

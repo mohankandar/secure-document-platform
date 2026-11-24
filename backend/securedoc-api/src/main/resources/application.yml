@@ -15,6 +15,14 @@ spring:
       max-file-size: 50MB
       max-request-size: 55MB
 
+# Task 0054: the platform's outbound rules, used by the test sign-in on Admin > Sign-in only (it calls the stored login
+# system's issuer, nothing else). Internal addresses stay off unless the customer's login system is on an internal address.
+# The http login system of a local development start needs nothing here (it is allowed by the development licence alone).
+platform:
+  outbound:
+    installation: ${PLATFORM_OUTBOUND_INSTALLATION:ON_PREMISES}
+    allow-internal-addresses: ${PLATFORM_OUTBOUND_ALLOW_INTERNAL_ADDRESSES:false}
+
 securedoc:
   logging:
     environment: ${SECUREDOC_ENVIRONMENT:production}
@@ -47,13 +55,17 @@ securedoc:
       display-name-claim: ${SECUREDOC_SECURITY_OIDC_DISPLAY_NAME_CLAIM:name}
       # External customer groups are normalized by the shared identity module; LexaVault owns role mapping.
       roles-claim: ${SECUREDOC_SECURITY_OIDC_ROLES_CLAIM:groups}
+      # Task 0054 (SEC-7): the claims only a person's token carries; a token with one of them is refused on the machine
+      # paths (push and scanner intake). Empty keeps platform-identity's list. Name your own when your login system puts
+      # one of those into its machine tokens.
+      machine-user-claims: ${SECUREDOC_SECURITY_OIDC_MACHINE_USER_CLAIMS:}
       role-mappings:
         DOCUMENT_PROCESSOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_PROCESSOR:securedoc-document-processor}
         DOCUMENT_SUPERVISOR: ${SECUREDOC_SECURITY_ROLE_DOCUMENT_SUPERVISOR:securedoc-document-supervisor}
         BUSINESS_ADMIN: ${SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN:securedoc-business-admin}
         REPORT_VIEWER: ${SECUREDOC_SECURITY_ROLE_REPORT_VIEWER:securedoc-report-viewer}
         TENANT_IT_ADMIN: ${SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN:securedoc-tenant-it-admin}
-        PLATFORM_OPERATIONS_ADMIN: ${SECUREDOC_SECURITY_ROLE_PLATFORM_OPERATIONS_ADMIN:securedoc-platform-operations-admin}
+        # PLATFORM_OPERATIONS_ADMIN comes only from a platform-wide grant (task 0054), never from a mapping here.
         # Narrow transition aliases for existing IdP groups. Remove after tenant IdP assignments migrate.
         USER: ${SECUREDOC_SECURITY_LEGACY_ROLE_USER:securedoc-user}
         REVIEWER: ${SECUREDOC_SECURITY_LEGACY_ROLE_REVIEWER:securedoc-reviewer}

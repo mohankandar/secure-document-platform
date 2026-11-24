@@ -20,7 +20,7 @@
     folder (it holds fake test values only).
 
 .PARAMETER JarPath
-    The backend jar to test. Build first: .\Build-LexaVault-All.ps1 or cd backend; mvn clean install.
+    The backend jar to test. Build first: .\Build-LexaVault-All.ps1 or cd backend; mvn clean install -Pdev-build.
 
 .PARAMETER RunRoot
     Where to put the run folder. Default: %TEMP%\lexavault-0015.

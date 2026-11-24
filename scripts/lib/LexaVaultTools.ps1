@@ -16,7 +16,7 @@ function Resolve-LexaVaultJar([string] $JarPath) {
     }
     $default = Join-Path $script:LexaVaultRepoRoot 'backend\securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar'
     if (-not (Test-Path -LiteralPath $default)) {
-        throw "Backend jar not found: $default (build it first: cd backend; mvn clean install)."
+        throw "Backend jar not found: $default (build it first: cd backend; mvn clean install -Pdev-build)."
     }
     return $default
 }
@@ -38,7 +38,22 @@ function Resolve-LexaVaultSetupJar([string] $SetupJarPath, [string] $ApiJar) {
     foreach ($candidate in $candidates) {
         if (Test-Path -LiteralPath $candidate) { return (Resolve-Path -LiteralPath $candidate).Path }
     }
-    throw "Setup jar not found: $($candidates[0]) (build it first: cd backend; mvn clean install)."
+    throw "Setup jar not found: $($candidates[0]) (build it first: cd backend; mvn clean install -Pdev-build)."
+}
+
+# Whether a jar is a development build (task 0054): its own META-INF/platform/licence-build.properties says
+# development-keys=true. The build decides; nothing here can make a jar trust a key.
+function Test-LexaVaultDevelopmentBuild([string] $Jar) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Jar).Path)
+    try {
+        $entry = $zip.GetEntry('META-INF/platform/licence-build.properties')
+        if (-not $entry -or -not $zip.GetEntry('META-INF/platform/licence-keys.json')) { return $false }
+        $reader = New-Object System.IO.StreamReader($entry.Open())
+        try { return [bool]($reader.ReadToEnd() -match '(?m)^development-keys=true\s*$') }
+        finally { $reader.Dispose() }
+    }
+    finally { $zip.Dispose() }
 }
 
 # Runs one install command. -Environment holds the settings for the child process only; the caller's environment is
@@ -90,6 +105,8 @@ $script:LexaVaultDemoEntityId = '30216241-b724-5a3a-aef3-3034fd546d17'
 # issuer this start was given. Platform-core 0.2.0 takes the http issuer on localhost because the demo licence is signed
 # by a development key. Setup changes nothing when the connection already matches.
 # -StateDir receives setup's config fragment (platform-tenant.properties), its run log and the OIDC sign-in file.
+# The jars must be a development build (mvn -Pdev-build, or Build-LexaVault-All.ps1 without -Production): only that one
+# trusts the demo licence's key (task 0054). Any other build is refused here before anything is changed.
 # -SetupJar defaults to the setup jar built next to -Jar. Throws on any failure.
 function Initialize-LexaVaultDatabase {
     param(
@@ -105,9 +122,13 @@ function Initialize-LexaVaultDatabase {
         [string] $OidcBrowserClientId
     )
     $demo = Join-Path $script:LexaVaultRepoRoot 'install\demo'
-    $keys = Join-Path $demo 'development-trusted-keys.json'
     New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
     $setupJarPath = Resolve-LexaVaultSetupJar $SetupJar $Jar
+    foreach ($built in @($Jar, $setupJarPath)) {
+        if (-not (Test-LexaVaultDevelopmentBuild $built)) {
+            throw "Not a development build: $built. It does not trust the demo licence (task 0054). Build it with .\Build-LexaVault-All.ps1 or cd backend; mvn clean install -Pdev-build -Pdev-build."
+        }
+    }
 
     Write-Host "Database: schema step..." -ForegroundColor Cyan
     $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.SchemaStep' -Arguments @('apply') `
@@ -140,7 +161,7 @@ function Initialize-LexaVaultDatabase {
             Write-Host "Database: the demo step has not run yet, so setup runs with the demo input files (install\demo)..." -ForegroundColor Cyan
         }
         $setupArgs = @('apply', '--licence', (Join-Path $demo 'licence-demo.json'), '--signin', $signin,
-            '--product', 'LEXAVAULT', '--keys', $keys,
+            '--product', 'LEXAVAULT',
             '--product-roles', (Join-Path $script:LexaVaultRepoRoot 'install\product-roles.json'),
             '--config-out', (Join-Path $StateDir 'platform-tenant.properties'),
             '--run-log', (Join-Path $StateDir 'platform-setup-runs.log'),
@@ -148,13 +169,17 @@ function Initialize-LexaVaultDatabase {
             '--no-customer-keys') + $extra
         $code = Invoke-LexaVaultJarMain -Jar $setupJarPath -MainClass 'com.documentplatform.setup.SetupCommand' -Arguments $setupArgs `
             -Environment (New-LexaVaultDbEnvironment 'PLATFORM_SETUP' $DbUrl $DbUser $DbPassword)
-        if ($code -ne 0) { throw "Setup with the demo files failed (exit $code)." }
+        # Exit 3 with the OIDC start: setup is done and lists the grants kept under the login system this start replaced
+        # (platform-core 0.7.0, task 0054). They do nothing while this one is active; --replace-connection leaves no conflict.
+        if ($code -eq 3 -and $OidcIssuer) {
+            Write-Host "Database: the grants of the login system that was replaced are kept (listed above)." -ForegroundColor DarkGray
+        }
+        elseif ($code -ne 0) { throw "Setup with the demo files failed (exit $code)." }
     }
     else { Write-Host "Database: the demo step has run; setup is not run again." -ForegroundColor DarkGray }
 
     Write-Host "Database: LexaVault demo step..." -ForegroundColor Cyan
-    $demoArgs = @('apply', '--keys', $keys)
-    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.DemoStep' -Arguments $demoArgs `
+    $code = Invoke-LexaVaultJarMain -Jar $Jar -MainClass 'com.securedoc.install.DemoStep' -Arguments @('apply') `
         -Environment (New-LexaVaultDbEnvironment 'LEXAVAULT_DEMO' $DbUrl $DbUser $DbPassword)
     if ($code -ne 0) { throw "The demo step failed (exit $code)." }
 }

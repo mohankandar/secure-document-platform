@@ -7,9 +7,9 @@ import com.documentplatform.identity.store.ActivationOutcome;
 import com.documentplatform.identity.store.EntityRecord;
 import com.documentplatform.identity.store.SlotActivation;
 import com.documentplatform.licensing.ClockGuard;
+import com.documentplatform.licensing.LicenceBuild;
 import com.documentplatform.licensing.LicenceService;
 import com.documentplatform.licensing.LicenceVerifier;
-import com.documentplatform.licensing.TrustedKeys;
 import com.documentplatform.licensing.jdbc.PostgresLastSeenStore;
 import com.documentplatform.licensing.jdbc.PostgresLicenceStore;
 import com.documentplatform.licensing.jdbc.PostgresUsageLedger;
@@ -28,11 +28,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -42,7 +38,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * LexaVault's demo step (task 0037 step 5): the demo-only records that setup does not make, written once by a command
@@ -58,13 +56,17 @@ import java.util.UUID;
  * file that {@link LocalOidcSignin} writes for the OIDC start.
  *
  * <pre>
- * demo-step apply --keys development-trusted-keys.json [--slot ENT-DEMO-0001] [--name "Local Demo Tenant"]
+ * demo-step apply [--slot ENT-DEMO-0001] [--name "Local Demo Tenant"]
  *                 [--slug local-demo] [--scanner-client-principal scanner-bridge-local]
  * demo-step installed [--slot ENT-DEMO-0001]
  * </pre>
  * {@code installed} answers whether the demo step has made the demo entity (its LexaVault entity row exists): exit 0
  * yes, 4 no. The local start runs setup with the demo files only while the answer is no (task 0037 fix 1), so a
  * database whose demo step stopped half-way gets setup again (it changes nothing) and then the demo step again.
+ *
+ * <p>Task 0054 (platform-core 0.7.0, SEC-12): the keys that verify the stored licence are the ones inside this build
+ * ({@link LicenceBuild}); {@code --keys} is gone. Only a development build ({@code -Pdev-build}) trusts the demo licence's
+ * key; any other build refuses here ({@code LICENCE_BUILD_INVALID} or {@code DEMO_ACTIVATION_REFUSED}).
  *
  * <p>An existing database (task 0037 fix 1) may hold the fixed demo tenant {@code 0000...0001} that
  * {@code LocalDemoBootstrap} made, with slug {@code local-demo} and name "Local Demo Tenant". That row and its data are
@@ -82,14 +84,21 @@ public final class DemoStep {
     static final String DEFAULT_SLOT = "ENT-DEMO-0001";
 
     /** Options of one run. */
-    record Options(Path keys, String slot, String name, String slug, String scannerPrincipal) {
+    record Options(String slot, String name, String slug, String scannerPrincipal) {
     }
 
     private final PrintStream out;
     private final PrintStream err;
     private final Clock clock;
+    private final Supplier<LicenceBuild> build;
 
     DemoStep(PrintStream out, PrintStream err, Clock clock) {
+        this(out, err, clock, LicenceBuild::load);
+    }
+
+    /** @param build the licence keys of this build; the tests give their own */
+    DemoStep(PrintStream out, PrintStream err, Clock clock, Supplier<LicenceBuild> build) {
+        this.build = Objects.requireNonNull(build, "build");
         this.out = out;
         this.err = err;
         this.clock = clock;
@@ -149,26 +158,26 @@ public final class DemoStep {
     static Options parse(String[] args) {
         if (args.length == 0 || !"apply".equals(args[0])) throw usage("the first word must be apply");
         Map<String, String> o = new HashMap<>();
-        List<String> known = List.of("--keys", "--slot", "--name", "--slug", "--scanner-client-principal");
+        List<String> known = List.of("--slot", "--name", "--slug", "--scanner-client-principal");
         for (int i = 1; i < args.length; i += 2) {
             if (!known.contains(args[i]) || i + 1 >= args.length || o.containsKey(args[i])) {
                 throw usage("unknown, repeated or empty option " + args[i]);
             }
             o.put(args[i], args[i + 1]);
         }
-        if (!o.containsKey("--keys")) throw usage("--keys is required (the trusted-keys file that verifies the stored licence)");
         String slot = o.getOrDefault("--slot", DEFAULT_SLOT);
         if (!EntityUuid.isSlotId(slot)) throw usage("--slot must be an entity slot ID (ENT-...)");
-        return new Options(Path.of(o.get("--keys")), slot, o.getOrDefault("--name", "Local Demo Tenant"),
+        return new Options(slot, o.getOrDefault("--name", "Local Demo Tenant"),
                 o.getOrDefault("--slug", "local-demo"), o.getOrDefault("--scanner-client-principal", "scanner-bridge-local"));
     }
 
     void apply(InstallDb db, Options options) {
-        TrustedKeys keys;
+        LicenceBuild licenceBuild;
         try {
-            keys = TrustedKeys.parse(Files.readString(options.keys(), StandardCharsets.UTF_8));
-        } catch (IOException | RuntimeException e) {
-            throw new InstallException(2, "KEYS_UNREADABLE", "the trusted-keys file " + options.keys() + " could not be read");
+            licenceBuild = build.get();
+        } catch (LicenceBuild.Invalid e) {
+            throw new InstallException(2, "LICENCE_BUILD_INVALID", e.getMessage()
+                    + " The demo step needs a development build (mvn -Pdev-build)");
         }
         DataSource ds = new DriverManagerDataSource(db.url(), db.user(), db.password());
         String tenantId = customer(ds);
@@ -181,8 +190,8 @@ public final class DemoStep {
         String name = naming.name();
 
         // 1. Activate the slot under the stored licence, as a Business Admin would.
-        LicenceService licences = new LicenceService(new PostgresLicenceStore(ds), new LicenceVerifier(keys),
-                new ClockGuard(clock, new PostgresLastSeenStore(ds)), new PostgresUsageLedger(ds),
+        LicenceService licences = new LicenceService(new PostgresLicenceStore(ds), new LicenceVerifier(licenceBuild.keys()),
+                new ClockGuard(clock, ClockGuard.DEFAULT_TOLERANCE, new PostgresLastSeenStore(ds), licenceBuild.builtAt()), new PostgresUsageLedger(ds),
                 LexaVaultProduct.CODE, tenantId);
         PostgresEntityStore entities = new PostgresEntityStore(ds);
         ActivationOutcome outcome = new SlotActivation(entities, LicenceSlots.of(licences), clock)
@@ -275,7 +284,9 @@ public final class DemoStep {
                 "org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration",
                 "org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration",
                 "org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration",
-                "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"));
+                "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+                // Task 0054: the app makes its own outbound rules (OutboundRulesConfig); this step calls nothing out.
+                "com.documentplatform.outbound.spring.OutboundAutoConfiguration"));
         props.put("logging.level.root", "WARN");
         app.setDefaultProperties(props);
         return app.run();
@@ -286,7 +297,7 @@ public final class DemoStep {
     }
 
     private static InstallException usage(String why) {
-        return new InstallException(2, "BAD_OPTION", why + ". Usage: demo-step apply --keys FILE [--slot ENT-...] "
+        return new InstallException(2, "BAD_OPTION", why + ". Usage: demo-step apply [--slot ENT-...] "
                 + "[--name NAME] [--slug SLUG] [--scanner-client-principal P], or demo-step installed [--slot ENT-...]");
     }
 }

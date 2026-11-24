@@ -1,6 +1,7 @@
 package com.securedoc.install;
 
-import com.documentplatform.setup.SigninFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -39,18 +40,16 @@ class LocalOidcSigninTest {
         byte[] bytes = Files.readAllBytes(file);
         assertFalse(bytes.length >= 3 && bytes[0] == (byte) 0xEF, "no byte order mark");
 
-        SigninFile signin = SigninFile.parse(new String(bytes, StandardCharsets.UTF_8));
-        SigninFile demo = SigninFile.parse(Files.readString(DEMO.resolve("signin-demo.json")));
-        assertEquals(URI.create(KEYCLOAK), signin.issuer());
-        assertEquals("customer-oidc", signin.providerId());
-        SigninFile.Product p = signin.product("LEXAVAULT").orElseThrow();
-        assertEquals("lexavault-web", p.browserClientId());
-        assertEquals("lexavault-api", p.apiAudience());
-        // Everything else is the demo file's: the customer, the mode and the role mapping (copied next to it).
-        assertEquals(demo.tenantId(), signin.tenantId());
-        assertEquals(demo.mode(), signin.mode());
-        assertEquals(demo.product("LEXAVAULT").orElseThrow().roleMappingFile(), p.roleMappingFile());
-        assertArrayEquals(Files.readAllBytes(DEMO.resolve(p.roleMappingFile())), Files.readAllBytes(out.resolve(p.roleMappingFile())));
+        // Task 0054: platform-setup's SigninFile is internal since 0.6.0; setup itself reads this file in
+        // FreshDatabaseStartPostgresTest. Everything but these four values is the demo file's (the customer, the mode, the
+        // role mapping, which is copied next to it).
+        ObjectMapper json = new ObjectMapper();
+        ObjectNode expected = (ObjectNode) json.readTree(Files.readString(DEMO.resolve("signin-demo.json")));
+        ((ObjectNode) expected.get("loginSystem")).put("issuer", KEYCLOAK).put("providerId", "customer-oidc");
+        ((ObjectNode) expected.get("products").get("LEXAVAULT")).put("browserClientId", "lexavault-web").put("apiAudience", "lexavault-api");
+        assertEquals(expected, json.readTree(new String(bytes, StandardCharsets.UTF_8)));
+        String mapping = expected.get("products").get("LEXAVAULT").get("roleMappingFile").asText();
+        assertArrayEquals(Files.readAllBytes(DEMO.resolve(mapping)), Files.readAllBytes(out.resolve(mapping)));
         // Written again: the same file.
         assertEquals(Files.readString(file), Files.readString(write(out)));
     }

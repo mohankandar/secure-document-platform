@@ -16,7 +16,7 @@ docker compose -f docker/compose/postgres.yml up -d
 
 ```bash
 cd backend
-mvn clean package -DskipTests
+mvn clean package -DskipTests -Pdev-build
 ```
 
 ## 3. Run

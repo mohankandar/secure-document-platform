@@ -26,9 +26,17 @@ class EnterpriseIdentityAuthorizationContractTest {
         assertFalse(policy.capabilitiesFor(Set.of("PLATFORM_OPERATIONS_ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
         assertFalse(policy.capabilitiesFor(Set.of("BUSINESS_ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
     }
-    /** Task 0041: the screen is read-only. Sign-in connections are set through setup; no endpoint here writes. */
+    /**
+     * Task 0041: the screen is read-only. Sign-in connections are set through setup; no endpoint here writes. Task 0054: the
+     * one POST is the test sign-in, which takes no input (no body, no parameter) and changes nothing (SignInConnectionTestTest).
+     */
     @Test void theScreenHasNoWritingEndpoint(){
         for(Method m:EnterpriseIdentityAdminController.class.getDeclaredMethods()){
+            if(m.getName().equals("testSignIn")){
+                assertArrayEquals(new Class<?>[]{jakarta.servlet.http.HttpServletRequest.class},m.getParameterTypes());
+                assertArrayEquals(new UserCapability[]{UserCapability.TENANT_AUTH_MANAGE},m.getAnnotation(RequireCapability.class).value());
+                continue;
+            }
             assertNull(m.getAnnotation(PostMapping.class),m.getName());
             assertNull(m.getAnnotation(PutMapping.class),m.getName());
             assertNull(m.getAnnotation(PatchMapping.class),m.getName());

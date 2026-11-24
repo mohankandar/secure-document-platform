@@ -24,6 +24,8 @@ public class OidcRoleMapper {
         for (Map.Entry<String, String> entry : properties.getOidc().getRoleMappings().entrySet()) {
             var canonicalRole = ProductRole.fromIdentityName(entry.getKey());
             if (canonicalRole.isEmpty()) continue;
+            // Task 0054, decision 2: the platform role comes only from a platform-wide grant. One configured here gives nothing.
+            if (canonicalRole.get() == ProductRole.PLATFORM_OPERATIONS_ADMIN) continue;
             for (String configuredExternal : split(entry.getValue())) {
                 if (externalValues.contains(configuredExternal)) {
                     mapped.add(canonicalRole.get().name());
@@ -37,14 +39,15 @@ public class OidcRoleMapper {
         return Set.copyOf(mapped);
     }
 
+    /** Task 0054 (platform-core 0.7.0, SEC-44): exactly as the login system sends them; a claim that is one text is one group. */
     private Set<String> normalizeExternalValues(Object raw) {
         Set<String> values = new LinkedHashSet<>();
         if (raw instanceof Collection<?> collection) {
             for (Object item : collection) {
-                if (item != null && !item.toString().isBlank()) values.add(item.toString().trim());
+                if (item != null && !item.toString().isBlank()) values.add(item.toString());
             }
         } else if (raw != null) {
-            for (String item : split(raw.toString())) values.add(item);
+            if (!raw.toString().isBlank()) values.add(raw.toString());
         }
         return values;
     }

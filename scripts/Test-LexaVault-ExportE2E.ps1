@@ -16,7 +16,7 @@
     4. Stops the backend if it is still running and removes only the throwaway container.
 
 .PARAMETER JarPath
-    The backend jar. Build first: cd backend; mvn clean install.
+    The backend jar. Build first: cd backend; mvn clean install -Pdev-build.
 
 .PARAMETER RunRoot
     Where the run folder goes. Default: %TEMP%\lexavault-0035.
@@ -48,7 +48,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ui = Join-Path $repoRoot 'frontend\securedoc-ui'
 if (-not $ProofDir) { $ProofDir = Join-Path $repoRoot 'docs\work\0037-proof' }
 if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar' }
-if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first: cd backend; mvn clean install)." }
+if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first: cd backend; mvn clean install -Pdev-build)." }
 $JarPath = (Resolve-Path -LiteralPath $JarPath).Path
 
 $Container = 'lexavault-0035-pg'

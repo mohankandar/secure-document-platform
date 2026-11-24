@@ -76,6 +76,7 @@ public final class IdentityAdmissionMapping {
             case UNKNOWN_ROLE -> "Invalid tenant role configuration";
             case INVALID_ROLE_GRANT -> "Invalid tenant-scoped role grant";
             case PLATFORM_ROLE_IN_ENTITY_GRANT -> "Platform Operations cannot be granted through tenant IdP groups";
+            case ENTITY_ROLE_IN_PLATFORM_GRANT -> "Only Platform Operations can be granted through a platform-wide grant";
             case GROUPS_NOT_A_COLLECTION -> "Trusted IdP group collection is required";
             case NO_ADMISSION_POLICY -> "Tenant has no trusted group admission policy";
             case CONTEXT_UNAVAILABLE -> "Verified OIDC tenant membership context is unavailable";

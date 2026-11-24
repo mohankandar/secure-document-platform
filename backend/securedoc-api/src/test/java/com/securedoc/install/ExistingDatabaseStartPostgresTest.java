@@ -98,22 +98,19 @@ class ExistingDatabaseStartPostgresTest {
                 "--licence", DEMO.resolve("licence-demo.json").toString(),
                 "--signin", signin.toString(),
                 "--product", "LEXAVAULT",
-                "--keys", DEMO.resolve("development-trusted-keys.json").toString(),
                 "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(),
                 "--no-customer-keys"));
         args.addAll(List.of(extra));
-        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC()).run(args, print, print);
+        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC(), TestBuild.development()).run(args, print, print);
         return checked(exit, out);
     }
 
     private static Run demoStep(String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
-        List<String> all = new ArrayList<>(List.of(args));
-        if ("apply".equals(all.get(0))) all.addAll(1, List.of("--keys", DEMO.resolve("development-trusted-keys.json").toString()));
-        int exit = new DemoStep(print, print, Clock.systemUTC()).run(all.toArray(String[]::new), db.env(DemoStep.ENV_PREFIX));
+        int exit = new DemoStep(print, print, Clock.systemUTC(), TestBuild::development).run(args, db.env(DemoStep.ENV_PREFIX));
         return checked(exit, out);
     }
 
@@ -121,7 +118,14 @@ class ExistingDatabaseStartPostgresTest {
     private static Run oidcStart() {
         Path signin = LocalOidcSigninTest.write(work.resolve("oidc-signin"));
         Run setup = setup(signin, "--replace-connection");
-        assertEquals(0, setup.exit(), setup.output());
+        // Task 0054 (platform-core 0.7.0, SEC-17): a run that moves the customer to another login system is done, with exit 3,
+        // and lists the grants kept under the old one. The local start takes that, and only that (LexaVaultTools.ps1).
+        if (setup.exit() != 0) {
+            assertEquals(3, setup.exit(), setup.output());
+            assertFalse(setup.output().contains("  conflict "), setup.output());
+            assertTrue(setup.output().lines().filter(l -> l.startsWith("  not removed "))
+                    .allMatch(l -> l.contains("under the replaced login system")), setup.output());
+        }
         Run demo = demoStep("apply");
         return new Run(demo.exit(), setup.output() + DEMO_STEP_PART + demo.output());
     }

@@ -12,7 +12,7 @@ It needs two jars:
 ```powershell
 # Build the base jar from a throwaway worktree, for example of the merge commit f1d2a74:
 git worktree add --detach $env:TEMP\lv-base f1d2a74
-cd $env:TEMP\lv-base\backend; mvn -o package -DskipTests; cd -
+cd $env:TEMP\lv-base\backend; mvn -o package -DskipTests -Pdev-build; cd -
 .\test-tools\audit-detail\Invoke-AuditDetailCheck.ps1 -BaseJarPath $env:TEMP\lv-base\backend\securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar
 git worktree remove $env:TEMP\lv-base
 ```
