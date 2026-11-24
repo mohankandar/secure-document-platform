@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0062 (R1, owner approved the migrations it needs): the redaction catalog. One row per entity and kind, with
+        its switch and style, replaces the four V1 columns of tenant_redaction_policies and the table
+        tenant_redaction_kinds (047); both are copied, then dropped. Regulation packs: one row per pack in force.
+
+        Existing entities keep exactly today's behaviour: every switch as it was, every style "remove fully", no pack,
+        and locked_items_on = false until their policy is next saved. An entity without a policy row used the built-in
+        defaults, so it gets a row with those defaults (its tenant_redaction_kinds rows, if any, were not read and are
+        not copied). New entities have no row or a row with locked_items_on = true.
+
+        findings.redaction_style: the style in force when the document was searched; null = remove fully.
+    -->
+    <changeSet id="070-01-redaction-catalog" author="lexavault">
+        <createTable tableName="tenant_redaction_catalog">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="kind_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="style" type="VARCHAR(32)" defaultValue="REMOVE_FULLY">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="tenant_redaction_catalog" columnNames="tenant_id,kind_key"
+                       constraintName="pk_tenant_redaction_catalog"/>
+        <addForeignKeyConstraint baseTableName="tenant_redaction_catalog" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_redaction_catalog_tenant"/>
+        <createTable tableName="tenant_regulation_packs">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="pack_key" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="tenant_regulation_packs" columnNames="tenant_id,pack_key"
+                       constraintName="pk_tenant_regulation_packs"/>
+        <addForeignKeyConstraint baseTableName="tenant_regulation_packs" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_tenant_regulation_packs_tenant"/>
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="locked_items_on" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <addColumn tableName="findings">
+            <column name="redaction_style" type="VARCHAR(32)"/>
+        </addColumn>
+        <sql>
+            ALTER TABLE tenant_redaction_catalog ADD CONSTRAINT ck_tenant_redaction_catalog_style
+                CHECK (style IN ('REMOVE_FULLY', 'KEEP_LAST_FOUR'));
+            -- Locked items are never shown in part, whatever writes the row.
+            ALTER TABLE tenant_redaction_catalog ADD CONSTRAINT ck_tenant_redaction_catalog_locked
+                CHECK (kind_key NOT IN ('CREDIT_CARD_NUMBER', 'CVV', 'PIN') OR style = 'REMOVE_FULLY');
+        </sql>
+        <sql>
+            INSERT INTO tenant_redaction_catalog (tenant_id, kind_key, enabled, updated_at)
+            SELECT k.tenant_id, k.kind_key, k.enabled, k.updated_at
+              FROM tenant_redaction_kinds k
+              JOIN tenant_redaction_policies p ON p.tenant_id = k.tenant_id
+             WHERE k.kind_key IN ('BANK_ROUTING_NUMBER', 'BANK_ACCOUNT_NUMBER', 'ITIN', 'EIN',
+                                  'DRIVERS_LICENSE_NUMBER', 'PASSPORT_NUMBER');
+            INSERT INTO tenant_redaction_policies (tenant_id, auto_redact_threshold, review_mode, ssn_enabled,
+                    date_of_birth_enabled, credit_card_number_enabled, credit_score_enabled, mask_ssn_last_four, updated_at)
+            SELECT t.id, 0.80, 'UNCERTAIN_ONLY', true, true, true, true, true, now()
+              FROM tenants t
+             WHERE NOT EXISTS (SELECT 1 FROM tenant_redaction_policies p WHERE p.tenant_id = t.id);
+            UPDATE tenant_redaction_policies SET locked_items_on = false;
+            INSERT INTO tenant_redaction_catalog (tenant_id, kind_key, enabled, updated_at)
+            SELECT p.tenant_id, v.kind_key, v.enabled, p.updated_at
+              FROM tenant_redaction_policies p
+             CROSS JOIN LATERAL (VALUES ('SSN', p.ssn_enabled), ('DATE_OF_BIRTH', p.date_of_birth_enabled),
+                    ('CREDIT_CARD_NUMBER', p.credit_card_number_enabled), ('CREDIT_SCORE', p.credit_score_enabled))
+                    AS v (kind_key, enabled);
+        </sql>
+        <dropColumn tableName="tenant_redaction_policies" columnName="ssn_enabled"/>
+        <dropColumn tableName="tenant_redaction_policies" columnName="date_of_birth_enabled"/>
+        <dropColumn tableName="tenant_redaction_policies" columnName="credit_card_number_enabled"/>
+        <dropColumn tableName="tenant_redaction_policies" columnName="credit_score_enabled"/>
+        <dropTable tableName="tenant_redaction_kinds"/>
+        <rollback>
+            <!--
+                Back to the four columns and tenant_redaction_kinds, with every switch. Packs, styles and the two new
+                locked items (CVV, PIN) have no place there and are lost; the version before removes values in full.
+            -->
+            <sql>
+                ALTER TABLE tenant_redaction_policies
+                    ADD COLUMN ssn_enabled BOOLEAN NOT NULL DEFAULT true,
+                    ADD COLUMN date_of_birth_enabled BOOLEAN NOT NULL DEFAULT true,
+                    ADD COLUMN credit_card_number_enabled BOOLEAN NOT NULL DEFAULT true,
+                    ADD COLUMN credit_score_enabled BOOLEAN NOT NULL DEFAULT true;
+                UPDATE tenant_redaction_policies p SET
+                    ssn_enabled = EXISTS (SELECT 1 FROM tenant_redaction_catalog c WHERE c.tenant_id = p.tenant_id
+                        AND c.kind_key = 'SSN' AND c.enabled),
+                    date_of_birth_enabled = EXISTS (SELECT 1 FROM tenant_redaction_catalog c WHERE c.tenant_id = p.tenant_id
+                        AND c.kind_key = 'DATE_OF_BIRTH' AND c.enabled),
+                    credit_card_number_enabled = EXISTS (SELECT 1 FROM tenant_redaction_catalog c WHERE c.tenant_id = p.tenant_id
+                        AND c.kind_key = 'CREDIT_CARD_NUMBER' AND c.enabled),
+                    credit_score_enabled = EXISTS (SELECT 1 FROM tenant_redaction_catalog c WHERE c.tenant_id = p.tenant_id
+                        AND c.kind_key = 'CREDIT_SCORE' AND c.enabled);
+                CREATE TABLE tenant_redaction_kinds (
+                    tenant_id UUID NOT NULL CONSTRAINT fk_tenant_redaction_kinds_tenant REFERENCES tenants (id),
+                    kind_key VARCHAR(64) NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT false,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    CONSTRAINT pk_tenant_redaction_kinds PRIMARY KEY (tenant_id, kind_key));
+                INSERT INTO tenant_redaction_kinds (tenant_id, kind_key, enabled, updated_at)
+                SELECT tenant_id, kind_key, enabled, updated_at FROM tenant_redaction_catalog
+                 WHERE kind_key IN ('BANK_ROUTING_NUMBER', 'BANK_ACCOUNT_NUMBER', 'ITIN', 'EIN',
+                                    'DRIVERS_LICENSE_NUMBER', 'PASSPORT_NUMBER');
+                -- The version before can't read the new kinds' names.
+                UPDATE findings SET entity_type = 'CUSTOM' WHERE entity_type IN ('CVV', 'PIN');
+                ALTER TABLE findings DROP COLUMN redaction_style;
+                ALTER TABLE tenant_redaction_policies DROP COLUMN locked_items_on;
+                DROP TABLE tenant_regulation_packs;
+                DROP TABLE tenant_redaction_catalog;
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -23,6 +23,8 @@ import com.securedoc.platform.domain.artifact.Artifact;
 import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
 import com.securedoc.platform.domain.artifact.ArtifactType;
 import com.securedoc.platform.domain.audit.AuditRecord;
+import com.securedoc.platform.domain.business.RedactionCatalog;
+import com.securedoc.platform.domain.business.RedactionStyle;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.document.Document;
@@ -102,7 +104,8 @@ class OptInPatternKindsDetectionTest {
             Second routing number: O32000719
             End of page""";
 
-    private static final Set<EntityType> NEW_KINDS = TenantRedactionPolicy.optInTypes();
+    private static final Set<EntityType> NEW_KINDS = RedactionCatalog.entries().stream()
+            .filter(e -> !e.onByDefault()).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
 
     private final TenantId tenantId = TenantId.of(UUID.randomUUID());
     private final List<Finding> savedFindings = new CopyOnWriteArrayList<>();
@@ -136,12 +139,12 @@ class OptInPatternKindsDetectionTest {
         storedPolicy = null;
         run();
         assertEquals(Set.of(EntityType.SSN), types(), "only the V1 kinds, as before");
-        assertEquals(TenantRedactionPolicy.v1ConfigurableTypes(), aiRequests.get(0).policy().enabledEntityTypes());
+        assertEquals(RedactionCatalog.askedOfAi(), aiRequests.get(0).policy().enabledEntityTypes());
     }
 
     @Test
-    void theV1DefaultsStayExactlyTheV1Four() {
-        assertEquals(TenantRedactionPolicy.v1ConfigurableTypes(),
+    void theDefaultsHoldNoOptInKind() {
+        assertEquals(RedactionCatalog.onByDefault(),
                 TenantRedactionPolicy.defaults(tenantId).enabledEntityTypes());
         assertTrue(TenantRedactionPolicy.defaults(tenantId).enabledEntityTypes().stream().noneMatch(NEW_KINDS::contains));
     }
@@ -161,7 +164,7 @@ class OptInPatternKindsDetectionTest {
 
     @Test
     void switchedOnFindingsHaveBoxesAndFollowTheConfidenceRule() {
-        EnumSet<EntityType> all = EnumSet.copyOf(TenantRedactionPolicy.v1ConfigurableTypes());
+        EnumSet<EntityType> all = EnumSet.copyOf(RedactionCatalog.askedOfAi());
         all.addAll(NEW_KINDS);
         storedPolicy = policy(all);
         run();
@@ -268,6 +271,30 @@ class OptInPatternKindsDetectionTest {
                 .getOrDefault(EntityType.DRIVERS_LICENSE_NUMBER, List.of());
         List<Integer> starts = found.stream().map(f -> f.location().startOffset()).sorted().toList();
         assertEquals(List.of(pageText.indexOf("K7302217"), pageText.indexOf("K7302218")), starts);
+    }
+
+    /**
+     * Task 0062: an entity from before the catalog keeps exactly its findings (its card switch may be off, CVV and PIN
+     * are not looked for); with the locked items on, the same page also gives the locked items, whatever is chosen.
+     */
+    @Test
+    void theLockedItemsAreFoundOnlyOnceTheEntityHasThem() {
+        pageText = "Borrower SSN: " + SSN + "\nCredit card number: 4111 1111 1111 1111\nCVV: 739\nPIN: 8264\nEnd of page";
+        Map<EntityType, List<Finding>> before = runWith(EnumSet.of(EntityType.SSN));
+        assertEquals(Set.of(EntityType.SSN), before.keySet(), "before the catalog: exactly what was on");
+        assertEquals(Set.of(EntityType.SSN), aiRequests.get(aiRequests.size() - 1).policy().enabledEntityTypes());
+
+        savedFindings.clear();
+        storedPolicy = new TenantRedactionPolicy(tenantId, EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY,
+                true, Instant.now(), true, com.securedoc.platform.domain.business.PageBatchSettings.DEFAULTS, Set.of(),
+                Set.of(EntityType.SSN), true);
+        run();
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV, EntityType.PIN),
+                EnumSet.copyOf(types()));
+        for (Finding f : savedFindings) {
+            assertEquals(f.entityType() == EntityType.SSN ? RedactionStyle.KEEP_LAST_FOUR : RedactionStyle.REMOVE_FULLY,
+                    f.redactionStyle(), "the style of the moment goes with the finding");
+        }
     }
 
     private Map<EntityType, List<Finding>> runWith(Set<EntityType> enabled) {

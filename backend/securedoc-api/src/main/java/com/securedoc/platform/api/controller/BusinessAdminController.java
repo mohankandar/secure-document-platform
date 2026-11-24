@@ -17,6 +17,8 @@ import com.securedoc.platform.application.intelligence.service.DocumentIntellige
 import com.securedoc.platform.application.operations.model.DashboardColumnSetting;
 import com.securedoc.platform.application.operations.service.DashboardColumnConfigurationService;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.domain.business.RedactionCatalog;
+import com.securedoc.platform.domain.business.RegulationPack;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.lifecycle.TenantLifecyclePolicy;
@@ -31,6 +33,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -120,7 +124,9 @@ public class BusinessAdminController {
         service.updateSensitiveDataPolicy(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), enabled,
                 body.autoRedactThreshold(), reviewMode, maskSsnLastFour, searchable,
-                body.pageBatchSize(), body.pageBatchOverlap());
+                body.pageBatchSize(), body.pageBatchOverlap(),
+                body.enabledPacks() == null ? null : parsePacks(body.enabledPacks()),
+                body.keepLastFourKinds() == null ? null : parseTypes(body.keepLastFourKinds()));
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -216,7 +222,8 @@ public class BusinessAdminController {
         var policyResponse = new BusinessAdminConfigurationResponse.SensitiveDataPolicyResponse(
                 policy.enabledEntityTypes().stream().map(Enum::name).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
                 policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour(),
-                policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap());
+                policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap(),
+                names(policy.packs()), names(policy.keepLastFour()), policy.lockedItemsOn());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),
@@ -238,6 +245,33 @@ public class BusinessAdminController {
                 reporting.deliveryTargetMinutes(), reporting.deliveryTargetPercent(),
                 reporting.straightThroughTargetPercent(), reporting.reviewWaitTargetMinutes(),
                 reporting.reviewWaitTargetPercent(), reporting.minutesPerPage());
-        return new BusinessAdminConfigurationResponse(identifiers, dashboardColumns, policyResponse, lifecycleResponse, intelligenceResponse, reportingResponse);
+        return new BusinessAdminConfigurationResponse(identifiers, dashboardColumns, policyResponse, lifecycleResponse, intelligenceResponse, reportingResponse, CATALOG);
+    }
+
+    private static final BusinessAdminConfigurationResponse.RedactionCatalogResponse CATALOG =
+            new BusinessAdminConfigurationResponse.RedactionCatalogResponse(
+                    RedactionCatalog.entries().stream().map(e ->
+                            new BusinessAdminConfigurationResponse.CatalogKindResponse(e.kind().name(), e.name(),
+                                    e.detection().name(), e.defaultStyle().name(), e.locked(), e.lastFourAllowed())).toList(),
+                    Arrays.stream(RegulationPack.values()).map(p ->
+                            new BusinessAdminConfigurationResponse.RegulationPackResponse(p.name(), p.displayName(),
+                                    p.covers(), p.notCovered(),
+                                    RedactionCatalog.kinds().stream().filter(p.kinds()::contains).map(Enum::name).toList()))
+                            .toList());
+
+    private static Set<String> names(Set<? extends Enum<?>> values) {
+        return values.stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private static Set<RegulationPack> parsePacks(Set<String> raw) {
+        Set<RegulationPack> packs = EnumSet.noneOf(RegulationPack.class);
+        for (String name : raw) {
+            try {
+                packs.add(RegulationPack.valueOf(name == null ? "" : name.trim().toUpperCase(Locale.ROOT)));
+            } catch (IllegalArgumentException e) {
+                throw new ValidationException(LvErrorCode.CFG_001, "Unsupported regulation pack");
+            }
+        }
+        return packs;
     }
 }

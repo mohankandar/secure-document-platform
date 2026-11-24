@@ -116,6 +116,9 @@ export const SENSITIVE_TYPES: readonly SensitiveType[] = [
   { key: 'EIN', name: 'EIN', plural: 'EINs', detects: 'A business’s Employer Identification Number (NN-NNNNNNN) next to an EIN or tax ID label. Off by default.' },
   { key: 'DRIVERS_LICENSE_NUMBER', name: 'Driver’s license number', plural: 'Driver’s license numbers', detects: 'A driver’s license number, only next to a driver’s license or DL label. Off by default.' },
   { key: 'PASSPORT_NUMBER', name: 'Passport number', plural: 'Passport numbers', detects: 'A passport number, only next to a passport label. Off by default.' },
+  // Task 0062: locked items with the credit card number: always on, always removed in full.
+  { key: 'CVV', name: 'Card security code (CVV)', plural: 'Card security codes', detects: 'A 3 or 4 digit card security code (CVV, CVC), only next to its label. Always on.' },
+  { key: 'PIN', name: 'PIN', plural: 'PINs', detects: 'A 4 to 6 digit PIN, only next to a PIN label. Always on.' },
 ];
 
 /** Other spellings the server or older data use for the same types. */
@@ -302,6 +305,22 @@ export function sentenceCase(raw: string): string {
  * legal entity (the entity switch), never a kind of sensitive data.
  */
 export const SENSITIVE_TYPES_HEADING = 'Sensitive types';
+
+/** Task 0062: regulation packs, locked items and styles on the policy screen. */
+export const CATALOG_WORDS = {
+  packsHeading: 'Regulation packs',
+  packsHint: 'Turning a pack on turns on its sensitive types below; then turn single types on or off by hand. Turning a pack off leaves its types on until you turn them off. A pack helps with a rule; it does not make a document compliant by itself.',
+  notCovered: 'Not covered:',
+  tunedOff: 'Turned off by hand:',
+  locked: 'always on',
+  lockedSoon: 'on with your next save',
+  lockedHint: 'Full card numbers, card security codes and PINs are locked: always on, and always removed in full.',
+  lockedPending: 'This entity does not have the locked items yet (full card number, card security code, PIN). They turn on with your next save of this card, for new cases, and can’t be turned off again.',
+  styleHeading: 'What stays visible',
+  styleHint: 'For the types that are on. Keep the last 4 shows only the last four digits on the cover, for values read from the document’s own text with at least eight characters; a scanned or uncertain value is removed in full. New documents only.',
+  removeFully: 'Remove fully',
+  keepLastFour: 'Keep the last 4',
+} as const;
 
 /** Task 0044: the entity's "searchable redacted pages" switch on the policy screen (on by default). */
 export const SEARCHABLE_PAGES_WORDS = {

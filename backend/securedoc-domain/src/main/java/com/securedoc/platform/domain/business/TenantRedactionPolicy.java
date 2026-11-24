@@ -14,6 +14,12 @@ import java.util.Set;
  * <p>Task 0044: {@code searchableRedactedPages} (on by default) adds an invisible OCR text layer to every redacted page
  * (option B); off gives today's image-only redacted pages. Task 0049: {@code pageBatches} splits large documents for
  * Text and Find.
+ *
+ * <p>Task 0062: the kinds come from the {@link RedactionCatalog}; {@code packs} are the regulation packs in force (they
+ * say why kinds are on; {@code enabledEntityTypes} alone decides what is found, so a kind can be fine-tuned);
+ * {@code keepLastFour} are the kinds whose last four digits stay visible. With {@code lockedItemsOn} the locked items
+ * are always enabled. It is off only for an entity from before the catalog whose policy was not saved since, which
+ * keeps exactly the behaviour it had.
  */
 public record TenantRedactionPolicy(
         TenantId tenantId,
@@ -23,8 +29,19 @@ public record TenantRedactionPolicy(
         boolean maskSsnLastFour,
         Instant updatedAt,
         boolean searchableRedactedPages,
-        PageBatchSettings pageBatches
+        PageBatchSettings pageBatches,
+        Set<RegulationPack> packs,
+        Set<EntityType> keepLastFour,
+        boolean lockedItemsOn
 ) {
+    /** A policy from before the catalog (task 0062): no packs, every value removed in full, no locked items. */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages, PageBatchSettings pageBatches) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, pageBatches, Set.of(), Set.of(), false);
+    }
+
     /** The policy as it was before task 0049, with the default page batches. */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
@@ -39,72 +56,47 @@ public record TenantRedactionPolicy(
         this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt, true);
     }
 
-    private static final Set<EntityType> V1_CONFIGURABLE_TYPES = Set.of(
-            EntityType.SSN,
-            EntityType.DATE_OF_BIRTH,
-            EntityType.CREDIT_CARD_NUMBER,
-            EntityType.CREDIT_SCORE
-    );
-
-    /**
-     * Task 0043: pattern kinds an entity can switch on. Off by default: {@link #defaults} enables only the V1 four,
-     * and a kind with no row in tenant_redaction_kinds (migration 047) is off.
-     */
-    private static final Set<EntityType> OPT_IN_TYPES = Set.of(
-            EntityType.BANK_ROUTING_NUMBER,
-            EntityType.BANK_ACCOUNT_NUMBER,
-            EntityType.ITIN,
-            EntityType.EIN,
-            EntityType.DRIVERS_LICENSE_NUMBER,
-            EntityType.PASSPORT_NUMBER
-    );
-
-    private static final Set<EntityType> CONFIGURABLE_TYPES = union(V1_CONFIGURABLE_TYPES, OPT_IN_TYPES);
-
-    private static Set<EntityType> union(Set<EntityType> a, Set<EntityType> b) {
-        EnumSet<EntityType> all = EnumSet.copyOf(a);
-        all.addAll(b);
-        return Set.copyOf(all);
-    }
-
     public TenantRedactionPolicy {
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(enabledEntityTypes, "enabledEntityTypes must not be null");
         Objects.requireNonNull(reviewMode, "reviewMode must not be null");
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         Objects.requireNonNull(pageBatches, "pageBatches must not be null");
+        Objects.requireNonNull(packs, "packs must not be null");
+        Objects.requireNonNull(keepLastFour, "keepLastFour must not be null");
         if (autoRedactThreshold < 0.0 || autoRedactThreshold > 1.0) {
             throw new IllegalArgumentException("autoRedactThreshold must be between 0 and 1");
         }
-        if (!CONFIGURABLE_TYPES.containsAll(enabledEntityTypes)) {
-            throw new IllegalArgumentException("Policy contains entity types that are not configurable in V1");
+        if (!RedactionCatalog.kinds().containsAll(enabledEntityTypes)) {
+            throw new IllegalArgumentException("Policy contains entity types that are not in the redaction catalog");
         }
-        enabledEntityTypes = Set.copyOf(enabledEntityTypes);
+        if (!RedactionCatalog.lastFourAllowed().containsAll(keepLastFour)) {
+            throw new IllegalArgumentException("The last four digits can't be kept for one of the kinds");
+        }
+        EnumSet<EntityType> enabled = EnumSet.noneOf(EntityType.class);
+        enabled.addAll(enabledEntityTypes);
+        if (lockedItemsOn) enabled.addAll(RedactionCatalog.lockedKinds());
+        enabledEntityTypes = Set.copyOf(enabled);
+        packs = Set.copyOf(packs);
+        keepLastFour = Set.copyOf(keepLastFour);
     }
 
+    /** The policy of a new entity: the catalog's defaults, with the locked items. */
     public static TenantRedactionPolicy defaults(TenantId tenantId) {
-        return new TenantRedactionPolicy(
-                tenantId,
-                EnumSet.copyOf(V1_CONFIGURABLE_TYPES),
-                0.80,
-                ReviewMode.UNCERTAIN_ONLY,
-                true,
-                Instant.now());
+        return new TenantRedactionPolicy(tenantId, RedactionCatalog.onByDefault(), 0.80, ReviewMode.UNCERTAIN_ONLY,
+                true, Instant.now(), true, PageBatchSettings.DEFAULTS, Set.of(), Set.of(), true);
     }
 
-    /** The four V1 kinds, on by default. */
-    public static Set<EntityType> v1ConfigurableTypes() {
-        return V1_CONFIGURABLE_TYPES;
+    /** The default policy as it was before the catalog: the four kinds the AI is asked for, nothing locked. */
+    public static TenantRedactionPolicy defaultsBeforeCatalog(TenantId tenantId) {
+        return new TenantRedactionPolicy(tenantId, RedactionCatalog.askedOfAi(), 0.80, ReviewMode.UNCERTAIN_ONLY,
+                true, Instant.now());
     }
 
-    /** Task 0043: the pattern kinds that stay off until a Business Admin switches them on. */
-    public static Set<EntityType> optInTypes() {
-        return OPT_IN_TYPES;
-    }
-
-    /** Every kind a policy may enable: the V1 four and the opt-in kinds. */
-    public static Set<EntityType> configurableTypes() {
-        return CONFIGURABLE_TYPES;
+    /** How a found value of this kind is covered. A locked item is always removed in full. */
+    public RedactionStyle styleOf(EntityType type) {
+        return keepLastFour.contains(type) && !RedactionCatalog.isLocked(type)
+                ? RedactionStyle.KEEP_LAST_FOUR : RedactionStyle.REMOVE_FULLY;
     }
 
     public boolean isEnabled(EntityType type) {

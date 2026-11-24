@@ -17,7 +17,7 @@ public class PdfBoxIntakeValidationAdapter implements PdfIntakeValidationPort {
     private static final Logger log = LoggerFactory.getLogger(PdfBoxIntakeValidationAdapter.class);
 
     static final String NOT_READABLE = "Uploaded content is not a valid readable PDF";
-    static final String PASSWORD_PROTECTED = "The PDF is password protected and cannot be read";
+    static final String PASSWORD_PROTECTED = "Password-protected file. Send it through the API.";
     static final String NO_PAGES = "PDF must contain at least one page";
 
     @Override

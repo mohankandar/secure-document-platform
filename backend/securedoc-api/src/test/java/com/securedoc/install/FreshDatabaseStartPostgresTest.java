@@ -251,7 +251,7 @@ class FreshDatabaseStartPostgresTest {
         // Put back as it was: the tests after this one count rows and read that slot.
         try (Connection c = db.connect(); Statement s = c.createStatement()) {
             String second2 = "(select id from tenants where slug = 'ent-demo-0002')";
-            for (String table : List.of("audit_records", "tenant_capabilities", "tenant_redaction_kinds", "tenant_redaction_policies")) {
+            for (String table : List.of("audit_records", "tenant_capabilities", "tenant_redaction_catalog", "tenant_regulation_packs", "tenant_redaction_policies")) {
                 s.execute("delete from " + table + " where tenant_id = " + second2);
             }
             s.execute("delete from tenants where slug = 'ent-demo-0002'");

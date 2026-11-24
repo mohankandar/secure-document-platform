@@ -48,10 +48,10 @@ class SensitiveDataPolicyAuditDetailTest {
                 ReviewMode.UNCERTAIN_ONLY, true);
 
         String detail = lastPolicyDetail();
-        assertEquals("Sensitive-data policy changed: enabledCount=3, threshold=0.80, reviewMode=UNCERTAIN_ONLY, "
-                + "maskSsnLastFour=true, enabledTypes=CREDIT_CARD_NUMBER,DATE_OF_BIRTH,SSN, preset=BALANCED, "
+        assertEquals("Sensitive-data policy changed: enabledCount=5, threshold=0.80, reviewMode=UNCERTAIN_ONLY, "
+                + "maskSsnLastFour=true, enabledTypes=CREDIT_CARD_NUMBER,CVV,DATE_OF_BIRTH,PIN,SSN, preset=BALANCED, "
                 + "previous=none", detail);
-        assertOldPrefix(detail, "3", "0.80", "UNCERTAIN_ONLY", "true");
+        assertOldPrefix(detail, "5", "0.80", "UNCERTAIN_ONLY", "true");
     }
 
     @Test
@@ -61,11 +61,11 @@ class SensitiveDataPolicyAuditDetailTest {
                 ReviewMode.UNCERTAIN_ONLY, false);
 
         String detail = lastPolicyDetail();
-        assertEquals("Sensitive-data policy changed: enabledCount=3, threshold=0.70, reviewMode=UNCERTAIN_ONLY, "
-                + "maskSsnLastFour=false, enabledTypes=CREDIT_SCORE,DATE_OF_BIRTH,SSN, preset=LIGHT, "
-                + "previous=[enabledCount=2, threshold=0.80, reviewMode=UNCERTAIN_ONLY, maskSsnLastFour=true, "
-                + "enabledTypes=CREDIT_SCORE,SSN, preset=BALANCED]", detail);
-        assertOldPrefix(detail, "3", "0.70", "UNCERTAIN_ONLY", "false");
+        assertEquals("Sensitive-data policy changed: enabledCount=6, threshold=0.70, reviewMode=UNCERTAIN_ONLY, "
+                + "maskSsnLastFour=false, enabledTypes=CREDIT_CARD_NUMBER,CREDIT_SCORE,CVV,DATE_OF_BIRTH,PIN,SSN, preset=LIGHT, "
+                + "previous=[enabledCount=5, threshold=0.80, reviewMode=UNCERTAIN_ONLY, maskSsnLastFour=true, "
+                + "enabledTypes=CREDIT_CARD_NUMBER,CREDIT_SCORE,CVV,PIN,SSN, preset=BALANCED]", detail);
+        assertOldPrefix(detail, "6", "0.70", "UNCERTAIN_ONLY", "false");
     }
 
     @Test
@@ -97,7 +97,7 @@ class SensitiveDataPolicyAuditDetailTest {
         assertEquals(13, count, "6 keys now, previous=, 6 keys for the previous policy");
         String withoutKnownWords = detail
                 .replaceAll("[A-Za-z]+=", "")
-                .replaceAll("CREDIT_CARD_NUMBER|DATE_OF_BIRTH|CREDIT_SCORE|SSN|UNCERTAIN_ONLY|REVIEW_ALL", "")
+                .replaceAll("CREDIT_CARD_NUMBER|CVV|PIN|DATE_OF_BIRTH|CREDIT_SCORE|SSN|UNCERTAIN_ONLY|REVIEW_ALL", "")
                 .replaceAll("STRICT|BALANCED|LIGHT|CUSTOM|true|false|none", "")
                 .replaceAll("[0-9.,\\[\\] ]", "");
         assertEquals("", withoutKnownWords, "nothing but keys, numbers and category names");
@@ -106,7 +106,7 @@ class SensitiveDataPolicyAuditDetailTest {
 
     @Test
     void theLongestPossibleDetailIsNotTruncated() {
-        Set<EntityType> all = TenantRedactionPolicy.v1ConfigurableTypes();
+        Set<EntityType> all = com.securedoc.platform.domain.business.RedactionCatalog.askedOfAi();
         change(all, 0.99, ReviewMode.UNCERTAIN_ONLY, false);
         change(all, 0.50, ReviewMode.UNCERTAIN_ONLY, false);
         assertFalse(lastPolicyDetail().contains("[truncated]"));

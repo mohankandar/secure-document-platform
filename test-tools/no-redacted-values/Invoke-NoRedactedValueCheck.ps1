@@ -82,6 +82,15 @@ foreach ($v in $values) {
     [void]$needles.Add([pscustomobject]@{ value = $v.name; form = 'last4'; text = $last4; regex = "(?<![0-9A-Fa-f])$last4(?![0-9A-Fa-f])" })
 }
 
+# Task 0063: a password-protected PDF through the push API. The passwords are made per run and searched for everywhere.
+$pdfPassword = 'Pw' + [guid]::NewGuid().ToString('N')
+$wrongPassword = 'Wr' + [guid]::NewGuid().ToString('N')
+foreach ($secret in @(@('PDF-PASSWORD', $pdfPassword), @('WRONG-PASSWORD', $wrongPassword))) {
+    [void]$needles.Add([pscustomobject]@{ value = $secret[0]; form = 'full'; text = $secret[1]; regex = [regex]::Escape($secret[1]) })
+    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($secret[1])).TrimEnd('=').Substring(0, 40)
+    [void]$needles.Add([pscustomobject]@{ value = $secret[0]; form = 'base64'; text = $b64; regex = [regex]::Escape($b64) })
+}
+
 function Get-MatchCounts([string] $text) {
     $counts = @{}
     foreach ($n in $needles) { $counts["$($n.value)/$($n.form)/$($n.text)"] = ([regex]::Matches($text, $n.regex)).Count }
@@ -168,6 +177,10 @@ try {
     & java -cp $cp (Join-Path $here 'MakeFakeValuePdf.java') $pdf
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path $pdf)) { throw "test PDF was not written" }
 
+    $lockedPdf = Join-Path $runDir 'fake-values-locked.pdf'
+    & java -cp $cp (Join-Path $here 'MakeFakeValuePdf.java') $lockedPdf $pdfPassword
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $lockedPdf)) { throw "locked test PDF was not written" }
+
     # --- 3. backend against the throwaway database ------------------------------------------
     $env:SPRING_DATASOURCE_URL = "jdbc:postgresql://localhost:$DbPort/securedoc"
     $env:SPRING_DATASOURCE_USERNAME = 'securedoc'
@@ -183,9 +196,11 @@ try {
     $env:SECUREDOC_LOG_DIR = $logDir
     $env:SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH = (Join-Path $logDir 'product-telemetry.jsonl')
     $env:SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH = (Join-Path $runDir 'securedoc-output')
+    $appTemp = Join-Path $runDir 'tmp'
+    New-Item -ItemType Directory -Force -Path $appTemp | Out-Null
     try {
         $appProcess = Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
-            -ArgumentList @('-jar', $JarPath, '--spring.profiles.active=local',
+            -ArgumentList @("-Djava.io.tmpdir=$appTemp", '-jar', $JarPath, '--spring.profiles.active=local',
                 "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')") `
             -RedirectStandardOutput (Join-Path $logDir 'backend.out.log') -RedirectStandardError (Join-Path $logDir 'backend.err.log')
     } finally {
@@ -240,6 +255,52 @@ try {
         $status = (Invoke-Api GET "/api/v1/packages/$packageId").status
     } while (-not ($terminal -contains $status) -and (Get-Date) -lt $deadline)
     Write-Host "Package $packageId finished processing with status $status"
+    # --- 5b. task 0063: the push API with a password -----------------------------------------
+    $sourceBody = @{ name = 'Push source 0063'; purpose = 'INGESTION_SOURCE'; direction = 'INBOUND'; providerType = 'PUSH_API'
+        authenticationType = 'JWT'; clientPrincipal = 'push-0063'; enabled = $true; acknowledgementMode = 'NONE'
+        timeoutSeconds = 60; retryMaxAttempts = 2; incompleteWindowHours = 24; maxDocumentsPerIntake = 1
+        maxPdfSizeBytes = 10000000; maxPdfPages = 100 }
+    Invoke-Api POST '/api/v1/integrations' $sourceBody | Out-Null
+    $lockedSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $lockedPdf).Hash.ToLowerInvariant()
+    $script:bodies = New-Object System.Collections.ArrayList
+    function Send-Push([string] $PackageId, [string] $Password, [string] $Key, [string] $Query = '') {
+        $push = [System.Net.Http.HttpClient]::new()
+        try {
+            foreach ($h in @(@('X-Tenant-Id', $tenantId), @('X-Actor-Id', $actorId), @('X-Integration-Client', 'push-0063'),
+                    @('Idempotency-Key', $Key), @('X-Content-SHA256', $lockedSha))) { $push.DefaultRequestHeaders.Add($h[0], $h[1]) }
+            $form = [System.Net.Http.MultipartFormDataContent]::new()
+            $part = [System.Net.Http.ByteArrayContent]::new([System.IO.File]::ReadAllBytes($lockedPdf))
+            $part.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new('application/pdf')
+            $form.Add($part, 'file', 'locked.pdf')
+            if ($Password) { $form.Add([System.Net.Http.StringContent]::new($Password), 'password') }
+            $answer = $push.PostAsync("$backend/api/v1/external-intakes/$PackageId/documents/DOC-1$Query", $form).GetAwaiter().GetResult()
+            $text = $answer.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            [void]$script:bodies.Add($text)
+            return [pscustomobject]@{ status = [int]$answer.StatusCode; text = $text }
+        } finally { $push.Dispose() }
+    }
+    $pushHeaders = @{ 'X-Tenant-Id' = $tenantId; 'X-Actor-Id' = $actorId; 'X-Integration-Client' = 'push-0063' }
+    $pushBody = @{ externalSourcePackageId = "SRC-$suffix"; sourceRevision = '1'
+        businessIdentifiers = @{ contract_number = "880063$suffix"; member_number = "90063$suffix"; service_entity = '001' }
+        metadata = @{}; documents = @(@{ externalSourceDocumentId = 'DOC-1'; fileName = 'locked.pdf'; sha256 = $lockedSha }); retry = $false }
+    $pushPackage = (Invoke-RestMethod -Method POST -Uri "$backend/api/v1/external-intakes" -Headers $pushHeaders -ContentType 'application/json' -Body ($pushBody | ConvertTo-Json -Depth 8)).packageId
+    $none = Send-Push $pushPackage '' 'k1'
+    $wrong = Send-Push $pushPackage $wrongPassword 'k1'
+    $address = Send-Push $pushPackage '' 'k1' '?password=not-a-secret'
+    $right = Send-Push $pushPackage $pdfPassword 'k1'
+    $again = Send-Push $pushPackage $pdfPassword 'k1'
+    Write-Host "Push API: none=$($none.status) wrong=$($wrong.status) address=$($address.status) right=$($right.status) again=$($again.status)"
+    $passwordOk = ($none.status -eq 400 -and $none.text -match 'LV-INT-008' -and $none.text -match 'Password-protected file. Send it through the API.' -and
+        $wrong.status -eq 400 -and $wrong.text -match 'LV-INT-036' -and $address.status -eq 400 -and $address.text -match 'LV-INT-037' -and
+        $right.status -eq 201 -and $again.status -eq 200)
+    $deadline = (Get-Date).AddSeconds($ProcessingTimeoutSeconds)
+    do {
+        Start-Sleep -Seconds 2
+        $pushStatus = (Invoke-Api GET "/api/v1/packages/$pushPackage").status
+    } while (-not ($terminal -contains $pushStatus) -and (Get-Date) -lt $deadline)
+    $decryptedAudits = (docker exec $Container psql -U securedoc -d securedoc -tAc "select count(*) from audit_records where detail like '%decrypted with a supplied password'").Trim()
+    Write-Host "Push package finished with status $pushStatus; audit records 'decrypted with a supplied password': $decryptedAudits"
+    $passwordOk = $passwordOk -and $pushStatus -eq $status -and $decryptedAudits -eq '1'
     Start-Sleep -Seconds 3
 
     $findingRows = (docker exec $Container psql -U securedoc -d securedoc -tAc "select entity_type || ':' || status || ':' || detector_name from findings order by entity_type").Trim()
@@ -268,6 +329,18 @@ try {
     }
     $targets = @()
     $targets += Get-ChildItem -LiteralPath $logDir -File | ForEach-Object { @{ name = "log: $($_.Name)"; path = $_.FullName } }
+    [System.IO.File]::WriteAllText((Join-Path $runDir 'push-answers.txt'), ($script:bodies -join "`n"))
+    $targets += @{ name = 'push API answers'; path = (Join-Path $runDir 'push-answers.txt') }
+    # Everything the app left on disk: no file may hold a password, and no stored PDF may still be encrypted.
+    $encryptedLeft = 0
+    $secretFiles = 0
+    foreach ($f in Get-ChildItem -LiteralPath $runDir -Recurse -File | Where-Object { $_.FullName -ne $lockedPdf -and $_.Name -notlike 'mock-ollama*' -and $_.DirectoryName -notlike "*\install*" }) {
+        $raw = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes($f.FullName))
+        if ($raw.Contains($pdfPassword) -or $raw.Contains($wrongPassword)) { $secretFiles++; Write-Host "  PASSWORD IN FILE $($f.FullName)" }
+        if ($raw.StartsWith('%PDF') -and $raw -match '/Encrypt\b') { $encryptedLeft++; Write-Host "  ENCRYPTED PDF LEFT $($f.FullName)" }
+    }
+    Write-Host "Files on disk: holding a password $secretFiles, encrypted PDFs left $encryptedLeft"
+    $passwordOk = $passwordOk -and $secretFiles -eq 0 -and $encryptedLeft -eq 0
     $targets += @{ name = 'audit export (JSON)'; path = $auditJson }
     $targets += @{ name = 'audit export (CSV)'; path = $auditCsv }
     foreach ($t in $targets) {
@@ -302,7 +375,7 @@ try {
         foreach ($l in $r.lines) { Write-Host "      $l" }
     }
     Write-Host "Audit records exported: $auditCount. Total matches: $totalMatches"
-    if ($totalMatches -eq 0 -and $snippetColumn -eq '0' -and $migration039 -eq '2' -and $findingRows) {
+    if ($totalMatches -eq 0 -and $snippetColumn -eq '0' -and $migration039 -eq '2' -and $findingRows -and $passwordOk) {
         Write-Host "PASS"
         $exitCode = 0
     } else {

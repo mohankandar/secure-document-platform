@@ -1,5 +1,7 @@
 package com.securedoc.platform.infrastructure.persistence.adapter;
 
+import com.securedoc.platform.domain.business.PageBatchSettings;
+import com.securedoc.platform.domain.business.RegulationPack;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -82,7 +84,7 @@ class SearchableRedactedPagesPolicyPostgresTest {
         tx = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
         policies = new JpaTenantRedactionPolicyRepositoryAdapter(
                 context.getBean(SpringDataTenantRedactionPolicyRepository.class),
-                new JdbcTenantRedactionKindStore(new NamedParameterJdbcTemplate(dataSource)));
+                new JdbcRedactionCatalogStore(new NamedParameterJdbcTemplate(dataSource)));
     }
 
     @AfterAll
@@ -104,9 +106,8 @@ class SearchableRedactedPagesPolicyPostgresTest {
         assertEquals(Boolean.FALSE, jdbc.queryForObject(
                 "SELECT searchable_redacted_pages FROM tenant_redaction_policies WHERE tenant_id = ?", Boolean.class,
                 tenant.value()));
-        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key NOT IN"
-                + " ('BANK_ROUTING_NUMBER','BANK_ACCOUNT_NUMBER','ITIN','EIN','DRIVERS_LICENSE_NUMBER','PASSPORT_NUMBER')",
-                Integer.class), "only redaction kinds are rows");
+        assertEquals(12, jdbc.queryForObject("SELECT count(*) FROM tenant_redaction_catalog WHERE tenant_id = ?",
+                Integer.class, tenant.value()), "one row per catalog kind, nothing else");
 
         save(policy(tenant, true, at.plusSeconds(1)));
         TenantRedactionPolicy read = policies.findByTenantId(tenant).orElseThrow();
@@ -121,6 +122,38 @@ class SearchableRedactedPagesPolicyPostgresTest {
         save(new TenantRedactionPolicy(tenant, EnumSet.of(EntityType.SSN), 0.8, ReviewMode.UNCERTAIN_ONLY, true,
                 Instant.now()));
         assertTrue(policies.findByTenantId(tenant).orElseThrow().searchableRedactedPages());
+    }
+
+    /** Task 0062: switches, styles, packs and the locked-items mark are stored and read back; a save replaces them. */
+    @Test
+    void theCatalogIsSavedAndReadBack() {
+        TenantId tenant = tenant();
+        Instant at = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        save(new TenantRedactionPolicy(tenant, EnumSet.of(EntityType.SSN, EntityType.EIN), 0.8,
+                ReviewMode.UNCERTAIN_ONLY, true, at, true, PageBatchSettings.DEFAULTS,
+                EnumSet.of(RegulationPack.GLBA, RegulationPack.FRCP_5_2), EnumSet.of(EntityType.SSN), true));
+        TenantRedactionPolicy read = policies.findByTenantId(tenant).orElseThrow();
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.EIN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV,
+                EntityType.PIN), EnumSet.copyOf(read.enabledEntityTypes()));
+        assertEquals(EnumSet.of(RegulationPack.GLBA, RegulationPack.FRCP_5_2), EnumSet.copyOf(read.packs()));
+        assertEquals(EnumSet.of(EntityType.SSN), EnumSet.copyOf(read.keepLastFour()));
+        assertTrue(read.lockedItemsOn());
+
+        save(policy(tenant, true, at.plusSeconds(1)));
+        read = policies.findByTenantId(tenant).orElseThrow();
+        assertTrue(read.packs().isEmpty() && read.keepLastFour().isEmpty() && !read.lockedItemsOn());
+
+        org.junit.jupiter.api.Assertions.assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> jdbc.update("UPDATE tenant_redaction_catalog SET style = 'KEEP_LAST_FOUR' WHERE tenant_id = ?"
+                        + " AND kind_key = 'CVV'", tenant.value()), "the database refuses a style for a locked item");
+        jdbc.update("INSERT INTO tenant_redaction_catalog (tenant_id, kind_key, enabled, style, updated_at)"
+                + " VALUES (?, 'NOT_A_KIND', true, 'REMOVE_FULLY', now())", tenant.value());
+        jdbc.update("INSERT INTO tenant_regulation_packs (tenant_id, pack_key, updated_at) VALUES (?, 'NOT_A_PACK', now())",
+                tenant.value());
+        read = policies.findByTenantId(tenant).orElseThrow();
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.EIN), EnumSet.copyOf(read.enabledEntityTypes()),
+                "an unknown key never switches anything on");
+        assertTrue(read.packs().isEmpty());
     }
 
     private static TenantRedactionPolicy policy(TenantId tenant, boolean searchable, Instant at) {

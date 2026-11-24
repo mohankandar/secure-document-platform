@@ -126,7 +126,7 @@ class ComplianceReportServiceTest {
         assertEquals("compliance-report-residential-lending-2026-07-01-2026-09-30.pdf", report.fileName());
         assertTrue(c.policy().unchangedSinceBefore());
         assertTrue(c.policy().changes().isEmpty());
-        assertEquals("Social Security Number, Date of birth, Credit card number, Credit score",
+        assertEquals("Social Security Number, Date of birth, Credit card number, Credit score, Card security code (CVV), PIN",
                 c.policy().atEnd().get(0).value(), "no record and no saved policy: the defaults");
         assertTrue(c.retention().unchangedSinceBefore());
         assertEquals(0, c.retention().due());
