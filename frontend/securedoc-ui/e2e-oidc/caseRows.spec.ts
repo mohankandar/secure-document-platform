@@ -200,3 +200,49 @@ test('task 0071: Review has Reject case, and the Cases list shows the reason', a
   await expect(page.getByRole('dialog', { name: 'Reject case LN-2001?' })).toBeVisible();
   if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-in-review.png` });
 });
+
+test('task 0076: bulk approval: own cases are greyed with the reason, the confirmation lists the cases, and one that fails stays with its reason', async ({ page }) => {
+  const sent: string[][] = [];
+  const second = caseFor('LN-5002', 'PENDING_FINAL_APPROVAL', '0052');
+  const own = caseFor('LN-5003', 'PENDING_FINAL_APPROVAL', '0053');
+  await mockIdentityProvider(page);
+  await mockApi(page, [], [second, own]);
+  await page.route('**/api/v1/bulk-approval/offer', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, maximum: 50, reviewedByYou: [own.packageId] }) }));
+  await page.route('**/api/v1/bulk-approval', (route) => {
+    const ids = JSON.parse(route.request().postData() || '{}').packageIds as string[];
+    sent.push(ids);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ids.map((id) => ({ packageId: id, approved: id !== second.packageId, reasonCode: id === second.packageId ? 'LV-REV-002' : null }))) });
+  });
+  await signIn(page);
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  await page.getByRole('group', { name: 'Cases by lifecycle stage' }).getByRole('button', { name: /^Approval/ }).click();
+  const approve = page.getByRole('button', { name: /^Approve selected/ });
+  await expect(approve).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Select LN-5003' })).toBeDisabled();
+  await expect(row(page, 'LN-5003')).toContainText('You reviewed this case, so another supervisor approves it.');
+  await page.getByRole('checkbox', { name: 'Select LN-2002' }).check();
+  await page.getByRole('checkbox', { name: 'Select LN-5002' }).check();
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/bulk-selected.png` });
+  await expect(approve).toHaveText('Approve selected (2)');
+  await approve.click();
+  const dialog = page.getByRole('dialog', { name: 'Approve 2 cases for delivery?' });
+  await expect(dialog).toContainText('LN-2002');
+  await expect(dialog).toContainText('LN-5002');
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/bulk-confirm.png` });
+  await dialog.getByRole('button', { name: 'Approve 2' }).click();
+  await expect(page.getByRole('status').filter({ hasText: '1 case approved.' })).toContainText('LN-5002:');
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/bulk-result.png` });
+  expect(sent).toHaveLength(1);
+  expect([...sent[0]].sort()).toEqual([APPROVAL_CASE.packageId, second.packageId].sort());
+});
+
+test('task 0076: no bulk approval while approval before delivery is off', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, []);
+  await page.route('**/api/v1/bulk-approval/offer', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: false, maximum: 50, reviewedByYou: [] }) }));
+  await signIn(page);
+  await page.getByRole('group', { name: 'Cases by lifecycle stage' }).getByRole('button', { name: /^Approval/ }).click();
+  await expect(row(page, 'LN-2002')).toBeVisible();
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Approve selected/ })).toHaveCount(0);
+});

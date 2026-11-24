@@ -1550,6 +1550,15 @@ public class ApplicationServiceConfig {
                 intakeLicence);
     }
 
+    /** Task 0076. */
+    @Bean
+    public com.securedoc.platform.application.lifecycle.service.BulkApprovalService bulkApprovalService(
+            ApproveFinalDeliveryUseCase approveFinalDeliveryUseCase, PackageLifecycleService packageLifecycleService,
+            com.securedoc.platform.application.port.out.CaseReviewersPort caseReviewersPort, AuditService auditService) {
+        return new com.securedoc.platform.application.lifecycle.service.BulkApprovalService(approveFinalDeliveryUseCase,
+                packageLifecycleService, caseReviewersPort, auditService);
+    }
+
     /** Task 0071. */
     @Bean
     public com.securedoc.platform.application.review.service.RejectCaseService rejectCaseService(
