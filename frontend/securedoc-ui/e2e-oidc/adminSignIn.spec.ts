@@ -139,7 +139,8 @@ test('IT Administrator: Test sign-in says it passed, or gives the exact code and
   await signIn(page, { roles: ['TENANT_IT_ADMIN'], caps: IT_CAPS, test: () => answers[at++], overview: { active: ACTIVE, staged: null, rollbackCandidates: [], activationSupported: false, activationMaxTestAgeSeconds: 0 } }, writes);
   const card = await openSignInTab(page);
   const button = card.getByRole('button', { name: 'Test sign-in' });
-  const answer = card.getByRole('status');
+  // Not the button's spinner, which is a status too while the test runs.
+  const answer = card.locator('div[role="status"]');
 
   await button.click();
   await expect(answer).toContainText('The login system answers.');
