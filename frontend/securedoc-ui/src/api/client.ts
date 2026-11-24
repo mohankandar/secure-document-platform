@@ -63,6 +63,7 @@ import type {
   TenantBrandingDetail,
   EnterpriseIdentityOverview,
   SignInTestAnswer,
+  SignInChangeAnswer,
   GrantHistoryRow,
   EntitySlotsOverview,
   EntityChangeAnswer,
@@ -147,7 +148,7 @@ class ApiClient {
     await this.request('/me/entity', { method: 'POST', ...(tenantId ? { headers: { 'X-Selected-Tenant-Id': tenantId } } : {}) });
   }
 
-  /** Read-only (task 0041): sign-in connections are set through setup; the server has no draft or activate step. */
+  /** Task 0058: the connection in use, the draft of a change and what going back gives. */
   async getEnterpriseIdentityOverview(): Promise<EnterpriseIdentityOverview> {
     return this.request('/admin/enterprise-identity');
   }
@@ -156,6 +157,25 @@ class ApiClient {
   async testSignInConnection(): Promise<SignInTestAnswer> {
     return this.request('/admin/enterprise-identity/test-sign-in', { method: 'POST' });
   }
+
+  // --- Admin, Sign-in: a change of the connection (task 0058). The server finds the draft; only its version is sent. ---
+  private signInStep(path: string, body: object, method = 'POST'): Promise<SignInChangeAnswer> {
+    return this.request(`/admin/enterprise-identity${path}`, { method, body: JSON.stringify(body), cache: 'no-store' });
+  }
+
+  startSignInDraft(activeVersion: number) { return this.signInStep('/draft', { expectedVersion: activeVersion }); }
+
+  saveSignInDraft(version: number, values: { providerId: string; issuerUri: string; browserClientId: string; apiAudience: string }) {
+    return this.signInStep('/draft', { expectedVersion: version, ...values }, 'PUT');
+  }
+
+  testSignInDraft(version: number, token: string | null) { return this.signInStep('/draft/test-sign-in', { expectedVersion: version, token }); }
+
+  activateSignInDraft(version: number) { return this.signInStep('/draft/activate', { expectedVersion: version }); }
+
+  discardSignInDraft(version: number) { return this.signInStep('/draft/discard', { expectedVersion: version }); }
+
+  rollBackSignIn(activeVersion: number) { return this.signInStep('/rollback', { expectedVersion: activeVersion }); }
 
   // --- UI branding ---
 

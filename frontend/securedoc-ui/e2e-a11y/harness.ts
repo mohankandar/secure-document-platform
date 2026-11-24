@@ -335,6 +335,8 @@ export interface MockOptions {
   licensing?: unknown;
   /** Task 0058: the entity's time zone. */
   timeZone?: string;
+  /** Task 0058: Admin › Sign-in. */
+  identity?: unknown;
 }
 
 /** Task 0058: Admin › Entities. */
@@ -408,7 +410,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     }
     if (path === '/business-admin/routing-rules/destinations') return json([{ connectionId: 'c-title', name: 'Title team folder', providerType: 'FILE_SHARE', enabled: false, healthStatus: 'DISABLED' }]);
     if (path === '/integrations/c-poll/polling') return json({ connectionId: 'c-poll', name: 'Servicing outbox', enabled: true, healthStatus: 'DEGRADED', nextScheduledAt: minsAgo(-10), recentRuns: [] });
-    if (path === '/admin/enterprise-identity') return json(IDENTITY);
+    if (path === '/admin/enterprise-identity') return json(options.identity ?? IDENTITY);
 
     // Admin › Platform operations
     if (path === '/platform-admin/overview' || path === '/platform-admin/health-check') return json(OVERVIEW);

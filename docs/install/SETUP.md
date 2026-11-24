@@ -51,8 +51,12 @@ in a development build; production keys never are. The local OIDC start uses thi
 **Grant history.** Every grant setup adds or removes is recorded in `idn_grant_history` with setup's run ID (identity
 schema version 3). LexaVault's Audit page lists them under "Sign-in access changes" (read-only).
 
-**Sign-in connections are set through setup.** The app's Admin › Sign-in screen only shows the active connection, and
-tests it (task 0054): "Test sign-in" (IT Admin) reads the login system's published details and keys and shows that it
+**Sign-in connections are set through setup and changed in Admin › Sign-in** (IT Admin, task 0058). A change is a draft:
+it is tested (optionally with a pasted token, which is checked and forgotten), switched to, and can be gone back from; the
+connection in use keeps working until the switch, and setup never touches a draft. The app takes tokens of the login
+system in its settings only, so a draft with another **issuer, provider ID or audience** is tested there but not switched
+to (`SIGN_IN_SETTINGS_DIFFER`; everybody would be refused): change `securedoc.security.oidc.*` and the web app's settings,
+and run setup with `--replace-connection`, at the same restart. The active connection can be tested at any time (task 0054): "Test sign-in" (IT Admin) reads the login system's published details and keys and shows that it
 answers, or the exact `IDN_TEST_…` code. No token is asked for; nothing is stored or changed; each test is audited with
 codes only, and repeated clicks within 10 seconds are one call. It calls only the stored issuer (and the key address that
 issuer names), under the platform's outbound rules:
@@ -100,7 +104,8 @@ These setup inputs come with their own tasks; nothing is needed for them now:
 - integration client bindings (client ID -> entity -> source): a later task;
 - customer keys for sensitive case fields: when LexaVault encrypts with platform-core (`--no-customer-keys` until then);
 - entity time zones: the sign-in file's optional `timeZone` and `entityTimeZones` are stored by setup today; the app
-  uses them from task 0039.
+  uses them (task 0058) for daily schedules, reports and the times it shows, and the Business Admin changes an entity's own
+  in Admin › Entities. Without any, everything works as before. Retention timers are hours from a fixed moment in every zone.
 
 ## The licence is live (task 0057)
 
@@ -109,7 +114,12 @@ counts pages. Give the app `platform-tenant.properties` (`-ConfigOut`): see `LIC
 
 ## After setup
 
-Your entity slots are stored as `NOT_ACTIVATED`. Activating and naming them in the app comes with task 0039. On a
+Your entity slots are stored as `NOT_ACTIVATED`. A Business Admin activates, names,
+suspends and resumes them in Admin › Entities (task 0058): the entity they are in, and every other slot whose mapping rows
+give one of their groups BUSINESS_ADMIN, also before it is activated. The **first** entity of a new customer still needs a
+command (nobody can sign in while none is active). While sign-in to more than one entity is off
+(`securedoc.security.oidc.shared-issuer-tenant-selection-enabled`, the default), a second entity is not made active
+(`SECOND_ENTITY_NEEDS_ENTITY_CHOICE`): sign-in would refuse everybody. On a
 development or demo machine, the LexaVault demo step activates the demo entity (`install/demo/README.md`).
 
 An install that existed before task 0037 copies its login connection and grants once with the identity migration

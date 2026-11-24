@@ -36,7 +36,7 @@ class DocumentStoreNamesMigrationPostgresTest {
             try (Connection connection = db.connection()) {
                 Liquibase liquibase = PostgresTestDatabase.liquibase(connection);
                 liquibase.update(new Contexts());
-                PostgresTestDatabase.rollback(liquibase, connection, 7); // back to 045 (061, 060, 050, 049, 048, 047, then 046): the old values and the old index name
+                PostgresTestDatabase.rollback(liquibase, connection, 8); // back to 045 (062, 061, 060, 050, 049, 048, 047, then 046): the old values and the old index name
             }
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             assertEquals(1, indexCount(jdbc, "uk_integration_connection_enabled_sdv"), "045: old index name");
@@ -105,7 +105,7 @@ class DocumentStoreNamesMigrationPostgresTest {
             TestRows.tenant(jdbc, tenant);
             insertConnection(jdbc, UUID.randomUUID(), tenant, "Main store", "DOCUMENT_STORE_DELIVERY", "SUBMISSION_ACK", null);
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 7); // 061, 060, 050, 049, 048, 047, then 046
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 8); // 062, 061, 060, 050, 049, 048, 047, then 046
             }
             assertEquals(OLD_PURPOSE + "|" + OLD_ACK, jdbc.queryForObject("SELECT purpose || '|' || acknowledgement_mode"
                     + " FROM integration_connections", new MapSqlParameterSource(), String.class));

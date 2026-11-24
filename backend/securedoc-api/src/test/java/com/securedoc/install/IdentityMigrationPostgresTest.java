@@ -55,6 +55,8 @@ class IdentityMigrationPostgresTest {
         rows.lexaTenant(a, "ACTIVE");
         rows.lexaTenant(b, "ACTIVE");
         rows.lexaTenant(legacy, "ACTIVE");
+        // Task 0058: migration 062 has dropped the old connection table; here it is as it was before (and the command is run).
+        rows.exec(OldConnectionTable.CREATE);
         // The old tables, as an R1/R1B install has them: one ACTIVE connection per issuer key (migration 037 is not
         // registered), here for entity A; entity B has grants only; the legacy entity has its own audience.
         oldConnection(a, "ACTIVE", "api://lexavault-mig");

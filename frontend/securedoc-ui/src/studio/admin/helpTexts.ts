@@ -94,7 +94,12 @@ export const HELP = {
   // Admin › Sign-in
   signIn: {
     name: 'Sign-in',
-    text: 'Shows the login system your people use to sign in to LexaVault. It is managed through the login hub and cannot be changed here. Test sign-in checks that it answers; it changes nothing. To change it, contact LexaVault support.',
+    text: 'The login system your people use to sign in to LexaVault. Test sign-in checks that it answers; it changes nothing.',
+  },
+
+  signInDraft: {
+    name: 'Change the sign-in',
+    text: 'A draft is a copy of the connection in use. Change it, test it, then switch. The test reads your login system\'s published details, and checks a token if you paste one. A change of login system, provider ID or audience also needs the server\'s settings, so it is switched at a restart.',
   },
 
   // Admin › Platform operations

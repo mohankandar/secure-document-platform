@@ -33,7 +33,8 @@ import java.util.UUID;
 /**
  * One-off copy of an existing install's login connection and group grants from LexaVault's old tables
  * ({@code enterprise_identity_connections}, {@code tenant_oidc_group_grants}) into platform-identity's {@code idn_}
- * tables (task 0037 step 4). The old tables stay; a later release drops them.
+ * tables (task 0037 step 4). The connection table is dropped by migration 062 (task 0058) once its connection is carried over; run
+ * this command before that schema step.
  *
  * <p>Run it after the schema step and setup (setup stores the customer and its entity slots). An entity of the old
  * tables is copied only when its id is the entity UUID of one of the customer's slots (derived from the slot ID);
@@ -117,7 +118,7 @@ public final class IdentityMigration {
         List<OldConnection> oldActive = new ArrayList<>();
         Map<UUID, Map<URI, Set<Grant>>> oldGrants = new TreeMap<>();
         try (Connection c = ds.getConnection()) {
-            for (String table : List.of("idn_customer", "enterprise_identity_connections", "tenant_oidc_group_grants")) {
+            for (String table : List.of("idn_customer", "tenant_oidc_group_grants")) {
                 if (!SchemaStep.tableExists(c, table)) {
                     throw new InstallException(2, "TABLES_NOT_READY", "table " + table + " is missing: run the schema step first");
                 }
@@ -135,6 +136,8 @@ public final class IdentityMigration {
                     while (rs.next()) slotByEntity.put(rs.getObject(1, UUID.class), rs.getString(2));
                 }
             }
+            // Task 0058: migration 062 drops the table once its connection is carried over; then only grants are left to copy.
+            if (SchemaStep.tableExists(c, "enterprise_identity_connections"))
             try (PreparedStatement ps = c.prepareStatement("select tenant_id, provider_id, provider_type, issuer_uri, "
                     + "browser_client_id, api_audience, secret_reference from enterprise_identity_connections "
                     + "where status = 'ACTIVE' order by tenant_id");

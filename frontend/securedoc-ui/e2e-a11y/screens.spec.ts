@@ -201,7 +201,7 @@ test.describe('Admin (IT Administrator)', () => {
 
   test('Sign-in', async ({ page }) => {
     await signInAs(page, 'it', '/admin/identity');
-    await expect(page.getByRole('region', { name: 'Login hub' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Sign-in in use' })).toBeVisible();
     await scan(page, 'Admin: Sign-in');
   });
 
@@ -241,6 +241,18 @@ test.describe('Licensing (Business Admin, task 0057)', () => {
     await expect(page.getByRole('heading', { name: 'New cases are not taken in' })).toBeVisible();
     await expect(page.getByText('Licence expired · LV-LIC-002')).toBeVisible();
     await scan(page, 'Licensing: intake stopped');
+  });
+});
+
+test.describe('Sign-in change (IT Admin, task 0058)', () => {
+  test('the draft and its dialogs', async ({ page }) => {
+    const c = { connectionId: 'c', providerId: 'okta', providerType: 'OIDC', displayName: 'okta', issuerUri: 'https://login.northwind.example', browserClientId: 'web', apiAudience: 'api', status: 'ACTIVE', configurationVersion: 4, matchesSettings: true };
+    await signInAs(page, 'it', '/admin/identity', { identity: { active: c, draft: { ...c, connectionId: 'd', status: 'VALIDATED', matchesSettings: false }, previous: null, history: [{ issuerUri: c.issuerUri, version: 4, status: 'ACTIVE', source: 'SETUP', changedBy: 's', changedAt: '2026-11-01T10:00:00Z' }] } });
+    await expect(page.getByRole('button', { name: 'Test the draft' })).toBeVisible();
+    await page.getByText('Changes so far').click();
+    await scan(page, 'Sign-in: draft');
+    await page.getByRole('button', { name: 'Discard draft' }).click();
+    await scan(page, 'Sign-in: discard');
   });
 });
 
