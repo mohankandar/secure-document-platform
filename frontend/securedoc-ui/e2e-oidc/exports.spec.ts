@@ -231,6 +231,31 @@ test.describe('The "Exporting" status', () => {
     await expect(panel.getByTestId('export-technical')).not.toContainText('SEN 006');
   });
 
+  test('the case panel waits for the export state: an exporting case never shows Redacting first (task 0049 step 0)', async ({ page }) => {
+    const c = caseOf('LN-7011');
+    await signInAs(page, 'processor', '/', { exports: true });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let asked = false;
+    await page.route((url) => url.pathname === `/api/v1/packages/${c.packageId}/export-jobs`, async (route) => {
+      asked = true;
+      await held;
+      await route.fallback();
+    });
+    await go(page, `/case/${c.packageId}`);
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await expect.poll(() => asked).toBe(true);
+    // The case itself is loaded, the export state is not: the panel keeps its spinner and draws no stage.
+    await expect(panel.locator('h2')).toHaveText('LN-7011');
+    await expect(panel.getByRole('status', { name: 'Opening case' })).toBeVisible();
+    await expect(panel.getByRole('list', { name: 'Stages' })).toHaveCount(0);
+    await expect(panel.getByRole('region', { name: 'Next step' })).toHaveCount(0);
+    await expect(panel).not.toContainText('LexaVault is redacting');
+    release();
+    await expect(panel.getByRole('region', { name: 'Next step' }).locator('.cf-eyebrow')).toHaveText('Exporting · waiting for you');
+    await expect(panel.getByRole('status', { name: 'Opening case' })).toHaveCount(0);
+  });
+
   // Task 0030: every chip on one line, whole and inside its column, at 1440 and 1024, with and without the case panel.
   for (const width of [1440, 1024]) {
     for (const withPanel of [false, true]) {

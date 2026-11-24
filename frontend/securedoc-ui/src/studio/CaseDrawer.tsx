@@ -45,6 +45,10 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   const caseExport = useCaseExport(packageId, canDesk);
   const exportState = exportStateOf(caseExport.data?.exportState);
   const exporting = isExporting(exportState);
+  // Task 0049 step 0: the panel waits for the case's export state before it draws the stage strip and the next step,
+  // so an exporting case never shows "Redacting" for a moment and then jumps to "Exporting" under the user.
+  // A failed export answer does not hold the panel: it then reads as not exporting, as before.
+  const exportKnown = !canDesk || caseExport.data !== undefined || caseExport.error !== undefined;
 
   const title = pkg ? caseTitle(pkg.businessIdentifiers) : null;
   const reprocessing = pkg ? isReprocessing(pkg.status, life) : false;
@@ -69,9 +73,9 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
       </div>
 
       {error && <Notice tone="danger">This case could not be loaded. It may have been removed or you may no longer have access.</Notice>}
-      {!pkg && !error && <div className="cf-center"><Spinner label="Opening case" /></div>}
+      {(!pkg || !exportKnown) && !error && <div className="cf-center"><Spinner label="Opening case" /></div>}
 
-      {pkg && stage && (
+      {pkg && stage && exportKnown && (
         <div className="cf-drawer-body">
           {stage !== 'unknown' && <Timeline stage={stage} status={pkg.status} exporting={exporting} />}
           {step && (
