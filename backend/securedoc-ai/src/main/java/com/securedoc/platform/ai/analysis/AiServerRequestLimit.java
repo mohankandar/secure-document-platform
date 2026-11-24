@@ -77,6 +77,15 @@ public final class AiServerRequestLimit {
         learning = Objects.requireNonNull(settings);
     }
 
+    /** Task 0067: IT's own maximum was changed. Nothing without learning. */
+    public static synchronized void maximum(int most) {
+        Learning before = learning;
+        if (before == null || before.max() == most) return;
+        Learning changed = new Learning(most, before.upEvery(), before.recheck());
+        learning = changed;
+        servers.values().forEach(server -> server.changed(changed));
+    }
+
     /** Sends the request when the AI server has a free place. */
     public static <T> T send(URI endpoint, Request<T> request) throws IOException, InterruptedException {
         if (learning == null && fixed == 0) return request.send();

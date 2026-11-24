@@ -100,7 +100,7 @@ public enum LvErrorCode {
             Kind.REFUSED, "Person", 409, false),
     INT_027("LV-INT-027", Area.INT, "Busy, try again later",
             "LexaVault is full for now; nothing was lost. Send again after the time given.",
-            Kind.REFUSED, "Source system", 429, true),
+            Kind.REFUSED, "Source system", 429, false),
     /** Task 0038: the case limits of {@code CaseLimits}, for every way a case is filled. */
     INT_028("LV-INT-028", Area.INT, "Too many pages in one file",
             "A PDF in a case can have up to 500 pages. Nothing was taken in from this file.",

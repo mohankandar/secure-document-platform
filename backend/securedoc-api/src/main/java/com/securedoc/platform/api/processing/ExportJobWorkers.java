@@ -3,28 +3,29 @@ package com.securedoc.platform.api.processing;
 import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.application.pipeline.ExportJobService;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
+import com.securedoc.platform.domain.pipeline.PipelineStage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Task 0027: a small fixed pool of export workers, started with {@code securedoc.processing.export-mode=job}. Task
+ * Task 0027: the export workers, started with {@code securedoc.processing.export-mode=job}. Task
  * 0052: with inline they start only when export jobs are still open (the setting was switched back, or a staged case
  * finished), with the maintenance, and finish those; new cases export inline. Each worker claims the next due export job, renews its claim while it runs, and saves the result (only if its claim
  * is still current). One maintenance task puts jobs whose claim ran out back in the queue and probes paused
- * destinations. Worker scaling is P3.
+ * destinations. Task 0067: the number of workers follows the queue ({@link ProcessingCapacity}); without it (tests) it
+ * is fixed.
  */
 @Component
 public class ExportJobWorkers {
@@ -37,12 +38,20 @@ public class ExportJobWorkers {
     static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
     private volatile boolean stopped;
-    private ExecutorService workers;
+    private final ProcessingCapacity capacity;
+    private ElasticWorkers workers;
     private ScheduledExecutorService timers;
 
+    public ExportJobWorkers(ExportJobService service, long pollIntervalMs, String nodeId) {
+        this(service, pollIntervalMs, nodeId, null);
+    }
+
+    @Autowired
     public ExportJobWorkers(ExportJobService service,
                             @Value("${securedoc.processing.export-jobs.poll-interval-ms:2000}") long pollIntervalMs,
-                            @Value("${securedoc.logging.node-id:unknown}") String nodeId) {
+                            @Value("${securedoc.logging.node-id:unknown}") String nodeId,
+                            ProcessingCapacity capacity) {
+        this.capacity = capacity;
         this.service = service;
         this.pollIntervalMs = Math.max(100L, pollIntervalMs);
         this.nodeId = nodeId == null || nodeId.isBlank() ? "unknown" : nodeId.trim();
@@ -77,21 +86,13 @@ public class ExportJobWorkers {
     }
 
     private void startWorkers() {
-        int total = service.settings().workersTotal();
-        AtomicInteger number = new AtomicInteger();
         running = true;
-        workers = Executors.newFixedThreadPool(total, runnable -> {
-            Thread thread = new Thread(runnable, "export-worker-" + number.incrementAndGet());
-            thread.setDaemon(true);
-            return thread;
-        });
-        String instance = UUID.randomUUID().toString();
-        for (int i = 1; i <= total; i++) {
-            String owner = nodeId + "/export-worker-" + i + "/" + instance;
-            workers.submit(() -> loop(owner));
-        }
+        workers = new ElasticWorkers("export-worker", nodeId + "/export", UUID.randomUUID().toString(), pollIntervalMs,
+                this::turn);
+        if (capacity == null) workers.set(service.settings().workersTotal());
+        else capacity.drive(PipelineStage.EXPORT, workers);
         timers.scheduleWithFixedDelay(this::maintenance, pollIntervalMs, pollIntervalMs, TimeUnit.MILLISECONDS);
-        log.info("EXPORT_JOB_WORKERS_STARTED workers={} perDestination={} nodeId={}", total,
+        log.info("EXPORT_JOB_WORKERS_STARTED perDestination={} nodeId={}",
                 service.settings().workersPerDestination(), nodeId);
     }
 
@@ -99,28 +100,22 @@ public class ExportJobWorkers {
     public synchronized void stop() {
         stopped = true;
         running = false;
-        if (workers != null) workers.shutdownNow();
+        if (workers != null) workers.stop();
         if (timers != null) timers.shutdownNow();
     }
 
-    private void loop(String owner) {
-        while (running && !Thread.currentThread().isInterrupted()) {
-            try {
-                Optional<PipelineJob> job = service.claimNext(owner);
-                if (job.isPresent()) {
-                    runWithRenewal(job.get());
-                } else {
-                    Thread.sleep(pollIntervalMs);
-                }
-            } catch (InterruptedException stopped) {
-                Thread.currentThread().interrupt();
-                return;
-            } catch (RuntimeException failure) {
-                // The job stays RUNNING until its claim runs out, then goes back to the queue (one attempt).
-                log.warn("EXPORT_WORKER_FAILED owner={} type={} code={}", owner, failure.getClass().getSimpleName(),
-                        LvErrorCodes.forPlatformFailure(failure).code());
-                sleepQuietly();
-            }
+    private boolean turn(String owner, Runnable started) {
+        try {
+            Optional<PipelineJob> job = service.claimNext(owner);
+            if (job.isEmpty()) return false;
+            started.run();
+            runWithRenewal(job.get());
+            return true;
+        } catch (RuntimeException failure) {
+            // The job stays RUNNING until its claim runs out, then goes back to the queue (one attempt).
+            log.warn("EXPORT_WORKER_FAILED owner={} type={} code={}", owner, failure.getClass().getSimpleName(),
+                    LvErrorCodes.forPlatformFailure(failure).code());
+            return false;
         }
     }
 
@@ -168,14 +163,6 @@ public class ExportJobWorkers {
         } catch (RuntimeException failure) {
             log.warn("EXPORT_WORKER_RESTORE_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());
-        }
-    }
-
-    private void sleepQuietly() {
-        try {
-            Thread.sleep(pollIntervalMs);
-        } catch (InterruptedException stopped) {
-            Thread.currentThread().interrupt();
         }
     }
 }

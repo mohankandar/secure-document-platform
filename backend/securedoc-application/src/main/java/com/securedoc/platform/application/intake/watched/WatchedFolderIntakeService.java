@@ -49,6 +49,9 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     private final Duration staleClaimAfter;
     /** Task 0021: the level Tenant IT set for the folder; every file picked up from it gets that level. */
     private com.securedoc.platform.application.licensing.IntakeLicence licence;
+    private com.securedoc.platform.application.intake.IntakeGate gate = com.securedoc.platform.application.intake.IntakeGate.OPEN;
+    /** Task 0067: drops one check takes while the queue is long, before its share is taken. */
+    static final int DROPS_PER_CHECK = 50;
     private final java.util.function.Function<com.securedoc.platform.domain.identity.TenantId, com.securedoc.platform.domain.document.SensitivityLevel> folderSensitivityLevel;
 
     public WatchedFolderIntakeService(WatchedFolderSourcePort sourcePort,
@@ -95,6 +98,16 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         return this;
     }
 
+    /** Task 0067: the same service, taking less while the queue is long and nothing while space is short. */
+    public WatchedFolderIntakeService withGate(com.securedoc.platform.application.intake.IntakeGate gate) {
+        this.gate = Objects.requireNonNull(gate);
+        return this;
+    }
+
+    public com.securedoc.platform.application.intake.IntakeGate gate() {
+        return gate;
+    }
+
     /** Task 0057: why the folder is not read now; empty when it is. */
     public Optional<LicenseEnforcementException> licenceRefusal(com.securedoc.platform.domain.identity.TenantId tenantId) {
         return licence == null ? Optional.empty() : licence.refusal(tenantId);
@@ -121,6 +134,8 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         sourcePort.recoverStaleClaims(scanLease, staleClaimAfter, authoritativeNow(scanLease));
         List<WatchedFolderCandidate> candidates = sourcePort.discover();
         int waiting=0, accepted=0, rejected=0, duplicates=0;
+        // Task 0067: while the queue is long, a check takes a few drops; the others stay where they are.
+        int left = gate.slowdown() == 1 ? Integer.MAX_VALUE : gate.share(DROPS_PER_CHECK);
         for (WatchedFolderCandidate discovered : candidates) {
             if (!discovered.triggerPresent()) {
                 waiting++;
@@ -129,6 +144,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             }
 
             if (!leaseIsCurrent(scanLease) || licenceRefusal(principal.tenantId()).isPresent()) break;
+            if (left-- <= 0 || gate.full()) break;
 
             Optional<WatchedFolderCandidate> claimed = sourcePort.claim(
                     discovered.sourceReference(), scanLease, authoritativeNow(scanLease));

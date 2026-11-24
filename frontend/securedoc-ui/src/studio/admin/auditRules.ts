@@ -269,6 +269,7 @@ const SENTENCES: Record<string, string> = {
   WATCHED_FOLDER_SCAN_TRIGGERED: 'Checked the watched folder',
   WATCHED_FOLDER_SETTINGS_CHANGED: 'Changed the watched folder’s sensitivity level',
   PLATFORM_HEALTH_CHECKED: 'Ran health checks',
+  PROCESSING_MAXIMUMS_CHANGED: 'Changed the processing maximums',
   PROCESSING_STORAGE_PROVIDER_CREATED: 'Added processing storage',
   PROCESSING_STORAGE_PROVIDER_TESTED: 'Tested processing storage',
   PROCESSING_STORAGE_PROVIDER_ACTIVATED: 'Made processing storage the default',

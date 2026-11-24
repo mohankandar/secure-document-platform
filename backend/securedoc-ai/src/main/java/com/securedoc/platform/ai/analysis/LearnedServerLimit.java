@@ -25,7 +25,7 @@ final class LearnedServerLimit {
 
     private final String name;
     /** Null: the number is fixed. */
-    private final AiServerRequestLimit.Learning settings;
+    private AiServerRequestLimit.Learning settings;
     private final AiServerRequestLimit.Store store;
     private int limit;
     private Integer ceiling;
@@ -63,6 +63,13 @@ final class LearnedServerLimit {
     synchronized AiServerRequestLimit.ServerState state() {
         return new AiServerRequestLimit.ServerState(name, limit, ceiling, settings == null ? limit : settings.max(),
                 settings != null, inFlight, waiting);
+    }
+
+    /** Another maximum; a number above it comes down at once. */
+    synchronized void changed(AiServerRequestLimit.Learning now) {
+        settings = now;
+        if (limit > now.max()) change(now.max());
+        notifyAll();
     }
 
     synchronized void acquire() throws InterruptedException {

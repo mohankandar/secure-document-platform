@@ -44,6 +44,9 @@ public class WatchedFolderScheduler {
     private final AtomicReference<WatchedFolderLeasePort.LeaseSnapshot> lastLease = new AtomicReference<>();
     private final AtomicReference<String> scannerRole = new AtomicReference<>("UNKNOWN");
     private final AtomicLong takeoverCount = new AtomicLong();
+    /** Task 0067: the outcome of a scan that the safety stop kept from running. */
+    static final String BUSY = "BUSY";
+    private volatile long lastScheduledAt = System.nanoTime() - Long.MAX_VALUE / 2;
     private final AtomicReference<String> configurationState = new AtomicReference<>("UNKNOWN");
 
     public WatchedFolderScheduler(WatchedFolderIntakeService intakeService,
@@ -67,6 +70,11 @@ public class WatchedFolderScheduler {
             last.set(new Snapshot(Instant.now(), "NOT_CONFIGURED", null));
             return;
         }
+        // Task 0067: while the queue is long the folder is checked less often.
+        long everyNanos = Math.max(1000L, platformAdmin.getWatchedFolderScanIntervalMs()) * 1_000_000L;
+        int slowdown = intakeService.gate().slowdown();
+        if (slowdown > 1 && System.nanoTime() - lastScheduledAt < everyNanos * slowdown - everyNanos / 2) return;
+        lastScheduledAt = System.nanoTime();
         try {
             scan(principal, CorrelationId.generate(), "SCHEDULED");
         } catch (RuntimeException alreadyRecorded) {
@@ -133,6 +141,14 @@ public class WatchedFolderScheduler {
             if ("MANUAL".equals(mode)) {
                 log.warn("WATCHED_FOLDER_SCAN_SKIPPED mode={} nodeId={} reasonCode={}", mode, logicalNodeId(), scannerRole.get());
             }
+            return response;
+        }
+
+        // Task 0067: the safety stop. A person who asked for the scan is told; scheduled, the files wait.
+        if (intakeService.gate().full()) {
+            WatchedFolderScanResponse response = emptyResponse(BUSY);
+            last.set(new Snapshot(Instant.now(), BUSY, response));
+            if ("MANUAL".equals(mode)) intakeService.gate().requireSpace();
             return response;
         }
 

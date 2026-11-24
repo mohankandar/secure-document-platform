@@ -184,6 +184,13 @@ An address LexaVault doesn't offer answers `404` and a wrong method `405`, both 
 - `403` — authenticated client is not bound to the tenant/source or does not own the intake;
 - `404` — intake/package not found inside the authenticated tenant boundary;
 - `409` — identity/idempotency/checksum/state conflict;
-- `410` — intake attempt expired.
+- `410` — intake attempt expired;
+- `429` — LexaVault is full for now (`code` `LV-INT-027`, `errorCode` `INTAKE_BUSY`, header `Retry-After` in seconds).
+
+## Busy: the safety stop
+
+LexaVault always takes documents in; a flood only makes processing take longer. The one exception is too little free space: below 10% free disk (or database space, when IT set its size) every request that creates an intake or sends a document is answered `429` with `LV-INT-027` and `Retry-After`. Nothing is lost and nothing of the refused request is kept: send the same request again after that time, with the same `Idempotency-Key`. Intake starts again by itself above 15% free. IT can set both thresholds and the time. Status requests are always answered. The scanner intake (`/api/v1/scanner-intakes`) and the app's own upload answer the same way; the watched folder and polling leave files at their source.
+
+While the queue is long, the watched folder and polling also check less often and take fewer files each time; the files wait at the source.
 
 Backend tenant/source checks are authoritative; UI or client-side hiding is never a security boundary.

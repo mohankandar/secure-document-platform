@@ -358,8 +358,6 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Who acts:** Source system
 - **HTTP status:** 429
 
-Reserved: not used yet.
-
 **What to do:**
 
 1. Wait for the time given in the answer (Retry-After).

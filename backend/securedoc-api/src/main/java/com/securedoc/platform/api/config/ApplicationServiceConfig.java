@@ -359,9 +359,11 @@ public class ApplicationServiceConfig {
             ExternalIntakeService externalIntakeService,
             AuditService auditService,
             IntakeLicence intakeLicence,
-            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones) {
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones,
+            com.securedoc.platform.application.intake.IntakeGate intakeGate) {
         return new PollingIntakeService(integrationConnectionService, pollingRunRepository, pollingSourcePort,
-                externalIntakeService, auditService).withLicence(intakeLicence).withEntityTimeZones(entityTimeZones);
+                externalIntakeService, auditService).withLicence(intakeLicence).withEntityTimeZones(entityTimeZones)
+                .withGate(intakeGate);
     }
 
     @Bean
@@ -431,14 +433,16 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             WatchedFolderProperties properties,
             IntakeLicence intakeLicence,
-            com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings) {
+            com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings,
+            com.securedoc.platform.application.intake.IntakeGate intakeGate) {
         return new WatchedFolderIntakeService(sourcePort, watchedFolderLeasePort, observationRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase,
                 packageProcessingDispatcher, auditService,
                 Duration.ofMinutes(Math.max(0, properties.getIncompleteVisibilityMinutes())),
                 Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())),
                 tenant -> watchedFolderSettings.sensitivityLevel(tenant,
-                        com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER)).withLicence(intakeLicence);
+                        com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER)).withLicence(intakeLicence)
+                .withGate(intakeGate);
     }
 
     /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */
@@ -1181,12 +1185,6 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-mode:inline}") String exportMode,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.claim-lease-ms:120000}") long claimLeaseMs,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.max-attempts:3}") int maxAttempts,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.text-workers:2}") int textWorkers,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.find-workers:2}") int findWorkers,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.requests-at-once:2}") int aiRequestsAtOnce,
-            AiRuntimeProperties ai,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.redact-workers:2}") int redactWorkers,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.vision-workers:2}") int visionWorkers,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.stage-jobs.poll-interval-ms:1000}") long pollIntervalMs) {
         var mode = com.securedoc.platform.application.pipeline.PipelineMode.parse(pipelineMode);
         if (mode == com.securedoc.platform.application.pipeline.PipelineMode.STAGED
@@ -1195,22 +1193,11 @@ public class ApplicationServiceConfig {
             throw new IllegalStateException(
                     "securedoc.processing.pipeline-mode=staged needs securedoc.processing.export-mode=job");
         }
-        // Task 0049: no more Find workers than the AI servers take requests at once, and never more requests at once.
-        if (aiRequestsAtOnce < 1 || aiRequestsAtOnce > 64) {
-            throw new IllegalStateException("securedoc.ai.requests-at-once must be between 1 and 64");
-        }
-        boolean staged = mode == com.securedoc.platform.application.pipeline.PipelineMode.STAGED;
-        com.securedoc.platform.ai.analysis.AiServerRequestLimit.set(staged ? aiRequestsAtOnce : 0);
-        int findLimit = ai.isPoolEnabled()
-                ? OllamaInferencePoolConfiguration.parse(ai.getPoolNodeUrls()).size()
-                        * Math.min(aiRequestsAtOnce, Math.max(1, ai.getPoolMaxConcurrentPerNode()))
-                : aiRequestsAtOnce;
+        // Task 0067: the numbers of workers and of AI requests at once are ProcessingCapacity's.
+        var defaults = com.securedoc.platform.application.pipeline.StagedProcessingSettings.defaults(mode);
         return new com.securedoc.platform.application.pipeline.StagedProcessingSettings(mode,
-                java.time.Duration.ofMillis(claimLeaseMs), maxAttempts, textWorkers,
-                Math.min(findWorkers, Math.max(1, findLimit)), redactWorkers,
-                java.time.Duration.ofMillis(pollIntervalMs),
-                // Task 0064: the vision model is one server; no more workers than it takes requests at once.
-                visionWorkers < 1 ? visionWorkers : Math.min(visionWorkers, aiRequestsAtOnce));
+                java.time.Duration.ofMillis(claimLeaseMs), maxAttempts, defaults.textWorkers(), defaults.findWorkers(),
+                defaults.redactWorkers(), java.time.Duration.ofMillis(pollIntervalMs), defaults.visionWorkers());
     }
 
     /** Task 0048: each staged step (and each gate) is one transaction of its own. */
@@ -1301,7 +1288,6 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.probe-interval-ms:300000}") long probeIntervalMs,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.claim-lease-ms:120000}") long claimLeaseMs,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-per-destination:4}") int workersPerDestination,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.workers-total:8}") int workersTotal,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.retry-schedule:5m,15m,1h,4h,12h}") String retrySchedule,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.rebuild-before-retry:3}") int rebuildBeforeRetry,
             @org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-jobs.failing-cases-to-pause:3}") int failingCasesToPause,
@@ -1314,7 +1300,8 @@ public class ApplicationServiceConfig {
                 com.securedoc.platform.application.pipeline.ExportMode.parse(exportMode),
                 java.time.Duration.ofMillis(retryDelayMs), maxAttempts, pauseAfterFailures,
                 java.time.Duration.ofMillis(probeIntervalMs), java.time.Duration.ofMillis(claimLeaseMs),
-                workersPerDestination, workersTotal,
+                // Task 0067: the number of workers is ProcessingCapacity's.
+                workersPerDestination, Math.max(8, workersPerDestination),
                 com.securedoc.platform.application.pipeline.ExportJobSettings.parseSchedule(retrySchedule),
                 rebuildBeforeRetry, failingCasesToPause, java.time.Duration.ofMillis(failingCasesWindowMs),
                 java.time.Duration.ofMillis(rateLimitDefaultWaitMs), java.time.Duration.ofMillis(rateLimitRecoveryMs),
