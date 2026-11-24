@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
 
 /** The redaction catalog (task 0062), read from the backend: every kind, and the ones off by default. */
-function catalogKinds(factory = '(?:onByDefault|locked|optIn)'): string[] {
+function catalogKinds(factory = '(?:onByDefault|locked|optIn|image)'): string[] {
   const source = readFileSync(resolve(repoRoot, 'backend', 'securedoc-domain', 'src', 'main', 'java', 'com', 'securedoc',
     'platform', 'domain', 'business', 'RedactionCatalog.java'), 'utf8');
   return [...source.matchAll(new RegExp(`\\b${factory}\\(EntityType\\.([A-Z_]+)`, 'g'))].map((m) => m[1]);
@@ -21,7 +21,7 @@ function catalogKinds(factory = '(?:onByDefault|locked|optIn)'): string[] {
 
 test('every sensitive type the policy can enable has a name in the vocabulary', () => {
   const types = catalogKinds();
-  assert.equal(types.length, 12, `expected the catalog, found ${types.join(', ')}`);
+  assert.equal(types.length, 14, `expected the catalog, found ${types.join(', ')}`);
   for (const type of types) {
     const known = findSensitiveType(type);
     assert.ok(known, `${type} has no name in words.ts`);
@@ -30,8 +30,8 @@ test('every sensitive type the policy can enable has a name in the vocabulary', 
 });
 
 test('task 0043: every opt-in pattern kind has a name, a plural and a one-line "off by default" description', () => {
-  const kinds = catalogKinds('optIn');
-  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'ITIN', 'PASSPORT_NUMBER']);
+  const kinds = catalogKinds('(?:optIn|image)');
+  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'FACE_PHOTO', 'ITIN', 'PASSPORT_NUMBER', 'SIGNATURE']);
   for (const kind of kinds) {
     const known = findSensitiveType(kind);
     assert.ok(known, `${kind} has no name in words.ts`);

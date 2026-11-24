@@ -38,6 +38,8 @@ public class StageJobWorkers {
     /** In inline mode, open staged jobs are looked for every this many poll intervals. */
     static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
+    /** Task 0064: a check for open jobs that was under way when the server stopped starts no worker any more. */
+    private boolean stopped;
     private ExecutorService workers;
     private ScheduledExecutorService timers;
 
@@ -68,7 +70,7 @@ public class StageJobWorkers {
         try {
             if (running) return;
             service.runMissedGates();
-            if (!service.hasOpenJobs()) return;
+            if (!service.hasOpenJobs() || stopped) return;
             log.info("STAGE_JOB_WORKERS_FINISHING pipelineMode=inline reasonCode=OPEN_STAGE_JOBS");
             startWorkers();
         } catch (RuntimeException failure) {
@@ -79,7 +81,8 @@ public class StageJobWorkers {
 
     private void startWorkers() {
         var settings = service.settings();
-        int total = settings.textWorkers() + settings.findWorkers() + settings.redactWorkers();
+        int total = settings.textWorkers() + settings.findWorkers() + settings.visionWorkers()
+                + settings.redactWorkers();
         AtomicInteger number = new AtomicInteger();
         running = true;
         workers = Executors.newFixedThreadPool(total, runnable -> {
@@ -90,13 +93,14 @@ public class StageJobWorkers {
         String instance = UUID.randomUUID().toString();
         submit(PipelineStage.TEXT, settings.textWorkers(), instance);
         submit(PipelineStage.FIND, settings.findWorkers(), instance);
+        submit(PipelineStage.VISION, settings.visionWorkers(), instance);
         submit(PipelineStage.REDACT, settings.redactWorkers(), instance);
         long every = settings.pollInterval().toMillis();
         timers.scheduleWithFixedDelay(this::sweep, every, every, TimeUnit.MILLISECONDS);
         timers.scheduleWithFixedDelay(this::missedGates, every * OPEN_JOBS_CHECK_POLLS,
                 every * OPEN_JOBS_CHECK_POLLS, TimeUnit.MILLISECONDS);
-        log.info("STAGE_JOB_WORKERS_STARTED text={} find={} redact={} claimLeaseMs={} nodeId={}",
-                settings.textWorkers(), settings.findWorkers(), settings.redactWorkers(),
+        log.info("STAGE_JOB_WORKERS_STARTED text={} find={} vision={} redact={} claimLeaseMs={} nodeId={}",
+                settings.textWorkers(), settings.findWorkers(), settings.visionWorkers(), settings.redactWorkers(),
                 settings.claimLease().toMillis(), nodeId);
     }
 
@@ -110,9 +114,13 @@ public class StageJobWorkers {
 
     @PreDestroy
     public void stop() {
-        running = false;
-        if (workers != null) workers.shutdownNow();
+        // The timers first, so an open check is interrupted; then its lock is waited for (or it saw "stopped").
         if (timers != null) timers.shutdownNow();
+        synchronized (this) {
+            stopped = true;
+            running = false;
+            if (workers != null) workers.shutdownNow();
+        }
     }
 
     private void loop(PipelineStage stage, String owner) {

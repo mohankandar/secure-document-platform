@@ -35,6 +35,30 @@ public interface TextExtractionPort {
                 kept.stream().anyMatch(page -> page.source() == ExtractionSource.OCR));
     }
 
+    /**
+     * Task 0064: the same pages ({@code null}: all), and how each is to be read (see {@link
+     * com.securedoc.platform.domain.vision.PageRoute}). A page the text reader cannot read (no text, or too poor) does
+     * not fail the document: it comes back with what was read and is routed to vision. This default routes nothing.
+     */
+    default RoutedOutput extractRouted(InputStream content, String mimeType, java.util.Set<Integer> pageNumbers,
+                                       double ocrThreshold) {
+        return new RoutedOutput(pageNumbers == null ? extract(content, mimeType)
+                : extractPages(content, mimeType, pageNumbers), List.of());
+    }
+
+    /** Task 0064: as {@link #extractRouted}, without the routing checks. This default reads as {@link #extract} does. */
+    default TextExtractionOutput extractReadable(InputStream content, String mimeType,
+                                                 java.util.Set<Integer> pageNumbers) {
+        return pageNumbers == null ? extract(content, mimeType) : extractPages(content, mimeType, pageNumbers);
+    }
+
+    /** Task 0064: the pages' text and their routes. */
+    record RoutedOutput(TextExtractionOutput text, List<com.securedoc.platform.domain.vision.PageRoute> routes) {
+        public RoutedOutput {
+            routes = List.copyOf(routes);
+        }
+    }
+
     /** Source used to normalize a page into text + coordinates. */
     enum ExtractionSource {
         NATIVE_PDF_TEXT,

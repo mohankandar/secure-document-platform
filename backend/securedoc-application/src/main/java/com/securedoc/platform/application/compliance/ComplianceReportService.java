@@ -28,6 +28,7 @@ import com.securedoc.platform.application.port.out.TenantRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
+import com.securedoc.platform.domain.finding.AiModel;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.lifecycle.TenantLifecyclePolicy;
@@ -332,7 +333,28 @@ public final class ComplianceReportService {
         return new ComplianceReportContent(edition, customerName, tenant.name(), periodWords(period), endWords,
                 creatorName + ", " + creatorRole,
                 CREATED_AT.format(ZonedDateTime.now(clock).withZoneSameInstant(zone)),
-                policy, retentionSection, cases, activity, appendix);
+                policy, retentionSection, cases, activity, appendix,
+                reading(readPort.pageReading(tenantId, start, end)));
+    }
+
+    /** Section 5 (task 0064). */
+    static ComplianceReportContent.Reading reading(ComplianceReportReadPort.PageReading r) {
+        if (r.nothing()) return ComplianceReportContent.Reading.NONE;
+        long all = r.textPages() + r.visionPages() + r.visionPagesToPerson();
+        List<CountRow> pages = List.of(
+                new CountRow("Read as text", r.textPages(), share(r.textPages(), all)),
+                new CountRow("Of these, also checked for signatures", r.signaturePages(),
+                        share(r.signaturePages(), all)),
+                new CountRow("Read by the vision model", r.visionPages(), share(r.visionPages(), all)),
+                new CountRow("Needed the vision model, sent to a person", r.visionPagesToPerson(),
+                        share(r.visionPagesToPerson(), all)));
+        List<ComplianceReportContent.ModelRow> models = r.models().stream().map(use -> {
+            AiModel model = AiModel.decode(use.model());
+            return new ComplianceReportContent.ModelRow(model.name(), model.version(), model.digest(), use.documents());
+        }).toList();
+        return new ComplianceReportContent.Reading(pages, models,
+                "Why a page was sent to the vision model, with its text-reading confidence, is in the audit trail of "
+                        + "its search. A digest of “" + AiModel.NO_DIGEST + "” means the model’s server states none.");
     }
 
     /**
@@ -411,7 +433,8 @@ public final class ComplianceReportService {
         return SensitivePolicy.of(p.enabledEntityTypes().stream().map(Enum::name).collect(Collectors.toSet()),
                 p.autoRedactThreshold(), p.reviewMode(), p.maskSsnLastFour())
                 .with(p.packs().stream().map(Enum::name).collect(Collectors.toSet()),
-                        p.keepLastFour().stream().map(Enum::name).collect(Collectors.toSet()));
+                        p.keepLastFour().stream().map(Enum::name).collect(Collectors.toSet()))
+                .withVision(p.vision());
     }
 
     private LifecyclePolicy lifecyclePolicyAt(TenantId tenantId, Instant at) {

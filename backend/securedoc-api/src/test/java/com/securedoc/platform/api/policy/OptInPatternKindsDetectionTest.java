@@ -104,8 +104,9 @@ class OptInPatternKindsDetectionTest {
             Second routing number: O32000719
             End of page""";
 
+    /** Found in text; signatures and face photos are found on the page image (task 0064, VisionDetectionTest). */
     private static final Set<EntityType> NEW_KINDS = RedactionCatalog.entries().stream()
-            .filter(e -> !e.onByDefault()).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
+            .filter(e -> !e.onByDefault() && e.detection() != RedactionCatalog.DetectionMethod.IMAGE).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
 
     private final TenantId tenantId = TenantId.of(UUID.randomUUID());
     private final List<Finding> savedFindings = new CopyOnWriteArrayList<>();

@@ -7,6 +7,8 @@ package com.securedoc.platform.domain.pipeline;
 public enum PipelineStage {
     TEXT,
     FIND,
+    /** Task 0064: one routed page read by the vision model, alongside FIND. */
+    VISION,
     REDACT,
     /** The full case to one destination. */
     EXPORT,

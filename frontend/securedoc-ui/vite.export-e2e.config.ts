@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { E2E_PORTS } from './e2ePorts';
 
 /**
  * Task 0035: the dev server for the export end-to-end run (playwright.export-e2e.config.ts). The same app as
@@ -11,7 +12,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: `http://localhost:${process.env.LEXAVAULT_E2E_APP_PORT || '18035'}`,
+        target: `http://localhost:${E2E_PORTS.exportApp}`,
         changeOrigin: true,
       },
     },

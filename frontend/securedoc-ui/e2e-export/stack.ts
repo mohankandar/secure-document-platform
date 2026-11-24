@@ -14,6 +14,7 @@
  * failing cases never mix between scenarios. The UI screens use the same entities by setting the LOCAL identity
  * headers on the page's API calls.
  */
+import { E2E_PORTS } from '../e2ePorts';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -28,7 +29,7 @@ function env(name: string, fallback?: string): string {
 export const RUN_DIR = env('LEXAVAULT_E2E_RUN_DIR');
 export const OUT_DIR = path.join(RUN_DIR, 'out');
 export const LOG_DIR = path.join(RUN_DIR, 'logs');
-export const APP_PORT = Number(env('LEXAVAULT_E2E_APP_PORT', '18035'));
+export const APP_PORT = E2E_PORTS.exportApp;
 export const BACKEND = `http://localhost:${APP_PORT}`;
 const DB_CONTAINER = env('LEXAVAULT_E2E_DB_CONTAINER');
 const PROTECTED = ['securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db'];
@@ -82,7 +83,7 @@ export async function startApp(): Promise<void> {
       SPRING_DATASOURCE_PASSWORD: env('LEXAVAULT_E2E_DB_PASSWORD'),
       SERVER_PORT: String(APP_PORT),
       SECUREDOC_AI_PROVIDER: 'ollama',
-      SECUREDOC_AI_OLLAMA_BASE_URL: `http://127.0.0.1:${env('LEXAVAULT_E2E_OLLAMA_PORT', '11535')}`,
+      SECUREDOC_AI_OLLAMA_BASE_URL: `http://127.0.0.1:${E2E_PORTS.exportOllama}`,
       SECUREDOC_AI_MODEL: 'qwen3.5:9b',
       SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED: 'false',
       SECUREDOC_WATCHED_FOLDER_ENABLED: 'false',
@@ -91,7 +92,7 @@ export async function startApp(): Promise<void> {
       SECUREDOC_LOG_DIR: LOG_DIR,
       SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH: path.join(LOG_DIR, 'product-telemetry.jsonl'),
       SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH: OUT_DIR,
-      SECUREDOC_SECURITY_CORS_ALLOWED_ORIGINS: 'http://localhost:15235',
+      SECUREDOC_SECURITY_CORS_ALLOWED_ORIGINS: `http://localhost:${E2E_PORTS.exportUi}`,
     },
   });
   child.unref();

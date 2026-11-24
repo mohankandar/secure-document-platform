@@ -19,6 +19,9 @@ import java.util.Objects;
  */
 public final class AuditService {
 
+    /** Task 0064: was 1000; a policy change with every kind on, before and after, is longer. The column is TEXT. */
+    static final int MAX_DETAIL = 2000;
+
     private final AuditPort auditPort;
     private final RequestActorDisplayName actorDisplayName;
 
@@ -181,8 +184,8 @@ public final class AuditService {
         // Do not log raw file contents, passwords, tokens, etc.
         // The detail should already be safe metadata by convention,
         // but truncate excessively long details as a safety measure.
-        if (detail.length() > 1000) {
-            return detail.substring(0, 1000) + "...[truncated]";
+        if (detail.length() > MAX_DETAIL) {
+            return detail.substring(0, MAX_DETAIL) + "...[truncated]";
         }
         return detail;
     }

@@ -44,6 +44,13 @@ public class FindingEntity {
     @Column(name = "detector_version")
     private String detectorVersion;
 
+    /** Task 0064 (migration 080): the path(s) that found it, and the AI model(s) that took part. */
+    @Column(name = "found_by", length = 64, updatable = false)
+    private String foundBy;
+
+    @Column(name = "ai_models", length = 2000, updatable = false)
+    private String aiModels;
+
     @Column(name = "bbox_left")
     private Double bboxLeft;
 
@@ -107,6 +114,12 @@ public class FindingEntity {
 
     public String getDetectorVersion() { return detectorVersion; }
     public void setDetectorVersion(String detectorVersion) { this.detectorVersion = detectorVersion; }
+
+    public String getFoundBy() { return foundBy; }
+    public void setFoundBy(String foundBy) { this.foundBy = foundBy; }
+
+    public String getAiModels() { return aiModels; }
+    public void setAiModels(String aiModels) { this.aiModels = aiModels; }
 
     public Double getBboxLeft() { return bboxLeft; }
     public void setBboxLeft(Double bboxLeft) { this.bboxLeft = bboxLeft; }

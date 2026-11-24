@@ -91,6 +91,32 @@ public class JpaComplianceReportReadAdapter implements ComplianceReportReadPort 
     }
 
     @Override
+    @SuppressWarnings("unchecked")
+    public PageReading pageReading(TenantId tenantId, Instant start, Instant endExclusive) {
+        String records = """
+                 from audit_records a
+                where a.tenant_id=:tenant and a.action='DOCUMENT_DETECTION_COMPLETED' and a.outcome='SUCCESS'
+                  and a.occurred_at>=:start and a.occurred_at<:end
+                """;
+        Object[] pages = row(entityManager.createNativeQuery("select "
+                        + sumOf("textPages") + ", " + sumOf("signaturePages") + ", " + sumOf("visionPages") + ", "
+                        + sumOf("visionPagesToPerson") + records)
+                .setParameter("tenant", tenantId.value()).setParameter("start", start)
+                .setParameter("end", endExclusive).getSingleResult());
+        List<Object[]> models = entityManager.createNativeQuery("select m.model, count(*) from (select "
+                        + "unnest(string_to_array(substring(a.detail from 'aiModels=[[]([^]]*)[]]'), ';')) as model"
+                        + records + ") m group by m.model order by m.model")
+                .setParameter("tenant", tenantId.value()).setParameter("start", start)
+                .setParameter("end", endExclusive).getResultList();
+        return new PageReading(number(pages[0]), number(pages[1]), number(pages[2]), number(pages[3]),
+                models.stream().map(m -> new ModelUse((String) m[0], number(m[1]))).toList());
+    }
+
+    private static String sumOf(String key) {
+        return "coalesce(sum(cast(substring(a.detail from '[, ]" + key + "=([0-9]+)') as bigint)),0)";
+    }
+
+    @Override
     public RetentionCounts retention(TenantId tenantId, Instant start, Instant endExclusive) {
         Object[] due = row(entityManager.createNativeQuery("""
                 with due as (

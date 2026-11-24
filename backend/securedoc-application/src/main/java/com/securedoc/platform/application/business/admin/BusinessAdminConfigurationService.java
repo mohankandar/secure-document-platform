@@ -19,6 +19,7 @@ import com.securedoc.platform.domain.business.RegulationPack;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.PageBatchSettings;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
+import com.securedoc.platform.domain.business.VisionSettings;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -219,11 +220,7 @@ public final class BusinessAdminConfigurationService {
                 reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, null, null);
     }
 
-    /**
-     * Task 0062: as above, with the regulation packs in force and the kinds whose last four digits stay visible; null
-     * keeps the stored ones. {@code enabledTypes} decides which kinds are on (a pack kind can be fine-tuned off); the
-     * locked items are on whatever it says.
-     */
+    /** Task 0062: as below, with the stored vision settings. */
     public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
                                                             CorrelationId correlationId,
                                                             Set<EntityType> enabledTypes,
@@ -235,6 +232,29 @@ public final class BusinessAdminConfigurationService {
                                                             Integer pageBatchOverlap,
                                                             Set<RegulationPack> packs,
                                                             Set<EntityType> keepLastFour) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, packs,
+                keepLastFour, null, null);
+    }
+
+    /**
+     * Task 0062: as above, with the regulation packs in force and the kinds whose last four digits stay visible; null
+     * keeps the stored ones. {@code enabledTypes} decides which kinds are on (a pack kind can be fine-tuned off); the
+     * locked items are on whatever it says. Task 0064: and vision on/off and the routing threshold (null keeps them).
+     */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap,
+                                                            Set<RegulationPack> packs,
+                                                            Set<EntityType> keepLastFour,
+                                                            Boolean visionEnabled,
+                                                            Double visionOcrThreshold) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -258,6 +278,14 @@ public final class BusinessAdminConfigurationService {
         } catch (IllegalArgumentException invalid) {
             throw new ValidationException(LvErrorCode.CFG_001, invalid.getMessage());
         }
+        VisionSettings storedVision = previous.map(TenantRedactionPolicy::vision).orElse(VisionSettings.DEFAULTS);
+        VisionSettings vision;
+        try {
+            vision = new VisionSettings(visionEnabled == null ? storedVision.enabled() : visionEnabled,
+                    visionOcrThreshold == null ? storedVision.ocrThreshold() : visionOcrThreshold);
+        } catch (IllegalArgumentException invalid) {
+            throw new ValidationException(LvErrorCode.CFG_001, invalid.getMessage());
+        }
         Set<EntityType> lastFour = keepLastFour != null ? keepLastFour
                 : previous.map(TenantRedactionPolicy::keepLastFour).orElse(Set.of());
         if (!RedactionCatalog.lastFourAllowed().containsAll(lastFour)) {
@@ -267,11 +295,12 @@ public final class BusinessAdminConfigurationService {
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
                 searchableRedactedPages, batches,
-                packs != null ? packs : previous.map(TenantRedactionPolicy::packs).orElse(Set.of()), lastFour, true);
+                packs != null ? packs : previous.map(TenantRedactionPolicy::packs).orElse(Set.of()), lastFour, true, vision);
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), policy.enabledEntityTypes(),
                 autoRedactThreshold, reviewMode, maskSsnLastFour)
                 && previous.get().searchableRedactedPages() == searchableRedactedPages
                 && storedBatches.equals(batches)
+                && storedVision.equals(vision)
                 && previous.get().packs().equals(policy.packs())
                 && previous.get().keepLastFour().equals(policy.keepLastFour())
                 && previous.get().lockedItemsOn()) {
@@ -309,6 +338,10 @@ public final class BusinessAdminConfigurationService {
                 // Task 0049: written only when not the default.
                 + (policy.pageBatches().equals(PageBatchSettings.DEFAULTS) ? "" : ", pageBatchSize="
                         + policy.pageBatches().size() + ", pageBatchOverlap=" + policy.pageBatches().overlap())
+                // Task 0064: written only when not the default.
+                + (policy.vision().enabled() ? "" : ", visionEnabled=false")
+                + (policy.vision().ocrThreshold() == VisionSettings.DEFAULTS.ocrThreshold() ? ""
+                        : ", visionOcrThreshold=" + String.format(Locale.ROOT, "%.2f", policy.vision().ocrThreshold()))
                 // Task 0062: packs and styles, written only when there are any (no key = none).
                 + (policy.packs().isEmpty() ? "" : ", packs=" + sortedNames(policy.packs()))
                 + (policy.keepLastFour().isEmpty() ? "" : ", keepLastFour=" + sortedNames(policy.keepLastFour()));

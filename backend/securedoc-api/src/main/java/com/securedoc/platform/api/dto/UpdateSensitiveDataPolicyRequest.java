@@ -15,5 +15,8 @@ public record UpdateSensitiveDataPolicyRequest(
         /* Task 0062: regulation packs in force; null keeps the stored ones. */
         Set<String> enabledPacks,
         /* Task 0062: kinds whose last four digits stay visible; null keeps the stored ones. */
-        Set<String> keepLastFourKinds
+        Set<String> keepLastFourKinds,
+        /* Task 0064: null keeps the stored value. */
+        Boolean visionEnabled,
+        Double visionOcrThreshold
 ) {}

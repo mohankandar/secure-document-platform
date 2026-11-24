@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { E2E_PORTS } from './e2ePorts';
 
 /**
  * Task 0035 (test layer L5): the export end-to-end run against the folder destination, on the real app.
@@ -9,7 +10,7 @@ import { defineConfig } from '@playwright/test';
  * (global setup) and a Vite dev server in LOCAL mode with the Case File UI, sending /api to that backend.
  * Every test is tagged @e2e-export.
  */
-const PORT = 15235;
+const PORT = E2E_PORTS.exportUi;
 
 export default defineConfig({
   testDir: './e2e-export',
@@ -38,7 +39,7 @@ export default defineConfig({
     env: {
       VITE_SECURITY_MODE: 'LOCAL',
       VITE_CASE_FILE_UI_ENABLED: 'true',
-      LEXAVAULT_E2E_APP_PORT: process.env.LEXAVAULT_E2E_APP_PORT || '18035',
+      LEXAVAULT_E2E_APP_PORT: String(E2E_PORTS.exportApp),
     },
   },
 });

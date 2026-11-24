@@ -73,6 +73,9 @@ export interface SensitiveDataPolicyConfiguration {
   maskSsnLastFour: boolean;
   /** Task 0044: invisible OCR text on redacted pages; on by default. Not sent = the server keeps its value. */
   searchableRedactedPages?: boolean;
+  /** Task 0064. Absent from an older server: on, 0.85. */
+  visionEnabled?: boolean;
+  visionOcrThreshold?: number;
   /** Task 0062: regulation packs in force, and the kinds whose last four digits stay visible. */
   enabledPacks?: string[];
   keepLastFourKinds?: string[];
@@ -331,6 +334,8 @@ export interface FocusedReviewItem {
   reason: 'LOW_CONFIDENCE' | 'LOCATION_UNCERTAIN' | 'POLICY_REVIEW' | string;
   /** The text found and the same line around it. Sensitive: show in full only in the decision panel, masked elsewhere; never log or store it. Absent when it cannot be read safely. */
   foundText?: ReviewFoundText | null;
+  /** Task 0064: TEXT, SIGNATURE, VISION, PAGE_CHECK. Empty for findings saved before. */
+  foundBy?: string[] | null;
 }
 
 

@@ -58,4 +58,5 @@
     <include file="db/changelog/061-person-last-entity.xml"/>
     <include file="db/changelog/062-drop-old-identity-connections.xml"/>
     <include file="db/changelog/070-redaction-catalog.xml"/>
+    <include file="db/changelog/080-vision-routing.xml"/>
 </databaseChangeLog>

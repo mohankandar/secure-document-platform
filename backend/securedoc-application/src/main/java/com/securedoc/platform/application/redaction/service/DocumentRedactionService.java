@@ -422,7 +422,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         InputStream original = storagePort.retrieve(originalArtifact.storageReference());
         TextExtractionPort.TextExtractionOutput extracted;
         try {
-            extracted = textExtractionPort.extractPages(original, REDACTED_MIME_TYPE, pagesWithFindings);
+            // Task 0064: a page only the vision model (or a person) could read has no text value to compare.
+            extracted = textExtractionPort.extractReadable(original, REDACTED_MIME_TYPE, pagesWithFindings);
         } finally {
             closeQuietly(original);
         }

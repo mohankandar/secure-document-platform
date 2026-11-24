@@ -94,6 +94,7 @@ The app is at http://localhost:5173 and the backend at http://localhost:8080.
 - **Phase 1 is accepted** (reports 0004 to 0009): one login system, two entities, in the isolated environment under `test-tools/phase1-shared-issuer/` (60 scripted checks and the browser script pass; the owner's screen checks pass). Migration 037 was applied there through Liquibase by a test-only changelog; it is still not in the master changelog, and shared-issuer selection is still off by default.
 - The newest (Case File) design has the entity switch at the top right (task 0009). The single-entity sign-in race on the dev server is fixed (task 0008).
 - The Phase 1 containers are kept as the regression environment; start the rest again with `test-tools/phase1-shared-issuer/Start-Phase1.ps1 -JarBuiltFromCommit <sha>`, then `Invoke-Phase1Checks.ps1` (60 checks) and `Invoke-Phase1BrowserSignin.mjs`. Tasks and reports are in `docs/work/`.
+- Browser-test ports (task 0068): queue A sets nothing (base 15175), queue B sets `LV_E2E_PORT_BASE=15275`, queue C sets `LV_E2E_PORT_BASE=15375` before any Playwright suite, so the sessions don't wait for each other.
 - There is no automatic build on GitHub.
 
 ## Independence rule (owner, 2026-11-22)

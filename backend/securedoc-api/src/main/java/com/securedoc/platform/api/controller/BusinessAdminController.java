@@ -126,7 +126,8 @@ public class BusinessAdminController {
                 body.autoRedactThreshold(), reviewMode, maskSsnLastFour, searchable,
                 body.pageBatchSize(), body.pageBatchOverlap(),
                 body.enabledPacks() == null ? null : parsePacks(body.enabledPacks()),
-                body.keepLastFourKinds() == null ? null : parseTypes(body.keepLastFourKinds()));
+                body.keepLastFourKinds() == null ? null : parseTypes(body.keepLastFourKinds()),
+                body.visionEnabled(), body.visionOcrThreshold());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -223,7 +224,8 @@ public class BusinessAdminController {
                 policy.enabledEntityTypes().stream().map(Enum::name).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
                 policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour(),
                 policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap(),
-                names(policy.packs()), names(policy.keepLastFour()), policy.lockedItemsOn());
+                names(policy.packs()), names(policy.keepLastFour()), policy.lockedItemsOn(),
+                policy.vision().enabled(), policy.vision().ocrThreshold());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),

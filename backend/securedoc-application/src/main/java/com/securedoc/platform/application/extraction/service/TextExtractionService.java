@@ -15,6 +15,10 @@ import com.securedoc.platform.application.port.out.ChecksumPort;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.application.port.out.PackageRepository;
+import com.securedoc.platform.application.port.out.PageRouteRepository;
+import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
+import com.securedoc.platform.domain.business.TenantRedactionPolicy;
+import com.securedoc.platform.domain.business.VisionSettings;
 import com.securedoc.platform.application.port.out.ProcessingLockPort;
 import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
@@ -81,6 +85,16 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
     private final PageBatchFiles batchFiles;
+    /** Task 0064: null where pages are not routed (then a page that cannot be read stops the document, as before). */
+    private final PageRouting routing;
+
+    /** Task 0064: where the pages' routes are kept, and the entity's routing threshold. */
+    public record PageRouting(PageRouteRepository routes, TenantRedactionPolicyRepository policies) {
+        public PageRouting {
+            Objects.requireNonNull(routes);
+            Objects.requireNonNull(policies);
+        }
+    }
 
     public TextExtractionService(DocumentRepository documentRepository,
                                   PackageRepository packageRepository,
@@ -91,6 +105,22 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
                                   ProcessingLockPort processingLockPort,
                                   DomainEventPublisher eventPublisher,
                                   AuditService auditService) {
+        this(documentRepository, packageRepository, artifactRepository, storagePort, textExtractionPort, checksumPort,
+                processingLockPort, eventPublisher, auditService, null);
+    }
+
+    /** Task 0064: with page routing. */
+    public TextExtractionService(DocumentRepository documentRepository,
+                                  PackageRepository packageRepository,
+                                  ArtifactRepository artifactRepository,
+                                  StoragePort storagePort,
+                                  TextExtractionPort textExtractionPort,
+                                  ChecksumPort checksumPort,
+                                  ProcessingLockPort processingLockPort,
+                                  DomainEventPublisher eventPublisher,
+                                  AuditService auditService,
+                                  PageRouting routing) {
+        this.routing = routing;
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
@@ -143,8 +173,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
             long startedNanos = System.nanoTime();
             TextExtractionOutput output;
             try (InputStream content = storagePort.retrieve(originalArtifact(document).storageReference())) {
-                output = textExtractionPort.extractPages(content, document.mimeType().value(),
-                        command.batch().pages());
+                output = read(document, content, command.batch().pages());
             } catch (ApplicationException e) {
                 throw e;
             } catch (Exception e) {
@@ -273,13 +302,27 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
         TextExtractionOutput extractionOutput;
         try (InputStream pdfContent = storagePort.retrieve(context.originalArtifact().storageReference())) {
-            extractionOutput = textExtractionPort.extract(pdfContent, document.mimeType().value());
+            extractionOutput = read(document, pdfContent, null);
         } catch (ApplicationException e) {
             throw e;
         } catch (Exception e) {
             throw new ExtractionProcessingException("Text extraction failed", e);
         }
         return complete(command, document, extractionOutput, startedNanos);
+    }
+
+    /** The pages' text ({@code null}: all); task 0064: and their routes, saved in this step. */
+    private TextExtractionOutput read(Document document, InputStream content, java.util.Set<Integer> pages) {
+        String mimeType = document.mimeType().value();
+        if (routing == null) {
+            return pages == null ? textExtractionPort.extract(content, mimeType)
+                    : textExtractionPort.extractPages(content, mimeType, pages);
+        }
+        double threshold = routing.policies().findByTenantId(document.tenantId())
+                .map(TenantRedactionPolicy::vision).orElse(VisionSettings.DEFAULTS).ocrThreshold();
+        TextExtractionPort.RoutedOutput routed = textExtractionPort.extractRouted(content, mimeType, pages, threshold);
+        routing.routes().save(document.tenantId(), document.id(), routed.routes());
+        return routed.text();
     }
 
     /** Writes the document's pages, text artifact, state, event and audit (whole document or gathered batches). */

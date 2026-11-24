@@ -51,7 +51,16 @@ if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\targe
 if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first: cd backend; mvn clean install -Pdev-build)." }
 $JarPath = (Resolve-Path -LiteralPath $JarPath).Path
 
+# Task 0068: LV_E2E_PORT_BASE moves every port that was not given, and names the container after it, so sessions in
+# different worktrees can run at the same time. Not set: the ports and the name as before.
 $Container = 'lexavault-0035-pg'
+if ($env:LV_E2E_PORT_BASE) {
+    $shift = [int]$env:LV_E2E_PORT_BASE - 15175
+    if (-not $PSBoundParameters.ContainsKey('DbPort')) { $DbPort += $shift }
+    if (-not $PSBoundParameters.ContainsKey('AppPort')) { $AppPort += $shift }
+    if (-not $PSBoundParameters.ContainsKey('OllamaPort')) { $OllamaPort += $shift }
+    if ($shift -ne 0) { $Container = "lexavault-0035-pg-$($env:LV_E2E_PORT_BASE)" }
+}
 $Protected = @('securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db')
 if ($Protected -contains $Container) { throw "Refusing to use a protected container name." }
 

@@ -35,6 +35,12 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "page_batch_overlap", nullable = false)
     private int pageBatchOverlap = 2;
 
+    /** Migration 080 (task 0064): vision on/off and the routing threshold. */
+    @Column(name = "vision_enabled", nullable = false)
+    private boolean visionEnabled = true;
+
+    @Column(name = "vision_ocr_threshold", nullable = false)
+    private double visionOcrThreshold = 0.85;
     /** Migration 070 (task 0062): off only for an entity from before the catalog, until its policy is saved. */
     @Column(name = "locked_items_on", nullable = false)
     private boolean lockedItemsOn = true;
@@ -42,6 +48,10 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    public boolean isVisionEnabled() { return visionEnabled; }
+    public void setVisionEnabled(boolean visionEnabled) { this.visionEnabled = visionEnabled; }
+    public double getVisionOcrThreshold() { return visionOcrThreshold; }
+    public void setVisionOcrThreshold(double visionOcrThreshold) { this.visionOcrThreshold = visionOcrThreshold; }
     public boolean isLockedItemsOn() { return lockedItemsOn; }
     public void setLockedItemsOn(boolean lockedItemsOn) { this.lockedItemsOn = lockedItemsOn; }
     public int getPageBatchSize() { return pageBatchSize; }

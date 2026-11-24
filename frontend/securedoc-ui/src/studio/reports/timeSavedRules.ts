@@ -28,6 +28,8 @@ export const SHORT_TYPE_NAMES: Readonly<Record<string, string>> = {
   EIN: 'EIN',
   DRIVERS_LICENSE_NUMBER: 'license number',
   PASSPORT_NUMBER: 'passport number',
+  SIGNATURE: 'signature',
+  FACE_PHOTO: 'face photo',
   CVV: 'card code',
   PIN: 'PIN',
 };
