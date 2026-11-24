@@ -144,6 +144,9 @@ class SearchableRedactedPagesTest {
     void offIsTodaysOutputByteForByte() throws Exception {
         // Today's engine already differs between two runs in exactly one place: the trailer's /ID, a new random
         // document id on every save. Everything else must be the same bytes.
+        // Task 0050: the output also carries the dates, so both engines get the same one.
+        todaysEngine.clock = java.time.Clock.fixed(java.time.Instant.parse("2026-11-24T00:00:00Z"), java.time.ZoneOffset.UTC);
+        searchableEngine.clock = todaysEngine.clock;
         byte[] today = redact(todaysEngine, null);
         assertArrayEquals(withoutDocumentId(today), withoutDocumentId(redact(todaysEngine, null)),
                 "today's engine, two runs: only the document id differs");

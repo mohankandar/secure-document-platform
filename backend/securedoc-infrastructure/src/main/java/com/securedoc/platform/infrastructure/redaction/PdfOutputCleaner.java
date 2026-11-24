@@ -199,7 +199,7 @@ final class PdfOutputCleaner {
     }
 
     /** Last step before saving: no object of the output keeps anything hidden, and the document says nothing else. */
-    static void clean(PDDocument output) throws IOException {
+    static void clean(PDDocument output, java.time.Instant now) throws IOException {
         Set<COSBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (PDPage page : output.getPages()) {
             COSBase contents = page.getCOSObject().getDictionaryObject(COSName.CONTENTS);
@@ -208,9 +208,9 @@ final class PdfOutputCleaner {
         }
         PDDocumentInformation information = new PDDocumentInformation();
         information.setProducer(PRODUCER);
-        Calendar now = new GregorianCalendar();
-        information.setCreationDate(now);
-        information.setModificationDate(now);
+        Calendar date = GregorianCalendar.from(now.atZone(java.time.ZoneOffset.UTC));
+        information.setCreationDate(date);
+        information.setModificationDate(date);
         output.setDocumentInformation(information);
         COSDictionary catalog = output.getDocumentCatalog().getCOSObject();
         for (COSName key : new ArrayList<>(catalog.keySet())) {
