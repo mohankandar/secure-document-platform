@@ -66,7 +66,7 @@ java -version
 printf '\nMaven:\n'
 mvn -version
 printf '\nNode: %s\nnpm:  %s\n' "$(node --version)" "$(npm --version)"
-printf '\nplatform-core: released com.documentplatform.platform:platform-bom 0.8.1 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml; docs/install/BUILD.md).\n'
+printf '\nplatform-core: released com.documentplatform.platform:platform-bom 1.0.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml; docs/install/BUILD.md).\n'
 
 profile_args=()
 if "$production"; then
@@ -86,7 +86,7 @@ else
 fi
 
 # Task 0041: the app's classpath carries platform-core's identity modules (and licensing, read only) and nothing else of
-# platform-core. Task 0054 decision 1: and what platform-identity 0.8.1 itself needs (outbound rules, error shape).
+# platform-core. Task 0054 decision 1: and what platform-identity 1.0.0 itself needs (outbound rules, error shape).
 # Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).
 printf '\nBACKEND - app jar classpath check (task 0041)\n'
 app_jar="$backend_dir/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar"
