@@ -374,6 +374,9 @@ public final class ComplianceReportService {
                 query(Set.of(AuditAction.PACKAGE_REJECTED, AuditAction.REVIEW_REJECTED), SUCCESS, false, null)),
         ORIGINALS_DELETED("Originals deleted",
                 query(Set.of(AuditAction.ORIGINAL_ARTIFACT_PURGED), SUCCESS, false, null)),
+        // Task 0069: the label says what it means for the copy.
+        SIGNED_ORIGINALS("Originals digitally signed; signature not on the redacted copy",
+                query(Set.of(AuditAction.DOCUMENT_SIGNATURE_REMOVED), SUCCESS, false, null)),
         REPORT_EXPORTS("Report exports (CSV)",
                 query(Set.of(AuditAction.REPORT_CSV_EXPORTED), SUCCESS, false, null),
                 query(Set.of(AuditAction.AUDIT_EXPORTED), SUCCESS, false, "CSV")),
