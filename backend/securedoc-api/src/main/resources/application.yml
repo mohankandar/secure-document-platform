@@ -32,6 +32,8 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 55MB
+      # Task 0063: small parts (a PDF password) stay in memory and are never written to a temporary file.
+      file-size-threshold: 4KB
 
 # Task 0056: as with Spring Boot 3, the liveness and readiness addresses exist under Kubernetes only.
 management:

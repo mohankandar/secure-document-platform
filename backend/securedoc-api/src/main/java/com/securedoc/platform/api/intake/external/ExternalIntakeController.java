@@ -53,11 +53,18 @@ public class ExternalIntakeController {
         AuthenticatedPrincipal principal = contextResolver.resolveIntegrationPrincipal(httpRequest);
         CorrelationId correlationId = contextResolver.resolveCorrelationId(httpRequest);
         String contentType = file.getContentType() == null ? MediaType.APPLICATION_PDF_VALUE : file.getContentType();
+        // Task 0063: for a password-protected PDF, the multipart part "password". In memory only, cleared after use.
+        char[] password = PdfPasswordPart.read(httpRequest);
         try (MultipartUploadContent content = MultipartUploadContent.from(file)) {
-            var receipt = service.receivePushDocument(PackageId.of(packageId), externalSourceDocumentId,
-                    idempotencyKey, sourceSha256, contentType, content, principal, correlationId);
+            var receipt = password == null
+                    ? service.receivePushDocument(PackageId.of(packageId), externalSourceDocumentId,
+                            idempotencyKey, sourceSha256, contentType, content, principal, correlationId)
+                    : service.receivePushDocument(PackageId.of(packageId), externalSourceDocumentId,
+                            idempotencyKey, sourceSha256, contentType, content, password, principal, correlationId);
             return ResponseEntity.status(receipt.duplicateAcknowledgement() ? HttpStatus.OK : HttpStatus.CREATED)
                     .body(ExternalDocumentReceiptResponse.from(receipt));
+        } finally {
+            if (password != null) java.util.Arrays.fill(password, '\0');
         }
     }
 
