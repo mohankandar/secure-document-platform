@@ -91,6 +91,7 @@ public final class ComplianceReportService {
     private final RequestActorDisplayName actorDisplayName;
     private final CustomerNames customerNames;
     private final Clock clock;
+    private com.securedoc.platform.application.port.out.EntityTimeZonePort zones = com.securedoc.platform.application.port.out.EntityTimeZonePort.NONE;
 
     /** The customer name of the entity's installed licence (task 0018 A1); empty without a licence. */
     @FunctionalInterface
@@ -128,6 +129,19 @@ public final class ComplianceReportService {
         this.clock = Objects.requireNonNull(clock);
     }
 
+    /** Task 0058: the entity's time zone, for a request that names none (before: UTC, which it still is without one). */
+    public ComplianceReportService withEntityTimeZones(com.securedoc.platform.application.port.out.EntityTimeZonePort zones) {
+        this.zones = Objects.requireNonNull(zones);
+        return this;
+    }
+
+    private ZoneId zone(TenantId tenantId, String requested) {
+        if (requested == null || requested.isBlank()) {
+            return zones.effective(tenantId).orElseGet(() -> CompliancePeriod.zone(null));
+        }
+        return CompliancePeriod.zone(requested);
+    }
+
     /** The request body, unvalidated. The entity is never taken from it. */
     public record Request(String period, LocalDate from, LocalDate to, String timeZone) { }
 
@@ -145,7 +159,7 @@ public final class ComplianceReportService {
         CompliancePeriod period = null;
         try {
             if (request == null) throw new ValidationException(LvErrorCode.CFG_001, "A request body is required");
-            ZoneId zone = CompliancePeriod.zone(request.timeZone());
+            ZoneId zone = zone(principal.tenantId(), request.timeZone());
             period = CompliancePeriod.resolve(CompliancePeriod.type(request.period()), request.from(), request.to(),
                     zone, clock);
             Tenant tenant = tenantRepository.findById(principal.tenantId())
@@ -183,7 +197,7 @@ public final class ComplianceReportService {
     public long appendixRecordCount(TenantId tenantId, Request request) {
         Objects.requireNonNull(tenantId);
         if (request == null) throw new ValidationException(LvErrorCode.CFG_001, "A period is required");
-        ZoneId zone = CompliancePeriod.zone(request.timeZone());
+        ZoneId zone = zone(tenantId, request.timeZone());
         CompliancePeriod period = CompliancePeriod.resolve(CompliancePeriod.type(request.period()), request.from(),
                 request.to(), zone, clock);
         return readPort.count(tenantId, ALL_RECORDS, period.start(), period.endExclusive());

@@ -39,8 +39,7 @@ Related repositories on this machine:
 - The UI framework.
 
 **R1B guardrails**
-- The shared-issuer setting stays off by default.
-- Migration 037 stays out of the master changelog until the owner approves registering it.
+- Sign-in uses platform-core identity; shared-issuer is the normal path. The old R1B setting and migration 037 are removed.
 
 **Secrets**
 - No secrets in the repository, in logs or in the chat.

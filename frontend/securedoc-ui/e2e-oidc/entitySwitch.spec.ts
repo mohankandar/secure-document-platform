@@ -56,6 +56,9 @@ type Api = {
   holdPackagesFor: string | null;               // the next /packages request for this entity is held open
   releaseHeld: () => void;
   heldRequestSeen: Promise<void>;
+  entered: Array<string | undefined>;          // POST /me/entity: the entity each switch was recorded for
+  refuseRecord: boolean;
+  last: string | null;                          // the entity the server says was used last
   meCalls: Array<string | undefined>;
 };
 
@@ -63,7 +66,7 @@ async function mockApi(page: Page, entities: Array<typeof A>): Promise<Api> {
   let releaseHeld: () => void = () => {};
   let markHeldSeen: () => void = () => {};
   const api: Api = {
-    refuse: new Set(), holdPackagesFor: null, meCalls: [],
+    refuse: new Set(), holdPackagesFor: null, meCalls: [], entered: [], refuseRecord: false, last: null,
     releaseHeld: () => releaseHeld(),
     heldRequestSeen: new Promise<void>((resolve) => { markHeldSeen = resolve; }),
   };
@@ -71,8 +74,13 @@ async function mockApi(page: Page, entities: Array<typeof A>): Promise<Api> {
     const url = new URL(route.request().url());
     const selected = route.request().headers()['x-selected-tenant-id'];
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    if (url.pathname === '/api/v1/me/tenants') return json(entities);
+    if (url.pathname === '/api/v1/me/tenants') return json(entities.map((e) => ({ ...e, lastUsed: e.tenantId === api.last })));
     const entity = entities.find((candidate) => candidate.tenantId === selected) ?? (entities.length === 1 ? entities[0] : undefined);
+    if (url.pathname === '/api/v1/me/entity') {
+      if (!entity || api.refuseRecord) return json({ code: 'INTERNAL' }, 500);
+      api.entered.push(selected);
+      return route.fulfill({ status: 204 });
+    }
     if (url.pathname === '/api/v1/me') {
       api.meCalls.push(selected);
       if (!entity || api.refuse.has(entity.tenantId)) return json({ code: 'SECURITY_CONTEXT_INVALID', message: 'Security context invalid' }, 403);
@@ -113,11 +121,13 @@ async function signInAndChoose(page: Page, entityName?: string) {
   if (entityName) await page.getByRole('button', { name: entityName }).click();
 }
 
-// Since UI task U002 the switch lives in the account menu: the account button names the current entity, and the
-// entities are menu items in the "Entities" group, the current one checked.
-const switchControl = (page: Page) => page.getByRole('button', { name: /account menu/i });
+// Task 0058: the entity and its switch are in the top bar (they were in the account menu since U002): the button names the
+// current entity, and the entities are the items of its menu, the current one checked.
+const switchControl = (page: Page) => page.getByRole('button', { name: /switch entity/i });
+const accountButton = (page: Page) => page.getByRole('button', { name: /account menu/i });
 const accountMenu = (page: Page) => page.getByRole('menu', { name: 'Account' });
-const entityItems = (page: Page) => accountMenu(page).getByRole('group', { name: 'Entities' }).getByRole('menuitemradio');
+const entityMenu = (page: Page) => page.getByRole('menu', { name: 'Entities' });
+const entityItems = (page: Page) => entityMenu(page).getByRole('menuitemradio');
 const workspaceNav = (page: Page) => page.getByRole('navigation', { name: 'Workspace' });
 // The row's Approve button: offered only with PACKAGE_APPROVE_DELIVERY (A's Supervisor role, not B's Processor role).
 const approveButtons = (page: Page) => page.getByRole('button', { name: /^Approve/ });
@@ -133,13 +143,13 @@ async function switchTo(page: Page, entityName: string) {
  * data cache in CaseFileApp, the previous organization's cached case list briefly showed under the new name.)
  *
  * The switch takes effect when the server has accepted the new organization: until then the app keeps the previous
- * organization's screen on purpose (a refused choice changes nothing), with the account menu still open. Samples
+ * organization's screen on purpose (a refused choice changes nothing), with the entity menu still open. Samples
  * taken while the menu is open are not judged. The menu is checked before the screen is read, so a reading taken
  * while it was open is never judged as after the switch. (UI task U001: sampling from the click made this test
  * fail whenever the server's answer was slower than the first sample, 5 runs in 10 before U001.)
  */
 async function expectNoStaleDataDuringSwitch(page: Page, staleText: string, freshText: string) {
-  const panel = accountMenu(page);
+  const panel = entityMenu(page);
   for (let sample = 0; sample < 250; sample++) {
     const switching = (await panel.count()) > 0;
     const text = await page.locator('body').innerText().catch(() => '');
@@ -206,11 +216,11 @@ test('one entity: no switch control, the name is plain text', async ({ page }) =
   await signInAndChoose(page);
 
   await expect(page.getByText('A-CASE-1001')).toBeVisible();
-  await expect(switchControl(page)).toHaveAccessibleName(/Race Entity A/);
-  await switchControl(page).click();
+  await expect(page.locator('header').getByText('Race Entity A')).toBeVisible();
+  await expect(switchControl(page)).toHaveCount(0);
+  await accountButton(page).click();
   await expect(accountMenu(page)).toBeVisible();
-  await expect(accountMenu(page).getByText('Race Entity A')).toBeVisible();
-  await expect(accountMenu(page).getByRole('group', { name: 'Entities' })).toHaveCount(0);
+  await expect(entityMenu(page)).toHaveCount(0);
   await expect(page.getByRole('menuitemradio', { name: /Race Entity/ })).toHaveCount(0);
 });
 
@@ -218,7 +228,7 @@ test('the account menu has no test-role picker outside local security mode', asy
   await mockIdentityProvider(page);
   await mockApi(page, [A, B]);
   await signInAndChoose(page, 'Race Entity A');
-  await switchControl(page).click();
+  await accountButton(page).click();
   await expect(accountMenu(page)).toBeVisible();
   await expect(accountMenu(page).getByRole('group', { name: 'Theme' })).toBeVisible();
   await expect(accountMenu(page).getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
@@ -271,7 +281,7 @@ test('the switch works by keyboard', async ({ page }) => {
 
   await switchControl(page).focus();
   await page.keyboard.press('Enter');
-  const menu = accountMenu(page);
+  const menu = entityMenu(page);
   await expect(menu).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -288,4 +298,64 @@ test('the switch works by keyboard', async ({ page }) => {
   await expect(b).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByText('B-CASE-2002')).toBeVisible();
+});
+
+/* ---------- Task 0058: land on the entity used last; the chooser only when there is none ---------- */
+
+test('signing in lands on the entity used last, without the chooser', async ({ page }) => {
+  await mockIdentityProvider(page);
+  const api = await mockApi(page, [A, B]);
+  api.last = B.tenantId;
+  await signInAndChoose(page);
+  await expect(page.getByText('B-CASE-2002')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose an entity' })).toHaveCount(0);
+  await expect(switchControl(page)).toHaveAccessibleName(/Race Entity B/);
+  expect(api.entered).toEqual([]); // nothing was switched
+  expect(api.meCalls.every((c) => c === B.tenantId)).toBe(true);
+});
+
+test('an entity used last that is refused now gives the chooser, and nothing of it is shown', async ({ page }) => {
+  await mockIdentityProvider(page);
+  const api = await mockApi(page, [A, B]);
+  api.last = B.tenantId;
+  api.refuse.add(B.tenantId);
+  await signInAndChoose(page);
+  await expect(page.getByRole('heading', { name: 'Choose an entity' })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('lexavault.oidc.selected-tenant'))).toBeNull();
+  await page.getByRole('button', { name: 'Race Entity A' }).click();
+  await expect(page.getByText('A-CASE-1001')).toBeVisible();
+});
+
+test('a remembered entity that is not among the choices is never entered', async ({ page }) => {
+  await mockIdentityProvider(page);
+  const api = await mockApi(page, [A, B]);
+  api.last = 'c3c3c3c3-0000-4000-8000-00000000000c';
+  await signInAndChoose(page);
+  await expect(page.getByRole('heading', { name: 'Choose an entity' })).toBeVisible();
+  expect(api.meCalls).toEqual([]);
+});
+
+test('every choice and switch is recorded first; one that cannot be recorded is not made', async ({ page }) => {
+  await mockIdentityProvider(page);
+  const api = await mockApi(page, [A, B]);
+  await signInAndChoose(page, 'Race Entity A');
+  await expect(page.getByText('A-CASE-1001')).toBeVisible();
+  await switchTo(page, 'Race Entity B');
+  await expect(page.getByText('B-CASE-2002')).toBeVisible();
+  expect(api.entered).toEqual([A.tenantId, B.tenantId]);
+  api.refuseRecord = true;
+  await switchTo(page, 'Race Entity A');
+  await expect(page.getByRole('alert')).toContainText(/could not switch to Race Entity A/i);
+  await expect(page.getByText('B-CASE-2002')).toBeVisible();
+});
+
+test('the entity name stays in the top bar at every width', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, [A, B]);
+  await signInAndChoose(page, 'Race Entity A');
+  for (const width of [1440, 1100, 900, 700, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(page.locator('header .cf-entity-name')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no sideways scroll at ${width}`).toBe(true);
+  }
 });

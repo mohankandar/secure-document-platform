@@ -2,8 +2,6 @@ param(
     [string]$IssuerUri = $env:SECUREDOC_SECURITY_OIDC_ISSUER_URI,
     [string]$Audience = $env:SECUREDOC_SECURITY_OIDC_AUDIENCE,
     [string]$ProviderId = $(if ($env:SECUREDOC_SECURITY_OIDC_PROVIDER_ID) { $env:SECUREDOC_SECURITY_OIDC_PROVIDER_ID } else { "customer-oidc" }),
-    [string]$TenantId = $(if ($env:SECUREDOC_SECURITY_OIDC_TENANT_ID) { $env:SECUREDOC_SECURITY_OIDC_TENANT_ID } else { "30216241-b724-5a3a-aef3-3034fd546d17" }),
-    [string]$TenantClaim = $(if ($env:SECUREDOC_SECURITY_OIDC_TENANT_CLAIM) { $env:SECUREDOC_SECURITY_OIDC_TENANT_CLAIM } else { "tenant_id" }),
     [string]$UsernameClaim = $(if ($env:SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM) { $env:SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM } else { "preferred_username" }),
     [string]$RolesClaim = $(if ($env:SECUREDOC_SECURITY_OIDC_ROLES_CLAIM) { $env:SECUREDOC_SECURITY_OIDC_ROLES_CLAIM } else { "groups" }),
     [string]$WebClientId = $(if ($env:LEXAVAULT_WEB_OIDC_CLIENT_ID) { $env:LEXAVAULT_WEB_OIDC_CLIENT_ID } else { "lexavault-web" }),
@@ -323,15 +321,8 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_SECURITY_OIDC_BROWSER_CLIENT_ID = '$webClientIdEscaped'
 `$env:SECUREDOC_SECURITY_OIDC_PERSISTENT_CONNECTION_ENABLED = 'true'
 `$env:SECUREDOC_SECURITY_OIDC_PROVIDER_ID = '$ProviderId'
-`$env:SECUREDOC_SECURITY_OIDC_TENANT_ID = '$TenantId'
-`$env:SECUREDOC_SECURITY_OIDC_TENANT_CLAIM = '$TenantClaim'
 `$env:SECUREDOC_SECURITY_OIDC_USERNAME_CLAIM = '$UsernameClaim'
 `$env:SECUREDOC_SECURITY_OIDC_ROLES_CLAIM = '$RolesClaim'
-`$env:SECUREDOC_SECURITY_ROLE_DOCUMENT_PROCESSOR = 'BusinessUsers'
-`$env:SECUREDOC_SECURITY_ROLE_DOCUMENT_SUPERVISOR = 'ElevatedUsers'
-`$env:SECUREDOC_SECURITY_ROLE_BUSINESS_ADMIN = 'BusinessAdmins'
-`$env:SECUREDOC_SECURITY_ROLE_REPORT_VIEWER = 'ReportViewers'
-`$env:SECUREDOC_SECURITY_ROLE_TENANT_IT_ADMIN = 'TenantITAdmins'
 # Local OIDC diagnostics only. Do not enable verbose Spring Security logging in deployed profiles.
 `$env:LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY = 'DEBUG'
 `$env:LOGGING_LEVEL_COM_SECUREDOC_PLATFORM_API_SECURITY = 'DEBUG'

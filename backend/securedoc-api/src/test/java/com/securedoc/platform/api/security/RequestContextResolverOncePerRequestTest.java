@@ -4,9 +4,7 @@ import com.documentplatform.identity.IdentityClaimConfig;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.context.SecurityContextException;
-import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
-import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
@@ -55,12 +53,11 @@ class RequestContextResolverOncePerRequestTest {
         properties.getOidc().setAudience("lexavault-phase1-api");
         properties.getOidc().setIssuerUri(ISSUER);
         properties.getOidc().setPersistentConnectionEnabled(true);
-        properties.getOidc().setSharedIssuerTenantSelectionEnabled(true);
         TenantOidcGroupGrantRepository grantStore = (p, i, a) -> { grantLookups.incrementAndGet(); return grants; };
         ActiveOidcTenantCandidates candidateStore = (p, i, a) -> { candidateLookups.incrementAndGet(); return Set.of(A); };
         ActiveOidcMachineTenantBindings machineStore = (p, i, a, c) -> { machineLookups.incrementAndGet(); return Set.of(A); };
         return new RequestContextResolver("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000099",
-                properties, new OidcRoleMapper(properties), new OidcTenantResolver(properties, (p, i, a) -> Optional.empty()),
+                properties,
                 new OidcTenantMembershipResolver(grantStore, candidateStore, properties), machineStore, new TrustedActorResolver(),
                 new OidcJwtIdentityNormalizer("phase1-oidc", new IdentityClaimConfig(null, null, null, null)), displayName);
     }

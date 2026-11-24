@@ -336,6 +336,7 @@ export default function App() {
         console.info('[LexaVault OIDC] Access token is present; validating it with /api/v1/me. Token value is intentionally not logged.');
         // Discovery can run before tenant selection. Older single-tenant servers
         // reject this optional endpoint, in which case existing /me behavior remains.
+        let landed: TenantChoice[] | null = null;
         try {
           const choices = await apiClient.getAvailableOidcTenants();
           // A run that is no longer the active one (e.g. the first React.StrictMode mount) must not
@@ -350,8 +351,15 @@ export default function App() {
           }
           if (choices.length === 1) setSelectedOidcTenant(choices[0].tenantId);
           else if (!selectedOidcTenant()) {
-            if (active) setTenantChoices(choices);
-            return;
+            // Task 0058: land on the entity used last; the chooser only when there is none, or it is not allowed any more.
+            // It is one of the server's own choices for this person, and the server checks it again on every request.
+            const last = choices.find((choice) => choice.lastUsed);
+            if (!last) {
+              if (active) setTenantChoices(choices);
+              return;
+            }
+            setSelectedOidcTenant(last.tenantId);
+            landed = choices;
           }
         } catch (discoveryError) {
           // Only an unsupported discovery route can fall back to the legacy /me flow.
@@ -361,7 +369,16 @@ export default function App() {
             ? Number((discoveryError as { httpStatus?: number }).httpStatus) : undefined;
           if (discoveryError instanceof NoOrganizationError || (status !== 403 && status !== 404)) throw discoveryError;
         }
-        const user = await apiClient.getCurrentUser();
+        let user: CurrentUser;
+        try {
+          user = await apiClient.getCurrentUser();
+        } catch (entryError) {
+          // The entity used last is refused after all (suspended a moment ago, say): the person chooses.
+          if (!landed || !active || (entryError as { httpStatus?: number })?.httpStatus !== 403) throw entryError;
+          setSelectedOidcTenant(null);
+          setTenantChoices(landed);
+          return;
+        }
         console.info('[LexaVault OIDC] Production session verified.', { roles: user.roles, capabilityCount: (user.capabilities || []).length });
         if (active) {
           setCurrentUser(user);
@@ -433,6 +450,8 @@ export default function App() {
     const previous = selectedOidcTenant();
     try {
       await apiClient.getCurrentUserForTenant(tenantId);
+      // Recorded before anything changes on screen: a switch that can't be recorded is not made.
+      await apiClient.enteredEntity(tenantId);
     } catch {
       return false; // refused or unreachable: nothing has changed
     }

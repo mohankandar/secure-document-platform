@@ -78,4 +78,36 @@ class OidcTenantDiscoveryControllerTest {
         assertEquals("code=LV-AUT-005, detail=TENANT_MISSING, method=GET, route=/api/v1/me/tenants, reason=TENANT_MISSING", audits.stream()
                 .filter(a -> a.tenantId().equals(missing)).findFirst().orElseThrow().detail());
     }
+
+    /** Task 0058: the remembered entity marks one of the allowed choices; it never adds one. */
+    @Test
+    void theEntityWorkedInLastIsMarkedAndNeverAddedWhenItIsNoLongerAllowed() {
+        Tenant one = Tenant.create("One", "one");
+        Tenant two = Tenant.create("Two", "two");
+        one.activate();
+        two.activate();
+        ActorId actor = ActorId.generate();
+        RequestContextResolver resolver = mock(RequestContextResolver.class);
+        when(resolver.securityMode()).thenReturn(SecurityMode.OIDC);
+        when(resolver.currentOidcActor()).thenReturn(Optional.of(actor));
+        when(resolver.resolveAvailableOidcTenants()).thenReturn(Map.of(one.id(), Set.of("DOCUMENT_PROCESSOR"),
+                two.id(), Set.of("BUSINESS_ADMIN")));
+        TenantRepository tenants = mock(TenantRepository.class);
+        when(tenants.findById(one.id())).thenReturn(Optional.of(one));
+        when(tenants.findById(two.id())).thenReturn(Optional.of(two));
+        var last = mock(com.securedoc.platform.infrastructure.identity.LastEntityStore.class);
+        var controller = new OidcTenantDiscoveryController(resolver, tenants, null, last);
+
+        when(last.find(actor)).thenReturn(Optional.of(two.id()));
+        assertEquals(List.of(two.id().toString()), controller.list(null).getBody().stream().filter(c -> c.lastUsed())
+                .map(c -> c.tenantId()).toList());
+
+        when(last.find(actor)).thenReturn(Optional.of(TenantId.generate()));
+        var choices = controller.list(null).getBody();
+        assertEquals(2, choices.size());
+        assertTrue(choices.stream().noneMatch(c -> c.lastUsed()));
+
+        when(last.find(actor)).thenReturn(Optional.empty());
+        assertTrue(controller.list(null).getBody().stream().noneMatch(c -> c.lastUsed()));
+    }
 }

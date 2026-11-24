@@ -1,17 +1,13 @@
 package com.securedoc.platform.api.audit;
 
 import com.documentplatform.identity.IdentityClaimConfig;
-import com.documentplatform.identity.OidcConnectionBinding;
-import com.documentplatform.identity.OidcConnectionBindingResolver;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.controller.AuditController;
 import com.securedoc.platform.api.observability.RequestActorDisplayNameFilter;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.SecurityProperties;
-import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
-import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.audit.query.AuditRecordSummary;
@@ -212,10 +208,8 @@ class AuditActorNameCaseIdApiTest {
                 "00000000-0000-0000-0000-000000000001",
                 "00000000-0000-0000-0000-000000000099",
                 properties,
-                new OidcRoleMapper(properties),
-                new OidcTenantResolver(properties, persistedConnectionResolver(properties)),
-                new OidcTenantMembershipResolver(mock(TenantOidcGroupGrantRepository.class),
-                        mock(ActiveOidcTenantCandidates.class), properties),
+                new OidcTenantMembershipResolver((p, i, a) -> java.util.Map.of(ENTITY, java.util.Map.of("securedoc-document-supervisor", Set.of("DOCUMENT_SUPERVISOR"),
+                        "securedoc-document-processor", Set.of("DOCUMENT_PROCESSOR"))), (p, i, a) -> Set.of(ENTITY), properties),
                 mock(ActiveOidcMachineTenantBindings.class),
                 new TrustedActorResolver(),
                 new OidcJwtIdentityNormalizer(
@@ -228,26 +222,12 @@ class AuditActorNameCaseIdApiTest {
                 names);
     }
 
-    private OidcConnectionBindingResolver persistedConnectionResolver(SecurityProperties properties) {
-        return (providerId, issuer, audience) -> {
-            if (!properties.getOidc().getProviderId().equals(providerId)
-                    || !URI.create("https://identity.example.test").equals(issuer)
-                    || !properties.getOidc().getAudience().equals(audience)) {
-                return Optional.empty();
-            }
-            return Optional.of(new OidcConnectionBinding(
-                    UUID.fromString("00000000-0000-0000-0000-000000000010"),
-                    UUID.fromString("00000000-0000-0000-0000-000000000001"),
-                    providerId, issuer, audience, 1));
-        };
-    }
+    private static final TenantId ENTITY = TenantId.of(UUID.fromString("00000000-0000-0000-0000-000000000001"));
 
     private SecurityProperties oidcProperties() {
         SecurityProperties properties = new SecurityProperties();
         properties.setMode(SecurityMode.OIDC);
         properties.getOidc().setAudience("lexavault-api");
-        properties.getOidc().setTenantId("00000000-0000-0000-0000-000000000001");
-        properties.getOidc().getRoleMappings().put("DOCUMENT_PROCESSOR", "securedoc-document-processor");
         return properties;
     }
 

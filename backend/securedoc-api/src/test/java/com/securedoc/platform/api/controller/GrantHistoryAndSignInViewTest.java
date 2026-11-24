@@ -41,7 +41,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** Task 0041: the Audit page's grant history and the read-only Sign-in screen, without a database. */
+/** Task 0041: the Audit page's grant history, without a database. */
 class GrantHistoryAndSignInViewTest {
 
     private static final UUID ENTITY = UUID.fromString("30216241-b724-5a3a-aef3-3034fd546d17");
@@ -107,27 +107,4 @@ class GrantHistoryAndSignInViewTest {
         assertTrue(List.of(required.value()).contains(UserCapability.AUDIT_VIEW));
     }
 
-    @Test
-    void theSignInScreenShowsTheActiveConnectionReadOnlyAndNeverItsSecretReference() throws Exception {
-        UUID connectionId = UUID.randomUUID();
-        when(reads.activeConnection(ENTITY)).thenReturn(Optional.of(new LoginConnection(connectionId, "TEN-DEMO-0001",
-                "LEXAVAULT", "customer-oidc", IdentityProviderType.OIDC, ISSUER, "lexavault-web", "lexavault-api",
-                "vault:secret/never-shown", IdentityConnectionStatus.ACTIVE, 3)));
-        var overview = new EnterpriseIdentityAdminController(context, reads, null, null).overview(request).getBody();
-        assertEquals(ISSUER.toString(), overview.active().issuerUri());
-        assertEquals("customer-oidc", overview.active().displayName());
-        assertEquals("ACTIVE", overview.active().status());
-        assertEquals(3, overview.active().configurationVersion());
-        assertNull(overview.staged());
-        assertTrue(overview.rollbackCandidates().isEmpty());
-        assertFalse(overview.activationSupported());
-        assertTrue(overview.readOnly());
-        assertEquals("Sign-in connections are set through setup", overview.managedBy());
-        String json = JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(overview);
-        assertFalse(json.contains("never-shown"), json);
-        assertFalse(json.toLowerCase().contains("secret"), json);
-
-        when(reads.activeConnection(ENTITY)).thenReturn(Optional.empty());
-        assertNull(new EnterpriseIdentityAdminController(context, reads, null, null).overview(request).getBody().active());
-    }
 }

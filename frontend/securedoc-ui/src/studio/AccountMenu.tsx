@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
-import type { CurrentUser, TenantSwitchActions } from '../types';
+import type { CurrentUser } from '../types';
 import { ROLE_OPTIONS } from '../security/uiAuthorization';
-import { useEntitySwitch } from './EntitySwitch';
 import { useThemePreference, type ThemePreference } from './theme';
 import { initials, secondNameLine } from './userName';
 
@@ -15,18 +14,17 @@ const THEMES: { value: ThemePreference; label: string }[] = [
 const ITEM_SELECTOR = '[role="menuitem"], [role="menuitemradio"]';
 
 /**
- * The one account button at the top right (UI spec finding 1): the person, the entity switch, the theme, the local
+ * The one account button at the top right (UI spec finding 1): the person, the theme, the local
  * test role (local security mode only) and sign out. A real menu: Enter, Space or ↓ opens it on the first item,
  * ↑/↓/Home/End move, Esc closes and returns focus to the button, Tab closes.
+ * Task 0058: the entity and its switch are in the top bar, next to this button (EntityMenu).
  */
-export default function AccountMenu({ me, organizationName, onSignOut, localMode, selectedRole, onRoleChange, tenantSwitch }: {
+export default function AccountMenu({ me, onSignOut, localMode, selectedRole, onRoleChange }: {
   me: CurrentUser;
-  organizationName?: string;
   onSignOut: () => void;
   localMode: boolean;
   selectedRole: string;
   onRoleChange: (role: string) => void;
-  tenantSwitch?: TenantSwitchActions;
 }) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -34,32 +32,20 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
   const menuId = useId();
   const [theme, setTheme] = useThemePreference();
   const name = displayName(me.username);
-  // A refused switch closes the menu; focus returns to the button once it is enabled again.
-  const entities = useEntitySwitch(me.tenantName, localMode ? undefined : tenantSwitch, () => {
-    setOpen(false);
-    setTimeout(() => buttonRef.current?.focus(), 0);
-  });
 
   function close(returnFocus = true) {
     setOpen(false);
-    entities.cancel();
     if (returnFocus) buttonRef.current?.focus();
   }
 
   function openMenu() {
-    entities.clearMessage();
     setOpen(true);
-    void entities.refresh();
   }
 
-  // Focus the first item when the menu opens, and keep focus inside it while the entity list loads.
+  // Focus the first item when the menu opens.
   useEffect(() => {
-    if (!open) return;
-    const target = entities.confirmFor
-      ? panelRef.current?.querySelector<HTMLElement>('[data-confirm-stay]')
-      : panelRef.current?.querySelector<HTMLElement>(ITEM_SELECTOR);
-    if (target && !panelRef.current?.contains(document.activeElement)) target.focus();
-  }, [open, entities.loading, entities.confirmFor]);
+    if (open) panelRef.current?.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,7 +75,6 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
       close(false);
       return;
     }
-    if (entities.confirmFor) return;
     const items = Array.from(panelRef.current?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? []);
     if (!items.length) return;
     const index = items.indexOf(document.activeElement as HTMLElement);
@@ -115,15 +100,13 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        disabled={entities.busy}
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={onButtonKey}
       >
         <span className="cf-acct-avatar" aria-hidden="true">{initials(me.username)}</span>
-        {/* U026 (WCAG 2.5.3): the name is the words shown (person, entity), then what the button is. */}
+        {/* U026 (WCAG 2.5.3): the name is the words shown (the person), then what the button is. */}
         <span className="cf-acct-text">
           <span className="cf-acct-name">{name}</span>
-          <span className="cf-acct-entity">{me.tenantName}</span>
         </span>
         <span className="cf-sr">, account menu</span>
         <ChevronDown size={14} aria-hidden="true" />
@@ -131,17 +114,6 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
 
       {open && (
         <div ref={panelRef} className="cf-acct-panel" onKeyDown={onMenuKey}>
-          {entities.confirmFor ? (
-            <div role="alertdialog" aria-label="Unsaved work" aria-describedby={`${menuId}-confirm`} className="cf-acct-confirm">
-              <p id={`${menuId}-confirm`}>
-                You have unsaved or in-progress work on this screen. Switching to {entities.confirmFor.name} discards it.
-              </p>
-              <div className="cf-acct-confirm-actions">
-                <button type="button" className="cf-btn" data-size="sm" data-confirm-stay onClick={() => close()}>Stay</button>
-                <button type="button" className="cf-btn" data-size="sm" data-variant="solid" onClick={() => entities.confirm()}>Switch anyway</button>
-              </div>
-            </div>
-          ) : (
             <div id={menuId} role="menu" aria-label="Account" className="cf-acct-menu">
               <div className="cf-acct-person" role="presentation">
                 <span className="cf-acct-avatar" aria-hidden="true">{initials(me.username)}</span>
@@ -151,29 +123,6 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
                   <span className="cf-acct-person-roles">{roleNames.join(', ')}</span>
                 </span>
               </div>
-
-              <Section label={organizationName ? `${organizationName} · Entity` : 'Entity'}>
-                {!entities.switchable ? (
-                  <div className="cf-acct-plain">{me.tenantName}</div>
-                ) : entities.loading ? (
-                  <div className="cf-acct-note" role="status">Loading your entities…</div>
-                ) : entities.failed || !entities.choices ? (
-                  <div className="cf-acct-note" role="status">Your entities could not be loaded. Close this menu and try again.</div>
-                ) : (
-                  <div role="group" aria-label="Entities">
-                    {entities.choices.map((choice) => {
-                      const isCurrent = choice.tenantId === entities.current;
-                      return (
-                        <Item key={choice.tenantId} radio checked={isCurrent} disabled={entities.busy}
-                          onSelect={() => entities.choose(choice)}
-                          hint={isCurrent ? 'Current' : 'Switch'}>
-                          {choice.name}
-                        </Item>
-                      );
-                    })}
-                  </div>
-                )}
-              </Section>
 
               <Section label="Theme">
                 <div role="group" aria-label="Theme" className="cf-acct-row">
@@ -199,11 +148,8 @@ export default function AccountMenu({ me, organizationName, onSignOut, localMode
               <div className="cf-acct-sep" role="separator" />
               <Item onSelect={() => { setOpen(false); onSignOut(); }}>Sign out</Item>
             </div>
-          )}
         </div>
       )}
-
-      {entities.message && <span role="alert" className="cf-acct-message">{entities.message}</span>}
     </div>
   );
 }
@@ -217,7 +163,7 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Item({ children, onSelect, radio, checked, disabled, hint, compact }: {
+export function Item({ children, onSelect, radio, checked, disabled, hint, compact }: {
   children: ReactNode; onSelect: () => void; radio?: boolean; checked?: boolean; disabled?: boolean; hint?: string; compact?: boolean;
 }) {
   return (

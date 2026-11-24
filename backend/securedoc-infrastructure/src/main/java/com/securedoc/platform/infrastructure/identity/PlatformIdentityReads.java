@@ -1,7 +1,5 @@
 package com.securedoc.platform.infrastructure.identity;
 
-import com.documentplatform.identity.OidcConnectionBinding;
-import com.documentplatform.identity.OidcConnectionBindingResolver;
 import com.documentplatform.identity.admission.ConnectionKey;
 import com.documentplatform.identity.admission.EntityId;
 import com.documentplatform.identity.jdbc.PostgresIdentityLookup;
@@ -25,7 +23,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,7 +47,7 @@ import java.util.UUID;
  */
 @Repository
 public class PlatformIdentityReads implements ActiveOidcTenantCandidates, TenantOidcGroupGrantRepository,
-        ActiveOidcMachineTenantBindings, OidcConnectionBindingResolver, PlatformOidcGroupGrants {
+        ActiveOidcMachineTenantBindings, PlatformOidcGroupGrants {
 
     private static final Logger log = LoggerFactory.getLogger(PlatformIdentityReads.class);
 
@@ -127,14 +124,6 @@ public class PlatformIdentityReads implements ActiveOidcTenantCandidates, Tenant
         if (key == null || clientPrincipal == null || clientPrincipal.isBlank()) return Set.of();
         Set<EntityId> found = machines.find(key, clientPrincipal.trim());
         return found == null ? null : activeTenants(found);
-    }
-
-    /** A binding only when exactly one connection matches and its customer has exactly one ACTIVE entity. */
-    @Override
-    public Optional<OidcConnectionBinding> findActive(String providerId, URI issuer, String audience) {
-        ConnectionKey key = key(providerId, issuer, audience);
-        if (key == null) return Optional.empty();
-        return lookup.findActive(key.providerId(), key.issuer(), key.audience());
     }
 
     /** The app's side of the machine binding: entities with an enabled bearer-token PUSH_API source for the client. */

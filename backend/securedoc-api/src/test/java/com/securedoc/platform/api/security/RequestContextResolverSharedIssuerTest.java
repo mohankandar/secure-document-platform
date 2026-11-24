@@ -4,9 +4,7 @@ import com.documentplatform.identity.IdentityClaimConfig;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.context.SecurityContextException;
-import com.securedoc.platform.api.security.oidc.OidcRoleMapper;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
-import com.securedoc.platform.api.security.oidc.OidcTenantResolver;
 import com.securedoc.platform.api.security.oidc.TrustedActorResolver;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
@@ -35,10 +33,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins the shared-issuer branch of RequestContextResolver (Phase 1b step P2a): resolver-level behaviour with
- * securedoc.security.oidc.shared-issuer-tenant-selection-enabled=true, including the exact refusal messages.
- * Written against the code before the Enterprise Identity 0.3.0 switch; it must pass unchanged after it.
- * Uses only collaborators that stay in LexaVault: the resolver's constructor, the application ports, and the
+ * Sign-in through the entities' grants (task 0058: the only way in OIDC mode; until then behind a setting), including the
+ * exact refusal messages. Uses only collaborators that stay in LexaVault: the resolver's constructor, the application ports, and the
  * membership resolver, role mapper, tenant resolver and actor resolver classes.
  */
 class RequestContextResolverSharedIssuerTest {
@@ -67,7 +63,6 @@ class RequestContextResolverSharedIssuerTest {
         properties.getOidc().setAudience(AUDIENCE);
         properties.getOidc().setIssuerUri(ISSUER);
         properties.getOidc().setPersistentConnectionEnabled(true);
-        properties.getOidc().setSharedIssuerTenantSelectionEnabled(true);
         return properties;
     }
 
@@ -86,8 +81,6 @@ class RequestContextResolverSharedIssuerTest {
                 "00000000-0000-0000-0000-000000000001",
                 "00000000-0000-0000-0000-000000000099",
                 properties,
-                new OidcRoleMapper(properties),
-                new OidcTenantResolver(properties, (p, i, a) -> Optional.empty()),
                 new OidcTenantMembershipResolver(grantStore, candidateStore, properties),
                 machineStore,
                 new TrustedActorResolver(),
@@ -209,7 +202,6 @@ class RequestContextResolverSharedIssuerTest {
         SecurityProperties properties = sharedIssuerProperties();
         return new RequestContextResolver(
                 "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000099", properties,
-                new OidcRoleMapper(properties), new OidcTenantResolver(properties, (p, i, a) -> Optional.empty()),
                 new OidcTenantMembershipResolver((p, i, a) -> expected(p, i, a) ? GRANTS : Map.of(),
                         (p, i, a) -> expected(p, i, a) ? activeCandidates : Set.of(),
                         (p, i, a) -> expected(p, i, a) ? platformGrants : Map.of(), properties),
@@ -322,5 +314,40 @@ class RequestContextResolverSharedIssuerTest {
         RequestContextResolver resolver = resolver(GRANTS, Set.of(A, B), Map.of());
         assertRefused("Machine identity has no unique ACTIVE tenant integration binding",
                 () -> resolver.resolveIntegrationPrincipal(choosing(null)));
+    }
+
+    /** Task 0058: one entity in the installation: the refusal belongs in its log. With two it belongs in none. */
+    @Test
+    void aRefusalIsInTheOnlyEntitysLogAndInNoneWhenThereAreTwo() {
+        signedIn("dave.none", List.of("lv-unmapped"));
+        SecurityContextException one = assertThrows(SecurityContextException.class, () -> phase1(Set.of(A)).resolvePrincipal(choosing(null)));
+        assertEquals(A, one.tenantId());
+        assertEquals("NO_VERIFIED_MEMBERSHIP", one.reasonCode());
+        SecurityContextException two = assertThrows(SecurityContextException.class, () -> phase1(Set.of(A, B)).resolvePrincipal(choosing(null)));
+        org.junit.jupiter.api.Assertions.assertNull(two.tenantId());
+    }
+
+    /** Task 0058: without the stored connection nobody gets in, person or machine; no claim or header takes its place. */
+    @Test
+    void withoutStoredConnectionsEverybodyIsRefused() {
+        RequestContextResolver off = without();
+        signedIn("alice.a", List.of("lv-a-staff"), Map.of("tenant_id", A.value().toString()));
+        for (String choice : new String[] {null, A.value().toString()}) {
+            assertEquals("SHARED_ISSUER_REQUIRES_PERSISTED_CONNECTIONS", assertThrows(SecurityContextException.class,
+                    () -> off.resolvePrincipal(choosing(choice))).reasonCode());
+        }
+        assertThrows(SecurityContextException.class, off::resolveAvailableOidcTenants);
+        signedIn("service-account-intake", List.of(), Map.of("tenant_id", A.value().toString()));
+        assertEquals("MACHINE_IDENTITY_CONFIGURATION_INCOMPLETE", assertThrows(SecurityContextException.class,
+                () -> off.resolveIntegrationPrincipal(choosing(null))).reasonCode());
+    }
+
+    private static RequestContextResolver without() {
+        SecurityProperties properties = sharedIssuerProperties();
+        properties.getOidc().setPersistentConnectionEnabled(false);
+        return new RequestContextResolver("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000099", properties,
+                new OidcTenantMembershipResolver((p, i, a) -> GRANTS, (p, i, a) -> Set.of(A), properties),
+                (p, i, a, client) -> Set.of(A), new TrustedActorResolver(),
+                new OidcJwtIdentityNormalizer(PROVIDER, new IdentityClaimConfig(null, null, null, null)));
     }
 }

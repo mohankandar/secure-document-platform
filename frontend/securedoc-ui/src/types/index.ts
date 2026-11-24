@@ -850,6 +850,8 @@ export interface TenantChoice {
   name: string;
   slug: string;
   roles: string[];
+  /** Task 0058: the entity this person worked in last. */
+  lastUsed?: boolean;
 }
 
 /** The organization switch handed to the newest design: one implementation, owned by App. */
@@ -862,6 +864,8 @@ export interface TenantSwitchActions {
 
 export interface CurrentUser {
   username: string;
+  /** Task 0058: the entity's time zone; null or absent when none is set. */
+  timeZone?: string | null;
   roles: string[];
   tenantName: string;
   tenantSlug: string;
@@ -1035,9 +1039,9 @@ export interface BrandingUpdateRequest {
   favicon?: BrandingAssetUpdate | null;
 }
 
+/** A sign-in connection as Admin › Sign-in shows it. It holds no secret. */
 export interface EnterpriseIdentityConnection {
   connectionId: string;
-  tenantId: string;
   providerId: string;
   providerType: 'OIDC' | 'SAML' | 'LDAP_AD';
   displayName: string;
@@ -1046,24 +1050,20 @@ export interface EnterpriseIdentityConnection {
   apiAudience: string;
   status: 'DRAFT' | 'VALIDATED' | 'ACTIVE' | 'DISABLED';
   configurationVersion: number;
-  // Task 0041: the server reads idn_login_connection, which keeps no times or test results; older answers had them.
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  lastTestedAt?: string | null;
-  lastTestStatus?: 'PASSED' | 'FAILED' | null;
-  lastTestMessage?: string | null;
+  /** Task 0058: whether this server signs people in with these values; only then can it be switched to. */
+  matchesSettings?: boolean;
 }
 
-/** Read-only (task 0041): sign-in connections are set through setup. `staged` is always null now. */
+/** Task 0058: the connection in use, the draft of a change, what going back gives, and the newest changes. */
 export interface EnterpriseIdentityOverview {
   active: EnterpriseIdentityConnection | null;
-  staged: EnterpriseIdentityConnection | null;
-  rollbackCandidates: EnterpriseIdentityConnection[];
-  activationSupported: boolean;
-  activationMaxTestAgeSeconds: number;
-  readOnly?: boolean;
-  managedBy?: string;
+  draft?: EnterpriseIdentityConnection | null;
+  previous?: EnterpriseIdentityConnection | null;
+  history?: { issuerUri: string; version: number; status: string; source: string; changedBy: string; changedAt: string }[];
 }
+
+/** The answer to a step of a sign-in change. `reason` is the outbound rule's code when the test's call was refused. */
+export interface SignInChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null; reason: string | null }
 
 /** The answer of the read-only sign-in test (task 0054). `code` is null when it passed. */
 export interface SignInTestAnswer {
@@ -1088,3 +1088,16 @@ export interface GrantHistoryRow {
   setupRunId: string | null;
   issuer: string;
 }
+
+/** Task 0058: the entity slots a Business Admin sees, and the answer to a change of one. */
+export interface EntitySlot {
+  slotId: string;
+  name: string | null;
+  status: string;
+  current: boolean;
+  timeZone: string | null;
+  customerTimeZone: string | null;
+  activatedAt: string | null;
+}
+export interface EntitySlotsOverview { entities: EntitySlot[] }
+export interface EntityChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null }

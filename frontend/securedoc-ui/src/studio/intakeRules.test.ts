@@ -75,3 +75,11 @@ test('New case reads ?id= for the primary identifier, and the older ?for=', () =
 test('the scanner is named by its site', () => {
   assert.equal(scannerDisplayName('HOME-LAB'), 'Scanner at HOME-LAB');
 });
+
+test('the result of an upload or a scan names the entity', async () => {
+  const { uploadedWords, scannedWords } = await import('./intakeRules.ts');
+  assert.equal(uploadedWords(3, 'Acme Mortgage'), '3 files uploaded to Acme Mortgage.');
+  assert.equal(uploadedWords(1, 'Acme Mortgage'), '1 file uploaded to Acme Mortgage.');
+  assert.equal(scannedWords('Acme Mortgage', true), 'The scan was handed to Acme Mortgage.');
+  assert.equal(scannedWords('Acme Mortgage', false), 'The scan was handed to LexaVault.');
+});

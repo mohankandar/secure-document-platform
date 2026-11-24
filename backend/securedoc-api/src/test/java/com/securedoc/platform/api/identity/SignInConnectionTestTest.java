@@ -189,7 +189,7 @@ class SignInConnectionTestTest {
         when(context.resolvePrincipal(request)).thenReturn(AuthenticatedPrincipal.of(actor, TenantId.of(ENTITY), "it", Set.of("TENANT_IT_ADMIN")));
         when(context.resolveCorrelationId(request)).thenReturn(correlation);
         when(reads.activeConnection(ENTITY)).thenAnswer(i -> store.active("TEN-TEST-0001", "LEXAVAULT"));
-        var controller = new EnterpriseIdentityAdminController(context, reads, tester(DEVELOPMENT), audit);
+        var controller = new EnterpriseIdentityAdminController(context, reads, tester(DEVELOPMENT), audit, null);
 
         var passed = controller.testSignIn(request).getBody();
         assertTrue(passed.passed(), passed.toString());
@@ -216,7 +216,7 @@ class SignInConnectionTestTest {
         when(context.resolvePrincipal(request)).thenReturn(AuthenticatedPrincipal.of(ActorId.of(UUID.randomUUID()),
                 TenantId.of(ENTITY), "it", Set.of("TENANT_IT_ADMIN")));
         when(reads.activeConnection(ENTITY)).thenReturn(Optional.empty());
-        var answer = new EnterpriseIdentityAdminController(context, reads, tester(DEVELOPMENT), audit).testSignIn(request).getBody();
+        var answer = new EnterpriseIdentityAdminController(context, reads, tester(DEVELOPMENT), audit, null).testSignIn(request).getBody();
         assertFalse(answer.passed());
         assertEquals("NO_ACTIVE_CONNECTION", answer.code());
         verifyNoInteractions(audit);

@@ -27,23 +27,27 @@ class EnterpriseIdentityAuthorizationContractTest {
         assertFalse(policy.capabilitiesFor(Set.of("BUSINESS_ADMIN")).contains(UserCapability.TENANT_AUTH_MANAGE));
     }
     /**
-     * Task 0041: the screen is read-only. Sign-in connections are set through setup; no endpoint here writes. Task 0054: the
-     * one POST is the test sign-in, which takes no input (no body, no parameter) and changes nothing (SignInConnectionTestTest).
+     * Task 0058: the screen changes the sign-in connection again (a draft, its test, switching, going back; 0041 had made it
+     * read-only). Every endpoint needs the IT Admin's capability, none takes a connection id, a customer or an entity, and
+     * the test of the active connection still takes no input at all (task 0054).
      */
-    @Test void theScreenHasNoWritingEndpoint(){
+    @Test void everyEndpointNeedsTheItAdminAndTakesNoConnectionCustomerOrEntity(){
+        int endpoints=0;
         for(Method m:EnterpriseIdentityAdminController.class.getDeclaredMethods()){
-            if(m.getName().equals("testSignIn")){
-                assertArrayEquals(new Class<?>[]{jakarta.servlet.http.HttpServletRequest.class},m.getParameterTypes());
-                assertArrayEquals(new UserCapability[]{UserCapability.TENANT_AUTH_MANAGE},m.getAnnotation(RequireCapability.class).value());
-                continue;
+            boolean endpoint=m.getAnnotation(org.springframework.web.bind.annotation.GetMapping.class)!=null||m.getAnnotation(PostMapping.class)!=null
+                    ||m.getAnnotation(PutMapping.class)!=null||m.getAnnotation(PatchMapping.class)!=null||m.getAnnotation(DeleteMapping.class)!=null;
+            if(!endpoint) continue;
+            endpoints++;
+            assertArrayEquals(new UserCapability[]{UserCapability.TENANT_AUTH_MANAGE},m.getAnnotation(RequireCapability.class).value(),m.getName());
+            for(java.lang.reflect.Parameter p:m.getParameters()){
+                assertNull(p.getAnnotation(org.springframework.web.bind.annotation.PathVariable.class),m.getName());
+                assertNull(p.getAnnotation(org.springframework.web.bind.annotation.RequestParam.class),m.getName());
+                if(p.getType().isRecord()) for(var part:p.getType().getRecordComponents()){
+                    assertTrue(Set.of("expectedVersion","providerId","issuerUri","browserClientId","apiAudience","token").contains(part.getName()),part.getName());
+                }
             }
-            assertNull(m.getAnnotation(PostMapping.class),m.getName());
-            assertNull(m.getAnnotation(PutMapping.class),m.getName());
-            assertNull(m.getAnnotation(PatchMapping.class),m.getName());
-            assertNull(m.getAnnotation(DeleteMapping.class),m.getName());
+            if(m.getName().equals("testSignIn")) assertArrayEquals(new Class<?>[]{jakarta.servlet.http.HttpServletRequest.class},m.getParameterTypes());
         }
-        for(String gone:new String[]{"saveDraft","testDraft","activateDraft","rollback"}){
-            assertTrue(Arrays.stream(EnterpriseIdentityAdminController.class.getDeclaredMethods()).noneMatch(m->m.getName().equals(gone)),gone);
-        }
+        assertEquals(8,endpoints);
     }
 }

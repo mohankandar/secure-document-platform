@@ -473,6 +473,23 @@ class ComplianceReportServiceTest {
         assertFalse(rendered.get().canonicalText().contains("MARKER-FILE-7731"));
     }
 
+    /** Task 0058: a request without a zone uses the entity's; one that names a zone keeps it; without either UTC, as before. */
+    @Test
+    void theEntitysTimeZoneAppliesWhenTheRequestNamesNone() {
+        Clock clock = Clock.fixed(Instant.parse("2026-12-01T02:00:00Z"), java.time.ZoneOffset.UTC); // still November 30 in New York
+        var none = new ComplianceReportService.Request("LAST_MONTH", null, null, null);
+        var period = service(clock).create(principal, CorrelationId.generate(), none, ComplianceEdition.SUMMARY, "x").period();
+        assertEquals(LocalDate.of(2026, 11, 1), period.from());
+        var zoned = service(clock).withEntityTimeZones(entity -> Optional.of(java.time.ZoneId.of("America/New_York")));
+        period = zoned.create(principal, CorrelationId.generate(), none, ComplianceEdition.SUMMARY, "x").period();
+        assertEquals(LocalDate.of(2026, 10, 1), period.from());
+        // October ends with the hour of October's own offset and November's starts after the clocks went back.
+        assertEquals(Instant.parse("2026-10-01T04:00:00Z"), period.start());
+        assertEquals(Instant.parse("2026-11-01T04:00:00Z"), period.endExclusive());
+        assertEquals(LocalDate.of(2026, 11, 1), zoned.create(principal, CorrelationId.generate(),
+                new ComplianceReportService.Request("LAST_MONTH", null, null, "UTC"), ComplianceEdition.SUMMARY, "x").period().from());
+    }
+
     @Test
     void refusalsAndFailuresAreAudited() {
         service(nov19()).recordRefused(principal, CorrelationId.generate(), ComplianceEdition.FULL);

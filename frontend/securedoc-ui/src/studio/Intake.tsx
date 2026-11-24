@@ -8,7 +8,9 @@ import { Notice, Spinner } from './atoms';
 import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
 import { useUnsavedWork } from './unsavedWork';
-import { prefillIdentifier } from './intakeRules';
+import { prefillIdentifier, scannedWords, uploadedWords } from './intakeRules';
+import useSWR from 'swr';
+import { apiClient } from '../api/client';
 import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, type SensitivityLevelCode } from './words';
 
 type Method = 'upload' | 'scan';
@@ -21,7 +23,7 @@ export interface IdentityGate {
   sensitivity: SensitivityLevelCode;
 }
 
-export default function Intake() {
+export default function Intake({ entityName }: { entityName: string }) {
   const [params, setParams] = useSearchParams();
   const method: Method = params.get('via') === 'scan' ? 'scan' : 'upload';
   const { data: rawDefinitions, error, isLoading } = useIdentifierDefinitions();
@@ -31,7 +33,7 @@ export default function Intake() {
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   const [lockedBy, setLockedBy] = useState<string | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityLevelCode>('STANDARD');
-  const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method } | null>(null);
+  const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method; files: number } | null>(null);
   useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
   // "Start a new case for this …" on a rejected case opens New case with ?id=<primary identifier> (UI tasks U003, U005).
@@ -66,10 +68,10 @@ export default function Intake() {
     }
   }, []);
 
-  const finish = (packageId: string | null) => {
+  const finish = (packageId: string | null, files = 0) => {
     const primary = definitions.find((d) => d.primary) ?? definitions[0];
     const label = primary ? canonicalIdentity(definitions, values)[primary.key] ?? 'New case' : 'New case';
-    setCreated({ packageId, label, method });
+    setCreated({ packageId, label, method, files });
   };
 
   const reset = () => {
@@ -80,7 +82,7 @@ export default function Intake() {
     setCreated(null);
   };
 
-  if (created) return <Created created={created} onReset={reset} />;
+  if (created) return <Created created={created} entityName={entityName} onReset={reset} />;
 
   return (
     <div className="cf-intake">
@@ -217,14 +219,19 @@ function SensitivityField({ value, locked, onChange }: {
   );
 }
 
-function Created({ created, onReset }: { created: { packageId: string | null; label: string; method: Method }; onReset: () => void }) {
+function Created({ created, entityName, onReset }: {
+  created: { packageId: string | null; label: string; method: Method; files: number }; entityName: string; onReset: () => void;
+}) {
+  // A scan is taken in by the Scanner Bridge, which is set up for an entity: the entity is named only once this entity has the case.
+  const { data: here } = useSWR(created.method === 'scan' && created.packageId ? ['created-case', created.packageId] : null,
+    () => apiClient.getPackage(created.packageId!).then((p) => p.packageId === created.packageId), { shouldRetryOnError: false, revalidateOnFocus: false });
   return (
     <div className="cf-created">
       <span className="cf-created-seal" aria-hidden="true"><span /><span /><span /></span>
       <p className="cf-eyebrow">Case opened</p>
       <h1 className="cf-title cf-mono">{created.label}</h1>
       <p className="cf-lede">
-        {created.method === 'scan' ? 'The scan was handed to LexaVault.' : 'All documents were uploaded and submitted.'} Redaction has started. Anything uncertain will come to review.
+        {created.method === 'scan' ? scannedWords(entityName, here === true) : uploadedWords(created.files, entityName)} Redaction has started. Anything uncertain will come to review.
       </p>
       <div className="cf-created-actions">
         {created.packageId && (
