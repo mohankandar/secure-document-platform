@@ -142,6 +142,8 @@ When the final expected PDF is acknowledged, LexaVault automatically submits the
 
 Returns source package/revision/attempt, intake/package state, expected/received counts, missing external document IDs, and deadline timestamps.
 
+Task 0071: when a person rejected the case, `packageStatus` is `REJECTED` and `rejectionCode` says why (`LV-REV-010` to `LV-REV-014`, see `error-codes.md`); otherwise `rejectionCode` is null. A rejection can't be undone: send a new case.
+
 ## Expiration
 
 Default incomplete window: 24 hours from intake creation, configurable per source within safe bounds. The deadline does not slide when individual PDFs arrive.

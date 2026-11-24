@@ -253,8 +253,9 @@ public final class DocumentPackage {
     }
 
     public void reject() {
-        if (status != PackageStatus.IN_REVIEW) {
-            throw new IllegalStateException("Cannot reject package in status: " + status);
+        if (status != PackageStatus.PENDING_REVIEW && status != PackageStatus.IN_REVIEW
+                && status != PackageStatus.PENDING_FINAL_APPROVAL) {
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.REV_002, "Cannot reject package in status: " + status);
         }
         status = PackageStatus.REJECTED;
         updatedAt = Instant.now();

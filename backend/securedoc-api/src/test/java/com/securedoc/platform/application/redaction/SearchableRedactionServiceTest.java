@@ -292,8 +292,39 @@ class SearchableRedactionServiceTest {
         List<AuditRecord> removed = audits.stream()
                 .filter(a -> a.action() == AuditAction.DOCUMENT_SIGNATURE_REMOVED).toList();
         assertEquals(1, removed.size());
-        assertEquals("Signature removed by redaction: document=" + document.id(), removed.get(0).detail());
+        assertEquals("Original was digitally signed; the signature no longer applies to the redacted copy: document="
+                + document.id(), removed.get(0).detail());
         assertEquals(pkg.id().toString(), removed.get(0).resourceId());
+    }
+
+    /** Task 0069: a signed PDF is processed as any other; the record has no signer, and the copy has no signature. */
+    @Test
+    void aSignedPdfGoesThroughAndTheCopyIsNotSigned() throws Exception {
+        policy = policy(true);
+        try (PDDocument doc = Loader.loadPDF(source); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            var form = new org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm(doc);
+            doc.getDocumentCatalog().setAcroForm(form);
+            var field = new org.apache.pdfbox.pdmodel.interactive.form.PDSignatureField(form);
+            var signature = new org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature();
+            signature.setFilter(org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature.FILTER_ADOBE_PPKLITE);
+            signature.setName("Test Signer Person");
+            signature.setContents(new byte[]{1, 2, 3});
+            field.getCOSObject().setItem(org.apache.pdfbox.cos.COSName.V, signature);
+            form.getFields().add(field);
+            doc.save(out);
+            source = out.toByteArray();
+        }
+        when(findings.findByDocumentIdAndTenantId(document.id(), tenantId)).thenReturn(confirmedFindings());
+        service(new PdfBoxBurnFlatRedactionAdapter(ocr())).execute(command());
+
+        assertEquals(DocumentStatus.PROCESSED, document.status());
+        try (PDDocument out = Loader.loadPDF(stored.get(0))) {
+            assertTrue(out.getSignatureDictionaries().isEmpty());
+        }
+        assertEquals(1, audits.stream().filter(a -> a.action() == AuditAction.DOCUMENT_SIGNATURE_REMOVED
+                && a.detail().startsWith("Original was digitally signed; the signature no longer applies")).count());
+        assertTrue(audits.stream().noneMatch(a -> String.valueOf(a.detail()).contains("Signer Person")), "no signer name");
+        assertNoValueAnywhere();
     }
 
     /**

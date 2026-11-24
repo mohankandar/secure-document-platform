@@ -400,7 +400,7 @@ export const NEXT_STEP = {
   readyToApprove: 'Redaction done, ready to approve',
   sent: 'Redacted and sent',
   stopped: 'Processing stopped',
-  notAccepted: 'Not accepted at intake',
+  notAccepted: 'Rejected, nothing more to do',
   unknown: 'Status not recognised',
 } as const;
 

@@ -151,10 +151,12 @@ public class DeliveryApprovals {
     public void askForWaitingCases() {
         if (!on()) return;
         try {
-            for (Waiting w : jdbc.query("select p.id, p.tenant_id, p.version, p.created_by from document_packages p"
-                    + " join notification_mail_settings m on m.tenant_id = p.tenant_id and m.enabled"
+            for (Waiting w : jdbc.query("select id, tenant_id, version, created_by from (select p.id, p.tenant_id,"
+                    // So many per submitter of each entity: cases nobody can be asked about yet never hold up anyone else's.
+                    + " p.version, p.created_by, row_number() over (partition by p.tenant_id, p.created_by order by p.updated_at, p.id) as place"
+                    + " from document_packages p join notification_mail_settings m on m.tenant_id = p.tenant_id and m.enabled"
                     + " where p.status = 'PENDING_FINAL_APPROVAL' and not exists (select 1 from delivery_approval_requests r"
-                    + " where r.package_id = p.id and r.case_version = p.version) order by p.updated_at limit ?",
+                    + " where r.package_id = p.id and r.case_version = p.version)) waiting where place <= ?",
                     (rs, i) -> new Waiting(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class), rs.getLong(3),
                             rs.getObject(4, UUID.class)), PER_ROUND)) {
                 ask(w);

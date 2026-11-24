@@ -19,6 +19,9 @@ public final class ListPackagesQueryService implements ListPackagesQuery {
     /** Task 0038: with the incidents, a stopped case carries the LV code of why it stopped. */
     public ListPackagesQueryService(PackageRepository packageRepository,BusinessIdentityService businessIdentityService,
                                     ProcessingIncidentRepository incidents){this.packageRepository=packageRepository;this.businessIdentityService=businessIdentityService;this.incidents=incidents;}
+    private com.securedoc.platform.application.port.out.PackageRejectionRepository rejections;
+    /** Task 0071: with the reasons of rejected cases. */
+    public ListPackagesQueryService withRejections(com.securedoc.platform.application.port.out.PackageRejectionRepository value){rejections=Objects.requireNonNull(value);return this;}
     @Override public List<PackageSummary> execute(AuthenticatedPrincipal principal,int offset,int limit){
         if(offset<0)offset=0;if(limit<=0)limit=20;if(limit>100)limit=100;
         return packageRepository.findByTenantId(principal.tenantId(),offset,limit).stream().map(pkg->new PackageSummary(
@@ -26,10 +29,13 @@ public final class ListPackagesQueryService implements ListPackagesQuery {
                 stopReasonCode(pkg,principal))).toList();
     }
     /**
-     * Task 0038: the code of the case's latest processing problem, for a FAILED case only. Only a code LexaVault knows
+     * Task 0038: the code of the case's latest processing problem, for a FAILED case; a REJECTED one has its reason. Only a code LexaVault knows
      * (the incident's own LV code, else the one its reason maps to); never the summary, a detail or metadata.
      */
     private String stopReasonCode(DocumentPackage pkg,AuthenticatedPrincipal principal){
+        // Task 0071: a rejected case has the reason the person chose.
+        if(pkg.status()==PackageStatus.REJECTED)return rejections==null?null
+                :rejections.find(principal.tenantId(),pkg.id()).map(reason->reason.code().code()).orElse(null);
         if(incidents==null||pkg.status()!=PackageStatus.FAILED)return null;
         return incidents.findLatestByPackageIdAndTenantId(pkg.id(),principal.tenantId()).map(incident->{
             Map<String,String> meta=incident.safeMetadata()==null?Map.of():incident.safeMetadata();

@@ -42,7 +42,11 @@ public final class FinalDeliveryApprovalService implements ApproveFinalDeliveryU
         }
         lifecycleService.grantFinalApproval(command.packageId(), command.tenantId(), Instant.now());
         pkg.resumeAfterFinalApproval();
-        packageRepository.save(pkg);
+        if (!packageRepository.changeStatus(pkg, java.util.Set.of(PackageStatus.PENDING_FINAL_APPROVAL))) {
+            // Task 0071: rejected meanwhile. The rejection stands and the approval is taken back.
+            lifecycleService.clearFinalApproval(command.packageId(), command.tenantId(), Instant.now());
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not waiting for final delivery approval");
+        }
         auditService.recordSuccess(command.tenantId(), command.actorId(), AuditAction.PACKAGE_FINAL_APPROVED,
                 "DocumentPackage", command.packageId().toString(), command.correlationId(),
                 "Final delivery approved");

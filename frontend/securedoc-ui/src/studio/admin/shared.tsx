@@ -221,8 +221,8 @@ export function Sheet({ open, title, description, onClose, children, footer, wid
  * Deliberate confirmation for high-impact operations. Shows the exact target facts and the
  * consequence; when `acknowledge` is set the confirm button stays disabled until it is ticked.
  */
-export function ConfirmDialog({ open, title, facts, consequence, confirmLabel, danger, acknowledge, busy, error, onConfirm, onCancel }: {
-  open: boolean; title: string; facts: [string, ReactNode][]; consequence: ReactNode; confirmLabel: string; danger?: boolean;
+export function ConfirmDialog({ open, title, facts, consequence, confirmLabel, confirmDisabled, danger, acknowledge, busy, error, onConfirm, onCancel }: {
+  open: boolean; title: string; facts: [string, ReactNode][]; consequence: ReactNode; confirmLabel: string; confirmDisabled?: boolean; danger?: boolean;
   acknowledge?: string; busy?: boolean; error?: string | null; onConfirm: () => void; onCancel: () => void;
 }) {
   const [ack, setAck] = useState(false);
@@ -232,7 +232,7 @@ export function ConfirmDialog({ open, title, facts, consequence, confirmLabel, d
     <Sheet open={open} title={title} onClose={onCancel}
       footer={<>
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={onCancel} disabled={busy}>Cancel</button>
-        <button type="button" className="cf-btn" data-variant={danger ? 'danger' : 'solid'} data-size="sm" disabled={busy || (!!acknowledge && !ack)} onClick={onConfirm}>
+        <button type="button" className="cf-btn" data-variant={danger ? 'danger' : 'solid'} data-size="sm" disabled={busy || confirmDisabled || (!!acknowledge && !ack)} onClick={onConfirm}>
           {busy && <Spinner label="Working" />}{confirmLabel}
         </button>
       </>}

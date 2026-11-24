@@ -451,6 +451,32 @@ class NotificationsAppPostgresTest {
     }
 
     @Test
+    @Order(8)
+    void casesNobodyCanBeAskedAboutNeverHoldUpAnotherEntitysOrSubmitters() throws Exception {
+        // Entity B's only known Supervisor submitted 60 cases, all older than entity A's one.
+        for (int i = 0; i < 60; i++) {
+            jdbc.update("update document_packages set updated_at = now() - interval '1 day' where id = ?", waitingCase(b, EVE));
+        }
+        UUID caseId = waitingCase(A, BOB);
+        assertEquals(Set.of("ann@a.example"), ask(caseId, 1).keySet());
+        assertEquals(0, jdbc.queryForObject("select count(*) from delivery_approval_requests where tenant_id = ?", Integer.class, b));
+        jdbc.update("delete from document_packages where tenant_id = ? and created_by = ?", b, EVE);
+    }
+
+    @Test
+    @Order(8)
+    void aCaseRejectedMeanwhileCannotBeApprovedByItsLink() throws Exception {
+        UUID caseId = waitingCase(A, BOB);
+        String token = token(ask(caseId, 1).get("ann@a.example"));
+        HttpResponse<String> rejected = call(A, ANN, "DOCUMENT_SUPERVISOR", "POST", "/api/v1/packages/" + caseId + "/approval/reject",
+                "{\"reasonCode\":\"LV-REV-013\"}");
+        assertEquals(200, rejected.statusCode(), rejected.body());
+        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "open", token, null).contains("CASE_CHANGED"));
+        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", token, null).contains("CASE_CHANGED"));
+        assertEquals("REJECTED", status(caseId));
+    }
+
+    @Test
     @Order(9)
     void aNoticeGoesToItsOwnEntitysItAdminOnceAndIsFollowedByRecovered() throws Exception {
         UUID connection = jdbc.queryForList("select id from integration_connections where tenant_id = ?", UUID.class, A).get(0);

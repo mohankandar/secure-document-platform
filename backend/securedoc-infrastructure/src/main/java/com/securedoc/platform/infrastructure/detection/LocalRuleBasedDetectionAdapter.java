@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPort, SensitiveDataValidationPort {
 
     private static final String DETECTOR_NAME = "local-rule-based";
-    private static final String DETECTOR_VERSION = "1.6.0";
+    private static final String DETECTOR_VERSION = "1.7.0";
 
     // SSN pattern: 3 digits, separator, 2 digits, separator, 4 digits
     private static final Pattern SSN_PATTERN = Pattern.compile("\\b(\\d{3})[- ](\\d{2})[- ](\\d{4})\\b");
@@ -324,10 +324,19 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
             if (evidence.outcome() != ValidationOutcome.SUPPORTS) {
                 continue;
             }
+            // Task 0069: a number no SSN can have (area 000, 666 or 9NN, group 00, serial 0000) is still covered next to
+            // an SSN label (a misread digit, a test value), but with less confidence, so a person looks at it.
+            double confidence = isIssuable(matcher.group(1), matcher.group(2), matcher.group(3)) ? 0.95 : 0.75;
             results.add(new DetectedEntity(
-                    "SSN", pageNumber, matcher.start(), matcher.end(), 0.95,
+                    "SSN", pageNumber, matcher.start(), matcher.end(), confidence,
                     DETECTOR_NAME, DETECTOR_VERSION));
         }
+    }
+
+    /** The ranges the SSA never issues. */
+    static boolean isIssuable(String area, String group, String serial) {
+        return !area.equals("000") && !area.equals("666") && area.charAt(0) != '9'
+                && !group.equals("00") && !serial.equals("0000");
     }
 
     private void detectCreditCards(String text, int pageNumber, List<DetectedEntity> results) {

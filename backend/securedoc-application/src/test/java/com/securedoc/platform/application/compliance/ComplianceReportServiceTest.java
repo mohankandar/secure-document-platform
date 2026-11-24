@@ -134,7 +134,7 @@ class ComplianceReportServiceTest {
         assertEquals("Delivered", c.cases().outcomes().get(1).label());
         c.cases().outcomes().forEach(r -> assertEquals(0, r.count()));
         assertEquals("—", c.cases().outcomes().get(0).share(), "nothing to divide by");
-        assertEquals(8, c.activity().size(), "\"Cases rejected\" is hidden (task 0018 A3)");
+        assertEquals(9, c.activity().size(), "\"Cases rejected\" is hidden (task 0018 A3)");
         c.activity().forEach(r -> assertEquals(0, r.count(), r.label()));
         assertTrue(c.appendix().isEmpty());
         assertEquals("pat@example.test, Business Administrator", c.createdBy(), "no display name bound: the username");
@@ -345,11 +345,12 @@ class ComplianceReportServiceTest {
         reads.records.add(record("COMPLIANCE_REPORT_CREATED", "DENIED", person, null, "t", "x", IN_PERIOD, null));
         reads.records.add(record("ORIGINAL_ARTIFACT_PURGED", "SUCCESS", SYSTEM, null, "p", "x", IN_PERIOD, null));
         reads.records.add(record("PACKAGE_FINAL_APPROVED", "SUCCESS", person, null, "p", "x", IN_PERIOD, null));
+        reads.records.add(record("DOCUMENT_SIGNATURE_REMOVED", "SUCCESS", SYSTEM, null, "p", "x", IN_PERIOD, null));
         reads.records.add(record("ORIGINAL_ARTIFACT_PURGED", "SUCCESS", SYSTEM, null, "p", "x",
                 Instant.parse("2026-10-01T05:00:00Z"), null)); // after the period (New York midnight is 04:00Z)
         create(ComplianceEdition.SUMMARY);
         List<Long> counts = rendered.get().activity().stream().map(CountRow::count).toList();
-        assertEquals(List.of(0L, 0L, 2L, 1L, 1L, 2L, 0L, 2L), counts);
+        assertEquals(List.of(0L, 0L, 2L, 1L, 1L, 1L, 2L, 0L, 2L), counts);
     }
 
     /* ---------------- task 0018 ---------------- */
