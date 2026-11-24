@@ -37,7 +37,9 @@ export default function Review({ caps }: { caps: string[] }) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReviewBoundingBox | null>(null);
-  useUnsavedWork(draft !== null);
+  // Task 0074: the boxes drawn on a page to check, and its confirmation. Kept per finding, so a refresh loses nothing.
+  const [marks, setMarks] = useState<{ findingId: string; boxes: ReviewBoundingBox[]; reviewed: boolean }>({ findingId: '', boxes: [], reviewed: false });
+  useUnsavedWork(draft !== null || marks.boxes.length > 0);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [decided, setDecided] = useState(0);
@@ -66,8 +68,10 @@ export default function Review({ caps }: { caps: string[] }) {
   );
   const selected = items.find((i) => i.findingId === selectedId) ?? items[0] ?? null;
   const index = selected ? items.indexOf(selected) : -1;
+  const pageCheck = selected?.entityType === UNREAD_PAGE;
+  const pageMarks = pageCheck && marks.findingId === selected?.findingId ? marks : { findingId: selected?.findingId ?? '', boxes: [], reviewed: false };
   const found = selected ? foundTextOf(selected) : null;
-  const bulk = useMemo(() => bulkPlan(items, selected, draft !== null), [items, selected, draft]);
+  const bulk = useMemo(() => (selected?.entityType === UNREAD_PAGE ? null : bulkPlan(items, selected, draft !== null)), [items, selected, draft]);
 
   const select = useCallback((item: FocusedReviewItem | undefined) => {
     if (!item) return;
@@ -108,7 +112,11 @@ export default function Review({ caps }: { caps: string[] }) {
 
   const decide = useCallback(async (kind: 'redact' | 'keep') => {
     if (!selected || busy) return;
-    if (kind === 'redact' && !selected.hasBoundingBox && !draft) {
+    if (pageCheck && (kind === 'keep' || !pageMarks.reviewed)) {
+      setFailure(UNREAD_PAGE_WORDS.needsTick);
+      return;
+    }
+    if (!pageCheck && kind === 'redact' && !selected.hasBoundingBox && !draft) {
       setFailure('Drag across the page to mark what should be redacted.');
       return;
     }
@@ -117,10 +125,13 @@ export default function Review({ caps }: { caps: string[] }) {
     const gone = new Set([selected.findingId]);
     const next = nextAfter(gone);
     try {
-      const result = kind === 'redact'
+      const result = pageCheck
+        ? await apiClient.checkReviewPage(selected.findingId, pageMarks.boxes)
+        : kind === 'redact'
         ? await apiClient.confirmReviewItem(selected.findingId, draft ?? selected.boundingBox ?? undefined)
         : await apiClient.dismissReviewItem(selected.findingId);
       setDecided((n) => n + 1);
+      if (pageCheck) setMarks({ findingId: '', boxes: [], reviewed: false });
       await removeFromQueue(gone);
       if (result.processingResumed) announceResumed(result.packageId);
       if (next) { setSelectedId(next.findingId); setDraft(null); }
@@ -136,7 +147,7 @@ export default function Review({ caps }: { caps: string[] }) {
     } finally {
       setBusy(false);
     }
-  }, [announceResumed, busy, draft, nextAfter, removeFromQueue, selected, toast]);
+  }, [announceResumed, busy, draft, nextAfter, pageCheck, pageMarks, removeFromQueue, selected, toast]);
 
   /**
    * "Redact all like this": each finding is confirmed through its own call, so each one is audited as its own
@@ -223,7 +234,7 @@ export default function Review({ caps }: { caps: string[] }) {
 
   const remaining = items.length;
   const progress = decided + remaining === 0 ? 0 : decided / (decided + remaining);
-  const needsMark = !!selected && !selected.hasBoundingBox && !draft;
+  const needsMark = !!selected && !pageCheck && !selected.hasBoundingBox && !draft;
 
   return (
     <div className="cf-review">
@@ -304,7 +315,9 @@ export default function Review({ caps }: { caps: string[] }) {
             ))}
           </nav>
 
-          <PageStage key={selected.findingId} item={selected} draft={draft} onDraft={setDraft} zoom={zoom} onZoom={setZoom}
+          <PageStage key={selected.findingId} item={selected} draft={pageCheck ? null : draft}
+            onDraft={pageCheck ? (box) => { if (box) setMarks({ ...pageMarks, boxes: [...pageMarks.boxes, box] }); } : setDraft}
+            boxes={pageCheck ? pageMarks.boxes : undefined} zoom={zoom} onZoom={setZoom}
             onAlreadyDecided={() => void alreadyDecidedOnPreview(selected.findingId)} />
 
           <aside className="cf-decision" aria-label="Decision">
@@ -321,6 +334,7 @@ export default function Review({ caps }: { caps: string[] }) {
               </div>
             )}
 
+            {pageCheck && <p className="cf-page-unreadable"><strong>{UNREAD_PAGE_WORDS.label}</strong></p>}
             <p className="cf-decision-reason">{selected.entityType === UNREAD_PAGE ? UNREAD_PAGE_WORDS.why : whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
 
             <dl className="cf-facts">
@@ -329,8 +343,26 @@ export default function Review({ caps }: { caps: string[] }) {
               {foundByText(selected.foundBy) && <div><dt>Found by</dt><dd>{foundByText(selected.foundBy)}</dd></div>}
             </dl>
 
+            {pageCheck && (
+              <>
+                <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> {UNREAD_PAGE_WORDS.hint}</p>
+                {pageMarks.boxes.length > 0 && (
+                  <ul className="cf-page-marks">
+                    {pageMarks.boxes.map((box, n) => (
+                      <li key={`${box.left}-${box.top}-${n}`}>Mark {n + 1}
+                        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={busy} aria-label={`${UNREAD_PAGE_WORDS.remove} ${n + 1}`}
+                          onClick={() => setMarks({ ...pageMarks, boxes: pageMarks.boxes.filter((_, i) => i !== n) })}>{UNREAD_PAGE_WORDS.remove}</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <label className="cf-page-reviewed">
+                  <input type="checkbox" checked={pageMarks.reviewed} disabled={busy} onChange={(e) => { setFailure(null); setMarks({ ...pageMarks, reviewed: e.target.checked }); }} /> {UNREAD_PAGE_WORDS.reviewed}
+                </label>
+              </>
+            )}
             {needsMark && (
-              <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> {selected.entityType === UNREAD_PAGE ? UNREAD_PAGE_WORDS.hint : 'Location unknown. Drag across the page to mark it before redacting.'}</p>
+              <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> {'Location unknown. Drag across the page to mark it before redacting.'}</p>
             )}
             {draft && (
               <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> Your mark will be redacted instead of the detected area. <Kbd>Esc</Kbd> clears it.</p>
@@ -338,12 +370,12 @@ export default function Review({ caps }: { caps: string[] }) {
             {failure && <Notice tone="danger">{failure}</Notice>}
 
             <div className="cf-decision-actions">
-              <button type="button" className="cf-btn cf-decide" data-variant="redact" onClick={() => decide('redact')} disabled={busy || needsMark}>
-                Redact <Kbd>R</Kbd>
+              <button type="button" className="cf-btn cf-decide" data-variant="redact" onClick={() => decide('redact')} disabled={busy || needsMark || (pageCheck && !pageMarks.reviewed)}>
+                {pageCheck ? UNREAD_PAGE_WORDS.done(pageMarks.boxes.length) : 'Redact'} <Kbd>R</Kbd>
               </button>
-              <button type="button" className="cf-btn cf-decide" data-variant="ghost" onClick={() => decide('keep')} disabled={busy}>
+              {!pageCheck && <button type="button" className="cf-btn cf-decide" data-variant="ghost" onClick={() => decide('keep')} disabled={busy}>
                 Keep visible <Kbd>V</Kbd>
-              </button>
+              </button>}
             </div>
 
             {bulk && (
@@ -376,10 +408,12 @@ export default function Review({ caps }: { caps: string[] }) {
   );
 }
 
-function PageStage({ item, draft, onDraft, zoom, onZoom, onAlreadyDecided }: {
+function PageStage({ item, draft, onDraft, boxes, zoom, onZoom, onAlreadyDecided }: {
   item: FocusedReviewItem;
   draft: ReviewBoundingBox | null;
   onDraft: (box: ReviewBoundingBox | null) => void;
+  /** Task 0074: every mark drawn on a page to check. */
+  boxes?: readonly ReviewBoundingBox[];
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
   onAlreadyDecided: () => void;
@@ -457,7 +491,7 @@ function PageStage({ item, draft, onDraft, zoom, onZoom, onAlreadyDecided }: {
   return (
     <section className="cf-viewer" aria-label={`Page ${item.pageNumber} of ${item.fileName}`}>
       <div className="cf-viewer-bar">
-        <span className="cf-doc-meta">{item.fileName} · page {item.pageNumber}</span>
+        <span className="cf-doc-meta">{item.fileName} · page {item.pageNumber}{boxes ? ` · ${UNREAD_PAGE_WORDS.label}` : ''}</span>
         <div className="cf-viewer-tools">
           {draft && <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => onDraft(null)}>Clear mark</button>}
           <div className="cf-zoom" role="group" aria-label="Zoom">
@@ -497,6 +531,7 @@ function PageStage({ item, draft, onDraft, zoom, onZoom, onAlreadyDecided }: {
               onLoad={(e) => setNaturalWidth(e.currentTarget.naturalWidth)}
             />
             {detected && !draft && <span className="cf-box" data-kind="detected" style={boxStyle(detected)} aria-hidden="true" />}
+            {boxes?.map((box, n) => <span key={n} className="cf-box" data-kind="drawn" style={boxStyle(box)} aria-hidden="true" />)}
             {shown && <span className="cf-box" data-kind="drawn" style={boxStyle(shown)} aria-hidden="true" />}
           </div>
         )}

@@ -63,6 +63,7 @@ public final class AuditSentences {
             entry("REVIEW_REJECTED", "Rejected in review"),
             entry("REVIEW_ESCALATED", "Escalated a review"),
             entry("REVIEW_PAGE_PREVIEWED", "Viewed a page in review"),
+            entry("REVIEW_PAGE_CHECKED", "Checked an unreadable page by hand"),
             entry("BUSINESS_MANUAL_FALLBACK_STARTED", "Started redacting by hand"),
             entry("BUSINESS_MANUAL_FALLBACK_REGION_ADDED", "Marked an area to redact"),
             entry("BUSINESS_MANUAL_FALLBACK_REGION_REMOVED", "Removed a marked area"),

@@ -184,6 +184,7 @@ const SENTENCES: Record<string, string> = {
   REVIEW_REJECTED: 'Rejected in review',
   REVIEW_ESCALATED: 'Escalated a review',
   REVIEW_PAGE_PREVIEWED: 'Viewed a page in review',
+  REVIEW_PAGE_CHECKED: 'Checked an unreadable page by hand',
   BUSINESS_MANUAL_FALLBACK_STARTED: 'Started redacting by hand',
   BUSINESS_MANUAL_FALLBACK_REGION_ADDED: 'Marked an area to redact',
   BUSINESS_MANUAL_FALLBACK_REGION_REMOVED: 'Removed a marked area',
