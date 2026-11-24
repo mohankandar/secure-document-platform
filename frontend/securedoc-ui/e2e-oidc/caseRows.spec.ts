@@ -149,7 +149,7 @@ test('task 0038: a stopped, waiting or rejected row says why in plain words, and
   await expect(row(page, 'LN-3001').locator('.cf-case-why')).toHaveText('Text reading timed out');
   await expect(row(page, 'LN-3002').locator('.cf-case-why')).toHaveText('Destination refused the file');
   await expect(row(page, 'LN-3002').locator('.cf-case-to')).toHaveText('To Records archive');
-  await expect(row(page, 'LN-3003')).toContainText('Not accepted');
+  await expect(row(page, 'LN-3003')).toContainText('Rejected, nothing more to do');
   await expect(row(page, 'LN-3003').locator('.cf-case-why')).toHaveCount(0); // no rejection reason is stored yet
   await expect(row(page, 'LN-3004').locator('.cf-case-why')).toHaveCount(0);
   await expect(row(page, 'LN-3004').locator('.cf-case-to')).toHaveText('To Records archive');
@@ -159,4 +159,44 @@ test('task 0038: a stopped, waiting or rejected row says why in plain words, and
   if (process.env.P0038_PROOF) {
     await page.screenshot({ path: '../../docs/work/0038-proof/cases-stopped-waiting-rejected.png', fullPage: true });
   }
+});
+
+test('task 0071: Reject case in the case panel: the dialog names the case and the reason, and sends only the code', async ({ page }) => {
+  const sent: { path: string; body: unknown }[] = [];
+  await mockIdentityProvider(page);
+  await mockApi(page, []);
+  await page.route('**/api/v1/packages/*/*/reject', async (route) => {
+    sent.push({ path: new URL(route.request().url()).pathname, body: JSON.parse(route.request().postData() || '{}') });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ packageId: '', status: 'REJECTED', reasonCode: 'LV-REV-013' }) });
+  });
+  await signIn(page);
+  for (const [loan, step, kase] of [['LN-2001', 'review', REVIEW_CASE], ['LN-2002', 'approval', APPROVAL_CASE]] as const) {
+    await row(page, loan).getByRole('link').click();
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await panel.getByRole('button', { name: 'Reject case' }).click();
+    const dialog = page.getByRole('dialog', { name: `Reject case ${loan}?` });
+    await expect(dialog).toContainText('This can’t be undone');
+    await expect(dialog.getByRole('button', { name: 'Reject case' })).toBeDisabled();
+    await expect(dialog.getByLabel('Reason').getByRole('option')).toHaveText(['Choose a reason', 'Wrong document', 'Unreadable', 'Out of scope', 'Duplicate', 'Other (see ticket)']);
+    await dialog.getByLabel('Reason').selectOption('LV-REV-013');
+    await expect(dialog).toContainText('Duplicate');
+    if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-${step}.png` });
+    await dialog.getByRole('button', { name: 'Reject case' }).click();
+    await expect(page.getByText('Case rejected.').first()).toBeVisible();
+    expect(sent.at(-1)).toEqual({ path: `/api/v1/packages/${kase.packageId}/${step}/reject`, body: { reasonCode: 'LV-REV-013' } });
+    await page.getByRole('button', { name: 'Close case' }).click();
+  }
+  expect(sent).toHaveLength(2);
+});
+
+test('task 0071: Review has Reject case, and the Cases list shows the reason', async ({ page }) => {
+  await mockIdentityProvider(page);
+  await mockApi(page, [], [{ ...caseFor('LN-4001', 'REJECTED', '0041'), stopReasonCode: 'LV-REV-010' }]);
+  await signIn(page);
+  await expect(row(page, 'LN-4001')).toContainText('Rejected: wrong document');
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-list.png` });
+  await row(page, 'LN-2001').getByRole('button', { name: 'Review LN-2001' }).click();
+  await page.getByRole('button', { name: 'Reject case' }).click();
+  await expect(page.getByRole('dialog', { name: 'Reject case LN-2001?' })).toBeVisible();
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-in-review.png` });
 });

@@ -24,7 +24,7 @@ public interface SpringDataPackageLifecycleRepository extends JpaRepository<Pack
             + "where p.id = l.packageId and p.tenantId = l.tenantId "
             + "and p.dashboardHiddenAt is null and l.purgedAt is not null "
             + "and ((p.status = 'COMPLETED' and l.successfulExportCycles > 0) "
-            + "or (p.status = 'FAILED' and l.successfulExportCycles = 0)) "
+            + "or (p.status = 'FAILED' and l.successfulExportCycles = 0) or p.status = 'REJECTED') "
             + "order by l.purgedAt asc")
     List<PackageLifecycleEntity> findPurgedPackagesNeedingDashboardHide(Pageable pageable);
 }

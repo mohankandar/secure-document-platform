@@ -225,6 +225,8 @@ export interface PackageDetail extends PackageSummary {
   effectiveSensitivityLevel?: string;
   /** Task 0050: a digitally signed document of this case lost its signature by redaction. */
   signatureRemoved?: boolean;
+  /** Task 0071: why a person rejected the case (LV code). */
+  rejectionCode?: string | null;
   metadata?: Record<string, string>;
   documents: DocumentSummary[];
 }

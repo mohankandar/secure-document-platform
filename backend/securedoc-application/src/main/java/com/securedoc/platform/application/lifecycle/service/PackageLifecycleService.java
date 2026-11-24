@@ -387,7 +387,9 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         if (pkg == null) return false;
         boolean exportedCompleted = lifecycle.successfulExportCycles() > 0 && pkg.status() == PackageStatus.COMPLETED;
         boolean expiredTechnicalAttention = lifecycle.successfulExportCycles() == 0 && pkg.status() == PackageStatus.FAILED;
-        if (!exportedCompleted && !expiredTechnicalAttention) return false;
+        // Task 0071: a rejected case leaves the list when its files are deleted, as a stopped one does.
+        boolean rejected = pkg.status() == PackageStatus.REJECTED;
+        if (!exportedCompleted && !expiredTechnicalAttention && !rejected) return false;
         dashboardVisibilityPort.hide(lifecycle.packageId(), lifecycle.tenantId(), hiddenBy, hiddenAt);
         return true;
     }

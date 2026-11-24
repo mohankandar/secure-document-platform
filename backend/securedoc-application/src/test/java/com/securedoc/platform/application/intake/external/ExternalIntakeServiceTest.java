@@ -123,6 +123,32 @@ class ExternalIntakeServiceTest {
         assertFalse(attempt1.packageId().equals(attempt2.packageId()));
         assertEquals("1", attempt2.sourceRevision());
 
+        // Task 0071: the status answer of a rejected case carries the reason's code; of any other case, none.
+        PackageId second = PackageId.of(attempt2.packageId());
+        service.withRejections(new com.securedoc.platform.application.port.out.PackageRejectionRepository() {
+            @Override public void save(TenantId t, PackageId id, com.securedoc.platform.domain.review.RejectionReason r,
+                                       ActorId by, Instant at) { }
+            @Override public Optional<com.securedoc.platform.domain.review.RejectionReason> find(TenantId t, PackageId id) {
+                return Optional.of(com.securedoc.platform.domain.review.RejectionReason.WRONG_DOCUMENT);
+            }
+        });
+        assertEquals(null, service.status(second, principal, CorrelationId.generate()).rejectionCode());
+        DocumentPackage rejected = packages.findByIdAndTenantId(second, tenant).orElseThrow();
+        try {
+            java.lang.reflect.Field status = DocumentPackage.class.getDeclaredField("status");
+            status.setAccessible(true);
+            status.set(rejected, PackageStatus.PENDING_REVIEW);
+            rejected.reject();
+            packages.save(rejected);
+            ExternalIntakeSnapshot answer = service.status(second, principal, CorrelationId.generate());
+            assertEquals(PackageStatus.REJECTED, answer.packageStatus());
+            assertEquals("LV-REV-010", answer.rejectionCode());
+            status.set(rejected, PackageStatus.CREATED);
+            packages.save(rejected);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+
         PushIntakeCreateInput changedSameRevision = new PushIntakeCreateInput("SRC-PKG-1", "1", Map.of("contractNumber", "C-1"),
                 Map.of(), List.of(new PushIntakeCreateInput.ManifestDocumentInput("DOC-CHANGED", "changed.pdf", null)), true);
         IntakeConflictException conflict = assertThrows(IntakeConflictException.class,

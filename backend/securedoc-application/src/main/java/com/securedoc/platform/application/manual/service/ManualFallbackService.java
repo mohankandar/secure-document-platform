@@ -270,7 +270,10 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
         }
 
         pkg.resumeProcessingAfterReview();
-        packageRepository.save(pkg);
+        if (!packageRepository.changeStatus(pkg, java.util.Set.of(PackageStatus.IN_REVIEW))) {
+            // Task 0071: rejected meanwhile. The rejection stands.
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not in business manual processing");
+        }
         processingIncidentService.markBusinessContinuitySubmitted(command.packageId(), command.tenantId(), command.correlationId());
         auditService.recordSuccess(command.tenantId(), command.actorId(),
                 AuditAction.BUSINESS_MANUAL_FALLBACK_SUBMITTED, "DocumentPackage", pkg.id().toString(),

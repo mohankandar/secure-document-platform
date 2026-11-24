@@ -51,6 +51,8 @@ public final class ExternalIntakeService {
     private final AuditService auditService;
     /** Task 0063; null where no password is taken. */
     private PdfDecryptionPort pdfDecryptionPort;
+    /** Task 0071; null where no case is rejected. */
+    private PackageRejectionRepository rejections;
     private final ExternalIntakeMaintenanceService maintenanceService;
     private final Clock clock;
     private final RequestActorDisplayName actorDisplayName;
@@ -664,7 +666,15 @@ public final class ExternalIntakeService {
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", intake.packageId().toString()));
         return new ExternalIntakeSnapshot(intake.packageId().value(), intake.externalSourcePackageId(), intake.sourceRevision(),
                 intake.attemptNumber(), intake.status(), pkg.status(), intake.expectedCount(), intake.receivedCount(),
-                intake.missingExternalSourceDocumentIds(), intake.createdAt(), intake.expiresAt(), intake.acceptedAt(), intake.expiredAt());
+                intake.missingExternalSourceDocumentIds(), intake.createdAt(), intake.expiresAt(), intake.acceptedAt(), intake.expiredAt())
+                .withRejection(rejections == null || pkg.status() != com.securedoc.platform.domain.document.PackageStatus.REJECTED ? null
+                        : rejections.find(intake.tenantId(), intake.packageId()).map(r -> r.code().code()).orElse(null));
+    }
+
+    /** Task 0071: with the reasons of rejected cases. */
+    public ExternalIntakeService withRejections(PackageRejectionRepository value) {
+        this.rejections = Objects.requireNonNull(value);
+        return this;
     }
 
     private ExternalDocumentReceipt receipt(ExternalIntake intake, ExternalManifestDocument document, boolean duplicate) {

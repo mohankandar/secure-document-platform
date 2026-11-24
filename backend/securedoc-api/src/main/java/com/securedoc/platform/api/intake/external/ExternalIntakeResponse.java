@@ -25,7 +25,9 @@ public record ExternalIntakeResponse(
         Instant expiresAt,
         Instant acceptedAt,
         Instant expiredAt,
-        List<Warning> warnings) {
+        List<Warning> warnings,
+        /** Task 0071: why a person rejected the case, as an LV code; null otherwise. */
+        String rejectionCode) {
 
     public record Warning(String code, String message, String scope, String externalSourceDocumentId) {
         static Warning from(IntakeWarning w) {
@@ -37,6 +39,7 @@ public record ExternalIntakeResponse(
         return new ExternalIntakeResponse(value.packageId(), value.externalSourcePackageId(), value.sourceRevision(),
                 value.attemptNumber(), value.intakeStatus().name(), value.packageStatus().name(), value.expectedDocuments(),
                 value.receivedDocuments(), value.missingExternalSourceDocumentIds(), value.createdAt(), value.expiresAt(),
-                value.acceptedAt(), value.expiredAt(), value.warnings().stream().map(Warning::from).toList());
+                value.acceptedAt(), value.expiredAt(), value.warnings().stream().map(Warning::from).toList(),
+                value.rejectionCode());
     }
 }

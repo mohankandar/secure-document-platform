@@ -178,6 +178,35 @@ class UploadCaseLockPostgresTest {
         assertEquals(CaseLimits.MAX_FILES_PER_CASE, documentsIn(caseId));
     }
 
+    /**
+     * Task 0071: a decision that read the case before it was rejected can't overwrite the rejection, and of a rejection
+     * and an approval at the same moment exactly one wins. The reason is stored once and read back.
+     */
+    @Test
+    void aRejectionIsNeverOverwrittenByADecisionThatReadTheCaseBefore() {
+        var rejections = new JdbcPackageRejectionRepository(
+                new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(jdbc));
+        PackageId caseId = caseWith(1);
+        jdbc.update("UPDATE document_packages SET status = 'PENDING_REVIEW' WHERE id = ?", caseId.value());
+        var review = Set.of(com.securedoc.platform.domain.document.PackageStatus.PENDING_REVIEW,
+                com.securedoc.platform.domain.document.PackageStatus.IN_REVIEW);
+        var earlier = packagesForSetup.findByIdAndTenantId(caseId, tenant.id()).orElseThrow();
+        tx.executeWithoutResult(s -> {
+            var pkg = packagesForSetup.findByIdAndTenantId(caseId, tenant.id()).orElseThrow();
+            pkg.reject();
+            assertTrue(packagesForSetup.changeStatus(pkg, review));
+            rejections.save(tenant.id(), caseId, com.securedoc.platform.domain.review.RejectionReason.DUPLICATE,
+                    ActorId.generate(), Instant.now());
+        });
+        earlier.resumeProcessingAfterReview();
+        assertEquals(false, packagesForSetup.changeStatus(earlier, review));
+        assertEquals("REJECTED", jdbc.queryForObject("SELECT status FROM document_packages WHERE id = ?", String.class,
+                caseId.value()));
+        assertEquals("LV-REV-013", rejections.find(tenant.id(), caseId).orElseThrow().code().code());
+        assertTrue(rejections.find(com.securedoc.platform.domain.identity.TenantId.generate(), caseId).isEmpty(),
+                "another entity sees nothing");
+    }
+
     @Test
     void uploadsAtOnceToDifferentCasesDoNotWaitForEachOtherAndAllSucceed() throws Exception {
         List<PackageId> cases = new ArrayList<>();
