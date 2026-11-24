@@ -38,6 +38,8 @@ public class StageJobWorkers {
     /** In inline mode, open staged jobs are looked for every this many poll intervals. */
     static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
+    /** Task 0064: a check for open jobs that was under way when the server stopped starts no worker any more. */
+    private boolean stopped;
     private ExecutorService workers;
     private ScheduledExecutorService timers;
 
@@ -68,7 +70,7 @@ public class StageJobWorkers {
         try {
             if (running) return;
             service.runMissedGates();
-            if (!service.hasOpenJobs()) return;
+            if (!service.hasOpenJobs() || stopped) return;
             log.info("STAGE_JOB_WORKERS_FINISHING pipelineMode=inline reasonCode=OPEN_STAGE_JOBS");
             startWorkers();
         } catch (RuntimeException failure) {
@@ -112,9 +114,13 @@ public class StageJobWorkers {
 
     @PreDestroy
     public void stop() {
-        running = false;
-        if (workers != null) workers.shutdownNow();
+        // The timers first, so an open check is interrupted; then its lock is waited for (or it saw "stopped").
         if (timers != null) timers.shutdownNow();
+        synchronized (this) {
+            stopped = true;
+            running = false;
+            if (workers != null) workers.shutdownNow();
+        }
     }
 
     private void loop(PipelineStage stage, String owner) {

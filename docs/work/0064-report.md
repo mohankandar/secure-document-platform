@@ -1,8 +1,8 @@
 # Report 0064: Vision-based redaction with page routing
 
 Date: 2026-11-24
-Branch: `feature/0064-vision-routing`, from `2a2ebe8`; the integration branch (0057, `4571e89`) is merged into it
-Outcome: **DONE** (7 questions, the recommended answer taken in each)
+Branch: `feature/0064-vision-routing`, from `2a2ebe8`; the integration branch is merged into it twice (0057, then 0062's redaction catalog)
+Outcome: **DONE** (8 questions, the recommended answer taken in each)
 
 ## What was done
 1. **Routing, per page, in the Text step** (`PageRouter`, the benchmark's checks moved in unchanged, sharing the step's OCR). Paths: fast, fast with the signature detector, vision. Two additions: a blank page is not "OCR failed", and a check that fails makes the page a hard one. Routes are stored (`document_page_routes`: path, reasons, OCR confidence, signature boxes; no text).
@@ -14,6 +14,9 @@ Outcome: **DONE** (7 questions, the recommended answer taken in each)
 7. **Every finding records** its path(s) and the AI model, prompt version and digest (text model too). Review shows "Found by". The compliance report has a new section 5 (pages per path; models with digests), printed only when there is something to print.
 8. **Settings per entity**: vision on/off (on), routing threshold (0.85), and two new kinds, Signature and Face photo. Admin screen, API, audit and compliance history included. IT: `securedoc.ai.vision.*`, `vision-workers` (2).
 9. **Migration 080** (four changes, with rollback), in the 08x range.
+10. **With 0062's catalog:** Signature and Face photo are catalog entries (found on the page image). A value the vision model found is always removed in full: "keep the last 4" needs a reliable place in the text. An ID number is the driver's license kind, or the passport kind where only that is on.
+11. **Audit details** may be 2000 characters (was 1000): a policy change with all 14 kinds, before and after, was cut.
+12. **An existing fault fixed** (`StageJobWorkers`, from 0049): in inline mode, a check for open jobs under way while the server stopped could start workers after the stop. It broke ten staged tests on a loaded machine.
 
 ## Benchmark through the product (part A, 26 documents, 108 pages, real models, staged)
 `test-tools/vision-product/Invoke-VisionProductBenchmark.ps1`. Its scorer gives 0040's published numbers on 0040's saved results.
@@ -39,12 +42,12 @@ Outcome: **DONE** (7 questions, the recommended answer taken in each)
 ## Commands run and results
 | Command | Result |
 |---|---|
-| `mvn -B -o -Pdev-build verify`, PostgreSQL tests on, merged code | domain 80, application 310, scan bridge 136, infrastructure 121, API 780 (1 skipped, the timing test): **2 failures**, both 0057's completeness checks wanting LV-AI-008's "what to do" text. Added; those classes and all vision classes re-run: 0 failures. The whole suite was not run again |
-| `Invoke-VisionProductBenchmark.ps1` (full; then 4 documents, vision on and off) | above |
-| `Invoke-TwoServerCheck.ps1` (extended) | run 3, merged code: **PASS, 28 checks** (A killed holding Text, Find, Vision and Redact claims; 40 routed pages, each read, recorded and redacted once) |
+| `mvn -B -o -Pdev-build clean verify`, PostgreSQL tests on, with 0057 and 0062 merged | domain 84, application 314, scan bridge 136, infrastructure 124, API 786 (1 skipped, the timing test). **11 failures**: ten in `StagedPipelinePostgresTest` (item 12) and `JdbcExportFollowupsPostgresTest` (a timing test, once). After the fix those classes pass (38 tests); the whole suite was not run again here (CI does) |
+| `Invoke-VisionProductBenchmark.ps1` (full; then 4 documents, vision on and off), **before the 0062 merge** | above. Not run again after it: the detectors and the prompt are the same |
+| `Invoke-TwoServerCheck.ps1` (extended) | runs 3 (0057 merged) and 4 (0062 merged too): **PASS, 28 checks** (A killed holding Text, Find, Vision and Redact claims; 40 routed pages, each read, recorded and redacted once) |
 | the same, runs 1 and 2 | run 1 found no moment with all four claims (the script's AI limit; changed). **Run 2 FAILED 2 of 28**: one export job at NEEDS_IT, see question 6 |
-| `Invoke-ComplianceReportCheck.ps1` (7 checks added) | PASS |
-| `npm run test:standalone`, 1 run | auth 10, vocabulary 193, ui-framework 17, oidc-signin 171, tablet 95 pass; a11y 155 pass, **1 failed**: I merged the integration branch while it ran, so an old test met the new licensing screen. On the merged code: auth 10, vocabulary 199, ui-framework 17 pass; a11y 160 and the two changed specs (34) pass. oidc-signin as a whole and tablet were not run again after the merge (CI does) |
+| `Invoke-ComplianceReportCheck.ps1` (7 checks added) | PASS, also after the 0062 merge |
+| `npm run test:standalone`, 1 run | auth 10, vocabulary 193, ui-framework 17, oidc-signin 171, tablet 95 pass; a11y 155 pass, **1 failed**: I merged the integration branch while it ran, so an old test met the new licensing screen. On the merged code: auth 10, vocabulary 199, ui-framework 17 pass; a11y 160 and the two changed specs (34) pass. After the 0062 merge: vocabulary 200, ui-framework 17, the review and both admin policy specs (44) pass. The other browser suites were not run again after the merges (CI does) |
 | Product-name guard | clean (1731 files) |
 
 **Left for the milestone (rule 9):** the export end-to-end, the no-redacted-value script (the Java check and the two-server database dump ran: 0 matches), the full set on one head.
@@ -66,7 +69,8 @@ Existing tests changed: Liquibase rollback counts (+1), counts of kinds (6 to 8,
 4. **False flags 0.26 per page against the 0.25 mark**: accept until part B? (recommended)
 5. **Handwriting check sends 3 of 16 plain scans to vision**, as in 0033. Leave until part B? (recommended)
 6. **Existing, not from this task:** a server killed after it wrote a case's export folder and before it recorded it leaves the export at NEEDS_IT (`LV-SYS-001`): the retry refuses the folder that is there (`LocalFolderDeliveryAdapter`, line 100). Its own small task? (recommended)
-7. **Pin the text model by digest** too? Its own task. (recommended)
+7. **HIPAA pack:** full-face photos are a HIPAA identifier; now that Face photo exists, add it to that pack? Not done.
+8. **Pin the text model by digest** too? Its own task. (recommended)
 
 ## For the owner
 Nothing to do: the model and its digest are installed. Migration 080 runs at the next schema step.
