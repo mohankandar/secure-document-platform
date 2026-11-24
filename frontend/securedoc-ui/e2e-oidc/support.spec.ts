@@ -211,10 +211,10 @@ test('IT Administrator: Support rows in plain words, Open / Resolved / All, one 
   const before = calls.searches.length;
   await more.getByLabel(/^Reason/).selectOption({ label: 'Redacted copy failed the safety check · LV-RED-002' });
   await more.getByRole('button', { name: 'Apply filters' }).click();
-  await expect.poll(() => calls.searches.length - before).toBe(8);
+  await expect.poll(() => calls.searches.length - before).toBe(9);
   expect(new Set(calls.searches.slice(before).map((s) => s.get('reasonCode')))).toEqual(new Set([
     'REDACTION_SOURCE_PAGES_UNKNOWN', 'REDACTION_PAGE_COUNT_MISMATCH', 'REDACTION_TARGETS_NOT_APPLIED', 'REDACTION_OUTPUT_EMPTY',
-    'REDACTION_TEXT_LAYER_REMAINS', 'REDACTION_ANNOTATIONS_REMAIN', 'REDACTION_REGION_NOT_COVERED', 'REDACTION_OUTPUT_UNPARSABLE',
+    'REDACTION_TEXT_LAYER_REMAINS', 'REDACTION_ANNOTATIONS_REMAIN', 'REDACTION_HIDDEN_CONTENT_REMAINS', 'REDACTION_REGION_NOT_COVERED', 'REDACTION_OUTPUT_UNPARSABLE',
   ]));
   await expect(page.getByText('Nothing matches')).toBeVisible();
 });
