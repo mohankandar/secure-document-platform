@@ -400,6 +400,11 @@ public final class StagedProcessingService {
 
     // ------------------------------------------------------------------------------------------------- workers
 
+    /** Task 0049: true while staged work is still to be done (after a switch back to inline it is finished first). */
+    public boolean hasOpenJobs() {
+        return jobs.hasOpenStageJobs();
+    }
+
     /** The next due job of one stage, claimed with a new claim number. */
     public Optional<PipelineJob> claimNext(PipelineStage stage, String owner) {
         if (!STAGES.contains(stage)) throw new IllegalArgumentException("Not a staged processing stage: " + stage);
@@ -744,6 +749,18 @@ public final class StagedProcessingService {
             }
         }
         return released.size();
+    }
+
+    /**
+     * Task 0049: runs the gate of cases it was missed for (a server stopped right after a job's result was saved).
+     * Waits a claim lease first, so it never races the server that is about to run it; the gate is idempotent.
+     */
+    public int runMissedGates() {
+        List<PipelineJobRepository.CaseRef> waiting = jobs.findCasesWaitingForTheirGate(settings.claimLease(), 100);
+        for (PipelineJobRepository.CaseRef ref : waiting) {
+            gateSafely(ref.tenantId(), ref.packageId(), CorrelationId.generate());
+        }
+        return waiting.size();
     }
 
     // --------------------------------------------------------------------------------------------------- helpers

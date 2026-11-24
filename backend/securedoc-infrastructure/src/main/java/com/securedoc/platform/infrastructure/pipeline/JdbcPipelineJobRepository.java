@@ -450,6 +450,38 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                         .addValue("packageId", packageId.value().toString()), rs -> { });
     }
 
+    static final String WAITING_FOR_GATE_SQL = """
+            SELECT j.tenant_id, j.package_id
+              FROM pipeline_jobs j
+              JOIN document_packages p ON p.id = j.package_id AND p.tenant_id = j.tenant_id
+             WHERE j.stage IN ('TEXT', 'FIND', 'REDACT')
+               AND p.status IN ('PROCESSING', 'PENDING_REVIEW', 'IN_REVIEW')
+               AND NOT EXISTS (SELECT 1 FROM pipeline_jobs o WHERE o.package_id = j.package_id
+                                  AND ((o.stage IN ('TEXT', 'FIND', 'REDACT') AND o.status <> 'DONE'
+                                        AND o.status <> 'STOPPED')
+                                       OR (o.stage = 'EXPORT' AND o.export_cycle >= j.export_cycle)))
+             GROUP BY j.tenant_id, j.package_id, p.status
+            HAVING max(j.updated_at) < clock_timestamp() - (:quietMillis * interval '1 millisecond')
+               AND (p.status = 'PROCESSING' OR bool_or(j.stage = 'REDACT'))
+             ORDER BY max(j.updated_at)
+             LIMIT :limit
+            """;
+
+    @Override
+    public List<CaseRef> findCasesWaitingForTheirGate(Duration quietFor, int limit) {
+        return jdbc.query(WAITING_FOR_GATE_SQL, new MapSqlParameterSource()
+                        .addValue("quietMillis", quietFor.toMillis()).addValue("limit", Math.max(1, limit)),
+                (rs, n) -> new CaseRef(TenantId.of(rs.getObject("tenant_id", UUID.class)),
+                        PackageId.of(rs.getObject("package_id", UUID.class))));
+    }
+
+    @Override
+    public boolean hasOpenStageJobs() {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pipeline_jobs"
+                + " WHERE stage IN ('TEXT', 'FIND', 'REDACT') AND status IN ('READY', 'RUNNING', 'WAITING_RETRY'))",
+                new MapSqlParameterSource(), Boolean.class));
+    }
+
     @Override
     public int removeStageJobs(TenantId tenantId, PackageId packageId, int exportCycle) {
         return jdbc.update("DELETE FROM pipeline_jobs WHERE tenant_id = :tenantId AND package_id = :packageId"

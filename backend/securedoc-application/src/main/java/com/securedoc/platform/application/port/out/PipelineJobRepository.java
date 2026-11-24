@@ -107,6 +107,23 @@ public interface PipelineJobRepository {
                         || job.stage() == PipelineStage.REDACT);
     }
 
+    /** A case, with its entity. */
+    record CaseRef(TenantId tenantId, PackageId packageId) { }
+
+    /**
+     * Task 0049: cases whose stage jobs all finished at least {@code quietFor} ago, that are still being processed (or
+     * were redacted after a review) and have no export job for that run: a server stopped after a job's result was
+     * saved and before the case's gate ran. Running the gate again decides the same.
+     */
+    default List<CaseRef> findCasesWaitingForTheirGate(Duration quietFor, int limit) {
+        return List.of();
+    }
+
+    /** Task 0049: true while any TEXT, FIND or REDACT job of any case is still to be done. */
+    default boolean hasOpenStageJobs() {
+        return false;
+    }
+
     /**
      * Task 0049: removes the TEXT, FIND and REDACT jobs of one case run, when the case starts again (a technical retry
      * keeps the run's number, so a finished job would stop the same job from being queued). A worker still on one of

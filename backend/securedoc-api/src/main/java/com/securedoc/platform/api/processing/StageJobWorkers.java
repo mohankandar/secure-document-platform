@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.processing;
 
 import com.securedoc.platform.application.error.LvErrorCodes;
+import com.securedoc.platform.application.pipeline.ExportMode;
 import com.securedoc.platform.application.processing.service.StagedProcessingService;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
@@ -21,8 +22,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Task 0048: the Text, Find and Redact workers of this server, started only with
- * {@code securedoc.processing.pipeline-mode=staged}. Each worker claims the next due job of its stage (claim lock,
+ * Task 0048: the Text, Find and Redact workers of this server, started with
+ * {@code securedoc.processing.pipeline-mode=staged}. Task 0049: with inline they start only when staged jobs are still
+ * open (the setting was switched back), and finish those; new cases go inline. That needs export-mode job, because a
+ * staged case ends in export jobs: without it the open jobs wait and the log says so. Each worker claims the next due job of its stage (claim lock,
  * {@code SKIP LOCKED}, queue order), renews its claim every third of the lease while it works, and saves its result
  * only under its current claim number. One sweep puts jobs whose claim ran out back in the queue. Fixed numbers per
  * stage for now; workers that grow with the queue are P3.
@@ -33,22 +36,58 @@ public class StageJobWorkers {
 
     private final StagedProcessingService service;
     private final String nodeId;
+    private final boolean exportJobs;
+    private boolean waitingLogged;
+    /** In inline mode, open staged jobs are looked for every this many poll intervals. */
+    static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
     private ExecutorService workers;
     private ScheduledExecutorService timers;
 
     public StageJobWorkers(StagedProcessingService service,
-                           @Value("${securedoc.logging.node-id:unknown}") String nodeId) {
+                           @Value("${securedoc.logging.node-id:unknown}") String nodeId,
+                           @Value("${securedoc.processing.export-mode:inline}") String exportMode) {
+        this.exportJobs = ExportMode.parse(exportMode) == ExportMode.JOB;
         this.service = service;
         this.nodeId = nodeId == null || nodeId.isBlank() ? "unknown" : nodeId.trim();
     }
 
     @PostConstruct
     public void start() {
+        timers = Executors.newScheduledThreadPool(2, runnable -> {
+            Thread thread = new Thread(runnable, "stage-worker-timer");
+            thread.setDaemon(true);
+            return thread;
+        });
         if (!service.settings().staged()) {
             log.info("STAGE_JOB_WORKERS_OFF pipelineMode=inline");
+            long every = service.settings().pollInterval().toMillis() * OPEN_JOBS_CHECK_POLLS;
+            timers.scheduleWithFixedDelay(this::finishOpenJobs, 0, every, TimeUnit.MILLISECONDS);
             return;
         }
+        startWorkers();
+    }
+
+    /** In inline mode: the open staged jobs, if any (also ones a server still staged queued later), are finished. */
+    private synchronized void finishOpenJobs() {
+        try {
+            if (running) return;
+            if (exportJobs) service.runMissedGates();
+            if (!service.hasOpenJobs()) return;
+            if (exportJobs) {
+                log.info("STAGE_JOB_WORKERS_FINISHING pipelineMode=inline reasonCode=OPEN_STAGE_JOBS");
+                startWorkers();
+            } else if (!waitingLogged) {
+                waitingLogged = true;
+                log.warn("STAGE_JOBS_WAITING pipelineMode=inline reasonCode=EXPORT_MODE_NOT_JOB");
+            }
+        } catch (RuntimeException failure) {
+            log.warn("STAGE_JOB_OPEN_CHECK_FAILED type={} code={}", failure.getClass().getSimpleName(),
+                    LvErrorCodes.forPlatformFailure(failure).code());
+        }
+    }
+
+    private void startWorkers() {
         var settings = service.settings();
         int total = settings.textWorkers() + settings.findWorkers() + settings.redactWorkers();
         AtomicInteger number = new AtomicInteger();
@@ -58,17 +97,14 @@ public class StageJobWorkers {
             thread.setDaemon(true);
             return thread;
         });
-        timers = Executors.newScheduledThreadPool(2, runnable -> {
-            Thread thread = new Thread(runnable, "stage-worker-timer");
-            thread.setDaemon(true);
-            return thread;
-        });
         String instance = UUID.randomUUID().toString();
         submit(PipelineStage.TEXT, settings.textWorkers(), instance);
         submit(PipelineStage.FIND, settings.findWorkers(), instance);
         submit(PipelineStage.REDACT, settings.redactWorkers(), instance);
         long every = settings.pollInterval().toMillis();
         timers.scheduleWithFixedDelay(this::sweep, every, every, TimeUnit.MILLISECONDS);
+        timers.scheduleWithFixedDelay(this::missedGates, every * OPEN_JOBS_CHECK_POLLS,
+                every * OPEN_JOBS_CHECK_POLLS, TimeUnit.MILLISECONDS);
         log.info("STAGE_JOB_WORKERS_STARTED text={} find={} redact={} claimLeaseMs={} nodeId={}",
                 settings.textWorkers(), settings.findWorkers(), settings.redactWorkers(),
                 settings.claimLease().toMillis(), nodeId);
@@ -136,6 +172,15 @@ public class StageJobWorkers {
             service.releaseExpiredClaims();
         } catch (RuntimeException failure) {
             log.warn("STAGE_JOB_CLAIM_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
+                    LvErrorCodes.forPlatformFailure(failure).code());
+        }
+    }
+
+    private void missedGates() {
+        try {
+            service.runMissedGates();
+        } catch (RuntimeException failure) {
+            log.warn("STAGE_JOB_MISSED_GATE_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());
         }
     }

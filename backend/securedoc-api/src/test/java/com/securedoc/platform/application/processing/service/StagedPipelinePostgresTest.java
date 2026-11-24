@@ -163,6 +163,7 @@ class StagedPipelinePostgresTest {
     /** Runs inside a page batch's step, after its result is kept. */
     private Consumer<PageBatchCommand> inBatch = command -> { };
     private StagedProcessingService service;
+    private java.util.function.Function<StagedProcessingSettings, StagedProcessingService> serviceWith;
     private PackageProcessingRecoveryService recovery;
 
     @BeforeAll
@@ -319,11 +320,12 @@ class StagedPipelinePostgresTest {
         recovery = new PackageProcessingRecoveryService(packages, lifecycle, incidents, audit, telemetry);
         StagedProcessingSettings settings = new StagedProcessingSettings(PipelineMode.STAGED, Duration.ofSeconds(30),
                 3, 1, 1, 1, Duration.ofMillis(200));
-        service = new StagedProcessingService(settings, jobs, packages, documents, mock(ProcessingLockPort.class),
+        serviceWith = chosen -> new StagedProcessingService(chosen, jobs, packages, documents, mock(ProcessingLockPort.class),
                 startPackage, startDocument, extract, detect, redact, lifecycle, incidents, recovery, audit,
                 mock(TenantLicensingService.class), telemetry, inline, transactions, storage,
                 new StagedProcessingService.PageBatching(t -> batchSettings,
                         d -> pages == 0 ? OptionalInt.empty() : OptionalInt.of(pages)));
+        service = serviceWith.apply(settings);
     }
 
     // ------------------------------------------------------------------------------------------------- tests
@@ -639,6 +641,96 @@ class StagedPipelinePostgresTest {
         runAll(PipelineStage.FIND);
         runAll(PipelineStage.REDACT);
         assertEquals(DocumentStatus.PROCESSED, document(pkg).status());
+    }
+
+    // --------------------------------------------------------------- switching back to inline (task 0049, step 4)
+
+    @Test
+    void switchedBackToInlineMidRunEveryStagedCaseStillFinishesAndNothingRunsTwice() throws Exception {
+        pages = 60;
+        List<DocumentPackage> cases = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            DocumentPackage pkg = submittedCase(2);
+            service.plan(trigger(pkg));
+            cases.add(pkg);
+        }
+        for (int i = 0; i < 5; i++) runOne(PipelineStage.TEXT); // mid-run
+        // One job was running when that server stopped for the switch: its claim has run out.
+        PipelineJob running = service.claimNext(PipelineStage.TEXT, "server-a/stopped").orElseThrow();
+        jdbc.update("UPDATE pipeline_jobs SET claim_until = clock_timestamp() - interval '1 second' WHERE id = ?",
+                running.id());
+        DocumentPackage later = submittedCase(1);
+
+        StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
+                Duration.ofSeconds(30), 3, 2, 2, 2, Duration.ofMillis(100)));
+        assertFalse(inlineService.handles(trigger(later)), "a new case goes inline");
+        cases.forEach(pkg -> assertTrue(inlineService.handles(trigger(pkg)), "a staged case stays staged"));
+        // Without export jobs the staged jobs wait (a staged case ends in export jobs).
+        var waiting = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test", "inline");
+        waiting.start();
+        Thread.sleep(1500);
+        waiting.stop();
+        assertTrue(inlineService.hasOpenJobs());
+
+        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test", "job");
+        workers.start();
+        try {
+            long until = System.currentTimeMillis() + 60_000;
+            while ((inlineService.hasOpenJobs() || cases.stream().anyMatch(pkg -> documents
+                    .findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                    .anyMatch(d -> d.status() != DocumentStatus.PROCESSED))) && System.currentTimeMillis() < until) Thread.sleep(100);
+        } finally {
+            workers.stop();
+        }
+        for (DocumentPackage pkg : cases) {
+            for (Document d : documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId())) {
+                assertEquals(DocumentStatus.PROCESSED, d.status());
+            }
+            assertTrue(jobsOf(pkg).stream().allMatch(j -> j.status() == PipelineJobStatus.DONE));
+            verify(exports, org.mockito.Mockito.atLeastOnce()).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1),
+                    any());
+        }
+        // 6 documents: 3 TEXT and 4 FIND batches each (60 pages), one gathering per stage, one final check.
+        assertEquals(6 * 3, batchesRun.stream().filter(b -> b.startsWith("TEXT")).count(), "no batch was read twice");
+        assertEquals(6 * 4, batchesRun.stream().filter(b -> b.startsWith("FIND")).count());
+        assertEquals(6 * 2, gathered.size());
+        assertEquals(6, audits.stream().filter(a -> a.action() == AuditAction.DOCUMENT_REDACTION_VERIFIED).count());
+        assertEquals(PackageStatus.SUBMITTED, status(later), "the stage workers do not touch the new case");
+        assertEquals(0, jobsOf(later).size());
+    }
+
+    @Test
+    void aServerThatStopsBetweenAJobsResultAndTheGateLeavesNoCaseBehind() {
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        // As if the server stopped after FIND was saved: its gate's REDACT job never came to be.
+        jdbc.update("DELETE FROM pipeline_jobs WHERE package_id = ? AND stage = 'REDACT'", pkg.id().value());
+        assertEquals(0, missed(pkg), "a gate that may still run is left alone for a claim lease");
+        jdbc.update("UPDATE pipeline_jobs SET updated_at = updated_at - interval '1 hour' WHERE package_id = ?",
+                pkg.id().value());
+        assertEquals(1, missed(pkg));
+        service.runMissedGates();
+        assertEquals(1, count(pkg, PipelineStage.REDACT));
+        assertEquals(0, missed(pkg), "nothing is missed while a job is open");
+    }
+
+    private static long missed(DocumentPackage pkg) {
+        return jobs.findCasesWaitingForTheirGate(Duration.ofSeconds(30), 1000).stream()
+                .filter(c -> c.packageId().equals(pkg.id())).count();
+    }
+
+    @Test
+    void inInlineModeWithNoStagedJobsNoWorkerStarts() throws Exception {
+        StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
+                Duration.ofSeconds(30), 3, 1, 1, 1, Duration.ofMillis(100)));
+        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test", "job");
+        workers.start();
+        Thread.sleep(500);
+        assertTrue(Thread.getAllStackTraces().keySet().stream().noneMatch(t -> t.isAlive()
+                && t.getName().matches("stage-worker-\\d+")));
+        workers.stop();
     }
 
     // ----------------------------------------------------------------------------------------------- helpers
