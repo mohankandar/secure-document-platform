@@ -1,16 +1,17 @@
 import { defineConfig } from '@playwright/test';
+import { E2E_PORTS } from './e2ePorts';
 
 /**
  * OIDC sign-in regression tests (report 0007 / task 0008).
  *
- * Starts its own Vite dev server on 127.0.0.1:15175 in OIDC mode, so the real app is mounted under
+ * Starts its own Vite dev server on 127.0.0.1 (port: e2ePorts.ts) in OIDC mode, so the real app is mounted under
  * React.StrictMode (development double-mount). The identity provider and the API are answered by
  * Playwright request mocks inside each test; no Keycloak, backend or database is needed.
  *
  * Run: npm run test:oidc-signin
  * Uses the installed Microsoft Edge (channel "msedge"), so no Playwright browser download is needed.
  */
-const PORT = 15175;
+const PORT = E2E_PORTS.oidcSignin;
 
 export default defineConfig({
   testDir: './e2e-oidc',

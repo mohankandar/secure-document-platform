@@ -3,9 +3,10 @@
  * a review and goes straight to its export job. Listens on 127.0.0.1 only; stopped by the returned teardown.
  */
 import * as http from 'node:http';
+import { E2E_PORTS } from '../e2ePorts';
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
-  const port = Number(process.env.LEXAVAULT_E2E_OLLAMA_PORT || '11535');
+  const port = E2E_PORTS.exportOllama;
   const model = 'qwen3.5:9b';
   const chat = JSON.stringify({ message: { content: JSON.stringify({ findings: [] }) }, done_reason: 'stop', done: true });
   const server = http.createServer((req, res) => {
