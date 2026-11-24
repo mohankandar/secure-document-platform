@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { SWRConfig } from 'swr';
 import type { CurrentUser, TenantSwitchActions } from '../types';
 import AccountMenu from './AccountMenu';
+import EntityMenu from './EntityMenu';
 import { ADMIN_CAPS, CAP, needsYou, useExportAlert, useExportNeedsIt, usePackages, useReviewQueue, useWaitingForYou } from './data';
 import { showWaitingNav, supportBadgeCount } from './exportRules';
 import WaitingForYou from './WaitingForYou';
@@ -148,8 +149,9 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <span className="cf-find-keys">{MOD_KEY} K</span>
         </button>
 
-        <AccountMenu me={me} organizationName={branding.organizationName || undefined} onSignOut={onSignOut} localMode={localMode}
-          selectedRole={selectedRole} onRoleChange={onRoleChange} tenantSwitch={tenantSwitch} />
+        <EntityMenu name={me.tenantName} tenantSwitch={localMode ? undefined : tenantSwitch} />
+        <AccountMenu me={me} onSignOut={onSignOut} localMode={localMode}
+          selectedRole={selectedRole} onRoleChange={onRoleChange} />
       </header>
 
       <main className="cf-main" id="cf-main">
@@ -158,7 +160,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
         <Routes>
           <Route path="/" element={canDesk ? <Desk caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/case/:caseId" element={canDesk ? <Desk caps={caps} /> : <Navigate to={home} replace />} />
-          <Route path="/intake" element={canIntake ? <Intake /> : <Navigate to={home} replace />} />
+          <Route path="/intake" element={canIntake ? <Intake entityName={me.tenantName} /> : <Navigate to={home} replace />} />
           <Route path="/review" element={canReview ? <Review caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/reports" element={canReports ? <Reports caps={caps} entityName={me.tenantName} /> : <Navigate to={home} replace />} />
           <Route path="/admin" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />

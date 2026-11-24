@@ -833,6 +833,8 @@ export interface TenantChoice {
   name: string;
   slug: string;
   roles: string[];
+  /** Task 0058: the entity this person worked in last. */
+  lastUsed?: boolean;
 }
 
 /** The organization switch handed to the newest design: one implementation, owned by App. */

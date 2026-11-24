@@ -8,6 +8,7 @@ import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.tenant.Tenant;
 import com.securedoc.platform.domain.tenant.TenantStatus;
+import com.securedoc.platform.infrastructure.identity.LastEntityStore;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.context.SecurityContextException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,14 +44,22 @@ public class OidcTenantDiscoveryController {
     private final RequestContextResolver context;
     private final TenantRepository tenantRepository;
     private final SecurityContextRefusalRecorder refusals;
+    private final LastEntityStore lastEntity;
 
     public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository) {
-        this(context, tenantRepository, null);
+        this(context, tenantRepository, null, null);
+    }
+
+    /** For tests without remembered entities. */
+    public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository,
+                                         SecurityContextRefusalRecorder refusals) {
+        this(context, tenantRepository, refusals, null);
     }
 
     @Autowired
     public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository,
-                                         SecurityContextRefusalRecorder refusals) {
+                                         SecurityContextRefusalRecorder refusals, LastEntityStore lastEntity) {
+        this.lastEntity = lastEntity;
         this.context = context;
         this.tenantRepository = tenantRepository;
         this.refusals = refusals;
@@ -62,12 +71,16 @@ public class OidcTenantDiscoveryController {
             throw new SecurityContextException("Tenant discovery requires OIDC authentication", "TENANT_DISCOVERY_REQUIRES_OIDC");
         }
         var memberships = context.resolveAvailableOidcTenants();
+        // Task 0058: the entity this person worked in last. It only marks one of the choices below, which the sign-in check
+        // gave; an entity that is not among them is never added.
+        TenantId last = lastEntity == null ? null : context.currentOidcActor().flatMap(lastEntity::find).orElse(null);
         List<TenantChoice> choices = new ArrayList<>();
         for (Map.Entry<TenantId, Set<String>> membership : memberships.entrySet()) {
             Optional<Tenant> tenant = tenantRepository.findById(membership.getKey());
             if (tenant.isPresent() && tenant.get().status() == TenantStatus.ACTIVE) {
                 Tenant t = tenant.get();
-                choices.add(new TenantChoice(t.id().value().toString(), t.name(), t.slug(), membership.getValue()));
+                choices.add(new TenantChoice(t.id().value().toString(), t.name(), t.slug(), membership.getValue(),
+                        t.id().equals(last)));
             } else {
                 recordLeftOut(request, membership.getKey(), tenant.isPresent() ? TENANT_NOT_ACTIVE : TENANT_MISSING);
             }
@@ -83,5 +96,5 @@ public class OidcTenantDiscoveryController {
         refusals.recordLeftOutEntity(request, reason, tenantId, actor, correlation == null ? null : correlation.toString());
     }
 
-    public record TenantChoice(String tenantId, String name, String slug, Set<String> roles) {}
+    public record TenantChoice(String tenantId, String name, String slug, Set<String> roles, boolean lastUsed) {}
 }

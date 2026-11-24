@@ -123,7 +123,7 @@ class ApiClient {
     return response as unknown as T;
   }
 
-  async getAvailableOidcTenants(): Promise<Array<{ tenantId: string; name: string; slug: string; roles: string[] }>> {
+  async getAvailableOidcTenants(): Promise<Array<{ tenantId: string; name: string; slug: string; roles: string[]; lastUsed?: boolean }>> {
     return this.request('/me/tenants');
   }
 
@@ -137,6 +137,14 @@ class ApiClient {
    */
   async getCurrentUserForTenant(tenantId: string): Promise<CurrentUser> {
     return this.request('/me', { headers: { 'X-Selected-Tenant-Id': tenantId } });
+  }
+
+  /**
+   * The person enters an entity (task 0058): the server checks it as on every request, remembers it for the next sign-in and
+   * records a switch. Without an id: the entity already entered.
+   */
+  async enteredEntity(tenantId?: string): Promise<void> {
+    await this.request('/me/entity', { method: 'POST', ...(tenantId ? { headers: { 'X-Selected-Tenant-Id': tenantId } } : {}) });
   }
 
   /** Read-only (task 0041): sign-in connections are set through setup; the server has no draft or activate step. */

@@ -55,4 +55,5 @@
     <include file="db/changelog/049-pipeline-stage-jobs.xml"/>
     <include file="db/changelog/050-page-batches.xml"/>
     <include file="db/changelog/060-licence-usage.xml"/>
+    <include file="db/changelog/061-person-last-entity.xml"/>
 </databaseChangeLog>
