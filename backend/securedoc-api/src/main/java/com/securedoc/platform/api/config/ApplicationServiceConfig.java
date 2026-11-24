@@ -339,12 +339,14 @@ public class ApplicationServiceConfig {
             PackageProcessingDispatcher packageProcessingDispatcher,
             ChecksumPort checksumPort,
             PdfIntakeValidationPort pdfIntakeValidationPort,
+            com.securedoc.platform.application.port.out.PdfDecryptionPort pdfDecryptionPort,
             AuditService auditService,
             ExternalIntakeMaintenanceService maintenanceService,
             RequestActorDisplayName requestActorDisplayName) {
         return new ExternalIntakeService(integrationConnectionService, externalIntakeRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
-                checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName);
+                checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName)
+                .withPdfDecryption(pdfDecryptionPort);
     }
 
     @Bean
