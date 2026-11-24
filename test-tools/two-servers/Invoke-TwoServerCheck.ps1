@@ -22,7 +22,12 @@
     9. Checks in the database and the audit: every case COMPLETED; per document exactly one TEXT, FIND and REDACT job,
        one set of findings (no duplicate), one redacted copy, one text read, one finding run and one final check (task
        0044) audited; per case one EXPORT job and one delivery; the fake values are in no table (pg_dump).
-   10. Stops B and the mock and removes only the throwaway container.
+   10. Task 0049: case 1 also has a 200-page document, split into page batches (20 pages, 2 shared); its batches, one
+       gathering per stage and the pages two batches share are checked with the rest.
+   11. Task 0049: a file left by a killed worker. Server B is killed while a Text step has stored its file and cannot
+       save its record (the artifacts table is locked). The file's age is set back; B, started again, finishes the case
+       and its clean-up sweep removes that file and no file a record points to.
+   12. Stops B and the mock and removes only the throwaway container.
 
     The container password is generated per run and never printed. The run folder holds fake test values only.
 
@@ -41,7 +46,8 @@ param(
     [int] $Cases = 20,
     [int] $AiDelayMs = 2500,
     [int] $ClaimLeaseMs = 15000,
-    [int] $FinishTimeoutSeconds = 900
+    [int] $BigPages = 200,
+    [int] $FinishTimeoutSeconds = 1800
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,7 +102,7 @@ function Send-Document([string] $Backend, [string] $PackageId, [string] $Pdf, [s
     } finally { $client.Dispose() }
 }
 
-function Start-Server([string] $Name, [int] $Port, [string] $DbPassword) {
+function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $PurgeIntervalMs = 900000) {
     $logDir = Join-Path $runDir "logs-$Name"
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
     $env:SPRING_DATASOURCE_URL = "jdbc:postgresql://localhost:$DbPort/securedoc"
@@ -118,6 +124,7 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword) {
     $env:SECUREDOC_PROCESSING_EXPORT_MODE = 'job'
     $env:SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS = "$ClaimLeaseMs"
     $env:SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS = '500'
+    $env:SECUREDOC_LIFECYCLE_PURGE_INTERVAL_MS = "$PurgeIntervalMs"
     $env:SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS = '1000'
     try {
         return Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
@@ -195,6 +202,8 @@ try {
     $scanned = Join-Path $runDir 'scanned.pdf'
     & java -cp $cp (Join-Path $here 'MakeCasePdf.java') $typed typed 2
     & java -cp $cp (Join-Path $here 'MakeCasePdf.java') $scanned scanned 2
+    $big = Join-Path $runDir 'big.pdf'
+    & java -cp $cp (Join-Path $here 'MakeCasePdf.java') $big typed $BigPages
     if (-not (Test-Path $typed) -or -not (Test-Path $scanned)) { throw "test PDFs were not written" }
 
     # --- 4. two servers ---------------------------------------------------------------------------
@@ -228,11 +237,12 @@ try {
         Send-Document $backend $id $typed 'typed-1.pdf'
         Send-Document $backend $id $scanned 'scanned.pdf'
         Send-Document $backend $id $typed 'typed-2.pdf'
+        if ($i -eq 1) { Send-Document $backend $id $big 'big.pdf' }
         Invoke-Api $backend POST "/api/v1/packages/$id/submit" | Out-Null
         [void]$packageIds.Add($id)
         Start-Sleep -Milliseconds 700
     }
-    Write-Host "Submitted $Cases cases ($($Cases * 3) documents)"
+    Write-Host "Submitted $Cases cases ($($Cases * 3 + 1) documents, one of $BigPages pages)"
 
     # --- 6. kill server A while it holds Text, Find and Redact claims ------------------------------
     $killed = $null
@@ -286,13 +296,22 @@ try {
         ") and status = 'DONE' and claim_expiries >= 1 and attempts >= 1")
     Add-Check "A's jobs finished by B after their claims ran out (one attempt each)" ([int]$takenOver -eq $killed.Count) "$takenOver of $($killed.Count)"
     foreach ($stage in 'TEXT', 'FIND', 'REDACT') {
-        $bad = Invoke-Sql "select count(*) from (select document_id from pipeline_jobs where package_id in ($ids) and stage = '$stage' group by document_id having count(*) <> 1 or bool_or(status <> 'DONE')) x"
+        $bad = Invoke-Sql "select count(*) from (select document_id from pipeline_jobs where package_id in ($ids) and stage = '$stage' and page_from is null group by document_id having count(*) <> 1 or bool_or(status <> 'DONE')) x"
         $n = Invoke-Sql "select count(*) from pipeline_jobs where package_id in ($ids) and stage = '$stage'"
-        Add-Check "one $stage job per document, done" ($bad -eq '0' -and [int]$n -eq $documentsN) "$n jobs for $documentsN documents; $bad documents not exactly one done job"
+        # Text batches do not overlap; Find batches step 18 pages (20 less 2 shared).
+        $batches = if ($stage -eq 'TEXT') { [math]::Ceiling($BigPages / 20) } elseif ($stage -eq 'FIND') { [math]::Ceiling(($BigPages - 20) / 18) + 1 } else { 1 }
+        $bigDone = Invoke-Sql "select count(distinct page_from) from pipeline_jobs where package_id in ($ids) and stage = '$stage' and page_from is not null and status = 'DONE'"
+        $bigWanted = if ($stage -eq 'REDACT') { 0 } else { $batches }
+        Add-Check "one $stage job per document or page batch, done" ($bad -eq '0' -and [int]$n -eq ($documentsN - 1 + $batches) -and [int]$bigDone -eq $bigWanted) "$n jobs for $documentsN documents, $bigDone page batches; $bad documents not exactly one done job"
     }
     $dupFindings = Invoke-Sql "select count(*) from (select document_id, entity_type, page_number, start_offset, end_offset from findings where document_id in ($docIds) group by 1,2,3,4,5 having count(*) > 1) d"
     $findingsN = Invoke-Sql "select count(*) from findings where document_id in ($docIds)"
     Add-Check 'no duplicate findings' ($dupFindings -eq '0' -and [int]$findingsN -gt 0) "$findingsN findings, $dupFindings duplicated places"
+    $bigFindings = Invoke-Sql "select count(*) from findings f join documents d on d.id = f.document_id where d.package_id in ($ids) and d.file_name = 'big.pdf'"
+    $bigPagesWithValues = 1 + @(2..$BigPages | Where-Object { $_ % 19 -le 1 }).Count
+    Add-Check "the $BigPages-page document: every value found once, also on shared pages" ([int]$bigFindings -eq (3 * $bigPagesWithValues)) "$bigFindings findings for 3 values on $bigPagesWithValues pages"
+    $batchRows = Invoke-Sql "select count(*) from artifacts where artifact_type in ('EXTRACTED_TEXT_BATCH','FINDINGS_BATCH') and status <> 'DELETED'"
+    Add-Check 'no page batch result left' ($batchRows -eq '0') "$batchRows records"
     $redacted = Invoke-Sql "select count(*) from (select document_id from artifacts where document_id in ($docIds) and artifact_type = 'REDACTED' group by document_id having count(*) = 1) x"
     $redactedRows = Invoke-Sql "select count(*) from artifacts where document_id in ($docIds) and artifact_type = 'REDACTED'"
     Add-Check 'one redacted copy per document' ([int]$redacted -eq $documentsN -and [int]$redactedRows -eq $documentsN) "$redactedRows redacted copies for $documentsN documents"
@@ -306,8 +325,9 @@ try {
     Add-Check 'one EXPORT job per case, done' ($exportBad -eq '0') "$exportBad cases not exactly one done export"
     $deliveryBad = Invoke-Sql "select count(*) from (select p.id from document_packages p left join delivery_submissions s on s.package_id = p.id where p.id in ($ids) group by p.id having count(s.id) > 1) x"
     Add-Check 'no case delivered twice' ($deliveryBad -eq '0') "$deliveryBad cases with more than one delivery"
+    $stageJobs = Invoke-Sql "select count(*) from pipeline_jobs where package_id in ($ids) and stage in ('TEXT','FIND','REDACT')"
     $doneAudits = Invoke-Sql "select count(*) from audit_records where action = 'PIPELINE_JOB_STATUS_CHANGED' and detail like '%from=RUNNING, to=DONE%'"
-    Add-Check 'job status changes audited' ([int]$doneAudits -eq ($documentsN * 3)) "$doneAudits RUNNING to DONE records for $($documentsN * 3) jobs (a refused save leaves none)"
+    Add-Check 'job status changes audited' ($doneAudits -eq $stageJobs) "$doneAudits RUNNING to DONE records for $stageJobs jobs (a refused save leaves none)"
     # The fake values never reach a table (as the task 0015 check, on the whole database).
     $inside = '/tmp/two-servers.sql'
     docker exec $Container pg_dump -U securedoc -d securedoc -f $inside | Out-Null
@@ -319,6 +339,46 @@ try {
         $valueHits += ([regex]::Matches($dumpText, [regex]::Escape($needle))).Count
     }
     Add-Check 'no redacted value saved (database dump)' ($valueHits -eq 0) "$valueHits matches"
+
+    # --- 11. a file left by a killed worker, and the clean-up sweep ------------------------------------------
+    function Get-StoredKeys {
+        @(Get-ChildItem -LiteralPath $shared -Recurse -File | ForEach-Object { $_.FullName.Substring($shared.Length + 1).Replace('\', '/') })
+    }
+    function Get-Unrecorded {
+        $live = @((Invoke-Sql "select storage_key from artifacts where status <> 'DELETED' and storage_key is not null") -split "`n" | ForEach-Object { $_.Trim() })
+        @(Get-StoredKeys | Where-Object { $live -notcontains $_ -and $_ -match '/(EXTRACTED_TEXT|EXTRACTED_TEXT_BATCH|FINDINGS_BATCH|REDACTED)/' })
+    }
+    $leftByA = @(Get-Unrecorded).Count
+    $created = Invoke-Api $backendB POST '/api/v1/packages' @{
+        packageType = 'MANUAL_UPLOAD'
+        businessIdentifiers = @{ contract_number = "884899$suffix"; member_number = "94899$suffix"; service_entity = '001' }
+        metadata = @{ source = 'task-0049-sweep' } }
+    Send-Document $backendB $created.packageId $typed 'typed.pdf'
+    docker exec -d $Container psql -U securedoc -d securedoc -c "begin; lock table artifacts in share mode; select pg_sleep(120); commit;"
+    Start-Sleep -Seconds 1
+    Invoke-Api $backendB POST "/api/v1/packages/$($created.packageId)/submit" | Out-Null
+    $deadline = (Get-Date).AddSeconds(60)
+    do { Start-Sleep -Milliseconds 300; $left = @(Get-Unrecorded | Where-Object { $_ -like "*/$($created.packageId)/*" }) } while ($left.Count -eq 0 -and (Get-Date) -lt $deadline)
+    Stop-Process -Id $serverB.Id -Force
+    Start-Sleep -Seconds 1
+    Invoke-Sql "select pg_terminate_backend(pid) from pg_stat_activity where query like '%pg_sleep(120)%' and pid <> pg_backend_pid()" | Out-Null
+    Add-Check 'a killed worker left a file with no record' ($left.Count -eq 1) "$($left.Count) (and $leftByA left by server A)"
+    $recordedBefore = @(Get-StoredKeys | Where-Object { @(Get-Unrecorded) -notcontains $_ })
+    Get-ChildItem -LiteralPath $shared -Recurse -File | ForEach-Object { $_.LastWriteTime = (Get-Date).AddHours(-25) }
+    $serverB = Start-Server 'b' $PortB $dbPassword 5000
+    Wait-Healthy $serverB $backendB
+    $deadline = (Get-Date).AddSeconds(180)
+    do {
+        Start-Sleep -Seconds 2
+        $caseDone = Invoke-Sql "select count(*) from document_packages where id = '$($created.packageId)' and status = 'COMPLETED'"
+        $stillThere = @($left | Where-Object { Test-Path -LiteralPath (Join-Path $shared $_) }).Count
+    } while (($caseDone -ne '1' -or $stillThere -gt 0) -and (Get-Date) -lt $deadline)
+    Add-Check 'the sweep removed the file left by the killed worker' ($left.Count -eq 1 -and $stillThere -eq 0) "$stillThere left"
+    $lost = @($recordedBefore | Where-Object { -not (Test-Path -LiteralPath (Join-Path $shared $_)) })
+    Add-Check 'the sweep removed no file a record points to' ($lost.Count -eq 0 -and $recordedBefore.Count -gt 0) "$($lost.Count) of $($recordedBefore.Count) gone"
+    Add-Check 'the killed case was finished' ($caseDone -eq '1') "$caseDone of 1 exported"
+    $sweepAudit = Invoke-Sql "select string_agg(detail, '; ') from audit_records where action = 'UNRECORDED_FILES_CLEANED'"
+    Add-Check 'one audit record of the sweep, counts only' ($sweepAudit -match '^Files without a record removed: text=\d+, redacted=\d+$') "$sweepAudit"
 
     $failed = @($checks | Where-Object { -not $_.ok }).Count
     [pscustomobject]@{ cases = $Cases; documents = $documentsN; killedClaims = $killed; secondsToFinishAfterKill = $finishedAfter
@@ -339,7 +399,7 @@ finally {
             'SECUREDOC_WATCHED_FOLDER_ENABLED', 'SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED', 'SECUREDOC_LOGGING_CONFIG',
             'SECUREDOC_LOG_DIR', 'SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH', 'SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH',
             'SECUREDOC_PROCESSING_PIPELINE_MODE', 'SECUREDOC_PROCESSING_EXPORT_MODE', 'SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS',
-            'SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS', 'SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS') {
+            'SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS', 'SECUREDOC_LIFECYCLE_PURGE_INTERVAL_MS', 'SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS') {
         Remove-Item "Env:$name" -ErrorAction SilentlyContinue
     }
 }

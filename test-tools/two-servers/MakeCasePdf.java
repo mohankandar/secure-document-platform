@@ -36,7 +36,8 @@ public class MakeCasePdf {
         int pages = Integer.parseInt(args[2]);
         try (PDDocument document = new PDDocument()) {
             for (int n = 1; n <= pages; n++) {
-                String[] lines = n == 1 ? VALUES : new String[]{
+                // A large document has them on pages 19, 20, 38, 39 and so on too: pages two page batches share (task 0049).
+                String[] lines = n == 1 || (pages > 20 && n % 19 <= 1) ? VALUES : new String[]{
                         "Supporting page " + n + " of the loan file",
                         "Monthly income is reviewed every year by the lender",
                         "The borrower agrees to the terms on the first page",
