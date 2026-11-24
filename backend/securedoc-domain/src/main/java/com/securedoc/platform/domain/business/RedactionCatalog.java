@@ -22,6 +22,8 @@ public final class RedactionCatalog {
         AI_AND_PATTERN,
         /** Pattern detectors only. */
         PATTERN,
+        /** The AI only (task 0072); every finding goes to a person. */
+        AI,
         /** On the page image: the signature detector and the vision model (task 0064). */
         IMAGE
     }
@@ -54,6 +56,7 @@ public final class RedactionCatalog {
             optIn(EntityType.EIN, "EIN"),
             optIn(EntityType.DRIVERS_LICENSE_NUMBER, "Driver’s license number"),
             optIn(EntityType.PASSPORT_NUMBER, "Passport number"),
+            aiOnly(EntityType.PERSON_NAME, "Person name"),
             image(EntityType.SIGNATURE, "Signature or initials"),
             image(EntityType.FACE_PHOTO, "Face photo"),
             locked(EntityType.CVV, "Card security code (CVV)", DetectionMethod.PATTERN),
@@ -61,7 +64,9 @@ public final class RedactionCatalog {
 
     private static final Set<EntityType> LOCKED = where(Entry::locked);
     private static final Set<EntityType> ON_BY_DEFAULT = where(Entry::onByDefault);
-    private static final Set<EntityType> ASKED_OF_AI = where(e -> e.detection() == DetectionMethod.AI_AND_PATTERN);
+    private static final Set<EntityType> ASKED_OF_AI = where(e -> e.detection() == DetectionMethod.AI_AND_PATTERN
+            || e.detection() == DetectionMethod.AI);
+    private static final Set<EntityType> ALWAYS_REVIEWED = where(e -> e.detection() == DetectionMethod.AI);
     private static final Set<EntityType> LAST_FOUR = where(Entry::lastFourAllowed);
 
     private RedactionCatalog() {
@@ -88,6 +93,11 @@ public final class RedactionCatalog {
         return ASKED_OF_AI;
     }
 
+    /** Task 0072: a finding of these kinds is never applied without a person, whatever the policy and its confidence. */
+    public static Set<EntityType> alwaysReviewed() {
+        return ALWAYS_REVIEWED;
+    }
+
     public static Set<EntityType> lastFourAllowed() {
         return LAST_FOUR;
     }
@@ -103,6 +113,10 @@ public final class RedactionCatalog {
 
     private static Entry optIn(EntityType kind, String name) {
         return new Entry(kind, name, DetectionMethod.PATTERN, RedactionStyle.REMOVE_FULLY, false, false, true);
+    }
+
+    private static Entry aiOnly(EntityType kind, String name) {
+        return new Entry(kind, name, DetectionMethod.AI, RedactionStyle.REMOVE_FULLY, false, false, false);
     }
 
     private static Entry image(EntityType kind, String name) {

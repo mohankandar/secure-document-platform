@@ -153,11 +153,13 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
                 {catalog.packs.map((pack) => {
                   const on = (d.enabledPacks ?? []).includes(pack.key);
                   const off = on ? tunedOff(d, pack, locked) : [];
+                  const suggested = on ? (pack.suggestedKinds ?? []).filter((k) => !d.enabledEntityTypes.includes(k)) : [];
                   return (
                     <div key={pack.key}>
                       <Toggle label={pack.name} hint={`${pack.covers} ${CATALOG_WORDS.notCovered} ${pack.notCovered}`} checked={on}
                         onChange={(v) => set(setPack(d, pack, v))} />
                       {off.length > 0 && <p className="cf-ad-hint cf-ad-pack-off">{CATALOG_WORDS.tunedOff} {off.map(typeName).join(', ')}</p>}
+                      {suggested.length > 0 && <p className="cf-ad-hint cf-ad-pack-off">{CATALOG_WORDS.suggested} {suggested.map(typeName).join(', ')}</p>}
                     </div>
                   );
                 })}

@@ -157,8 +157,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         int parallelism = Math.min(configuredParallelism, batches.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
         AtomicInteger providerCallCount = new AtomicInteger();
-        String systemPrompt = promptBuilder.buildCompact(request.policy());
-        JsonNode responseSchema = structuredOutput ? buildResponseSchema() : null;
+        List<Prompt> prompts = prompts(request.policy());
         long startedNanos = System.nanoTime();
 
         StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.ofEntries(
@@ -174,10 +173,12 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
 
         ExecutorService executor = Executors.newFixedThreadPool(parallelism);
         try {
-            List<Future<BatchAnalysisResult>> futures = new ArrayList<>(batches.size());
-            for (List<PageContent> batch : batches) {
-                futures.add(executor.submit(StructuredLogContext.wrap(() -> analyzeBatchWithRetry(
-                        batch, pageRetryCount, providerCallCount, systemPrompt, responseSchema))));
+            List<Future<BatchAnalysisResult>> futures = new ArrayList<>(batches.size() * prompts.size());
+            for (Prompt prompt : prompts) {
+                for (List<PageContent> batch : batches) {
+                    futures.add(executor.submit(StructuredLogContext.wrap(() -> analyzeBatchWithRetry(
+                            batch, pageRetryCount, providerCallCount, prompt))));
+                }
             }
 
             List<DiscoveredSensitiveContent> discoveries = new ArrayList<>();
@@ -216,8 +217,9 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                     Map.entry("outputEvalTokens", aggregate.evalCount()),
                     Map.entry("providerEvalMs", nanosToMillis(aggregate.evalDurationNanos())),
                     Map.entry("durationMs", elapsedMillis(startedNanos))), "AI analysis completed");
-            return new AnalysisOutput(discoveries, List.of(com.securedoc.platform.domain.finding.AiModel.of(
-                    model, "text-" + VERSION, digest())));
+            String digest = digest();
+            return new AnalysisOutput(discoveries, prompts.stream().map(p -> com.securedoc.platform.domain.finding.AiModel.of(
+                    model, "text-" + p.version(), digest)).toList());
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
                     ? technical.failureCode().name()
@@ -293,15 +295,14 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     private BatchAnalysisResult analyzeBatchWithRetry(List<PageContent> pages,
                                                        AtomicInteger pageRetryCount,
                                                        AtomicInteger providerCallCount,
-                                                       String systemPrompt,
-                                                       JsonNode responseSchema) {
+                                                       Prompt prompt) {
         int attempt = 0;
         long batchStartedNanos = System.nanoTime();
         while (true) {
             attempt++;
             long attemptStartedNanos = System.nanoTime();
             try {
-                BatchAnalysisResult result = analyzeBatch(pages, systemPrompt, responseSchema, providerCallCount);
+                BatchAnalysisResult result = analyzeBatch(pages, prompt, providerCallCount);
                 if (attempt > 1) {
                     log.info("AI_BATCH_RECOVERED provider=ollama model={} pages={} attempts={} durationMs={}",
                             model, pageNumbers(pages), attempt, elapsedMillis(batchStartedNanos));
@@ -323,7 +324,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 }
                 if (splitFallback) {
                     return analyzeSplitBatchAfterInvalidResponse(
-                            pages, pageRetryCount, providerCallCount, systemPrompt, responseSchema, attempt);
+                            pages, pageRetryCount, providerCallCount, prompt, attempt);
                 }
                 if (e.retryable()) {
                     throw exhaustedBatchFailure(e, attempt);
@@ -336,8 +337,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     private BatchAnalysisResult analyzeSplitBatchAfterInvalidResponse(List<PageContent> pages,
                                                                        AtomicInteger pageRetryCount,
                                                                        AtomicInteger providerCallCount,
-                                                                       String systemPrompt,
-                                                                       JsonNode responseSchema,
+                                                                       Prompt prompt,
                                                                        int failedBatchAttempts) {
         long startedNanos = System.nanoTime();
         int callsBefore = providerCallCount.get();
@@ -349,7 +349,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         for (PageContent page : pages) {
             try {
                 BatchAnalysisResult pageResult = analyzeBatchWithRetry(
-                        List.of(page), pageRetryCount, providerCallCount, systemPrompt, responseSchema);
+                        List.of(page), pageRetryCount, providerCallCount, prompt);
                 findings.addAll(pageResult.findings());
                 aggregate.add(pageResult.metrics());
             } catch (TechnicalDependencyException e) {
@@ -367,15 +367,14 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     }
 
     private BatchAnalysisResult analyzeBatch(List<PageContent> pages,
-                                              String systemPrompt,
-                                              JsonNode responseSchema,
+                                              Prompt prompt,
                                               AtomicInteger providerCallCount) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", model);
         requestBody.put("stream", false);
         requestBody.put("keep_alive", keepAlive);
         requestBody.put("think", thinkingEnabled);
-        requestBody.put("format", structuredOutput ? responseSchema : "json");
+        requestBody.put("format", structuredOutput ? prompt.schema() : "json");
 
         Map<String, Object> options = new LinkedHashMap<>();
         options.put("temperature", 0);
@@ -387,7 +386,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         }
         requestBody.put("options", options);
         requestBody.put("messages", List.of(
-                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "system", "content", prompt.text()),
                 Map.of("role", "user", "content", buildBatchUserPrompt(pages))
         ));
 
@@ -453,7 +452,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                         "Local AI provider reached the configured output limit", null);
             }
             List<DiscoveredSensitiveContent> findings = responseParser.parse(
-                    content, pages, "ollama", model, "ollama:" + model, VERSION);
+                    content, pages, "ollama", model, "ollama:" + model, prompt.version());
             return new BatchAnalysisResult(findings, ProviderMetrics.from(envelope));
         } catch (TechnicalDependencyException e) {
             throw e;
@@ -471,6 +470,36 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                     .append("\n</PAGE>\n");
         }
         return builder.toString();
+    }
+
+    /** What the model is told, the shape of its answer, and the version recorded with its findings. */
+    private record Prompt(String text, JsonNode schema, String version) { }
+
+    /** Task 0072: one request for the other kinds, exactly as before, and one for names where they are on. */
+    private List<Prompt> prompts(AnalysisPolicy policy) {
+        List<Prompt> prompts = new ArrayList<>();
+        boolean names = SensitiveContentPromptBuilder.asksForNames(policy);
+        AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(policy);
+        if (!names || !others.enabledEntityTypes().isEmpty()) {
+            prompts.add(new Prompt(promptBuilder.buildCompact(others), structuredOutput ? buildResponseSchema() : null, VERSION));
+        }
+        if (names) {
+            prompts.add(new Prompt(promptBuilder.buildNames(), structuredOutput ? namesSchema() : null,
+                    SensitiveContentPromptBuilder.NAMES_VERSION));
+        }
+        return prompts;
+    }
+
+    private JsonNode namesSchema() {
+        Map<String, Object> finding = Map.of("type", "object", "additionalProperties", false,
+                "properties", Map.of("pageNumber", Map.of("type", "integer", "minimum", 1),
+                        "entityType", Map.of("type", "string", "enum", List.of("PERSON_NAME")),
+                        "matchedText", Map.of("type", "string"),
+                        "confidence", Map.of("type", "number", "minimum", 0, "maximum", 1)),
+                "required", List.of("pageNumber", "entityType", "matchedText", "confidence"));
+        return objectMapper.valueToTree(Map.of("type", "object", "additionalProperties", false,
+                "properties", Map.of("findings", Map.of("type", "array", "items", finding)),
+                "required", List.of("findings")));
     }
 
     private JsonNode buildResponseSchema() {

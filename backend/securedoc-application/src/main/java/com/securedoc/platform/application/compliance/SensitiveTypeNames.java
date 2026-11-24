@@ -25,6 +25,7 @@ public final class SensitiveTypeNames {
             Map.entry("EIN", "EIN"),
             Map.entry("DRIVERS_LICENSE_NUMBER", "Driver’s license number"),
             Map.entry("PASSPORT_NUMBER", "Passport number"),
+            Map.entry("PERSON_NAME", "Person name"),
             Map.entry("SIGNATURE", "Signature or initials"),
             Map.entry("FACE_PHOTO", "Face photo"),
             Map.entry("UNREAD_PAGE", "Page to check"),

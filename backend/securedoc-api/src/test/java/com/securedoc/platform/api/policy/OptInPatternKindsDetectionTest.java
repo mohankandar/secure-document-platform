@@ -106,13 +106,14 @@ class OptInPatternKindsDetectionTest {
 
     /** Found in text; signatures and face photos are found on the page image (task 0064, VisionDetectionTest). */
     private static final Set<EntityType> NEW_KINDS = RedactionCatalog.entries().stream()
-            .filter(e -> !e.onByDefault() && e.detection() != RedactionCatalog.DetectionMethod.IMAGE).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
+            .filter(e -> !e.onByDefault() && e.detection() == RedactionCatalog.DetectionMethod.PATTERN).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
 
     private final TenantId tenantId = TenantId.of(UUID.randomUUID());
     private final List<Finding> savedFindings = new CopyOnWriteArrayList<>();
     private final List<AuditRecord> auditRecords = new CopyOnWriteArrayList<>();
     private final List<DomainEvent> events = new CopyOnWriteArrayList<>();
     private final List<SensitiveContentAnalysisPort.AnalysisRequest> aiRequests = new CopyOnWriteArrayList<>();
+    private List<SensitiveContentAnalysisPort.DiscoveredSensitiveContent> aiAnswer = List.of();
     private TenantRedactionPolicy storedPolicy;
     private String pageText = PAGE;
     private ListAppender<ILoggingEvent> logs;
@@ -140,7 +141,8 @@ class OptInPatternKindsDetectionTest {
         storedPolicy = null;
         run();
         assertEquals(Set.of(EntityType.SSN), types(), "only the V1 kinds, as before");
-        assertEquals(RedactionCatalog.askedOfAi(), aiRequests.get(0).policy().enabledEntityTypes());
+        assertEquals(Set.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
+                EntityType.CREDIT_SCORE), aiRequests.get(0).policy().enabledEntityTypes());
     }
 
     @Test
@@ -165,7 +167,7 @@ class OptInPatternKindsDetectionTest {
 
     @Test
     void switchedOnFindingsHaveBoxesAndFollowTheConfidenceRule() {
-        EnumSet<EntityType> all = EnumSet.copyOf(RedactionCatalog.askedOfAi());
+        EnumSet<EntityType> all = EnumSet.copyOf(RedactionCatalog.onByDefault());
         all.addAll(NEW_KINDS);
         storedPolicy = policy(all);
         run();
@@ -298,6 +300,60 @@ class OptInPatternKindsDetectionTest {
         }
     }
 
+    /* Task 0072: Person name: off by default, the AI only, every place on the page, never without a person. */
+
+    private static final String NAMES = """
+            Letter of DELPHINE QUARRINGTON to the court
+            Ms. Quarrington asks that Delphine Quarrington be heard. Quarringtonville is a town.
+            SSN: 412-55-7531
+            End of page""";
+
+    private static SensitiveContentAnalysisPort.DiscoveredSensitiveContent name(String text) {
+        return new SensitiveContentAnalysisPort.DiscoveredSensitiveContent("PERSON_NAME", 1, text, "", 0.99, "ai", "1");
+    }
+
+    @Test
+    void aNameIsFoundInEveryPlaceAndAlwaysGoesToAPerson() {
+        pageText = NAMES;
+        aiAnswer = List.of(name("Delphine Quarrington"), name("Quarrington"), name("412-55-7531"));
+        Map<EntityType, List<Finding>> found = runWith(EnumSet.of(EntityType.SSN, EntityType.PERSON_NAME));
+        assertEquals(Set.of(EntityType.SSN, EntityType.PERSON_NAME), aiRequests.get(0).policy().enabledEntityTypes());
+        List<Finding> names = found.get(EntityType.PERSON_NAME);
+        assertEquals(3, names.size(), "both full names and the last name alone; not the town, not the number");
+        for (Finding f : names) {
+            assertTrue(f.location().hasBoundingBox());
+            assertEquals(FindingStatus.DETECTED, f.status(), "0.99 is above the threshold, and still a person decides");
+            assertEquals(RedactionStyle.REMOVE_FULLY, f.redactionStyle());
+        }
+        assertTrue(found.get(EntityType.SSN).stream().allMatch(f -> f.status() == FindingStatus.CONFIRMED));
+        for (String text : java.util.stream.Stream.of(savedFindings.stream().map(NoRedactedValueSavedTest::dump),
+                auditRecords.stream().map(NoRedactedValueSavedTest::dump), events.stream().map(NoRedactedValueSavedTest::dump),
+                logs.list.stream().map(l -> l.getFormattedMessage())).flatMap(s -> s).toList()) {
+            assertFalse(text.toLowerCase().contains("quarrington") || text.toLowerCase().contains("delphine"), "a name is kept nowhere");
+        }
+    }
+
+    @Test
+    void offMeansOffEvenWhenTheModelAnswersWithNames() {
+        pageText = NAMES;
+        aiAnswer = List.of(name("Delphine Quarrington"));
+        assertEquals(Set.of(EntityType.SSN), runWith(EnumSet.of(EntityType.SSN)).keySet());
+        storedPolicy = null;
+        savedFindings.clear();
+        run();
+        assertEquals(Set.of(EntityType.SSN), types());
+    }
+
+    @Test
+    void aNameWithoutAWholeWordPlaceIsNotLost() {
+        pageText = NAMES;
+        aiAnswer = List.of(name("Quarringtonv"));
+        List<Finding> names = runWith(EnumSet.of(EntityType.PERSON_NAME)).get(EntityType.PERSON_NAME);
+        assertEquals(1, names.size());
+        assertFalse(names.get(0).location().hasBoundingBox());
+        assertEquals(FindingStatus.DETECTED, names.get(0).status());
+    }
+
     private Map<EntityType, List<Finding>> runWith(Set<EntityType> enabled) {
         savedFindings.clear();
         storedPolicy = policy(enabled);
@@ -319,7 +375,7 @@ class OptInPatternKindsDetectionTest {
         LocalRuleBasedDetectionAdapter rules = new LocalRuleBasedDetectionAdapter();
         SensitiveContentAnalysisPort ai = request -> {
             aiRequests.add(request);
-            return new SensitiveContentAnalysisPort.AnalysisOutput(List.of());
+            return new SensitiveContentAnalysisPort.AnalysisOutput(aiAnswer);
         };
         SensitiveDataDetectionService service = new SensitiveDataDetectionService(
                 new Documents(), new Packages(), new Artifacts(), new Storage(),

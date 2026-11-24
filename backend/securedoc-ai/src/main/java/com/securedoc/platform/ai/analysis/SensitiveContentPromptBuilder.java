@@ -15,6 +15,25 @@ import java.util.Objects;
  */
 public final class SensitiveContentPromptBuilder {
 
+    /** Task 0072 (BL7): the recorded version of {@link #buildNames()}; any change of that text is a new one. */
+    static final String NAMES_VERSION = "person-name-v1";
+
+    /** Task 0072: names have a request of their own; beside the other kinds the model returned none. */
+    static boolean asksForNames(AnalysisPolicy policy) {
+        return policy.enabledEntityTypes().contains(EntityType.PERSON_NAME);
+    }
+
+    /** The other kinds, whose prompt and answer shape are the same with and without names. */
+    static AnalysisPolicy withoutNames(AnalysisPolicy policy) {
+        return new AnalysisPolicy(policy.enabledEntityTypes().stream().filter(t -> t != EntityType.PERSON_NAME)
+                .collect(java.util.stream.Collectors.toSet()), policy.maskSsnLastFour());
+    }
+
+    public String buildNames() {
+        return """
+                Find every person name. Read the page line by line. matchedText is the name exactly as written: a full name, a name in capitals, "Last, First", or a last name standing alone in a sentence. Give every different written form once. Never return companies, banks, courts, agencies, counties, streets, places, programs or roles (Borrower, Plaintiff, Loan Officer); if nobody is named, return no findings. Return JSON only: findings[] with pageNumber, entityType (always PERSON_NAME), matchedText, confidence.""";
+    }
+
     public String build(AnalysisPolicy policy) {
         Objects.requireNonNull(policy, "policy must not be null");
 

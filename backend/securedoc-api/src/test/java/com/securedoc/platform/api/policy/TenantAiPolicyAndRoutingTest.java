@@ -46,6 +46,24 @@ class TenantAiPolicyAndRoutingTest {
         assertFalse(prompt.contains("SSN:"));
     }
 
+    /** Task 0072 (model change gate): without Person name the prompt is byte for byte the approved one. */
+    @Test
+    void thePromptsOfTheOtherKindsAreUnchangedAndNamesHaveTheirOwn() throws Exception {
+        SensitiveContentPromptBuilder builder = new SensitiveContentPromptBuilder();
+        AnalysisPolicy four = AnalysisPolicy.v1Defaults();
+        assertEquals("864f32ea6faceb6d9f503e1ae1e81f1151b141e00f2ff742f1993a82af1ebdad", sha(builder.buildCompact(four)));
+        assertEquals("32422f7338a07f8174546b71074e8b9839ab545043eddaa00229f9de189a6a05", sha(builder.build(four)));
+        assertEquals("5c1cc58ac9eaf55ed266eb80a7a6c84d49f5946e337b6fc4c2a77d1e5df9a4a3", sha(builder.buildNames()), "a change of the names prompt needs a new version and the gate");
+        java.util.Set<EntityType> five = java.util.EnumSet.copyOf(four.enabledEntityTypes());
+        five.add(EntityType.PERSON_NAME);
+        assertEquals(builder.buildCompact(four), builder.buildCompact(new AnalysisPolicy(five, true)));
+    }
+
+    private static String sha(String text) throws Exception {
+        return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(text.replace("\r\n", "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
     @Test
     void qwenPromptCarriesCompactPrecisionGuardrails() {
         SensitiveContentPromptBuilder builder = new SensitiveContentPromptBuilder();
