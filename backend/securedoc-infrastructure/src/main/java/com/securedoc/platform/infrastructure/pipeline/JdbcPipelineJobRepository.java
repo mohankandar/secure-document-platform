@@ -68,6 +68,16 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             (d.state IS NULL OR d.state = 'WORKING')
                AND (d.rate_limited_until IS NULL OR d.rate_limited_until <= clock_timestamp())""";
 
+    /**
+     * Task 0049: fairness between entities. Within a priority, the entity after the one this server served last (by id,
+     * round and round), then queue order within the entity. One entity's flood never holds back another's work.
+     */
+    private static final String FAIR_ORDER = """
+            CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END,
+            (j.tenant_id <= :lastTenant), j.tenant_id, j.queue_seq""";
+
+    private static final UUID NO_TENANT = new UUID(0L, 0L);
+
     private static final String ORDER = """
             CASE j.priority WHEN 'URGENT' THEN 1 WHEN 'NORMAL' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END, j.queue_seq""";
 
@@ -94,7 +104,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                     < GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)))
              ORDER BY %s
              LIMIT 1
-            """.formatted(DUE, DESTINATION_OPEN, ORDER);
+            """.formatted(DUE, DESTINATION_OPEN, FAIR_ORDER);
 
     /**
      * Task 0038: under the destination's lock, its first due job in queue order. {@code FOR UPDATE} without
@@ -127,7 +137,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
              ORDER BY %s
              LIMIT 1
              FOR UPDATE OF j SKIP LOCKED
-            """.formatted(DUE, ORDER);
+            """.formatted(DUE, FAIR_ORDER);
 
     /**
      * One lock per (entity, destination), held until the claim's transaction ends: a 64-bit hash of a text that names
@@ -240,6 +250,8 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final TransactionTemplate transactions;
+    /** Task 0049: the entity served last, per stage (set) claimed together, on this server. */
+    private final Map<String, UUID> lastServed = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** For tests: a transaction manager on the template's own data source. */
     public JdbcPipelineJobRepository(NamedParameterJdbcTemplate jdbc) {
@@ -316,10 +328,15 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 .addValue("owner", owner)
                 .addValue("leaseMillis", leaseMillis(lease))
                 .addValue("perDestination", Math.max(1, perDestinationLimit));
+        String turn = stages.stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(","));
         for (int i = 0; i < CLAIM_TRIES; i++) {
+            params.addValue("lastTenant", lastServed.getOrDefault(turn, NO_TENANT));
             ClaimTry result = transactions.execute(status -> claimOnce(params));
             if (result == null || result.nothingDue()) return Optional.empty();
-            if (result.claimed() != null) return Optional.of(result.claimed());
+            if (result.claimed() != null) {
+                lastServed.put(turn, result.claimed().tenantId().value());
+                return Optional.of(result.claimed());
+            }
             // Its destination was full once the lock was held: look again (the first filter now sees it full).
         }
         return Optional.empty();

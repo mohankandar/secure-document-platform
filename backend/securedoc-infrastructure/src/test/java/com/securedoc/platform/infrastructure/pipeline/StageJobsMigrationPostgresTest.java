@@ -199,6 +199,69 @@ class StageJobsMigrationPostgresTest {
         }
     }
 
+    /** Task 0049, step 2: entity A queues 200 documents, then B queues 5: they take turns. */
+    @Test
+    void entitiesTakeTurnsWithinAStageAndPriorityOldestFirstWithinEach() throws Exception {
+        for (boolean export : new boolean[]{false, true}) {
+            try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m050fair")) {
+                NamedParameterJdbcTemplate jdbc = db.jdbc();
+                JdbcPipelineJobRepository jobs = new JdbcPipelineJobRepository(jdbc);
+                TenantId a = TenantId.generate();
+                TenantId b = TenantId.generate();
+                List<UUID> ofA = queue(jdbc, jobs, a, 200, export);
+                List<UUID> ofB = queue(jdbc, jobs, b, 5, export);
+                PipelineStage stage = export ? PipelineStage.EXPORT : PipelineStage.TEXT;
+
+                List<PipelineJob> claimed = new java.util.ArrayList<>();
+                for (int i = 0; i < 205; i++) {
+                    claimed.add(jobs.claimNext(EnumSet.of(stage), "a", Duration.ofMinutes(5), 1000).orElseThrow());
+                }
+                List<UUID> first10 = claimed.stream().limit(10).map(PipelineJob::id).toList();
+                assertTrue(first10.containsAll(ofB), "B's 5 documents start within the next 10 claims, not after A's 200");
+                assertEquals(ofA, claimed.stream().filter(j -> j.tenantId().equals(a)).map(PipelineJob::id).toList(),
+                        "oldest first within A");
+                assertEquals(ofB, claimed.stream().filter(j -> j.tenantId().equals(b)).map(PipelineJob::id).toList(),
+                        "oldest first within B");
+            }
+        }
+    }
+
+    private static List<UUID> queue(NamedParameterJdbcTemplate jdbc, JdbcPipelineJobRepository jobs, TenantId tenant,
+                                    int count, boolean export) {
+        TestRows.tenant(jdbc, tenant);
+        IntegrationConnectionId destination = IntegrationConnectionId.generate();
+        if (export) TestRows.connection(jdbc, tenant, destination);
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            PackageId pkg = PackageId.generate();
+            TestRows.packageRow(jdbc, tenant, pkg);
+            PipelineJob job = export
+                    ? PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, destination, null, 1, Instant.now())
+                    : job(tenant, PipelineStage.TEXT, pkg, DocumentId.generate());
+            assertTrue(jobs.enqueue(job));
+            ids.add(job.id());
+        }
+        return ids;
+    }
+
+    /** Priority comes before turns: an Urgent job of the entity just served still goes first. */
+    @Test
+    void priorityComesBeforeTurns() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m050prio")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            JdbcPipelineJobRepository jobs = new JdbcPipelineJobRepository(jdbc);
+            TenantId a = TenantId.generate();
+            List<UUID> ofA = queue(jdbc, jobs, a, 3, false);
+            queue(jdbc, jobs, TenantId.generate(), 3, false);
+            PipelineJob first = jobs.claimNext(EnumSet.of(PipelineStage.TEXT), "a", Duration.ofMinutes(5), 1).orElseThrow();
+            UUID urgent = ofA.get(2);
+            jdbc.update("UPDATE pipeline_jobs SET priority = 'URGENT' WHERE id = :id",
+                    new MapSqlParameterSource("id", urgent));
+            assertEquals(urgent, jobs.claimNext(EnumSet.of(PipelineStage.TEXT), "a", Duration.ofMinutes(5), 1)
+                    .orElseThrow().id(), "after " + first.tenantId());
+        }
+    }
+
     private static PipelineJob job(TenantId tenant, PipelineStage stage, PackageId pkg, DocumentId document) {
         return PipelineJob.ready(tenant, stage, pkg, document, null, null, 1, Instant.now());
     }
