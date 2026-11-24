@@ -191,6 +191,14 @@ public class PackageController {
                 null, null, null, null, 1, true)).isEmpty();
     }
 
+    private com.securedoc.platform.application.port.out.PackageRejectionRepository rejections;
+
+    /** Task 0071. Optional, as below. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setRejections(com.securedoc.platform.application.port.out.PackageRejectionRepository rejections) {
+        this.rejections = rejections;
+    }
+
     /** Optional so that the controller's tests need no audit store. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setAuditQuery(com.securedoc.platform.application.port.out.AuditQueryPort auditQuery) {
@@ -234,7 +242,8 @@ public class PackageController {
                 detail.updatedAt(),
                 detail.sensitivityLevel().name(),
                 detail.effectiveSensitivityLevel().name(),
-                signatureRemoved(principal, pkgId)
+                signatureRemoved(principal, pkgId),
+                rejections == null ? null : rejections.find(principal.tenantId(), pkgId).map(r -> r.code().code()).orElse(null)
         );
         return ResponseEntity.ok(response);
     }

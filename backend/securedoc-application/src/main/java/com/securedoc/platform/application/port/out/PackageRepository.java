@@ -26,6 +26,16 @@ public interface PackageRepository {
     default void lockForUpdate(PackageId id, TenantId tenantId) {
     }
 
+    /**
+     * Task 0071: saves the case's new status only while the stored one is still among {@code from}; false when another
+     * person's decision (a rejection, an approval) came first. Decided in the database, so a decision that read the case
+     * earlier can't overwrite a newer one. The default, for in-memory copies in tests, saves.
+     */
+    default boolean changeStatus(DocumentPackage documentPackage, java.util.Set<PackageStatus> from) {
+        save(documentPackage);
+        return true;
+    }
+
     List<DocumentPackage> findByTenantId(TenantId tenantId, int offset, int limit);
 
     long countByTenantId(TenantId tenantId);

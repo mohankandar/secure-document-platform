@@ -1,7 +1,7 @@
 # Report 0067: P3, workers grow with the queue, learned AI limit, intake pacing, safety stop
 
 Date: 2026-11-24
-Branch: `feature/0067-p3-workers`; the integration branch (with 0058 and 0069) is merged into it
+Branch: `feature/0067-p3-workers`; the integration branch (with 0058, 0069 and 0071) is merged into it; after 0071 the targeted backend tests (13 + 55 + 3 + 275) and `test:vocabulary` (215) were run again, 0 failed
 Outcome: **DONE** (40,000 documents wait for milestone M1; 6 questions, the recommended answer taken in each)
 
 ## What was done

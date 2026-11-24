@@ -28,7 +28,7 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
   EXPORTED: { stage: 'delivered', label: STAGE_NAMES.delivered, detail: 'Processing and export completed.' },
   DELIVERED: { stage: 'delivered', label: STAGE_NAMES.delivered, detail: 'Processing and export completed.' },
   FAILED: { stage: 'stopped', label: 'Stopped', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
-  REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'The source was rejected and will not be processed.' },
+  REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'A person rejected this case. Nothing is exported.' },
 };
 
 export const STAGES: { key: StageKey; label: string }[] = (

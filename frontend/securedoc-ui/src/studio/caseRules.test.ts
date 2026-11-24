@@ -55,7 +55,7 @@ test('the next step in words', () => {
   assert.equal(nextStepText('PROCESSING', 0), 'Finding sensitive data…');
   assert.equal(nextStepText('SUBMITTED', 0), 'Queued');
   assert.equal(nextStepText('FAILED', 0), 'Processing stopped');
-  assert.equal(nextStepText('REJECTED', 0), 'Not accepted at intake');
+  assert.equal(nextStepText('REJECTED', 0), 'Rejected, nothing more to do');
   assert.equal(nextStepText('COMPLETED', 0), 'Redacted and sent');
   assert.equal(nextStepText('SOMETHING_NEW', 0), 'Status not recognised');
 });

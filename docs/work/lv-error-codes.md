@@ -144,6 +144,11 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-REV-007 | Can't process again | The original is no longer kept, or the case reached its limit of runs. | Refused | Nobody | 400 | 146, 199 |
 | LV-REV-008 | Can't continue by hand | Continuing manually is only for cases stopped at the AI step. | Refused | Reviewer | 400 | 151 |
 | LV-REV-009 | Page doesn't exist | The page asked for isn't in the document. | Refused | Nobody | 400 | 0025 (review page out of range) |
+| LV-REV-010 | Rejected: wrong document | A person rejected the case: it holds the wrong document. | Stopped | Source system | — | 0071 |
+| LV-REV-011 | Rejected: unreadable | A person rejected the case: its document is unreadable. | Stopped | Source system | — | 0071 |
+| LV-REV-012 | Rejected: out of scope | A person rejected the case: it is out of scope. | Stopped | Source system | — | 0071 |
+| LV-REV-013 | Rejected: duplicate | A person rejected the case: it is a duplicate. | Stopped | Source system | — | 0071 |
+| LV-REV-014 | Rejected: other (see ticket) | A person rejected the case for another reason, written in a ticket. | Stopped | Source system | — | 0071 |
 
 ### DLV: export (001–029)
 

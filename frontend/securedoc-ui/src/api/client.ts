@@ -628,6 +628,11 @@ class ApiClient {
     return this.request(`/packages/${packageId}/reprocess`, { method: 'POST' });
   }
 
+  /** Task 0071: ends the case as Rejected. The reason is an LV code of the fixed list. */
+  async rejectCase(packageId: string, step: 'review' | 'approval', reasonCode: string): Promise<{ packageId: string; status: string; reasonCode: string }> {
+    return this.request(`/packages/${packageId}/${step}/reject`, { method: 'POST', body: JSON.stringify({ reasonCode }) });
+  }
+
   async approvePackageDelivery(packageId: string): Promise<{ packageId: string; status: string }> {
     return this.request(`/packages/${packageId}/approve-delivery`, { method: 'POST' });
   }

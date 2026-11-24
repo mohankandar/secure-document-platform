@@ -87,7 +87,7 @@ class VisionMigrationPostgresTest {
             jobs.enqueue(vision(tenant, pkg, doc, 1, 1));
             jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.TEXT, pkg, doc, null, null, 1, Instant.now()));
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 1);
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 2); // 071, then 080
             }
             assertEquals(List.of("TEXT"), jdbc.queryForList("SELECT stage FROM pipeline_jobs",
                     new MapSqlParameterSource(), String.class));

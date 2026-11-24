@@ -48,6 +48,13 @@ public class JpaPackageRepositoryAdapter implements PackageRepository {
                 .map(this::toDomainWithDocuments);
     }
 
+    @Override
+    public boolean changeStatus(DocumentPackage documentPackage, java.util.Set<PackageStatus> from) {
+        return packageRepo.changeStatus(documentPackage.id().value(), documentPackage.tenantId().value(),
+                documentPackage.status().name(), documentPackage.updatedAt(),
+                from.stream().map(Enum::name).toList()) == 1;
+    }
+
     /**
      * Task 0039: a row lock on the case ({@code SELECT … FOR UPDATE}), released when the transaction commits or rolls
      * back. Taken only inside a read-write transaction: manual upload and push/scanner intake run in one. The scheduled

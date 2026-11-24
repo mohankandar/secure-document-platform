@@ -342,13 +342,14 @@ public class ApplicationServiceConfig {
             ChecksumPort checksumPort,
             PdfIntakeValidationPort pdfIntakeValidationPort,
             com.securedoc.platform.application.port.out.PdfDecryptionPort pdfDecryptionPort,
+            com.securedoc.platform.application.port.out.PackageRejectionRepository packageRejectionRepository,
             AuditService auditService,
             ExternalIntakeMaintenanceService maintenanceService,
             RequestActorDisplayName requestActorDisplayName) {
         return new ExternalIntakeService(integrationConnectionService, externalIntakeRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
                 checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName)
-                .withPdfDecryption(pdfDecryptionPort);
+                .withPdfDecryption(pdfDecryptionPort).withRejections(packageRejectionRepository);
     }
 
     @Bean
@@ -493,8 +494,10 @@ public class ApplicationServiceConfig {
 
     @Bean
     public ListPackagesQuery listPackagesQuery(PackageRepository packageRepository, BusinessIdentityService businessIdentityService,
-                                               ProcessingIncidentRepository processingIncidentRepository) {
-        return new ListPackagesQueryService(packageRepository, businessIdentityService, processingIncidentRepository);
+                                               ProcessingIncidentRepository processingIncidentRepository,
+            com.securedoc.platform.application.port.out.PackageRejectionRepository packageRejectionRepository) {
+        return new ListPackagesQueryService(packageRepository, businessIdentityService, processingIncidentRepository)
+                .withRejections(packageRejectionRepository);
     }
 
     @Bean
@@ -1545,6 +1548,18 @@ public class ApplicationServiceConfig {
         return new ReprocessPackageService(packageRepository, documentRepository, findingRepository,
                 artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService,
                 intakeLicence);
+    }
+
+    /** Task 0071. */
+    @Bean
+    public com.securedoc.platform.application.review.service.RejectCaseService rejectCaseService(
+            PackageRepository packageRepository,
+            com.securedoc.platform.application.port.out.PackageRejectionRepository packageRejectionRepository,
+            PackageLifecycleService packageLifecycleService,
+            com.securedoc.platform.application.port.out.PipelineJobRepository pipelineJobRepository,
+            AuditService auditService) {
+        return new com.securedoc.platform.application.review.service.RejectCaseService(packageRepository,
+                packageRejectionRepository, packageLifecycleService, pipelineJobRepository, auditService);
     }
 
     @Bean
