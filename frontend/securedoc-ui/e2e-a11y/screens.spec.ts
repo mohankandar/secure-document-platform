@@ -292,6 +292,7 @@ test.describe('Platform operations (Platform Operations)', () => {
     ['', '1 service needs attention'],
     ['storage', 'Where LexaVault works on documents'],
     ['branding', 'Branding'],
+    ['capacity', 'Workers on this server'],
     ['telemetry', 'Usage data'],
   ] as const) {
     test(`Platform: ${section || 'overview'}`, async ({ page }) => {

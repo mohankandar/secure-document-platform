@@ -757,6 +757,17 @@ export interface WatchedFolderAdminStatus {
   } | null;
 }
 
+/** Task 0067: the workers of the server that answered, and IT's own maximums. */
+export interface ProcessingCapacity {
+  staged: boolean;
+  stages: { stage: string; current: number; busy: number; lowest: number; highest: number; measured: number; maximum?: number | null; waiting: number }[];
+  aiServers: { number: number; requestsAtOnce: number; maximum: number; learned: boolean }[];
+  aiMaximum?: number | null;
+  queueLength: number;
+  intakeSlowdown: number;
+  intakeStopped: boolean;
+}
+
 export interface ProductTelemetryStatus {
   mode: 'OFF' | 'BASIC' | 'ENHANCED' | string;
   enabled: boolean;

@@ -84,7 +84,11 @@ class WorkersThatGrowTest {
         var nothingFree = WorkerLimits.measured(new WorkerLimits.Machine(1, 0, 5), 512, 4, 4, 16);
         nothingFree.values().forEach(n -> assertEquals(1, n));
         var fewConnections = WorkerLimits.measured(new WorkerLimits.Machine(64, 256_000, 40), 512, 64, 64, 16);
-        assertEquals(30, fewConnections.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(Map.of(PipelineStage.TEXT, 11, PipelineStage.REDACT, 5, PipelineStage.FIND, 6,
+                PipelineStage.VISION, 4, PipelineStage.EXPORT, 4), fewConnections, "30 in all");
+        assertEquals(Map.of(PipelineStage.TEXT, 7, PipelineStage.REDACT, 4, PipelineStage.FIND, 8,
+                PipelineStage.VISION, 6, PipelineStage.EXPORT, 5),
+                WorkerLimits.measured(new WorkerLimits.Machine(8, 32_000, 40), 512, 64, 64, 16));
     }
 
     @Test

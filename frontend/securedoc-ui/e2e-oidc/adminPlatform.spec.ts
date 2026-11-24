@@ -88,6 +88,10 @@ const DEPLOYMENT_BRAND = { id: 'b-1', tenantId: null, applicationName: 'LexaVaul
   secondaryColor: null, primaryLogoDataUrl: null, compactLogoDataUrl: null, faviconDataUrl: null, updatedBy: 'ops', updatedAt: minsAgo(500) };
 const BRANDING = { deployment: DEPLOYMENT_BRAND, tenants: [{ tenantId: 't-nw', tenantName: 'Northwind Commercial', tenantSlug: 'nwc', customBranding: false }] };
 
+const CAPACITY = { staged: true, queueLength: 420, intakeSlowdown: 4, intakeStopped: false, aiMaximum: null,
+  stages: ['TEXT', 'FIND', 'VISION', 'REDACT', 'EXPORT'].map((stage) => ({ stage, current: 3, busy: 2, lowest: 1, highest: 7, measured: 7, maximum: stage === 'FIND' ? 4 : null, waiting: 84 })),
+  aiServers: [{ number: 1, requestsAtOnce: 5, maximum: 64, learned: true }] };
+
 const TELEMETRY = {
   mode: 'BASIC', enabled: true, installationIdConfigured: true, privacyContract: 'ALLOW_LIST_ONLY',
   eventAllowList: ['package.processing.attempt', 'package.processing.finished'],
@@ -121,6 +125,7 @@ async function openPlatform(page: Page, role: 'TENANT_IT_ADMIN' | 'PLATFORM_OPER
     if (url.pathname === '/api/v1/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });
     if (url.pathname === '/api/v1/platform/branding/deployment') return json(DEPLOYMENT_BRAND);
     if (url.pathname === '/api/v1/platform/product-telemetry/status') return json(TELEMETRY);
+    if (url.pathname === '/api/v1/platform-admin/capacity') return json(CAPACITY);
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
   });
@@ -212,6 +217,21 @@ test('Branding: one form with Apply to, preview of the top bar; Usage data in pl
   await expect(card.getByLabel('Product name')).toHaveAttribute('placeholder', "Everyone's look");
   await expect(card.getByRole('button', { name: 'Save' })).toHaveCount(1);
   await expect(page.getByText(/Deployment branding|Tenant overrides|sidebar/i)).toHaveCount(0);
+
+  // Task 0067: the workers, the learned AI limit, and IT's own maximums; only what changed is sent.
+  await sections.getByRole('button', { name: 'Workers' }).click();
+  const workers = page.getByRole('region', { name: 'Workers on this server' });
+  await expect(workers.getByText('AI server 1: 5 at once (learned)')).toBeVisible();
+  await expect(workers.getByRole('row').filter({ hasText: 'Read the text' })).toContainText('317');
+  await workers.getByRole('button', { name: 'Change maximums' }).click();
+  await workers.getByLabel(/^Read the text/).fill('99');
+  await workers.getByRole('button', { name: 'Save maximums' }).click();
+  await expect(workers.getByText('A maximum is a whole number from 1 to 64, or empty.')).toBeVisible();
+  await workers.getByLabel(/^Read the text/).fill('6');
+  await workers.getByLabel(/^Find/).fill('');
+  await workers.getByRole('button', { name: 'Save maximums' }).click();
+  await expect.poll(() => calls.find((c) => c.path === '/api/v1/platform-admin/capacity')?.body).toEqual({ maximums: { TEXT: 6, FIND: null } });
+  await expect(workers.getByRole('button', { name: 'Change maximums' })).toBeVisible();
 
   await sections.getByRole('button', { name: 'Usage data' }).click();
   const usage = page.getByRole('region', { name: 'Usage data' });

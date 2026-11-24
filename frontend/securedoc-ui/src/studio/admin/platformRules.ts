@@ -5,6 +5,7 @@
  * names and node names stay under Technical details.
  */
 import type {
+  ProcessingCapacity,
   PlatformHealthItem,
   ProcessingStorageNodeValidation,
   ProcessingStorageOverview,
@@ -18,9 +19,35 @@ export type StatusLine = { tone: Tone; word: string; rest: string[] };
 export const SECTION_LABELS = {
   overview: 'Overview',
   storage: 'Processing storage',
+  capacity: 'Workers',
   branding: 'Branding',
   telemetry: 'Usage data',
 } as const;
+
+/* ---------- Workers (task 0067) ---------- */
+
+const STAGE_NAMES: Record<string, string> = { TEXT: 'Read the text', FIND: 'Find', VISION: 'Look at pages', REDACT: 'Redact', EXPORT: 'Export' };
+export const stageName = (stage: string): string => STAGE_NAMES[stage] ?? stage;
+
+/** "AI server 1: 5 at once (learned)". */
+export const aiServerText = (a: ProcessingCapacity['aiServers'][number]): string =>
+  `AI server ${a.number}: ${a.requestsAtOnce} at once${a.learned ? ' (learned)' : ''}`;
+
+export function capacityNote(c: Pick<ProcessingCapacity, 'intakeStopped' | 'intakeSlowdown' | 'staged'>): { tone: 'danger' | 'neutral'; text: string } | null {
+  if (c.intakeStopped) return { tone: 'danger', text: 'LexaVault takes nothing in: too little disk or database space is free. It starts again by itself when there is enough. Senders are told to send again later; nothing is lost. · LV-INT-027' };
+  if (c.intakeSlowdown > 1) return { tone: 'neutral', text: 'Many documents are waiting, so the watched folder and polling are checked less often. The files wait where they are.' };
+  return null;
+}
+
+export const maximumError = (value: string): boolean => {
+  const v = value.trim();
+  return v !== '' && !(/^\d{1,2}$/.test(v) && Number(v) >= 1 && Number(v) <= 64);
+};
+
+/** Only what differs; an emptied maximum is null (LexaVault decides again). */
+export function maximumChanges(saved: Record<string, number | null>, edits: Record<string, string>): Record<string, number | null> {
+  return Object.fromEntries(Object.entries(edits).map(([k, v]) => [k, v.trim() === '' ? null : Number(v)] as const).filter(([k, v]) => (saved[k] ?? null) !== v));
+}
 
 /* ---------- Overview: services ---------- */
 

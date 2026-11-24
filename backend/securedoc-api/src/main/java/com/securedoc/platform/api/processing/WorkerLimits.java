@@ -13,6 +13,9 @@ final class WorkerLimits {
     /** Database connections left for requests and for the app's own checks. */
     static final int CONNECTIONS_KEPT_FREE = 10;
 
+    private static final int FIND_FIRST = 6;
+    private static final int WAITING_STAGES_FIRST = 4;
+
     /** @param freeMemoryMb memory free when the app started */
     record Machine(int cores, long freeMemoryMb, int databaseConnections) { }
 
@@ -22,8 +25,9 @@ final class WorkerLimits {
     /**
      * The highest number per stage on this machine: Text one per core leaving one free, Redact half the cores, Text and
      * Redact together no more than the free memory allows, Find and Vision what the AI servers may take, Export what is
-     * asked, and all together no more than the database connections (each may hold one). Never below 1; what is short is
-     * shared out one by one.
+     * asked, and all together no more than the database connections (a running job holds one). Never below 1. When
+     * connections are short, Find (usually the slowest) first gets 6, Vision and Export 4 each (they mostly wait), then
+     * Text and Redact theirs (two to one), then the others the rest.
      */
     static Map<PipelineStage, Integer> measured(Machine machine, int memoryPerWorkerMb, int aiRequests, int visionRequests,
                                                 int exports) {
@@ -37,19 +41,32 @@ final class WorkerLimits {
         int connections = machine.databaseConnections() - CONNECTIONS_KEPT_FREE - STAGES.size();
         Map<PipelineStage, Integer> out = new EnumMap<>(PipelineStage.class);
         STAGES.forEach(stage -> out.put(stage, 1));
+        List<PipelineStage> waiting = List.of(PipelineStage.FIND, PipelineStage.VISION, PipelineStage.EXPORT);
+        List<PipelineStage> working = List.of(PipelineStage.TEXT, PipelineStage.TEXT, PipelineStage.REDACT);
+        connections -= share(out, wanted, waiting, WAITING_STAGES_FIRST, connections);
+        connections -= share(out, wanted, List.of(PipelineStage.FIND), FIND_FIRST, connections);
+        connections -= share(out, wanted, working, MANY, (int) Math.min(connections, memory));
+        share(out, wanted, waiting, MANY, connections);
+        return out;
+    }
+
+    private static final int MANY = 1_000;
+
+    /** One by one in this order, up to what each wants and {@code upTo}; the number given. */
+    private static int share(Map<PipelineStage, Integer> out, Map<PipelineStage, Integer> wanted,
+                             List<PipelineStage> stages, int upTo, int available) {
+        int left = Math.max(0, available);
         boolean given = true;
-        while (given && connections > 0) {
+        while (given && left > 0) {
             given = false;
-            for (PipelineStage stage : STAGES) {
-                boolean usesMemory = stage == PipelineStage.TEXT || stage == PipelineStage.REDACT;
-                if (connections < 1 || out.get(stage) >= wanted.get(stage) || usesMemory && memory < 1) continue;
+            for (PipelineStage stage : stages) {
+                if (left < 1 || out.get(stage) >= Math.min(upTo, wanted.get(stage))) continue;
                 out.merge(stage, 1, Integer::sum);
-                connections--;
-                if (usesMemory) memory--;
+                left--;
                 given = true;
             }
         }
-        return out;
+        return Math.max(0, available) - left;
     }
 
     /** Up at once, down by half of what is too many, so a short gap in the queue does not stop and start workers. */
