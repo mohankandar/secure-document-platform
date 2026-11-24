@@ -85,6 +85,12 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         this.responseParser = new SensitiveContentResponseParser(this.objectMapper);
     }
 
+    /** One request per page. */
+    @Override
+    public boolean mayCoverSeveralPages(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return false;
+    }
+
     @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
         Objects.requireNonNull(request, "request must not be null");

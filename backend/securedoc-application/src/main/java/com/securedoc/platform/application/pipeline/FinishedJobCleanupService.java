@@ -21,7 +21,7 @@ import java.util.Objects;
  * <p>Per tenant: finished jobs are removed in batches until a batch comes back short (at most
  * {@link #MAX_BATCHES_PER_TENANT} batches per run; the rest waits for the next run), then the cleared reachability
  * alert. A tenant with anything removed gets one {@link AuditAction#PIPELINE_JOBS_CLEANED} record with the counts
- * and the cut-off date only. With export-mode inline the tables are empty and nothing happens.
+ * and the cut-off date only. Where no export job was ever queued the tables are empty and nothing happens.
  */
 public final class FinishedJobCleanupService {
     private static final Logger log = LoggerFactory.getLogger(FinishedJobCleanupService.class);

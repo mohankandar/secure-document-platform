@@ -151,6 +151,11 @@ public final class ExportJobService {
 
     // ---------------------------------------------------------------- workers
 
+    /** Task 0052: true while any export job is still to be done (after a switch back to inline it is finished). */
+    public boolean hasOpenJobs() {
+        return jobs.hasOpenExportJobs();
+    }
+
     /** Claims the next due export job for this worker, if there is one. */
     public Optional<PipelineJob> claimNext(String owner) {
         return jobs.claimNext(EXPORT_STAGES, owner, settings.claimLease(), settings.workersPerDestination());
@@ -604,6 +609,10 @@ public final class ExportJobService {
     // ---------------------------------------------------------------- one attempt
 
     private Outcome attempt(PipelineJob job, CorrelationId correlationId) {
+        return ExportJobAttempt.run(() -> attemptOnce(job, correlationId));
+    }
+
+    private Outcome attemptOnce(PipelineJob job, CorrelationId correlationId) {
         try {
             return switch (job.stage()) {
                 case EXPORT -> exportCase(job, correlationId);

@@ -26,6 +26,15 @@ public interface SensitiveContentAnalysisPort {
     AnalysisOutput analyze(AnalysisRequest request);
 
     /**
+     * Task 0052: whether one request to the AI provider may cover several pages for this tenant, with any provider the
+     * tenant may use (failover included). Page batches share pages only then. An implementation that does not say is
+     * taken to send several pages (the batches keep their shared pages).
+     */
+    default boolean mayCoverSeveralPages(TenantId tenantId) {
+        return true;
+    }
+
+    /**
      * Compatibility helper for focused adapter tests and development utilities. Production
      * document processing always supplies tenant identity and policy through {@link AnalysisRequest}.
      */

@@ -107,14 +107,31 @@ final class ExportJobFixture {
     final ExportJobSettings settings;
     final ExportJobQueue queue;
     final ExportJobService service;
+    /** Task 0052: the stores the queue and the service use (in memory unless the test gives real ones). */
+    final com.securedoc.platform.application.port.out.PipelineJobRepository jobStore;
+    final com.securedoc.platform.application.port.out.ExportDestinationStateRepository stateStore;
+    final com.securedoc.platform.application.port.out.ExportReachabilityAlertRepository alertStore;
+    final DocumentRepository documentRepository = mock(DocumentRepository.class);
+    final PackageDocumentExportService export;
+    private final ExportDestinationProbePort probe;
 
     ExportJobFixture() {
         this(ExportJobSettings.defaults(ExportMode.JOB));
     }
 
     ExportJobFixture(ExportJobSettings settings) {
+        this(settings, null, null, null);
+    }
+
+    /** Task 0052: with real stores for the queue, the destination states and the alert. */
+    ExportJobFixture(ExportJobSettings settings,
+                     com.securedoc.platform.application.port.out.PipelineJobRepository realJobs,
+                     com.securedoc.platform.application.port.out.ExportDestinationStateRepository realStates,
+                     com.securedoc.platform.application.port.out.ExportReachabilityAlertRepository realAlerts) {
         this.settings = settings;
-        DocumentRepository documentRepository = mock(DocumentRepository.class);
+        jobStore = realJobs == null ? jobs : realJobs;
+        stateStore = realStates == null ? states : realStates;
+        alertStore = realAlerts == null ? alerts : realAlerts;
         ArtifactRepository artifactRepository = mock(ArtifactRepository.class);
         when(packageRepository.findByIdAndTenantId(any(), any()))
                 .thenAnswer(i -> Optional.ofNullable(packages.get(i.<PackageId>getArgument(0))));
@@ -147,10 +164,10 @@ final class ExportJobFixture {
             public void saveAttempt(com.securedoc.platform.domain.delivery.DeliveryAttempt attempt) { }
         };
 
-        PackageDocumentExportService export = new PackageDocumentExportService(documentRepository, packageRepository,
+        export = new PackageDocumentExportService(documentRepository, packageRepository,
                 mock(BusinessRecordRepository.class), artifactRepository, storage, destination, submissionRepository,
                 lifecycle, audit);
-        ExportDestinationProbePort probe = (tenantId, connectionId) -> {
+        probe = (tenantId, connectionId) -> {
             synchronized (checked) {
                 checked.add(connectionId);
             }
@@ -161,10 +178,19 @@ final class ExportJobFixture {
                         true, "down").withLvCode(LvErrorCode.DLV_001);
             }
         };
-        queue = new ExportJobQueue(jobs, destination, audit, settings, clock);
-        service = new ExportJobService(jobs, states, alerts, export, export, derived, packageRepository, lifecycle,
+        queue = queueFor(settings);
+        service = serviceFor(settings);
+    }
+
+    /** Another server's queue, or the same server's after a restart with other settings (task 0052). */
+    ExportJobQueue queueFor(ExportJobSettings chosen) {
+        return new ExportJobQueue(jobStore, destination, audit, chosen, clock);
+    }
+
+    ExportJobService serviceFor(ExportJobSettings chosen) {
+        return new ExportJobService(jobStore, stateStore, alertStore, export, export, derived, packageRepository, lifecycle,
                 new MasterExportCompletion(packageRepository, routing, incidents, audit), incidents, audit, probe,
-                connections, queue, settings, clock,
+                connections, queueFor(chosen), chosen, clock,
                 (tenantId, ids) -> {
                     Map<PackageId, CasePrimaryIdentifierLookup.CasePrimaryIdentifier> numbers = new HashMap<>();
                     ids.forEach(id -> {
@@ -178,6 +204,13 @@ final class ExportJobFixture {
 
     /** A case whose documents are all redacted, still PROCESSING, with its EXPORT job queued. */
     DocumentPackage caseReadyForExport() {
+        DocumentPackage pkg = finishedCase();
+        queue.queueCaseExport(tenant, pkg.id(), 1, CorrelationId.generate());
+        return pkg;
+    }
+
+    /** A case whose documents are all redacted, still PROCESSING, with no job. */
+    DocumentPackage finishedCase() {
         DocumentPackage pkg = DocumentPackage.create(tenant, PackageType.MANUAL_UPLOAD, ActorId.generate(),
                 PackageMetadata.empty());
         Instant now = Instant.now();
@@ -193,7 +226,6 @@ final class ExportJobFixture {
         packages.put(pkg.id(), pkg);
         documents.put(pkg.id(), List.of(document));
         artifacts.put(document.id().toString(), artifact);
-        queue.queueCaseExport(tenant, pkg.id(), 1, CorrelationId.generate());
         return pkg;
     }
 
@@ -253,6 +285,11 @@ final class ExportJobFixture {
         final List<String> existingReferences = new ArrayList<>();
         final Set<String> stored = new LinkedHashSet<>();
         final List<PackageId> deliveredInOrder = new ArrayList<>();
+        /** Task 0052: every call the destination accepted, also a repeated one, and whether an export job made it. */
+        final List<String> acceptedCalls = new ArrayList<>();
+        final List<Boolean> acceptedFromJob = new ArrayList<>();
+        /** Task 0052: runs inside a call, before the destination answers. */
+        volatile Runnable duringCall = () -> { };
 
         void up() { failWith = null; probeAnswers = true; }
 
@@ -269,6 +306,7 @@ final class ExportJobFixture {
         public synchronized BatchDeliveryReference deliverBatch(DeliveryBatch batch) {
             keys.add(batch.sourceSubmissionId());
             existingReferences.add(batch.existingDestinationSubmissionReference());
+            duringCall.run();
             if (stopServerOnNextCall) {
                 stopServerOnNextCall = false;
                 // The request reached the destination, then LexaVault's server stopped before it saved anything.
@@ -280,6 +318,8 @@ final class ExportJobFixture {
                 throw failure(LvErrorCode.DLV_002).asRateLimited(retryAfter);
             }
             if (failWith != null) throw failure(failWith).withDestinationCode(destinationCode);
+            acceptedCalls.add(batch.sourceSubmissionId());
+            acceptedFromJob.add(ExportJobAttempt.running());
             if (stored.add(batch.sourceSubmissionId())) deliveredInOrder.add(batch.packageId());
             List<DeliveryReference> refs = batch.items().stream().map(item -> new DeliveryReference(item.documentId(),
                     item.sourceDocumentId(), "document-store", "remote-" + item.sourceDocumentId(), "store://remote")).toList();

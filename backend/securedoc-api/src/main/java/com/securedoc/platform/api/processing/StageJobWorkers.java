@@ -1,7 +1,6 @@
 package com.securedoc.platform.api.processing;
 
 import com.securedoc.platform.application.error.LvErrorCodes;
-import com.securedoc.platform.application.pipeline.ExportMode;
 import com.securedoc.platform.application.processing.service.StagedProcessingService;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
@@ -24,11 +23,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Task 0048: the Text, Find and Redact workers of this server, started with
  * {@code securedoc.processing.pipeline-mode=staged}. Task 0049: with inline they start only when staged jobs are still
- * open (the setting was switched back), and finish those; new cases go inline. That needs export-mode job, because a
- * staged case ends in export jobs: without it the open jobs wait and the log says so. Each worker claims the next due job of its stage (claim lock,
- * {@code SKIP LOCKED}, queue order), renews its claim every third of the lease while it works, and saves its result
- * only under its current claim number. One sweep puts jobs whose claim ran out back in the queue. Fixed numbers per
- * stage for now; workers that grow with the queue are P3.
+ * open (the setting was switched back), and finish those; new cases go inline. Task 0052: whatever export-mode says, a
+ * staged case ends in export jobs, which the export workers finish. Each worker claims the next due job of its stage
+ * (claim lock, {@code SKIP LOCKED}, queue order), renews its claim every third of the lease while it works, and saves
+ * its result only under its current claim number. One sweep puts jobs whose claim ran out back in the queue. Fixed
+ * numbers per stage for now; workers that grow with the queue are P3.
  */
 @Component
 public class StageJobWorkers {
@@ -36,8 +35,6 @@ public class StageJobWorkers {
 
     private final StagedProcessingService service;
     private final String nodeId;
-    private final boolean exportJobs;
-    private boolean waitingLogged;
     /** In inline mode, open staged jobs are looked for every this many poll intervals. */
     static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
@@ -45,9 +42,7 @@ public class StageJobWorkers {
     private ScheduledExecutorService timers;
 
     public StageJobWorkers(StagedProcessingService service,
-                           @Value("${securedoc.logging.node-id:unknown}") String nodeId,
-                           @Value("${securedoc.processing.export-mode:inline}") String exportMode) {
-        this.exportJobs = ExportMode.parse(exportMode) == ExportMode.JOB;
+                           @Value("${securedoc.logging.node-id:unknown}") String nodeId) {
         this.service = service;
         this.nodeId = nodeId == null || nodeId.isBlank() ? "unknown" : nodeId.trim();
     }
@@ -72,15 +67,10 @@ public class StageJobWorkers {
     private synchronized void finishOpenJobs() {
         try {
             if (running) return;
-            if (exportJobs) service.runMissedGates();
+            service.runMissedGates();
             if (!service.hasOpenJobs()) return;
-            if (exportJobs) {
-                log.info("STAGE_JOB_WORKERS_FINISHING pipelineMode=inline reasonCode=OPEN_STAGE_JOBS");
-                startWorkers();
-            } else if (!waitingLogged) {
-                waitingLogged = true;
-                log.warn("STAGE_JOBS_WAITING pipelineMode=inline reasonCode=EXPORT_MODE_NOT_JOB");
-            }
+            log.info("STAGE_JOB_WORKERS_FINISHING pipelineMode=inline reasonCode=OPEN_STAGE_JOBS");
+            startWorkers();
         } catch (RuntimeException failure) {
             log.warn("STAGE_JOB_OPEN_CHECK_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());

@@ -122,6 +122,11 @@ public final class OllamaInferencePoolSensitiveContentAnalysisAdapter implements
     }
 
     @Override
+    public boolean mayCoverSeveralPages(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return nodes.stream().anyMatch(node -> node.delegate.mayCoverSeveralPages(tenantId));
+    }
+
+    @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         if (request.pages().stream().allMatch(page -> page.text().isBlank())) {

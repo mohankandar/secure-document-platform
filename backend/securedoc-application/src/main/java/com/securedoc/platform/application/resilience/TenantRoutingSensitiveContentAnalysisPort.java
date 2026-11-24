@@ -38,6 +38,15 @@ public final class TenantRoutingSensitiveContentAnalysisPort implements Sensitiv
         this.requireExplicitTenantProfile = requireExplicitTenantProfile;
     }
 
+    /** Task 0052: the tenant's own profile, else the default. With no profile to use, nothing is said (true). */
+    @Override
+    public boolean mayCoverSeveralPages(TenantId tenantId) {
+        SensitiveContentAnalysisPort tenantProvider = tenantId == null ? null : tenantProviders.get(tenantId);
+        if (tenantProvider != null) return tenantProvider.mayCoverSeveralPages(tenantId);
+        if (tenantId != null && requireExplicitTenantProfile) return true;
+        return defaultProvider.mayCoverSeveralPages(tenantId);
+    }
+
     @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
         Objects.requireNonNull(request, "request must not be null");

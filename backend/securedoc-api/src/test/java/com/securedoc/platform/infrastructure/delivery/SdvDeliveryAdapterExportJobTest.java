@@ -40,6 +40,21 @@ class SdvDeliveryAdapterExportJobTest {
         assertEquals(LvErrorCode.DLV_002, LvErrorCodes.of(failure));
     }
 
+    /** Task 0052: after a switch back to inline, an export job's attempt is still one try. */
+    @Test
+    void inInlineModeAnExportJobsAttemptIsStillOneTry() throws Exception {
+        List<HttpRequest> requests = new ArrayList<>();
+        HttpClient client = client(requests, new ArrayDeque<>(List.of(response(503, "{}"), response(503, "{}"),
+                response(503, "{}"))));
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), new ObjectMapper(),
+                client);
+
+        assertThrows(TechnicalDependencyException.class, () -> com.securedoc.platform.application.pipeline
+                .ExportJobAttempt.run(() -> adapter.deliverBatch(batch())));
+
+        assertEquals(1, requests.size());
+    }
+
     @Test
     void inlineKeepsTheInAdapterRetries() throws Exception {
         List<HttpRequest> requests = new ArrayList<>();

@@ -27,6 +27,13 @@ public final class ResilientSensitiveContentAnalysisPort implements SensitiveCon
         this.retryExecutor = Objects.requireNonNull(retryExecutor);
     }
 
+    /** Task 0052: true when the primary or the failover provider sends several pages in one request. */
+    @Override
+    public boolean mayCoverSeveralPages(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return primary.mayCoverSeveralPages(tenantId)
+                || (secondary != null && secondary.mayCoverSeveralPages(tenantId));
+    }
+
     @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
         try {

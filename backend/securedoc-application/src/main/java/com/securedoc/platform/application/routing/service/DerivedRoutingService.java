@@ -33,7 +33,7 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
     private final IntegrationConnectionRepository connections; private final DocumentRepository documents;
     private final ArtifactRepository artifacts; private final StoragePort storage; private final RoutingMarkerDetectionPort detector;
     private final DerivedPdfBuilderPort pdfBuilder; private final DerivedDeliveryService deliveryService; private final AuditService audit;
-    /** Task 0027: null sends each split document at once (today); set, it queues a SPLIT_EXPORT job instead. */
+    /** Task 0027: null sends each split document at once; set, it queues a SPLIT_EXPORT job unless the run's splits go inline (task 0052). */
     private final com.securedoc.platform.application.pipeline.SplitExportScheduler splitExportScheduler;
     public DerivedRoutingService(RoutingRuleRepository rules, DerivedDeliveryRepository deliveries, IntegrationConnectionRepository connections,
                                  DocumentRepository documents, ArtifactRepository artifacts, StoragePort storage,
@@ -64,8 +64,10 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
             return;
         }
         List<Document> packageDocuments=documents.findByPackageIdAndTenantId(packageId,tenantId);
+        // Task 0052: decided once for the run, before anything is built.
+        boolean byJob=splitExportScheduler!=null&&!splitExportScheduler.splitsGoInline(tenantId,packageId,exportCycle);
         try{
-            for(Document document:packageDocuments) processDocumentRecordingFailure(packageId,tenantId,exportCycle,document,active,correlationId);
+            for(Document document:packageDocuments) processDocumentRecordingFailure(packageId,tenantId,exportCycle,document,active,byJob,correlationId);
         }finally{
             StructuredLogContext.info(log,"DERIVED_ROUTING_COMPLETED",Map.of(
                     "exportCycle",exportCycle,
@@ -79,8 +81,8 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
      * Task 0023 (C4, #181/#190): one document's routing failure no longer escapes unrecorded. It becomes an
      * attention item with a code (and its audit), and the other documents are still routed. No retry.
      */
-    private void processDocumentRecordingFailure(PackageId packageId,TenantId tenantId,int exportCycle,Document document,List<RoutingRule> active,CorrelationId correlationId){
-        try{processDocument(packageId,tenantId,exportCycle,document,active,correlationId);}
+    private void processDocumentRecordingFailure(PackageId packageId,TenantId tenantId,int exportCycle,Document document,List<RoutingRule> active,boolean byJob,CorrelationId correlationId){
+        try{processDocument(packageId,tenantId,exportCycle,document,active,byJob,correlationId);}
         catch(RuntimeException e){
             log.warn("DERIVED_ROUTING_DOCUMENT_FAILED package={} document={} cycle={} code={} type={}",packageId,document.id(),exportCycle,DOCUMENT_ROUTING_FAILED,e.getClass().getSimpleName());
             ensureAttention(tenantId,packageId,document.id(),exportCycle,List.of(),DOCUMENT_ROUTING_FAILED,correlationId);
@@ -92,7 +94,7 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
         for(Document document:documents.findByPackageIdAndTenantId(packageId,tenantId))
             ensureAttention(tenantId,packageId,document.id(),exportCycle,List.of(),code,correlationId);
     }
-    private void processDocument(PackageId packageId,TenantId tenantId,int exportCycle,Document document,List<RoutingRule> active,CorrelationId correlationId){
+    private void processDocument(PackageId packageId,TenantId tenantId,int exportCycle,Document document,List<RoutingRule> active,boolean byJob,CorrelationId correlationId){
         Artifact master=artifacts.findByDocumentIdAndTenantId(document.id(),tenantId).stream().filter(a->a.artifactType()==ArtifactType.REDACTED&&a.isAvailable()).max(Comparator.comparing(Artifact::createdAt)).orElse(null);
         if(master==null){
             // Task 0023 (C4, #190): was a silent return; with enabled rules a missing master is an attention item.
@@ -148,8 +150,8 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
                             "Derived redacted document created for cycle="+exportCycle+", destination="+rule.destinationLabel()+", pages="+pages);
                     // Task 0023 (C4, #192): the delivery row and the audit record every failure, including a refusal
                     // before the attempt (DerivedDeliveryService.refuse); this log adds the type for IT. No retry here.
-                    if(splitExportScheduler!=null){
-                        // Task 0027 (export-mode job): the split document goes out as its own export job.
+                    if(byJob){
+                        // Task 0027 (export-mode job) or a case its job exported (task 0052): the split document goes out as its own export job.
                         splitExportScheduler.queueSplitExport(tenantId,packageId,document.id(),d.id(),c.id(),exportCycle,correlationId);
                         continue;
                     }

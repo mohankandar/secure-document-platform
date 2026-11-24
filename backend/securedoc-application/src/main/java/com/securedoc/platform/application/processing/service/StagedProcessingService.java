@@ -139,12 +139,24 @@ public final class StagedProcessingService {
      * @param settings  the entity's batch size and overlap
      * @param pageCount the number of pages of a document that is not read yet; empty when it cannot be told (the
      *                  document is then one job, whose step reports what is wrong with it)
+     * @param severalPagesPerAiRequest task 0052: whether one AI request may cover several pages for the entity. Only
+     *                  then do Find batches share pages: with one page per request the model never sees two pages
+     *                  together, so a shared page would only be sent twice.
      */
     public record PageBatching(Function<TenantId, PageBatchSettings> settings,
-                               Function<Document, OptionalInt> pageCount) {
+                               Function<Document, OptionalInt> pageCount,
+                               java.util.function.Predicate<TenantId> severalPagesPerAiRequest) {
         public PageBatching {
             Objects.requireNonNull(settings);
             Objects.requireNonNull(pageCount);
+            Objects.requireNonNull(severalPagesPerAiRequest);
+        }
+
+        /** The entity's settings as they are used for Find now; the stored overlap is not changed. */
+        public PageBatchSettings findSettings(TenantId tenantId) {
+            PageBatchSettings stored = settings.apply(tenantId);
+            return stored.overlap() == 0 || severalPagesPerAiRequest.test(tenantId) ? stored
+                    : new PageBatchSettings(stored.size(), 0);
         }
     }
 
@@ -324,7 +336,7 @@ public final class StagedProcessingService {
     private void queueFind(TenantId tenantId, PackageId packageId, Document document, int cycle,
                            CorrelationId correlationId) {
         queueRanges(PipelineStage.FIND, tenantId, packageId, document.id(), batching == null ? List.of()
-                : PageBatchPlan.find(document.pageCount(), batching.settings().apply(tenantId)), cycle, correlationId);
+                : PageBatchPlan.find(document.pageCount(), batching.findSettings(tenantId)), cycle, correlationId);
     }
 
     private void queueRanges(PipelineStage stage, TenantId tenantId, PackageId packageId, DocumentId documentId,
@@ -707,7 +719,7 @@ public final class StagedProcessingService {
                 inline.hasDetectedFindings(document.id(), tenantId));
         if (anyFailed || needsReview) {
             // Inline's own gate: a failed document fails the case; a finding for a person sends it to Review.
-            inline.completePackageProcessingIfReady(packageId, tenantId, correlationId);
+            inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
             return;
         }
         List<Document> waitingForRedaction = documents.stream()
@@ -719,8 +731,9 @@ public final class StagedProcessingService {
             }
             return;
         }
-        // Every document is redacted: Ready for export (final approval if the entity asks for it), as inline.
-        inline.completePackageProcessingIfReady(packageId, tenantId, correlationId);
+        // Every document is redacted: Ready for export (final approval if the entity asks for it), as inline. The case
+        // always ends in an export job, whatever export-mode says now: nothing is sent in this transaction (task 0052).
+        inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
     }
 
     // ------------------------------------------------------------------------------------------- expired claims

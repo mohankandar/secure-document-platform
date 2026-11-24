@@ -158,6 +158,11 @@ class StagedPipelinePostgresTest {
     /** Task 0049: the pages of a document, when large documents are split; 0 means one job per document. */
     private int pages = 0;
     private PageBatchSettings batchSettings = PageBatchSettings.DEFAULTS;
+    /** Task 0052: one AI request may cover several pages (then Find batches share pages). */
+    private boolean severalPagesPerAiRequest = true;
+    private final ExportPackageDocumentsUseCase inlineExport = mock(ExportPackageDocumentsUseCase.class);
+    /** Task 0052: where a finished case is handed to export; a test may use the real queue instead of the stand-in. */
+    private ExportJobScheduler scheduler = exports;
     private final List<String> batchesRun = new CopyOnWriteArrayList<>();
     private final List<String> gathered = new CopyOnWriteArrayList<>();
     /** Runs inside a page batch's step, after its result is kept. */
@@ -314,9 +319,9 @@ class StagedPipelinePostgresTest {
         };
         TriggerPackageProcessingService inline = new TriggerPackageProcessingService(packages, documents, findings,
                 mock(ArtifactRepository.class), mock(ProcessingLockPort.class), startPackage, startDocument, extract,
-                detect, redact, mock(ExportPackageDocumentsUseCase.class), mock(ProcessDerivedRoutingUseCase.class),
+                detect, redact, inlineExport, mock(ProcessDerivedRoutingUseCase.class),
                 mock(SelectiveRetryExecutor.class), lifecycle, mock(DocumentIntelligenceExecutionService.class), audit,
-                incidents, mock(TenantLicensingService.class), telemetry, exports);
+                incidents, mock(TenantLicensingService.class), telemetry, scheduler);
         recovery = new PackageProcessingRecoveryService(packages, lifecycle, incidents, audit, telemetry);
         StagedProcessingSettings settings = new StagedProcessingSettings(PipelineMode.STAGED, Duration.ofSeconds(30),
                 3, 1, 1, 1, Duration.ofMillis(200));
@@ -324,7 +329,8 @@ class StagedPipelinePostgresTest {
                 startPackage, startDocument, extract, detect, redact, lifecycle, incidents, recovery, audit,
                 mock(TenantLicensingService.class), telemetry, inline, transactions, storage,
                 new StagedProcessingService.PageBatching(t -> batchSettings,
-                        d -> pages == 0 ? OptionalInt.empty() : OptionalInt.of(pages)));
+                        d -> pages == 0 ? OptionalInt.empty() : OptionalInt.of(pages),
+                        t -> severalPagesPerAiRequest));
         service = serviceWith.apply(settings);
     }
 
@@ -665,14 +671,7 @@ class StagedPipelinePostgresTest {
                 Duration.ofSeconds(30), 3, 2, 2, 2, Duration.ofMillis(100)));
         assertFalse(inlineService.handles(trigger(later)), "a new case goes inline");
         cases.forEach(pkg -> assertTrue(inlineService.handles(trigger(pkg)), "a staged case stays staged"));
-        // Without export jobs the staged jobs wait (a staged case ends in export jobs).
-        var waiting = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test", "inline");
-        waiting.start();
-        Thread.sleep(1500);
-        waiting.stop();
-        assertTrue(inlineService.hasOpenJobs());
-
-        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test", "job");
+        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test");
         workers.start();
         try {
             long until = System.currentTimeMillis() + 60_000;
@@ -697,6 +696,80 @@ class StagedPipelinePostgresTest {
         assertEquals(6, audits.stream().filter(a -> a.action() == AuditAction.DOCUMENT_REDACTION_VERIFIED).count());
         assertEquals(PackageStatus.SUBMITTED, status(later), "the stage workers do not touch the new case");
         assertEquals(0, jobsOf(later).size());
+    }
+
+    /** Task 0052: both modes back to inline. A staged case still ends in an export job; its gate sends nothing. */
+    @Test
+    void withExportModeInlineAStagedCaseStillEndsInOneExportJobAndNothingIsSentFromItsGate() throws Exception {
+        var deliveryPort = mock(com.securedoc.platform.application.port.out.DeliveryPort.class);
+        when(deliveryPort.describe(any())).thenReturn(
+                new com.securedoc.platform.application.port.out.DeliveryPort.DeliveryDescriptor("LOCAL_FOLDER", null, null));
+        scheduler = new com.securedoc.platform.application.pipeline.ExportJobQueue(jobs, deliveryPort,
+                new AuditService(audits::add), com.securedoc.platform.application.pipeline.ExportJobSettings.defaults(
+                com.securedoc.platform.application.pipeline.ExportMode.INLINE), java.time.Clock.systemUTC());
+        wire();
+        List<DocumentPackage> cases = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            DocumentPackage pkg = submittedCase(2);
+            service.plan(trigger(pkg));
+            cases.add(pkg);
+        }
+        runOne(PipelineStage.TEXT); // mid-run
+        StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
+                Duration.ofSeconds(30), 3, 2, 2, 2, Duration.ofMillis(100)));
+        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test");
+        workers.start();
+        try {
+            long until = System.currentTimeMillis() + 60_000;
+            while (cases.stream().anyMatch(pkg -> count(pkg, PipelineStage.EXPORT) == 0)
+                    && System.currentTimeMillis() < until) Thread.sleep(100);
+        } finally {
+            workers.stop();
+        }
+        for (DocumentPackage pkg : cases) {
+            assertEquals(PackageStatus.PROCESSING, status(pkg), "Ready for export, as in job mode");
+            // A late trigger (final approval, a person, a second server) runs the gate again: still one job.
+            inlineService.plan(trigger(pkg));
+            PipelineJob export = jobsOf(pkg).stream().filter(j -> j.stage() == PipelineStage.EXPORT)
+                    .reduce((a, b) -> { throw new AssertionError("two export jobs"); }).orElseThrow();
+            assertEquals(PipelineJobStatus.READY, export.status());
+            assertTrue(scheduler.jobHasCase(pkg.tenantId(), pkg.id(), 1));
+        }
+        org.mockito.Mockito.verifyNoInteractions(inlineExport);
+        assertTrue(jobs.hasOpenExportJobs());
+        // A case that is not staged is never queued while export jobs are off.
+        DocumentPackage notStaged = submittedCase(1);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> scheduler.queueCaseExport(
+                notStaged.tenantId(), notStaged.id(), 1, CorrelationId.generate()));
+        assertEquals(0, jobsOf(notStaged).size());
+    }
+
+    /** Task 0052: Find batches share pages only when one AI request may cover several pages. */
+    @Test
+    void withOnePagePerAiRequestNoPageIsInTwoFindBatches() {
+        pages = 500;
+        severalPagesPerAiRequest = false;
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        List<PipelineJob> find = jobsOf(pkg).stream().filter(j -> j.stage() == PipelineStage.FIND)
+                .sorted(java.util.Comparator.comparingInt(PipelineJob::pageFrom)).toList();
+        assertEquals(25, find.size());
+        for (int i = 0; i < find.size(); i++) {
+            assertEquals(i * 20 + 1, find.get(i).pageFrom());
+            assertEquals(i * 20 + 20, find.get(i).pageTo());
+        }
+        runAll(PipelineStage.FIND);
+        assertEquals(1, gathered.stream().filter(g -> g.startsWith("FIND")).count());
+        runAll(PipelineStage.REDACT);
+        assertEquals(DocumentStatus.PROCESSED, document(pkg).status());
+
+        severalPagesPerAiRequest = true;
+        DocumentPackage shared = submittedCase(1);
+        service.plan(trigger(shared));
+        runAll(PipelineStage.TEXT);
+        assertEquals(28, count(shared, PipelineStage.FIND), "several pages in one request: the stored overlap of 2");
+        assertEquals(2, batchSettings.overlap(), "the stored setting is as it was");
     }
 
     @Test
@@ -725,7 +798,7 @@ class StagedPipelinePostgresTest {
     void inInlineModeWithNoStagedJobsNoWorkerStarts() throws Exception {
         StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
                 Duration.ofSeconds(30), 3, 1, 1, 1, Duration.ofMillis(100)));
-        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test", "job");
+        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test");
         workers.start();
         Thread.sleep(500);
         assertTrue(Thread.getAllStackTraces().keySet().stream().noneMatch(t -> t.isAlive()
