@@ -741,6 +741,11 @@ class ApiClient {
     });
   }
 
+  /** Task 0074: an unreadable page was checked by hand; each box is redacted. */
+  async checkReviewPage(findingId: string, boxes: readonly ReviewBoundingBox[]): Promise<ReviewResolutionResult> {
+    return this.request(`/review-items/${findingId}/page-checked`, { method: 'POST', body: JSON.stringify({ reviewed: true, boxes }) });
+  }
+
   async dismissReviewItem(
     findingId: string,
     reason = 'Reviewer marked item as not sensitive'

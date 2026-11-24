@@ -84,6 +84,8 @@ public enum AuditAction {
     REVIEW_REJECTED,
     REVIEW_ESCALATED,
     REVIEW_PAGE_PREVIEWED,
+    /** Task 0074: a person checked an unreadable page by hand (page number and number of boxes only). */
+    REVIEW_PAGE_CHECKED,
     BUSINESS_MANUAL_FALLBACK_STARTED,
     BUSINESS_MANUAL_FALLBACK_REGION_ADDED,
     BUSINESS_MANUAL_FALLBACK_REGION_REMOVED,
