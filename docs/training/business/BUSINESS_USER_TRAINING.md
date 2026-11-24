@@ -30,6 +30,10 @@ If LexaVault is confident and policy allows it, no business review is required.
 
 ---
 
+### Password-protected PDFs
+
+New case has no password field and refuses a password-protected PDF: "Password-protected file. Send it through the API." Ask for a copy without a password, or ask your IT Admin to have the source system send it through the API.
+
 ## 3. Normal Needs Review
 
 Normal Needs Review is **system-guided**.
