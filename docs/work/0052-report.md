@@ -2,7 +2,7 @@
 
 Date: 2026-11-24
 Branch: `feature/0052-p2-followups`, from 0054's branch (PR #3, not merged yet)
-Outcome: **DONE** (1 question for the owner). Built by a subagent from a written brief; I reviewed the export path and ran the proofs myself. Lines marked (agent) were run by the subagent only.
+Outcome: **DONE** (1 question, answered below). Built by a subagent from a written brief; I reviewed the export path and ran the proofs myself. Lines marked (agent) were run by the subagent only.
 
 ## What was done
 1. **Overlap.** Page batches share pages only when one AI request may cover several pages. Every adapter that is wired says so for the entity that owns the document; with failover, either one is enough; one that does not say keeps the overlap. The policy setting is unchanged. **Measured (agent), 500 pages, one page per request: 554 AI page requests in 28 batches before, 500 in 25 batches now (9.7% fewer), no page sent twice**, with the real Ollama adapter against a local counting server. Findings equal the whole-document run.
@@ -49,3 +49,6 @@ Failures on the way (agent): a compile error in a new test, and one set-up mista
 Task 0056, once PR #2 and PR #3 are merged.
 
 No other product's name or behaviour in code, except the existing class named above (planned removal: switch-over part 3).
+
+## Decisions (2026-11-24, design chat, as recommended under LV-19)
+1. The one-line condition in `SdvDeliveryAdapter` is accepted; it leaves with the class in switch-over part 3.
