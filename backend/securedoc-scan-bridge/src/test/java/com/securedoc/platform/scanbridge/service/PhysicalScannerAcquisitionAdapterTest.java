@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.ScanSessionStatus;
 import com.securedoc.platform.scanbridge.model.ScannerCaptureMode;
@@ -24,7 +25,7 @@ class PhysicalScannerAcquisitionAdapterTest {
     @Test
     void physicalAcquisitionPublishesOneDurableReadyPdfIntoExistingSessionLifecycle() throws Exception {
         ScanBridgeProperties properties = properties();
-        FileScanSessionStore store = new FileScanSessionStore(properties, new ObjectMapper().findAndRegisterModules());
+        FileScanSessionStore store = new FileScanSessionStore(properties, JsonMapper.builderWithJackson2Defaults().build());
         ScanArtifactService artifacts = new ScanArtifactService(store);
         ScanSessionService sessions = new ScanSessionService(properties, store, artifacts);
         sessions.recoverDurableState();
@@ -56,7 +57,7 @@ class PhysicalScannerAcquisitionAdapterTest {
     @Test
     void physicalAvailabilityNeverFallsBackToSimulator() {
         ScanBridgeProperties properties = properties();
-        FileScanSessionStore store = new FileScanSessionStore(properties, new ObjectMapper().findAndRegisterModules());
+        FileScanSessionStore store = new FileScanSessionStore(properties, JsonMapper.builderWithJackson2Defaults().build());
         ScanArtifactService artifacts = new ScanArtifactService(store);
         ScanSessionService sessions = new ScanSessionService(properties, store, artifacts);
         sessions.recoverDurableState();
@@ -76,7 +77,7 @@ class PhysicalScannerAcquisitionAdapterTest {
     @Test
     void aFailedScanLeavesNoPageImagesOrPartialPdfBehind() throws Exception {
         ScanBridgeProperties properties = properties();
-        FileScanSessionStore store = new FileScanSessionStore(properties, new ObjectMapper().findAndRegisterModules());
+        FileScanSessionStore store = new FileScanSessionStore(properties, JsonMapper.builderWithJackson2Defaults().build());
         ScanArtifactService artifacts = new ScanArtifactService(store);
         ScanSessionService sessions = new ScanSessionService(properties, store, artifacts);
         sessions.recoverDurableState();

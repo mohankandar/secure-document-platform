@@ -1,7 +1,8 @@
 package com.securedoc.platform.infrastructure.delivery;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.DeliveryPort;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.*;
 
 /** Task 0021: the full-case export carries both levels, retries carry the same, and a refused level is LV-DLV-003. */
 class SdvDeliveryAdapterSensitivityTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     @Test
     void submissionCarriesTheCaseLevelAndEachUploadItsDocumentLevel() throws Exception {
@@ -42,7 +43,7 @@ class SdvDeliveryAdapterSensitivityTest {
                 item("src-1", SensitivityLevel.HIGHLY_CONFIDENTIAL), item("src-2", SensitivityLevel.STANDARD)));
 
         JsonNode submission = mapper.readTree(body(requests.get(0)));
-        assertEquals("CONFIDENTIAL", submission.get("recordSensitivityLevel").asText());
+        assertEquals("CONFIDENTIAL", submission.get("recordSensitivityLevel").asString());
         assertFalse(submission.has("sensitivityLevel"), "Vero refuses a document level on the submission (SDV-SEN-006)");
         assertEquals("HIGHLY_CONFIDENTIAL", requests.get(1).headers().firstValue("X-SDV-Sensitivity-Level").orElseThrow());
         assertEquals("STANDARD", requests.get(2).headers().firstValue("X-SDV-Sensitivity-Level").orElseThrow());
@@ -61,7 +62,7 @@ class SdvDeliveryAdapterSensitivityTest {
                 () -> new ByteArrayInputStream(pdf), pdf.length, "application/pdf", null, null);
         adapter.deliverBatch(new DeliveryPort.DeliveryBatch(TenantId.generate(), PackageId.generate(), 1, "sub-1", null,
                 Map.of(), Map.of(), List.of(legacyItem), DeliveryPort.NOOP_PROGRESS));
-        assertEquals("STANDARD", mapper.readTree(body(requests.get(0))).get("recordSensitivityLevel").asText());
+        assertEquals("STANDARD", mapper.readTree(body(requests.get(0))).get("recordSensitivityLevel").asString());
         assertEquals("STANDARD", requests.get(1).headers().firstValue("X-SDV-Sensitivity-Level").orElseThrow());
     }
 

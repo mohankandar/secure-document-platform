@@ -1,8 +1,8 @@
 package com.securedoc.platform.api.identity;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,7 +86,7 @@ public class OidcDiscoveryTester {
             return failed(refusal.category, null, refusal.getMessage());
         } catch (HttpTimeoutException ex) {
             return failed("TIMED_OUT", ex, TIMED_OUT);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             return failed("NOT_JSON", ex, NOT_JSON);
         } catch (IOException ex) {
             return failed("COULD_NOT_REACH", ex, COULD_NOT_REACH);
@@ -150,10 +150,10 @@ public class OidcDiscoveryTester {
 
     private static String text(JsonNode json, String field) {
         JsonNode value = json.get(field);
-        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+        if (value == null || !value.isString() || value.asString().isBlank()) {
             throw new Refusal("MISSING_FIELD", "OIDC discovery is missing " + field + ".");
         }
-        return value.asText();
+        return value.asString();
     }
 
     private static String normalizeDiscovered(String discoveredIssuer) {

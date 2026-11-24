@@ -6,6 +6,8 @@
             <customFields>{"service":"${serviceName}"}</customFields>
             <includeContext>false</includeContext>
             <includeCallerData>false</includeCallerData>
+            <!-- Task 0056: Spring 7 marks its own lines; without this they would carry "tags":["COMMONS-LOGGING"]. -->
+            <includeTags>false</includeTags>
         </encoder>
     </appender>
     <root level="INFO">

@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.ScanSessionStatus;
 import com.securedoc.platform.scanbridge.model.StartScanSessionRequest;
@@ -159,7 +160,7 @@ class ScannerSimulatorServiceTest {
 
     private Fixture fixture(boolean initializeSimulator) throws Exception {
         ScanBridgeProperties props = properties();
-        FileScanSessionStore store = new FileScanSessionStore(props, new ObjectMapper().findAndRegisterModules());
+        FileScanSessionStore store = new FileScanSessionStore(props, JsonMapper.builderWithJackson2Defaults().build());
         ScanArtifactService artifacts = new ScanArtifactService(store);
         ScanSessionService sessions = new ScanSessionService(props, store, artifacts, clock);
         sessions.recoverDurableState();

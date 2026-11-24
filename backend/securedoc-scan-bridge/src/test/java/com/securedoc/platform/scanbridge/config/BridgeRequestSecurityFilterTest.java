@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.service.BridgeRuntimeIdentity;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -45,7 +46,7 @@ class BridgeRequestSecurityFilterTest {
     /** Task 0025: both refusals carry errorCode as before, the LV code and its title as message. */
     @Test
     void refusalBodiesCarryTheLvCodeAndTitle() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
+        ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
         Fixture fixture = fixture();
 
         MockHttpServletRequest hostile = request("GET", "/api/v1/scanner-status");
@@ -53,9 +54,9 @@ class BridgeRequestSecurityFilterTest {
         MockHttpServletResponse originRefused = new MockHttpServletResponse();
         fixture.filter.doFilter(hostile, originRefused, new MockFilterChain());
         var origin = mapper.readTree(originRefused.getContentAsString());
-        assertEquals("BRIDGE_ORIGIN_NOT_ALLOWED", origin.get("errorCode").asText());
-        assertEquals("LV-SCN-012", origin.get("code").asText());
-        assertEquals("Scan Bridge refused the request", origin.get("message").asText());
+        assertEquals("BRIDGE_ORIGIN_NOT_ALLOWED", origin.get("errorCode").asString());
+        assertEquals("LV-SCN-012", origin.get("code").asString());
+        assertEquals("Scan Bridge refused the request", origin.get("message").asString());
 
         MockHttpServletRequest noToken = request("POST", "/api/v1/scan-sessions");
         noToken.addHeader("Origin", "http://localhost:5173");
@@ -63,9 +64,9 @@ class BridgeRequestSecurityFilterTest {
         fixture.filter.doFilter(noToken, tokenRefused, new MockFilterChain());
         var token = mapper.readTree(tokenRefused.getContentAsString());
         assertEquals(403, tokenRefused.getStatus());
-        assertEquals("BRIDGE_REQUEST_TOKEN_INVALID", token.get("errorCode").asText());
-        assertEquals("LV-SCN-012", token.get("code").asText());
-        assertEquals("Scan Bridge refused the request", token.get("message").asText());
+        assertEquals("BRIDGE_REQUEST_TOKEN_INVALID", token.get("errorCode").asString());
+        assertEquals("LV-SCN-012", token.get("code").asString());
+        assertEquals("Scan Bridge refused the request", token.get("message").asString());
     }
 
     @Test
@@ -155,7 +156,7 @@ class BridgeRequestSecurityFilterTest {
     private Fixture fixture() {
         ScanBridgeProperties properties = new ScanBridgeProperties();
         BridgeRuntimeIdentity identity = new BridgeRuntimeIdentity();
-        BridgeRequestSecurityFilter filter = new BridgeRequestSecurityFilter(properties, identity, new ObjectMapper());
+        BridgeRequestSecurityFilter filter = new BridgeRequestSecurityFilter(properties, identity, JsonMapper.builderWithJackson2Defaults().build());
         return new Fixture(filter, identity);
     }
 

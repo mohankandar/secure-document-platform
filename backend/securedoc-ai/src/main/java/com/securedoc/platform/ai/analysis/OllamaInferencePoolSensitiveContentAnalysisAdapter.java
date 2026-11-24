@@ -1,7 +1,8 @@
 package com.securedoc.platform.ai.analysis;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -56,7 +57,7 @@ public final class OllamaInferencePoolSensitiveContentAnalysisAdapter implements
     private final Duration queueWait;
     private final int maxNodeAttempts;
     private final HttpClient healthClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
     private final AtomicInteger roundRobinCursor = new AtomicInteger();
 
     public OllamaInferencePoolSensitiveContentAnalysisAdapter(
@@ -341,8 +342,8 @@ public final class OllamaInferencePoolSensitiveContentAnalysisAdapter implements
             JsonNode root = objectMapper.readTree(response.body());
             boolean modelPresent = false;
             for (JsonNode candidate : root.path("models")) {
-                String name = candidate.path("name").asText("");
-                String providerModel = candidate.path("model").asText("");
+                String name = candidate.path("name").asString("");
+                String providerModel = candidate.path("model").asString("");
                 if (model.equals(name) || model.equals(providerModel)) {
                     modelPresent = true;
                     break;
@@ -365,7 +366,7 @@ public final class OllamaInferencePoolSensitiveContentAnalysisAdapter implements
             node.markProbeFailure(circuitOpenDuration);
             // Task 0023 C7 (#118): the exception message can hold the node URL (with user info) or
             // response text, so only its type is logged, with the configured node id.
-            String reasonCode = e instanceof com.fasterxml.jackson.core.JsonProcessingException
+            String reasonCode = e instanceof tools.jackson.core.JacksonException
                     ? "AI_NODE_PROBE_UNREADABLE"
                     : e instanceof IOException ? "AI_NODE_PROBE_IO" : "AI_NODE_PROBE_FAILED";
             logProbeFailure(node, reasonCode, e.getClass().getSimpleName(), startedNanos);

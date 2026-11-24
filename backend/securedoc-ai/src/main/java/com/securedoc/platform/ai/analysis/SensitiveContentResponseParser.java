@@ -1,7 +1,8 @@
 package com.securedoc.platform.ai.analysis;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.StreamReadFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.DiscoveredSensitiveContent;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.PageContent;
 
@@ -58,7 +59,7 @@ final class SensitiveContentResponseParser {
         int confidenceOutOfRange = 0;
         int textNotOnPage = 0;
         for (JsonNode finding : findings) {
-            int pageNumber = finding.path("pageNumber").asInt(-1);
+            int pageNumber = JsonNodeValues.asInt(finding.path("pageNumber"), -1);
             if (pageNumber < 1 && pages.size() == 1) {
                 pageNumber = pages.getFirst().pageNumber();
             }
@@ -68,10 +69,10 @@ final class SensitiveContentResponseParser {
                 continue;
             }
 
-            String type = normalizeEntityType(finding.path("entityType").asText(""));
-            String matchedText = finding.path("matchedText").asText("");
-            String contextText = finding.path("contextText").asText("");
-            double confidence = finding.path("confidence").asDouble(-1.0);
+            String type = normalizeEntityType(JsonNodeValues.asText(finding.path("entityType"), ""));
+            String matchedText = JsonNodeValues.asText(finding.path("matchedText"), "");
+            String contextText = JsonNodeValues.asText(finding.path("contextText"), "");
+            double confidence = JsonNodeValues.asDouble(finding.path("confidence"), -1.0);
             if (type.isBlank()) {
                 unknownType++;
                 continue;
@@ -117,23 +118,24 @@ final class SensitiveContentResponseParser {
      * {@code Unrecognized token '123-45-6789'}) and, when source-in-location is on, part of the
      * input. The answer can hold found values, so the Jackson exception is dropped here and a
      * fixed message with no cause is thrown instead (task 0015). Source-in-location is also
-     * switched off on the parser, in case a caller passes a mapper that has it on.
+     * switched off on the reader, in case a caller passes a mapper that has it on.
      */
     static JsonNode readTreeWithoutEcho(ObjectMapper objectMapper, String json, String fixedMessage)
             throws IOException {
         if (json == null) {
             throw new IOException(fixedMessage);
         }
-        try (com.fasterxml.jackson.core.JsonParser parser = objectMapper.getFactory().createParser(json)) {
-            parser.disable(com.fasterxml.jackson.core.JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION);
-            JsonNode node = objectMapper.readTree(parser);
-            if (node == null) {
-                throw new IOException(fixedMessage);
-            }
-            return node;
-        } catch (IOException | RuntimeException parseFailure) {
+        final JsonNode node;
+        try {
+            node = objectMapper.reader().without(StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION).readTree(json);
+        } catch (RuntimeException parseFailure) {
             throw new IOException(fixedMessage);
         }
+        // Jackson 3 gives a missing node, not null, for text with no JSON value in it.
+        if (node == null || node.isMissingNode()) {
+            throw new IOException(fixedMessage);
+        }
+        return node;
     }
 
     /**

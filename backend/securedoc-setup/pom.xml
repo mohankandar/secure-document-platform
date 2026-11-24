@@ -20,28 +20,8 @@
         0054, SEC-12): META-INF/platform, see licence.build in the parent pom.
     </description>
 
-    <properties>
-        <spring-boot.version>3.3.2</spring-boot.version>
-    </properties>
-
     <dependencyManagement>
         <dependencies>
-            <!-- Task 0054: as in securedoc-api. -->
-            <dependency>
-                <groupId>org.apache.httpcomponents.client5</groupId>
-                <artifactId>httpclient5</artifactId>
-                <version>${httpclient5.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents.core5</groupId>
-                <artifactId>httpcore5</artifactId>
-                <version>${httpcore5.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents.core5</groupId>
-                <artifactId>httpcore5-h2</artifactId>
-                <version>${httpcore5.version}</version>
-            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

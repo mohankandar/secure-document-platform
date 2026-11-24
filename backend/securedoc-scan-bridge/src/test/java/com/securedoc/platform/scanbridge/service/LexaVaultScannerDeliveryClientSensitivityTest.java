@@ -1,7 +1,8 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSession;
@@ -21,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Task 0021: the bridge sends the New case level to LexaVault as caseSensitivityLevel, unchanged. */
 class LexaVaultScannerDeliveryClientSensitivityTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     private JsonNode sentBody(String level) throws Exception {
         AtomicReference<byte[]> received = new AtomicReference<>();
@@ -57,7 +58,7 @@ class LexaVaultScannerDeliveryClientSensitivityTest {
 
     @Test
     void theChosenLevelIsSentAsCaseSensitivityLevel() throws Exception {
-        assertEquals("HIGHLY_CONFIDENTIAL", sentBody("HIGHLY_CONFIDENTIAL").get("caseSensitivityLevel").asText());
+        assertEquals("HIGHLY_CONFIDENTIAL", sentBody("HIGHLY_CONFIDENTIAL").get("caseSensitivityLevel").asString());
     }
 
     @Test

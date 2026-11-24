@@ -1,7 +1,8 @@
 package com.securedoc.platform.infrastructure.intake;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.intake.command.UploadContent;
 import com.securedoc.platform.application.intake.model.IntakeRejectionCode;
 import com.securedoc.platform.application.intake.watched.*;
@@ -20,7 +21,7 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
     static final String CLAIM_FILE = ".lexavault-claim.json";
 
     private final WatchedFolderProperties properties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
 
     public LocalWatchedFolderSourceAdapter(WatchedFolderProperties properties) { this.properties = properties; }
 
@@ -168,7 +169,7 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
             return new WatchedFolderCandidate(sourceReference, false, false, null, Map.of(), Map.of(), List.of());
         }
         try {
-            Map<String,Object> manifest = objectMapper.readValue(trigger.toFile(), new TypeReference<>(){});
+            Map<String,Object> manifest = objectMapper.readValue(Files.readAllBytes(trigger), new TypeReference<>(){});
             Map<String,String> identifiers = stringMap(manifest.get("businessIdentifiers"));
             Map<String,String> metadata = stringMap(manifest.get("metadata"));
             List<String> requestedFiles = stringList(manifest.get("files"));
@@ -210,7 +211,7 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
 
     /** A trigger that is not valid JSON, or a listed file that escapes the drop, is malformed; any other I/O fault is I/O. */
     static IntakeRejectionCode readFailureCode(Exception failure) {
-        if (failure instanceof com.fasterxml.jackson.core.JacksonException
+        if (failure instanceof tools.jackson.core.JacksonException
                 || failure instanceof IllegalArgumentException
                 || failure instanceof InvalidPathException) {
             return IntakeRejectionCode.MALFORMED_TRIGGER;
@@ -225,7 +226,7 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
         Path marker = folder.resolve(CLAIM_FILE);
         Path temp = folder.resolve(CLAIM_FILE + ".tmp");
         ClaimMarker data = new ClaimMarker(lease.ownerId(), lease.fencingToken(), claimedAt.toEpochMilli());
-        objectMapper.writeValue(temp.toFile(), data);
+        Files.write(temp, objectMapper.writeValueAsBytes(data));
         try {
             Files.move(temp, marker, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (AtomicMoveNotSupportedException unsupported) {
@@ -237,8 +238,8 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
         Path marker = folder.resolve(CLAIM_FILE);
         if (!Files.isRegularFile(marker)) return Optional.empty();
         try {
-            return Optional.of(objectMapper.readValue(marker.toFile(), ClaimMarker.class));
-        } catch (IOException invalid) {
+            return Optional.of(objectMapper.readValue(Files.readAllBytes(marker), ClaimMarker.class));
+        } catch (IOException | tools.jackson.core.JacksonException invalid) {
             return Optional.empty();
         }
     }

@@ -1,6 +1,6 @@
 package com.securedoc.platform.api.intake.external;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.securedoc.platform.application.intake.external.PushIntakeCreateInput;
 
 import java.util.List;
@@ -43,6 +43,6 @@ public record ExternalIntakeCreateRequest(
     /** The value as sent: null when absent or JSON null, the text of a string, otherwise its JSON form (never a level). */
     static String sent(JsonNode value) {
         if (value == null || value.isNull() || value.isMissingNode()) return null;
-        return value.isTextual() ? value.textValue() : value.toString();
+        return value.isString() ? value.stringValue() : value.toString();
     }
 }

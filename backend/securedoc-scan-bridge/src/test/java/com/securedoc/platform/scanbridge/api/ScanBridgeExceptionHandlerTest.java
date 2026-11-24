@@ -1,7 +1,8 @@
 package com.securedoc.platform.scanbridge.api;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.model.ApiErrorResponse;
 import com.securedoc.platform.scanbridge.service.ScanBridgeException;
 import org.junit.jupiter.api.Test;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Task 0025: the bridge's error body is errorCode (as before), code (LV) and message (the code's title). */
 class ScanBridgeExceptionHandlerTest {
     private final ScanBridgeExceptionHandler handler = new ScanBridgeExceptionHandler();
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     @Test
     void aTypedRefusalKeepsItsStatusAndErrorCodeAndGivesTheLvCodeAndTitle() throws Exception {
@@ -67,11 +68,11 @@ class ScanBridgeExceptionHandlerTest {
     void theJsonFieldsAreErrorCodeCodeMessageInThatOrder() throws Exception {
         JsonNode json = mapper.readTree(mapper.writeValueAsString(ApiErrorResponse.of("BRIDGE_DISABLED")));
         List<String> names = new ArrayList<>();
-        json.fieldNames().forEachRemaining(names::add);
+        json.propertyNames().forEach(names::add);
 
         assertEquals(List.of("errorCode", "code", "message"), names);
-        assertEquals("BRIDGE_DISABLED", json.get("errorCode").asText());
-        assertEquals("LV-SCN-007", json.get("code").asText());
-        assertEquals("Scan Bridge switched off or in the wrong mode", json.get("message").asText());
+        assertEquals("BRIDGE_DISABLED", json.get("errorCode").asString());
+        assertEquals("LV-SCN-007", json.get("code").asString());
+        assertEquals("Scan Bridge switched off or in the wrong mode", json.get("message").asString());
     }
 }

@@ -1,7 +1,7 @@
 package com.securedoc.platform.infrastructure.intake.polling;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.application.intake.command.UploadContent;
 import com.securedoc.platform.application.intake.polling.*;
 import com.securedoc.platform.application.port.out.PollingSourcePort;
@@ -176,14 +176,14 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
     private record DiscoveryEnvelope(List<SourcePackage> items) {}
     private record SourcePackage(String externalSourcePackageId, String sourceRevision, Boolean retry,
                                  Map<String,String> businessIdentifiers, Map<String,String> metadata, List<SourceDocument> documents,
-                                 com.fasterxml.jackson.databind.JsonNode caseSensitivityLevel) {}
+                                 tools.jackson.databind.JsonNode caseSensitivityLevel) {}
     private record SourceDocument(String externalSourceDocumentId, String fileName, String sha256,
-                                  com.fasterxml.jackson.databind.JsonNode sensitivityLevel) {}
+                                  tools.jackson.databind.JsonNode sensitivityLevel) {}
 
     /** Task 0021: a level as the source sent it; never refused here (an unknown one is taken as Standard later). */
-    private static String sentLevel(com.fasterxml.jackson.databind.JsonNode value) {
+    private static String sentLevel(tools.jackson.databind.JsonNode value) {
         if (value == null || value.isNull() || value.isMissingNode()) return null;
-        return value.isTextual() ? value.textValue() : value.toString();
+        return value.isString() ? value.stringValue() : value.toString();
     }
 
     private static final class FileUploadContent implements UploadContent {

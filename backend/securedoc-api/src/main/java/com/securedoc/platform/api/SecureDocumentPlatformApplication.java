@@ -2,7 +2,7 @@ package com.securedoc.platform.api;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 // Task 0054: the outbound rules and the issuer fetch are OutboundRulesConfig's (the app does not carry

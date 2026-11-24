@@ -1,7 +1,8 @@
 package com.securedoc.platform.api.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OllamaModelPreloaderTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = JsonMapper.builderWithJackson2Defaults().build();
 
     @Test
     void preloadUsesEmptyPromptSelectedModelKeepAliveAndContextWithoutCustomerContent() throws Exception {
@@ -36,10 +37,10 @@ class OllamaModelPreloaderTest {
             new OllamaModelPreloader(properties, objectMapper).preload();
 
             JsonNode body = objectMapper.readTree(requestBody.get());
-            assertEquals("qwen3.5:4b", body.path("model").asText());
-            assertEquals("", body.path("prompt").asText());
+            assertEquals("qwen3.5:4b", body.path("model").asString());
+            assertEquals("", body.path("prompt").asString());
             assertFalse(body.path("stream").asBoolean(true));
-            assertEquals("30m", body.path("keep_alive").asText());
+            assertEquals("30m", body.path("keep_alive").asString());
             assertEquals(8192, body.path("options").path("num_ctx").asInt());
             assertEquals(5, body.size(), "warmup payload must contain only model-loading controls");
         } finally {

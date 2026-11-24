@@ -11,8 +11,9 @@ import com.documentplatform.licensing.LicenceKind;
 import com.documentplatform.licensing.LicenceType;
 import com.documentplatform.licensing.SignedDocument;
 import com.documentplatform.licensing.TrustedKeys;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.SerializationFeature;
 import com.securedoc.platform.infrastructure.identity.LexaVaultProduct;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -89,7 +90,7 @@ class DemoFilesGenerator {
         file.put("licence", payload);
         file.put("signature", new TreeMap<>(Map.of("algorithm", Ed25519.ALGORITHM, "payloadSha256", Ed25519.sha256Hex(message),
                 "value", Base64.getEncoder().encodeToString(signature.sign()))));
-        return new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT)
-                .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(file) + "\n";
+        return JsonMapper.builderWithJackson2Defaults().enable(SerializationFeature.INDENT_OUTPUT)
+                .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build().writeValueAsString(file) + "\n";
     }
 }

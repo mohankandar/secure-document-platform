@@ -290,10 +290,10 @@ public class PlatformHealthService {
             return false;
         }
         try {
-            com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(responseBody);
-            for (com.fasterxml.jackson.databind.JsonNode candidate : root.path("models")) {
-                if (requiredModel.equals(candidate.path("name").asText(""))
-                        || requiredModel.equals(candidate.path("model").asText(""))) {
+            tools.jackson.databind.JsonNode root = tools.jackson.databind.json.JsonMapper.builderWithJackson2Defaults().build().readTree(responseBody);
+            for (tools.jackson.databind.JsonNode candidate : root.path("models")) {
+                if (requiredModel.equals(candidate.path("name").asString(""))
+                        || requiredModel.equals(candidate.path("model").asString(""))) {
                     return true;
                 }
             }

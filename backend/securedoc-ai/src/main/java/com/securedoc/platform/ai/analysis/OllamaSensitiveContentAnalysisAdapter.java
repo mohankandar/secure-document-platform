@@ -1,7 +1,9 @@
 package com.securedoc.platform.ai.analysis;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -126,7 +128,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         this.pageBatchSize = pageBatchSize;
         this.pageBatchMaxCharacters = pageBatchMaxCharacters;
         this.httpClient = HttpClient.newBuilder().connectTimeout(this.timeout).build();
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = JsonMapper.builderWithJackson2Defaults().build();
         this.promptBuilder = new SensitiveContentPromptBuilder();
         this.responseParser = new SensitiveContentResponseParser(this.objectMapper);
     }
@@ -368,7 +370,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         final String body;
         try {
             body = objectMapper.writeValueAsString(requestBody);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
                     "Local AI request could not be prepared", e);
         }
@@ -416,12 +418,12 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         try {
             JsonNode envelope = SensitiveContentResponseParser.readTreeWithoutEcho(
                     objectMapper, response.body(), "Invalid provider envelope");
-            String content = envelope.path("message").path("content").asText(null);
+            String content = envelope.path("message").path("content").asString(null);
             if (content == null || content.isBlank()) {
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "Local AI provider returned no analysis content", null);
             }
-            String doneReason = envelope.path("done_reason").asText("");
+            String doneReason = envelope.path("done_reason").asString("");
             if ("length".equalsIgnoreCase(doneReason)) {
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "Local AI provider reached the configured output limit", null);

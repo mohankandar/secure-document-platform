@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.routing;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.routing.service.DerivedDeliveryAttentionQuery;
 import com.securedoc.platform.domain.identity.*;
 import com.securedoc.platform.domain.routing.DerivedDelivery;
@@ -15,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Task 0023 (B4, #222): the derived-delivery and attention responses carry no file name. */
 class DerivedDeliveryResponseNoFileNameTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     private DerivedDelivery deliveredWithLegacyFileShareReference() {
         UUID id = UUID.randomUUID();

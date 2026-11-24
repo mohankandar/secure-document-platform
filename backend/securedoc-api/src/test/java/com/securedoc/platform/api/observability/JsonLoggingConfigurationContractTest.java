@@ -3,7 +3,8 @@ package com.securedoc.platform.api.observability;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.LoggingEvent;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import net.logstash.logback.encoder.LogstashEncoder;
 import org.junit.jupiter.api.Test;
 
@@ -38,10 +39,10 @@ class JsonLoggingConfigurationContractTest {
                     "rawPrompt", "must-not-be-emitted"));
 
             String json = new String(encoder.encode(event), StandardCharsets.UTF_8);
-            var node = new ObjectMapper().readTree(json);
+            var node = JsonMapper.builderWithJackson2Defaults().build().readTree(json);
 
-            assertEquals("PROCESSING_INCIDENT_RECORDED", node.get("eventName").asText());
-            assertEquals("AI_INVALID_RESPONSE", node.get("reasonCode").asText());
+            assertEquals("PROCESSING_INCIDENT_RECORDED", node.get("eventName").asString());
+            assertEquals("AI_INVALID_RESPONSE", node.get("reasonCode").asString());
             assertTrue(node.has("correlationId"));
             assertTrue(node.has("incidentId"));
             assertFalse(node.has("rawPrompt"));

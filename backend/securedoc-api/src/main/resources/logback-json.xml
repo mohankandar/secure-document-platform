@@ -10,6 +10,8 @@
             <customFields>{"service":"${serviceName}","environment":"${environment}","nodeId":"${nodeId}"}</customFields>
             <includeContext>false</includeContext>
             <includeCallerData>false</includeCallerData>
+            <!-- Task 0056: Spring 7 marks its own lines; without this they would carry "tags":["COMMONS-LOGGING"]. -->
+            <includeTags>false</includeTags>
             <includeMdc>true</includeMdc>
             <includeMdcKeyName>tenantId</includeMdcKeyName>
             <includeMdcKeyName>actorId</includeMdcKeyName>
@@ -65,6 +67,8 @@
             <customFields>{"service":"${serviceName}","environment":"${environment}","telemetryStream":"product"}</customFields>
             <includeContext>false</includeContext>
             <includeCallerData>false</includeCallerData>
+            <!-- Task 0056: Spring 7 marks its own lines; without this they would carry "tags":["COMMONS-LOGGING"]. -->
+            <includeTags>false</includeTags>
             <includeMdc>true</includeMdc>
             <includeMdcKeyName>eventName</includeMdcKeyName>
             <includeMdcKeyName>telemetryMode</includeMdcKeyName>

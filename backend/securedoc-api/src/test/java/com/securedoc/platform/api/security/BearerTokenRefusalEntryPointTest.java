@@ -1,9 +1,9 @@
 package com.securedoc.platform.api.security;
 
 import com.documentplatform.identity.spring.RequiredAudienceValidator;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -61,6 +61,7 @@ class BearerTokenRefusalEntryPointTest {
         assertEquals("AUDIENCE", reasonFor(token(keys, ISSUER, "other-api", now.minusSeconds(5), now.plusSeconds(300))));
         assertEquals("SIGNATURE", reasonFor(token(keyPair(), ISSUER, AUDIENCE, now.minusSeconds(5), now.plusSeconds(300))));
         assertEquals("MALFORMED", reasonFor("not-a-jwt"));
+        assertEquals("MALFORMED", reasonFor(token(keys, ISSUER, AUDIENCE, now.minusSeconds(5), now.plusSeconds(300), "at+jwt")));
     }
 
     @Test
@@ -79,7 +80,7 @@ class BearerTokenRefusalEntryPointTest {
         request.setAttribute(RequestCorrelationFilter.REQUEST_ATTRIBUTE_CORRELATION_ID, correlation);
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
         try (LogCapture logs = LogCapture.of(BearerTokenRefusalEntryPoint.class)) {
             new BearerTokenRefusalEntryPoint(mapper).commence(request, response, rejected(token));
@@ -91,10 +92,10 @@ class BearerTokenRefusalEntryPointTest {
         assertEquals(401, response.getStatus());
         assertEquals(correlation.toString(), response.getHeader("X-Correlation-Id"));
         JsonNode body = mapper.readTree(response.getContentAsString());
-        assertEquals("AUTHENTICATION_REQUIRED", body.path("errorCode").asText());
-        assertEquals("Please sign in again", body.path("message").asText());
-        assertEquals("LV-AUT-001", body.path("code").asText());
-        assertEquals(correlation.toString(), body.path("correlationId").asText());
+        assertEquals("AUTHENTICATION_REQUIRED", body.path("errorCode").asString());
+        assertEquals("Please sign in again", body.path("message").asString());
+        assertEquals("LV-AUT-001", body.path("code").asString());
+        assertEquals(correlation.toString(), body.path("correlationId").asString());
         assertFalse(response.getContentAsString().contains("audience"));
     }
 
@@ -122,12 +123,17 @@ class BearerTokenRefusalEntryPointTest {
     }
 
     private static String token(KeyPair signing, String issuer, String audience, Instant nbf, Instant exp) {
+        return token(signing, issuer, audience, nbf, exp, null);
+    }
+
+    private static String token(KeyPair signing, String issuer, String audience, Instant nbf, Instant exp, String type) {
         RSAKey jwk = new RSAKey.Builder((RSAPublicKey) signing.getPublic())
                 .privateKey((RSAPrivateKey) signing.getPrivate()).keyID("test-key").build();
         NimbusJwtEncoder encoder = new NimbusJwtEncoder(new ImmutableJWKSet<SecurityContext>(new JWKSet(jwk)));
         JwtClaimsSet claims = JwtClaimsSet.builder().issuer(issuer).subject("user-123").audience(List.of(audience))
                 .notBefore(nbf).issuedAt(nbf).expiresAt(exp).claim("email", "person@example.test").build();
-        JwsHeader header = JwsHeader.with(SignatureAlgorithm.RS256).keyId("test-key").build();
+        JwsHeader.Builder builder = JwsHeader.with(SignatureAlgorithm.RS256).keyId("test-key");
+        JwsHeader header = (type == null ? builder : builder.type(type)).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 }

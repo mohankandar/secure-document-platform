@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.delivery;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.port.out.DeliveryPort;
@@ -35,7 +36,7 @@ class ExportDestinationAdapterFollowupsTest {
     @Test
     void a429IsMarkedWithItsRetryAfterAndKeepsItsCode() throws Exception {
         HttpClient client = client(new ArrayList<>(), new ArrayDeque<>(List.of(response(429, "{}", "120"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
                 client, true);
 
         TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
@@ -50,7 +51,7 @@ class ExportDestinationAdapterFollowupsTest {
     @Test
     void aServerErrorIsNotMarkedAsA429() throws Exception {
         HttpClient client = client(new ArrayList<>(), new ArrayDeque<>(List.of(response(503, "{}", null))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
                 client, true);
         TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
                 () -> adapter.deliverBatch(batch()));
@@ -62,7 +63,7 @@ class ExportDestinationAdapterFollowupsTest {
         List<HttpRequest> requests = new ArrayList<>();
         HttpClient client = client(requests, new ArrayDeque<>(List.of(response(429, "{}", "1"), response(429, "{}", "1"),
                 response(429, "{}", "1"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
                 client);
         assertThrows(TechnicalDependencyException.class, () -> adapter.deliverBatch(batch()));
         assertEquals(3, requests.size(), "1 + retryMaxAttempts (2), as before");
@@ -85,7 +86,7 @@ class ExportDestinationAdapterFollowupsTest {
     void theDocumentStoreHealthCheckIsTheSafeConnectionTest() throws Exception {
         List<HttpRequest> requests = new ArrayList<>();
         HttpClient client = client(requests, new ArrayDeque<>(List.of(response(200, "{}", null), response(503, "{}", null))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
                 client, true);
         adapter.checkDestination(tenant);
         assertTrue(requests.get(0).uri().toString().endsWith("/api/v1/health"));

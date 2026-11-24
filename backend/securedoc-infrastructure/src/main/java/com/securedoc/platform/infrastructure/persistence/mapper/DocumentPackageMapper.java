@@ -1,8 +1,9 @@
 package com.securedoc.platform.infrastructure.persistence.mapper;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.PackageMetadata;
@@ -20,7 +21,7 @@ import java.util.Map;
 
 public final class DocumentPackageMapper {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builderWithJackson2Defaults().build();
 
     private DocumentPackageMapper() {
     }
@@ -82,7 +83,7 @@ public final class DocumentPackageMapper {
         try {
             Map<String, String> map = OBJECT_MAPPER.readValue(json, new TypeReference<>() {});
             return PackageMetadata.of(map);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return PackageMetadata.empty();
         }
     }
@@ -93,7 +94,7 @@ public final class DocumentPackageMapper {
         }
         try {
             return OBJECT_MAPPER.writeValueAsString(metadata.asMap());
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return null;
         }
     }

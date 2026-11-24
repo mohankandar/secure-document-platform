@@ -1,9 +1,9 @@
 package com.securedoc.platform.infrastructure.event;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.cfg.DateTimeFeature;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.domain.event.AccessRequestDecidedEvent;
 import com.securedoc.platform.domain.event.ArtifactAccessedEvent;
@@ -45,9 +45,8 @@ public class OutboxDomainEventPublisher implements DomainEventPublisher {
 
     public OutboxDomainEventPublisher(SpringDataOutboxEventRepository outboxRepo) {
         this.outboxRepo = outboxRepo;
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.registerModule(new JavaTimeModule());
-        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper = JsonMapper.builderWithJackson2Defaults()
+                .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS).build();
     }
 
     @Override
@@ -71,7 +70,7 @@ public class OutboxDomainEventPublisher implements DomainEventPublisher {
     private String serializePayload(DomainEvent event) {
         try {
             return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             // Fallback: store event type and timestamp only
             return "{\"eventType\":\"" + event.eventType()
                     + "\",\"occurredAt\":\"" + event.occurredAt() + "\"}";

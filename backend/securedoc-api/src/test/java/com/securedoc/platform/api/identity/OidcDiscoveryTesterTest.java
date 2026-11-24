@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.identity;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 
 import javax.net.ssl.SSLSession;
@@ -22,7 +23,7 @@ class OidcDiscoveryTesterTest {
     private static final String SECRET = "internal-10.1.2.3-secret-body";
 
     private static OidcDiscoveryTester.TestResult run(OidcDiscoveryTester.DiscoveryFetcher fetcher) {
-        return new OidcDiscoveryTester(new ObjectMapper(), fetcher).test(ISSUER);
+        return new OidcDiscoveryTester(JsonMapper.builderWithJackson2Defaults().build(), fetcher).test(ISSUER);
     }
 
     private static OidcDiscoveryTester.DiscoveryFetcher answering(int status, String body) {
@@ -76,10 +77,10 @@ class OidcDiscoveryTesterTest {
 
     @Test
     void anIssuerThatIsNotAUriIsNotQuoted() {
-        var result = new OidcDiscoveryTester(new ObjectMapper(), answering(200, "{}")).test("https://bad host/" + SECRET);
+        var result = new OidcDiscoveryTester(JsonMapper.builderWithJackson2Defaults().build(), answering(200, "{}")).test("https://bad host/" + SECRET);
         assertEquals("Invalid OIDC configuration: Issuer is not a valid URI.", result.message());
         assertEquals("Invalid OIDC configuration: Issuer must not contain credentials, query parameters, or fragments.",
-                new OidcDiscoveryTester(new ObjectMapper(), answering(200, "{}"))
+                new OidcDiscoveryTester(JsonMapper.builderWithJackson2Defaults().build(), answering(200, "{}"))
                         .test("https://user:pw@login.example.test").message());
     }
 

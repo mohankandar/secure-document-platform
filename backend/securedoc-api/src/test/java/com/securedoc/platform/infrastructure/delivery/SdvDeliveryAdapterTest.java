@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.delivery;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
@@ -34,7 +35,7 @@ class SdvDeliveryAdapterTest {
             return responses.removeFirst();
         });
 
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(repository, new ObjectMapper(), client);
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(repository, JsonMapper.builderWithJackson2Defaults().build(), client);
         byte[] pdf = "%PDF-test".getBytes();
         List<String> progress = new ArrayList<>();
         DeliveryPort.DeliveryProgressListener listener = new DeliveryPort.DeliveryProgressListener() {
@@ -69,7 +70,7 @@ class SdvDeliveryAdapterTest {
         responses.add(response(201, "{\"documentId\":\"sdv-doc-1\",\"sourceDocumentId\":\"source-doc-1\"}"));
         responses.add(response(200, "{\"status\":\"RECEIVING\"}"));
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(invocation -> responses.removeFirst());
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(repository, new ObjectMapper(), client);
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(repository, JsonMapper.builderWithJackson2Defaults().build(), client);
         byte[] pdf = "%PDF-test".getBytes();
         var item = new DeliveryPort.DeliveryItem(DocumentId.generate(), "source-doc-1", "redacted.pdf",
                 () -> new ByteArrayInputStream(pdf), pdf.length, "application/pdf", null, null);

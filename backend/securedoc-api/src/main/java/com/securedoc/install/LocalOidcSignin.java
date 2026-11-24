@@ -1,9 +1,10 @@
 package com.securedoc.install;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.node.ObjectNode;
 import com.securedoc.platform.infrastructure.identity.LexaVaultProduct;
 
 import java.io.IOException;
@@ -91,7 +92,7 @@ public final class LocalOidcSignin {
     }
 
     static Path write(Path from, Path outDir, URI issuer, String providerId, String audience, String browserClientId) {
-        ObjectMapper json = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+        ObjectMapper json = JsonMapper.builderWithJackson2Defaults().enable(SerializationFeature.INDENT_OUTPUT).build();
         JsonNode root;
         try {
             root = json.readTree(Files.readString(from, StandardCharsets.UTF_8));
@@ -100,7 +101,7 @@ public final class LocalOidcSignin {
         }
         if (!(root instanceof ObjectNode file) || !(file.get("loginSystem") instanceof ObjectNode login)
                 || !(file.path("products").get(LexaVaultProduct.CODE) instanceof ObjectNode product)
-                || !product.path("roleMappingFile").isTextual()) {
+                || !product.path("roleMappingFile").isString()) {
             throw new InstallException(2, "SIGNIN_UNREADABLE", "the sign-in file " + from
                     + " has no loginSystem, or no " + LexaVaultProduct.CODE + " product with a roleMappingFile");
         }
@@ -109,7 +110,7 @@ public final class LocalOidcSignin {
         product.put("browserClientId", browserClientId);
         product.put("apiAudience", audience);
 
-        String mapping = product.get("roleMappingFile").asText();
+        String mapping = product.get("roleMappingFile").asString();
         Path mappingFrom = from.toAbsolutePath().getParent().resolve(mapping).normalize();
         Path mappingName = Path.of(mapping).getFileName();
         try {

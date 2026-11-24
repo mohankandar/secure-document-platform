@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSession;
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Task 0023 D2 (#82): which LexaVault answers the bridge retries, and which go straight to a person. */
 class LexaVaultScannerDeliveryClientRetryClassificationTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     private static final Instant NOW = Instant.parse("2026-11-20T10:00:00Z");
 

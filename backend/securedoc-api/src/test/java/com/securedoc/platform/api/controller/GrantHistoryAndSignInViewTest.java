@@ -5,8 +5,8 @@ import com.documentplatform.identity.IdentityProviderType;
 import com.documentplatform.identity.store.ChangeSource;
 import com.documentplatform.identity.store.GrantChange;
 import com.documentplatform.identity.store.LoginConnection;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.identity.EnterpriseIdentityAdminController;
 import com.securedoc.platform.api.security.RequireCapability;
@@ -123,7 +123,7 @@ class GrantHistoryAndSignInViewTest {
         assertFalse(overview.activationSupported());
         assertTrue(overview.readOnly());
         assertEquals("Sign-in connections are set through setup", overview.managedBy());
-        String json = new ObjectMapper().registerModule(new JavaTimeModule()).writeValueAsString(overview);
+        String json = JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(overview);
         assertFalse(json.contains("never-shown"), json);
         assertFalse(json.toLowerCase().contains("secret"), json);
 

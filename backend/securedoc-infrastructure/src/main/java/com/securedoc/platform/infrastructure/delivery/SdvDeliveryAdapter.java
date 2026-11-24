@@ -1,7 +1,7 @@
 package com.securedoc.platform.infrastructure.delivery;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -181,7 +181,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, DocumentStoreConnection
         JsonNode receipt = json.get("receiptAcknowledgement");
         return (replay != null && replay.asBoolean(false))
                 || (duplicate != null && duplicate.asBoolean(false))
-                || (receipt != null && "DUPLICATE_ALREADY_STORED".equals(receipt.asText()));
+                || (receipt != null && "DUPLICATE_ALREADY_STORED".equals(receipt.asString("")));
     }
 
     private record Upload(DeliveryReference reference, boolean alreadyReceived) { }
@@ -361,7 +361,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, DocumentStoreConnection
                     retryable || transientStatus, message, null).withLvCode(lvCode);
         }
     }
-    private String text(JsonNode node, String field) { JsonNode v = node == null ? null : node.get(field); return v == null || v.isNull() ? null : v.asText(); }
+    private String text(JsonNode node, String field) { JsonNode v = node == null ? null : node.get(field); return v == null || v.isNull() ? null : v.isContainer() ? "" : v.asString(); }
     private String safeHeader(String v) { return (v == null ? "document.pdf" : v).replace("\r", "_").replace("\n", "_"); }
     private static String enc(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20"); }
     private TechnicalDependencyException failure(TechnicalFailureCode code, boolean retryable, String message, Throwable cause) {

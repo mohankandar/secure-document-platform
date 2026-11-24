@@ -1,6 +1,6 @@
 package com.securedoc.platform.api.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
 
@@ -28,6 +28,6 @@ public record CreatePackageRequest(
     /** The level as sent: null when absent or JSON null, the text of a string, otherwise its JSON form. */
     public String sentSensitivityLevel() {
         if (sensitivityLevel == null || sensitivityLevel.isNull() || sensitivityLevel.isMissingNode()) return null;
-        return sensitivityLevel.isTextual() ? sensitivityLevel.textValue() : sensitivityLevel.toString();
+        return sensitivityLevel.isString() ? sensitivityLevel.stringValue() : sensitivityLevel.toString();
     }
 }

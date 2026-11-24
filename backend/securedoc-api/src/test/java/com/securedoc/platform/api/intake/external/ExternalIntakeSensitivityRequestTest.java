@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.intake.external;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.intake.external.ExternalIntakeSnapshot;
 import com.securedoc.platform.application.intake.external.IntakeWarning;
 import com.securedoc.platform.application.intake.external.PushIntakeCreateInput;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Task 0021: the push and scanner create request take optional levels as sent, and never fail on them. */
 class ExternalIntakeSensitivityRequestTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     private PushIntakeCreateInput parse(String caseLevel, String documentLevel) throws Exception {
         String json = "{\"externalSourcePackageId\":\"S-1\",\"sourceRevision\":\"1\","

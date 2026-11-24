@@ -1,6 +1,6 @@
 package com.securedoc.platform.api.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.documentplatform.identity.IdentityClaimConfig;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.documentplatform.identity.spring.RequiredAudienceValidator;
@@ -16,6 +16,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.web.OAuth2ProtectedResourceMetadataFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -63,7 +64,7 @@ public class SecurityConfig {
     @Bean
     @ConditionalOnProperty(name = "securedoc.security.mode", havingValue = "OIDC", matchIfMissing = true)
     SecurityFilterChain oidcSecurityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
-        return commonHeaders(http)
+        SecurityFilterChain chain = commonHeaders(http)
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -73,9 +74,14 @@ public class SecurityConfig {
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(resource -> resource
                         .jwt(Customizer.withDefaults())
+                        .bearerTokenResolver(new OneBearerTokenResolver())
                         // Task 0023 C5 (#252): same 401 code and text, plus correlationId; the reason is logged.
                         .authenticationEntryPoint(new BearerTokenRefusalEntryPoint(objectMapper)))
                 .build();
+        // Task 0056: Spring Security 7 adds a public address, /.well-known/oauth-protected-resource, with no setting to leave
+        // it out. LexaVault has never had it.
+        chain.getFilters().removeIf(OAuth2ProtectedResourceMetadataFilter.class::isInstance);
+        return chain;
     }
 
     @Bean
@@ -86,7 +92,7 @@ public class SecurityConfig {
         if (issuer == null || issuer.isBlank() || audience == null || audience.isBlank()) {
             throw new IllegalStateException("OIDC mode requires securedoc.security.oidc.issuer-uri and audience");
         }
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer).cache(new IssuerKeyCache()).build();
         OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
         OAuth2TokenValidator<Jwt> audienceValidator = new RequiredAudienceValidator(audience);
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, audienceValidator));
