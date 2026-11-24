@@ -4,7 +4,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.intake.command.UploadContent;
 import com.securedoc.platform.application.intake.command.UploadDocumentCommand;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.port.out.*;
 import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
 import com.securedoc.platform.domain.document.DocumentPackage;
@@ -47,7 +47,7 @@ class UploadDocumentPdfCheckTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return new UploadDocumentService(tenants, mock(CapabilityEnforcementService.class), mock(TenantLicensingService.class),
+        return new UploadDocumentService(tenants, mock(CapabilityEnforcementService.class), mock(IntakeLicence.class),
                 packages, mock(DocumentRepository.class), mock(ArtifactRepository.class), storage, checksum,
                 mock(DomainEventPublisher.class), new AuditService(r -> { }), pdfCheck);
     }

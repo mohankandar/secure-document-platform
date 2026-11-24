@@ -21,6 +21,8 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
+import com.securedoc.platform.application.licensing.LicenseEnforcementException;
+
 import java.util.*;
 
 /**
@@ -46,6 +48,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
     private final Duration incompleteVisibility;
     private final Duration staleClaimAfter;
     /** Task 0021: the level Tenant IT set for the folder; every file picked up from it gets that level. */
+    private com.securedoc.platform.application.licensing.IntakeLicence licence;
     private final java.util.function.Function<com.securedoc.platform.domain.identity.TenantId, com.securedoc.platform.domain.document.SensitivityLevel> folderSensitivityLevel;
 
     public WatchedFolderIntakeService(WatchedFolderSourcePort sourcePort,
@@ -86,6 +89,22 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         this.staleClaimAfter=staleClaimAfter==null?Duration.ofMinutes(5):staleClaimAfter;
     }
 
+    /** Task 0057: the same service on the word of the licence. Without it (tests of the folder itself) nothing is refused. */
+    public WatchedFolderIntakeService withLicence(com.securedoc.platform.application.licensing.IntakeLicence licence) {
+        this.licence = Objects.requireNonNull(licence);
+        return this;
+    }
+
+    /** Task 0057: why the folder is not read now; empty when it is. */
+    public Optional<LicenseEnforcementException> licenceRefusal(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return licence == null ? Optional.empty() : licence.refusal(tenantId);
+    }
+
+    /** Task 0057: as {@link #licenceRefusal}, recorded and thrown (a scan a person asked for). */
+    public void requireLicence(AuthenticatedPrincipal principal, CorrelationId correlationId) {
+        if (licence != null) licence.requireIntake(principal.tenantId(), principal.actorId(), correlationId);
+    }
+
     @Override
     public ScanWatchedFolderResult scan(AuthenticatedPrincipal principal, CorrelationId correlationId) {
         return scan(principal, correlationId, WatchedFolderScanLease.singleNode());
@@ -95,6 +114,9 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                                         CorrelationId correlationId,
                                         WatchedFolderScanLease scanLease) {
         Objects.requireNonNull(scanLease, "scanLease");
+        // Task 0057: with intake stopped by the licence no drop is claimed, moved or recorded; each waits where it is.
+        Optional<LicenseEnforcementException> stopped = licenceRefusal(principal.tenantId());
+        if (stopped.isPresent()) throw stopped.get();
         if (!leaseIsCurrent(scanLease)) return new ScanWatchedFolderResult(0, 0, 0, 0, 0);
         sourcePort.recoverStaleClaims(scanLease, staleClaimAfter, authoritativeNow(scanLease));
         List<WatchedFolderCandidate> candidates = sourcePort.discover();
@@ -106,7 +128,7 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                 continue;
             }
 
-            if (!leaseIsCurrent(scanLease)) break;
+            if (!leaseIsCurrent(scanLease) || licenceRefusal(principal.tenantId()).isPresent()) break;
 
             Optional<WatchedFolderCandidate> claimed = sourcePort.claim(
                     discovered.sourceReference(), scanLease, authoritativeNow(scanLease));
@@ -159,6 +181,11 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                         fingerprint,null,correlationId,null);
                 applyDispositionBestEffort(candidate.sourceReference(), IntakeDisposition.DUPLICATE, scanLease);
                 continue;
+            } catch (LicenseEnforcementException stoppedMeanwhile) {
+                // Task 0057: the licence stopped intake while this drop was being taken in. It is not refused: the claim
+                // is left, so a later scan recovers it and goes on with the case it made, if it made one.
+                log.warn("WATCHED_FOLDER_DROP_LEFT_FOR_LATER reasonCode={}", stoppedMeanwhile.errorCode());
+                break;
             } catch (LostScanLeaseException lostLease) {
                 // Do not terminally dispose a candidate after losing the distributed generation.
                 // The next owner will recover the claim and resume the persisted package.

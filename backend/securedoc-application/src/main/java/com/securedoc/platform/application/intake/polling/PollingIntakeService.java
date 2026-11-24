@@ -30,11 +30,18 @@ public final class PollingIntakeService {
     private final ExternalIntakeService externalIntakeService;
     private final AuditService auditService;
     private final Clock clock;
+    private com.securedoc.platform.application.licensing.IntakeLicence licence;
 
     public PollingIntakeService(IntegrationConnectionService connectionService, PollingRunRepository runRepository,
                                 PollingSourcePort sourcePort, ExternalIntakeService externalIntakeService,
                                 AuditService auditService) {
         this(connectionService, runRepository, sourcePort, externalIntakeService, auditService, Clock.systemUTC());
+    }
+
+    /** Task 0057: the same service on the word of the licence. Without it (tests of polling itself) nothing is refused. */
+    public PollingIntakeService withLicence(com.securedoc.platform.application.licensing.IntakeLicence licence) {
+        this.licence = Objects.requireNonNull(licence);
+        return this;
     }
 
     PollingIntakeService(IntegrationConnectionService connectionService, PollingRunRepository runRepository,
@@ -64,6 +71,12 @@ public final class PollingIntakeService {
     public Optional<PollingRunSnapshot> runScheduled(TenantId tenantId, IntegrationConnectionId connectionId) {
         IntegrationConnection source = connectionService.get(tenantId, connectionId);
         if (!source.enabled() || !source.pollingSource()) return Optional.empty();
+        // Task 0057: with intake stopped by the licence the source is not called and nothing is recorded as a run.
+        if (licence != null && licence.refusal(tenantId).isPresent()) {
+            log.warn("POLLING_RUN_STOPPED_BY_LICENCE connectionId={} reasonCode={}", source.id(),
+                    licence.refusal(tenantId).map(com.securedoc.platform.application.licensing.LicenseEnforcementException::errorCode).orElse("none"));
+            return Optional.empty();
+        }
         ActorId actor = systemActor(source);
         // Task 0018 A6: the run's records name the connection ("Polling: <connection name>"); cleared after the run.
         // A manual run keeps the person's own name, bound by their request.
@@ -76,6 +89,7 @@ public final class PollingIntakeService {
         if (!source.enabled() || !source.pollingSource()) {
             throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not an enabled polling ingestion source");
         }
+        if (licence != null) licence.requireIntake(tenantId, actorId, CorrelationId.generate());
         return runInternal(source, PollingRunTrigger.MANUAL, actorId);
     }
 

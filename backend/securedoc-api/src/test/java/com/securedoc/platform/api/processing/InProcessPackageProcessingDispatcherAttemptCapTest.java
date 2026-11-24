@@ -54,7 +54,7 @@ class InProcessPackageProcessingDispatcherAttemptCapTest {
         AtomicBoolean stopped = new AtomicBoolean();
         InProcessPackageProcessingDispatcher dispatcher = dispatcher(
                 command -> {
-                    // TenantLicensingService.requireDocumentProcessing writes one LICENSE_ENFORCEMENT_DENIED
+                    // IntakeLicence.requireIntake writes one LICENSE_ENFORCEMENT_DENIED
                     // audit row per call before it throws; count the calls.
                     denials.incrementAndGet();
                     throw new LicenseEnforcementException("LICENSE_MISSING", "denied", LicenseValidationStatus.MISSING);

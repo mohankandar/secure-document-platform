@@ -2,7 +2,6 @@ package com.securedoc.platform.application.processing.service;
 
 import com.securedoc.platform.application.export.result.ExportPackageDocumentsResult;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.port.in.*;
 import com.securedoc.platform.application.port.out.*;
@@ -59,8 +58,7 @@ class DerivedRoutingPostExportFailureTest {
                 mock(StartDocumentProcessingUseCase.class), mock(ExtractDocumentTextUseCase.class),
                 mock(DetectSensitiveDataUseCase.class), mock(RedactDocumentUseCase.class), export, routing,
                 new SelectiveRetryExecutor(1, Duration.ZERO), lifecycle, mock(DocumentIntelligenceExecutionService.class),
-                mock(AuditService.class), mock(ProcessingIncidentService.class), mock(TenantLicensingService.class),
-                mock(ProductTelemetryService.class));
+                mock(AuditService.class), mock(ProcessingIncidentService.class), mock(ProductTelemetryService.class));
 
         service.execute(TriggerPackageProcessingCommand.of(pkg.id(), tenant, ActorId.generate(), CorrelationId.generate()));
 

@@ -42,13 +42,23 @@ public interface PdfRedactionPort {
         if (options != null && options.searchableText()) {
             throw new UnsupportedOperationException("This redaction engine cannot add a searchable text layer");
         }
+        if (options != null && options.nonProductionMark()) {
+            throw new UnsupportedOperationException("This redaction engine cannot mark a test output");
+        }
         return redact(originalPdf, targets);
     }
 
-    /** Output options. {@link #IMAGE_ONLY} is today's output: redacted pages are images with no text. */
-    record RedactionOptions(boolean searchableText) {
+    /**
+     * Output options. {@link #IMAGE_ONLY} is today's output: redacted pages are images with no text. Task 0057:
+     * {@code nonProductionMark} marks every page and the file (only under a licence for tests).
+     */
+    record RedactionOptions(boolean searchableText, boolean nonProductionMark) {
         public static final RedactionOptions IMAGE_ONLY = new RedactionOptions(false);
         public static final RedactionOptions SEARCHABLE = new RedactionOptions(true);
+
+        public RedactionOptions(boolean searchableText) {
+            this(searchableText, false);
+        }
     }
 
     /**

@@ -7,7 +7,7 @@ import {
 import type { ProcessingStorageNodeValidation, ProcessingStorageOverview } from '../../types';
 
 test('section names are the vocabulary words', () => {
-  assert.deepEqual(Object.values(SECTION_LABELS), ['Overview', 'Processing storage', 'Licensing', 'Branding', 'Usage data']);
+  assert.deepEqual(Object.values(SECTION_LABELS), ['Overview', 'Processing storage', 'Branding', 'Usage data']);
 });
 
 test('services in plain words', () => {

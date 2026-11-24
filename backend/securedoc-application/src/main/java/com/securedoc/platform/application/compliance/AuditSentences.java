@@ -138,6 +138,7 @@ public final class AuditSentences {
             entry("SECURITY_CONTEXT_INVALID", "Sent a request that could not be trusted"),
             entry("LICENSE_VALIDATION_FAILED", "The licence could not be checked"),
             entry("LICENSE_ENFORCEMENT_DENIED", "Refused by the licence"),
+            entry("DIAGNOSTIC_BUNDLE_DOWNLOADED", "Downloaded a diagnostic bundle"),
             // Exports
             entry("REPORT_CSV_EXPORTED", "Exported a report"),
             entry("AUDIT_EXPORTED", "Exported the audit trail"));

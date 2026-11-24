@@ -95,9 +95,7 @@ import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.application.port.out.RedactionVerificationPort;
 import com.securedoc.platform.application.port.out.ReviewPageRenderPort;
 import com.securedoc.platform.application.port.out.TenantRepository;
-import com.securedoc.platform.application.licensing.LicenseTokenVerifier;
-import com.securedoc.platform.application.licensing.TenantLicenseRepository;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.branding.BrandingConfigurationRepository;
 import com.securedoc.platform.application.branding.BrandingService;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
@@ -157,7 +155,6 @@ import com.securedoc.platform.api.storage.ProcessingStorageNodeReadiness;
 import com.securedoc.platform.api.observability.MdcTaskDecorator;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.resilience.TechnicalResilienceProperties;
-import com.securedoc.platform.infrastructure.licensing.Ed25519LicenseTokenVerifier;
 import com.securedoc.platform.worker.processing.ProcessingWorkCoordinator;
 import com.securedoc.platform.worker.processing.ProcessingWorker;
 import com.securedoc.platform.worker.processing.ProcessingWorkerConfig;
@@ -184,58 +181,6 @@ import java.util.concurrent.ThreadPoolExecutor;
  */
 @Configuration
 public class ApplicationServiceConfig {
-
-    @Bean
-    @ConfigurationProperties(prefix = "securedoc.licensing")
-    public LicensingProperties licensingProperties() {
-        return new LicensingProperties();
-    }
-
-    @Bean
-    public LicenseTokenVerifier licenseTokenVerifier(LicensingProperties licensingProperties,
-                                                     ResourceLoader resourceLoader) {
-        String publicKey = "";
-        if (licensingProperties.isAllowDevelopmentKeyOverride()
-                && licensingProperties.getDevelopmentPublicKey() != null
-                && !licensingProperties.getDevelopmentPublicKey().isBlank()) {
-            publicKey = licensingProperties.getDevelopmentPublicKey();
-        } else {
-            String problem = null;
-            try {
-                var resource = resourceLoader.getResource(licensingProperties.getVerificationKeyResource());
-                if (resource.exists()) {
-                    try (var in = resource.getInputStream()) {
-                        publicKey = new String(in.readAllBytes(), StandardCharsets.US_ASCII);
-                    }
-                    if (publicKey.isBlank()) problem = "EMPTY";
-                } else {
-                    problem = "MISSING";
-                }
-            } catch (Exception unreadable) {
-                // Missing/unreadable vendor key is represented as CONFIGURATION_ERROR by the verifier.
-                problem = "UNREADABLE (" + unreadable.getClass().getSimpleName() + ")";
-            }
-            if (problem != null) {
-                // Task 0023 C7 (#325): say so at start-up instead of only at the first refused intake.
-                org.slf4j.LoggerFactory.getLogger(ApplicationServiceConfig.class).warn(
-                        "LICENSE_VERIFICATION_KEY_UNAVAILABLE reason={} enforcement={} setting=securedoc.licensing."
-                                + "verification-key-resource: licences cannot be verified", problem,
-                        licensingProperties.enforcementEnabled());
-            }
-        }
-        return new Ed25519LicenseTokenVerifier(publicKey);
-    }
-
-    @Bean
-    public TenantLicensingService tenantLicensingService(
-            TenantLicenseRepository tenantLicenseRepository,
-            TenantRepository tenantRepository,
-            LicenseTokenVerifier licenseTokenVerifier,
-            AuditService auditService,
-            LicensingProperties licensingProperties) {
-        return new TenantLicensingService(tenantLicenseRepository, tenantRepository, licenseTokenVerifier,
-                auditService, licensingProperties.enforcementEnabled());
-    }
 
     @Bean
     public BrandingService brandingService(BrandingConfigurationRepository brandingConfigurationRepository,
@@ -315,7 +260,9 @@ public class ApplicationServiceConfig {
                                                                ProcessingFingerprintProvider processingFingerprintProvider,
                                                                ProductTelemetryService productTelemetryService) {
         return new ProcessingIncidentService(processingIncidentRepository, processingFingerprintProvider,
-                productTelemetryService);
+                productTelemetryService)
+                .withFailureReferences(code -> com.documentplatform.errors.FailureLog.record(
+                        new com.securedoc.platform.api.error.LvPlatformCode(code)));
     }
 
 
@@ -406,9 +353,10 @@ public class ApplicationServiceConfig {
             PollingRunRepository pollingRunRepository,
             PollingSourcePort pollingSourcePort,
             ExternalIntakeService externalIntakeService,
-            AuditService auditService) {
+            AuditService auditService,
+            IntakeLicence intakeLicence) {
         return new PollingIntakeService(integrationConnectionService, pollingRunRepository, pollingSourcePort,
-                externalIntakeService, auditService);
+                externalIntakeService, auditService).withLicence(intakeLicence);
     }
 
     @Bean
@@ -456,12 +404,12 @@ public class ApplicationServiceConfig {
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
             BusinessIdentityService businessIdentityService,
-            TenantLicensingService tenantLicensingService,
+            IntakeLicence intakeLicence,
             PackageRepository packageRepository,
             DomainEventPublisher eventPublisher,
             AuditService auditService) {
         return new CreatePackageService(
-                tenantContextService, capabilityEnforcementService, businessIdentityService, tenantLicensingService,
+                tenantContextService, capabilityEnforcementService, businessIdentityService, intakeLicence,
                 packageRepository, eventPublisher, auditService);
     }
 
@@ -477,6 +425,7 @@ public class ApplicationServiceConfig {
             PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService,
             WatchedFolderProperties properties,
+            IntakeLicence intakeLicence,
             com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings) {
         return new WatchedFolderIntakeService(sourcePort, watchedFolderLeasePort, observationRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase,
@@ -484,7 +433,7 @@ public class ApplicationServiceConfig {
                 Duration.ofMinutes(Math.max(0, properties.getIncompleteVisibilityMinutes())),
                 Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())),
                 tenant -> watchedFolderSettings.sensitivityLevel(tenant,
-                        com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER));
+                        com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER)).withLicence(intakeLicence);
     }
 
     /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */
@@ -500,7 +449,7 @@ public class ApplicationServiceConfig {
     public UploadDocumentUseCase uploadDocumentUseCase(
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
-            TenantLicensingService tenantLicensingService,
+            IntakeLicence intakeLicence,
             PackageRepository packageRepository,
             DocumentRepository documentRepository,
             ArtifactRepository artifactRepository,
@@ -510,7 +459,7 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             PdfIntakeValidationPort pdfIntakeValidationPort) {
         return new UploadDocumentService(
-                tenantContextService, capabilityEnforcementService, tenantLicensingService,
+                tenantContextService, capabilityEnforcementService, intakeLicence,
                 packageRepository, documentRepository, artifactRepository,
                 storagePort, checksumPort, eventPublisher, auditService, pdfIntakeValidationPort);
     }
@@ -519,12 +468,12 @@ public class ApplicationServiceConfig {
     public SubmitPackageUseCase submitPackageUseCase(
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
-            TenantLicensingService tenantLicensingService,
+            IntakeLicence intakeLicence,
             PackageRepository packageRepository,
             DomainEventPublisher eventPublisher,
             AuditService auditService) {
         return new SubmitPackageService(
-                tenantContextService, capabilityEnforcementService, tenantLicensingService,
+                tenantContextService, capabilityEnforcementService, intakeLicence,
                 packageRepository, eventPublisher, auditService);
     }
 
@@ -555,11 +504,11 @@ public class ApplicationServiceConfig {
             TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
             AuditService auditService,
             RequestActorDisplayName requestActorDisplayName,
-            TenantLicensingService tenantLicensingService) {
+            IntakeLicence intakeLicence) {
         return new com.securedoc.platform.application.compliance.ComplianceReportService(complianceReportReadPort,
                 complianceReportPdfPort, operationsQueryService, tenantRepository, tenantRedactionPolicyRepository,
                 tenantLifecyclePolicyRepository, auditService, requestActorDisplayName,
-                tenantLicensingService::installedCustomerName, java.time.Clock.systemUTC());
+                tenant -> intakeLicence.customerName(), java.time.Clock.systemUTC());
     }
 
     /** Task 0019: the policy estimate (counts only, read-only). */
@@ -933,12 +882,15 @@ public class ApplicationServiceConfig {
             DomainEventPublisher eventPublisher,
             AuditService auditService,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
-            TextExtractionPort textExtractionPort) {
+            TextExtractionPort textExtractionPort,
+            com.securedoc.platform.application.licensing.UsageMeter usageMeter,
+            com.securedoc.platform.api.licensing.PlatformLicence licence) {
         // Task 0044: the entity policy (searchable redacted pages) and the same text extraction as the detection.
         return new DocumentRedactionService(
                 documentRepository, packageRepository, artifactRepository,
                 findingRepository, storagePort, pdfRedactionPort, redactionVerificationPort, checksumPort,
-                eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort);
+                eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort)
+                .withUsageMeter(usageMeter).withNonProductionMark(licence::testEnvironment);
     }
 
     @Bean
@@ -1176,7 +1128,6 @@ public class ApplicationServiceConfig {
             DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
             AuditService auditService,
             ProcessingIncidentService processingIncidentService,
-            TenantLicensingService tenantLicensingService,
             ProductTelemetryService productTelemetryService,
             com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue) {
         return new TriggerPackageProcessingService(packageRepository, documentRepository,
@@ -1184,7 +1135,7 @@ public class ApplicationServiceConfig {
                 startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase,
                 exportPackageDocumentsUseCase, processDerivedRoutingUseCase, selectiveRetryExecutor, packageLifecycleService,
-                documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService,
+                documentIntelligenceExecutionService, auditService, processingIncidentService,
                 productTelemetryService, exportJobQueue);
     }
 
@@ -1258,7 +1209,6 @@ public class ApplicationServiceConfig {
             ProcessingIncidentService processingIncidentService,
             PackageProcessingRecoveryService packageProcessingRecoveryService,
             AuditService auditService,
-            TenantLicensingService tenantLicensingService,
             ProductTelemetryService productTelemetryService,
             TriggerPackageProcessingService triggerPackageProcessingService,
             com.securedoc.platform.application.port.out.TransactionPort transactionPort,
@@ -1290,7 +1240,7 @@ public class ApplicationServiceConfig {
                 stagedProcessingSettings, pipelineJobRepository, packageRepository, documentRepository,
                 processingLockPort, startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase, packageLifecycleService,
-                processingIncidentService, packageProcessingRecoveryService, auditService, tenantLicensingService,
+                processingIncidentService, packageProcessingRecoveryService, auditService,
                 productTelemetryService, triggerPackageProcessingService, transactionPort, storagePort, batching);
     }
 
@@ -1570,10 +1520,10 @@ public class ApplicationServiceConfig {
             FindingRepository findingRepository, ArtifactRepository artifactRepository,
             PackageLifecycleService packageLifecycleService,
             PackageProcessingDispatcher packageProcessingDispatcher, AuditService auditService,
-            TenantLicensingService tenantLicensingService) {
+            IntakeLicence intakeLicence) {
         return new ReprocessPackageService(packageRepository, documentRepository, findingRepository,
                 artifactRepository, packageLifecycleService, packageProcessingDispatcher, auditService,
-                tenantLicensingService);
+                intakeLicence);
     }
 
     @Bean

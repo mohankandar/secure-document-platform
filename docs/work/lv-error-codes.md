@@ -183,10 +183,10 @@ Inventory row numbers (`#n`) show where each code comes from.
 
 | Code | Title | Short description | Kind | Who acts | HTTP | Rows |
 |---|---|---|---|---|---|---|
-| LV-LIC-001 | No licence installed | This entity has no LexaVault licence. | Set-up | Platform Ops | 403 | 261, 308, 358, 287 |
-| LV-LIC-002 | Licence expired | The licence has expired or isn't valid yet. | Set-up | Platform Ops | 403 | 261, 308, 358, 287 |
-| LV-LIC-003 | Licence not valid | The licence's signature or entity doesn't match. | Set-up | Platform Ops | 403 | 261, 287, 325 |
-| LV-LIC-004 | Licence doesn't include this | The licence doesn't cover this feature. | Set-up | Platform Ops | 403 | 261, 308 |
+| LV-LIC-001 | No licence installed | No licence is stored for this installation. | Set-up | IT Admin | 403 | 261, 308, 358, 287 |
+| LV-LIC-002 | Licence expired | The licence has expired, its grace period is over, or it hasn't started yet. No new cases are taken in; cases already in LexaVault are finished. | Set-up | IT Admin | 403 | 261, 308, 358, 287 |
+| LV-LIC-003 | Licence not valid | The licence can't be read or trusted, or it doesn't cover this entity. | Set-up | IT Admin | 403 | 261, 287, 325 |
+| LV-LIC-004 | Licence doesn't include this | The licence doesn't cover LexaVault. | Set-up | IT Admin | 403 | 261, 308 |
 
 ### CFG: settings (001–019)
 

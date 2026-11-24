@@ -55,9 +55,20 @@ export function errorText(error: unknown, fallback: string): string {
   const message = typeof e.message === 'string' ? e.message : undefined;
   if (isLvCode(e.code)) {
     const code = e.code.trim();
-    return withLvCode(message?.trim() ? message : lvEntry(code).title, code);
+    const words = withLvCode(message?.trim() ? message : lvEntry(code).title, code);
+    // Task 0057: a refusal of the shared platform (the licence) says its own code and what to do about it.
+    const details = (error as { details?: { platformCode?: unknown }; whatToDo?: unknown });
+    const platform = typeof details.details?.platformCode === 'string' ? details.details.platformCode : undefined;
+    if (!platform) return words;
+    const steps = typeof details.whatToDo === 'string' && details.whatToDo.trim() ? details.whatToDo : lvEntry(code).whatToDo;
+    return `${words} (${platform}). What to do: ${steps}`;
   }
   return message ?? fallback;
+}
+
+/** Task 0057: what to do about a code, the steps of the customer error code guide. */
+export function whatToDo(code: string | null | undefined): string {
+  return lvEntry(code).whatToDo;
 }
 
 /** The code a sign-in refusal shows when the server's 403 body has none. */

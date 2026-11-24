@@ -8,7 +8,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.IntakeExpiredException;
 import com.securedoc.platform.application.intake.external.ExternalIntakeService;
 import com.securedoc.platform.application.licensing.LicenseEnforcementException;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.port.in.CreatePackageUseCase;
 import com.securedoc.platform.application.port.in.GetPackageQuery;
 import com.securedoc.platform.application.port.in.ListPackagesQuery;
@@ -21,10 +21,6 @@ import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
-import com.securedoc.platform.application.licensing.LicenseTokenVerifier;
-import com.securedoc.platform.domain.licensing.LicenseValidationStatus;
-import com.securedoc.platform.domain.licensing.LicenseVerificationResult;
-import com.securedoc.platform.application.licensing.TenantLicenseRepository;
 import com.securedoc.platform.domain.tenant.Tenant;
 import com.securedoc.platform.infrastructure.audit.JpaAuditPortAdapter;
 import com.securedoc.platform.infrastructure.persistence.entity.AuditRecordEntity;
@@ -73,10 +69,10 @@ class RefusalAuditTransactionTest {
     void aLicenceDenialAuditSurvivesTheRequestRollback() {
         Tenant tenant = Tenant.create("Licence Entity", "licence-entity");
         AuditService audit = new AuditService(auditAdapter());
-        TenantLicensingService licensing = licensingWithoutLicence(tenant, audit);
+        IntakeLicence licensing = licensingWithoutLicence(audit);
         CreatePackageUseCase create = mock(CreatePackageUseCase.class);
         when(create.execute(any(), any())).thenAnswer(call -> {
-            licensing.requireDocumentProcessing(tenant.id(), ActorId.generate(), CorrelationId.generate());
+            licensing.requireIntake(tenant.id(), ActorId.generate(), CorrelationId.generate());
             return null;
         });
         PackageController controller = transactional(new PackageController(create, mock(UploadDocumentUseCase.class),
@@ -188,18 +184,11 @@ class RefusalAuditTransactionTest {
         return context;
     }
 
-    private static TenantLicensingService licensingWithoutLicence(Tenant tenant, AuditService audit) {
-        TenantRepository tenants = mock(TenantRepository.class);
-        when(tenants.findById(tenant.id())).thenReturn(Optional.of(tenant));
-        TenantLicenseRepository licences = mock(TenantLicenseRepository.class);
-        when(licences.findActive(tenant.id())).thenReturn(Optional.empty());
-        LicenseTokenVerifier verifier = new LicenseTokenVerifier() {
-            @Override public LicenseVerificationResult verify(String token, TenantId expected, Instant now) {
-                return LicenseVerificationResult.of(LicenseValidationStatus.MISSING, null, "LICENSE_MISSING");
-            }
-            @Override public boolean isVerificationKeyConfigured() { return true; }
-        };
-        return new TenantLicensingService(licences, tenants, verifier, audit, true);
+    /** LexaVault's own intake check with no licence stored (task 0057). */
+    private static IntakeLicence licensingWithoutLicence(AuditService audit) {
+        return new com.securedoc.platform.api.licensing.PlatformLicence(() -> {
+            throw new com.documentplatform.licensing.LicenceException(com.documentplatform.licensing.LicenceRefusal.LICENCE_MISSING);
+        }, status -> true, audit);
     }
 
     /** A transaction manager with Spring's real propagation, suspension and synchronization; it only counts. */

@@ -373,17 +373,17 @@ public enum LvErrorCode {
             "This feature isn't switched on for your entity.",
             Kind.SET_UP, "Platform Ops", 403, false),
     LIC_001("LV-LIC-001", Area.LIC, "No licence installed",
-            "This entity has no LexaVault licence.",
-            Kind.SET_UP, "Platform Ops", 403, false),
+            "No licence is stored for this installation.",
+            Kind.SET_UP, "IT Admin", 403, false),
     LIC_002("LV-LIC-002", Area.LIC, "Licence expired",
-            "The licence has expired or isn't valid yet.",
-            Kind.SET_UP, "Platform Ops", 403, false),
+            "The licence has expired, its grace period is over, or it hasn't started yet. No new cases are taken in; cases already in LexaVault are finished.",
+            Kind.SET_UP, "IT Admin", 403, false),
     LIC_003("LV-LIC-003", Area.LIC, "Licence not valid",
-            "The licence's signature or entity doesn't match.",
-            Kind.SET_UP, "Platform Ops", 403, false),
+            "The licence can't be read or trusted, or it doesn't cover this entity.",
+            Kind.SET_UP, "IT Admin", 403, false),
     LIC_004("LV-LIC-004", Area.LIC, "Licence doesn't include this",
-            "The licence doesn't cover this feature.",
-            Kind.SET_UP, "Platform Ops", 403, false),
+            "The licence doesn't cover LexaVault.",
+            Kind.SET_UP, "IT Admin", 403, false),
     CFG_001("LV-CFG-001", Area.CFG, "Setting not valid",
             "A value breaks its rule; the message names the field and the allowed range.",
             Kind.REFUSED, "Admin who saved it", 400, false),
@@ -527,6 +527,24 @@ public enum LvErrorCode {
 
     /** Reserved for later work: listed, never given to a failure yet. */
     public boolean reserved() { return reserved; }
+
+    /**
+     * Task 0057: what to do about it, in one paragraph: the numbered steps of the customer error code guide
+     * ({@code docs/api/error-codes.md}). {@code LvErrorCodeGuideTest} keeps {@code lv-what-to-do.properties} equal to it.
+     */
+    public String whatToDo() { return WhatToDo.TEXTS.getProperty(code, ""); }
+
+    private static final class WhatToDo {
+        static final java.util.Properties TEXTS = new java.util.Properties();
+
+        static {
+            try (var in = LvErrorCode.class.getResourceAsStream("/lv-what-to-do.properties")) {
+                TEXTS.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        }
+    }
 
     /** The title and the code, as screens show them: "Destination busy or down · LV-DLV-002". */
     public String titleWithCode() { return title + " · " + code; }

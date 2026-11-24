@@ -4,7 +4,6 @@ import { apiClient } from '../api/client';
 import type { PlatformAdminOverview, PlatformHealthItem } from '../types';
 import PageScaffold from '../components/ui/PageScaffold';
 import ProcessingStoragePanel from './ProcessingStoragePanel';
-import LicensingPanel from './LicensingPanel';
 import BrandingPanel from './BrandingPanel';
 import ProductTelemetryPanel from './ProductTelemetryPanel';
 import HorizontalTabs from '../components/ui/HorizontalTabs';
@@ -35,7 +34,7 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false,
   const [runningHealth, setRunningHealth] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'storage' | 'licensing' | 'branding' | 'telemetry'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'storage' | 'branding' | 'telemetry'>('overview');
 
   const load = useCallback(async () => {
     try {
@@ -103,7 +102,6 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false,
         {canManagePlatformOperations && (
           <>
             <button className={activeTab === 'storage' ? 'active' : ''} onClick={() => setActiveTab('storage')} role="tab" aria-selected={activeTab === 'storage'}>Processing Storage</button>
-            <button className={activeTab === 'licensing' ? 'active' : ''} onClick={() => setActiveTab('licensing')} role="tab" aria-selected={activeTab === 'licensing'}>Licensing</button>
             <button className={activeTab === 'branding' ? 'active' : ''} onClick={() => setActiveTab('branding')} role="tab" aria-selected={activeTab === 'branding'}>Branding</button>
             <button className={activeTab === 'telemetry' ? 'active' : ''} onClick={() => setActiveTab('telemetry')} role="tab" aria-selected={activeTab === 'telemetry'}>Product Telemetry</button>
           </>
@@ -112,8 +110,6 @@ export default function PlatformAdminPage({ canManagePlatformOperations = false,
 
       {activeTab === 'storage' && canManagePlatformOperations ? (
         <ProcessingStoragePanel />
-      ) : activeTab === 'licensing' && canManagePlatformOperations ? (
-        <LicensingPanel />
       ) : activeTab === 'branding' && canManagePlatformOperations ? (
         <BrandingPanel />
       ) : activeTab === 'telemetry' && canManagePlatformOperations ? (

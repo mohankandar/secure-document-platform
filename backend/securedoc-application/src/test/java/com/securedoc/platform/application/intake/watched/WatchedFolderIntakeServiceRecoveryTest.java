@@ -257,6 +257,49 @@ class WatchedFolderIntakeServiceRecoveryTest {
         assertEquals(1, fifty.service.scan(principal, correlationId).accepted(), "fifty files are taken in");
     }
 
+    /* Task 0057: the licence stops intake; a drop is never refused for it. */
+
+    private static com.securedoc.platform.application.licensing.LicenseEnforcementException licenceOver() {
+        return new com.securedoc.platform.application.licensing.LicenseEnforcementException("LICENSE_EXPIRED",
+                "Intake is stopped by the licence", com.securedoc.platform.domain.licensing.LicenseValidationStatus.EXPIRED,
+                "EXPIRED_GRACE_OVER");
+    }
+
+    @Test
+    void withIntakeStoppedNoDropIsClaimedMovedOrRecorded() {
+        Fresh fresh = fresh(candidate("drop", doc("one.pdf", "one")), (command, p) -> {
+            throw new AssertionError("no case is made");
+        });
+        var stopped = new com.securedoc.platform.application.licensing.IntakeLicence() {
+            boolean over = true;
+            @Override public java.util.Optional<com.securedoc.platform.application.licensing.LicenseEnforcementException> refusal(
+                    TenantId tenant) { return over ? java.util.Optional.of(licenceOver()) : java.util.Optional.empty(); }
+            @Override public void requireIntake(TenantId t, com.securedoc.platform.domain.identity.ActorId a, CorrelationId c) {
+                if (over) throw licenceOver();
+            }
+            @Override public java.util.Optional<String> customerName() { return java.util.Optional.empty(); }
+        };
+        fresh.service.withLicence(stopped);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.securedoc.platform.application.licensing.LicenseEnforcementException.class,
+                () -> fresh.service.scan(principal, correlationId));
+
+        org.junit.jupiter.api.Assertions.assertNull(fresh.observations.latest, "nothing recorded");
+        assertEquals(0, fresh.audits.size());
+    }
+
+    @Test
+    void aDropCaughtByALicenceStopIsLeftForALaterScan() {
+        Fresh fresh = fresh(candidate("drop", doc("one.pdf", "one")), (command, p) -> { throw licenceOver(); });
+
+        var result = fresh.service.scan(principal, correlationId);
+
+        assertEquals(0, result.rejected());
+        assertEquals(0, result.accepted());
+        org.junit.jupiter.api.Assertions.assertNull(fresh.observations.latest, "not refused");
+    }
+
     /* Task 0023 C2: the real reason for each refused drop, as a code in the observation and the audit. */
 
     @Test
@@ -266,9 +309,6 @@ class WatchedFolderIntakeServiceRecoveryTest {
                 new Case(new com.securedoc.platform.application.exception.IntakeValidationException(
                         IntakeRejectionCode.UNKNOWN_IDENTIFIER, "Unknown identifier key Secret-Key"),
                         IntakeRejectionCode.UNKNOWN_IDENTIFIER, "INTAKE_UNKNOWN_IDENTIFIER"),
-                new Case(new com.securedoc.platform.application.licensing.LicenseEnforcementException("LICENSE_EXPIRED",
-                        "Tenant license has expired", com.securedoc.platform.domain.licensing.LicenseValidationStatus.EXPIRED),
-                        IntakeRejectionCode.LICENSE_DENIED, "LICENSE_EXPIRED"),
                 new Case(new com.securedoc.platform.application.exception.CapabilityNotEnabledException(
                         com.securedoc.platform.domain.tenant.Capability.DOCUMENT_UPLOAD),
                         IntakeRejectionCode.CAPABILITY_DISABLED, "CAPABILITY_DISABLED"),

@@ -2,9 +2,7 @@ package com.securedoc.platform.application.lifecycle.service;
 
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.lifecycle.command.ReprocessPackageCommand;
-import com.securedoc.platform.application.licensing.LicenseTokenVerifier;
-import com.securedoc.platform.application.licensing.TenantLicenseRepository;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.port.out.*;
 import com.securedoc.platform.application.processing.command.TriggerPackageProcessingCommand;
 import com.securedoc.platform.application.service.AuditService;
@@ -20,8 +18,6 @@ import com.securedoc.platform.domain.identity.*;
 import com.securedoc.platform.domain.lifecycle.PackageExportRecord;
 import com.securedoc.platform.domain.lifecycle.PackageLifecycle;
 import com.securedoc.platform.domain.lifecycle.TenantLifecyclePolicy;
-import com.securedoc.platform.domain.licensing.LicenseVerificationResult;
-import com.securedoc.platform.domain.licensing.TenantLicenseRecord;
 import com.securedoc.platform.domain.tenant.Tenant;
 import com.securedoc.platform.domain.vo.Checksum;
 import com.securedoc.platform.domain.vo.FileName;
@@ -83,7 +79,7 @@ class ReprocessPackageServiceTest {
         AuditService auditService = new AuditService(audit);
         ReprocessPackageService service = new ReprocessPackageService(
                 packages, documents, new EmptyFindingRepository(), artifacts,
-                lifecycleService, dispatcher, auditService, disabledLicensing(auditService));
+                lifecycleService, dispatcher, auditService, licence(null));
 
         assertTrue(lifecycleService.execute(pkg.id(), tenantId).canReprocess());
 
@@ -109,23 +105,14 @@ class ReprocessPackageServiceTest {
     }
 
 
-    private static TenantLicensingService disabledLicensing(AuditService auditService) {
-        TenantLicenseRepository licenses = new TenantLicenseRepository() {
-            @Override public TenantLicenseRecord save(TenantLicenseRecord record) { return record; }
-            @Override public void activate(TenantId tenantId, java.util.UUID licenseRecordId, java.util.UUID actorId) { }
-            @Override public Optional<TenantLicenseRecord> findActive(TenantId tenantId) { return Optional.empty(); }
-            @Override public List<TenantLicenseRecord> findHistory(TenantId tenantId) { return List.of(); }
+    private static IntakeLicence licence(com.securedoc.platform.application.licensing.LicenseEnforcementException refusal) {
+        return new IntakeLicence() {
+            @Override public Optional<com.securedoc.platform.application.licensing.LicenseEnforcementException> refusal(TenantId t) {
+                return Optional.ofNullable(refusal);
+            }
+            @Override public void requireIntake(TenantId t, ActorId a, CorrelationId c) { if (refusal != null) throw refusal; }
+            @Override public Optional<String> customerName() { return Optional.empty(); }
         };
-        TenantRepository tenants = new TenantRepository() {
-            @Override public Optional<Tenant> findById(TenantId tenantId) { return Optional.empty(); }
-            @Override public Optional<Tenant> findBySlug(String slug) { return Optional.empty(); }
-            @Override public List<Tenant> findAll() { return List.of(); }
-        };
-        LicenseTokenVerifier verifier = new LicenseTokenVerifier() {
-            @Override public LicenseVerificationResult verify(String signedToken, TenantId expectedTenantId, Instant now) { throw new AssertionError("not used"); }
-            @Override public boolean isVerificationKeyConfigured() { return false; }
-        };
-        return new TenantLicensingService(licenses, tenants, verifier, auditService, false);
     }
 
     private static Artifact availableArtifact(TenantId tenantId, DocumentId documentId,

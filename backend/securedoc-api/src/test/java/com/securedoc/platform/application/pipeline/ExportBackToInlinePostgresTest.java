@@ -2,7 +2,6 @@ package com.securedoc.platform.application.pipeline;
 
 import com.securedoc.platform.api.processing.ExportJobWorkers;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
 import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
@@ -413,7 +412,7 @@ class ExportBackToInlinePostgresTest {
                 mock(DetectSensitiveDataUseCase.class), mock(RedactDocumentUseCase.class), f.export, f.routing,
                 new SelectiveRetryExecutor(1, Duration.ZERO), f.lifecycle,
                 mock(DocumentIntelligenceExecutionService.class), f.audit, f.incidents,
-                mock(TenantLicensingService.class), mock(ProductTelemetryService.class), inlineQueue)
+                mock(ProductTelemetryService.class), inlineQueue)
                 .execute(TriggerPackageProcessingCommand.of(id, f.tenant, ActorId.generate(), CorrelationId.generate()));
     }
 

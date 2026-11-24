@@ -34,6 +34,8 @@ public class PdfBoxDerivedPdfBuilderAdapter implements DerivedPdfBuilderPort {
                 }
                 output.importPage(source.getPage(page - 1));
             }
+            // Task 0057: pages of a marked output make a marked file.
+            com.securedoc.platform.infrastructure.redaction.NonProductionMark.carry(source, output);
             outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-derived-output-");
             output.save(outputPath.toFile());
             result = TempFileReplayableContent.owned(outputPath);

@@ -19,6 +19,7 @@ import Review from './Review';
 import Reports from './reports/Reports';
 import Admin from './admin/Admin';
 import NoAccess from './NoAccess';
+import SupportStatus from './support/SupportStatus';
 import SupportList from './support/SupportList';
 import { CaseProblem, IncidentProblem } from './support/ProblemDetail';
 import ManualCase from './support/ManualCase';
@@ -170,6 +171,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/audit" element={<Navigate to={caps.includes(CAP.audit) ? '/admin/audit' : home} replace />} />
           {/* UI task U012: Case File screens; the legacy pages stay for the legacy app (App.tsx). */}
           <Route path="/waiting" element={canResend ? <WaitingForYou /> : <Navigate to={home} replace />} />
+          <Route path="/support/status" element={canSupport ? <SupportStatus caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/support/export" element={canSupport ? <SupportExport caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/support/incidents" element={canSupport ? <SupportList caps={caps} entityName={me.tenantName} /> : <Navigate to={home} replace />} />
           <Route path="/support/incidents/:incidentId" element={canSupport ? <IncidentProblem caps={caps} /> : <Navigate to={home} replace />} />

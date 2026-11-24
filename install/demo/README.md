@@ -4,7 +4,7 @@ Demo values only. Nothing here belongs to a real customer, login system or produ
 
 | File | What it is |
 |---|---|
-| `licence-demo.json` | Licence `LIC-LV-DEMO-0001` v1 for customer `TEN-DEMO-0001` ("LexaVault Demo Customer"), product `LEXAVAULT`, two entity slots `ENT-DEMO-0001` and `ENT-DEMO-0002` (1,000 pages a month each), kind `NON_PRODUCTION` (the app shows "Test environment"), perpetual. Signed with LexaVault's **development** key `dev-lexavault-demo-1`. |
+| `licence-demo.json` | Licence `LIC-LV-DEMO-0001` v1 for customer `TEN-DEMO-0001` ("LexaVault Demo Customer"), product `LEXAVAULT`, two entity slots `ENT-DEMO-0001` and `ENT-DEMO-0002` (1,000 pages a month each), kind `NON_PRODUCTION` (Admin, Licensing says "Test environment" and every redacted copy is marked, task 0057), perpetual. Signed with LexaVault's **development** key `dev-lexavault-demo-1`. |
 | `development-trusted-keys.json` | That development public key, marked `"development": true` (task 0041), so setup takes a local `http` login system under the demo licence. It is for reading and tests only: nothing passes it to setup any more (task 0054). The copy that counts is inside a development build's jars (`backend/licence-build/dev`, `mvn -Pdev-build`); a production build does not hold it and refuses the demo licence (`SETUP_LICENCE_REFUSED: LICENCE_UNKNOWN_KEY_ID`). |
 | `signin-demo.json` | Sign-in file (`platform-signin/1`, direct mode) with a placeholder https login system. No secrets. |
 | `role-mapping-lexavault-demo.csv` | Group-to-role grants per slot, with the local development Keycloak's group names, and one platform-wide row (`*`): the platform operations group gets `PLATFORM_OPERATIONS_ADMIN` in every entity (task 0054). |
