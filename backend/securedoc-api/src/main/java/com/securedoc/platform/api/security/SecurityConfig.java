@@ -92,7 +92,7 @@ public class SecurityConfig {
         if (issuer == null || issuer.isBlank() || audience == null || audience.isBlank()) {
             throw new IllegalStateException("OIDC mode requires securedoc.security.oidc.issuer-uri and audience");
         }
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuer).cache(new IssuerKeyCache()).build();
         OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
         OAuth2TokenValidator<Jwt> audienceValidator = new RequiredAudienceValidator(audience);
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuerValidator, audienceValidator));
