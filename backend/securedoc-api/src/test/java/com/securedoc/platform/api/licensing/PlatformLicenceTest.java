@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,6 +59,28 @@ class PlatformLicenceTest {
         LicenseEnforcementException early = on("2025-12-31").refusal(ENTITY).orElseThrow();
         assertEquals("LICENSE_NOT_YET_VALID", early.errorCode());
         assertEquals(LvErrorCode.LIC_002, LvErrorCodes.of(early));
+    }
+
+    /** Task 0058: a suspended entity takes nothing in, asked at every question; the audit names the reason. */
+    @Test
+    void aSuspendedEntityTakesNothingInWhateverTheLicenceSays() {
+        var active = new java.util.concurrent.atomic.AtomicBoolean(true);
+        PlatformLicence licence = on("2026-01-01").withEntityActive(entity -> active.get());
+        assertTrue(licence.refusal(ENTITY).isEmpty());
+        active.set(false);
+        LicenseEnforcementException refused = licence.refusal(ENTITY).orElseThrow();
+        assertEquals("ENTITY_NOT_ACTIVE", refused.errorCode());
+        assertEquals(LvErrorCode.AUT_005, LvErrorCodes.of(refused));
+        assertFalse(refused.serviceUnavailable());
+        assertThrows(LicenseEnforcementException.class, () -> licence.requireIntake(ENTITY, com.securedoc.platform.domain.identity.ActorId.of(
+                java.util.UUID.randomUUID()), com.securedoc.platform.domain.identity.CorrelationId.generate()));
+        assertTrue(audits.get(audits.size() - 1).detail().startsWith("Intake refused, the entity is not active: "));
+        active.set(true);
+        assertTrue(licence.refusal(ENTITY).isEmpty());
+        // The check cannot be made: it is not taken as a yes.
+        assertThrows(IllegalStateException.class, () -> on("2026-01-01").withEntityActive(entity -> {
+            throw new IllegalStateException("database away");
+        }).refusal(ENTITY));
     }
 
     @Test

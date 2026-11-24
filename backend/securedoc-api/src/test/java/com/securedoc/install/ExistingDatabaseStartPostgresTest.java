@@ -183,8 +183,8 @@ class ExistingDatabaseStartPostgresTest {
     @Order(3)
     void signInGoesThroughTheIssuerTheOidcStartWasGiven() {
         PlatformIdentityReads reads = new PlatformIdentityReads(new JdbcTemplate(new IdnRows(db).ds));
-        assertEquals(DEMO_ENTITY, reads.findActive("customer-oidc", URI.create(KEYCLOAK), "lexavault-api").orElseThrow().tenantId());
-        assertTrue(reads.findActive("demo-okta", URI.create("https://login.demo.example/oauth2/default"),
+        assertEquals(java.util.Set.of(com.securedoc.platform.domain.identity.TenantId.of(DEMO_ENTITY)), reads.findCandidates("customer-oidc", URI.create(KEYCLOAK), "lexavault-api"));
+        assertTrue(reads.findCandidates("demo-okta", URI.create("https://login.demo.example/oauth2/default"),
                 "api://lexavault-demo").isEmpty(), "the demo files' placeholder login system is no longer the active one");
     }
 

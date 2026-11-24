@@ -11,6 +11,8 @@ import { axisTicks, bucketDate, hours, labelledBuckets, pct, ratio } from './rep
 import { isTimeSaved, timeSavedWords } from './timeSavedRules';
 import { ComplianceReportButton } from '../compliance/ComplianceReport';
 import { complianceEdition } from '../compliance/complianceRules';
+import { dayFrom, dayIn, dayText, plusDays, startOfDay, type Day } from '../entityZone';
+import { useEntityZone, useEntityZoneSet } from '../EntityZoneContext';
 import './reports.css';
 
 type Preset = 'TODAY' | '7D' | '30D' | 'THIS_MONTH' | 'THIS_QUARTER' | 'CUSTOM';
@@ -39,29 +41,21 @@ const OUTCOMES = [
   { value: 'ATTENTION', label: 'Stopped' },
 ];
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-const toDateInput = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const fromDateInput = (value: string) => {
-  const [y, m, d] = value.split('-').map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-};
-
-/** Mirrors ReportsPage: local-day boundaries, exclusive `to`, sent as ISO instants. */
-function periodFor(preset: Preset, customFrom: string, customTo: string): { from: Date; to: Date; label: string } | null {
-  const today = startOfDay(new Date());
-  const tomorrow = addDays(today, 1);
+/** Days of the entity's time zone (task 0058; the browser's when none is set), exclusive `to`, sent as ISO instants. */
+function periodFor(preset: Preset, customFrom: string, customTo: string, zone: string): { from: Date; to: Date; fromDay: Day; toDay: Day; label: string } | null {
+  const today = dayIn(new Date(), zone);
+  const range = (fromDay: Day, toDay: Day, label: string) => ({ from: startOfDay(fromDay, zone), to: startOfDay(plusDays(toDay, 1), zone), fromDay, toDay, label });
   switch (preset) {
-    case 'TODAY': return { from: today, to: tomorrow, label: 'Today' };
-    case '7D': return { from: addDays(today, -6), to: tomorrow, label: 'Last 7 days' };
-    case '30D': return { from: addDays(today, -29), to: tomorrow, label: 'Last 30 days' };
-    case 'THIS_MONTH': return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: tomorrow, label: 'This month' };
-    case 'THIS_QUARTER': return { from: new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1), to: tomorrow, label: 'This quarter' };
+    case 'TODAY': return range(today, today, 'Today');
+    case '7D': return range(plusDays(today, -6), today, 'Last 7 days');
+    case '30D': return range(plusDays(today, -29), today, 'Last 30 days');
+    case 'THIS_MONTH': return range({ ...today, d: 1 }, today, 'This month');
+    case 'THIS_QUARTER': return range({ y: today.y, m: Math.floor((today.m - 1) / 3) * 3 + 1, d: 1 }, today, 'This quarter');
     case 'CUSTOM': {
-      if (!customFrom || !customTo) return null;
-      const from = fromDateInput(customFrom);
-      const to = addDays(fromDateInput(customTo), 1);
-      return to > from ? { from, to, label: `${customFrom} – ${customTo}` } : null;
+      const from = dayFrom(customFrom);
+      const to = dayFrom(customTo);
+      if (!from || !to || dayText(to) < dayText(from)) return null;
+      return range(from, to, `${customFrom} – ${customTo}`);
     }
   }
 }
@@ -80,13 +74,15 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
   const compliance = complianceEdition('reports', caps);
 
   const [preset, setPreset] = useState<Preset>('30D');
-  const [customFrom, setCustomFrom] = useState(() => toDateInput(addDays(new Date(), -13)));
-  const [customTo, setCustomTo] = useState(() => toDateInput(new Date()));
+  const zone = useEntityZone();
+  const zoneSet = useEntityZoneSet();
+  const [customFrom, setCustomFrom] = useState(() => dayText(plusDays(dayIn(new Date(), zone), -13)));
+  const [customTo, setCustomTo] = useState(() => dayText(dayIn(new Date(), zone)));
   const [source, setSource] = useState('ALL');
   const [outcome, setOutcome] = useState('ALL');
   const [exporting, setExporting] = useState(false);
 
-  const period = useMemo(() => periodFor(preset, customFrom, customTo), [preset, customFrom, customTo]);
+  const period = useMemo(() => periodFor(preset, customFrom, customTo, zone), [preset, customFrom, customTo, zone]);
   const params = period ? { from: period.from.toISOString(), to: period.to.toISOString(), source, outcome } : null;
 
   const { data, error, isLoading, isValidating, mutate } = useSWR<OperationalReports>(
@@ -103,7 +99,7 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `lexavault-report-${toDateInput(period!.from)}-to-${toDateInput(addDays(period!.to, -1))}.csv`;
+      a.download = `lexavault-report-${dayText(period!.fromDay)}-to-${dayText(period!.toDay)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast('Report exported.');
@@ -122,7 +118,8 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
           <h1 className="cf-title">How the work is going</h1>
           <p className="cf-lede">
             {period ? period.label : 'Choose a valid range'}
-            {data && <> · updated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>}
+            {data && <> · updated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: zone })}</>}
+            {zoneSet && <> · days in {zoneSet}</>}
             {isValidating && data && <> · refreshing</>}
           </p>
         </div>
@@ -326,7 +323,8 @@ function Trend({ r }: { r: OperationalReports }) {
   const at = (v: number) => `${(v / top) * 100}%`;
   const labelled = new Set(labelledBuckets(points.length));
   const shown = hover === null ? null : points[hover];
-  const dayLabel = (p: (typeof points)[number]) => `${bucketDate(p.bucket)}: ${p.received.toLocaleString()} received, ${p.delivered.toLocaleString()} delivered`;
+  const bucketZone = useEntityZoneSet();
+  const dayLabel = (p: (typeof points)[number]) => `${bucketDate(p.bucket, bucketZone)}: ${p.received.toLocaleString()} received, ${p.delivered.toLocaleString()} delivered`;
   // U027 (WCAG 2.1.1): one Tab stop for the chart (the group of days), then the arrow keys move between days. The
   // focused day shows the same tip as on hover and is read out by its name. Esc goes back to the chart itself.
   const focusDay = (i: number) => {
@@ -367,13 +365,13 @@ function Trend({ r }: { r: OperationalReports }) {
           {shown && hover !== null && (
             <div className="cf-rp-tip" data-testid="trend-tip" aria-hidden="true" data-side={hover >= points.length / 2 ? 'left' : 'right'}
               style={{ left: `${((hover + 0.5) / points.length) * 100}%` }}>
-              <strong>{bucketDate(shown.bucket)}</strong>
+              <strong>{bucketDate(shown.bucket, bucketZone)}</strong>
               <span data-k="received">{shown.received.toLocaleString()} received</span>
               <span data-k="delivered">{shown.delivered.toLocaleString()} delivered</span>
             </div>
           )}
           <div className="cf-rp-xaxis" aria-hidden="true">
-            {points.map((p, i) => <span key={p.bucket}>{labelled.has(i) ? bucketDate(p.bucket) : ''}</span>)}
+            {points.map((p, i) => <span key={p.bucket}>{labelled.has(i) ? bucketDate(p.bucket, bucketZone) : ''}</span>)}
           </div>
         </div>
       </div>
@@ -383,7 +381,7 @@ function Trend({ r }: { r: OperationalReports }) {
           <caption>Cases received and delivered per day</caption>
           <thead><tr><th scope="col">Day</th><th scope="col">Received</th><th scope="col">Delivered</th></tr></thead>
           <tbody>
-            {points.map((p) => <tr key={p.bucket}><th scope="row">{bucketDate(p.bucket)}</th><td>{p.received}</td><td>{p.delivered}</td></tr>)}
+            {points.map((p) => <tr key={p.bucket}><th scope="row">{bucketDate(p.bucket, bucketZone)}</th><td>{p.received}</td><td>{p.delivered}</td></tr>)}
           </tbody>
         </table>
       </div>

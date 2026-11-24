@@ -251,6 +251,64 @@ class OptInPatternDetectorTest {
             assertNone("Order number: K7302215", OptInPatternDetector.DRIVERS_LICENSE);
         }
 
+        /** Task 0069: one value of each common state format, and shapes no state uses. */
+        @Test
+        void driversLicenseStateFormats() {
+            for (String value : List.of("12345678", "1234567890123", "K7302215", "S530429100123", "D123-4567-8901",
+                    "AB123456", "AB123456C", "ABC123456", "123AB4567", "12ABC34567", "1234567A")) {
+                assertSpans("Driver's license number: " + value, OptInPatternDetector.DRIVERS_LICENSE, value);
+                assertNone("Reference " + value, OptInPatternDetector.DRIVERS_LICENSE);
+            }
+            for (String shape : List.of("1A2B3456", "12345AB", "123456789012345", "A123B456C")) {
+                assertNone("Driver's license number: " + shape, OptInPatternDetector.DRIVERS_LICENSE);
+            }
+        }
+
+        /** Task 0069: the labels the requirement names, the right check digits, and the same values without them. */
+        @Test
+        void theNamedLabelsAndTheCheckDigits() {
+            assertSpans("Routing 032000719", OptInPatternDetector.ROUTING, "032000719");
+            assertNone("Routing 032000718", OptInPatternDetector.ROUTING);
+            assertNone("Batch 032000719", OptInPatternDetector.ROUTING);
+            assertSpans("Acct 4410098765", OptInPatternDetector.ACCOUNT, "4410098765");
+            assertNone("Batch 4410098765", OptInPatternDetector.ACCOUNT);
+            assertSpans("DL# K7302215", OptInPatternDetector.DRIVERS_LICENSE, "K7302215");
+            assertSpans("Passport No. X12345678", OptInPatternDetector.PASSPORT, "X12345678");
+            assertNone("EIN 00-1234567", OptInPatternDetector.EIN);
+            assertNone("ITIN 912-00-1234", OptInPatternDetector.ITIN);
+        }
+
+        /** Task 0069: a labelled number no SSN can have is kept with less confidence; unlabelled, nothing is found. */
+        @Test
+        void impossibleSsnRanges() {
+            LocalRuleBasedDetectionAdapter adapter = new LocalRuleBasedDetectionAdapter();
+            for (String value : List.of("000-12-3456", "666-12-3456", "987-65-4320", "412-00-7531", "412-55-0000")) {
+                assertEquals(List.of(0.75), ssnConfidences(adapter, "Borrower SSN: " + value), value);
+                assertEquals(List.of(), ssnConfidences(adapter, "Batch " + value), value);
+            }
+            assertEquals(List.of(0.95), ssnConfidences(adapter, "Borrower SSN: 412-55-7531"));
+            assertEquals(List.of(), ssnConfidences(adapter, "Batch 412-55-7531"));
+        }
+
+        /** Cards: the check digit and a card label, both. */
+        @Test
+        void cardsNeedTheirCheckDigit() {
+            LocalRuleBasedDetectionAdapter adapter = new LocalRuleBasedDetectionAdapter();
+            assertEquals(1, count(adapter, "Card number 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
+            assertEquals(0, count(adapter, "Card number 4000 0566 5566 5557", "CREDIT_CARD_NUMBER"));
+            assertEquals(0, count(adapter, "Batch 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
+        }
+
+        private static List<Double> ssnConfidences(LocalRuleBasedDetectionAdapter adapter, String text) {
+            return adapter.detect(List.of(new com.securedoc.platform.application.port.out.SensitiveDataDetectionPort.PageInput(1, text)))
+                    .entities().stream().filter(e -> e.entityType().equals("SSN")).map(DetectedEntity::confidence).toList();
+        }
+
+        private static long count(LocalRuleBasedDetectionAdapter adapter, String text, String kind) {
+            return adapter.detect(List.of(new com.securedoc.platform.application.port.out.SensitiveDataDetectionPort.PageInput(1, text)))
+                    .entities().stream().filter(e -> e.entityType().equals(kind)).count();
+        }
+
         @Test
         void passportWithItsLabel() {
             assertSpans("Passport number: X12345678", OptInPatternDetector.PASSPORT, "X12345678");

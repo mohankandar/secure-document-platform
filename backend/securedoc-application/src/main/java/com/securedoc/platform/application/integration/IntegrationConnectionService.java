@@ -23,6 +23,7 @@ public final class IntegrationConnectionService {
     private final IntegrationConnectionRepository repository;
     private final AuditService auditService;
     private final Clock clock;
+    private com.securedoc.platform.application.port.out.EntityTimeZonePort zones = com.securedoc.platform.application.port.out.EntityTimeZonePort.NONE;
 
     public IntegrationConnectionService(IntegrationConnectionRepository repository, AuditService auditService) {
         this(repository, auditService, Clock.systemUTC());
@@ -32,6 +33,21 @@ public final class IntegrationConnectionService {
         this.repository = Objects.requireNonNull(repository);
         this.auditService = Objects.requireNonNull(auditService);
         this.clock = Objects.requireNonNull(clock);
+    }
+
+    /** Task 0058: the entity's time zone, which a daily schedule without one of its own follows. */
+    public IntegrationConnectionService withEntityTimeZones(com.securedoc.platform.application.port.out.EntityTimeZonePort zones) {
+        this.zones = Objects.requireNonNull(zones);
+        return this;
+    }
+
+    /** A daily schedule without a time zone needs an entity that has one; otherwise it would never run. */
+    private void requireZone(TenantId tenantId, ConnectionInput input) {
+        boolean none = input.pollingTimeZone() == null || input.pollingTimeZone().isBlank();
+        if (none && input.pollingScheduleType() == com.securedoc.platform.domain.integration.IntegrationPollingScheduleType.DAILY
+                && zones.effective(tenantId).isEmpty()) {
+            throw new ValidationException(LvErrorCode.CFG_001, "Daily polling requires a time zone");
+        }
     }
 
     public List<IntegrationConnection> list(TenantId tenantId) {
@@ -77,6 +93,7 @@ public final class IntegrationConnectionService {
         ensureUniqueName(tenantId, input.name(), null);
         ensureUniqueClientPrincipal(tenantId, input, null);
         ensureSingleEnabledDocumentStore(tenantId, input.purpose(), input.enabled(), null);
+        requireZone(tenantId, input);
         try {
             return IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
                     input.direction(), input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(),
@@ -94,6 +111,7 @@ public final class IntegrationConnectionService {
         ensureUniqueName(tenantId, input.name(), id);
         ensureUniqueClientPrincipal(tenantId, input, id);
         ensureSingleEnabledDocumentStore(tenantId, input.purpose(), existing.enabled(), id);
+        requireZone(tenantId, input);
         try {
             return existing.updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
                     input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(), input.fileShareRoot(),

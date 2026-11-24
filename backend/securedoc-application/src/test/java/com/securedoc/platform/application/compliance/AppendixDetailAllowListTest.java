@@ -37,7 +37,11 @@ class AppendixDetailAllowListTest {
         // 89 in task 0017; task 0018 A2 adds AUTHORIZATION_FAILED (now written by the capability interceptor).
         // Task 0021 adds INTAKE_SENSITIVITY_LEVEL_UNKNOWN (code and scope only) and WATCHED_FOLDER_SETTINGS_CHANGED
         // (level codes only).
-        assertEquals(92, AppendixDetailAllowList.allowed().size());
+        // Task 0069 adds DOCUMENT_SIGNATURE_REMOVED (a fixed sentence and the document id; never the signer).
+        assertEquals(93, AppendixDetailAllowList.allowed().size());
+        assertEquals("Original was digitally signed; the signature no longer applies to the redacted copy: document=d-1",
+                AppendixDetailAllowList.printable("DOCUMENT_SIGNATURE_REMOVED",
+                        "Original was digitally signed; the signature no longer applies to the redacted copy: document=d-1"));
         assertTrue(AppendixDetailAllowList.isAllowed("INTAKE_SENSITIVITY_LEVEL_UNKNOWN"));
         assertTrue(AppendixDetailAllowList.isAllowed("WATCHED_FOLDER_SETTINGS_CHANGED"));
         assertTrue(AppendixDetailAllowList.isAllowed("SENSITIVE_DATA_POLICY_CHANGED"));

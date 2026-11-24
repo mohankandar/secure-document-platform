@@ -369,8 +369,8 @@ public record IntegrationConnection(
             }
         } else if (scheduleType == IntegrationPollingScheduleType.DAILY) {
             if (localTime == null) throw new IllegalArgumentException("Daily polling requires a local time");
-            if (timeZone == null) throw new IllegalArgumentException("Daily polling requires a time zone");
-            try { ZoneId.of(timeZone); } catch (DateTimeException e) {
+            // Task 0058: without a zone of its own the schedule follows the entity's (checked where the entity is known).
+            try { if (timeZone != null) ZoneId.of(timeZone); } catch (DateTimeException e) {
                 throw new IllegalArgumentException("Polling time zone must be a valid IANA time zone");
             }
             if (intervalMinutes != null) throw new IllegalArgumentException("Daily polling does not use an interval");

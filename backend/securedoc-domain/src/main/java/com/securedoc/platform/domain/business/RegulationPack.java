@@ -24,11 +24,11 @@ import static com.securedoc.platform.domain.finding.EntityType.SSN;
  */
 public enum RegulationPack {
     GLBA("GLBA / financial",
-            "Customer financial information: Social Security Numbers, ITINs, dates of birth, bank account and routing "
+            "Customer financial information: Social Security Numbers, tax IDs (ITIN, EIN), dates of birth, bank account and routing "
                     + "numbers, card numbers, card security codes, PINs, credit scores, driver’s license and "
                     + "passport numbers.",
             "Names, addresses, income, balances and loan terms are not found.",
-            SSN, ITIN, DATE_OF_BIRTH, BANK_ACCOUNT_NUMBER, BANK_ROUTING_NUMBER, CREDIT_CARD_NUMBER, CREDIT_SCORE,
+            SSN, ITIN, EIN, DATE_OF_BIRTH, BANK_ACCOUNT_NUMBER, BANK_ROUTING_NUMBER, CREDIT_CARD_NUMBER, CREDIT_SCORE,
             DRIVERS_LICENSE_NUMBER, PASSPORT_NUMBER, CVV, PIN),
     PCI_DSS("PCI DSS",
             "Payment card data: full card numbers, card security codes (CVV) and PINs. All three are locked items, "

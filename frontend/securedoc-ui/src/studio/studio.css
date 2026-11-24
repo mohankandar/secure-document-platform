@@ -82,6 +82,14 @@
 .cf-find-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cf-find-keys { margin-left: auto; font-size: 11px; line-height: 1.4; border: 1px solid var(--cf-line); border-radius: 3px; padding: 1px 5px; white-space: nowrap; }
 .cf .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* ---------- Entity in the top bar (task 0058): always shown, shortened with dots when the bar is narrow ---------- */
+.cf-entity { flex: 0 1 auto; min-width: 88px; max-width: 260px; }
+.cf-entity-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-acct.cf-entity { align-items: stretch; }
+.cf-entity-button { padding: 8px 10px; max-width: none; min-width: 0; justify-content: space-between; }
+.cf-entity .cf-acct-panel { right: auto; left: 0; width: 280px; }
+@media (max-width: 1200px) { .cf-entity .cf-acct-panel { left: auto; right: 0; } }
+
 /* ---------- Account menu (UI spec finding 1): person, entity, theme, local test role, sign out ---------- */
 .cf-acct { position: relative; display: inline-flex; flex-direction: column; align-items: flex-end; flex: none; }
 .cf-acct-button {

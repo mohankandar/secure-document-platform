@@ -2,15 +2,21 @@ package com.securedoc.platform.api.identity;
 
 import com.documentplatform.identity.store.LoginConnection;
 import com.securedoc.platform.api.context.RequestContextResolver;
+import com.securedoc.platform.api.identity.LoginConnectionService.Answer;
+import com.securedoc.platform.api.identity.LoginConnectionService.HistoryLine;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
+import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.infrastructure.identity.PlatformIdentityAdminReads;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,41 +25,39 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Admin, Sign-in: read-only (task 0041). Sign-in connections are set through setup ({@code idn_login_connection});
- * this screen shows the ACTIVE LexaVault connection of the entity's customer and changes nothing. The R1 draft, test,
- * activate and rollback endpoints are gone: they wrote {@code enterprise_identity_connections}, which sign-in no longer
- * reads (task 0037), so a change there never changed sign-in. Task 0054: a test sign-in of the ACTIVE connection, which
- * stores and changes nothing.
- *
- * <p>The response keeps the R1 shape so the screens read it as before: {@code staged} is null, there are no rollback
- * candidates and {@code activationSupported} is false. The secret reference is never sent.
+ * Admin, Sign-in (IT Admin). The ACTIVE LexaVault connection of the entity's customer ({@code idn_login_connection}), a test
+ * sign-in of it (task 0054), and since task 0058 a draft, its test sign-in, switching to it and going back
+ * ({@link LoginConnectionService}; before, the screen only showed the connection). No id of a connection is taken; the draft's
+ * own values and a pasted test token are all the browser sends, and the secret reference is never sent.
  */
 @RestController
 @RequestMapping("/api/v1/admin/enterprise-identity")
 public class EnterpriseIdentityAdminController {
 
-    /** The words both screens show; also in the response so a client can show them as they are. */
-    public static final String MANAGED_BY_SETUP = "Sign-in connections are set through setup";
+    static final int HISTORY = 20;
 
     private final RequestContextResolver context;
     private final PlatformIdentityAdminReads reads;
     private final SignInConnectionTest tester;
     private final AuditService audit;
+    private final LoginConnectionService service;
 
     public EnterpriseIdentityAdminController(RequestContextResolver context, PlatformIdentityAdminReads reads,
-                                             SignInConnectionTest tester, AuditService audit) {
+                                             SignInConnectionTest tester, AuditService audit, LoginConnectionService service) {
         this.context = context;
         this.reads = reads;
         this.tester = tester;
         this.audit = audit;
+        this.service = service;
     }
 
     @GetMapping
     @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
     public ResponseEntity<Overview> overview(HttpServletRequest request) {
-        UUID entity = context.resolvePrincipal(request).tenantId().value();
-        ConnectionView active = reads.activeConnection(entity).map(c -> ConnectionView.of(entity, c)).orElse(null);
-        return ResponseEntity.ok(new Overview(active, null, List.of(), false, 0, true, MANAGED_BY_SETUP));
+        AuthenticatedPrincipal principal = context.resolvePrincipal(request);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Overview(
+                view(service.active(principal).orElse(null)), view(service.draft(principal).orElse(null)),
+                view(service.previous(principal).orElse(null)), service.history(principal, HISTORY)));
     }
 
     /**
@@ -83,24 +87,82 @@ public class EnterpriseIdentityAdminController {
                 result.testedAt(), result.whatToDo()));
     }
 
+    /** Starts a draft: a copy of the active connection, at the version the person saw. */
+    @PostMapping("/draft")
+    @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
+    public ResponseEntity<Answer> startDraft(@RequestBody VersionRequest body, HttpServletRequest request) {
+        return ResponseEntity.ok(service.startDraft(context.resolvePrincipal(request), context.resolveCorrelationId(request),
+                body.expectedVersion()));
+    }
+
+    @PutMapping("/draft")
+    @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
+    public ResponseEntity<Answer> saveDraft(@RequestBody DraftRequest body, HttpServletRequest request) {
+        return ResponseEntity.ok(service.saveDraft(context.resolvePrincipal(request), context.resolveCorrelationId(request),
+                body.expectedVersion(), body.providerId(), body.issuerUri(), body.browserClientId(), body.apiAudience()));
+    }
+
+    @PostMapping("/draft/discard")
+    @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
+    public ResponseEntity<Answer> discardDraft(@RequestBody VersionRequest body, HttpServletRequest request) {
+        return ResponseEntity.ok(service.discardDraft(context.resolvePrincipal(request), context.resolveCorrelationId(request),
+                body.expectedVersion()));
+    }
+
+    @PostMapping("/draft/test-sign-in")
+    @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
+    public ResponseEntity<Answer> testDraft(@RequestBody DraftTestRequest body, HttpServletRequest request) {
+        return ResponseEntity.ok(service.testDraft(context.resolvePrincipal(request), context.resolveCorrelationId(request),
+                body.expectedVersion(), body.token()));
+    }
+
+    @PostMapping("/draft/activate")
+    @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
+    public ResponseEntity<Answer> activateDraft(@RequestBody VersionRequest body, HttpServletRequest request) {
+        return ResponseEntity.ok(service.activate(context.resolvePrincipal(request), context.resolveCorrelationId(request),
+                body.expectedVersion()));
+    }
+
+    /** Goes back to the previous active connection, from the active version the person saw. */
+    @PostMapping("/rollback")
+    @RequireCapability(UserCapability.TENANT_AUTH_MANAGE)
+    public ResponseEntity<Answer> rollBack(@RequestBody VersionRequest body, HttpServletRequest request) {
+        return ResponseEntity.ok(service.rollBack(context.resolvePrincipal(request), context.resolveCorrelationId(request),
+                body.expectedVersion()));
+    }
+
+    public record VersionRequest(long expectedVersion) {
+    }
+
+    public record DraftRequest(long expectedVersion, String providerId, String issuerUri, String browserClientId,
+                               String apiAudience) {
+    }
+
+    public record DraftTestRequest(long expectedVersion, String token) {
+        /** The token is never part of a text. */
+        @Override
+        public String toString() {
+            return "DraftTestRequest[expectedVersion=" + expectedVersion + "]";
+        }
+    }
+
     /** What the screen shows of a test: passed, or the exact code and its words. */
     public record TestAnswer(boolean passed, String code, String message, String reason, Instant testedAt,
                              String whatToDo) {
     }
 
-    /** One login connection as the screens show it. {@code displayName} is the provider ID (idn_ keeps no other name). */
-    public record ConnectionView(UUID connectionId, UUID tenantId, String providerId, String providerType,
-                                 String displayName, String issuerUri, String browserClientId, String apiAudience,
-                                 String status, long configurationVersion) {
-        static ConnectionView of(UUID entity, LoginConnection c) {
-            return new ConnectionView(c.connectionId(), entity, c.providerId(), c.providerType().name(), c.providerId(),
-                    c.issuer().toString(), c.browserClientId(), c.apiAudience(), c.status().name(),
-                    c.configurationVersion());
-        }
+    /** A login connection as the screen shows it, and whether this server can switch to it as it is set now. */
+    public record ConnectionView(UUID connectionId, String providerId, String providerType, String displayName,
+                                 String issuerUri, String browserClientId, String apiAudience, String status,
+                                 long configurationVersion, boolean matchesSettings) {
     }
 
-    public record Overview(ConnectionView active, ConnectionView staged, List<ConnectionView> rollbackCandidates,
-                           boolean activationSupported, long activationMaxTestAgeSeconds, boolean readOnly,
-                           String managedBy) {
+    private ConnectionView view(LoginConnection c) {
+        return c == null ? null : new ConnectionView(c.connectionId(), c.providerId(), c.providerType().name(), c.providerId(),
+                c.issuer().toString(), c.browserClientId(), c.apiAudience(), c.status().name(), c.configurationVersion(),
+                service.asThisServerSignsIn(c));
+    }
+
+    public record Overview(ConnectionView active, ConnectionView draft, ConnectionView previous, List<HistoryLine> history) {
     }
 }

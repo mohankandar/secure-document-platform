@@ -34,7 +34,7 @@ const fileKey = (file: File) => `${file.name.toLowerCase()}::${file.size}::${fil
 export default function UploadCapture({ gate, onLock, onCreated }: {
   gate: IdentityGate;
   onLock: (identity: Record<string, string> | null, reason: string, sensitivity?: string | null) => void;
-  onCreated: (packageId: string) => void;
+  onCreated: (packageId: string, files: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const nextId = useRef(0);
@@ -119,7 +119,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
 
       await apiClient.submitPackage(packageId);
       await mutate('packages');
-      onCreated(packageId);
+      onCreated(packageId, drafts.length);
     } catch (err) {
       setFailure(errorMessage(err, packageId ? 'The case could not be submitted. Your uploads are kept — try again.' : 'The case could not be opened.'));
       if (!packageId) onLock(null, '');

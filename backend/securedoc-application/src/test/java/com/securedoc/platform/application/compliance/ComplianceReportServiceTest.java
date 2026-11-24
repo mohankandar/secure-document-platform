@@ -134,7 +134,7 @@ class ComplianceReportServiceTest {
         assertEquals("Delivered", c.cases().outcomes().get(1).label());
         c.cases().outcomes().forEach(r -> assertEquals(0, r.count()));
         assertEquals("—", c.cases().outcomes().get(0).share(), "nothing to divide by");
-        assertEquals(8, c.activity().size(), "\"Cases rejected\" is hidden (task 0018 A3)");
+        assertEquals(9, c.activity().size(), "\"Cases rejected\" is hidden (task 0018 A3)");
         c.activity().forEach(r -> assertEquals(0, r.count(), r.label()));
         assertTrue(c.appendix().isEmpty());
         assertEquals("pat@example.test, Business Administrator", c.createdBy(), "no display name bound: the username");
@@ -345,11 +345,12 @@ class ComplianceReportServiceTest {
         reads.records.add(record("COMPLIANCE_REPORT_CREATED", "DENIED", person, null, "t", "x", IN_PERIOD, null));
         reads.records.add(record("ORIGINAL_ARTIFACT_PURGED", "SUCCESS", SYSTEM, null, "p", "x", IN_PERIOD, null));
         reads.records.add(record("PACKAGE_FINAL_APPROVED", "SUCCESS", person, null, "p", "x", IN_PERIOD, null));
+        reads.records.add(record("DOCUMENT_SIGNATURE_REMOVED", "SUCCESS", SYSTEM, null, "p", "x", IN_PERIOD, null));
         reads.records.add(record("ORIGINAL_ARTIFACT_PURGED", "SUCCESS", SYSTEM, null, "p", "x",
                 Instant.parse("2026-10-01T05:00:00Z"), null)); // after the period (New York midnight is 04:00Z)
         create(ComplianceEdition.SUMMARY);
         List<Long> counts = rendered.get().activity().stream().map(CountRow::count).toList();
-        assertEquals(List.of(0L, 0L, 2L, 1L, 1L, 2L, 0L, 2L), counts);
+        assertEquals(List.of(0L, 0L, 2L, 1L, 1L, 1L, 2L, 0L, 2L), counts);
     }
 
     /* ---------------- task 0018 ---------------- */
@@ -470,6 +471,23 @@ class ComplianceReportServiceTest {
         assertEquals("Package submitted: documents=2", rows.get(1).detail());
         assertEquals("—", rows.get(1).caseId());
         assertFalse(rendered.get().canonicalText().contains("MARKER-FILE-7731"));
+    }
+
+    /** Task 0058: a request without a zone uses the entity's; one that names a zone keeps it; without either UTC, as before. */
+    @Test
+    void theEntitysTimeZoneAppliesWhenTheRequestNamesNone() {
+        Clock clock = Clock.fixed(Instant.parse("2026-12-01T02:00:00Z"), java.time.ZoneOffset.UTC); // still November 30 in New York
+        var none = new ComplianceReportService.Request("LAST_MONTH", null, null, null);
+        var period = service(clock).create(principal, CorrelationId.generate(), none, ComplianceEdition.SUMMARY, "x").period();
+        assertEquals(LocalDate.of(2026, 11, 1), period.from());
+        var zoned = service(clock).withEntityTimeZones(entity -> Optional.of(java.time.ZoneId.of("America/New_York")));
+        period = zoned.create(principal, CorrelationId.generate(), none, ComplianceEdition.SUMMARY, "x").period();
+        assertEquals(LocalDate.of(2026, 10, 1), period.from());
+        // October ends with the hour of October's own offset and November's starts after the clocks went back.
+        assertEquals(Instant.parse("2026-10-01T04:00:00Z"), period.start());
+        assertEquals(Instant.parse("2026-11-01T04:00:00Z"), period.endExclusive());
+        assertEquals(LocalDate.of(2026, 11, 1), zoned.create(principal, CorrelationId.generate(),
+                new ComplianceReportService.Request("LAST_MONTH", null, null, "UTC"), ComplianceEdition.SUMMARY, "x").period().from());
     }
 
     @Test

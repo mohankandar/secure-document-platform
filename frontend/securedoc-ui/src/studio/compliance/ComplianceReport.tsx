@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { apiClient } from '../../api/client';
 import { Notice } from '../atoms';
 import { useToast } from '../toast';
+import { useEntityZone } from '../EntityZoneContext';
 import {
-  DEFAULT_PERIOD, PERIODS, SUMMARY_CONTENTS, browserTimeZone, countQuery, customRangeProblem, defaultCustomRange,
+  DEFAULT_PERIOD, PERIODS, SUMMARY_CONTENTS, countQuery, customRangeProblem, defaultCustomRange,
   errorText, fileNameFromDisposition, localToday, presetRange, rangeLabel, recordCountWords, requestBody, type PeriodKey,
 } from './complianceRules';
 import './compliance.css';
@@ -45,7 +46,8 @@ function ComplianceReportDialog({ edition, entityName, onClose }: { edition: 'SU
   const dialog = useRef<HTMLElement>(null);
   const firstFocus = useRef<HTMLButtonElement>(null);
 
-  const today = useMemo(() => localToday(), []);
+  const zone = useEntityZone();
+  const today = useMemo(() => localToday(new Date(), zone), [zone]);
   const [period, setPeriod] = useState<PeriodKey>(DEFAULT_PERIOD);
   const [custom, setCustom] = useState(() => defaultCustomRange(today));
   const [fullTrail, setFullTrail] = useState(true);
@@ -67,11 +69,11 @@ function ComplianceReportDialog({ edition, entityName, onClose }: { edition: 'SU
     setRecordCount(null);
     if (edition !== 'FULL' || !countFrom || !countTo) return;
     const controller = new AbortController();
-    apiClient.auditRecordCount(countQuery(period, { from: countFrom, to: countTo }, browserTimeZone()), controller.signal)
+    apiClient.auditRecordCount(countQuery(period, { from: countFrom, to: countTo }, zone), controller.signal)
       .then((r) => { if (!controller.signal.aborted) setRecordCount(recordCountWords(r?.count)); })
       .catch(() => { /* no count: the card shows without it */ });
     return () => controller.abort();
-  }, [edition, period, countFrom, countTo]);
+  }, [edition, period, countFrom, countTo, zone]);
 
   // Wherever focus is while the dialog is open (even on the page behind it), Esc and Tab belong to the dialog.
   const busyRef = useRef(busy);
@@ -111,7 +113,7 @@ function ComplianceReportDialog({ edition, entityName, onClose }: { edition: 'SU
     // The buttons are disabled while busy, so focus is kept on the dialog itself.
     dialog.current?.focus();
     try {
-      const body = requestBody(period, custom, browserTimeZone(), edition, fullTrail);
+      const body = requestBody(period, custom, zone, edition, fullTrail);
       const { pdf, disposition } = await apiClient.createComplianceReport(body);
       // Download, then let go of everything: the PDF, the response and the file hash are never kept.
       const url = URL.createObjectURL(pdf);
