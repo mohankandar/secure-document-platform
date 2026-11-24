@@ -31,7 +31,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-INT-005 | Unknown sensitivity level, taken as Standard | The level sent isn't one of Standard, Confidential, Highly Confidential, so the case or document was taken in as Standard. | Warning | Source system | 201 | 17, 19 |
 | LV-INT-006 | File is empty | The file has no content. | Refused | Source system | 400 | 22 |
 | LV-INT-007 | Not a PDF | The file isn't a PDF. Only PDFs are taken in. | Refused | Source system, person uploading | 400 | 23, 45, 60, 66, 70 |
-| LV-INT-008 | PDF can't be opened | The PDF is damaged or protected with a password. | Refused | Source system | 400 | 62 |
+| LV-INT-008 | PDF can't be opened | The PDF is damaged, or it is a password-protected file. Password-protected file: send it through the API. | Refused | Source system, IT Admin | 400 | 62, 0063 |
 | LV-INT-009 | Too many pages | The PDF has more pages than the limit for this source. | Refused | Source system | 400 | 26 |
 | LV-INT-010 | Too many documents | The case lists more documents than the limit for this source. | Refused | Source system | 400 | 30 |
 | LV-INT-011 | Checksum doesn't match the manifest | The checksum sent with the file differs from the one in the case's manifest. | Refused | Source system | 409 | 24 |
@@ -59,6 +59,8 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-INT-033 | Folder drop has no documents | The drop has a trigger file but no PDFs. | Refused | Source system | — | 59 |
 | LV-INT-034 | Watched folder can't be read or written | LexaVault can't list, read or move files in the watched folder. | System | IT Admin | — | 36, 39, 56, 57 |
 | LV-INT-035 | Folder drop no longer matches its case | A resumed folder drop no longer matches the case it started. | Refused | Source system | — | 0025 (RECOVERY_CONFLICT) |
+| LV-INT-036 | Password not accepted | The password sent with the PDF doesn't open it. Nothing was taken in. | Refused | Source system | 400 | 0063 |
+| LV-INT-037 | Password sent the wrong way | A PDF password is taken only in the request body, over HTTPS. Nothing was taken in. | Refused | Source system | 400 | 0063 |
 | LV-INT-040 | Source system can't be reached | Polling couldn't connect to the source, or it timed out. | Refused | IT Admin, source system | — | 69 |
 | LV-INT-041 | Source system answered with an error | The source answered polling with an error status. | Refused | Source system | — | 65, 68 |
 | LV-INT-042 | Source system's answer not understood | The source's list of cases or a document wasn't in the expected form. | Refused | Source system | — | 64, 66 |
@@ -219,7 +221,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-008 | Item not found | The item asked for (a rule, a connection, a file) doesn't exist in this entity. | Refused | Person, IT Admin | 404 | 0025 (not-found other than a case) |
 | LV-SYS-009 | Unknown request | The address or method isn't one LexaVault offers. | Refused | Source system | 404 / 405 | 0025 (unknown endpoint, wrong method) |
 
-**Totals:** INT 40 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **142 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-AI-008 by task 0064.)*
+**Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064.)*
 
 ## 3. Rows with no code on purpose
 

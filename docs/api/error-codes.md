@@ -106,14 +106,14 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 
 ### LV-INT-008 PDF can't be opened
 
-- **Means:** The PDF is damaged or protected with a password.
+- **Means:** The PDF is damaged, or it is a password-protected file. Password-protected file: send it through the API.
 - **Kind:** Refused
-- **Who acts:** Source system
+- **Who acts:** Source system, IT Admin
 - **HTTP status:** 400
 
 **What to do:**
 
-1. If the PDF has a password, save a copy without it.
+1. If the PDF has a password, send it through the API with its password, or save a copy without it.
 2. If it is damaged, create it again from the original document.
 3. Check that it opens in a normal PDF reader, then send it again.
 
@@ -469,6 +469,31 @@ Reserved: not used yet.
 1. Check whether the files in the drop were changed, added or removed after LexaVault started taking it in.
 2. Put the complete, unchanged drop in the watched folder again as a new drop, with its trigger file.
 3. If it happens again, give IT the reference number from the watched-folder view.
+
+### LV-INT-036 Password not accepted
+
+- **Means:** The password sent with the PDF doesn't open it. Nothing was taken in.
+- **Kind:** Refused
+- **Who acts:** Source system
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Check the password with the person who protected the PDF.
+2. Send the same document again with the right password.
+
+### LV-INT-037 Password sent the wrong way
+
+- **Means:** A PDF password is taken only in the request body, over HTTPS. Nothing was taken in.
+- **Kind:** Refused
+- **Who acts:** Source system
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Send the password in the body part named password, not in the address.
+2. Use HTTPS. Behind a proxy, let the proxy say so (X-Forwarded-Proto: https).
+3. If the password was in the address, change it: addresses are kept in logs.
 
 ### LV-INT-040 Source system can't be reached
 

@@ -14,8 +14,8 @@ import java.io.File;
  */
 public class MakeFakeValuePdf {
     public static void main(String[] args) throws Exception {
-        if (args.length != 1) {
-            throw new IllegalArgumentException("usage: MakeFakeValuePdf <out.pdf>");
+        if (args.length != 1 && args.length != 2) {
+            throw new IllegalArgumentException("usage: MakeFakeValuePdf <out.pdf> [password]");
         }
         String[] lines = {
                 "Loan application for a test borrower",
@@ -37,6 +37,13 @@ public class MakeFakeValuePdf {
                     content.newLine();
                 }
                 content.endText();
+            }
+            if (args.length == 2) {
+                // Task 0063: the same page, AES-256, with a user password (the owner password is another one).
+                var policy = new org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy(args[1] + "-owner", args[1],
+                        new org.apache.pdfbox.pdmodel.encryption.AccessPermission());
+                policy.setEncryptionKeyLength(256);
+                document.protect(policy);
             }
             document.save(new File(args[0]));
         }

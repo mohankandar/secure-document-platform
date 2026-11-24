@@ -104,7 +104,19 @@ Required headers:
 
 Multipart field:
 
-- `file` — PDF binary.
+- `file` — PDF binary;
+- `password` — optional, only for a password-protected PDF (task 0063): the user or the owner password, up to 127 bytes of UTF-8.
+
+### Password-protected PDFs (task 0063)
+
+This upload is the only way to send a password-protected PDF. The watched folder, file polling, the scanner and the New case screen (which has no password field) refuse one with `LV-INT-008` "Password-protected file. Send it through the API."
+
+- Send the password in the body part `password`, over HTTPS. In the address (`?password=`) or over plain HTTP it is refused with `LV-INT-037`. Behind a proxy that ends HTTPS, the proxy must send `X-Forwarded-Proto: https`. A call from the same machine may use HTTP.
+- The password is held in memory for the decryption only. It is never stored, logged, audited or repeated in an answer. The audit trail says only "decrypted with a supplied password".
+- A password that doesn't open the PDF is refused with `LV-INT-036`, with no hint. Nothing is taken in; the same document can be sent again with the right one.
+- The decrypted PDF is checked, stored and processed as any other PDF. The encrypted file is not kept. `X-Content-SHA256` and the manifest checksum are those of the file as sent, so a retry of the same encrypted file is still recognised.
+- A password sent with a PDF that has none is ignored.
+- Never put the password in the metadata, the file name or the identifiers: those are kept.
 
 LexaVault validates:
 

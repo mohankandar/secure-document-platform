@@ -1,7 +1,7 @@
 # Report 0064: Vision-based redaction with page routing
 
 Date: 2026-11-24
-Branch: `feature/0064-vision-routing`, from `2a2ebe8`; the integration branch is merged into it twice (0057, then 0062's redaction catalog)
+Branch: `feature/0064-vision-routing`, from `2a2ebe8`; the integration branch is merged into it (0057, 0062's redaction catalog, 0063)
 Outcome: **DONE** (8 questions, the recommended answer taken in each)
 
 ## What was done

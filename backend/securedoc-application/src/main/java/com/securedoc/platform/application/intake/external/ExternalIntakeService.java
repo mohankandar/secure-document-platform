@@ -49,6 +49,8 @@ public final class ExternalIntakeService {
     private final ChecksumPort checksumPort;
     private final PdfIntakeValidationPort pdfValidationPort;
     private final AuditService auditService;
+    /** Task 0063; null where no password is taken. */
+    private PdfDecryptionPort pdfDecryptionPort;
     private final ExternalIntakeMaintenanceService maintenanceService;
     private final Clock clock;
     private final RequestActorDisplayName actorDisplayName;
@@ -351,7 +353,28 @@ public final class ExternalIntakeService {
         Objects.requireNonNull(principal);
         IntegrationConnection source = pushSource(principal);
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
-                source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
+                null, source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
+    }
+
+    /**
+     * Task 0063 (R3): as above, for a password-protected PDF. The push API is the only way in for one. The password is
+     * used once, in memory, and never stored, logged or audited; the encrypted file is not kept: the decrypted PDF is
+     * taken in as any other.
+     */
+    public ExternalDocumentReceipt receivePushDocument(PackageId packageId, String externalSourceDocumentId,
+                                                        String idempotencyKey, String sourceSha256,
+                                                        String mimeType, UploadContent content, char[] password,
+                                                        AuthenticatedPrincipal principal, CorrelationId correlationId) {
+        Objects.requireNonNull(principal);
+        IntegrationConnection source = pushSource(principal);
+        return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
+                password, source, ExternalIntakeChannel.PUSH_API, principal, correlationId);
+    }
+
+    /** Task 0063: with the decryption of password-protected PDFs; without it they are refused. */
+    public ExternalIntakeService withPdfDecryption(PdfDecryptionPort port) {
+        this.pdfDecryptionPort = Objects.requireNonNull(port);
+        return this;
     }
 
     public ExternalDocumentReceipt receiveScannerDocument(PackageId packageId, String externalSourceDocumentId,
@@ -361,7 +384,7 @@ public final class ExternalIntakeService {
         Objects.requireNonNull(principal);
         IntegrationConnection source = scannerSource(principal);
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
-                source, ExternalIntakeChannel.SCANNER, principal, correlationId);
+                null, source, ExternalIntakeChannel.SCANNER, principal, correlationId);
     }
 
     public ExternalDocumentReceipt receivePollingDocument(PackageId packageId, String externalSourceDocumentId,
@@ -372,12 +395,13 @@ public final class ExternalIntakeService {
             throw new AccessDeniedException(LvErrorCode.CFG_010, "Polling source is not enabled for this tenant");
         }
         return receiveMachineDocument(packageId, externalSourceDocumentId, idempotencyKey, sourceSha256, mimeType, content,
-                source, ExternalIntakeChannel.POLLING, principal, correlationId);
+                null, source, ExternalIntakeChannel.POLLING, principal, correlationId);
     }
 
     private ExternalDocumentReceipt receiveMachineDocument(PackageId packageId, String externalSourceDocumentId,
                                                             String idempotencyKey, String sourceSha256, String mimeType,
-                                                            UploadContent content, IntegrationConnection source,
+                                                            UploadContent content, char[] password,
+                                                            IntegrationConnection source,
                                                             ExternalIntakeChannel channel, AuthenticatedPrincipal principal,
                                                             CorrelationId correlationId) {
         Objects.requireNonNull(packageId); Objects.requireNonNull(content); Objects.requireNonNull(principal);
@@ -441,6 +465,38 @@ public final class ExternalIntakeService {
             throw new IntakeConflictException("CONTENT_CHECKSUM_MISMATCH",
                     "Uploaded PDF content does not match X-Content-SHA256");
         }
+        if (password != null) {
+            try (InputStream encrypted = content.openStream();
+                 PdfDecryptionPort.DecryptedPdf decrypted = decrypt(encrypted, password)) {
+                return takeIn(intake, manifestDocument, normalizedIdempotency, actual, content,
+                        decrypted == null ? content : decrypted, decrypted != null, source, channel, principal, correlationId);
+            } catch (IOException | java.io.UncheckedIOException e) {
+                throw receivedCopyUnreadable(packageId, e);
+            }
+        }
+        return takeIn(intake, manifestDocument, normalizedIdempotency, actual, content, content, false, source, channel,
+                principal, correlationId);
+    }
+
+    /** Null when the PDF needs no password. */
+    private PdfDecryptionPort.DecryptedPdf decrypt(InputStream encrypted, char[] password) {
+        if (pdfDecryptionPort == null) {
+            throw new ValidationException(LvErrorCode.INT_008, "Password-protected files are not taken in here");
+        }
+        return pdfDecryptionPort.decrypt(encrypted, password).orElse(null);
+    }
+
+    /**
+     * {@code received} is what the source sent (its size and checksum identify the document for a retry); {@code content}
+     * is what is checked, stored and processed: the same, or (task 0063) its decrypted copy.
+     */
+    private ExternalDocumentReceipt takeIn(ExternalIntake intake, ExternalManifestDocument manifestDocument,
+                                           String normalizedIdempotency, Checksum actual, UploadContent received,
+                                           UploadContent content, boolean decrypted, IntegrationConnection source,
+                                           ExternalIntakeChannel channel, AuthenticatedPrincipal principal,
+                                           CorrelationId correlationId) {
+        PackageId packageId = intake.packageId();
+        String normalizedExternalId = manifestDocument.externalSourceDocumentId();
         final int pageCount;
         try (InputStream pdfStream = content.openStream()) {
             pageCount = pdfValidationPort.inspect(pdfStream).pageCount();
@@ -470,13 +526,14 @@ public final class ExternalIntakeService {
         }
         externalIntakeRepository.save(intake);
         if (channel == ExternalIntakeChannel.SCANNER) {
-            recordScannerReceiptProvenance(packageId, principal.tenantId(), content.contentLength(),
+            recordScannerReceiptProvenance(packageId, principal.tenantId(), received.contentLength(),
                     pageCount, actual.value());
         }
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.EXTERNAL_DOCUMENT_RECEIVED,
                 "Document", uploadResult.documentId().toString(), packageId, correlationId,
                 "External document durably received: sourceConnection=" + source.id() + ",received="
-                        + intake.receivedCount() + "/" + intake.expectedCount());
+                        + intake.receivedCount() + "/" + intake.expectedCount()
+                        + (decrypted ? ", decrypted with a supplied password" : ""));
 
         if (intake.status() == ExternalIntakeStatus.ACCEPTED_FOR_PROCESSING) {
             submitPackageUseCase.execute(SubmitPackageCommand.of(packageId, correlationId), principal);
