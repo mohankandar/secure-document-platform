@@ -46,6 +46,7 @@ The mock AI server that refuses above a number, and the one that only queues (1,
 
 ## Tests changed
 - `LvErrorCodeRegistryTest`: two reserved codes left, not three (`LV-INT-027` is in use).
+- Six migration tests (045 to 049, 080): they count change sets back from the end, so each count is one higher (081). The first CI run was red for this (8 failures at `8e365d1`); my targeted set had left them out. All 133 infrastructure tests pass now.
 - `platformRules.test.ts`, `helpTip.spec.ts`, `screens.spec.ts`, `adminPlatform.spec.ts`: the new section.
 - `WatchedFolderSchedulerFailureTest`: its mock answers the new gate.
 
