@@ -235,8 +235,15 @@ class SignInConnectionTestTest {
         p.getProxy().setPort(3128);
         assertEquals("proxy.corp.example", OutboundRulesConfig.installation(p).proxy().host());
         p.getProxy().setUser("svc");
-        p.getProxy().setPasswordSecret("outbound/proxy-password");
-        assertInvalid(p, "a proxy with sign-in is not supported");
+        assertInvalid(p, "proxy.user and proxy.password-secret go together");
+        // Task 0059: a proxy with sign-in is allowed; its password is a reference of the installation, never the password.
+        for (String notAReference : new String[] {"outbound/proxy-password", "hunter2", "env:PATH"}) {
+            p.getProxy().setPasswordSecret(notAReference);
+            assertInvalid(p, "is not a secret reference of this installation");
+        }
+        p.getProxy().setPasswordSecret("env:LEXAVAULT_SECRET_INSTALL_PROXY");
+        assertTrue(OutboundRulesConfig.installation(p).proxy().signIn());
+        assertEquals("svc", OutboundRulesConfig.installation(p).proxy().user());
         OutboundProperties hosted = new OutboundProperties();
         hosted.setInstallation(OutboundProperties.InstallationMode.HOSTED);
         hosted.setAllowInternalAddresses(true);

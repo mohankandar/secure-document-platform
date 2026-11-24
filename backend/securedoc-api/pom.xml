@@ -83,17 +83,15 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-monitoring-spring</artifactId>
         </dependency>
-        <!-- Task 0057: only the types the licensing events are registered with (EventCatalogue). Nothing is sent: no
-             notifier, and the mail library it brings is left out until notifications are integrated. -->
+        <!-- Task 0059: notifications and the one-click approval links. Its mail sender needs the mail library that task
+             0057 left out: angus-mail with jakarta.mail-api, and their activation libraries. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-notifications-spring</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-notifications</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.eclipse.angus</groupId>
-                    <artifactId>angus-mail</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <!-- Task 0041: the setup command runs from its own jar (securedoc-setup), because it brings platform-crypto and
              platform-integration, which the app's classpath may not carry (task 0041). Here only for the tests that
