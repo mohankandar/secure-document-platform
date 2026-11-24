@@ -293,7 +293,7 @@ public class SdvDeliveryAdapter implements DeliveryPort, DocumentStoreConnection
 
     private <T> T withRetry(IntegrationConnection c, java.util.function.Supplier<T> operation) {
         TechnicalDependencyException last = null;
-        int attempts = singleAttempt ? 1 : Math.max(1, c.retryMaxAttempts() + 1);
+        int attempts = singleAttempt || com.securedoc.platform.application.pipeline.ExportJobAttempt.running() ? 1 : Math.max(1, c.retryMaxAttempts() + 1);
         for (int i = 1; i <= attempts; i++) {
             try { return operation.get(); }
             catch (TechnicalDependencyException e) {

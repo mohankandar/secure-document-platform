@@ -124,6 +124,11 @@ public interface PipelineJobRepository {
         return false;
     }
 
+    /** Task 0052: true while any EXPORT or SPLIT_EXPORT job of any case is still to be done (not DONE or STOPPED). */
+    default boolean hasOpenExportJobs() {
+        return false;
+    }
+
     /**
      * Task 0049: removes the TEXT, FIND and REDACT jobs of one case run, when the case starts again (a technical retry
      * keeps the run's number, so a finished job would stop the same job from being queued). A worker still on one of

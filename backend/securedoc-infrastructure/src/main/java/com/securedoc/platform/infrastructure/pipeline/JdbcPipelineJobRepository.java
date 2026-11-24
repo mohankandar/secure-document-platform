@@ -483,6 +483,13 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     }
 
     @Override
+    public boolean hasOpenExportJobs() {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pipeline_jobs"
+                + " WHERE stage IN ('EXPORT', 'SPLIT_EXPORT') AND status NOT IN ('DONE', 'STOPPED'))",
+                new MapSqlParameterSource(), Boolean.class));
+    }
+
+    @Override
     public int removeStageJobs(TenantId tenantId, PackageId packageId, int exportCycle) {
         return jdbc.update("DELETE FROM pipeline_jobs WHERE tenant_id = :tenantId AND package_id = :packageId"
                 + " AND export_cycle = :cycle AND stage IN ('TEXT', 'FIND', 'REDACT')", new MapSqlParameterSource()

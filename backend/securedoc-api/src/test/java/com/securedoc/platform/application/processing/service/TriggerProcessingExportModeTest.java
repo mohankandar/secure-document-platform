@@ -79,6 +79,39 @@ class TriggerProcessingExportModeTest {
         assertEquals(PackageStatus.COMPLETED, pkg.status());
     }
 
+    /** Task 0052: after a switch back to inline, a case its export job has is left to that job. */
+    @Test
+    void inlineLeavesACaseThatAnExportJobHasToThatJob() {
+        DocumentPackage pkg = finishedCase();
+        ExportJobScheduler scheduler = mock(ExportJobScheduler.class);
+        when(lifecycle.nextExportCycle(pkg.id(), tenant)).thenReturn(2);
+        when(scheduler.jobHasCase(tenant, pkg.id(), 2)).thenReturn(true);
+
+        service(scheduler).execute(TriggerPackageProcessingCommand.of(pkg.id(), tenant, ActorId.generate(),
+                CorrelationId.generate()));
+
+        verifyNoInteractions(export, routing);
+        verify(scheduler, never()).queueCaseExport(any(), any(), anyInt(), any());
+        assertEquals(PackageStatus.PROCESSING, pkg.status());
+    }
+
+    /** Task 0052: the job finished the case between the trigger's first read and its check. */
+    @Test
+    void inlineDoesNotExportACaseWhoseJobFinishedItMeanwhile() {
+        DocumentPackage pkg = finishedCase();
+        ExportJobScheduler scheduler = mock(ExportJobScheduler.class);
+        when(scheduler.jobHasCase(any(), any(), anyInt())).thenAnswer(i -> {
+            pkg.completeSuccessfully(); // the job's last write; its job is now done, for the run before
+            return false;
+        });
+
+        service(scheduler).execute(TriggerPackageProcessingCommand.of(pkg.id(), tenant, ActorId.generate(),
+                CorrelationId.generate()));
+
+        verifyNoInteractions(export, routing);
+        assertEquals(PackageStatus.COMPLETED, pkg.status());
+    }
+
     private DocumentPackage finishedCase() {
         DocumentPackage pkg = DocumentPackage.create(tenant, PackageType.MANUAL_UPLOAD, ActorId.generate(),
                 PackageMetadata.empty());

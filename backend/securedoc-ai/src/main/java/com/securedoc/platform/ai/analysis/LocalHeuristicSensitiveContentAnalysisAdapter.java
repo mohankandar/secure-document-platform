@@ -36,6 +36,12 @@ public final class LocalHeuristicSensitiveContentAnalysisAdapter implements Sens
                     + "how\\s+can\\s+you\\s+get\\s+more\\s+information)\\b");
     private static final Pattern THREE_DIGIT_NUMBER = Pattern.compile("(?<!\\d)(\\d{3})(?!\\d)");
 
+    /** Each page is searched by itself. */
+    @Override
+    public boolean mayCoverSeveralPages(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return false;
+    }
+
     @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
         List<DiscoveredSensitiveContent> findings = new ArrayList<>();

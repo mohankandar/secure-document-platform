@@ -417,6 +417,19 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
      */
     void completePackageProcessingIfReady(PackageId packageId, TenantId tenantId,
                                                   CorrelationId correlationId) {
+        completePackageProcessingIfReady(packageId, tenantId, correlationId, false);
+    }
+
+    /**
+     * Task 0052: the same decision for the staged pipeline's gate, which runs inside its own database transaction: the
+     * case always ends in an export job, also while export-mode is inline. Nothing is ever sent from here.
+     */
+    void completeStagedPackageIfReady(PackageId packageId, TenantId tenantId, CorrelationId correlationId) {
+        completePackageProcessingIfReady(packageId, tenantId, correlationId, true);
+    }
+
+    private void completePackageProcessingIfReady(PackageId packageId, TenantId tenantId,
+                                                  CorrelationId correlationId, boolean staged) {
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
         if (pkg == null || (pkg.status() != PackageStatus.PROCESSING
                 && pkg.status() != PackageStatus.PENDING_REVIEW
@@ -486,7 +499,7 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         // Task 0027: with export jobs on, the case is Ready for export. It keeps its status (PROCESSING, or
         // PENDING_REVIEW / IN_REVIEW after a review; not failed, not completed) while its export jobs run; the
         // EXPORT job completes it with the same steps as below. Queuing the same run twice adds nothing.
-        if (exportJobScheduler.jobMode()) {
+        if (staged || exportJobScheduler.jobMode()) {
             try {
                 exportJobScheduler.queueCaseExport(tenantId, packageId,
                         lifecycleService.nextExportCycle(packageId, tenantId), correlationId);
@@ -497,6 +510,26 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                         TechnicalFailureClassifier.safeAuditDetail(
                                 e, "Package export could not be queued; technical attention required"));
             }
+            return;
+        }
+
+        // Task 0052: with export jobs off, a case is still left to an export job that has it. The run's number is read
+        // before the jobs and the case after them: a job that finishes meanwhile shows either as having the case or
+        // in the case's status. So the case is never sent both by a job and from here.
+        int exportCycle;
+        try {
+            exportCycle = lifecycleService.nextExportCycle(packageId, tenantId);
+        } catch (IllegalStateException noRunLeft) {
+            exportCycle = -1; // the export below refuses it and records why, as before
+        }
+        if (exportJobScheduler.jobHasCase(tenantId, packageId, exportCycle)) {
+            log.info("PACKAGE_EXPORT_LEFT_TO_ITS_JOB package={} cycle={}", packageId, exportCycle);
+            return;
+        }
+        pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
+        if (pkg == null || (pkg.status() != PackageStatus.PROCESSING
+                && pkg.status() != PackageStatus.PENDING_REVIEW
+                && pkg.status() != PackageStatus.IN_REVIEW)) {
             return;
         }
 

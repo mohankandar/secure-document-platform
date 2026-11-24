@@ -132,6 +132,11 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     }
 
     @Override
+    public boolean mayCoverSeveralPages(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return pageBatchSize > 1;
+    }
+
+    @Override
     public AnalysisOutput analyze(AnalysisRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         List<PageContent> nonBlankPages = request.pages().stream()

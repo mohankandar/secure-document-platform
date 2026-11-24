@@ -260,6 +260,13 @@ class DerivedRoutingFailureRecordingTest {
         verify(scheduler).queueSplitExport(eq(tenant), eq(pkg.id()), eq(source.id()), any(UUID.class),
                 eq(destination.id()), eq(1), any());
         verify(port, never()).deliver(any(), any());
+
+        // Task 0052: a run that was exported inline sends its split documents at once, as before export jobs.
+        var inlineRun = mock(com.securedoc.platform.application.pipeline.SplitExportScheduler.class);
+        when(inlineRun.splitsGoInline(any(), any(), anyInt())).thenReturn(true);
+        new DerivedRoutingService(rules, deliveries, connections, documents, artifacts, storage, detector, builder,
+                deliveryService, audit, inlineRun).processPackage(pkg.id(), tenant, 2, CorrelationId.generate());
+        verify(inlineRun, never()).queueSplitExport(any(), any(), any(), any(), any(), anyInt(), any());
     }
 
     @Test

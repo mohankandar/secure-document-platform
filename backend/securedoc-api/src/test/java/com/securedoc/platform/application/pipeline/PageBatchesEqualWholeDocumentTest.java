@@ -93,6 +93,7 @@ class PageBatchesEqualWholeDocumentTest {
     private final TenantId tenantId = TenantId.generate();
     private final List<AuditRecord> audits = Collections.synchronizedList(new ArrayList<>());
     private final List<Object> events = Collections.synchronizedList(new ArrayList<>());
+    private SensitiveContentAnalysisPort ai = PageBatchesEqualWholeDocumentTest::standInAi;
     private TenantRedactionPolicy policy = policy(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH));
 
     @BeforeAll
@@ -166,6 +167,83 @@ class PageBatchesEqualWholeDocumentTest {
         for (byte[] file : batched.findingFiles()) {
             assertFalse(new String(file, java.nio.charset.StandardCharsets.ISO_8859_1).contains("219-09-"));
         }
+    }
+
+    /**
+     * Task 0052: the real one-page-per-request adapter against a local stand-in server that counts the pages it gets.
+     * Without shared pages no page is sent twice, and the findings are those of the whole-document run.
+     */
+    @Test
+    void withOnePagePerAiRequestNoPageIsSentTwiceAndTheFindingsAreTheSame() throws Exception {
+        Map<Integer, java.util.concurrent.atomic.AtomicInteger> sent = new ConcurrentHashMap<>();
+        Pattern pageOf = Pattern.compile("Synthetic loan file, page (\\d+) of");
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        server.setExecutor(pool);
+        server.createContext("/api/chat", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            Matcher pages = pageOf.matcher(body);
+            while (pages.find()) sent.computeIfAbsent(Integer.parseInt(pages.group(1)),
+                    n -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+            Matcher date = DOB.matcher(body);
+            String finding = date.find() ? "{\\\"entityType\\\":\\\"DATE_OF_BIRTH\\\",\\\"matchedText\\\":\\\""
+                    + date.group(1) + "\\\",\\\"contextText\\\":\\\"\\\",\\\"confidence\\\":0.95}" : "";
+            byte[] answer = ("{\"message\":{\"content\":\"{\\\"findings\\\":[" + finding + "]}\"}}")
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, answer.length);
+            exchange.getResponseBody().write(answer);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ai = new com.securedoc.platform.ai.analysis.OllamaSensitiveContentAnalysisAdapter(
+                    "http://127.0.0.1:" + server.getAddress().getPort(), "test-model", java.time.Duration.ofSeconds(20),
+                    2, 1, java.time.Duration.ZERO);
+            assertFalse(ai.mayCoverSeveralPages(tenantId), "the default is one page per request");
+            Run whole = new Run();
+            whole.text.execute(whole.extractCommand());
+            whole.find.execute(whole.detectCommand());
+            assertEquals(PAGES, requests(sent));
+
+            Run shared = new Run();
+            shared.readInBatches();
+            List<PageBatch> sharedBatches = shared.searchBatches();
+            int withOverlap = requests(sent);
+            shared.find.completeFromBatches(shared.detectCommand(), sharedBatches);
+
+            Run apart = new Run();
+            apart.readInBatches();
+            apart.settings = new com.securedoc.platform.application.processing.service.StagedProcessingService.PageBatching(
+                    t -> SETTINGS, d -> java.util.OptionalInt.empty(), ai::mayCoverSeveralPages).findSettings(tenantId);
+            assertEquals(new PageBatchSettings(20, 0), apart.settings);
+            List<PageBatch> batches = apart.searchBatches();
+            assertEquals(PAGES, sent.size(), "every page is sent");
+            assertTrue(sent.values().stream().allMatch(n -> n.get() == 1), "no page is sent to the AI twice");
+            int withoutOverlap = requests(sent);
+            apart.find.completeFromBatches(apart.detectCommand(), batches);
+
+            assertEquals(0, requests(sent), "gathering asks the AI nothing");
+            assertEquals(28, sharedBatches.size());
+            assertEquals(25, batches.size());
+            assertEquals(554, withOverlap);
+            assertEquals(500, withoutOverlap);
+            assertFalse(whole.findings.isEmpty());
+            assertTrue(whole.findings.stream().anyMatch(f -> f.entityType() == EntityType.DATE_OF_BIRTH));
+            assertEquals(places(whole.findings), places(apart.findings), "the findings of the whole-document run");
+            assertEquals(places(shared.findings), places(apart.findings), "and those of the run with shared pages");
+            System.out.println("TASK_0052 pages=500 overlap2: batches=" + sharedBatches.size() + " aiPageRequests="
+                    + withOverlap + "; overlap0: batches=" + batches.size() + " aiPageRequests=" + withoutOverlap);
+        } finally {
+            server.stop(0);
+            pool.shutdownNow();
+        }
+    }
+
+    /** The requests since the last call. */
+    private static int requests(Map<Integer, java.util.concurrent.atomic.AtomicInteger> sent) {
+        int total = sent.values().stream().mapToInt(java.util.concurrent.atomic.AtomicInteger::get).sum();
+        sent.clear();
+        return total;
     }
 
     @Test
@@ -298,7 +376,7 @@ class PageBatchesEqualWholeDocumentTest {
             text = new TextExtractionService(documents, packages, artifactStore, storage, extraction, checksums,
                     mock(ProcessingLockPort.class), events::add, audit);
             find = new SensitiveDataDetectionService(documents, packages, artifactStore, storage,
-                    PageBatchesEqualWholeDocumentTest::standInAi, rules, rules, policies, extraction, findingStore,
+                    ai, rules, rules, policies, extraction, findingStore,
                     events::add, audit, checksums);
         }
 

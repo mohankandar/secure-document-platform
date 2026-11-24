@@ -151,6 +151,27 @@ class DerivedDestinationDeliveryAdapterTest {
         }
     }
 
+    /** Task 0052: with export-mode inline, an export job's attempt is still one try; anything else keeps its retries. */
+    @Test
+    void anExportJobsAttemptIsOneTryWhateverTheExportMode() throws Exception {
+        HttpClient client = mock(HttpClient.class);
+        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                .thenThrow(new IOException("down"));
+        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client);
+        IntegrationConnection connection = IntegrationConnection.create(TenantId.generate(), "HTTP", null,
+                IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
+                IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null,
+                "https://destination.example/api", null, null, 3, 1, 24, 10, 10_000_000L, 100,
+                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now());
+
+        assertThrows(TechnicalDependencyException.class, () -> com.securedoc.platform.application.pipeline
+                .ExportJobAttempt.run(() -> adapter.deliver(connection, request())));
+        verify(client, times(1)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+
+        assertThrows(TechnicalDependencyException.class, () -> adapter.deliver(connection, request()));
+        verify(client, times(3)).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+    }
+
     private DerivedDestinationDeliveryPort.DeliveryRequest request() {
         byte[] body = "PDF-CONTENT".getBytes(StandardCharsets.UTF_8);
         return new DerivedDestinationDeliveryPort.DeliveryRequest("derived-123", "routed.pdf", "application/pdf",

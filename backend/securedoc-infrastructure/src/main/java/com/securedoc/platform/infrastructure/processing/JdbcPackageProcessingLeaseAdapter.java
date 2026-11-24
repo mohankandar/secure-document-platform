@@ -102,8 +102,8 @@ public class JdbcPackageProcessingLeaseAdapter implements PackageProcessingLease
     /**
      * Task 0027: a case whose processing is done and that waits for its EXPORT job (export-mode job) stays PROCESSING
      * as "Ready for export". It is not interrupted work: recovery leaves it alone, so it is never re-run or stopped
-     * after 3 recoveries while its destination is paused. With export-mode inline there are no jobs, so nothing
-     * changes.
+     * after 3 recoveries while its destination is paused. With export-mode inline a case has such a job only when it
+     * was queued before the switch back, or when it is a staged case; its job finishes it (task 0052).
      */
     static final String WAITING_FOR_EXPORT_JOB_EXCLUSION = """
                AND NOT EXISTS (SELECT 1 FROM pipeline_jobs j

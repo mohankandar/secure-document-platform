@@ -1265,7 +1265,8 @@ public class ApplicationServiceConfig {
             StoragePort storagePort,
             ArtifactRepository artifactRepository,
             com.securedoc.platform.application.port.out.PdfIntakeValidationPort pdfIntakeValidationPort,
-            TenantRedactionPolicyRepository tenantRedactionPolicyRepository) {
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+            SensitiveContentAnalysisPort sensitiveContentAnalysisPort) {
         // Task 0049: page batches. A page count that cannot be told means one job, whose step reports the problem.
         var batching = new com.securedoc.platform.application.processing.service.StagedProcessingService.PageBatching(
                 tenant -> tenantRedactionPolicyRepository.findByTenantId(tenant)
@@ -1282,7 +1283,9 @@ public class ApplicationServiceConfig {
                     } catch (java.io.IOException | RuntimeException unreadable) {
                         return java.util.OptionalInt.empty();
                     }
-                });
+                },
+                // Task 0052: shared pages only when one AI request may cover several pages.
+                sensitiveContentAnalysisPort::mayCoverSeveralPages);
         return new com.securedoc.platform.application.processing.service.StagedProcessingService(
                 stagedProcessingSettings, pipelineJobRepository, packageRepository, documentRepository,
                 processingLockPort, startPackageProcessingUseCase, startDocumentProcessingUseCase,
@@ -1517,10 +1520,11 @@ public class ApplicationServiceConfig {
                                                                      AuditService auditService,
                                                                      com.securedoc.platform.application.pipeline.ExportJobQueue exportJobQueue) {
         // Task 0027: with export jobs on, each split document is queued as a SPLIT_EXPORT job instead of sent at once.
+        // Task 0052: after a switch back to inline, so are those of a case that its own export job exported.
         return new DerivedRoutingService(routingRuleRepository, derivedDeliveryRepository,
                 integrationConnectionRepository, documentRepository, artifactRepository, storagePort,
                 routingMarkerDetectionPort, derivedPdfBuilderPort, derivedDeliveryService, auditService,
-                exportJobQueue.jobMode() ? exportJobQueue : null);
+                exportJobQueue);
     }
 
     @Bean

@@ -177,7 +177,8 @@ securedoc:
       # Legacy/pre-HA PROCESSING rows without any lease are eligible for safe recovery after this grace.
       orphan-without-lease-grace-ms: ${SECUREDOC_PROCESSING_ORPHAN_WITHOUT_LEASE_GRACE_MS:60000}
     # Task 0027 (staged pipeline P1): inline = today's behaviour (default); job = the case is exported by an
-    # export job with retries by code. Rollout stays inline until P2 is proven.
+    # export job with retries by code. Rollout stays inline until P2 is proven. Back to inline: export jobs already
+    # queued are finished by the export workers (task 0052); only new cases export inline.
     export-mode: ${SECUREDOC_PROCESSING_EXPORT_MODE:inline}
     # Task 0048 (staged pipeline P2 part 1): inline = today's flow (default); staged = Text, Find and Redact run as
     # per-document jobs with a gate per case. Staged needs export-mode job. Rollout stays inline until P2 is proven.

@@ -12,6 +12,7 @@ import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.pipeline.ExportDestinations;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
+import com.securedoc.platform.domain.pipeline.PipelineJobStatus;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,8 +51,22 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
     }
 
     @Override
+    public boolean jobHasCase(TenantId tenantId, PackageId packageId, int exportCycle) {
+        return jobs.findByTenantIdAndPackageId(tenantId, packageId).stream()
+                .anyMatch(job -> job.stage() == PipelineStage.EXPORT && (job.status().open()
+                        || (job.exportCycle() == exportCycle && job.status() != PipelineJobStatus.STOPPED)));
+    }
+
+    @Override
+    public boolean splitsGoInline(TenantId tenantId, PackageId packageId, int exportCycle) {
+        return !settings.jobMode() && jobs.findByTenantIdAndPackageId(tenantId, packageId).stream()
+                .noneMatch(job -> job.stage() == PipelineStage.EXPORT && job.exportCycle() == exportCycle
+                        && job.status() != PipelineJobStatus.STOPPED);
+    }
+
+    @Override
     public void queueCaseExport(TenantId tenantId, PackageId packageId, int exportCycle, CorrelationId correlationId) {
-        requireJobMode();
+        if (!settings.jobMode() && !jobs.hasStageJobs(tenantId, packageId)) throw exportJobsOff();
         IntegrationConnectionId destination = masterDestination(tenantId);
         queue(PipelineJob.ready(tenantId, PipelineStage.EXPORT, packageId, null, destination, null, exportCycle,
                 clock.instant()), correlationId);
@@ -61,7 +76,7 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
     public void queueSplitExport(TenantId tenantId, PackageId packageId, DocumentId sourceDocumentId,
                                  UUID derivedDeliveryId, IntegrationConnectionId destinationId, int exportCycle,
                                  CorrelationId correlationId) {
-        requireJobMode();
+        if (splitsGoInline(tenantId, packageId, exportCycle)) throw exportJobsOff();
         queue(PipelineJob.ready(tenantId, PipelineStage.SPLIT_EXPORT, packageId, sourceDocumentId, destinationId,
                 Objects.requireNonNull(derivedDeliveryId, "derivedDeliveryId"), exportCycle, clock.instant()),
                 correlationId);
@@ -101,9 +116,7 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
         }
     }
 
-    private void requireJobMode() {
-        if (!settings.jobMode()) {
-            throw new IllegalStateException("Export jobs are off (securedoc.processing.export-mode=inline)");
-        }
+    private static IllegalStateException exportJobsOff() {
+        return new IllegalStateException("Export jobs are off (securedoc.processing.export-mode=inline)");
     }
 }
