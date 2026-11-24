@@ -54,6 +54,8 @@ Outcome: **DONE** (6 questions). Built by a subagent from a written brief; I rea
 - Extended: `BearerTokenRefusalEntryPointTest`. New: `JsonSettingsContractTest` (21), `OidcFilterChainTest` (3), `JsonNodeValuesTest` (3), `IssuerKeyCacheTest` (3).
 - `adminSignIn.spec.ts` (0054's test, fixed on 0052's branch): CI on PR #4 failed once because its locator also matched the button's spinner while the test ran. It now names the answer only. 20 repeats: all pass (the only test run after the merge of that fix).
 
+- `shortcuts.spec.ts` (failed in CI on PR #6, and once before on another PR): it typed into the Find dialog before the dialog had focused its field. It now waits for the focus; 20 of 20 repeats pass.
+
 ## Commits (hash and message), or "not committed"
 - `4cdbd89` build(backend): Spring Boot 4.2.0, Jackson 3, platform-core 0.8.1 (its message says Liquibase 4.33.0; it is 4.29.2 since `617e233`)
 - `617e233` fix(api): JSON, sign-in, probes, logs and stop behave as before the move; Liquibase without usage reporting
