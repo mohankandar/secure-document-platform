@@ -57,3 +57,7 @@ New: `PdfOutputCleaner`, `PdfWholeFileCheck`, `HiddenContentInOutputTest`. Chang
 Task 0053.
 
 No other product's name or behaviour in code.
+
+## Decisions (2026-11-24, design chat, as recommended under LV-19; for the owner's later review)
+1. **Other annotations:** yes. Free-text notes, stamps and any other annotation whose appearance is drawn into the page are read by detection like form fields; added to task 0053 (addendum).
+- Merge approved (queue "Approved merges").
