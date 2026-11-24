@@ -34,6 +34,7 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
     private static final float VERIFY_DPI = 96f;
     private static final int DARK_CHANNEL_THRESHOLD = 45;
     private static final double REQUIRED_DARK_RATIO = 0.90;
+    private static final double REQUIRED_DARK_RATIO_WITH_DIGITS = 0.40;
     private static final double INTERIOR_MARGIN_RATIO = 0.15;
 
     @Override
@@ -177,7 +178,12 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, VERIFY_DPI);
             try {
                 for (RedactionTarget target : entry.getValue()) {
-                    if (isRegionDark(image, target)) covered++;
+                    // Task 0062: around kept digits the cover is still mostly dark; the page's own text would not be.
+                    if (isRegionDark(image, target.solidPart(), REQUIRED_DARK_RATIO)
+                            && (target.kept() == null
+                                    || isRegionDark(image, target.keptPart(), REQUIRED_DARK_RATIO_WITH_DIGITS))) {
+                        covered++;
+                    }
                 }
             } finally {
                 image.flush();
@@ -186,7 +192,7 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
         return covered;
     }
 
-    private boolean isRegionDark(BufferedImage image, RedactionTarget target) {
+    private boolean isRegionDark(BufferedImage image, RedactionTarget target, double requiredRatio) {
         int imageWidth = image.getWidth();
         int imageHeight = image.getHeight();
 
@@ -221,7 +227,7 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
                 if (r <= DARK_CHANNEL_THRESHOLD && g <= DARK_CHANNEL_THRESHOLD && b <= DARK_CHANNEL_THRESHOLD) dark++;
             }
         }
-        return sampled > 0 && ((double) dark / sampled) >= REQUIRED_DARK_RATIO;
+        return sampled > 0 && ((double) dark / sampled) >= requiredRatio;
     }
 
     private int clamp(int value, int min, int max) {

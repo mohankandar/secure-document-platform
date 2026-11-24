@@ -41,13 +41,24 @@ async function mockIdentityProvider(page: Page) {
   });
 }
 
-type Policy = { enabledEntityTypes: string[]; autoRedactThreshold: number; reviewMode: 'UNCERTAIN_ONLY' | 'REVIEW_ALL'; maskSsnLastFour: boolean };
+type Policy = { enabledEntityTypes: string[]; autoRedactThreshold: number; reviewMode: 'UNCERTAIN_ONLY' | 'REVIEW_ALL'; maskSsnLastFour: boolean; enabledPacks?: string[]; keepLastFourKinds?: string[]; lockedItemsOn?: boolean };
+
+/** Task 0062: as the server sends it, shortened. Tests without it run the screen against an older server. */
+const KIND = (key: string, locked = false, lastFourAllowed = false) => ({ key, name: key, detectionMethod: 'PATTERN', defaultStyle: 'REMOVE_FULLY', locked, lastFourAllowed });
+const CATALOG = {
+  kinds: [KIND('SSN', false, true), KIND('DATE_OF_BIRTH'), KIND('CREDIT_CARD_NUMBER', true), KIND('CREDIT_SCORE'), KIND('ITIN', false, true), KIND('EIN', false, true), KIND('CVV', true), KIND('PIN', true)],
+  packs: [
+    { key: 'PCI_DSS', name: 'PCI DSS', covers: 'Payment card data.', notCovered: 'Cardholder names are not found.', kinds: ['CREDIT_CARD_NUMBER', 'CVV', 'PIN'] },
+    { key: 'FRCP_5_2', name: 'FRCP 5.2 (court filings)', covers: 'Social Security and taxpayer numbers.', notCovered: 'Names of minors are not found.', kinds: ['SSN', 'ITIN', 'EIN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER'] },
+  ],
+};
 const BALANCED: Policy = { enabledEntityTypes: ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true };
 
-function configuration(policy: Policy) {
+function configuration(policy: Policy, catalog?: typeof CATALOG) {
   return {
     identifiers: [], dashboardColumns: [],
     sensitiveDataPolicy: policy,
+    redactionCatalog: catalog,
     lifecyclePolicy: { originalRetentionHours: 72, redactedCacheHours: 168, neverExportedHoldHours: 336, finalApprovalRequired: false, maximumSuccessfulExportCycles: 3, maximumRedactedCacheHours: 720 },
     documentIntelligence: {
       mode: 'OBSERVE', activeBundleVersion: '2026.11.1', lastKnownGoodBundleVersion: '2026.11.1', configurationVersion: 4, baselineDiscoveryRequired: false,
@@ -87,7 +98,7 @@ function defaultEstimate(q: URLSearchParams, cases = 512) {
   };
 }
 
-async function openPolicy(page: Page, opts: { policy?: Policy; estimate?: Estimate } = {}): Promise<Harness> {
+async function openPolicy(page: Page, opts: { catalog?: typeof CATALOG; policy?: Policy; estimate?: Estimate } = {}): Promise<Harness> {
   const h: Harness = { writes: [], estimates: [] };
   let policy = opts.policy ?? BALANCED;
   await mockIdentityProvider(page);
@@ -99,7 +110,7 @@ async function openPolicy(page: Page, opts: { policy?: Policy; estimate?: Estima
     if (url.pathname === '/api/v1/me') {
       return json({ username: 'admin.user@example.test', roles: ['BUSINESS_ADMIN'], tenantName: ENTITY.name, tenantSlug: ENTITY.slug, authenticationMode: 'OIDC', capabilities: CAPS });
     }
-    if (url.pathname === '/api/v1/business-admin/configuration') return json(configuration(policy));
+    if (url.pathname === '/api/v1/business-admin/configuration') return json(configuration(policy, opts.catalog));
     if (url.pathname === '/api/v1/business-admin/sensitive-data-policy/estimate') {
       h.estimates.push(url.search);
       const custom = opts.estimate?.(url.searchParams);
@@ -111,7 +122,7 @@ async function openPolicy(page: Page, opts: { policy?: Policy; estimate?: Estima
       const body = JSON.parse(request.postData() || '{}') as Policy;
       h.writes.push(body);
       policy = body;
-      return json(configuration(policy));
+      return json(configuration(policy, opts.catalog));
     }
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
@@ -443,4 +454,36 @@ test('confirm step leaves out the cases when they don’t drop', async ({ page }
   await expect(preview(page).locator('.cf-sp-tile')).toHaveCount(2);
   await saveButton(page).click();
   await expect(page.getByRole('alertdialog')).toHaveAccessibleDescription('With Light, about 40 fewer findings in the last 30 days would have had a person check them.');
+});
+
+test('task 0062: packs, locked items and styles; what is saved', async ({ page }) => {
+  const h = await openPolicy(page, { catalog: CATALOG, policy: { ...BALANCED, enabledPacks: [], keepLastFourKinds: [], lockedItemsOn: false } });
+  const c = card(page);
+  await expect(c.getByText('This entity does not have the locked items yet')).toBeVisible();
+  for (const [name, on] of [['Credit card number', 'true'], ['Card security code (CVV)', 'false'], ['PIN', 'false']]) {
+    const chip = c.getByRole('button', { name: `${name} (on with your next save)` });
+    await expect(chip).toHaveAttribute('aria-pressed', on);
+    await expect(chip).toHaveAttribute('aria-disabled', 'true');
+    await chip.click({ force: true });
+    await expect(saveButton(page)).toBeDisabled();
+  }
+  const pack = c.getByRole('switch', { name: /^FRCP 5\.2/ });
+  await expect(pack).toHaveAccessibleName(/Not covered: Names of minors are not found\./);
+  await pack.check({ force: true });
+  await expect(c.getByRole('button', { name: 'EIN', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await c.getByRole('button', { name: 'EIN', exact: true }).click();
+  await expect(c.getByText('Turned off by hand: EIN')).toBeVisible();
+  // A style only for kinds that are on and allow it: never a locked item, a date of birth or a credit score.
+  await expect(c.getByRole('group', { name: 'What stays visible' }).getByRole('combobox')).toHaveCount(2);
+  await c.getByLabel('Social Security Number', { exact: true }).selectOption('KEEP_LAST_FOUR');
+  await saveButton(page).click();
+  await expect.poll(() => h.writes.length).toBe(1);
+  expect(h.writes[0].enabledPacks).toEqual(['FRCP_5_2']);
+  expect(h.writes[0].keepLastFourKinds).toEqual(['SSN']);
+  expect(h.writes[0].enabledEntityTypes).toContain('ITIN');
+  expect(h.writes[0].enabledEntityTypes).not.toContain('EIN');
+  expect(h.writes[0]).not.toHaveProperty('lockedItemsOn');
+  // The server's answer has the locked items on (the mock echoes what was sent).
+  await expect(c.getByRole('button', { name: 'PIN (always on)' })).toHaveAttribute('aria-pressed', 'true');
+  if (process.env.PROOF_DIR) await c.screenshot({ path: `${process.env.PROOF_DIR}/policy-catalog.png` });
 });

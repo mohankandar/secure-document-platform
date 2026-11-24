@@ -1,0 +1,94 @@
+package com.securedoc.platform.domain.business;
+
+import com.securedoc.platform.domain.finding.EntityType;
+import com.securedoc.platform.domain.identity.TenantId;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Task 0062 (R1): the catalog, the packs, the locked items and the styles. */
+class RedactionCatalogTest {
+
+    private static final TenantId TENANT = TenantId.generate();
+
+    @Test
+    void theCatalogHasTwelveKindsAndTheRetiredOnesAreGone() {
+        assertEquals(12, RedactionCatalog.entries().size());
+        assertTrue(Arrays.stream(EntityType.values()).map(Enum::name)
+                .noneMatch(Set.of("FINANCIAL_ACCOUNT", "GOVERNMENT_ID")::contains));
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
+                EntityType.CREDIT_SCORE), RedactionCatalog.askedOfAi());
+        assertTrue(RedactionCatalog.entries().stream().allMatch(e -> e.defaultStyle() == RedactionStyle.REMOVE_FULLY),
+                "today's behaviour is the default style");
+    }
+
+    @Test
+    void lockedItemsAreTheCardNumberTheCvvAndThePin() {
+        Set<EntityType> locked = EnumSet.of(EntityType.CREDIT_CARD_NUMBER, EntityType.CVV, EntityType.PIN);
+        assertEquals(locked, RedactionCatalog.lockedKinds());
+        for (EntityType kind : locked) {
+            assertFalse(RedactionCatalog.lastFourAllowed().contains(kind));
+            assertThrows(IllegalArgumentException.class, () -> policy(Set.of(EntityType.SSN), Set.of(kind), true),
+                    kind + " never keeps its last four");
+        }
+        assertTrue(policy(Set.of(EntityType.SSN), Set.of(), true).enabledEntityTypes().containsAll(locked),
+                "on although not chosen");
+        assertEquals(Set.of(EntityType.SSN), policy(Set.of(EntityType.SSN), Set.of(), false).enabledEntityTypes(),
+                "an entity from before the catalog keeps exactly its kinds");
+        assertTrue(TenantRedactionPolicy.defaults(TENANT).enabledEntityTypes().containsAll(locked));
+        assertEquals(RedactionCatalog.askedOfAi(),
+                EnumSet.copyOf(TenantRedactionPolicy.defaultsBeforeCatalog(TENANT).enabledEntityTypes()));
+    }
+
+    @Test
+    void onlyNumbersWithFourSpareDigitsCanKeepTheLastFour() {
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.BANK_ROUTING_NUMBER, EntityType.BANK_ACCOUNT_NUMBER,
+                EntityType.ITIN, EntityType.EIN, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER),
+                RedactionCatalog.lastFourAllowed());
+        for (EntityType kind : RedactionCatalog.kinds()) {
+            if (RedactionCatalog.lastFourAllowed().contains(kind)) {
+                assertEquals(RedactionStyle.KEEP_LAST_FOUR, policy(Set.of(kind), Set.of(kind), true).styleOf(kind));
+            }
+            assertEquals(RedactionStyle.REMOVE_FULLY, policy(Set.of(EntityType.SSN), Set.of(), true).styleOf(kind));
+        }
+    }
+
+    @Test
+    void everyPackIsMadeOfCatalogKindsAndSaysWhatItDoesNotCover() {
+        assertEquals(EnumSet.of(EntityType.CREDIT_CARD_NUMBER, EntityType.CVV, EntityType.PIN),
+                EnumSet.copyOf(RegulationPack.PCI_DSS.kinds()));
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.ITIN, EntityType.EIN, EntityType.DATE_OF_BIRTH,
+                EntityType.BANK_ACCOUNT_NUMBER, EntityType.CREDIT_CARD_NUMBER),
+                EnumSet.copyOf(RegulationPack.FRCP_5_2.kinds()));
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.ITIN, EntityType.DATE_OF_BIRTH,
+                EntityType.BANK_ACCOUNT_NUMBER, EntityType.CREDIT_CARD_NUMBER, EntityType.DRIVERS_LICENSE_NUMBER,
+                EntityType.PASSPORT_NUMBER), EnumSet.copyOf(RegulationPack.HIPAA.kinds()));
+        assertEquals(EnumSet.complementOf(notIn(EntityType.EIN)), EnumSet.copyOf(RegulationPack.GLBA.kinds()));
+        for (RegulationPack pack : RegulationPack.values()) {
+            assertTrue(RedactionCatalog.kinds().containsAll(pack.kinds()), pack.name());
+            assertFalse(pack.covers().isBlank());
+            assertTrue(pack.notCovered().contains("not found"), pack.name());
+        }
+    }
+
+    /** Everything that is not a catalog kind, and one kind. */
+    private static EnumSet<EntityType> notIn(EntityType kind) {
+        EnumSet<EntityType> out = EnumSet.allOf(EntityType.class);
+        out.removeAll(RedactionCatalog.kinds());
+        out.add(kind);
+        return out;
+    }
+
+    private static TenantRedactionPolicy policy(Set<EntityType> enabled, Set<EntityType> lastFour, boolean locked) {
+        return new TenantRedactionPolicy(TENANT, enabled, 0.8, ReviewMode.UNCERTAIN_ONLY, true, Instant.now(), true,
+                PageBatchSettings.DEFAULTS, Set.of(), lastFour, locked);
+    }
+}

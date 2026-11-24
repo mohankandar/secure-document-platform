@@ -204,9 +204,10 @@ class ApiClient {
   }
 
   async updateSensitiveDataPolicy(policy: SensitiveDataPolicyConfiguration): Promise<BusinessAdminConfiguration> {
+    // lockedItemsOn is the server's to say (task 0062), never sent.
     return this.request('/business-admin/sensitive-data-policy', {
       method: 'PUT',
-      body: JSON.stringify(policy),
+      body: JSON.stringify({ ...policy, lockedItemsOn: undefined }),
     });
   }
 

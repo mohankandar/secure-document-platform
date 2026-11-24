@@ -14,6 +14,8 @@ import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
 import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
 import com.securedoc.platform.domain.business.PolicyPreset;
+import com.securedoc.platform.domain.business.RedactionCatalog;
+import com.securedoc.platform.domain.business.RegulationPack;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.PageBatchSettings;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
@@ -213,10 +215,30 @@ public final class BusinessAdminConfigurationService {
                                                             boolean searchableRedactedPages,
                                                             Integer pageBatchSize,
                                                             Integer pageBatchOverlap) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, null, null);
+    }
+
+    /**
+     * Task 0062: as above, with the regulation packs in force and the kinds whose last four digits stay visible; null
+     * keeps the stored ones. {@code enabledTypes} decides which kinds are on (a pack kind can be fine-tuned off); the
+     * locked items are on whatever it says.
+     */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap,
+                                                            Set<RegulationPack> packs,
+                                                            Set<EntityType> keepLastFour) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
-        if (!TenantRedactionPolicy.configurableTypes().containsAll(enabledTypes)) {
+        if (!RedactionCatalog.kinds().containsAll(enabledTypes)) {
             throw new ValidationException(LvErrorCode.CFG_001, "Sensitive-data policy contains an unsupported V1 category");
         }
         if (autoRedactThreshold < MIN_THRESHOLD || autoRedactThreshold > MAX_THRESHOLD) {
@@ -236,16 +258,26 @@ public final class BusinessAdminConfigurationService {
         } catch (IllegalArgumentException invalid) {
             throw new ValidationException(LvErrorCode.CFG_001, invalid.getMessage());
         }
-        if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), enabledTypes, autoRedactThreshold,
-                reviewMode, maskSsnLastFour)
-                && previous.get().searchableRedactedPages() == searchableRedactedPages
-                && storedBatches.equals(batches)) {
-            // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
-            return previous.get();
+        Set<EntityType> lastFour = keepLastFour != null ? keepLastFour
+                : previous.map(TenantRedactionPolicy::keepLastFour).orElse(Set.of());
+        if (!RedactionCatalog.lastFourAllowed().containsAll(lastFour)) {
+            throw new ValidationException(LvErrorCode.CFG_001,
+                    "The last four digits can't be kept for a locked item, a date of birth or a credit score");
         }
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
-                searchableRedactedPages, batches);
+                searchableRedactedPages, batches,
+                packs != null ? packs : previous.map(TenantRedactionPolicy::packs).orElse(Set.of()), lastFour, true);
+        if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), policy.enabledEntityTypes(),
+                autoRedactThreshold, reviewMode, maskSsnLastFour)
+                && previous.get().searchableRedactedPages() == searchableRedactedPages
+                && storedBatches.equals(batches)
+                && previous.get().packs().equals(policy.packs())
+                && previous.get().keepLastFour().equals(policy.keepLastFour())
+                && previous.get().lockedItemsOn()) {
+            // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
+            return previous.get();
+        }
         policyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId,
                 AuditAction.SENSITIVE_DATA_POLICY_CHANGED,
@@ -276,7 +308,14 @@ public final class BusinessAdminConfigurationService {
                 + (policy.searchableRedactedPages() ? "" : ", searchableRedactedPages=false")
                 // Task 0049: written only when not the default.
                 + (policy.pageBatches().equals(PageBatchSettings.DEFAULTS) ? "" : ", pageBatchSize="
-                        + policy.pageBatches().size() + ", pageBatchOverlap=" + policy.pageBatches().overlap());
+                        + policy.pageBatches().size() + ", pageBatchOverlap=" + policy.pageBatches().overlap())
+                // Task 0062: packs and styles, written only when there are any (no key = none).
+                + (policy.packs().isEmpty() ? "" : ", packs=" + sortedNames(policy.packs()))
+                + (policy.keepLastFour().isEmpty() ? "" : ", keepLastFour=" + sortedNames(policy.keepLastFour()));
+    }
+
+    private static String sortedNames(Set<? extends Enum<?>> values) {
+        return values.stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(","));
     }
 
     public TenantLifecyclePolicy updateLifecyclePolicy(TenantId tenantId, ActorId actorId,

@@ -59,6 +59,10 @@ public class FindingEntity {
     @Column(name = "status", nullable = false)
     private String status;
 
+    /** Migration 070 (task 0062): null means removed in full. */
+    @Column(name = "redaction_style", updatable = false)
+    private String redactionStyle;
+
     @Column(name = "detected_at", nullable = false)
     private Instant detectedAt;
 
@@ -118,6 +122,9 @@ public class FindingEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getRedactionStyle() { return redactionStyle; }
+    public void setRedactionStyle(String redactionStyle) { this.redactionStyle = redactionStyle; }
 
     public Instant getDetectedAt() { return detectedAt; }
     public void setDetectedAt(Instant detectedAt) { this.detectedAt = detectedAt; }

@@ -12,10 +12,10 @@ import useSWR from 'swr';
 import { RETENTION_WORDS, retentionPlaceholder, retentionValueError, type RetentionSettings } from '../exportRules';
 import { HelpTip } from './HelpTip';
 import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
-import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, SEARCHABLE_PAGES_WORDS } from '../words';
+import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, CATALOG_WORDS, SEARCHABLE_PAGES_WORDS } from '../words';
 import {
   MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetOf, previewHeadline,
-  previewTiles, reviewChanged, saveLabel, type ConfirmWords, type EstimateRunner, type PolicyEstimate,
+  previewTiles, reviewChanged, saveLabel, setKeepLastFour, setPack, tunedOff, type ConfirmWords, type EstimateRunner, type PolicyEstimate,
 } from './policyRules';
 
 /** The one name for a sensitive type (words.ts), shared with Review, the case panel and Continue manually. */
@@ -35,6 +35,10 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
   const sdp = data.sensitiveDataPolicy;
   const savedPreset = presetOf(sdp.reviewMode, sdp.autoRedactThreshold);
   const unsupported = sdp.enabledEntityTypes.filter((t) => !SENSITIVE_TYPES.some((s) => s.key === t));
+  const catalog = data.redactionCatalog;
+  const locked = catalog ? catalog.kinds.filter((k) => k.locked).map((k) => k.key) : [];
+  // Without the catalog (an older server), the two new locked kinds are not offered as switches.
+  const listed = SENSITIVE_TYPES.filter((t) => catalog || (t.key !== 'CVV' && t.key !== 'PIN'));
   const radioName = useId();
   const saveButton = useRef<HTMLButtonElement>(null);
   const [runner] = useState(() => estimateRunner((query, signal) => apiClient.sensitiveDataPolicyEstimate(query, signal)));
@@ -142,11 +146,34 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
           </details>
           <div className="cf-sp-section">
           <h3 className="cf-sp-heading">What is redacted <span>· not changed by presets</span></h3>
+          {catalog && (
+            <fieldset className="cf-ad-fieldset">
+              <legend>{CATALOG_WORDS.packsHeading}</legend>
+              <div className="cf-ad-list">
+                {catalog.packs.map((pack) => {
+                  const on = (d.enabledPacks ?? []).includes(pack.key);
+                  const off = on ? tunedOff(d, pack, locked) : [];
+                  return (
+                    <div key={pack.key}>
+                      <Toggle label={pack.name} hint={`${pack.covers} ${CATALOG_WORDS.notCovered} ${pack.notCovered}`} checked={on}
+                        onChange={(v) => set(setPack(d, pack, v))} />
+                      {off.length > 0 && <p className="cf-ad-hint cf-ad-pack-off">{CATALOG_WORDS.tunedOff} {off.map(typeName).join(', ')}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="cf-ad-hint">{CATALOG_WORDS.packsHint}</p>
+            </fieldset>
+          )}
           <fieldset className="cf-ad-fieldset">
             <legend>{SENSITIVE_TYPES_HEADING} <span className="cf-muted">({d.enabledEntityTypes.length})</span></legend>
             <div className="cf-ad-chips">
-              {[...SENSITIVE_TYPES.map((s) => s.key), ...unsupported].map((t) => {
+              {[...listed.map((s) => s.key), ...unsupported].map((t) => {
                 const on = d.enabledEntityTypes.includes(t);
+                if (locked.includes(t)) {
+                  // Focusable, so its state can be read; it does nothing.
+                  return <button key={t} type="button" aria-pressed={on || d.lockedItemsOn !== false} aria-disabled="true" className="cf-ad-chip" data-locked="">{typeName(t)} ({d.lockedItemsOn === false ? CATALOG_WORDS.lockedSoon : CATALOG_WORDS.locked})</button>;
+                }
                 const meta = SENSITIVE_TYPES.find((s) => s.key === t);
                 return (
                   <button key={t} type="button" aria-pressed={on} className="cf-ad-chip" title={meta?.detects}
@@ -157,7 +184,7 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
               })}
             </div>
             <dl className="cf-ad-defs">
-              {SENSITIVE_TYPES.map((s) => <div key={s.key}><dt>{s.name}</dt><dd>{s.detects}</dd></div>)}
+              {listed.map((s) => <div key={s.key}><dt>{s.name}</dt><dd>{s.detects}</dd></div>)}
             </dl>
             <p className="cf-ad-hint">
               Detection works on text values, not document types. Each finding blacks out only the matched value on the page.
@@ -165,9 +192,24 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
               out as a whole: its number is found only when Driver’s license number is on, and an SSN or date of birth printed
               on it is found like any other text.
             </p>
+            {catalog && <p className="cf-ad-hint">{CATALOG_WORDS.lockedHint}</p>}
+            {catalog && d.lockedItemsOn === false && <Notice tone="mark">{CATALOG_WORDS.lockedPending}</Notice>}
             {unsupported.length > 0 && <p className="cf-ad-warn">{unsupported.map(typeName).join(', ')} {unsupported.length === 1 ? 'is' : 'are'} not acted on by the detection engine. Turn {unsupported.length === 1 ? 'it' : 'them'} off to keep the policy accurate.</p>}
             {d.enabledEntityTypes.length === 0 && <p className="cf-ad-warn">Enable at least one category. The policy cannot be saved empty.</p>}
           </fieldset>
+          {catalog && (
+            <fieldset className="cf-ad-fieldset">
+              <legend>{CATALOG_WORDS.styleHeading}</legend>
+              <p className="cf-ad-hint">{CATALOG_WORDS.styleHint}</p>
+              <div className="cf-ad-grid">
+                {catalog.kinds.filter((k) => k.lastFourAllowed && d.enabledEntityTypes.includes(k.key)).map((k) => (
+                  <SelectField key={k.key} label={typeName(k.key)} value={(d.keepLastFourKinds ?? []).includes(k.key) ? 'KEEP_LAST_FOUR' : 'REMOVE_FULLY'}
+                    options={[['REMOVE_FULLY', CATALOG_WORDS.removeFully], ['KEEP_LAST_FOUR', CATALOG_WORDS.keepLastFour]] as ['REMOVE_FULLY' | 'KEEP_LAST_FOUR', string][]}
+                    onChange={(v) => set(setKeepLastFour(d, k.key, v === 'KEEP_LAST_FOUR'))} />
+                ))}
+              </div>
+            </fieldset>
+          )}
           <Toggle label="Treat labeled last-four SSNs as sensitive" hint="When on, a last-four value is also redacted, but only when it is explicitly labeled SSN." checked={d.maskSsnLastFour} disabled={!d.enabledEntityTypes.includes('SSN')} onChange={(v) => set({ ...d, maskSsnLastFour: v })} />
           <Toggle label={SEARCHABLE_PAGES_WORDS.label} hint={SEARCHABLE_PAGES_WORDS.hint} checked={d.searchableRedactedPages !== false} onChange={(v) => set({ ...d, searchableRedactedPages: v })} />
           </div>

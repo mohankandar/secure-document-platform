@@ -26,17 +26,11 @@ public enum EntityType {
     /** Credit card number. Kept distinct from bank/account identifiers for tenant policy clarity. */
     CREDIT_CARD_NUMBER,
 
-    /** Bank or other financial account number (not enabled by default in the V1 baseline). */
-    FINANCIAL_ACCOUNT,
-
     /** Credit score (contextually recognized numeric score). */
     CREDIT_SCORE,
 
     /** Medical record number or health info. */
     MEDICAL_RECORD,
-
-    /** National ID, passport, or driver's license number. */
-    GOVERNMENT_ID,
 
     /** IP address. */
     IP_ADDRESS,
@@ -45,8 +39,8 @@ public enum EntityType {
     CUSTOM,
 
     // Task 0043 (R1 part 1): specific pattern kinds, each off by default for every entity. The names are stable
-    // keys (stored in findings and in tenant_redaction_kinds); never rename one. FINANCIAL_ACCOUNT and GOVERNMENT_ID
-    // above stay unused (owner, 0043 answers); the catalog task decides whether to remove them.
+    // keys (stored in findings and in tenant_redaction_catalog); never rename one. Task 0062 removed the unused
+    // FINANCIAL_ACCOUNT and GOVERNMENT_ID.
 
     /** US bank routing number (ABA: 9 digits, 3-7-1 checksum), by its label or on a check's MICR line. */
     BANK_ROUTING_NUMBER,
@@ -64,5 +58,13 @@ public enum EntityType {
     DRIVERS_LICENSE_NUMBER,
 
     /** Passport number, only next to a passport label. */
-    PASSPORT_NUMBER
+    PASSPORT_NUMBER,
+
+    // Task 0062 (R1): with CREDIT_CARD_NUMBER the locked items, always on and always removed in full.
+
+    /** Card security code (CVV, CVC, CID; 3 or 4 digits), only next to its label. */
+    CVV,
+
+    /** Personal identification number (4 to 6 digits), only next to its label. */
+    PIN
 }

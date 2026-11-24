@@ -212,7 +212,7 @@ public final class TextPathRunner {
         @Override public Optional<TenantRedactionPolicy> findByTenantId(TenantId t) {
             if (!allKinds) return Optional.empty();
             TenantRedactionPolicy d = TenantRedactionPolicy.defaults(t);
-            return Optional.of(new TenantRedactionPolicy(t, TenantRedactionPolicy.configurableTypes(),
+            return Optional.of(new TenantRedactionPolicy(t, com.securedoc.platform.domain.business.RedactionCatalog.kinds(),
                     d.autoRedactThreshold(), d.reviewMode(), d.maskSsnLastFour(), d.updatedAt()));
         }
         @Override public void save(TenantRedactionPolicy p) { }

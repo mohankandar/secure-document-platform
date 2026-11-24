@@ -1,8 +1,6 @@
 package com.securedoc.platform.infrastructure.pipeline;
 
-import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.identity.TenantId;
-import com.securedoc.platform.infrastructure.persistence.adapter.JdbcTenantRedactionKindStore;
 import liquibase.Contexts;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -10,8 +8,6 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import java.sql.Connection;
-import java.util.EnumSet;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,7 +27,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void upgradingFrom047CopiesEveryValueRemovesTheRowsAndLeavesTheKindsAlone() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.empty("m048up")) {
-            migrateThenRollBack(db, 4); // back to 047 (060, 050, 049, then 048): the 0044 storage
+            migrateThenRollBack(db, 5); // back to 047 (070, 060, 050, 049, then 048): the 0044 storage
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId turnedOff = tenantWithPolicy(jdbc);
             TenantId savedOn = tenantWithPolicy(jdbc);
@@ -42,6 +38,7 @@ class SearchableRedactedPagesSettingPostgresTest {
             String before = policyRow(jdbc, turnedOff);
 
             update(db);
+            db.backTo050();
 
             assertFalse(searchable(jdbc, turnedOff), "a stored 'off' is copied");
             assertTrue(searchable(jdbc, savedOn), "a stored 'on' is copied");
@@ -49,7 +46,7 @@ class SearchableRedactedPagesSettingPostgresTest {
             assertEquals(0, count(jdbc, "SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key = '" + ROW + "'"),
                     "the switch rows are removed");
             assertEquals(1, count(jdbc, "SELECT count(*) FROM tenant_redaction_kinds"), "the kind row stays");
-            assertEquals(EnumSet.of(EntityType.EIN), new JdbcTenantRedactionKindStore(jdbc).enabledKinds(turnedOff));
+            assertEquals(1, count(jdbc, "SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key = 'EIN' AND enabled"));
             assertEquals(before, policyRow(jdbc, turnedOff), "the other policy columns are unchanged");
         }
     }
@@ -57,7 +54,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void aSwitchRowWithNoPolicyToCopyItToHaltsTheMigration() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.empty("m048halt")) {
-            migrateThenRollBack(db, 4); // 060, 050, 049, then 048
+            migrateThenRollBack(db, 5); // 070, 060, 050, 049, then 048
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = TenantId.generate();
             TestRows.tenant(jdbc, tenant);
@@ -73,6 +70,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void rollingBack048RestoresThe0044RowsAndUpgradingAgainKeepsEveryValue() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m048rb")) {
+            db.backTo050();
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId off = tenantWithPolicy(jdbc);
             TenantId on = tenantWithPolicy(jdbc);
@@ -80,7 +78,7 @@ class SearchableRedactedPagesSettingPostgresTest {
                     new MapSqlParameterSource("t", off.value()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 4); // 060, 050, 049, then 048
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 3); // 050, 049, then 048
             }
             assertEquals(0, columnCount(jdbc), "the column is dropped");
             assertEquals(1, count(jdbc, "SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key = '" + ROW
@@ -97,11 +95,13 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void aNewPolicyRowIsSearchableAndALeftoverSwitchRowIsNeverAKind() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m048def")) {
+            db.backTo050();
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = tenantWithPolicy(jdbc); // written without the column
             assertTrue(searchable(jdbc, tenant));
             switchRow(jdbc, tenant, ROW, true);
-            assertEquals(Set.of(), new JdbcTenantRedactionKindStore(jdbc).enabledKinds(tenant),
+            update(db);
+            assertEquals(0, count(jdbc, "SELECT count(*) FROM tenant_redaction_catalog WHERE kind_key = '" + ROW + "'"),
                     "an unknown key never switches anything on");
             assertTrue(searchable(jdbc, tenant), "the old row no longer means anything");
         }

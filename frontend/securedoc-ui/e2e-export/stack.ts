@@ -240,7 +240,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM tenants WHERE id = nt) THEN RETURN; END IF;
   INSERT INTO tenants (id, name, slug, status, created_at, updated_at, version)
     VALUES (nt, '${name.replace(/'/g, "''")}', '${slug}', 'ACTIVE', now(), now(), 0);
-  FOREACH t IN ARRAY ARRAY['tenant_capabilities','business_identifier_definitions','tenant_redaction_policies'] LOOP
+  FOREACH t IN ARRAY ARRAY['tenant_capabilities','business_identifier_definitions','tenant_redaction_policies','tenant_redaction_catalog'] LOOP
     SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
            string_agg(CASE WHEN column_name = 'tenant_id' THEN quote_literal(nt) || '::uuid'
                            WHEN column_name = 'id' AND data_type = 'uuid' THEN 'gen_random_uuid()'
