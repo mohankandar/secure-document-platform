@@ -129,6 +129,43 @@ class FormFieldValuesTest {
         check(comb, Map.of("SSN", List.of(SSN)));
     }
 
+    /** Addendum: every annotation the redaction draws into the page is read. */
+    @Test
+    void aValueOnlyInAFreeTextNoteOrAStampIsFoundRedactedAndAbsentFromTheOutput() throws Exception {
+        for (boolean storedLook : new boolean[]{true, false}) {
+            byte[] note = pdf(doc -> {
+                PDPage page = page(doc, PAGE);
+                var free = new org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFreeText();
+                free.setContents("Borrower SSN: " + SSN);
+                free.setDefaultAppearance("/Helv 12 Tf 0 g");
+                free.setRectangle(new PDRectangle(150, 500, 260, 30));
+                page.getAnnotations().add(free);
+                if (storedLook) free.constructAppearances(doc);
+            });
+            check(note, Map.of("SSN", List.of(SSN)));
+        }
+        byte[] stamp = pdf(doc -> {
+            PDPage page = page(doc, PAGE);
+            var rubber = new org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationRubberStamp();
+            rubber.setRectangle(new PDRectangle(150, 500, 300, 40));
+            var look = new org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream(doc);
+            look.setBBox(new PDRectangle(300, 40));
+            look.setResources(new PDResources());
+            try (PDPageContentStream cs = new PDPageContentStream(doc, look)) {
+                cs.beginText();
+                cs.setFont(font(), 12);
+                cs.newLineAtOffset(5, 15);
+                cs.showText("Card number " + CARD);
+                cs.endText();
+            }
+            var looks = new org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary();
+            looks.setNormalAppearance(look);
+            rubber.setAppearance(looks);
+            page.getAnnotations().add(rubber);
+        });
+        check(stamp, Map.of("CREDIT_CARD_NUMBER", List.of(CARD)));
+    }
+
     @Test
     void pagesWithoutFieldsAndFieldsNobodySeesChangeNothing() throws Exception {
         byte[] plain = pdf(doc -> page(doc, PAGE));

@@ -5,6 +5,7 @@ import com.securedoc.platform.application.port.out.TextExtractionPort.TextSpan;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.cos.COSArray;
@@ -14,7 +15,8 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationPopup;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.text.PDFTextStripper;
 
@@ -29,12 +31,15 @@ import java.util.Set;
  * Task 0053: the text of a page's visible form fields (text, combo box and list fields), which is not part of the page's
  * own drawing. It is added after the page's text, one line per field: its label (words only, without a place), then its
  * value, whose place is the field's box. So a value is found and covered like page text, and every offset of the page's
- * own text stays as it was. A page without such fields is returned unchanged.
+ * own text stays as it was. A page without such fields is returned unchanged. Addendum: so is the text of every other
+ * annotation the redaction draws into the page (free-text notes, stamps, callouts, button captions, signatures).
  *
- * <p>The value is the field's stored value and, where the drawn text differs, the drawn text too. Check boxes, radio
- * buttons, push buttons and signatures have no text and are ignored.
+ * <p>The value is the field's stored value and, where the drawn text differs, the drawn text too. Check boxes and
+ * radio buttons have no text and are ignored.
  */
 final class PdfFormFieldText {
+
+    private static final int PUSH_BUTTON = 1 << 16;
 
     private PdfFormFieldText() {
     }
@@ -43,12 +48,16 @@ final class PdfFormFieldText {
         StringBuilder all = null;
         List<TextSpan> spans = null;
         for (PDAnnotation annotation : page.getAnnotations()) {
-            if (!(annotation instanceof PDAnnotationWidget) || annotation.isHidden() || annotation.isNoView()) continue;
+            // The same annotations the redaction draws into the page (PdfOutputCleaner).
+            if (annotation instanceof PDAnnotationPopup || annotation instanceof PDAnnotationLink
+                    || annotation.isHidden() || annotation.isNoView()) continue;
             String type = inherited(annotation.getCOSObject(), COSName.FT) instanceof COSName name ? name.getName() : "";
-            if (!type.equals("Tx") && !type.equals("Ch")) continue;
+            boolean field = type.equals("Tx") || type.equals("Ch");
+            // A check box or radio button draws a mark, not text; a push button's caption is text.
+            if (type.equals("Btn") && (flags(annotation) & PUSH_BUTTON) == 0) continue;
             double[] place = place(page, annotation.getRectangle());
             if (place == null) continue;
-            Set<String> values = values(annotation);
+            Set<String> values = field ? values(annotation) : drawnOnly(document, annotation);
             if (values.isEmpty()) continue;
             if (all == null) {
                 all = new StringBuilder(text.text());
@@ -66,6 +75,24 @@ final class PdfFormFieldText {
         }
         return all == null ? text : new PageText(text.pageNumber(), text.width(), text.height(), all.toString(), spans,
                 text.visualRegions(), text.source(), text.sourceConfidence());
+    }
+
+    /** Task 0053, addendum: a note, stamp, callout, button caption or signature says what it draws. */
+    private static Set<String> drawnOnly(PDDocument document, PDAnnotation annotation) throws IOException {
+        if (annotation.getNormalAppearanceStream() == null) {
+            try {
+                // As the redaction does: an annotation without a stored look gets its standard one.
+                annotation.constructAppearances(document);
+            } catch (RuntimeException noLook) {
+                return Set.of();
+            }
+        }
+        String drawn = drawn(annotation);
+        return drawn.isEmpty() ? Set.of() : Set.of(drawn);
+    }
+
+    private static int flags(PDAnnotation annotation) {
+        return inherited(annotation.getCOSObject(), COSName.FF) instanceof COSNumber number ? number.intValue() : 0;
     }
 
     /** The stored value (with a choice's shown words) and the drawn text, each once. */
