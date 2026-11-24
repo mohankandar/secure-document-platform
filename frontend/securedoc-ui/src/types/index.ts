@@ -1100,4 +1100,21 @@ export interface EntitySlot {
   activatedAt: string | null;
 }
 export interface EntitySlotsOverview { entities: EntitySlot[] }
+/** Task 0059: Admin › Notifications, and the answer to an approval link. */
+export interface NotificationMail {
+  enabled: boolean; mode: string; host: string | null; port: number | null; security: string | null; username: string | null;
+  fromAddress: string | null; fromName: string | null; directoryId: string | null; clientId: string | null; credentialType: string | null;
+  secretNamed: boolean;
+}
+export interface NotificationRoleCount { role: string; people: number }
+export interface NotificationEvent { id: string; name: string; enabled: boolean; alwaysOn: boolean; frequency: string; frequencies: string[]; roles: string[]; dailyAt: string | null; alertAfterMinutes: number | null; repeatMinutes: number | null; alertAfterMax: number; thresholds: { name: string; label: string; value: number; min: number; max: number }[] }
+export interface NotificationEventChange { enabled: boolean; frequency: string; dailyAt?: string; alertAfterMinutes?: number; repeatMinutes?: number; thresholds?: Record<string, number> }
+export interface NotificationItOverview {
+  mail: NotificationMail | null; appAddressSet: boolean; approvalLinksOn: boolean; secretNamePrefix: string; mailPorts: number[];
+  people: NotificationRoleCount[]; events: NotificationEvent[];
+  recent: { event: string; state: string; code: string | null; reason: string | null; at: string }[];
+}
+export interface NotificationBusinessOverview { mailOn: boolean; people: NotificationRoleCount[]; events: NotificationEvent[] }
+export interface ApprovalAnswer { state: string; action: string | null; caseId: string | null; caseNumber: string | null; askedBy: string | null; expiresAt: string | null; code: string | null; message: string }
+
 export interface EntityChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null }
