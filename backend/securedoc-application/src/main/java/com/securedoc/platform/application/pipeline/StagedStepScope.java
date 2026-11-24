@@ -27,6 +27,29 @@ public final class StagedStepScope {
         }
     }
 
+    private static final ThreadLocal<List<ArtifactStorageReference>> DISCARDED = new ThreadLocal<>();
+
+    /** Task 0049: as {@link #tracking}, also collecting the files to delete once the step's result is saved. */
+    public static <T> T tracking(List<ArtifactStorageReference> stored, List<ArtifactStorageReference> discarded,
+                                 Supplier<T> work) {
+        List<ArtifactStorageReference> previous = DISCARDED.get();
+        DISCARDED.set(discarded);
+        try {
+            return tracking(stored, work);
+        } finally {
+            if (previous == null) DISCARDED.remove(); else DISCARDED.set(previous);
+        }
+    }
+
+    /**
+     * Task 0049: a file whose record this step marks deleted. The worker deletes the file only after the step is
+     * saved, so a step that is not saved leaves it in place. Outside a staged step nothing happens.
+     */
+    public static void deleteWhenSaved(ArtifactStorageReference reference) {
+        List<ArtifactStorageReference> discarded = DISCARDED.get();
+        if (discarded != null && reference != null) discarded.add(reference);
+    }
+
     /** Called by the storage adapter after a file is stored. */
     public static void recordStored(ArtifactStorageReference reference) {
         List<ArtifactStorageReference> stored = STORED.get();

@@ -5,6 +5,9 @@ import com.securedoc.platform.application.detection.command.DetectSensitiveDataC
 import com.securedoc.platform.application.detection.result.DetectSensitiveDataResult;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
+import com.securedoc.platform.application.pipeline.PageBatch;
+import com.securedoc.platform.application.pipeline.PageBatchCommand;
+import com.securedoc.platform.application.pipeline.PageBatchFiles;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.DocumentRepository;
@@ -94,6 +97,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private final FindingRepository findingRepository;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
+    /** Task 0049: null where page batches are not wired (they are refused there). */
+    private final PageBatchFiles batchFiles;
 
     public SensitiveDataDetectionService(DocumentRepository documentRepository,
                                          PackageRepository packageRepository,
@@ -107,6 +112,25 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                                          FindingRepository findingRepository,
                                          DomainEventPublisher eventPublisher,
                                          AuditService auditService) {
+        this(documentRepository, packageRepository, artifactRepository, storagePort, semanticAnalysisPort,
+                deterministicDetectionPort, deterministicValidationPort, tenantRedactionPolicyRepository,
+                textExtractionPort, findingRepository, eventPublisher, auditService, null);
+    }
+
+    /** Task 0049: with the checksums of the page batch results. */
+    public SensitiveDataDetectionService(DocumentRepository documentRepository,
+                                         PackageRepository packageRepository,
+                                         ArtifactRepository artifactRepository,
+                                         StoragePort storagePort,
+                                         SensitiveContentAnalysisPort semanticAnalysisPort,
+                                         SensitiveDataDetectionPort deterministicDetectionPort,
+                                         SensitiveDataValidationPort deterministicValidationPort,
+                                         TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+                                         TextExtractionPort textExtractionPort,
+                                         FindingRepository findingRepository,
+                                         DomainEventPublisher eventPublisher,
+                                         AuditService auditService,
+                                         com.securedoc.platform.application.port.out.ChecksumPort checksumPort) {
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
@@ -119,6 +143,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         this.findingRepository = Objects.requireNonNull(findingRepository);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
+        this.batchFiles = checksumPort == null ? null
+                : new PageBatchFiles(artifactRepository, storagePort, checksumPort);
     }
 
     @Override
@@ -136,9 +162,113 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         }
     }
 
+    /**
+     * Task 0049: the same search as {@link #execute}, for one batch's pages. Nothing is decided here: the document's
+     * state, findings, events and audit are written once, when the batches are gathered.
+     */
+    @Override
+    public void detectBatch(PageBatchCommand command) {
+        Objects.requireNonNull(command, "Command must not be null");
+        DetectSensitiveDataCommand whole = DetectSensitiveDataCommand.of(command.documentId(), command.packageId(),
+                command.tenantId(), command.correlationId());
+        try {
+            Document document = loadDetecting(whole);
+            TenantRedactionPolicy policy = policyOf(command.tenantId());
+            Map<Integer, PageText> pages = extractPagePositions(document, command.tenantId(), command.batch().pages());
+            PageFindings found = findOnPages(whole, document, policy, pages);
+            batchFiles().save(com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH, command, out ->
+                    PageBatchFindings.write(out, new PageBatchFindings.Result(policyStamp(policy),
+                            found.unlocatedSemantic(),
+                            found.findings().stream().map(PageBatchFindings.Candidate::of).toList())));
+        } catch (ValidationException | NotFoundException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            handleFailure(whole, command.correlationId(), e);
+            throw e;
+        }
+    }
+
+    @Override
+    public DetectSensitiveDataResult completeFromBatches(DetectSensitiveDataCommand command, List<PageBatch> batches) {
+        Objects.requireNonNull(command, "Command must not be null");
+        CorrelationId correlationId = command.correlationId();
+        try {
+            long startedNanos = System.nanoTime();
+            Document document = loadDetecting(command);
+            TenantRedactionPolicy policy = policyOf(command.tenantId());
+            requireEveryPage(batches, document.pageCount());
+            List<PageBatchFindings.Result> results = batchFiles().load(
+                    com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH, command.documentId(),
+                    command.tenantId(), batches, PageBatchFindings::read);
+            DetectSensitiveDataResult result;
+            if (results.stream().anyMatch(r -> !r.policyStamp().equals(policyStamp(policy)))) {
+                // The entity's policy changed between the batches: one policy must decide for the whole document.
+                log.info("DETECTION_BATCHES_SEARCHED_AGAIN document={} reasonCode=POLICY_CHANGED",
+                        command.documentId());
+                result = doDetection(command, correlationId);
+            } else {
+                List<Finding> findings = new ArrayList<>();
+                for (PageBatchFindings.Candidate candidate : PageBatchFindings.merge(batches, results)) {
+                    findings.add(Finding.create(document.tenantId(), document.id(), candidate.type(),
+                            candidate.location(), Confidence.of(candidate.confidence()), candidate.source()));
+                }
+                int unlocated = results.stream().mapToInt(PageBatchFindings.Result::unlocatedSemantic).max().orElse(0);
+                result = complete(command, document, policy, findings, unlocated, startedNanos, correlationId);
+            }
+            batchFiles().discard(com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH,
+                    command.documentId(), command.tenantId());
+            return result;
+        } catch (ValidationException | NotFoundException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            handleFailure(command, correlationId, e);
+            throw e;
+        }
+    }
+
+    private static void requireEveryPage(List<PageBatch> batches, int pageCount) {
+        for (int page = 1; page <= pageCount; page++) {
+            int wanted = page;
+            if (batches.stream().noneMatch(batch -> batch.covers(wanted))) {
+                throw new IllegalStateException("The page batches do not cover every page");
+            }
+        }
+    }
+
+    private PageBatchFiles batchFiles() {
+        if (batchFiles == null) throw new UnsupportedOperationException("Page batches are not supported");
+        return batchFiles;
+    }
+
+    /** What a batch searched for: a policy change between batches is noticed. Names of kinds only. */
+    private static String policyStamp(TenantRedactionPolicy policy) {
+        return policy.enabledEntityTypes().stream().map(Enum::name).sorted()
+                .collect(java.util.stream.Collectors.joining(",")) + ";maskSsnLastFour=" + policy.maskSsnLastFour();
+    }
+
+    private TenantRedactionPolicy policyOf(com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return tenantRedactionPolicyRepository.findByTenantId(tenantId)
+                .orElseGet(() -> TenantRedactionPolicy.defaults(tenantId));
+    }
+
     private DetectSensitiveDataResult doDetection(DetectSensitiveDataCommand command,
                                                    CorrelationId correlationId) {
         long startedNanos = System.nanoTime();
+        Document document = loadDetecting(command);
+        TenantRedactionPolicy tenantPolicy = policyOf(command.tenantId());
+
+        // Trusted positional text is the common normalization layer for both semantic discovery
+        // and deterministic recognition. Unit 17 will feed OCR text/coordinates into the same shape.
+        Map<Integer, PageText> pagesByNumber = extractPagePositions(document, command.tenantId(), null);
+        PageFindings found = findOnPages(command, document, tenantPolicy, pagesByNumber);
+        return complete(command, document, tenantPolicy, found.findings(), found.unlocatedSemantic(), startedNanos,
+                correlationId);
+    }
+
+    /** Findings before the confidence policy, and how many semantic findings have no place. */
+    private record PageFindings(List<Finding> findings, int unlocatedSemantic) { }
+
+    private Document loadDetecting(DetectSensitiveDataCommand command) {
         Document document = documentRepository
                 .findByIdAndTenantId(command.documentId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
@@ -157,13 +287,12 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             throw new ValidationException(LvErrorCode.PRC_009, "Document is not in DETECTING status");
         }
 
-        TenantRedactionPolicy tenantPolicy = tenantRedactionPolicyRepository.findByTenantId(command.tenantId())
-                .orElseGet(() -> TenantRedactionPolicy.defaults(command.tenantId()));
-        Set<EntityType> enabledTypes = tenantPolicy.enabledEntityTypes();
+        return document;
+    }
 
-        // Trusted positional text is the common normalization layer for both semantic discovery
-        // and deterministic recognition. Unit 17 will feed OCR text/coordinates into the same shape.
-        Map<Integer, PageText> pagesByNumber = extractPagePositions(document, command.tenantId());
+    private PageFindings findOnPages(DetectSensitiveDataCommand command, Document document,
+                                     TenantRedactionPolicy tenantPolicy, Map<Integer, PageText> pagesByNumber) {
+        Set<EntityType> enabledTypes = tenantPolicy.enabledEntityTypes();
         List<PageInput> deterministicInputs = buildDeterministicInputs(pagesByNumber);
         List<SensitiveContentAnalysisPort.PageContent> semanticInputs = buildSemanticInputs(pagesByNumber);
 
@@ -201,6 +330,23 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document));
         findings.addAll(createOcrSafetyReviewFindings(ocrSafety.reviewSignals(), document));
 
+        log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} ocrGuardStrongLabels={} ocrGuardSpatialScoreCandidates={} merged={} semanticByType={} deterministicByType={} semanticLocatedByPageType={} deterministicByPageType={}",
+                command.documentId(), semanticOutput.findings().size(), semanticResolution.located().size(),
+                semanticResolution.unlocated().size(), deterministicOutput.entities().size(),
+                ocrSafety.locatedEntities().size(), ocrSafety.reviewSignals().size(),
+                ocrSafety.strongLabelCount(), ocrSafety.spatialScoreCandidateCount(), mergedEntities.size(),
+                buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()),
+                buildDetectedEntityPageTypeCounts(semanticResolution.located(), enabledTypes),
+                buildDetectedEntityPageTypeCounts(deterministicOutput.entities(), enabledTypes));
+        return new PageFindings(findings, semanticResolution.unlocated().size());
+    }
+
+    /** Policy, findings, state, events and audit of the document (whole document or gathered batches). */
+    private DetectSensitiveDataResult complete(DetectSensitiveDataCommand command, Document document,
+                                               TenantRedactionPolicy tenantPolicy, List<Finding> findings,
+                                               int unlocatedSemantic, long startedNanos,
+                                               CorrelationId correlationId) {
+        Set<EntityType> enabledTypes = tenantPolicy.enabledEntityTypes();
         // Per-finding policy. Only findings that individually meet confidence AND have a trusted
         // location are auto-confirmed. Low-confidence/unlocated findings remain DETECTED for review.
         for (Finding finding : findings) {
@@ -237,14 +383,6 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                         Map.Entry::getKey, Map.Entry::getValue,
                         (left, right) -> left, java.util.TreeMap::new));
         long autoConfirmedCount = findings.stream().filter(f -> f.status() == FindingStatus.CONFIRMED).count();
-        log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} ocrGuardStrongLabels={} ocrGuardSpatialScoreCandidates={} merged={} semanticByType={} deterministicByType={} semanticLocatedByPageType={} deterministicByPageType={}",
-                command.documentId(), semanticOutput.findings().size(), semanticResolution.located().size(),
-                semanticResolution.unlocated().size(), deterministicOutput.entities().size(),
-                ocrSafety.locatedEntities().size(), ocrSafety.reviewSignals().size(),
-                ocrSafety.strongLabelCount(), ocrSafety.spatialScoreCandidateCount(), mergedEntities.size(),
-                buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()),
-                buildDetectedEntityPageTypeCounts(semanticResolution.located(), enabledTypes),
-                buildDetectedEntityPageTypeCounts(deterministicOutput.entities(), enabledTypes));
         log.info("DOCUMENT_DETECTION_COMPLETED document={} package={} findings={} byType={} pagesByType={} pageTypeCounts={} multiFindingPageTypes={} autoConfirmed={} reviewRequired={} decision={} enabledTypes={} maskSsnLastFour={} durationMs={}",
                 command.documentId(), command.packageId(), findings.size(), findingsByType, findingPagesByType,
                 finalPageTypeCounts, multiFindingPageTypes, autoConfirmedCount, requiresReview, overallDecision,
@@ -270,7 +408,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                         + ", threshold=" + tenantPolicy.autoRedactThreshold()
                         + ", reviewMode=" + tenantPolicy.reviewMode()
                         + ", enabledTypes=" + enabledTypes.size()
-                        + ", unlocatedSemantic=" + semanticResolution.unlocated().size()
+                        + ", unlocatedSemantic=" + unlocatedSemantic
                         + ", decision=" + overallDecision
                         + ", types=" + findingsByType);
 
@@ -592,7 +730,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     }
 
     private Map<Integer, PageText> extractPagePositions(Document document,
-                                                        com.securedoc.platform.domain.identity.TenantId tenantId) {
+                                                        com.securedoc.platform.domain.identity.TenantId tenantId,
+                                                        Set<Integer> onlyPages) {
         Artifact originalArtifact = artifactRepository
                 .findByDocumentIdAndTenantId(document.id(), tenantId)
                 .stream()
@@ -603,7 +742,9 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
         Map<Integer, PageText> byNumber = new LinkedHashMap<>();
         try (InputStream stream = storagePort.retrieve(originalArtifact.storageReference())) {
-            TextExtractionOutput output = textExtractionPort.extract(stream, "application/pdf");
+            TextExtractionOutput output = onlyPages == null
+                    ? textExtractionPort.extract(stream, "application/pdf")
+                    : textExtractionPort.extractPages(stream, "application/pdf", onlyPages);
             output.pages().stream()
                     .sorted(Comparator.comparingInt(PageText::pageNumber))
                     .forEach(page -> byNumber.put(page.pageNumber(), page));

@@ -11,6 +11,12 @@ public enum ArtifactType {
     /** Embedded text extracted from a digital PDF. */
     EXTRACTED_TEXT,
 
+    /** Task 0049: the text of one page batch, until the document's batches are gathered into EXTRACTED_TEXT. */
+    EXTRACTED_TEXT_BATCH,
+
+    /** Task 0049: the places one page batch found (no value, no text), until the document's batches are gathered. */
+    FINDINGS_BATCH,
+
     /** OCR-extracted text output (scanned image documents). */
     OCR_TEXT,
 

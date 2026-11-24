@@ -42,15 +42,16 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     static final String COLUMNS = """
             id, tenant_id, stage, package_id, document_id, destination_id, item_id, export_cycle, priority, status,
             attempts, next_attempt_at, claim_owner, claim_until, claim_token, last_lv_code, last_detail,
-            created_at, updated_at, resend, rebuilt, claim_expiries, first_failed_at, last_failed_at""";
+            created_at, updated_at, resend, rebuilt, claim_expiries, first_failed_at, last_failed_at,
+            page_from, page_to""";
 
     private static final String ENQUEUE_SQL = """
             INSERT INTO pipeline_jobs
                 (id, tenant_id, stage, package_id, document_id, destination_id, item_id, export_cycle, priority,
-                 status, attempts, next_attempt_at, claim_token, created_at, updated_at)
+                 status, attempts, next_attempt_at, claim_token, created_at, updated_at, page_from, page_to)
             VALUES
                 (:id, :tenantId, :stage, :packageId, :documentId, :destinationId, :itemId, :exportCycle, :priority,
-                 'READY', 0, clock_timestamp(), 0, clock_timestamp(), clock_timestamp())
+                 'READY', 0, clock_timestamp(), 0, clock_timestamp(), clock_timestamp(), :pageFrom, :pageTo)
             ON CONFLICT DO NOTHING
             """;
 
@@ -265,7 +266,9 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 .addValue("destinationId", job.destinationId() == null ? null : job.destinationId().value())
                 .addValue("itemId", job.itemId())
                 .addValue("exportCycle", job.exportCycle())
-                .addValue("priority", job.priority().name());
+                .addValue("priority", job.priority().name())
+                .addValue("pageFrom", job.pageFrom(), java.sql.Types.INTEGER)
+                .addValue("pageTo", job.pageTo(), java.sql.Types.INTEGER);
         return jdbc.update(ENQUEUE_SQL, params) == 1;
     }
 
@@ -431,6 +434,14 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     }
 
     @Override
+    public int removeStageJobs(TenantId tenantId, PackageId packageId, int exportCycle) {
+        return jdbc.update("DELETE FROM pipeline_jobs WHERE tenant_id = :tenantId AND package_id = :packageId"
+                + " AND export_cycle = :cycle AND stage IN ('TEXT', 'FIND', 'REDACT')", new MapSqlParameterSource()
+                .addValue("tenantId", tenantId.value()).addValue("packageId", packageId.value())
+                .addValue("cycle", exportCycle));
+    }
+
+    @Override
     public boolean hasStageJobs(TenantId tenantId, PackageId packageId) {
         var params = new MapSqlParameterSource().addValue("tenantId", tenantId.value())
                 .addValue("packageId", packageId.value());
@@ -584,7 +595,9 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 rs.getBoolean("rebuilt"),
                 rs.getInt("claim_expiries"),
                 instant(rs.getTimestamp("first_failed_at")),
-                instant(rs.getTimestamp("last_failed_at")));
+                instant(rs.getTimestamp("last_failed_at")),
+                rs.getObject("page_from", Integer.class),
+                rs.getObject("page_to", Integer.class));
     }
 
     private static Instant instant(Timestamp value) {

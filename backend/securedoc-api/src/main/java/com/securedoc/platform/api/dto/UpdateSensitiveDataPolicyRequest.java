@@ -8,5 +8,8 @@ public record UpdateSensitiveDataPolicyRequest(
         String reviewMode,
         Boolean maskSsnLastFour,
         /* Task 0044: null keeps the stored value. */
-        Boolean searchableRedactedPages
+        Boolean searchableRedactedPages,
+        /* Task 0049: null keeps the stored value. */
+        Integer pageBatchSize,
+        Integer pageBatchOverlap
 ) {}

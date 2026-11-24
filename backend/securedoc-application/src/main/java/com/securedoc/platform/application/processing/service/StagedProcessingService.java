@@ -7,6 +7,9 @@ import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.pipeline.PageBatch;
+import com.securedoc.platform.application.pipeline.PageBatchCommand;
+import com.securedoc.platform.application.pipeline.PageBatchPlan;
 import com.securedoc.platform.application.pipeline.StagedProcessingSettings;
 import com.securedoc.platform.application.pipeline.StagedStepScope;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
@@ -33,6 +36,7 @@ import com.securedoc.platform.application.technical.service.ProcessingIncidentSe
 import com.securedoc.platform.application.telemetry.ProductTelemetryService;
 import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
 import com.securedoc.platform.domain.audit.AuditAction;
+import com.securedoc.platform.domain.business.PageBatchSettings;
 import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.DocumentStatus;
@@ -57,8 +61,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Task 0048 (staged pipeline P2 part 1): text reading, finding and redaction as per-document jobs (design
@@ -77,6 +83,9 @@ import java.util.UUID;
  *       its claim number is still current. If it is not (the worker was paused or cut off and another worker took the
  *       job), the whole transaction rolls back: none of the step's writes count, and the files it stored are deleted.
  *       A server that stops mid-step leaves nothing half-saved either: its transaction never commits.</li>
+ *   <li><b>Page batches (task 0049).</b> A document over its policy's batch size has one TEXT and one FIND job per page
+ *       batch. The last batch of a stage to finish gathers the document in its own transaction (under the case's gate
+ *       lock, so exactly one does), fenced like every result; only then does the document move on.</li>
  *   <li><b>A server stops.</b> Its claims run out; the job goes back to the queue (one attempt). After
  *       {@code maxAttempts} the case stops with LV-PRC-008.</li>
  * </ul>
@@ -121,6 +130,23 @@ public final class StagedProcessingService {
     private final TriggerPackageProcessingService inline;
     private final TransactionPort transactions;
     private final StoragePort storage;
+    /** Task 0049: null splits no document. */
+    private final PageBatching batching;
+
+    /**
+     * Task 0049: what planning page batches needs.
+     *
+     * @param settings  the entity's batch size and overlap
+     * @param pageCount the number of pages of a document that is not read yet; empty when it cannot be told (the
+     *                  document is then one job, whose step reports what is wrong with it)
+     */
+    public record PageBatching(Function<TenantId, PageBatchSettings> settings,
+                               Function<Document, OptionalInt> pageCount) {
+        public PageBatching {
+            Objects.requireNonNull(settings);
+            Objects.requireNonNull(pageCount);
+        }
+    }
 
     public StagedProcessingService(StagedProcessingSettings settings,
                                    PipelineJobRepository jobs,
@@ -141,6 +167,32 @@ public final class StagedProcessingService {
                                    TriggerPackageProcessingService inline,
                                    TransactionPort transactions,
                                    StoragePort storage) {
+        this(settings, jobs, packageRepository, documentRepository, processingLockPort, startPackageProcessing,
+                startDocumentProcessing, extractDocumentText, detectSensitiveData, redactDocument, lifecycleService,
+                incidents, recoveryService, audit, licensing, telemetry, inline, transactions, storage, null);
+    }
+
+    public StagedProcessingService(StagedProcessingSettings settings,
+                                   PipelineJobRepository jobs,
+                                   PackageRepository packageRepository,
+                                   DocumentRepository documentRepository,
+                                   ProcessingLockPort processingLockPort,
+                                   StartPackageProcessingUseCase startPackageProcessing,
+                                   StartDocumentProcessingUseCase startDocumentProcessing,
+                                   ExtractDocumentTextUseCase extractDocumentText,
+                                   DetectSensitiveDataUseCase detectSensitiveData,
+                                   RedactDocumentUseCase redactDocument,
+                                   PackageLifecycleService lifecycleService,
+                                   ProcessingIncidentService incidents,
+                                   PackageProcessingRecoveryService recoveryService,
+                                   AuditService audit,
+                                   TenantLicensingService licensing,
+                                   ProductTelemetryService telemetry,
+                                   TriggerPackageProcessingService inline,
+                                   TransactionPort transactions,
+                                   StoragePort storage,
+                                   PageBatching batching) {
+        this.batching = batching;
         this.settings = Objects.requireNonNull(settings);
         this.jobs = Objects.requireNonNull(jobs);
         this.packageRepository = Objects.requireNonNull(packageRepository);
@@ -224,9 +276,11 @@ public final class StagedProcessingService {
         StartPackageProcessingResult result = startPackageProcessing.execute(StartPackageProcessingCommand.of(
                 command.packageId(), command.tenantId(), command.correlationId()));
         int cycle = lifecycleService.nextExportCycle(command.packageId(), command.tenantId());
+        // A case that starts again in the same run (a technical retry) starts with no old job: a finished one would
+        // stop its document's job from being queued (task 0049).
+        jobs.removeStageJobs(command.tenantId(), command.packageId(), cycle);
         for (ProcessingWorkItem item : result.workItems()) {
-            queue(PipelineStage.TEXT, command.tenantId(), command.packageId(), item.documentId(), cycle,
-                    command.correlationId(), false);
+            queueText(command.tenantId(), command.packageId(), item.documentId(), cycle, command.correlationId());
         }
     }
 
@@ -236,13 +290,65 @@ public final class StagedProcessingService {
      */
     private void queueMissingJobs(TenantId tenantId, PackageId packageId, CorrelationId correlationId) {
         int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
+        List<PipelineJob> existing = jobs.findByTenantIdAndPackageId(tenantId, packageId);
         for (Document document : documentRepository.findByPackageIdAndTenantId(packageId, tenantId)) {
-            if (document.status() == DocumentStatus.UPLOADED) {
-                queue(PipelineStage.TEXT, tenantId, packageId, document.id(), cycle, correlationId, false);
-            } else if (document.status() == DocumentStatus.DETECTING) {
-                queue(PipelineStage.FIND, tenantId, packageId, document.id(), cycle, correlationId, false);
+            if (document.status() == DocumentStatus.UPLOADED
+                    && !hasJob(existing, PipelineStage.TEXT, document.id(), cycle)) {
+                queueText(tenantId, packageId, document.id(), cycle, correlationId);
+            } else if (document.status() == DocumentStatus.DETECTING
+                    && !hasJob(existing, PipelineStage.FIND, document.id(), cycle)) {
+                queueFind(tenantId, packageId, document, cycle, correlationId);
             }
         }
+    }
+
+    /** A document keeps the batches it was split into, also when the entity's batch settings change meanwhile. */
+    private static boolean hasJob(List<PipelineJob> jobs, PipelineStage stage, DocumentId documentId, int cycle) {
+        return jobs.stream().anyMatch(job -> job.stage() == stage && documentId.equals(job.documentId())
+                && job.exportCycle() == cycle);
+    }
+
+    /** The document's TEXT job, or one per page batch of a large document. */
+    private void queueText(TenantId tenantId, PackageId packageId, DocumentId documentId, int cycle,
+                           CorrelationId correlationId) {
+        List<PageBatchPlan.Range> ranges = List.of();
+        if (batching != null) {
+            OptionalInt pages = documentRepository.findByIdAndTenantId(documentId, tenantId)
+                    .map(batching.pageCount()).orElse(OptionalInt.empty());
+            if (pages.isPresent()) ranges = PageBatchPlan.text(pages.getAsInt(), batching.settings().apply(tenantId));
+        }
+        queueRanges(PipelineStage.TEXT, tenantId, packageId, documentId, ranges, cycle, correlationId);
+    }
+
+    /** The read document's FIND job, or one per page batch of a large document. */
+    private void queueFind(TenantId tenantId, PackageId packageId, Document document, int cycle,
+                           CorrelationId correlationId) {
+        queueRanges(PipelineStage.FIND, tenantId, packageId, document.id(), batching == null ? List.of()
+                : PageBatchPlan.find(document.pageCount(), batching.settings().apply(tenantId)), cycle, correlationId);
+    }
+
+    private void queueRanges(PipelineStage stage, TenantId tenantId, PackageId packageId, DocumentId documentId,
+                             List<PageBatchPlan.Range> ranges, int cycle, CorrelationId correlationId) {
+        if (ranges.isEmpty()) {
+            queue(stage, tenantId, packageId, documentId, cycle, correlationId, false);
+            return;
+        }
+        for (PageBatchPlan.Range range : ranges) {
+            PipelineJob job = PipelineJob.readyBatch(tenantId, stage, packageId, documentId, range.from(), range.to(),
+                    cycle, Instant.now());
+            if (jobs.enqueue(job)) auditQueued(job, correlationId);
+        }
+    }
+
+    private void auditQueued(PipelineJob job, CorrelationId correlationId) {
+        audit.recordSuccess(job.tenantId(), SYSTEM_ACTOR, AuditAction.PIPELINE_JOB_QUEUED, "DocumentPackage",
+                job.packageId().toString(), job.packageId(), correlationId,
+                "Pipeline job queued: stage=" + job.stage() + ", document=" + job.documentId() + pagesText(job)
+                        + ", cycle=" + job.exportCycle());
+    }
+
+    private static String pagesText(PipelineJob job) {
+        return job.isPageBatch() ? ", pages=" + job.pageFrom() + "-" + job.pageTo() : "";
     }
 
     /** As inline: every document waiting for redaction is cleared by its reviewer; then each gets its REDACT job. */
@@ -275,9 +381,7 @@ public final class StagedProcessingService {
                        CorrelationId correlationId, boolean again) {
         PipelineJob job = PipelineJob.ready(tenantId, stage, packageId, documentId, null, null, cycle, Instant.now());
         if (jobs.enqueue(job)) {
-            audit.recordSuccess(tenantId, SYSTEM_ACTOR, AuditAction.PIPELINE_JOB_QUEUED, "DocumentPackage",
-                    packageId.toString(), packageId, correlationId,
-                    "Pipeline job queued: stage=" + stage + ", document=" + documentId + ", cycle=" + cycle);
+            auditQueued(job, correlationId);
             return;
         }
         if (!again) return;
@@ -315,11 +419,14 @@ public final class StagedProcessingService {
         Objects.requireNonNull(job, "job");
         CorrelationId correlationId = CorrelationId.generate();
         List<ArtifactStorageReference> stored = new ArrayList<>();
+        List<ArtifactStorageReference> discarded = new ArrayList<>();
         try {
-            transactions.inNewTransaction(() -> StagedStepScope.tracking(stored, () -> {
+            transactions.inNewTransaction(() -> StagedStepScope.tracking(stored, discarded, () -> {
                 runStep(job, correlationId);
                 return null;
             }));
+            // Saved: the batch results this step gathered are no longer needed.
+            deleteStored(discarded);
         } catch (ClaimLost lost) {
             deleteStored(stored);
             log.warn("PIPELINE_JOB_CLAIM_LOST job={} stage={} package={} claimToken={} reasonCode=RESULT_NOT_SAVED",
@@ -396,11 +503,63 @@ public final class StagedProcessingService {
         if (document.status() != DocumentStatus.UPLOADED) {
             // Already read by an earlier run of this job whose result was saved: only the next job is missing.
             if (document.status() == DocumentStatus.DETECTING) {
-                queue(PipelineStage.FIND, job.tenantId(), job.packageId(), document.id(), job.exportCycle(),
-                        correlationId, false);
+                if (!hasJob(jobs.findByTenantIdAndPackageId(job.tenantId(), job.packageId()), PipelineStage.FIND,
+                        document.id(), job.exportCycle())) {
+                    queueFind(job.tenantId(), job.packageId(), document, job.exportCycle(), correlationId);
+                }
             }
             return "ALREADY_" + document.status();
         }
+        if (job.isPageBatch()) return textBatch(job, document, correlationId);
+        startAndRead(job, document, correlationId, List.of());
+        queueFind(job.tenantId(), job.packageId(), reload(job, document), job.exportCycle(), correlationId);
+        return null;
+    }
+
+    /** One page batch of TEXT; the last one gathers the document's text. */
+    private String textBatch(PipelineJob job, Document document, CorrelationId correlationId) {
+        try {
+            extractDocumentText.extractBatch(command(job, correlationId));
+        } catch (RuntimeException failure) {
+            throw new StepFailure(ProcessingStage.TEXT_EXTRACTION, failure);
+        }
+        List<PageBatch> batches = lastOfItsStage(job);
+        if (batches.isEmpty()) return null;
+        startAndRead(job, document, correlationId, batches);
+        queueFind(job.tenantId(), job.packageId(), reload(job, document), job.exportCycle(), correlationId);
+        return null;
+    }
+
+    private static PageBatchCommand command(PipelineJob job, CorrelationId correlationId) {
+        return new PageBatchCommand(new PageBatch(job.id(), job.pageFrom(), job.pageTo()), job.documentId(),
+                job.packageId(), job.tenantId(), correlationId);
+    }
+
+    private Document reload(PipelineJob job, Document document) {
+        return documentRepository.findByIdAndTenantId(document.id(), job.tenantId()).orElse(document);
+    }
+
+    /**
+     * Every batch of the job's document and stage when the others are all done (this one's result is in this
+     * transaction); otherwise empty. The gate lock is held until this transaction ends, so of two batches finishing
+     * together the second sees the first as done. A batch that failed (its document is then FAILED) is never gathered.
+     */
+    private List<PageBatch> lastOfItsStage(PipelineJob job) {
+        jobs.lockCaseGate(job.tenantId(), job.packageId());
+        List<PipelineJob> batches = jobs.findByTenantIdAndPackageId(job.tenantId(), job.packageId()).stream()
+                .filter(other -> other.stage() == job.stage() && job.documentId().equals(other.documentId())
+                        && other.exportCycle() == job.exportCycle())
+                .sorted(java.util.Comparator.comparingInt(PipelineJob::pageFrom)).toList();
+        boolean othersDone = batches.stream().filter(other -> !other.id().equals(job.id()))
+                .allMatch(other -> other.status() == PipelineJobStatus.DONE && other.lastLvCode() == null
+                        && other.lastDetail() == null);
+        return othersDone ? batches.stream()
+                .map(other -> new PageBatch(other.id(), other.pageFrom(), other.pageTo())).toList() : List.of();
+    }
+
+    /** UPLOADED to DETECTING: the document is read, or its read batches are gathered. */
+    private void startAndRead(PipelineJob job, Document document, CorrelationId correlationId,
+                              List<PageBatch> batches) {
         if (job.attempts() > 0) {
             // A lost run's document lock (an inline run's, or one written outside this transaction) must not refuse
             // the retry. While this job is claimed no other worker works on this document.
@@ -411,22 +570,28 @@ public final class StagedProcessingService {
             StartDocumentProcessingResult start = startDocumentProcessing.execute(StartDocumentProcessingCommand.of(
                     document.id(), job.packageId(), job.tenantId(), correlationId));
             stage = ProcessingStage.TEXT_EXTRACTION;
-            extractDocumentText.execute(ExtractDocumentTextCommand.of(document.id(), job.packageId(), job.tenantId(),
-                    start.lockKey(), start.lockToken(), correlationId));
+            ExtractDocumentTextCommand read = ExtractDocumentTextCommand.of(document.id(), job.packageId(),
+                    job.tenantId(), start.lockKey(), start.lockToken(), correlationId);
+            if (batches.isEmpty()) extractDocumentText.execute(read);
+            else extractDocumentText.completeFromBatches(read, batches);
         } catch (RuntimeException failure) {
             throw new StepFailure(stage, failure);
         }
-        queue(PipelineStage.FIND, job.tenantId(), job.packageId(), document.id(), job.exportCycle(), correlationId,
-                false);
-        return null;
     }
 
     /** FIND: sensitive data is found (rules and AI), as inline. What follows is the gate's decision. */
     private String find(PipelineJob job, Document document, CorrelationId correlationId) {
         if (document.status() != DocumentStatus.DETECTING) return "ALREADY_" + document.status();
         try {
-            detectSensitiveData.execute(DetectSensitiveDataCommand.of(document.id(), job.packageId(), job.tenantId(),
-                    correlationId));
+            DetectSensitiveDataCommand whole = DetectSensitiveDataCommand.of(document.id(), job.packageId(),
+                    job.tenantId(), correlationId);
+            if (!job.isPageBatch()) {
+                detectSensitiveData.execute(whole);
+            } else {
+                detectSensitiveData.detectBatch(command(job, correlationId));
+                List<PageBatch> batches = lastOfItsStage(job);
+                if (!batches.isEmpty()) detectSensitiveData.completeFromBatches(whole, batches);
+            }
         } catch (RuntimeException failure) {
             throw new StepFailure(ProcessingStage.SENSITIVE_DETECTION, failure);
         }
@@ -586,7 +751,7 @@ public final class StagedProcessingService {
     private void auditStatus(PipelineJob job, PipelineJobStatus from, PipelineJobStatus to, String code,
                              String detail, CorrelationId correlationId) {
         String text = "Pipeline job status: job=" + job.id() + ", stage=" + job.stage() + ", document="
-                + job.documentId() + ", from=" + from + ", to=" + to + ", attempts=" + job.attempts()
+                + job.documentId() + pagesText(job) + ", from=" + from + ", to=" + to + ", attempts=" + job.attempts()
                 + ", claimToken=" + job.claimToken()
                 + (code == null ? "" : ", code=" + code) + (detail == null ? "" : ", detail=" + detail);
         if (code == null && (to == PipelineJobStatus.DONE || to == PipelineJobStatus.READY)) {

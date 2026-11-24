@@ -107,6 +107,15 @@ public interface PipelineJobRepository {
                         || job.stage() == PipelineStage.REDACT);
     }
 
+    /**
+     * Task 0049: removes the TEXT, FIND and REDACT jobs of one case run, when the case starts again (a technical retry
+     * keeps the run's number, so a finished job would stop the same job from being queued). A worker still on one of
+     * them can no longer save its result. The audit trail keeps the record. This default removes nothing.
+     */
+    default int removeStageJobs(TenantId tenantId, PackageId packageId, int exportCycle) {
+        return 0;
+    }
+
     /** Sets a job that is not running from one status to another, due now. False when it was not in {@code from}. */
     boolean changeStatus(TenantId tenantId, UUID id, PipelineJobStatus from, PipelineJobStatus to, int attempts,
                          String lastLvCode, String lastDetail);

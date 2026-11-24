@@ -49,6 +49,8 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         entity.setCreditCardNumberEnabled(policy.enabledEntityTypes().contains(EntityType.CREDIT_CARD_NUMBER));
         entity.setCreditScoreEnabled(policy.enabledEntityTypes().contains(EntityType.CREDIT_SCORE));
         entity.setSearchableRedactedPages(policy.searchableRedactedPages());
+        entity.setPageBatchSize(policy.pageBatches().size());
+        entity.setPageBatchOverlap(policy.pageBatches().overlap());
         entity.setUpdatedAt(policy.updatedAt());
         repository.save(entity);
         // Same transaction: the policy row and the kind rows change together or not at all.
@@ -66,6 +68,8 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         return new TenantRedactionPolicy(
                 tenantId, enabled, entity.getAutoRedactThreshold(),
                 ReviewMode.valueOf(entity.getReviewMode()), entity.isMaskSsnLastFour(), entity.getUpdatedAt(),
-                entity.isSearchableRedactedPages());
+                entity.isSearchableRedactedPages(),
+                new com.securedoc.platform.domain.business.PageBatchSettings(
+                        entity.getPageBatchSize(), entity.getPageBatchOverlap()));
     }
 }

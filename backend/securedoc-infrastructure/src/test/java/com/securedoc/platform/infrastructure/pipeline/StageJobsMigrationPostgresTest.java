@@ -137,15 +137,65 @@ class StageJobsMigrationPostgresTest {
             jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, destination, null, 1, Instant.now()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.liquibase(connection).rollback(1, (String) null);
+                PostgresTestDatabase.liquibase(connection).rollback(2, (String) null);
             }
             assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM pipeline_jobs", new MapSqlParameterSource(),
                     Integer.class), "the export job stays; the stage jobs are removed");
             assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_name ="
                     + " 'pipeline_jobs' AND column_name IN ('page_from', 'page_to')", new MapSqlParameterSource(),
                     Integer.class));
-            assertFalse(jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, destination, null, 1,
-                    Instant.now())), "the old identity holds");
+            // Task 0049: plain SQL, because the job store now writes the page range this rollback removed.
+            assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("""
+                    INSERT INTO pipeline_jobs (id, tenant_id, stage, package_id, destination_id, export_cycle, status,
+                        next_attempt_at, created_at, updated_at)
+                    VALUES (:id, :t, 'EXPORT', :p, :d, 1, 'READY', now(), now(), now())""",
+                    new MapSqlParameterSource("id", UUID.randomUUID()).addValue("t", tenant.value())
+                            .addValue("p", pkg.value()).addValue("d", destination.value())), "the old identity holds");
+        }
+    }
+
+    /** Task 0049: migration 050, the policy's page batches; the job keeps and returns its page range. */
+    @Test
+    void migration050GivesPoliciesTheDefaultsAndRefusesImpossibleBatches() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("m050")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            TenantId tenant = TenantId.generate();
+            TestRows.tenant(jdbc, tenant);
+            MapSqlParameterSource t = new MapSqlParameterSource("t", tenant.value());
+            jdbc.update("INSERT INTO tenant_redaction_policies (tenant_id, auto_redact_threshold, review_mode, ssn_enabled,"
+                    + " mask_ssn_last_four, date_of_birth_enabled, credit_card_number_enabled, credit_score_enabled,"
+                    + " updated_at) VALUES (:t, 0.8, 'UNCERTAIN_ONLY', true, true, true, true, true, now())", t);
+            assertEquals("20/2", jdbc.queryForObject("SELECT page_batch_size || '/' || page_batch_overlap FROM"
+                    + " tenant_redaction_policies WHERE tenant_id = :t", t, String.class));
+            for (String bad : List.of("page_batch_size = 0", "page_batch_size = 501", "page_batch_overlap = -1",
+                    "page_batch_overlap = 20", "page_batch_overlap = 21, page_batch_size = 50")) {
+                assertThrows(DataIntegrityViolationException.class, () -> jdbc.update(
+                        "UPDATE tenant_redaction_policies SET " + bad + " WHERE tenant_id = :t", t), bad);
+            }
+            JdbcPipelineJobRepository jobs = new JdbcPipelineJobRepository(jdbc);
+            PackageId pkg = PackageId.generate();
+            TestRows.packageRow(jdbc, tenant, pkg);
+            DocumentId document = DocumentId.generate();
+            PipelineJob batch = PipelineJob.readyBatch(tenant, PipelineStage.TEXT, pkg, document, 21, 40, 1,
+                    Instant.now());
+            assertTrue(jobs.enqueue(batch));
+            assertTrue(jobs.enqueue(PipelineJob.readyBatch(tenant, PipelineStage.TEXT, pkg, document, 41, 60, 1,
+                    Instant.now())));
+            PipelineJob stored = jobs.findByTenantIdAndId(tenant, batch.id()).orElseThrow();
+            assertEquals(21, stored.pageFrom());
+            assertEquals(40, stored.pageTo());
+            PipelineJob claimed = jobs.claimNext(EnumSet.of(PipelineStage.TEXT), "a", Duration.ofMinutes(1), 1)
+                    .orElseThrow();
+            assertEquals(21, claimed.pageFrom());
+            assertEquals(2, jobs.removeStageJobs(tenant, pkg, 1));
+            assertFalse(jobs.claimIsCurrent(claimed.id(), claimed.claimToken()), "a removed job saves nothing");
+
+            try (Connection connection = db.connection()) {
+                PostgresTestDatabase.liquibase(connection).rollback(1, (String) null);
+            }
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_name ="
+                    + " 'tenant_redaction_policies' AND column_name LIKE 'page_batch%'", new MapSqlParameterSource(),
+                    Integer.class));
         }
     }
 

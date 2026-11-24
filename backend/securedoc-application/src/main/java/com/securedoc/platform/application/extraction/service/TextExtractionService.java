@@ -6,6 +6,9 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
 import com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult;
+import com.securedoc.platform.application.pipeline.PageBatch;
+import com.securedoc.platform.application.pipeline.PageBatchCommand;
+import com.securedoc.platform.application.pipeline.PageBatchFiles;
 import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.ChecksumPort;
@@ -15,6 +18,7 @@ import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.ProcessingLockPort;
 import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
+import com.securedoc.platform.application.port.out.TextExtractionPort.ExtractionSource;
 import com.securedoc.platform.application.port.out.TextExtractionPort.PageText;
 import com.securedoc.platform.application.port.out.TextExtractionPort.TextExtractionOutput;
 import com.securedoc.platform.application.processing.service.FailureReasonSanitizer;
@@ -37,8 +41,11 @@ import com.securedoc.platform.domain.vo.Checksum;
 import com.securedoc.platform.domain.vo.MimeType;
 
 import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -73,6 +80,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
     private final ProcessingLockPort processingLockPort;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final PageBatchFiles batchFiles;
 
     public TextExtractionService(DocumentRepository documentRepository,
                                   PackageRepository packageRepository,
@@ -92,6 +100,7 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
         this.processingLockPort = Objects.requireNonNull(processingLockPort);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
+        this.batchFiles = new PageBatchFiles(artifactRepository, storagePort, checksumPort);
     }
 
     @Override
@@ -112,6 +121,114 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
             handleProcessingFailure(command, context.document(), e);
             throw e;
         }
+    }
+
+    /**
+     * Task 0049: the same page reading as {@link #execute}, for one batch's pages. The document keeps its status; its
+     * state, text artifact, event and audit are written once, when the batches are gathered.
+     */
+    @Override
+    public void extractBatch(PageBatchCommand command) {
+        Objects.requireNonNull(command, "Command must not be null");
+        Document document = documentRepository
+                .findByIdAndTenantId(command.documentId(), command.tenantId())
+                .orElseThrow(() -> new NotFoundException("Document", command.documentId().toString()));
+        if (!document.packageId().equals(command.packageId())) {
+            throw new ValidationException(LvErrorCode.PRC_009, "Document does not belong to the specified package");
+        }
+        if (document.status() != DocumentStatus.UPLOADED) {
+            throw new ValidationException(LvErrorCode.PRC_009, "Document is not waiting for its text to be read");
+        }
+        try {
+            long startedNanos = System.nanoTime();
+            TextExtractionOutput output;
+            try (InputStream content = storagePort.retrieve(originalArtifact(document).storageReference())) {
+                output = textExtractionPort.extractPages(content, document.mimeType().value(),
+                        command.batch().pages());
+            } catch (ApplicationException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new ExtractionProcessingException("Text extraction failed", e);
+            }
+            batchFiles.save(ArtifactType.EXTRACTED_TEXT_BATCH, command, out -> {
+                out.writeBoolean(output.hasEmbeddedText());
+                out.writeBoolean(output.usedOcr());
+                out.writeInt(output.pages().size());
+                for (PageText page : output.pages()) {
+                    out.writeInt(page.pageNumber());
+                    out.writeInt(page.width());
+                    out.writeInt(page.height());
+                    PageBatchFiles.writeText(out, page.source().name());
+                    out.writeDouble(page.sourceConfidence());
+                    PageBatchFiles.writeText(out, page.text());
+                }
+            });
+            log.info("DOCUMENT_TEXT_BATCH_READ document={} package={} pages={}-{} ocrPages={} durationMs={}",
+                    command.documentId(), command.packageId(), command.batch().from(), command.batch().to(),
+                    output.ocrPageCount(), elapsedMillis(startedNanos));
+        } catch (RuntimeException e) {
+            recordProcessingFailure(command.documentId(), command.packageId(), command.tenantId(),
+                    command.correlationId(), document, e);
+            throw e;
+        }
+    }
+
+    @Override
+    public ExtractDocumentTextResult completeFromBatches(ExtractDocumentTextCommand command, List<PageBatch> batches) {
+        Objects.requireNonNull(command, "Command must not be null");
+        ExtractionContext context;
+        try {
+            context = loadAndValidate(command);
+        } catch (RuntimeException e) {
+            releaseLockQuietly(command);
+            throw e;
+        }
+        try {
+            long startedNanos = System.nanoTime();
+            TextExtractionOutput gathered = gather(batchFiles.load(ArtifactType.EXTRACTED_TEXT_BATCH,
+                    command.documentId(), command.tenantId(), batches, TextExtractionService::readBatch));
+            if (batches.isEmpty() || gathered.pages().size()
+                    != batches.stream().mapToInt(PageBatch::to).max().getAsInt()) {
+                throw new IllegalStateException("The page batches do not cover every page once");
+            }
+            ExtractDocumentTextResult result = complete(command, context.document(), gathered, startedNanos);
+            batchFiles.discard(ArtifactType.EXTRACTED_TEXT_BATCH, command.documentId(), command.tenantId());
+            return result;
+        } catch (RuntimeException e) {
+            handleProcessingFailure(command, context.document(), e);
+            throw e;
+        }
+    }
+
+    private static TextExtractionOutput readBatch(DataInputStream in) throws IOException {
+        boolean embedded = in.readBoolean();
+        boolean ocr = in.readBoolean();
+        int count = in.readInt();
+        List<PageText> pages = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            int number = in.readInt();
+            int width = in.readInt();
+            int height = in.readInt();
+            ExtractionSource source = ExtractionSource.valueOf(PageBatchFiles.readText(in));
+            double confidence = in.readDouble();
+            pages.add(new PageText(number, width, height, PageBatchFiles.readText(in), List.of(), source, confidence));
+        }
+        return new TextExtractionOutput(pages, pages.stream().mapToLong(p -> p.text().length()).sum(), embedded, ocr);
+    }
+
+    /** Every page exactly once, in order; a gap or a double page refuses the document (fail closed). */
+    private static TextExtractionOutput gather(List<TextExtractionOutput> batches) {
+        List<PageText> pages = new ArrayList<>();
+        for (TextExtractionOutput batch : batches) pages.addAll(batch.pages());
+        for (int i = 0; i < pages.size(); i++) {
+            if (pages.get(i).pageNumber() != i + 1) {
+                throw new IllegalStateException("The page batches do not cover every page once");
+            }
+        }
+        return new TextExtractionOutput(pages,
+                batches.stream().mapToLong(TextExtractionOutput::totalCharacterCount).sum(),
+                batches.stream().anyMatch(TextExtractionOutput::hasEmbeddedText),
+                batches.stream().anyMatch(TextExtractionOutput::usedOcr));
     }
 
     private ExtractionContext loadAndValidate(ExtractDocumentTextCommand command) {
@@ -135,16 +252,18 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
             throw new ValidationException(LvErrorCode.PRC_009, "Document is not in EXTRACTING status");
         }
 
-        Artifact originalArtifact = artifactRepository
-                .findByDocumentIdAndTenantId(document.id(), command.tenantId())
+        return new ExtractionContext(document, originalArtifact(document));
+    }
+
+    private Artifact originalArtifact(Document document) {
+        return artifactRepository
+                .findByDocumentIdAndTenantId(document.id(), document.tenantId())
                 .stream()
                 .filter(a -> a.artifactType() == ArtifactType.ORIGINAL && a.isAvailable())
                 .findFirst()
                 // Task 0026 (#355): the original is missing from storage, LV-PRC-007.
                 .orElseThrow(() -> new NotFoundException("Original artifact for document",
-                        command.documentId().toString(), com.securedoc.platform.domain.error.LvErrorCode.PRC_007));
-
-        return new ExtractionContext(document, originalArtifact);
+                        document.id().toString(), com.securedoc.platform.domain.error.LvErrorCode.PRC_007));
     }
 
     private ExtractDocumentTextResult extractAndComplete(ExtractDocumentTextCommand command,
@@ -160,7 +279,12 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
         } catch (Exception e) {
             throw new ExtractionProcessingException("Text extraction failed", e);
         }
+        return complete(command, document, extractionOutput, startedNanos);
+    }
 
+    /** Writes the document's pages, text artifact, state, event and audit (whole document or gathered batches). */
+    private ExtractDocumentTextResult complete(ExtractDocumentTextCommand command, Document document,
+                                               TextExtractionOutput extractionOutput, long startedNanos) {
         if (extractionOutput.pages().isEmpty()) {
             return handleNoReadableText(command, document, extractionOutput);
         }
@@ -278,6 +402,15 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
     private void handleProcessingFailure(ExtractDocumentTextCommand command,
                                           Document document,
                                           RuntimeException failure) {
+        recordProcessingFailure(command.documentId(), command.packageId(), command.tenantId(),
+                command.correlationId(), document, failure);
+        releaseLockQuietly(command);
+    }
+
+    private void recordProcessingFailure(com.securedoc.platform.domain.identity.DocumentId documentId,
+                                         com.securedoc.platform.domain.identity.PackageId packageId,
+                                         com.securedoc.platform.domain.identity.TenantId tenantId,
+                                         CorrelationId correlationId, Document document, RuntimeException failure) {
         String safeReason = TechnicalFailureClassifier.safeAuditDetail(failure, FailureReasonSanitizer.textExtractionFailed());
 
         try {
@@ -289,8 +422,8 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
         try {
             TextExtractionFailedEvent event = TextExtractionFailedEvent.of(
-                    command.documentId(), command.packageId(), command.tenantId(),
-                    safeReason, command.correlationId());
+                    documentId, packageId, tenantId,
+                    safeReason, correlationId);
             eventPublisher.publish(event);
         } catch (RuntimeException ignored) {
             // Best-effort — do not mask the original processing failure.
@@ -298,19 +431,17 @@ public final class TextExtractionService implements ExtractDocumentTextUseCase {
 
         try {
             auditService.recordFailure(
-                    command.tenantId(),
+                    tenantId,
                     SYSTEM_ACTOR,
                     AuditAction.DOCUMENT_PROCESSING_FAILED,
                     "Document",
-                    command.documentId().toString(), command.packageId(),
-                    command.correlationId(),
+                    documentId.toString(), packageId,
+                    correlationId,
                     safeReason
             );
         } catch (RuntimeException ignored) {
             // Best-effort — do not mask the original processing failure.
         }
-
-        releaseLockQuietly(command);
     }
 
     private void releaseLockQuietly(ExtractDocumentTextCommand command) {

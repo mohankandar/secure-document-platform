@@ -909,11 +909,13 @@ public class ApplicationServiceConfig {
             TextExtractionPort textExtractionPort,
             FindingRepository findingRepository,
             DomainEventPublisher eventPublisher,
-            AuditService auditService) {
+            AuditService auditService,
+            ChecksumPort checksumPort) {
+        // Task 0049: the checksum port is the page batch results'.
         return new SensitiveDataDetectionService(
                 documentRepository, packageRepository, artifactRepository,
                 storagePort, semanticAnalysisPort, detectionPort, validationPort, tenantRedactionPolicyRepository, textExtractionPort, findingRepository,
-                eventPublisher, auditService);
+                eventPublisher, auditService, checksumPort);
     }
 
     // --- Redaction service ---
@@ -1237,13 +1239,33 @@ public class ApplicationServiceConfig {
             ProductTelemetryService productTelemetryService,
             TriggerPackageProcessingService triggerPackageProcessingService,
             com.securedoc.platform.application.port.out.TransactionPort transactionPort,
-            StoragePort storagePort) {
+            StoragePort storagePort,
+            ArtifactRepository artifactRepository,
+            com.securedoc.platform.application.port.out.PdfIntakeValidationPort pdfIntakeValidationPort,
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository) {
+        // Task 0049: page batches. A page count that cannot be told means one job, whose step reports the problem.
+        var batching = new com.securedoc.platform.application.processing.service.StagedProcessingService.PageBatching(
+                tenant -> tenantRedactionPolicyRepository.findByTenantId(tenant)
+                        .map(com.securedoc.platform.domain.business.TenantRedactionPolicy::pageBatches)
+                        .orElse(com.securedoc.platform.domain.business.PageBatchSettings.DEFAULTS),
+                document -> {
+                    if (!"application/pdf".equals(document.mimeType().value())) return java.util.OptionalInt.empty();
+                    var original = artifactRepository.findByDocumentIdAndTenantId(document.id(), document.tenantId())
+                            .stream().filter(a -> a.isAvailable() && a.artifactType()
+                                    == com.securedoc.platform.domain.artifact.ArtifactType.ORIGINAL).findFirst();
+                    if (original.isEmpty()) return java.util.OptionalInt.empty();
+                    try (var content = storagePort.retrieve(original.get().storageReference())) {
+                        return java.util.OptionalInt.of(pdfIntakeValidationPort.inspect(content).pageCount());
+                    } catch (java.io.IOException | RuntimeException unreadable) {
+                        return java.util.OptionalInt.empty();
+                    }
+                });
         return new com.securedoc.platform.application.processing.service.StagedProcessingService(
                 stagedProcessingSettings, pipelineJobRepository, packageRepository, documentRepository,
                 processingLockPort, startPackageProcessingUseCase, startDocumentProcessingUseCase,
                 extractDocumentTextUseCase, detectSensitiveDataUseCase, redactDocumentUseCase, packageLifecycleService,
                 processingIncidentService, packageProcessingRecoveryService, auditService, tenantLicensingService,
-                productTelemetryService, triggerPackageProcessingService, transactionPort, storagePort);
+                productTelemetryService, triggerPackageProcessingService, transactionPort, storagePort, batching);
     }
 
     /**

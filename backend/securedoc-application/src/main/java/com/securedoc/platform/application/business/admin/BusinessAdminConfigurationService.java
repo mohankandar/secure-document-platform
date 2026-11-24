@@ -15,6 +15,7 @@ import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
 import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
 import com.securedoc.platform.domain.business.PolicyPreset;
 import com.securedoc.platform.domain.business.ReviewMode;
+import com.securedoc.platform.domain.business.PageBatchSettings;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.identity.ActorId;
@@ -198,6 +199,20 @@ public final class BusinessAdminConfigurationService {
                                                             ReviewMode reviewMode,
                                                             boolean maskSsnLastFour,
                                                             boolean searchableRedactedPages) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, null, null);
+    }
+
+    /** Task 0049: as above, with the page batch size and overlap; null keeps the stored value (defaults 20 and 2). */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -212,15 +227,25 @@ public final class BusinessAdminConfigurationService {
         }
 
         Optional<TenantRedactionPolicy> previous = policyRepository.findByTenantId(tenantId);
+        PageBatchSettings storedBatches = previous.map(TenantRedactionPolicy::pageBatches)
+                .orElse(PageBatchSettings.DEFAULTS);
+        PageBatchSettings batches;
+        try {
+            batches = new PageBatchSettings(pageBatchSize == null ? storedBatches.size() : pageBatchSize,
+                    pageBatchOverlap == null ? storedBatches.overlap() : pageBatchOverlap);
+        } catch (IllegalArgumentException invalid) {
+            throw new ValidationException(LvErrorCode.CFG_001, invalid.getMessage());
+        }
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), enabledTypes, autoRedactThreshold,
                 reviewMode, maskSsnLastFour)
-                && previous.get().searchableRedactedPages() == searchableRedactedPages) {
+                && previous.get().searchableRedactedPages() == searchableRedactedPages
+                && storedBatches.equals(batches)) {
             // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
             return previous.get();
         }
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
-                searchableRedactedPages);
+                searchableRedactedPages, batches);
         policyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId,
                 AuditAction.SENSITIVE_DATA_POLICY_CHANGED,
@@ -248,7 +273,10 @@ public final class BusinessAdminConfigurationService {
                         .collect(java.util.stream.Collectors.joining(","))
                 + ", preset=" + PolicyPreset.of(policy)
                 // Task 0044: written only when off, so every detail written before stays as it was (no key = on).
-                + (policy.searchableRedactedPages() ? "" : ", searchableRedactedPages=false");
+                + (policy.searchableRedactedPages() ? "" : ", searchableRedactedPages=false")
+                // Task 0049: written only when not the default.
+                + (policy.pageBatches().equals(PageBatchSettings.DEFAULTS) ? "" : ", pageBatchSize="
+                        + policy.pageBatches().size() + ", pageBatchOverlap=" + policy.pageBatches().overlap());
     }
 
     public TenantLifecyclePolicy updateLifecyclePolicy(TenantId tenantId, ActorId actorId,

@@ -12,7 +12,8 @@ import java.util.Set;
  * Tenant-owned business policy for what to redact and when review is required.
  *
  * <p>Task 0044: {@code searchableRedactedPages} (on by default) adds an invisible OCR text layer to every redacted page
- * (option B); off gives today's image-only redacted pages.
+ * (option B); off gives today's image-only redacted pages. Task 0049: {@code pageBatches} splits large documents for
+ * Text and Find.
  */
 public record TenantRedactionPolicy(
         TenantId tenantId,
@@ -21,8 +22,17 @@ public record TenantRedactionPolicy(
         ReviewMode reviewMode,
         boolean maskSsnLastFour,
         Instant updatedAt,
-        boolean searchableRedactedPages
+        boolean searchableRedactedPages,
+        PageBatchSettings pageBatches
 ) {
+    /** The policy as it was before task 0049, with the default page batches. */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, PageBatchSettings.DEFAULTS);
+    }
+
     /** The policy as it was before task 0044, with searchable redacted pages at their default (on). */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt) {
@@ -62,6 +72,7 @@ public record TenantRedactionPolicy(
         Objects.requireNonNull(enabledEntityTypes, "enabledEntityTypes must not be null");
         Objects.requireNonNull(reviewMode, "reviewMode must not be null");
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
+        Objects.requireNonNull(pageBatches, "pageBatches must not be null");
         if (autoRedactThreshold < 0.0 || autoRedactThreshold > 1.0) {
             throw new IllegalArgumentException("autoRedactThreshold must be between 0 and 1");
         }

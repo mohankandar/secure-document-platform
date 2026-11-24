@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0049 (staged pipeline P2 part 2, owner approved one migration): the page batch size and overlap of an
+        entity's sensitive-data policy. Existing policies get the defaults (20 pages, 2 shared with the next batch).
+        Used only with pipeline-mode staged. The job's page range columns exist since 049.
+    -->
+    <changeSet id="050-01-page-batches" author="lexavault">
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="page_batch_size" type="INTEGER" defaultValueNumeric="20">
+                <constraints nullable="false"/>
+            </column>
+            <column name="page_batch_overlap" type="INTEGER" defaultValueNumeric="2">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>
+            alter table tenant_redaction_policies
+                add constraint ck_tenant_redaction_policies_page_batches
+                check (page_batch_size between 1 and 500 and page_batch_overlap between 0 and 20
+                       and page_batch_overlap &lt; page_batch_size);
+        </sql>
+        <rollback>
+            <sql>
+                alter table tenant_redaction_policies drop constraint if exists ck_tenant_redaction_policies_page_batches;
+            </sql>
+            <dropColumn tableName="tenant_redaction_policies" columnName="page_batch_overlap"/>
+            <dropColumn tableName="tenant_redaction_policies" columnName="page_batch_size"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

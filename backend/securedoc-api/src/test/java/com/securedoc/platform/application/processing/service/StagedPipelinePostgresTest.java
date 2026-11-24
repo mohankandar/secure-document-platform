@@ -3,7 +3,10 @@ package com.securedoc.platform.application.processing.service;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.pipeline.ExportJobScheduler;
+import com.securedoc.platform.application.pipeline.PageBatch;
+import com.securedoc.platform.application.pipeline.PageBatchCommand;
 import com.securedoc.platform.application.pipeline.PipelineMode;
+import com.securedoc.platform.domain.business.PageBatchSettings;
 import com.securedoc.platform.application.pipeline.StagedProcessingSettings;
 import com.securedoc.platform.application.pipeline.StagedStepScope;
 import com.securedoc.platform.application.port.in.DetectSensitiveDataUseCase;
@@ -97,6 +100,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -151,6 +155,13 @@ class StagedPipelinePostgresTest {
     private Consumer<Document> onFind = document -> { };
     /** What the stand-in TEXT step does after saving its result (the fencing test takes the job away here). */
     private Consumer<Document> afterTextSaved = document -> { };
+    /** Task 0049: the pages of a document, when large documents are split; 0 means one job per document. */
+    private int pages = 0;
+    private PageBatchSettings batchSettings = PageBatchSettings.DEFAULTS;
+    private final List<String> batchesRun = new CopyOnWriteArrayList<>();
+    private final List<String> gathered = new CopyOnWriteArrayList<>();
+    /** Runs inside a page batch's step, after its result is kept. */
+    private Consumer<PageBatchCommand> inBatch = command -> { };
     private StagedProcessingService service;
     private PackageProcessingRecoveryService recovery;
 
@@ -238,20 +249,58 @@ class StagedPipelinePostgresTest {
             return ref;
         });
         org.mockito.Mockito.doAnswer(i -> deleted.add(i.getArgument(0))).when(storage).delete(any());
-        ExtractDocumentTextUseCase extract = command -> {
-            storage.storeForPackage(command.tenantId(), command.packageId(), "x", null, 1, "text/plain");
-            Document d = documents.findByIdAndTenantId(command.documentId(), command.tenantId()).orElseThrow();
-            d.completeExtraction(List.of(Page.of(1, 612, 792)));
-            documents.save(d);
-            afterTextSaved.accept(d);
-            return null;
+        ExtractDocumentTextUseCase extract = new ExtractDocumentTextUseCase() {
+            @Override
+            public com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult execute(
+                    com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand command) {
+                storage.storeForPackage(command.tenantId(), command.packageId(), "x", null, 1, "text/plain");
+                Document d = documents.findByIdAndTenantId(command.documentId(), command.tenantId()).orElseThrow();
+                d.completeExtraction(java.util.stream.IntStream.rangeClosed(1, Math.max(1, pages))
+                        .mapToObj(n -> Page.of(n, 612, 792)).toList());
+                documents.save(d);
+                afterTextSaved.accept(d);
+                return null;
+            }
+
+            @Override
+            public void extractBatch(PageBatchCommand command) {
+                storage.storeForPackage(command.tenantId(), command.packageId(), "x", null, 1, "text/plain");
+                batchesRun.add("TEXT " + command.batch().from() + "-" + command.batch().to());
+                inBatch.accept(command);
+            }
+
+            @Override
+            public com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult completeFromBatches(
+                    com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand command,
+                    List<PageBatch> batches) {
+                gathered.add("TEXT " + batches.stream().map(b -> b.from() + "-" + b.to()).toList());
+                return execute(command);
+            }
         };
-        DetectSensitiveDataUseCase detect = command -> {
-            Document d = documents.findByIdAndTenantId(command.documentId(), command.tenantId()).orElseThrow();
-            onFind.accept(d);
-            d.startRedaction();
-            documents.save(d);
-            return null;
+        DetectSensitiveDataUseCase detect = new DetectSensitiveDataUseCase() {
+            @Override
+            public com.securedoc.platform.application.detection.result.DetectSensitiveDataResult execute(
+                    com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand command) {
+                Document d = documents.findByIdAndTenantId(command.documentId(), command.tenantId()).orElseThrow();
+                onFind.accept(d);
+                d.startRedaction();
+                documents.save(d);
+                return null;
+            }
+
+            @Override
+            public void detectBatch(PageBatchCommand command) {
+                batchesRun.add("FIND " + command.batch().from() + "-" + command.batch().to());
+                inBatch.accept(command);
+            }
+
+            @Override
+            public com.securedoc.platform.application.detection.result.DetectSensitiveDataResult completeFromBatches(
+                    com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand command,
+                    List<PageBatch> batches) {
+                gathered.add("FIND " + batches.stream().map(b -> b.from() + "-" + b.to()).toList());
+                return execute(command);
+            }
         };
         RedactDocumentUseCase redact = command -> {
             Document d = documents.findByIdAndTenantId(command.documentId(), command.tenantId()).orElseThrow();
@@ -272,7 +321,9 @@ class StagedPipelinePostgresTest {
                 3, 1, 1, 1, Duration.ofMillis(200));
         service = new StagedProcessingService(settings, jobs, packages, documents, mock(ProcessingLockPort.class),
                 startPackage, startDocument, extract, detect, redact, lifecycle, incidents, recovery, audit,
-                mock(TenantLicensingService.class), telemetry, inline, transactions, storage);
+                mock(TenantLicensingService.class), telemetry, inline, transactions, storage,
+                new StagedProcessingService.PageBatching(t -> batchSettings,
+                        d -> pages == 0 ? OptionalInt.empty() : OptionalInt.of(pages)));
     }
 
     // ------------------------------------------------------------------------------------------------- tests
@@ -448,7 +499,173 @@ class StagedPipelinePostgresTest {
         assertTrue(service.handles(trigger(fresh)), "a staged case stays staged");
     }
 
+    // ------------------------------------------------------------------------------- page batches (task 0049)
+
+    @Test
+    void aLargeDocumentIsSplitIntoBatchesThatRunInParallelAndIsGatheredOnceBeforeRedact() throws Exception {
+        pages = 500;
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        assertEquals(25, count(pkg, PipelineStage.TEXT), "500 pages, 20 per batch");
+
+        runWithWorkers(PipelineStage.TEXT, 4);
+        assertEquals(25, batchesRun.size());
+        assertEquals(1, gathered.size(), "one gathering, by the last batch");
+        assertTrue(gathered.get(0).startsWith("TEXT [1-20, 21-40,") && gathered.get(0).endsWith("481-500]"));
+        assertEquals(DocumentStatus.DETECTING, document(pkg).status());
+        assertEquals(28, count(pkg, PipelineStage.FIND), "2 pages shared with the next batch");
+        assertEquals(0, count(pkg, PipelineStage.REDACT));
+
+        runWithWorkers(PipelineStage.FIND, 4);
+        assertEquals(2, gathered.size());
+        assertTrue(gathered.get(1).startsWith("FIND [1-20, 19-38,"));
+        assertEquals(DocumentStatus.REDACTING, document(pkg).status());
+        assertEquals(1, count(pkg, PipelineStage.REDACT), "Redact is one job for the document");
+        assertTrue(jobsOf(pkg).stream().filter(j -> j.stage() != PipelineStage.REDACT)
+                .allMatch(j -> j.status() == PipelineJobStatus.DONE && j.lastDetail() == null));
+        long owners = audits.stream().filter(a -> a.action() == AuditAction.PIPELINE_JOB_STATUS_CHANGED
+                && a.detail().contains("pages=")).count();
+        assertEquals(53, owners, "every batch's status change is audited with its pages");
+        runAll(PipelineStage.REDACT);
+        verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any());
+    }
+
+    @Test
+    void twoLastBatchesFinishingAtTheSameMomentGatherOnce() throws Exception {
+        pages = 40;
+        for (int round = 0; round < 5; round++) {
+            gathered.clear();
+            DocumentPackage pkg = submittedCase(1);
+            service.plan(trigger(pkg));
+            java.util.concurrent.CyclicBarrier both = new java.util.concurrent.CyclicBarrier(2);
+            inBatch = command -> {
+                try {
+                    both.await(20, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+            };
+            runWithWorkers(PipelineStage.TEXT, 2);
+            assertEquals(1, gathered.size(), "round " + round);
+            assertEquals(DocumentStatus.DETECTING, document(pkg).status());
+            inBatch = command -> { };
+            runAll(PipelineStage.FIND);
+            runAll(PipelineStage.REDACT);
+        }
+    }
+
+    @Test
+    void aDocumentUpToTheBatchSizeIsOneJob() {
+        pages = 20;
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        assertEquals(List.of(), batchesRun);
+        assertEquals(3, jobsOf(pkg).size());
+        assertTrue(jobsOf(pkg).stream().noneMatch(PipelineJob::isPageBatch));
+    }
+
+    @Test
+    void aBatchWhoseClaimWasLostSavesNothingAndItsRetryGathersTheDocument() {
+        pages = 40;
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        runOne(PipelineStage.TEXT);
+        PipelineJob last = service.claimNext(PipelineStage.TEXT, "server-a/text-worker-1").orElseThrow();
+        // Another server's write: its own connection, not the step's transaction.
+        inBatch = command -> {
+            try (Connection other = DriverManager.getConnection(url, user, password);
+                 Statement s = other.createStatement()) {
+                s.execute("UPDATE pipeline_jobs SET status = 'READY', claim_token = claim_token + 1,"
+                        + " claim_owner = NULL, claim_until = NULL WHERE id = '" + command.batch().jobId() + "'");
+            } catch (java.sql.SQLException e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        assertEquals(StagedProcessingService.Outcome.CLAIM_LOST, service.run(last));
+        assertEquals(DocumentStatus.UPLOADED, document(pkg).status(), "the gathering of the late worker does not count");
+        assertEquals(0, count(pkg, PipelineStage.FIND));
+        assertFalse(deleted.isEmpty(), "the files it stored are deleted");
+        inBatch = command -> { };
+        runOne(PipelineStage.TEXT);
+        assertEquals(DocumentStatus.DETECTING, document(pkg).status());
+        assertEquals(3, count(pkg, PipelineStage.FIND), "40 pages: 1-20, 19-38, 37-40");
+    }
+
+    @Test
+    void aBatchThatFailsFailsTheDocumentAndNothingIsGathered() {
+        pages = 60;
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        inBatch = command -> {
+            if (command.batch().from() == 21) throw new IllegalStateException("test failure");
+        };
+        runAll(PipelineStage.TEXT);
+        assertEquals(List.of(), gathered);
+        assertEquals(DocumentStatus.FAILED, document(pkg).status());
+        assertEquals(PackageStatus.FAILED, status(pkg));
+        assertTrue(jobsOf(pkg).stream().noneMatch(j -> j.status() == PipelineJobStatus.READY
+                || j.status() == PipelineJobStatus.RUNNING));
+    }
+
+    @Test
+    void aTechnicalRetryInTheSameCaseRunStartsOverAlsoWithOtherBatchSettings() {
+        pages = 60;
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        inBatch = command -> {
+            if (command.batch().from() == 21) throw new IllegalStateException("test failure");
+        };
+        runAll(PipelineStage.TEXT);
+        assertEquals(PackageStatus.FAILED, status(pkg));
+        tx.executeWithoutResult(s -> {
+            Document d = document(pkg);
+            d.prepareForTechnicalRetry();
+            documents.save(d);
+            DocumentPackage p = packages.findByIdAndTenantId(pkg.id(), pkg.tenantId()).orElseThrow();
+            p.prepareForTechnicalRetry();
+            packages.save(p);
+        });
+        inBatch = command -> { };
+        batchSettings = new PageBatchSettings(30, 3);
+        service.plan(trigger(pkg));
+        assertEquals(2, count(pkg, PipelineStage.TEXT), "the retry's own batches: 1-30, 31-60");
+        // Queuing again while it runs keeps the batches it was split into.
+        batchSettings = new PageBatchSettings(10, 1);
+        service.plan(trigger(pkg));
+        assertEquals(2, count(pkg, PipelineStage.TEXT));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        assertEquals(DocumentStatus.PROCESSED, document(pkg).status());
+    }
+
     // ----------------------------------------------------------------------------------------------- helpers
+
+    private Document document(DocumentPackage pkg) {
+        return documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).get(0);
+    }
+
+    /** Several workers on one stage, as on one or two servers. */
+    private void runWithWorkers(PipelineStage stage, int workers) throws Exception {
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(workers);
+        try {
+            List<java.util.concurrent.Future<?>> running = new ArrayList<>();
+            for (int w = 1; w <= workers; w++) {
+                String owner = "server-" + (w % 2 == 0 ? "a" : "b") + "/worker-" + w;
+                running.add(pool.submit(() -> {
+                    Optional<PipelineJob> job;
+                    while ((job = service.claimNext(stage, owner)).isPresent()) {
+                        assertEquals(StagedProcessingService.Outcome.DONE, service.run(job.get()));
+                    }
+                }));
+            }
+            for (var r : running) r.get(120, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 
     private void runOne(PipelineStage stage) {
         PipelineJob job = service.claimNext(stage, "server-a/" + stage + "-worker-1").orElseThrow(

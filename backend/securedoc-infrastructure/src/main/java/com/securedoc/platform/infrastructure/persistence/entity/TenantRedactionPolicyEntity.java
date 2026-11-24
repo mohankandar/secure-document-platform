@@ -40,9 +40,20 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "searchable_redacted_pages", nullable = false)
     private boolean searchableRedactedPages = true;
 
+    /** Migration 050 (task 0049): page batches of large documents. */
+    @Column(name = "page_batch_size", nullable = false)
+    private int pageBatchSize = 20;
+
+    @Column(name = "page_batch_overlap", nullable = false)
+    private int pageBatchOverlap = 2;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    public int getPageBatchSize() { return pageBatchSize; }
+    public void setPageBatchSize(int pageBatchSize) { this.pageBatchSize = pageBatchSize; }
+    public int getPageBatchOverlap() { return pageBatchOverlap; }
+    public void setPageBatchOverlap(int pageBatchOverlap) { this.pageBatchOverlap = pageBatchOverlap; }
     public boolean isSearchableRedactedPages() { return searchableRedactedPages; }
     public void setSearchableRedactedPages(boolean searchableRedactedPages) { this.searchableRedactedPages = searchableRedactedPages; }
     public UUID getTenantId() { return tenantId; }

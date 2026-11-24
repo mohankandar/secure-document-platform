@@ -48,7 +48,10 @@ public record BusinessAdminConfigurationResponse(
             String reviewMode,
             boolean maskSsnLastFour,
             /* Task 0044: invisible OCR text on redacted pages (on by default). */
-            boolean searchableRedactedPages
+            boolean searchableRedactedPages,
+            /* Task 0049: page batches of large documents (defaults 20 pages, 2 shared). */
+            int pageBatchSize,
+            int pageBatchOverlap
     ) {}
 
     public record LifecyclePolicyResponse(
