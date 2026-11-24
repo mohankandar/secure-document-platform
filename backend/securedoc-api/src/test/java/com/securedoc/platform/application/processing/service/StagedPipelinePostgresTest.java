@@ -164,6 +164,9 @@ class StagedPipelinePostgresTest {
     /** Task 0052: where a finished case is handed to export; a test may use the real queue instead of the stand-in. */
     private ExportJobScheduler scheduler = exports;
     private final List<String> batchesRun = new CopyOnWriteArrayList<>();
+    /** Task 0064: the document's routed pages, and whether a page was read inside a transaction. */
+    private List<Integer> visionPages = List.of();
+    private final List<Boolean> readInTransaction = new CopyOnWriteArrayList<>();
     private final List<String> gathered = new CopyOnWriteArrayList<>();
     /** Runs inside a page batch's step, after its result is kept. */
     private Consumer<PageBatchCommand> inBatch = command -> { };
@@ -284,6 +287,36 @@ class StagedPipelinePostgresTest {
             }
         };
         DetectSensitiveDataUseCase detect = new DetectSensitiveDataUseCase() {
+            @Override
+            public List<Integer> pagesForVision(
+                    com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand command) {
+                return visionPages;
+            }
+
+            @Override
+            public com.securedoc.platform.domain.vision.VisionPageResult readVisionPage(
+                    com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand command, int page) {
+                readInTransaction.add(org.springframework.transaction.support.TransactionSynchronizationManager
+                        .isActualTransactionActive());
+                return com.securedoc.platform.domain.vision.VisionPageResult.notRead(page, null, "TEST");
+            }
+
+            @Override
+            public void saveVisionPage(PageBatchCommand command,
+                                       com.securedoc.platform.domain.vision.VisionPageResult result) {
+                storage.storeForPackage(command.tenantId(), command.packageId(), "v", null, 1, "text/plain");
+                batchesRun.add("VISION " + result.page());
+                inBatch.accept(command);
+            }
+
+            @Override
+            public com.securedoc.platform.application.detection.result.DetectSensitiveDataResult completeFromBatches(
+                    com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand command,
+                    List<PageBatch> batches, List<PageBatch> vision) {
+                if (!vision.isEmpty()) gathered.add("VISION " + vision.stream().map(PageBatch::from).toList());
+                return completeFromBatches(command, batches);
+            }
+
             @Override
             public com.securedoc.platform.application.detection.result.DetectSensitiveDataResult execute(
                     com.securedoc.platform.application.detection.command.DetectSensitiveDataCommand command) {
@@ -770,6 +803,71 @@ class StagedPipelinePostgresTest {
         runAll(PipelineStage.TEXT);
         assertEquals(28, count(shared, PipelineStage.FIND), "several pages in one request: the stored overlap of 2");
         assertEquals(2, batchSettings.overlap(), "the stored setting is as it was");
+    }
+
+    /** Task 0064: one VISION job per routed page, alongside Find; the last of both gathers the document, once. */
+    @Test
+    void routedPagesAreTheirOwnJobsAndTheLastSearchOrVisionJobGathersTheDocument() throws Exception {
+        pages = 5;
+        visionPages = List.of(2, 5);
+        for (boolean visionLast : new boolean[]{true, false}) {
+            gathered.clear();
+            DocumentPackage pkg = submittedCase(1);
+            service.plan(trigger(pkg));
+            runAll(PipelineStage.TEXT);
+            assertEquals(1, count(pkg, PipelineStage.FIND), "a small document is still one search job");
+            assertEquals(List.of(2, 5), jobsOf(pkg).stream().filter(j -> j.stage() == PipelineStage.VISION)
+                    .map(PipelineJob::pageFrom).sorted().toList());
+            runAll(visionLast ? PipelineStage.FIND : PipelineStage.VISION);
+            assertEquals(DocumentStatus.DETECTING, document(pkg).status(), "the other half is still open");
+            assertTrue(gathered.stream().noneMatch(g -> g.startsWith("FIND")));
+            assertEquals(0, count(pkg, PipelineStage.REDACT));
+            runAll(visionLast ? PipelineStage.VISION : PipelineStage.FIND);
+            assertEquals(1, gathered.stream().filter(g -> g.equals("FIND [1-5]")).count());
+            assertEquals(1, gathered.stream().filter(g -> g.equals("VISION [2, 5]")).count());
+            assertEquals(1, count(pkg, PipelineStage.REDACT), "the gate moved the case on");
+            runAll(PipelineStage.REDACT);
+            assertEquals(DocumentStatus.PROCESSED, document(pkg).status());
+        }
+        assertTrue(readInTransaction.stream().noneMatch(Boolean::booleanValue),
+                "no database connection is held while the model works");
+        for (int round = 0; round < 5; round++) {
+            gathered.clear();
+            DocumentPackage pkg = submittedCase(1);
+            service.plan(trigger(pkg));
+            runAll(PipelineStage.TEXT);
+            runAll(PipelineStage.FIND);
+            runWithWorkers(PipelineStage.VISION, 2);
+            assertEquals(1, gathered.stream().filter(g -> g.startsWith("FIND")).count(), "two at the same moment");
+            runAll(PipelineStage.REDACT);
+        }
+    }
+
+    /** Task 0064: a worker whose VISION job was taken by another server saves nothing. */
+    @Test
+    void aLostVisionClaimSavesNothingAndDeletesItsFile() {
+        pages = 3;
+        visionPages = List.of(1);
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        inBatch = command -> jdbc.update("UPDATE pipeline_jobs SET claim_token = claim_token + 1 WHERE id = ?",
+                command.batch().jobId());
+        PipelineJob job = service.claimNext(PipelineStage.VISION, "late").orElseThrow();
+        int deletedBefore = deleted.size();
+        assertEquals(StagedProcessingService.Outcome.CLAIM_LOST, service.run(job));
+        assertEquals(deletedBefore + 1, deleted.size(), "the page's result file is deleted");
+        assertEquals(DocumentStatus.DETECTING, document(pkg).status());
+        assertTrue(gathered.stream().noneMatch(g -> g.startsWith("VISION")) || document(pkg).status()
+                == DocumentStatus.DETECTING, "nothing of it counts");
+        inBatch = command -> { };
+        jdbc.update("UPDATE pipeline_jobs SET status = 'READY' WHERE id = ?", job.id());
+        gathered.clear();
+        runAll(PipelineStage.VISION);
+        assertEquals(1, gathered.stream().filter(g -> g.equals("VISION [1]")).count());
+        assertEquals(1, count(pkg, PipelineStage.REDACT));
+        runAll(PipelineStage.REDACT);
     }
 
     @Test

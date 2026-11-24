@@ -120,7 +120,7 @@ public class BusinessAdminController {
         service.updateSensitiveDataPolicy(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), enabled,
                 body.autoRedactThreshold(), reviewMode, maskSsnLastFour, searchable,
-                body.pageBatchSize(), body.pageBatchOverlap());
+                body.pageBatchSize(), body.pageBatchOverlap(), body.visionEnabled(), body.visionOcrThreshold());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -216,7 +216,8 @@ public class BusinessAdminController {
         var policyResponse = new BusinessAdminConfigurationResponse.SensitiveDataPolicyResponse(
                 policy.enabledEntityTypes().stream().map(Enum::name).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
                 policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour(),
-                policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap());
+                policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap(),
+                policy.vision().enabled(), policy.vision().ocrThreshold());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),

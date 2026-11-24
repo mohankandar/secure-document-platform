@@ -48,6 +48,10 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     private static final String VERSION = "1.3.0";
     private static final int MAX_BATCH_SIZE = 8;
 
+    /** Task 0064: how long a model's stated digest is taken as still current. */
+    private static final long DIGEST_FRESH_NANOS = Duration.ofMinutes(1).toNanos();
+
+    private final String baseUrl;
     private final URI chatEndpoint;
     private final String model;
     private final Duration timeout;
@@ -127,6 +131,7 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         this.maxOutputTokens = maxOutputTokens;
         this.pageBatchSize = pageBatchSize;
         this.pageBatchMaxCharacters = pageBatchMaxCharacters;
+        this.baseUrl = normalized;
         this.httpClient = HttpClient.newBuilder().connectTimeout(this.timeout).build();
         this.objectMapper = JsonMapper.builderWithJackson2Defaults().build();
         this.promptBuilder = new SensitiveContentPromptBuilder();
@@ -211,7 +216,8 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                     Map.entry("outputEvalTokens", aggregate.evalCount()),
                     Map.entry("providerEvalMs", nanosToMillis(aggregate.evalDurationNanos())),
                     Map.entry("durationMs", elapsedMillis(startedNanos))), "AI analysis completed");
-            return new AnalysisOutput(discoveries);
+            return new AnalysisOutput(discoveries, List.of(com.securedoc.platform.domain.finding.AiModel.of(
+                    model, "text-" + VERSION, digest())));
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
                     ? technical.failureCode().name()
@@ -236,6 +242,24 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    private volatile String knownDigest;
+    private volatile long digestReadAt;
+
+    /** Task 0064 (BL7): the model's digest, recorded with its findings; null when the server does not state it. */
+    private String digest() {
+        if (knownDigest != null && System.nanoTime() - digestReadAt < DIGEST_FRESH_NANOS) return knownDigest;
+        try {
+            knownDigest = new OllamaModelDigests(baseUrl, httpClient, objectMapper).of(model).orElse(null);
+            digestReadAt = System.nanoTime();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException | RuntimeException notStated) {
+            knownDigest = null;
+        }
+        return knownDigest;
     }
 
     private List<List<PageContent>> buildBatches(List<PageContent> pages) {

@@ -2,7 +2,9 @@ package com.securedoc.platform.application.detection.service;
 
 import com.securedoc.platform.application.pipeline.PageBatch;
 import com.securedoc.platform.application.pipeline.PageBatchFiles;
+import com.securedoc.platform.domain.finding.FindingOrigin;
 import com.securedoc.platform.domain.vo.Confidence;
+import com.securedoc.platform.domain.finding.AiModel;
 import com.securedoc.platform.domain.finding.DetectorSource;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.finding.Finding;
@@ -26,10 +28,11 @@ import java.util.Map;
 final class PageBatchFindings {
 
     /** A finding before the entity's confidence policy. */
-    record Candidate(EntityType type, FindingLocation location, double confidence, DetectorSource source) {
+    record Candidate(EntityType type, FindingLocation location, double confidence, DetectorSource source,
+                     FindingOrigin origin) {
         static Candidate of(Finding finding) {
             return new Candidate(finding.entityType(), finding.location(), finding.confidence().value(),
-                    finding.detectorSource());
+                    finding.detectorSource(), finding.origin());
         }
 
         /** No offsets and no box: a page-level finding for a person. */
@@ -44,8 +47,8 @@ final class PageBatchFindings {
         }
     }
 
-    /** One batch's result. {@code policyStamp}: the kinds it looked for. */
-    record Result(String policyStamp, int unlocatedSemantic, List<Candidate> candidates) { }
+    /** One batch's result. {@code policyStamp}: the kinds it looked for. {@code models}: the AI models asked. */
+    record Result(String policyStamp, int unlocatedSemantic, List<Candidate> candidates, List<AiModel> models) { }
 
     private PageBatchFindings() {
     }
@@ -71,6 +74,16 @@ final class PageBatchFindings {
             PageBatchFiles.writeText(out, c.source().detectorName());
             PageBatchFiles.writeText(out, c.source().version());
         }
+        // Task 0064: at the end, so a result written before it can still be read.
+        for (Candidate c : result.candidates()) {
+            PageBatchFiles.writeText(out, orEmpty(c.origin().encodePaths()));
+            PageBatchFiles.writeText(out, orEmpty(c.origin().encodeModels()));
+        }
+        PageBatchFiles.writeText(out, orEmpty(FindingOrigin.encodeModels(result.models())));
+    }
+
+    private static String orEmpty(String text) {
+        return text == null ? "" : text;
     }
 
     static Result read(DataInputStream in) throws IOException {
@@ -87,9 +100,19 @@ final class PageBatchFindings {
                     ? BoundingBox.of(in.readDouble(), in.readDouble(), in.readDouble(), in.readDouble()) : null;
             double confidence = Confidence.of(in.readDouble()).value();
             candidates.add(new Candidate(type, new FindingLocation(page, start, end, box), confidence,
-                    new DetectorSource(PageBatchFiles.readText(in), PageBatchFiles.readText(in))));
+                    new DetectorSource(PageBatchFiles.readText(in), PageBatchFiles.readText(in)),
+                    FindingOrigin.NOT_RECORDED));
         }
-        return new Result(stamp, unlocated, candidates);
+        List<AiModel> models = List.of();
+        if (in.available() > 0) {
+            for (int i = 0; i < count; i++) {
+                Candidate c = candidates.get(i);
+                candidates.set(i, new Candidate(c.type(), c.location(), c.confidence(), c.source(),
+                        FindingOrigin.decode(PageBatchFiles.readText(in), PageBatchFiles.readText(in))));
+            }
+            models = FindingOrigin.decodeModels(PageBatchFiles.readText(in));
+        }
+        return new Result(stamp, unlocated, candidates, models);
     }
 
     /**
@@ -149,7 +172,7 @@ final class PageBatchFindings {
                 Math.min(a.location().startOffset(), b.location().startOffset()),
                 Math.max(a.location().endOffset(), b.location().endOffset()),
                 union(a.location().boundingBox(), b.location().boundingBox()));
-        return new Candidate(a.type(), place, surer.confidence(), surer.source());
+        return new Candidate(a.type(), place, surer.confidence(), surer.source(), a.origin().with(b.origin()));
     }
 
     private static BoundingBox union(BoundingBox a, BoundingBox b) {

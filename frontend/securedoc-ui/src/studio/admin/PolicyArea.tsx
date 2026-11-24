@@ -12,7 +12,7 @@ import useSWR from 'swr';
 import { RETENTION_WORDS, retentionPlaceholder, retentionValueError, type RetentionSettings } from '../exportRules';
 import { HelpTip } from './HelpTip';
 import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
-import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, SEARCHABLE_PAGES_WORDS } from '../words';
+import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, SEARCHABLE_PAGES_WORDS, VISION_WORDS } from '../words';
 import {
   MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetOf, previewHeadline,
   previewTiles, reviewChanged, saveLabel, type ConfirmWords, type EstimateRunner, type PolicyEstimate,
@@ -160,16 +160,20 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
               {SENSITIVE_TYPES.map((s) => <div key={s.key}><dt>{s.name}</dt><dd>{s.detects}</dd></div>)}
             </dl>
             <p className="cf-ad-hint">
-              Detection works on text values, not document types. Each finding blacks out only the matched value on the page.
-              There is no whole-document or image-region redaction. A copy of a driver’s license, for example, is not blacked
-              out as a whole: its number is found only when Driver’s license number is on, and an SSN or date of birth printed
-              on it is found like any other text.
+              Detection works on single values, not document types. Each finding blacks out only that value, signature or
+              photo on the page. A copy of a driver’s license, for example, is not blacked out as a whole: its number is found
+              only when Driver’s license number is on, and an SSN or date of birth printed on it is found like any other.
             </p>
             {unsupported.length > 0 && <p className="cf-ad-warn">{unsupported.map(typeName).join(', ')} {unsupported.length === 1 ? 'is' : 'are'} not acted on by the detection engine. Turn {unsupported.length === 1 ? 'it' : 'them'} off to keep the policy accurate.</p>}
             {d.enabledEntityTypes.length === 0 && <p className="cf-ad-warn">Enable at least one category. The policy cannot be saved empty.</p>}
           </fieldset>
           <Toggle label="Treat labeled last-four SSNs as sensitive" hint="When on, a last-four value is also redacted, but only when it is explicitly labeled SSN." checked={d.maskSsnLastFour} disabled={!d.enabledEntityTypes.includes('SSN')} onChange={(v) => set({ ...d, maskSsnLastFour: v })} />
           <Toggle label={SEARCHABLE_PAGES_WORDS.label} hint={SEARCHABLE_PAGES_WORDS.hint} checked={d.searchableRedactedPages !== false} onChange={(v) => set({ ...d, searchableRedactedPages: v })} />
+          <Toggle label={VISION_WORDS.label} hint={VISION_WORDS.hint} checked={d.visionEnabled !== false} onChange={(v) => set({ ...d, visionEnabled: v })} />
+          <div className="cf-ad-threshold">
+            <label htmlFor="cf-vision-threshold">{VISION_WORDS.threshold} <strong>{Math.round((d.visionOcrThreshold ?? 0.85) * 100)}%</strong></label>
+            <input id="cf-vision-threshold" type="range" min={50} max={99} step={1} value={Math.round((d.visionOcrThreshold ?? 0.85) * 100)} onChange={(e) => set({ ...d, visionOcrThreshold: Number(e.target.value) / 100 })} />
+          </div>
           </div>
         </fieldset>
         );

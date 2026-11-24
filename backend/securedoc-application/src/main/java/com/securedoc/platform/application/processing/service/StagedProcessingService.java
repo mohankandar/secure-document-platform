@@ -51,6 +51,7 @@ import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineJobStatus;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import com.securedoc.platform.domain.processing.ProcessingStage;
+import com.securedoc.platform.domain.vision.VisionPageResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +87,9 @@ import java.util.function.Function;
  *   <li><b>Page batches (task 0049).</b> A document over its policy's batch size has one TEXT and one FIND job per page
  *       batch. The last batch of a stage to finish gathers the document in its own transaction (under the case's gate
  *       lock, so exactly one does), fenced like every result; only then does the document move on.</li>
+ *   <li><b>Vision (task 0064).</b> A read document gets one VISION job per routed page, alongside its FIND jobs. The
+ *       page is read before the step's transaction begins, so no database connection is held while the model works.
+ *       The last FIND or VISION job of the document gathers it.</li>
  *   <li><b>A server stops.</b> Its claims run out; the job goes back to the queue (one attempt). After
  *       {@code maxAttempts} the case stops with LV-PRC-008.</li>
  * </ul>
@@ -99,7 +103,8 @@ public final class StagedProcessingService {
 
     /** The stages this service runs. */
     public static final Set<PipelineStage> STAGES = EnumSet.of(PipelineStage.TEXT, PipelineStage.FIND,
-            PipelineStage.REDACT);
+            PipelineStage.VISION, PipelineStage.REDACT);
+    private static final Set<PipelineStage> SEARCH = EnumSet.of(PipelineStage.FIND, PipelineStage.VISION);
     private static final Set<PackageStatus> OPEN = EnumSet.of(PackageStatus.PROCESSING, PackageStatus.PENDING_REVIEW,
             PackageStatus.IN_REVIEW);
 
@@ -335,8 +340,20 @@ public final class StagedProcessingService {
     /** The read document's FIND job, or one per page batch of a large document. */
     private void queueFind(TenantId tenantId, PackageId packageId, Document document, int cycle,
                            CorrelationId correlationId) {
-        queueRanges(PipelineStage.FIND, tenantId, packageId, document.id(), batching == null ? List.of()
-                : PageBatchPlan.find(document.pageCount(), batching.findSettings(tenantId)), cycle, correlationId);
+        List<PageBatchPlan.Range> ranges = batching == null ? List.of()
+                : PageBatchPlan.find(document.pageCount(), batching.findSettings(tenantId));
+        List<Integer> visionPages = detectSensitiveData.pagesForVision(DetectSensitiveDataCommand.of(document.id(),
+                packageId, tenantId, correlationId));
+        if (ranges.isEmpty() && !visionPages.isEmpty()) {
+            // The search and the vision pages are gathered together, so the search is a batch too.
+            ranges = List.of(new PageBatchPlan.Range(1, document.pageCount()));
+        }
+        queueRanges(PipelineStage.FIND, tenantId, packageId, document.id(), ranges, cycle, correlationId);
+        for (int page : visionPages) {
+            PipelineJob job = PipelineJob.readyBatch(tenantId, PipelineStage.VISION, packageId, document.id(), page,
+                    page, cycle, Instant.now());
+            if (jobs.enqueue(job)) auditQueued(job, correlationId);
+        }
     }
 
     private void queueRanges(PipelineStage stage, TenantId tenantId, PackageId packageId, DocumentId documentId,
@@ -437,9 +454,10 @@ public final class StagedProcessingService {
         CorrelationId correlationId = CorrelationId.generate();
         List<ArtifactStorageReference> stored = new ArrayList<>();
         List<ArtifactStorageReference> discarded = new ArrayList<>();
+        VisionPageResult visionPage = job.stage() == PipelineStage.VISION ? readVisionPage(job, correlationId) : null;
         try {
             transactions.inNewTransaction(() -> StagedStepScope.tracking(stored, discarded, () -> {
-                runStep(job, correlationId);
+                runStep(job, correlationId, visionPage);
                 return null;
             }));
             // Saved: the batch results this step gathered are no longer needed.
@@ -472,7 +490,33 @@ public final class StagedProcessingService {
         return Outcome.DONE;
     }
 
-    private void runStep(PipelineJob job, CorrelationId correlationId) {
+    /**
+     * Task 0064: the page, read outside any transaction; null when there is nothing to read or it failed (the step then
+     * finds out why inside its own transaction, and records it).
+     */
+    private VisionPageResult readVisionPage(PipelineJob job, CorrelationId correlationId) {
+        try {
+            if (!jobs.claimIsCurrent(job.id(), job.claimToken())) return null;
+            boolean open = packageRepository.findByIdAndTenantId(job.packageId(), job.tenantId())
+                    .map(pkg -> OPEN.contains(pkg.status())).orElse(false);
+            boolean detecting = documentRepository.findByIdAndTenantId(job.documentId(), job.tenantId())
+                    .map(document -> document.status() == DocumentStatus.DETECTING).orElse(false);
+            return open && detecting ? detectSensitiveData.readVisionPage(wholeDocument(job, correlationId),
+                    job.pageFrom()) : null;
+        } catch (RuntimeException failure) {
+            // The server is stopping: the job's claim runs out and another worker reads the page.
+            if (Thread.currentThread().isInterrupted()) throw failure;
+            log.warn("VISION_PAGE_READ_FAILED job={} package={} type={}", job.id(), job.packageId(),
+                    failure.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private static DetectSensitiveDataCommand wholeDocument(PipelineJob job, CorrelationId correlationId) {
+        return DetectSensitiveDataCommand.of(job.documentId(), job.packageId(), job.tenantId(), correlationId);
+    }
+
+    private void runStep(PipelineJob job, CorrelationId correlationId, VisionPageResult visionPage) {
         if (!jobs.claimIsCurrent(job.id(), job.claimToken())) throw new ClaimLost();
         DocumentPackage pkg = packageRepository.findByIdAndTenantId(job.packageId(), job.tenantId()).orElse(null);
         if (pkg == null || !OPEN.contains(pkg.status())) {
@@ -491,6 +535,7 @@ public final class StagedProcessingService {
             detail = switch (job.stage()) {
                 case TEXT -> text(job, document, correlationId);
                 case FIND -> find(job, document, correlationId);
+                case VISION -> vision(job, document, correlationId, visionPage);
                 case REDACT -> redact(job, document, correlationId);
                 default -> throw new IllegalStateException("Not a staged processing stage: " + job.stage());
             };
@@ -540,9 +585,9 @@ public final class StagedProcessingService {
         } catch (RuntimeException failure) {
             throw new StepFailure(ProcessingStage.TEXT_EXTRACTION, failure);
         }
-        List<PageBatch> batches = lastOfItsStage(job);
+        List<PipelineJob> batches = lastOfItsStage(job);
         if (batches.isEmpty()) return null;
-        startAndRead(job, document, correlationId, batches);
+        startAndRead(job, document, correlationId, batchesOf(batches, PipelineStage.TEXT));
         queueFind(job.tenantId(), job.packageId(), reload(job, document), job.exportCycle(), correlationId);
         return null;
     }
@@ -561,17 +606,26 @@ public final class StagedProcessingService {
      * transaction); otherwise empty. The gate lock is held until this transaction ends, so of two batches finishing
      * together the second sees the first as done. A batch that failed (its document is then FAILED) is never gathered.
      */
-    private List<PageBatch> lastOfItsStage(PipelineJob job) {
+    private List<PipelineJob> lastOfItsStage(PipelineJob job) {
         jobs.lockCaseGate(job.tenantId(), job.packageId());
         List<PipelineJob> batches = jobs.findByTenantIdAndPackageId(job.tenantId(), job.packageId()).stream()
-                .filter(other -> other.stage() == job.stage() && job.documentId().equals(other.documentId())
-                        && other.exportCycle() == job.exportCycle())
+                .filter(other -> gatheredTogether(other.stage(), job.stage())
+                        && job.documentId().equals(other.documentId()) && other.exportCycle() == job.exportCycle())
                 .sorted(java.util.Comparator.comparingInt(PipelineJob::pageFrom)).toList();
         boolean othersDone = batches.stream().filter(other -> !other.id().equals(job.id()))
                 .allMatch(other -> other.status() == PipelineJobStatus.DONE && other.lastLvCode() == null
                         && other.lastDetail() == null);
-        return othersDone ? batches.stream()
-                .map(other -> new PageBatch(other.id(), other.pageFrom(), other.pageTo())).toList() : List.of();
+        return othersDone ? batches : List.of();
+    }
+
+    /** Task 0064: a document's search and its vision pages are one gathering. */
+    private static boolean gatheredTogether(PipelineStage a, PipelineStage b) {
+        return a == b || (SEARCH.contains(a) && SEARCH.contains(b));
+    }
+
+    private static List<PageBatch> batchesOf(List<PipelineJob> jobs, PipelineStage stage) {
+        return jobs.stream().filter(job -> job.stage() == stage)
+                .map(job -> new PageBatch(job.id(), job.pageFrom(), job.pageTo())).toList();
     }
 
     /** UPLOADED to DETECTING: the document is read, or its read batches are gathered. */
@@ -600,19 +654,36 @@ public final class StagedProcessingService {
     private String find(PipelineJob job, Document document, CorrelationId correlationId) {
         if (document.status() != DocumentStatus.DETECTING) return "ALREADY_" + document.status();
         try {
-            DetectSensitiveDataCommand whole = DetectSensitiveDataCommand.of(document.id(), job.packageId(),
-                    job.tenantId(), correlationId);
             if (!job.isPageBatch()) {
-                detectSensitiveData.execute(whole);
+                detectSensitiveData.execute(wholeDocument(job, correlationId));
             } else {
                 detectSensitiveData.detectBatch(command(job, correlationId));
-                List<PageBatch> batches = lastOfItsStage(job);
-                if (!batches.isEmpty()) detectSensitiveData.completeFromBatches(whole, batches);
+                completeIfLast(job, correlationId);
             }
         } catch (RuntimeException failure) {
             throw new StepFailure(ProcessingStage.SENSITIVE_DETECTION, failure);
         }
         return null;
+    }
+
+    /** VISION (task 0064): one routed page's result is kept; the last search or vision job gathers the document. */
+    private String vision(PipelineJob job, Document document, CorrelationId correlationId, VisionPageResult result) {
+        if (document.status() != DocumentStatus.DETECTING) return "ALREADY_" + document.status();
+        try {
+            detectSensitiveData.saveVisionPage(command(job, correlationId), result != null ? result
+                    : detectSensitiveData.readVisionPage(wholeDocument(job, correlationId), job.pageFrom()));
+            completeIfLast(job, correlationId);
+        } catch (RuntimeException failure) {
+            throw new StepFailure(ProcessingStage.SENSITIVE_DETECTION, failure);
+        }
+        return null;
+    }
+
+    private void completeIfLast(PipelineJob job, CorrelationId correlationId) {
+        List<PipelineJob> search = lastOfItsStage(job);
+        if (search.isEmpty()) return;
+        detectSensitiveData.completeFromBatches(wholeDocument(job, correlationId),
+                batchesOf(search, PipelineStage.FIND), batchesOf(search, PipelineStage.VISION));
     }
 
     /** REDACT: the document is redacted with its safety check and the final check (task 0044), as inline. */
@@ -796,7 +867,7 @@ public final class StagedProcessingService {
     private static ProcessingStage processingStage(PipelineStage stage) {
         return switch (stage) {
             case TEXT -> ProcessingStage.TEXT_EXTRACTION;
-            case FIND -> ProcessingStage.SENSITIVE_DETECTION;
+            case FIND, VISION -> ProcessingStage.SENSITIVE_DETECTION;
             case REDACT -> ProcessingStage.REDACTION;
             default -> ProcessingStage.DOCUMENT_PROCESSING;
         };

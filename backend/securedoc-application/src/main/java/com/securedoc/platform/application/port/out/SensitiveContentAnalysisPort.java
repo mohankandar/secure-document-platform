@@ -143,9 +143,16 @@ public interface SensitiveContentAnalysisPort {
         }
     }
 
-    record AnalysisOutput(List<DiscoveredSensitiveContent> findings) {
+    /** @param models task 0064: the AI model(s) that answered; empty where none did (no text, the heuristic) */
+    record AnalysisOutput(List<DiscoveredSensitiveContent> findings,
+                          List<com.securedoc.platform.domain.finding.AiModel> models) {
         public AnalysisOutput {
             findings = findings == null ? List.of() : List.copyOf(findings);
+            models = models == null ? List.of() : List.copyOf(models);
+        }
+
+        public AnalysisOutput(List<DiscoveredSensitiveContent> findings) {
+            this(findings, List.of());
         }
     }
 }

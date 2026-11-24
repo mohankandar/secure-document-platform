@@ -51,7 +51,10 @@ public record BusinessAdminConfigurationResponse(
             boolean searchableRedactedPages,
             /* Task 0049: page batches of large documents (defaults 20 pages, 2 shared). */
             int pageBatchSize,
-            int pageBatchOverlap
+            int pageBatchOverlap,
+            /* Task 0064: routed pages are read by the vision model (on by default), and the routing threshold. */
+            boolean visionEnabled,
+            double visionOcrThreshold
     ) {}
 
     public record LifecyclePolicyResponse(

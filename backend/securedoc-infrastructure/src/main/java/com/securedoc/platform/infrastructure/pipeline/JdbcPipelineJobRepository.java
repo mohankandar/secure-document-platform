@@ -454,10 +454,10 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
             SELECT j.tenant_id, j.package_id
               FROM pipeline_jobs j
               JOIN document_packages p ON p.id = j.package_id AND p.tenant_id = j.tenant_id
-             WHERE j.stage IN ('TEXT', 'FIND', 'REDACT')
+             WHERE j.stage IN ('TEXT', 'FIND', 'VISION', 'REDACT')
                AND p.status IN ('PROCESSING', 'PENDING_REVIEW', 'IN_REVIEW')
                AND NOT EXISTS (SELECT 1 FROM pipeline_jobs o WHERE o.package_id = j.package_id
-                                  AND ((o.stage IN ('TEXT', 'FIND', 'REDACT') AND o.status <> 'DONE'
+                                  AND ((o.stage IN ('TEXT', 'FIND', 'VISION', 'REDACT') AND o.status <> 'DONE'
                                         AND o.status <> 'STOPPED')
                                        OR (o.stage = 'EXPORT' AND o.export_cycle >= j.export_cycle)))
              GROUP BY j.tenant_id, j.package_id, p.status
@@ -478,7 +478,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     @Override
     public boolean hasOpenStageJobs() {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pipeline_jobs"
-                + " WHERE stage IN ('TEXT', 'FIND', 'REDACT') AND status IN ('READY', 'RUNNING', 'WAITING_RETRY'))",
+                + " WHERE stage IN ('TEXT', 'FIND', 'VISION', 'REDACT') AND status IN ('READY', 'RUNNING', 'WAITING_RETRY'))",
                 new MapSqlParameterSource(), Boolean.class));
     }
 
@@ -492,7 +492,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     @Override
     public int removeStageJobs(TenantId tenantId, PackageId packageId, int exportCycle) {
         return jdbc.update("DELETE FROM pipeline_jobs WHERE tenant_id = :tenantId AND package_id = :packageId"
-                + " AND export_cycle = :cycle AND stage IN ('TEXT', 'FIND', 'REDACT')", new MapSqlParameterSource()
+                + " AND export_cycle = :cycle AND stage IN ('TEXT', 'FIND', 'VISION', 'REDACT')", new MapSqlParameterSource()
                 .addValue("tenantId", tenantId.value()).addValue("packageId", packageId.value())
                 .addValue("cycle", exportCycle));
     }
@@ -503,7 +503,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                 .addValue("packageId", packageId.value());
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM pipeline_jobs"
                 + " WHERE package_id = :packageId AND tenant_id = :tenantId"
-                + " AND stage IN ('TEXT', 'FIND', 'REDACT'))", params, Boolean.class));
+                + " AND stage IN ('TEXT', 'FIND', 'VISION', 'REDACT'))", params, Boolean.class));
     }
 
     @Override

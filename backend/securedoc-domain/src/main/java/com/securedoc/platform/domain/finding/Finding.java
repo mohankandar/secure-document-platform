@@ -31,13 +31,16 @@ public final class Finding {
     private final Confidence confidence;
     private final DetectorSource detectorSource;
     private final Instant detectedAt;
+    /** Task 0064: which path(s) found it and which AI model(s) took part. */
+    private final FindingOrigin origin;
     private FindingStatus status;
     private final List<EvidenceRecord> evidenceHistory;
     private Instant updatedAt;
 
     private Finding(FindingId id, TenantId tenantId, DocumentId documentId, EntityType entityType,
                     FindingLocation location, Confidence confidence,
-                    DetectorSource detectorSource, Instant detectedAt) {
+                    DetectorSource detectorSource, Instant detectedAt, FindingOrigin origin) {
+        this.origin = Objects.requireNonNull(origin, "Origin must not be null");
         this.id = id;
         this.tenantId = tenantId;
         this.documentId = documentId;
@@ -54,6 +57,14 @@ public final class Finding {
     public static Finding create(TenantId tenantId, DocumentId documentId, EntityType entityType,
                                   FindingLocation location, Confidence confidence,
                                   DetectorSource detectorSource) {
+        return create(tenantId, documentId, entityType, location, confidence, detectorSource,
+                FindingOrigin.NOT_RECORDED);
+    }
+
+    /** Task 0064: with the path(s) that found it and the AI model(s) that took part. */
+    public static Finding create(TenantId tenantId, DocumentId documentId, EntityType entityType,
+                                  FindingLocation location, Confidence confidence,
+                                  DetectorSource detectorSource, FindingOrigin origin) {
         Objects.requireNonNull(tenantId, "TenantId must not be null");
         Objects.requireNonNull(documentId, "DocumentId must not be null");
         Objects.requireNonNull(entityType, "EntityType must not be null");
@@ -62,7 +73,7 @@ public final class Finding {
         Objects.requireNonNull(detectorSource, "DetectorSource must not be null");
 
         return new Finding(FindingId.generate(), tenantId, documentId, entityType, location,
-                confidence, detectorSource, Instant.now());
+                confidence, detectorSource, Instant.now(), origin);
     }
 
     public static Finding reconstitute(FindingId id, TenantId tenantId, DocumentId documentId,
@@ -70,8 +81,18 @@ public final class Finding {
                                         Confidence confidence, DetectorSource detectorSource,
                                         Instant detectedAt, FindingStatus status,
                                         List<EvidenceRecord> evidenceHistory, Instant updatedAt) {
+        return reconstitute(id, tenantId, documentId, entityType, location, confidence, detectorSource, detectedAt,
+                status, evidenceHistory, updatedAt, FindingOrigin.NOT_RECORDED);
+    }
+
+    public static Finding reconstitute(FindingId id, TenantId tenantId, DocumentId documentId,
+                                        EntityType entityType, FindingLocation location,
+                                        Confidence confidence, DetectorSource detectorSource,
+                                        Instant detectedAt, FindingStatus status,
+                                        List<EvidenceRecord> evidenceHistory, Instant updatedAt,
+                                        FindingOrigin origin) {
         Finding finding = new Finding(id, tenantId, documentId, entityType, location, confidence,
-                detectorSource, detectedAt);
+                detectorSource, detectedAt, origin);
         finding.status = status;
         finding.evidenceHistory.addAll(evidenceHistory);
         finding.updatedAt = updatedAt;
@@ -159,6 +180,10 @@ public final class Finding {
 
     public DetectorSource detectorSource() {
         return detectorSource;
+    }
+
+    public FindingOrigin origin() {
+        return origin;
     }
 
     public Instant detectedAt() {

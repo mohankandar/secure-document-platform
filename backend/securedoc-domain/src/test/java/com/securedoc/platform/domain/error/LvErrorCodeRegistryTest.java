@@ -126,7 +126,7 @@ class LvErrorCodeRegistryTest {
         expected.put(LvErrorCode.Area.INT, 40);
         expected.put(LvErrorCode.Area.SCN, 21);
         expected.put(LvErrorCode.Area.PRC, 10); // task 0053: + LV-PRC-010
-        expected.put(LvErrorCode.Area.AI, 7);
+        expected.put(LvErrorCode.Area.AI, 8);
         expected.put(LvErrorCode.Area.RED, 5); // task 0044: + LV-RED-005
         expected.put(LvErrorCode.Area.REV, 9);
         expected.put(LvErrorCode.Area.DLV, 15);
@@ -136,6 +136,6 @@ class LvErrorCodeRegistryTest {
         expected.put(LvErrorCode.Area.SYS, 9);
         expected.forEach((area, count) -> assertEquals(count, LvErrorCode.inArea(area).size(), area.name()));
         // Task 0026: 129 codes after 0025, plus the 8 added on 2026-11-21; task 0038 adds LV-INT-028 and 029.
-        assertEquals(141, LvErrorCode.values().length); // task 0044: + LV-RED-005; task 0053: + LV-PRC-010
+        assertEquals(142, LvErrorCode.values().length); // task 0044: + LV-RED-005; task 0053: + LV-PRC-010; task 0064: + LV-AI-008
     }
 }

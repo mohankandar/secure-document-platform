@@ -3,6 +3,7 @@ package com.securedoc.platform.infrastructure.extraction;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
 import com.securedoc.platform.application.port.out.OcrPort;
+import com.securedoc.platform.domain.vision.PageRoute;
 import com.securedoc.platform.application.port.out.TextExtractionPort;
 import com.securedoc.platform.infrastructure.ocr.OcrProcessingException;
 import com.securedoc.platform.infrastructure.ocr.TesseractOcrProperties;
@@ -54,7 +55,7 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
 
     @Override
     public TextExtractionOutput extract(InputStream content, String mimeType) {
-        return extract(content, mimeType, null);
+        return extract(content, mimeType, null, null, false).text();
     }
 
     /**
@@ -64,14 +65,31 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
      */
     @Override
     public TextExtractionOutput extractPages(InputStream content, String mimeType, Set<Integer> pageNumbers) {
-        return extract(content, mimeType, Set.copyOf(pageNumbers));
+        return extract(content, mimeType, Set.copyOf(pageNumbers), null, false).text();
     }
 
-    /** {@code onlyPages} null: every page (the detection path, unchanged). */
-    private TextExtractionOutput extract(InputStream content, String mimeType, Set<Integer> onlyPages) {
+    @Override
+    public RoutedOutput extractRouted(InputStream content, String mimeType, Set<Integer> pageNumbers,
+                                      double ocrThreshold) {
+        return extract(content, mimeType, pageNumbers == null ? null : Set.copyOf(pageNumbers), ocrThreshold, true);
+    }
+
+    @Override
+    public TextExtractionOutput extractReadable(InputStream content, String mimeType, Set<Integer> pageNumbers) {
+        return extract(content, mimeType, pageNumbers == null ? null : Set.copyOf(pageNumbers), null, true).text();
+    }
+
+    /**
+     * @param onlyPages      null: every page
+     * @param routeThreshold task 0064: null routes no page
+     * @param lenient        task 0064: a page OCR cannot read (no text, or too poor) fails nothing: it is kept with what
+     *                       was read. Every other failure (OCR missing, timed out, ...) stops the document as before.
+     */
+    private RoutedOutput extract(InputStream content, String mimeType, Set<Integer> onlyPages, Double routeThreshold,
+                                 boolean lenient) {
         if (!PDF_MIME_TYPE.equals(mimeType)) {
-            return onlyPages == null ? nativeExtractor.extract(content, mimeType)
-                    : nativeExtractor.extractPages(content, mimeType, onlyPages);
+            return new RoutedOutput(onlyPages == null ? nativeExtractor.extract(content, mimeType)
+                    : nativeExtractor.extractPages(content, mimeType, onlyPages), List.of());
         }
 
         try (PdfBoxTempFileSupport.StagedPdf staged = PdfBoxTextExtractionAdapter.stageForProcessing(content, "lexavault-hybrid-text-")) {
@@ -83,6 +101,8 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
             boolean hasEmbeddedText = false;
             boolean usedOcr = false;
             long totalChars = 0;
+            PageRouter router = routeThreshold == null ? null : new PageRouter(ocrPort, properties);
+            List<PageRoute> routes = new ArrayList<>();
 
             for (int index = 0; index < document.getNumberOfPages(); index++) {
                 int pageNumber = index + 1;
@@ -101,31 +121,40 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     PageText withFields = PdfFormFieldText.with(document, document.getPage(index), nativePage);
                     normalizedPages.add(withFields);
                     totalChars += withFields.text().length();
+                    if (router != null) routes.add(router.route(document, renderer, index, null, true, routeThreshold));
                     continue;
                 }
 
-                PageText ocrPage;
+                Recognized ocrPage;
                 try {
-                    ocrPage = recognizePage(document.getPage(index), renderer, index, pageNumber);
+                    ocrPage = recognizePage(document.getPage(index), renderer, index, pageNumber, lenient);
                 } catch (TechnicalDependencyException failure) {
                     // Task 0039: the failure carries the page number (only the number) up to Support. The code,
                     // retry and outcome are unchanged.
                     throw failure.page() != null ? failure : failure.withPage(pageNumber);
                 }
-                PageText withFields = PdfFormFieldText.with(document, document.getPage(index), ocrPage);
+                PageText withFields = PdfFormFieldText.with(document, document.getPage(index), ocrPage.page());
                 normalizedPages.add(withFields);
                 totalChars += withFields.text().length();
                 usedOcr = true;
+                if (router != null) {
+                    routes.add(router.route(document, renderer, index, ocrPage.output(), ocrPage.readable(),
+                            routeThreshold));
+                }
             }
 
-            return new TextExtractionOutput(normalizedPages, totalChars, hasEmbeddedText, usedOcr);
+            return new RoutedOutput(new TextExtractionOutput(normalizedPages, totalChars, hasEmbeddedText, usedOcr),
+                    routes);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to normalize PDF text", e);
         }
     }
 
-    private PageText recognizePage(PDPage page, PDFRenderer renderer,
-                                   int pageIndex, int pageNumber) throws IOException {
+    /** @param readable false only when lenient: OCR could not read the page (no text, or too poor) */
+    private record Recognized(PageText page, OcrPort.OcrPageOutput output, boolean readable) { }
+
+    private Recognized recognizePage(PDPage page, PDFRenderer renderer,
+                                     int pageIndex, int pageNumber, boolean lenient) throws IOException {
         int dpi = Math.max(72, properties.getRenderDpi());
         BufferedImage image = renderer.renderImageWithDPI(pageIndex, dpi, ImageType.RGB);
         try {
@@ -138,13 +167,15 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     pageNumber, png.toByteArray(), "image/png", image.getWidth(), image.getHeight()));
 
             boolean visuallyBlank = isVisuallyBlank(image);
-            if (output.text().isBlank() && !visuallyBlank) {
+            boolean noText = output.text().isBlank() && !visuallyBlank;
+            boolean tooPoor = !output.text().isBlank()
+                    && output.confidence() < clamp01(properties.getMinimumPageConfidence());
+            if (noText && !lenient) {
                 throw new OcrProcessingException(
                         TechnicalFailureCode.OCR_PROCESS_FAILED, false,
                         "OCR produced no readable text for a non-blank page", com.securedoc.platform.domain.error.LvErrorCode.PRC_002);
             }
-            if (!output.text().isBlank()
-                    && output.confidence() < clamp01(properties.getMinimumPageConfidence())) {
+            if (tooPoor && !lenient) {
                 throw new OcrProcessingException(
                         TechnicalFailureCode.OCR_PROCESS_FAILED, false,
                         "OCR confidence is below the configured minimum", com.securedoc.platform.domain.error.LvErrorCode.PRC_003);
@@ -160,8 +191,9 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     .toList();
 
             var visualRegions = SolidDarkRectangleDetector.detect(image);
-            return new PageText(pageNumber, pageWidth, pageHeight,
-                    output.text(), spans, visualRegions, ExtractionSource.OCR, output.confidence());
+            return new Recognized(new PageText(pageNumber, pageWidth, pageHeight,
+                    output.text(), spans, visualRegions, ExtractionSource.OCR, output.confidence()), output,
+                    !noText && !tooPoor);
         } finally {
             image.flush();
         }
@@ -212,7 +244,7 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
         return darkPixelRatio(image) <= Math.max(0.0, properties.getBlankPageDarkPixelRatio());
     }
 
-    private double darkPixelRatio(BufferedImage image) {
+    static double darkPixelRatio(BufferedImage image) {
         long sampled = 0;
         long dark = 0;
         int step = Math.max(1, Math.min(image.getWidth(), image.getHeight()) / 500);

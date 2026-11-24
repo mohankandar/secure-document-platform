@@ -1029,6 +1029,19 @@ Reserved: not used yet.
 2. Check that the model is installed on those servers.
 3. Start LexaVault again after the fix.
 
+### LV-AI-008 AI model isn't the approved one
+
+- **Means:** The installed AI model isn't the version approved for LexaVault, so it wasn't used.
+- **Kind:** Set-up
+- **Who acts:** IT Admin
+- **HTTP status:** —
+
+**What to do:**
+
+1. Install the approved version of the model on the AI server (its digest is in LexaVault's settings).
+2. To change the model, have the new one approved first, then set its name and digest in LexaVault's settings.
+3. Pages that needed the model are in Review meanwhile; a person decides them.
+
 ## RED: redaction
 
 ### LV-RED-001 A finding has no location

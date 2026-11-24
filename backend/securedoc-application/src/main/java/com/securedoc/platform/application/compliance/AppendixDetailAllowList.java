@@ -27,6 +27,9 @@ public final class AppendixDetailAllowList {
     /** Even an allowed detail is cut to this length in the appendix. */
     static final int MAX_PRINTED = 300;
 
+    /** Task 0064: a search's detail also says how its pages were read (paths, confidences, codes, AI models). */
+    static final int MAX_PRINTED_DETECTION = 900;
+
     private static final Set<AuditAction> ALLOWED = EnumSet.of(
             // Cases
             AuditAction.PACKAGE_CREATED, AuditAction.PACKAGE_SUBMITTED, AuditAction.PACKAGE_PROCESSING_STARTED,
@@ -109,6 +112,7 @@ public final class AppendixDetailAllowList {
     public static String printable(String action, String detail) {
         if (!isAllowed(action) || detail == null || detail.isBlank()) return NOT_PRINTED;
         String clean = detail.replaceAll("\\p{Cntrl}", " ").strip();
-        return clean.length() > MAX_PRINTED ? clean.substring(0, MAX_PRINTED) + "…" : clean;
+        int max = AuditAction.DOCUMENT_DETECTION_COMPLETED.name().equals(action) ? MAX_PRINTED_DETECTION : MAX_PRINTED;
+        return clean.length() > max ? clean.substring(0, max) + "…" : clean;
     }
 }

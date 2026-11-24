@@ -100,6 +100,8 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
         entity.setConfidence(finding.confidence().value());
         entity.setDetectorName(finding.detectorSource().detectorName());
         entity.setDetectorVersion(finding.detectorSource().version());
+        entity.setFoundBy(finding.origin().encodePaths());
+        entity.setAiModels(finding.origin().encodeModels());
         persistBoundingBox(finding.location(), entity);
         entity.setStatus(finding.status().name());
         entity.setDetectedAt(finding.detectedAt());
@@ -142,7 +144,8 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
                 entity.getDetectedAt(),
                 FindingStatus.valueOf(entity.getStatus()),
                 List.of(), // evidence history not persisted in this table
-                entity.getUpdatedAt()
+                entity.getUpdatedAt(),
+                com.securedoc.platform.domain.finding.FindingOrigin.decode(entity.getFoundBy(), entity.getAiModels())
         );
     }
 

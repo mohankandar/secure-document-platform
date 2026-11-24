@@ -24,7 +24,10 @@ public final class SensitiveTypeNames {
             Map.entry("ITIN", "ITIN"),
             Map.entry("EIN", "EIN"),
             Map.entry("DRIVERS_LICENSE_NUMBER", "Driver’s license number"),
-            Map.entry("PASSPORT_NUMBER", "Passport number"));
+            Map.entry("PASSPORT_NUMBER", "Passport number"),
+            Map.entry("SIGNATURE", "Signature or initials"),
+            Map.entry("FACE_PHOTO", "Face photo"),
+            Map.entry("UNREAD_PAGE", "Page to check"));
 
     /** words.ts {@code SENSITIVE_ALIASES}. */
     private static final Map<String, String> ALIASES = Map.of(

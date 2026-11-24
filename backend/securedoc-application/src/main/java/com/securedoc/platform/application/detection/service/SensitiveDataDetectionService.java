@@ -44,7 +44,14 @@ import com.securedoc.platform.domain.document.PackageStatus;
 import com.securedoc.platform.domain.event.DocumentDetectionCompletedEvent;
 import com.securedoc.platform.domain.event.DocumentDetectionFailedEvent;
 import com.securedoc.platform.domain.event.FindingDetectedEvent;
+import com.securedoc.platform.application.port.out.PageRouteRepository;
+import com.securedoc.platform.application.vision.VisionPageReader;
+import com.securedoc.platform.domain.finding.AiModel;
+import com.securedoc.platform.domain.finding.DetectionPath;
 import com.securedoc.platform.domain.finding.DetectorSource;
+import com.securedoc.platform.domain.finding.FindingOrigin;
+import com.securedoc.platform.domain.vision.PageRoute;
+import com.securedoc.platform.domain.vision.VisionPageResult;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.finding.Finding;
 import com.securedoc.platform.domain.finding.FindingLocation;
@@ -81,6 +88,11 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private static final Logger log = LoggerFactory.getLogger(SensitiveDataDetectionService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
     private static final double AGREEMENT_CONFIDENCE_BOOST = 0.05;
+    /**
+     * Task 0064: an audit detail is cut at 1000 characters, so routed pages are named only while there is room for a
+     * whole one; every page's route is in document_page_routes.
+     */
+    private static final int MAX_DETAIL_FOR_ROUTED = 840;
 
     private final DocumentRepository documentRepository;
     private final PackageRepository packageRepository;
@@ -99,6 +111,16 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private final AuditService auditService;
     /** Task 0049: null where page batches are not wired (they are refused there). */
     private final PageBatchFiles batchFiles;
+    /** Task 0064: null where vision is not wired (then no page is routed). */
+    private final Vision vision;
+
+    /** Task 0064: the pages' routes and the reader of routed pages. */
+    public record Vision(PageRouteRepository routes, VisionPageReader reader) {
+        public Vision {
+            Objects.requireNonNull(routes);
+            Objects.requireNonNull(reader);
+        }
+    }
 
     public SensitiveDataDetectionService(DocumentRepository documentRepository,
                                          PackageRepository packageRepository,
@@ -131,6 +153,27 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                                          DomainEventPublisher eventPublisher,
                                          AuditService auditService,
                                          com.securedoc.platform.application.port.out.ChecksumPort checksumPort) {
+        this(documentRepository, packageRepository, artifactRepository, storagePort, semanticAnalysisPort,
+                deterministicDetectionPort, deterministicValidationPort, tenantRedactionPolicyRepository,
+                textExtractionPort, findingRepository, eventPublisher, auditService, checksumPort, null);
+    }
+
+    /** Task 0064: with page routing and the vision model. */
+    public SensitiveDataDetectionService(DocumentRepository documentRepository,
+                                         PackageRepository packageRepository,
+                                         ArtifactRepository artifactRepository,
+                                         StoragePort storagePort,
+                                         SensitiveContentAnalysisPort semanticAnalysisPort,
+                                         SensitiveDataDetectionPort deterministicDetectionPort,
+                                         SensitiveDataValidationPort deterministicValidationPort,
+                                         TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+                                         TextExtractionPort textExtractionPort,
+                                         FindingRepository findingRepository,
+                                         DomainEventPublisher eventPublisher,
+                                         AuditService auditService,
+                                         com.securedoc.platform.application.port.out.ChecksumPort checksumPort,
+                                         Vision vision) {
+        this.vision = vision;
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
@@ -153,7 +196,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         CorrelationId correlationId = command.correlationId();
 
         try {
-            return doDetection(command, correlationId);
+            return doDetection(command, correlationId, Map.of());
         } catch (ValidationException | NotFoundException e) {
             throw e;
         } catch (Exception e) {
@@ -179,7 +222,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             batchFiles().save(com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH, command, out ->
                     PageBatchFindings.write(out, new PageBatchFindings.Result(policyStamp(policy),
                             found.unlocatedSemantic(),
-                            found.findings().stream().map(PageBatchFindings.Candidate::of).toList())));
+                            found.findings().stream().map(PageBatchFindings.Candidate::of).toList(),
+                            found.models())));
         } catch (ValidationException | NotFoundException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -190,6 +234,40 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
     @Override
     public DetectSensitiveDataResult completeFromBatches(DetectSensitiveDataCommand command, List<PageBatch> batches) {
+        return completeFromBatches(command, batches, List.of());
+    }
+
+    @Override
+    public List<Integer> pagesForVision(DetectSensitiveDataCommand command) {
+        // Switched off: nothing to wait for; the completion sends the routed pages to a person.
+        if (vision == null || !policyOf(command.tenantId()).vision().enabled()) return List.of();
+        return vision.routes().findByDocument(command.tenantId(), command.documentId()).stream()
+                .filter(PageRoute::vision).map(PageRoute::page).toList();
+    }
+
+    @Override
+    public VisionPageResult readVisionPage(DetectSensitiveDataCommand command, int page) {
+        Document document = loadDetecting(command);
+        return vision().reader().read(document, policyOf(command.tenantId()).vision(), page);
+    }
+
+    @Override
+    public void saveVisionPage(PageBatchCommand command, VisionPageResult result) {
+        vision();
+        if (command.batch().from() != result.page() || command.batch().to() != result.page()) {
+            throw new IllegalArgumentException("A vision job has one page");
+        }
+        batchFiles().save(ArtifactType.VISION_PAGE, command, out -> VisionFindings.write(out, result));
+    }
+
+    private Vision vision() {
+        if (vision == null) throw new UnsupportedOperationException("Vision is not supported");
+        return vision;
+    }
+
+    @Override
+    public DetectSensitiveDataResult completeFromBatches(DetectSensitiveDataCommand command, List<PageBatch> batches,
+                                                         List<PageBatch> visionPages) {
         Objects.requireNonNull(command, "Command must not be null");
         CorrelationId correlationId = command.correlationId();
         try {
@@ -200,20 +278,28 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             List<PageBatchFindings.Result> results = batchFiles().load(
                     com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH, command.documentId(),
                     command.tenantId(), batches, PageBatchFindings::read);
+            Map<Integer, VisionPageResult> pagesRead = new HashMap<>();
+            if (!visionPages.isEmpty()) {
+                for (VisionPageResult page : batchFiles().load(ArtifactType.VISION_PAGE, command.documentId(),
+                        command.tenantId(), visionPages, VisionFindings::read)) {
+                    pagesRead.put(page.page(), page);
+                }
+            }
             DetectSensitiveDataResult result;
             if (results.stream().anyMatch(r -> !r.policyStamp().equals(policyStamp(policy)))) {
                 // The entity's policy changed between the batches: one policy must decide for the whole document.
                 log.info("DETECTION_BATCHES_SEARCHED_AGAIN document={} reasonCode=POLICY_CHANGED",
                         command.documentId());
-                result = doDetection(command, correlationId);
+                result = doDetection(command, correlationId, pagesRead);
             } else {
-                List<Finding> findings = new ArrayList<>();
-                for (PageBatchFindings.Candidate candidate : PageBatchFindings.merge(batches, results)) {
-                    findings.add(Finding.create(document.tenantId(), document.id(), candidate.type(),
-                            candidate.location(), Confidence.of(candidate.confidence()), candidate.source()));
-                }
                 int unlocated = results.stream().mapToInt(PageBatchFindings.Result::unlocatedSemantic).max().orElse(0);
-                result = complete(command, document, policy, findings, unlocated, startedNanos, correlationId);
+                List<AiModel> textModels = results.stream().flatMap(r -> r.models().stream()).distinct().toList();
+                AllFindings all = withVision(document, policy, PageBatchFindings.merge(batches, results), pagesRead,
+                        textModels);
+                result = complete(command, document, policy, all, unlocated, startedNanos, correlationId);
+            }
+            if (!visionPages.isEmpty()) {
+                batchFiles().discard(ArtifactType.VISION_PAGE, command.documentId(), command.tenantId());
             }
             batchFiles().discard(com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH,
                     command.documentId(), command.tenantId());
@@ -251,8 +337,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 .orElseGet(() -> TenantRedactionPolicy.defaults(tenantId));
     }
 
-    private DetectSensitiveDataResult doDetection(DetectSensitiveDataCommand command,
-                                                   CorrelationId correlationId) {
+    private DetectSensitiveDataResult doDetection(DetectSensitiveDataCommand command, CorrelationId correlationId,
+                                                  Map<Integer, VisionPageResult> pagesRead) {
         long startedNanos = System.nanoTime();
         Document document = loadDetecting(command);
         TenantRedactionPolicy tenantPolicy = policyOf(command.tenantId());
@@ -261,12 +347,88 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // and deterministic recognition. Unit 17 will feed OCR text/coordinates into the same shape.
         Map<Integer, PageText> pagesByNumber = extractPagePositions(document, command.tenantId(), null);
         PageFindings found = findOnPages(command, document, tenantPolicy, pagesByNumber);
-        return complete(command, document, tenantPolicy, found.findings(), found.unlocatedSemantic(), startedNanos,
-                correlationId);
+        AllFindings all = vision == null
+                ? new AllFindings(found.findings(), List.of(), Map.of(), found.models())
+                : withVision(document, tenantPolicy,
+                        found.findings().stream().map(PageBatchFindings.Candidate::of).toList(), pagesRead,
+                        found.models());
+        return complete(command, document, tenantPolicy, all, found.unlocatedSemantic(), startedNanos, correlationId);
     }
 
-    /** Findings before the confidence policy, and how many semantic findings have no place. */
-    private record PageFindings(List<Finding> findings, int unlocatedSemantic) { }
+    /** Findings before the confidence policy, how many semantic findings have no place, and the AI models asked. */
+    private record PageFindings(List<Finding> findings, int unlocatedSemantic, List<AiModel> models) { }
+
+    /**
+     * Every path's findings, before the confidence policy.
+     *
+     * @param notRead the routed pages the vision model did not read, with why (a code or an internal code)
+     */
+    private record AllFindings(List<Finding> findings, List<PageRoute> routes, Map<Integer, String> notRead,
+                               List<AiModel> models) { }
+
+    /**
+     * Task 0064: the text path's findings with the signature detector's and the vision model's. Every routed page is
+     * read here if no job read it, or goes to a person: a page never passes unread.
+     */
+    private AllFindings withVision(Document document, TenantRedactionPolicy policy,
+                                   List<PageBatchFindings.Candidate> text, Map<Integer, VisionPageResult> pagesRead,
+                                   List<AiModel> textModels) {
+        List<PageRoute> routes = vision == null ? List.of() : routesOf(document, policy);
+        List<PageBatchFindings.Candidate> others = new ArrayList<>();
+        Map<Integer, String> notRead = new java.util.TreeMap<>();
+        Set<AiModel> models = new java.util.LinkedHashSet<>(textModels);
+        for (PageRoute route : routes) {
+            if (route.path() == PageRoute.Path.FAST_SIGNATURE) {
+                others.addAll(VisionFindings.signatures(route, policy.enabledEntityTypes()));
+            }
+            if (!route.vision()) continue;
+            VisionPageResult result = pagesRead.get(route.page());
+            if (result == null) result = vision.reader().read(document, policy.vision(), route.page());
+            if (result.read()) {
+                models.add(result.model());
+            } else {
+                notRead.put(route.page(), result.code() == null ? result.reason() : result.code());
+                others.addAll(VisionFindings.signatures(route, policy.enabledEntityTypes()));
+            }
+            others.addAll(VisionFindings.of(result, policy));
+        }
+        List<Finding> findings = new ArrayList<>();
+        for (PageBatchFindings.Candidate candidate : VisionFindings.merge(text, others)) {
+            findings.add(Finding.create(document.tenantId(), document.id(), candidate.type(), candidate.location(),
+                    Confidence.of(candidate.confidence()), candidate.source(), candidate.origin()));
+        }
+        return new AllFindings(findings, routes, notRead, List.copyOf(models));
+    }
+
+    /** The routes stored when the text was read. A page without one (read before task 0064) is routed now. */
+    private List<PageRoute> routesOf(Document document, TenantRedactionPolicy policy) {
+        Map<Integer, PageRoute> byPage = new java.util.TreeMap<>();
+        for (PageRoute route : vision.routes().findByDocument(document.tenantId(), document.id())) {
+            byPage.put(route.page(), route);
+        }
+        Set<Integer> missing = new java.util.TreeSet<>();
+        for (int page = 1; page <= document.pageCount(); page++) if (!byPage.containsKey(page)) missing.add(page);
+        if (!missing.isEmpty()) {
+            List<PageRoute> added = new ArrayList<>();
+            try (InputStream stream = storagePort.retrieve(original(document, document.tenantId()).storageReference())) {
+                for (PageRoute route : textExtractionPort.extractRouted(stream, "application/pdf", missing,
+                        policy.vision().ocrThreshold()).routes()) {
+                    if (missing.remove(route.page())) added.add(route);
+                }
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("Failed to read the original document", e);
+            }
+            // A page the checks say nothing about is a hard page (fail closed).
+            for (int page : missing) {
+                added.add(new PageRoute(page, PageRoute.Path.VISION, Set.of(PageRoute.Reason.CHECK_FAILED), null,
+                        List.of()));
+            }
+            vision.routes().save(document.tenantId(), document.id(), added);
+            added.forEach(route -> byPage.put(route.page(), route));
+        }
+        // Only this document's pages count.
+        return byPage.values().stream().filter(route -> route.page() <= document.pageCount()).toList();
+    }
 
     private Document loadDetecting(DetectSensitiveDataCommand command) {
         Document document = documentRepository
@@ -326,8 +488,12 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         mergedEntities = mergeEvidence(mergedEntities, ocrSafety.locatedEntities(), enabledTypes);
         mergedEntities = itinWinsOverSsn(mergedEntities);
 
-        List<Finding> findings = createFindings(new DetectionOutput(mergedEntities), document, pagesByNumber, enabledTypes);
-        findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document));
+        Set<String> aiNames = semanticOutput.findings().stream().map(DiscoveredSensitiveContent::analyzerName)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Finding> findings = createFindings(new DetectionOutput(mergedEntities), document, pagesByNumber,
+                enabledTypes, aiNames, semanticOutput.models());
+        findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document,
+                semanticOutput.models()));
         findings.addAll(createOcrSafetyReviewFindings(ocrSafety.reviewSignals(), document));
 
         log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} ocrGuardStrongLabels={} ocrGuardSpatialScoreCandidates={} merged={} semanticByType={} deterministicByType={} semanticLocatedByPageType={} deterministicByPageType={}",
@@ -338,14 +504,15 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()),
                 buildDetectedEntityPageTypeCounts(semanticResolution.located(), enabledTypes),
                 buildDetectedEntityPageTypeCounts(deterministicOutput.entities(), enabledTypes));
-        return new PageFindings(findings, semanticResolution.unlocated().size());
+        return new PageFindings(findings, semanticResolution.unlocated().size(), semanticOutput.models());
     }
 
     /** Policy, findings, state, events and audit of the document (whole document or gathered batches). */
     private DetectSensitiveDataResult complete(DetectSensitiveDataCommand command, Document document,
-                                               TenantRedactionPolicy tenantPolicy, List<Finding> findings,
+                                               TenantRedactionPolicy tenantPolicy, AllFindings all,
                                                int unlocatedSemantic, long startedNanos,
                                                CorrelationId correlationId) {
+        List<Finding> findings = all.findings();
         Set<EntityType> enabledTypes = tenantPolicy.enabledEntityTypes();
         // Per-finding policy. Only findings that individually meet confidence AND have a trusted
         // location are auto-confirmed. Low-confidence/unlocated findings remain DETECTED for review.
@@ -402,7 +569,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 command.tenantId(), SYSTEM_ACTOR,
                 AuditAction.DOCUMENT_DETECTION_COMPLETED,
                 "Document", command.documentId().toString(), command.packageId(), correlationId,
-                "Detection completed: findings=" + findings.size()
+                withPagePaths("Detection completed: findings=" + findings.size()
                         + ", autoConfirmed=" + findings.stream().filter(f -> f.status() == FindingStatus.CONFIRMED).count()
                         + ", requiresReview=" + requiresReview
                         + ", threshold=" + tenantPolicy.autoRedactThreshold()
@@ -410,11 +577,51 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                         + ", enabledTypes=" + enabledTypes.size()
                         + ", unlocatedSemantic=" + unlocatedSemantic
                         + ", decision=" + overallDecision
-                        + ", types=" + findingsByType);
+                        + ", types=" + findingsByType, all));
 
         return DetectSensitiveDataResult.of(
                 command.documentId(), document.status(), findings.size(),
                 findingsByType, requiresRedaction, overallDecision);
+    }
+
+    /**
+     * Task 0064: how the pages were read and the AI models that took part (page numbers, reason names, OCR confidence,
+     * codes, model names and digests; never a value). Nothing when neither is known, so older details stay as they were.
+     */
+    private static String withPagePaths(String base, AllFindings all) {
+        StringBuilder detail = new StringBuilder(base);
+        List<PageRoute> vision = all.routes().stream().filter(PageRoute::vision).toList();
+        if (!all.routes().isEmpty()) {
+            detail.append(", textPages=").append(all.routes().size() - vision.size())
+                    .append(", signaturePages=").append(all.routes().stream()
+                            .filter(r -> r.path() == PageRoute.Path.FAST_SIGNATURE).count())
+                    .append(", visionPages=").append(vision.size() - all.notRead().size())
+                    .append(", visionPagesToPerson=").append(all.notRead().size());
+        }
+        if (!all.models().isEmpty()) {
+            detail.append(", aiModels=[").append(FindingOrigin.encodeModels(all.models())).append(']');
+        }
+        if (!vision.isEmpty()) {
+            detail.append(", routed=[");
+            for (int i = 0; i < vision.size(); i++) {
+                PageRoute route = vision.get(i);
+                if (detail.length() > MAX_DETAIL_FOR_ROUTED) {
+                    detail.append(" +").append(vision.size() - i);
+                    break;
+                }
+                if (i > 0) detail.append(' ');
+                detail.append('p').append(route.page()).append(':')
+                        .append(route.reasons().stream().map(Enum::name)
+                                .collect(java.util.stream.Collectors.joining("+")));
+                if (route.ocrConfidence() != null) {
+                    detail.append("@ocr").append(String.format(java.util.Locale.ROOT, "%.2f", route.ocrConfidence()));
+                }
+                String why = all.notRead().get(route.page());
+                if (why != null) detail.append("->PERSON(").append(why).append(')');
+            }
+            detail.append(']');
+        }
+        return detail.toString();
     }
 
     private SemanticResolution resolveSemanticDiscoveries(List<DiscoveredSensitiveContent> discoveries,
@@ -503,14 +710,15 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     }
 
     private List<Finding> createUnlocatedSemanticFindings(List<UnlocatedSemanticFinding> unlocated,
-                                                           Document document) {
+                                                           Document document, List<AiModel> models) {
         List<Finding> findings = new ArrayList<>(unlocated.size());
         for (UnlocatedSemanticFinding candidate : unlocated) {
             findings.add(Finding.create(
                     document.tenantId(), document.id(), candidate.entityType(),
                     FindingLocation.unlocated(candidate.pageNumber()),
                     Confidence.of(candidate.confidence()),
-                    new DetectorSource(candidate.detectorName(), candidate.detectorVersion())));
+                    new DetectorSource(candidate.detectorName(), candidate.detectorVersion()),
+                    FindingOrigin.of(DetectionPath.TEXT, models)));
         }
         return findings;
     }
@@ -524,7 +732,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     document.tenantId(), document.id(), signal.entityType(),
                     FindingLocation.unlocated(signal.pageNumber()),
                     Confidence.of(signal.confidence()),
-                    new DetectorSource("ocr-sensitive-field-guard", "1.4.0;unresolved-field")));
+                    new DetectorSource("ocr-sensitive-field-guard", "1.4.0;unresolved-field"),
+                    FindingOrigin.of(DetectionPath.TEXT, List.of())));
         }
         return findings;
     }
@@ -690,7 +899,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
     private List<Finding> createFindings(DetectionOutput output, Document document,
                                          Map<Integer, PageText> pagesByNumber,
-                                         Set<EntityType> enabledTypes) {
+                                         Set<EntityType> enabledTypes, Set<String> aiNames,
+                                         List<AiModel> models) {
         List<Finding> findings = new ArrayList<>();
         for (DetectedEntity entity : output.entities()) {
             EntityType entityType = parseEntityType(entity.entityType());
@@ -724,7 +934,9 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             findings.add(Finding.create(
                     document.tenantId(), document.id(), entityType, location,
                     Confidence.of(effectiveConfidence),
-                    new DetectorSource(entity.detectorName(), entity.detectorVersion())));
+                    new DetectorSource(entity.detectorName(), entity.detectorVersion()),
+                    FindingOrigin.of(DetectionPath.TEXT,
+                            aiNames.stream().anyMatch(entity.detectorName()::contains) ? models : List.of())));
         }
         return findings;
     }
@@ -732,17 +944,14 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private Map<Integer, PageText> extractPagePositions(Document document,
                                                         com.securedoc.platform.domain.identity.TenantId tenantId,
                                                         Set<Integer> onlyPages) {
-        Artifact originalArtifact = artifactRepository
-                .findByDocumentIdAndTenantId(document.id(), tenantId)
-                .stream()
-                .filter(a -> a.artifactType() == ArtifactType.ORIGINAL && a.isAvailable())
-                .findFirst()
-                .orElseThrow(() -> new NotFoundException("Original artifact for document",
-                        document.id().toString()));
+        Artifact originalArtifact = original(document, tenantId);
 
         Map<Integer, PageText> byNumber = new LinkedHashMap<>();
         try (InputStream stream = storagePort.retrieve(originalArtifact.storageReference())) {
-            TextExtractionOutput output = onlyPages == null
+            // Task 0064: a page the text reader cannot read is routed to vision and fails nothing here.
+            TextExtractionOutput output = vision != null
+                    ? textExtractionPort.extractReadable(stream, "application/pdf", onlyPages)
+                    : onlyPages == null
                     ? textExtractionPort.extract(stream, "application/pdf")
                     : textExtractionPort.extractPages(stream, "application/pdf", onlyPages);
             output.pages().stream()
@@ -752,6 +961,16 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             throw new IllegalStateException("Failed to extract positional page data", e);
         }
         return byNumber;
+    }
+
+    private Artifact original(Document document, com.securedoc.platform.domain.identity.TenantId tenantId) {
+        return artifactRepository
+                .findByDocumentIdAndTenantId(document.id(), tenantId)
+                .stream()
+                .filter(a -> a.artifactType() == ArtifactType.ORIGINAL && a.isAvailable())
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Original artifact for document",
+                        document.id().toString()));
     }
 
     private EntityType parseEntityType(String type) {

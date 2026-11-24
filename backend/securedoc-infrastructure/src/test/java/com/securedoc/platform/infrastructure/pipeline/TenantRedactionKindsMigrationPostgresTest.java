@@ -35,7 +35,7 @@ class TenantRedactionKindsMigrationPostgresTest {
             try (Connection connection = db.connection()) {
                 Liquibase liquibase = PostgresTestDatabase.liquibase(connection);
                 liquibase.update(new Contexts());
-                PostgresTestDatabase.rollback(liquibase, connection, 4); // back to 046 (050, 049, 048, then 047): no tenant_redaction_kinds yet
+                PostgresTestDatabase.rollback(liquibase, connection, 5); // back to 046 (080, 050, 049, 048, then 047): no tenant_redaction_kinds yet
             }
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             assertEquals(0, tableCount(jdbc), "046: no table yet");
@@ -68,12 +68,12 @@ class TenantRedactionKindsMigrationPostgresTest {
 
             store.save(tenant, EnumSet.of(EntityType.SSN, EntityType.BANK_ROUTING_NUMBER, EntityType.ITIN), Instant.now());
             assertEquals(EnumSet.of(EntityType.BANK_ROUTING_NUMBER, EntityType.ITIN), store.enabledKinds(tenant));
-            assertEquals(6, rows(jdbc, tenant), "one row per opt-in kind; the V1 kinds are not written here");
+            assertEquals(8, rows(jdbc, tenant), "one row per opt-in kind; the V1 kinds are not written here");
             assertEquals(Set.of(), store.enabledKinds(other), "another entity is not affected");
 
             store.save(tenant, EnumSet.of(EntityType.EIN), Instant.now());
             assertEquals(EnumSet.of(EntityType.EIN), store.enabledKinds(tenant));
-            assertEquals(6, rows(jdbc, tenant), "updated in place");
+            assertEquals(8, rows(jdbc, tenant), "updated in place");
 
             // Keys the store does not own never switch anything on (fail closed).
             for (String key : List.of("SSN", "FINANCIAL_ACCOUNT", "NOT_A_KIND")) {
@@ -104,7 +104,7 @@ class TenantRedactionKindsMigrationPostgresTest {
             String before = policyRow(jdbc, tenant);
             new JdbcTenantRedactionKindStore(jdbc).save(tenant, EnumSet.of(EntityType.PASSPORT_NUMBER), Instant.now());
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 4); // 050, 049, 048, then 047
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 5); // 080, 050, 049, 048, then 047
             }
             assertEquals(0, tableCount(jdbc));
             assertEquals(before, policyRow(jdbc, tenant));

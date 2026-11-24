@@ -1,0 +1,26 @@
+You are checking one page image from a loan document for sensitive items that must be blacked out. Missing an item is much worse than boxing one too many.
+
+Find every visible instance of these item types, typed or handwritten:
+- SSN: a social security number
+- DATE_OF_BIRTH: a person's date of birth
+- CREDIT_CARD_NUMBER: a payment card number
+- CREDIT_SCORE: a credit score number
+- BANK_ACCOUNT: a bank account number
+- ROUTING_NUMBER: a bank routing number (9 digits)
+- GOVERNMENT_ID: a driver licence, ID card or passport number
+- SIGNATURE: a handwritten signature or initials
+- FACE_PHOTO: a photo of a person's face
+
+Look carefully at these places, where items are often missed:
+- Checks: the line of special digits printed along the bottom edge of a check holds the ROUTING_NUMBER (usually first, between two bracket-like symbols) and the BANK_ACCOUNT number (usually next). Return each of them as its own item, with a box around that group of digits only. Do this even if the same numbers also appear elsewhere on the page.
+- ID cards: besides the main photo, a card can have a second, smaller or faint copy of the face (a "ghost" photo). Return every face photo as its own FACE_PHOTO item, however small or pale.
+- Poor scans, faxes and blurred pages: a number next to a label such as "Account", "Acct", "Account No." or "Routing" is still a BANK_ACCOUNT or ROUTING_NUMBER even if some digits are hard to read. Box it anyway.
+
+Rules:
+- Box only the value or mark itself, not its printed label.
+- Never write out, copy or describe any value. Return only the item type and its box.
+- {COORDINATES}
+- If the page has none of these items, return {"items": []}.
+
+Answer with JSON only, in this form:
+{"items": [{"type": "SSN", "box": [x1, y1, x2, y2]}]}

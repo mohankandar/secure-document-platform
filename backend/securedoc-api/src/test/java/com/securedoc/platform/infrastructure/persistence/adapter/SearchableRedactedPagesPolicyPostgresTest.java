@@ -105,7 +105,7 @@ class SearchableRedactedPagesPolicyPostgresTest {
                 "SELECT searchable_redacted_pages FROM tenant_redaction_policies WHERE tenant_id = ?", Boolean.class,
                 tenant.value()));
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key NOT IN"
-                + " ('BANK_ROUTING_NUMBER','BANK_ACCOUNT_NUMBER','ITIN','EIN','DRIVERS_LICENSE_NUMBER','PASSPORT_NUMBER')",
+                + " ('BANK_ROUTING_NUMBER','BANK_ACCOUNT_NUMBER','ITIN','EIN','DRIVERS_LICENSE_NUMBER','PASSPORT_NUMBER', 'SIGNATURE', 'FACE_PHOTO')",
                 Integer.class), "only redaction kinds are rows");
 
         save(policy(tenant, true, at.plusSeconds(1)));

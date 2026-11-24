@@ -79,7 +79,8 @@ public class StageJobWorkers {
 
     private void startWorkers() {
         var settings = service.settings();
-        int total = settings.textWorkers() + settings.findWorkers() + settings.redactWorkers();
+        int total = settings.textWorkers() + settings.findWorkers() + settings.visionWorkers()
+                + settings.redactWorkers();
         AtomicInteger number = new AtomicInteger();
         running = true;
         workers = Executors.newFixedThreadPool(total, runnable -> {
@@ -90,13 +91,14 @@ public class StageJobWorkers {
         String instance = UUID.randomUUID().toString();
         submit(PipelineStage.TEXT, settings.textWorkers(), instance);
         submit(PipelineStage.FIND, settings.findWorkers(), instance);
+        submit(PipelineStage.VISION, settings.visionWorkers(), instance);
         submit(PipelineStage.REDACT, settings.redactWorkers(), instance);
         long every = settings.pollInterval().toMillis();
         timers.scheduleWithFixedDelay(this::sweep, every, every, TimeUnit.MILLISECONDS);
         timers.scheduleWithFixedDelay(this::missedGates, every * OPEN_JOBS_CHECK_POLLS,
                 every * OPEN_JOBS_CHECK_POLLS, TimeUnit.MILLISECONDS);
-        log.info("STAGE_JOB_WORKERS_STARTED text={} find={} redact={} claimLeaseMs={} nodeId={}",
-                settings.textWorkers(), settings.findWorkers(), settings.redactWorkers(),
+        log.info("STAGE_JOB_WORKERS_STARTED text={} find={} vision={} redact={} claimLeaseMs={} nodeId={}",
+                settings.textWorkers(), settings.findWorkers(), settings.visionWorkers(), settings.redactWorkers(),
                 settings.claimLease().toMillis(), nodeId);
     }
 

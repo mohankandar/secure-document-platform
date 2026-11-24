@@ -2,6 +2,7 @@ package com.securedoc.platform.application.compliance;
 
 import com.securedoc.platform.domain.business.PolicyPreset;
 import com.securedoc.platform.domain.business.ReviewMode;
+import com.securedoc.platform.domain.business.VisionSettings;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,7 +26,17 @@ public final class PolicyHistory {
 
     /** Sensitive-data policy values; {@code types} is null when the record did not hold the names (before 0016). */
     public record SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
-                                  Boolean maskSsnLastFour, String preset) {
+                                  Boolean maskSsnLastFour, String preset, VisionSettings vision) {
+
+        public SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
+                               Boolean maskSsnLastFour, String preset) {
+            this(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, VisionSettings.DEFAULTS);
+        }
+
+        /** Task 0064. */
+        public SensitivePolicy withVision(VisionSettings settings) {
+            return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, settings);
+        }
 
         public static SensitivePolicy of(Set<String> types, double threshold, ReviewMode mode, boolean mask) {
             Set<String> names = new TreeSet<>(types);
@@ -166,6 +177,14 @@ public final class PolicyHistory {
             lines.add("Labeled last-four SSN treated as sensitive: " + yesNo(before.maskSsnLastFour()) + " → "
                     + yesNo(after.maskSsnLastFour()));
         }
+        if (before.vision().enabled() != after.vision().enabled()) {
+            lines.add("Hard pages read by the vision model: " + yesNo(before.vision().enabled()) + " → "
+                    + yesNo(after.vision().enabled()));
+        }
+        if (Math.abs(before.vision().ocrThreshold() - after.vision().ocrThreshold()) > 1e-9) {
+            lines.add("Pages are hard below text-reading confidence: " + percent(before.vision().ocrThreshold()) + " → "
+                    + percent(after.vision().ocrThreshold()));
+        }
         if (lines.isEmpty()) lines.add("Saved with no change");
         return lines;
     }
@@ -230,7 +249,18 @@ public final class PolicyHistory {
         }
         return new SensitivePolicy(types, parseInt(k.get("enabledCount")), parseDouble(k.get("threshold")),
                 enumWord(k.get("reviewMode")), k.containsKey("maskSsnLastFour") ? parseBoolean(k.get("maskSsnLastFour")) : null,
-                enumWord(k.get("preset")));
+                enumWord(k.get("preset")), vision(k));
+    }
+
+    /** Task 0064: the keys are written only when not the default. */
+    private static VisionSettings vision(Map<String, String> k) {
+        Double threshold = parseDouble(k.get("visionOcrThreshold"));
+        try {
+            return new VisionSettings(!"false".equals(k.get("visionEnabled")),
+                    threshold == null ? VisionSettings.DEFAULTS.ocrThreshold() : threshold);
+        } catch (IllegalArgumentException unreadable) {
+            return VisionSettings.DEFAULTS;
+        }
     }
 
     /** "a=1, b=X,Y, c=true" → {a:1, b:"X,Y", c:true}. Keys are split on ", " only; lists use "," with no space. */

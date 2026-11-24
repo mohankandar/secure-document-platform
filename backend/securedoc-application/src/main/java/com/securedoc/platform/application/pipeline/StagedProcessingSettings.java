@@ -12,10 +12,18 @@ import java.util.Objects;
  * @param textWorkers   Text workers on this server
  * @param findWorkers   Find workers on this server
  * @param redactWorkers Redact workers on this server
+ * @param visionWorkers Vision workers on this server (task 0064)
  * @param pollInterval  how often an idle worker looks for a job, and how often expired claims are swept
  */
 public record StagedProcessingSettings(PipelineMode mode, Duration claimLease, int maxAttempts, int textWorkers,
-                                       int findWorkers, int redactWorkers, Duration pollInterval) {
+                                       int findWorkers, int redactWorkers, Duration pollInterval,
+                                       int visionWorkers) {
+
+    /** The task 0048 shape, with the default number of vision workers. */
+    public StagedProcessingSettings(PipelineMode mode, Duration claimLease, int maxAttempts, int textWorkers,
+                                    int findWorkers, int redactWorkers, Duration pollInterval) {
+        this(mode, claimLease, maxAttempts, textWorkers, findWorkers, redactWorkers, pollInterval, 2);
+    }
 
     public StagedProcessingSettings {
         Objects.requireNonNull(mode, "mode");
@@ -23,7 +31,7 @@ public record StagedProcessingSettings(PipelineMode mode, Duration claimLease, i
         Objects.requireNonNull(pollInterval, "pollInterval");
         if (claimLease.toMillis() < 3000) throw new IllegalArgumentException("claim lease must be >= 3 seconds");
         if (maxAttempts < 1) throw new IllegalArgumentException("max attempts must be >= 1");
-        if (textWorkers < 1 || findWorkers < 1 || redactWorkers < 1) {
+        if (textWorkers < 1 || findWorkers < 1 || redactWorkers < 1 || visionWorkers < 1) {
             throw new IllegalArgumentException("each stage needs at least one worker");
         }
         if (pollInterval.toMillis() < 100) throw new IllegalArgumentException("poll interval must be >= 100 ms");

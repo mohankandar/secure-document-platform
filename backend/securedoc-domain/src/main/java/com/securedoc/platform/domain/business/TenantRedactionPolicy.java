@@ -13,7 +13,8 @@ import java.util.Set;
  *
  * <p>Task 0044: {@code searchableRedactedPages} (on by default) adds an invisible OCR text layer to every redacted page
  * (option B); off gives today's image-only redacted pages. Task 0049: {@code pageBatches} splits large documents for
- * Text and Find.
+ * Text and Find. Task 0064: {@code vision} says whether routed pages are read by the vision model, and the routing
+ * threshold.
  */
 public record TenantRedactionPolicy(
         TenantId tenantId,
@@ -23,8 +24,17 @@ public record TenantRedactionPolicy(
         boolean maskSsnLastFour,
         Instant updatedAt,
         boolean searchableRedactedPages,
-        PageBatchSettings pageBatches
+        PageBatchSettings pageBatches,
+        VisionSettings vision
 ) {
+    /** The policy as it was before task 0064, with the default vision settings. */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages, PageBatchSettings pageBatches) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, pageBatches, VisionSettings.DEFAULTS);
+    }
+
     /** The policy as it was before task 0049, with the default page batches. */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
@@ -56,7 +66,10 @@ public record TenantRedactionPolicy(
             EntityType.ITIN,
             EntityType.EIN,
             EntityType.DRIVERS_LICENSE_NUMBER,
-            EntityType.PASSPORT_NUMBER
+            EntityType.PASSPORT_NUMBER,
+            // Task 0064: found by the signature detector and the vision path.
+            EntityType.SIGNATURE,
+            EntityType.FACE_PHOTO
     );
 
     private static final Set<EntityType> CONFIGURABLE_TYPES = union(V1_CONFIGURABLE_TYPES, OPT_IN_TYPES);
@@ -73,6 +86,7 @@ public record TenantRedactionPolicy(
         Objects.requireNonNull(reviewMode, "reviewMode must not be null");
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         Objects.requireNonNull(pageBatches, "pageBatches must not be null");
+        Objects.requireNonNull(vision, "vision must not be null");
         if (autoRedactThreshold < 0.0 || autoRedactThreshold > 1.0) {
             throw new IllegalArgumentException("autoRedactThreshold must be between 0 and 1");
         }

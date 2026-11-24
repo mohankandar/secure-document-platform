@@ -39,13 +39,14 @@ class OptInKindsPolicySaveTest {
             new NoDefinitions(), policies, new NoLifecycle(), new DefaultReporting(), new AuditService(audits::add));
 
     @Test
-    void theSixKindsAreOptInAndSeparateFromTheV1Four() {
+    void theOptInKindsAreOptInAndSeparateFromTheV1Four() {
         assertEquals(EnumSet.of(EntityType.BANK_ROUTING_NUMBER, EntityType.BANK_ACCOUNT_NUMBER, EntityType.ITIN,
-                EntityType.EIN, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER),
+                EntityType.EIN, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER,
+                EntityType.SIGNATURE, EntityType.FACE_PHOTO), // task 0064
                 EnumSet.copyOf(TenantRedactionPolicy.optInTypes()));
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
                 EntityType.CREDIT_SCORE), EnumSet.copyOf(TenantRedactionPolicy.v1ConfigurableTypes()));
-        assertEquals(10, TenantRedactionPolicy.configurableTypes().size());
+        assertEquals(12, TenantRedactionPolicy.configurableTypes().size());
         assertFalse(TenantRedactionPolicy.configurableTypes().contains(EntityType.FINANCIAL_ACCOUNT), "stays unused");
         assertFalse(TenantRedactionPolicy.configurableTypes().contains(EntityType.GOVERNMENT_ID), "stays unused");
     }
@@ -85,9 +86,12 @@ class OptInKindsPolicySaveTest {
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), all, 0.99,
                 ReviewMode.UNCERTAIN_ONLY, false);
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), all, 0.50,
-                ReviewMode.UNCERTAIN_ONLY, false);
+                ReviewMode.UNCERTAIN_ONLY, false, false, 100, 10, false, 0.70);
+        service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), all, 0.50,
+                ReviewMode.UNCERTAIN_ONLY, false, false, 101, 11, false, 0.71);
+        assertTrue(lastDetail().contains("visionEnabled=false, visionOcrThreshold=0.71"), lastDetail());
         assertFalse(lastDetail().contains("[truncated]"));
-        assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=10, threshold=0.50"));
+        assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=12, threshold=0.50"));
     }
 
     private String lastDetail() {

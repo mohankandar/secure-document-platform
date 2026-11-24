@@ -5,7 +5,7 @@ import { Minus, MousePointerSquareDashed, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
-import { NAV, REVIEW_WORDS, sensitiveTypeName, whyAsked } from './words';
+import { NAV, REVIEW_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, foundByText, sensitiveTypeName, whyAsked } from './words';
 import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
 import { ConfirmDialog } from './admin/shared';
@@ -285,8 +285,8 @@ export default function Review({ caps }: { caps: string[] }) {
                         >
                           <span className="cf-queue-entity">{sensitiveTypeName(item.entityType)}</span>
                           <span className="cf-queue-meta">
-                            {!item.hasBoundingBox ? `${REVIEW_WORDS.placeNotFound} · ` : masked ? <><span className="cf-queue-found" aria-label="Text found, masked">{masked}</span> · </> : null}
-                            p.{item.pageNumber} · {Math.round(item.confidence * 100)}%
+                            {!item.hasBoundingBox && item.entityType !== UNREAD_PAGE ? `${REVIEW_WORDS.placeNotFound} · ` : masked ? <><span className="cf-queue-found" aria-label="Text found, masked">{masked}</span> · </> : null}
+                            p.{item.pageNumber}{item.entityType === UNREAD_PAGE ? '' : ` · ${Math.round(item.confidence * 100)}%`}
                           </span>
                         </button>
                       </li>
@@ -314,15 +314,16 @@ export default function Review({ caps }: { caps: string[] }) {
               </div>
             )}
 
-            <p className="cf-decision-reason">{whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
+            <p className="cf-decision-reason">{selected.entityType === UNREAD_PAGE ? UNREAD_PAGE_WORDS.why : whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
 
             <dl className="cf-facts">
               <div><dt>Case</dt><dd className="cf-mono">{titles.get(selected.packageId) ?? '—'}</dd></div>
               <div><dt>Document</dt><dd>{selected.fileName}, page {selected.pageNumber}</dd></div>
+              {foundByText(selected.foundBy) && <div><dt>Found by</dt><dd>{foundByText(selected.foundBy)}</dd></div>}
             </dl>
 
             {needsMark && (
-              <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> Location unknown. Drag across the page to mark it before redacting.</p>
+              <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> {selected.entityType === UNREAD_PAGE ? UNREAD_PAGE_WORDS.hint : 'Location unknown. Drag across the page to mark it before redacting.'}</p>
             )}
             {draft && (
               <p className="cf-decision-hint"><MousePointerSquareDashed size={15} aria-hidden="true" /> Your mark will be redacted instead of the detected area. <Kbd>Esc</Kbd> clears it.</p>

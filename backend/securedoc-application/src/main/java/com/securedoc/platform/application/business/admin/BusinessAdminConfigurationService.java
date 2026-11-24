@@ -17,6 +17,7 @@ import com.securedoc.platform.domain.business.PolicyPreset;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.PageBatchSettings;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
+import com.securedoc.platform.domain.business.VisionSettings;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -213,6 +214,22 @@ public final class BusinessAdminConfigurationService {
                                                             boolean searchableRedactedPages,
                                                             Integer pageBatchSize,
                                                             Integer pageBatchOverlap) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, null, null);
+    }
+
+    /** Task 0064: as above, with vision on/off and the routing threshold; null keeps the stored value. */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap,
+                                                            Boolean visionEnabled,
+                                                            Double visionOcrThreshold) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -236,16 +253,25 @@ public final class BusinessAdminConfigurationService {
         } catch (IllegalArgumentException invalid) {
             throw new ValidationException(LvErrorCode.CFG_001, invalid.getMessage());
         }
+        VisionSettings storedVision = previous.map(TenantRedactionPolicy::vision).orElse(VisionSettings.DEFAULTS);
+        VisionSettings vision;
+        try {
+            vision = new VisionSettings(visionEnabled == null ? storedVision.enabled() : visionEnabled,
+                    visionOcrThreshold == null ? storedVision.ocrThreshold() : visionOcrThreshold);
+        } catch (IllegalArgumentException invalid) {
+            throw new ValidationException(LvErrorCode.CFG_001, invalid.getMessage());
+        }
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), enabledTypes, autoRedactThreshold,
                 reviewMode, maskSsnLastFour)
                 && previous.get().searchableRedactedPages() == searchableRedactedPages
-                && storedBatches.equals(batches)) {
+                && storedBatches.equals(batches)
+                && storedVision.equals(vision)) {
             // Task 0017: a save that changes nothing writes no audit record (and nothing is saved).
             return previous.get();
         }
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
-                searchableRedactedPages, batches);
+                searchableRedactedPages, batches, vision);
         policyRepository.save(policy);
         auditService.recordSuccess(tenantId, actorId,
                 AuditAction.SENSITIVE_DATA_POLICY_CHANGED,
@@ -276,7 +302,11 @@ public final class BusinessAdminConfigurationService {
                 + (policy.searchableRedactedPages() ? "" : ", searchableRedactedPages=false")
                 // Task 0049: written only when not the default.
                 + (policy.pageBatches().equals(PageBatchSettings.DEFAULTS) ? "" : ", pageBatchSize="
-                        + policy.pageBatches().size() + ", pageBatchOverlap=" + policy.pageBatches().overlap());
+                        + policy.pageBatches().size() + ", pageBatchOverlap=" + policy.pageBatches().overlap())
+                // Task 0064: written only when not the default.
+                + (policy.vision().enabled() ? "" : ", visionEnabled=false")
+                + (policy.vision().ocrThreshold() == VisionSettings.DEFAULTS.ocrThreshold() ? ""
+                        : ", visionOcrThreshold=" + String.format(Locale.ROOT, "%.2f", policy.vision().ocrThreshold()));
     }
 
     public TenantLifecyclePolicy updateLifecyclePolicy(TenantId tenantId, ActorId actorId,

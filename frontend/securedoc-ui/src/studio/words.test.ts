@@ -37,7 +37,7 @@ test('task 0043: every opt-in pattern kind has a name, a plural and a one-line "
   const block = /OPT_IN_TYPES\s*=\s*Set\.of\(([^)]*)\)/s.exec(source);
   assert.ok(block, 'OPT_IN_TYPES must be readable from TenantRedactionPolicy.java');
   const kinds = [...block[1].matchAll(/EntityType\.([A-Z_]+)/g)].map((m) => m[1]);
-  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'ITIN', 'PASSPORT_NUMBER']);
+  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'FACE_PHOTO', 'ITIN', 'PASSPORT_NUMBER', 'SIGNATURE']);
   for (const kind of kinds) {
     const known = findSensitiveType(kind);
     assert.ok(known, `${kind} has no name in words.ts`);

@@ -101,6 +101,14 @@ securedoc:
     model: ${SECUREDOC_AI_MODEL:${SECUREDOC_AI_OLLAMA_MODEL:qwen2.5:7b}}
     api-key: ${SECUREDOC_AI_API_KEY:}
     timeout-seconds: ${SECUREDOC_AI_TIMEOUT_SECONDS:60}
+    # Task 0064: the vision model that reads routed pages. Local Ollama only: a server outside this machine or its
+    # private network is never asked. Pinned by digest: the server's model must have exactly this digest, or it is not
+    # used (LV-AI-008) and the pages go to a person. A change of model means the model, its digest and a new benchmark.
+    vision:
+      base-url: ${SECUREDOC_AI_VISION_BASE_URL:${SECUREDOC_AI_BASE_URL:${SECUREDOC_AI_OLLAMA_BASE_URL:http://localhost:11434}}}
+      model: ${SECUREDOC_AI_VISION_MODEL:qwen3-vl:8b-instruct}
+      model-digest: ${SECUREDOC_AI_VISION_MODEL_DIGEST:70e58e37beb15464e19aa903dedb2cba828b89c0fb186f75ff2738c7347b96eb}
+      timeout-seconds: ${SECUREDOC_AI_VISION_TIMEOUT_SECONDS:180}
     # Page-level execution is bounded and configurable. Transient failures retry only the
     # affected page; successful pages are not replayed.
     parallelism: ${SECUREDOC_AI_PARALLELISM:2}
@@ -214,6 +222,8 @@ securedoc:
       text-workers: ${SECUREDOC_STAGE_JOBS_TEXT_WORKERS:2}
       find-workers: ${SECUREDOC_STAGE_JOBS_FIND_WORKERS:2}
       redact-workers: ${SECUREDOC_STAGE_JOBS_REDACT_WORKERS:2}
+      # Task 0064: pages read by the vision model at once (never more than securedoc.ai.requests-at-once).
+      vision-workers: ${SECUREDOC_STAGE_JOBS_VISION_WORKERS:2}
       poll-interval-ms: ${SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS:1000}
     export-jobs:
       # Task 0028: retry-delay-ms and pause-after-failures are still read but no longer used (destinations are

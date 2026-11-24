@@ -11,5 +11,8 @@ public record UpdateSensitiveDataPolicyRequest(
         Boolean searchableRedactedPages,
         /* Task 0049: null keeps the stored value. */
         Integer pageBatchSize,
-        Integer pageBatchOverlap
+        Integer pageBatchOverlap,
+        /* Task 0064: null keeps the stored value. */
+        Boolean visionEnabled,
+        Double visionOcrThreshold
 ) {}

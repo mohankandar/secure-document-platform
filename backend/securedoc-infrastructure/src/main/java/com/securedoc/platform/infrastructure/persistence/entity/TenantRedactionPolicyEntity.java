@@ -47,9 +47,20 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "page_batch_overlap", nullable = false)
     private int pageBatchOverlap = 2;
 
+    /** Migration 080 (task 0064): vision on/off and the routing threshold. */
+    @Column(name = "vision_enabled", nullable = false)
+    private boolean visionEnabled = true;
+
+    @Column(name = "vision_ocr_threshold", nullable = false)
+    private double visionOcrThreshold = 0.85;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    public boolean isVisionEnabled() { return visionEnabled; }
+    public void setVisionEnabled(boolean visionEnabled) { this.visionEnabled = visionEnabled; }
+    public double getVisionOcrThreshold() { return visionOcrThreshold; }
+    public void setVisionOcrThreshold(double visionOcrThreshold) { this.visionOcrThreshold = visionOcrThreshold; }
     public int getPageBatchSize() { return pageBatchSize; }
     public void setPageBatchSize(int pageBatchSize) { this.pageBatchSize = pageBatchSize; }
     public int getPageBatchOverlap() { return pageBatchOverlap; }

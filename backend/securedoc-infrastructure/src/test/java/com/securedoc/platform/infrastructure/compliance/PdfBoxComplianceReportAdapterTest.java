@@ -192,6 +192,34 @@ class PdfBoxComplianceReportAdapterTest {
         assertFalse(adapter.render(base, FINGERPRINT).length == pdf.length && java.util.Arrays.equals(adapter.render(base, FINGERPRINT), pdf));
     }
 
+    /** Task 0064: section 5 lists the AI models with their digests, and how pages were read; absent when not recorded. */
+    @Test
+    void howPagesWereReadListsTheModelsAndTheirDigests() throws IOException {
+        ComplianceReportContent base = content(ComplianceEdition.SUMMARY, List.of());
+        String digest = "70e58e37beb15464e19aa903dedb2cba828b89c0fb186f75ff2738c7347b96eb";
+        ComplianceReportContent withReading = new ComplianceReportContent(base.edition(), null, base.entityName(),
+                base.periodWords(), base.periodEndWords(), base.createdBy(), base.createdAt(), base.policy(),
+                base.retention(), base.cases(), base.activity(), base.appendix(),
+                new ComplianceReportContent.Reading(List.of(
+                        new ComplianceReportContent.CountRow("Read as text", 55, "92%"),
+                        new ComplianceReportContent.CountRow("Read by the vision model", 5, "8%")),
+                        List.of(new ComplianceReportContent.ModelRow("qwen3-vl:8b-instruct", "vision-prompt-v2", digest, 3)),
+                        "Note."));
+        byte[] pdf = adapter.render(withReading, FINGERPRINT);
+        writeSample("summary-page-reading", pdf);
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            String all = text(doc, 1, doc.getNumberOfPages());
+            assertTrue(all.contains("5 · How pages were read"));
+            assertTrue(all.contains("Read by the vision model 5 8%"));
+            assertTrue(all.replaceAll("\\s+", "").contains(digest), "the whole digest is printed");
+        }
+        assertTrue(withReading.canonicalText().contains("reading.model=qwen3-vl:8b-instruct|vision-prompt-v2|" + digest + "|3"));
+        assertFalse(base.canonicalText().contains("reading."), "nothing recorded: the report is as before");
+        try (PDDocument doc = Loader.loadPDF(adapter.render(base, FINGERPRINT))) {
+            assertFalse(text(doc, 1, doc.getNumberOfPages()).contains("How pages were read"));
+        }
+    }
+
     @Test
     void charactersTheFontCannotDrawAreReplacedNotFatal() throws IOException {
         ComplianceReportContent base = content(ComplianceEdition.SUMMARY, List.of());

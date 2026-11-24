@@ -117,6 +117,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-AI-005 | AI answer couldn't be used | The model's answer was empty, cut short or not in the expected form. | System | IT Admin | — | 124, 125, 126, 129, 132 |
 | LV-AI-006 | AI model not set up for this entity | This entity has no AI settings. | Set-up | Platform Ops | — | 135 |
 | LV-AI-007 | AI model couldn't be loaded | Loading the AI model at start failed. | Set-up | IT Admin | — | 133, 329 |
+| LV-AI-008 | AI model isn't the approved one | The installed AI model isn't the version approved for LexaVault, so it wasn't used. | Set-up | IT Admin | — | task 0064 |
 
 ### RED: redaction (001–009)
 
@@ -218,7 +219,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-008 | Item not found | The item asked for (a rule, a connection, a file) doesn't exist in this entity. | Refused | Person, IT Admin | 404 | 0025 (not-found other than a case) |
 | LV-SYS-009 | Unknown request | The address or method isn't one LexaVault offers. | Refused | Source system | 404 / 405 | 0025 (unknown endpoint, wrong method) |
 
-**Totals:** INT 40 · SCN 21 · PRC 10 · AI 7 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **141 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053.)*
+**Totals:** INT 40 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **142 codes** (3 reserved: LV-INT-027, LV-DLV-009, LV-DLV-015). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-AI-008 by task 0064.)*
 
 ## 3. Rows with no code on purpose
 
