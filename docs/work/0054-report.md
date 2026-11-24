@@ -2,7 +2,7 @@
 
 Date: 2026-11-24
 Branch: `feature/0054-identity-0.7.0`, from 0053's branch (PR #2, approved, not merged yet)
-Outcome: **DONE** (4 decisions for the owner). Built by a subagent from a written brief; I read the sign-in, licence-key, build and settings parts of the change and ran the full proofs myself. Lines marked (agent) were run by the subagent only.
+Outcome: **DONE** (4 decisions, answered below). Built by a subagent from a written brief; I read the sign-in, licence-key, build and settings parts of the change and ran the full proofs myself. Lines marked (agent) were run by the subagent only.
 
 ## What was done
 - **Version:** platform-core 0.7.0 for identity and the setup jar. In the app jar: identity-core, -jdbc, -spring, licensing, outbound-spring, outbound, errors. Both build scripts check exactly these. HttpClient is pinned to the versions platform-core 0.7.0 is built with (Spring Boot's list would take it back to older ones).
@@ -53,7 +53,16 @@ Versions and renamed steps (`SchemaStepPostgresTest`); no `--keys`, and exit 3 o
 3. **Production licence keys** must be added to `backend/licence-build/production` before any customer build. Who provides them, and when?
 4. **`CLAUDE.md`:** change the backend command to `mvn -Pdev-build clean install`?
 
+## Decisions (2026-11-24, design chat, as recommended under LV-19)
+1. `platform-notifications` stays excluded for now; a proxy with sign-in is refused at start. Revisit when notifications are integrated.
+2. **Done on this branch:** the configured `PLATFORM_OPERATIONS_ADMIN` mapping is gone (`application.yml`, `Start-LexaVault-OIDC.ps1`), and one that is still configured gives nothing. Test: `aConfiguredMappingNeverGivesThePlatformRole`; `eachSupportedAdministratorRoleAuthenticatesWithoutLegacyAdmin` no longer expects the platform role from a mapping.
+3. Production licence keys: an owner item, before the first customer build.
+4. **Done on this branch:** `CLAUDE.md` names `mvn -Pdev-build clean install` for local builds.
+
+After these two changes the full backend build was run again: BUILD SUCCESS, 0 failures (API 680, +1). The frontend suite and the proof scripts above were run before these two changes and not repeated; CI covers the frontend.
+
 ## For the owner
+- **An installation that gives platform operations through the configured mapping loses it at this upgrade** until setup has the platform-wide grant. On your machine the next OIDC start's setup adds it.
 - After the merge: rebuild with `Build-LexaVault-All.ps1`, then `Start-LexaVault-OIDC.ps1 …`, then `Test-LexaVault-OidcSessionContinuity.ps1 -Username businessuser -PromptForPassword`. Expected at that start: identity 2 migrations to V5, licensing 1 to V2, setup creates 1 platform grant. Not run on your data.
 - A LOCAL-only start does not run setup again, so it does not get the new platform grant; an OIDC start does.
 

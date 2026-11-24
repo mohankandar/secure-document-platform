@@ -106,18 +106,29 @@ class RequestContextResolverSecurityTest {
     @Test
     void eachSupportedAdministratorRoleAuthenticatesWithoutLegacyAdmin() {
         SecurityProperties oidc = oidcProperties();
-        for (String role : List.of("BUSINESS_ADMIN", "TENANT_IT_ADMIN", "PLATFORM_OPERATIONS_ADMIN")) {
+        for (String role : List.of("BUSINESS_ADMIN", "TENANT_IT_ADMIN")) {
             SecurityContextHolder.clearContext();
             String external = switch (role) {
                 case "BUSINESS_ADMIN" -> "securedoc-business-admin";
-                case "TENANT_IT_ADMIN" -> "securedoc-tenant-it-admin";
-                default -> "securedoc-platform-operations-admin";
+                default -> "securedoc-tenant-it-admin";
             };
             SecurityContextHolder.getContext().setAuthentication(authenticated(
                     jwt("00000000-0000-0000-0000-000000000001", List.of(external))));
             assertEquals(java.util.Set.of(role),
                     resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
         }
+    }
+
+    /** Task 0054, decision 2: a configured mapping to the platform role gives nothing; only a platform-wide grant does. */
+    @Test
+    void aConfiguredMappingNeverGivesThePlatformRole() {
+        SecurityProperties oidc = oidcProperties();
+        assertEquals("securedoc-platform-operations-admin", oidc.getOidc().getRoleMappings().get("PLATFORM_OPERATIONS_ADMIN"));
+        signIn(List.of("securedoc-platform-operations-admin"));
+        assertThrows(SecurityContextException.class, () -> resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)));
+        signIn(List.of("securedoc-platform-operations-admin", "securedoc-report-viewer"));
+        assertEquals(java.util.Set.of("REPORT_VIEWER"),
+                resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)).roles());
     }
 
     /** Task 0054: with one configured entity too, the platform role comes through a platform-wide grant alone. */
