@@ -71,7 +71,7 @@ class RedactionCatalogTest {
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.ITIN, EntityType.DATE_OF_BIRTH,
                 EntityType.BANK_ACCOUNT_NUMBER, EntityType.CREDIT_CARD_NUMBER, EntityType.DRIVERS_LICENSE_NUMBER,
                 EntityType.PASSPORT_NUMBER), EnumSet.copyOf(RegulationPack.HIPAA.kinds()));
-        assertEquals(EnumSet.complementOf(notIn(EntityType.EIN, EntityType.SIGNATURE, EntityType.FACE_PHOTO)), EnumSet.copyOf(RegulationPack.GLBA.kinds()));
+        assertEquals(EnumSet.complementOf(notIn(EntityType.SIGNATURE, EntityType.FACE_PHOTO)), EnumSet.copyOf(RegulationPack.GLBA.kinds()));
         for (RegulationPack pack : RegulationPack.values()) {
             assertTrue(RedactionCatalog.kinds().containsAll(pack.kinds()), pack.name());
             assertFalse(pack.covers().isBlank());

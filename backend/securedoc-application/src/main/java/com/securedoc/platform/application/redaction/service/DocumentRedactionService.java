@@ -321,7 +321,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                 // Task 0050: no signer name. The case is the record's resource, so the case panel can ask for it.
                 auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SIGNATURE_REMOVED,
                         "DocumentPackage", command.packageId().toString(), command.packageId(), correlationId,
-                        "Signature removed by redaction: document=" + command.documentId());
+                        "Original was digitally signed; the signature no longer applies to the redacted copy: document="
+                                + command.documentId());
             }
 
             Checksum redactedChecksum;

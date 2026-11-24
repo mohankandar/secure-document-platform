@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 final class OptInPatternDetector {
 
     static final String DETECTOR_NAME = "local-pattern-kinds";
-    static final String DETECTOR_VERSION = "1.1.0"; // 1.1.0: task 0047 (ITIN or SSN label, driver context)
+    static final String DETECTOR_VERSION = "1.2.0"; // 1.1.0: task 0047 (ITIN or SSN label, driver context); 1.2.0: task 0069 (US state licence formats)
 
     static final String ROUTING = "BANK_ROUTING_NUMBER";
     static final String ACCOUNT = "BANK_ACCOUNT_NUMBER";
@@ -456,8 +456,24 @@ final class OptInPatternDetector {
         long letters = alnum.length() - digitCount;
         if (alnum.length() < 5 || alnum.length() > 16 || digitCount < 4 || letters > 3) return false;
         return !DATE_SHAPE.matcher(value).matches() && !SSN_SHAPE.matcher(value).matches()
-                && !PHONE_SHAPE.matcher(value).matches() && !ZIP4_SHAPE.matcher(value).matches();
+                && !PHONE_SHAPE.matcher(value).matches() && !ZIP4_SHAPE.matcher(value).matches()
+                && US_LICENSE_FORMATS.matcher(alnum).matches();
     }
+
+    /**
+     * Task 0069: the common US state formats, dashes left out. Not covered: other countries, and formats that mix letters
+     * and digits freely (for example a Washington number). docs/operations/REDACTION_CATALOG.md lists them.
+     */
+    private static final Pattern US_LICENSE_FORMATS = Pattern.compile(
+            "\\d{5,14}"                    // TX, PA, GA, NC, OR, TN, LA, NY, AZ and others: digits only
+                    + "|[A-Z]\\d{4,14}"     // CA, IL, FL, MI, MN, MD, VA, MA, NJ, WI, AZ, MO and others: a letter, then digits
+                    + "|[A-Z]{2}\\d{4,7}"   // OH, CO, RI and WV: two letters, then digits
+                    + "|[A-Z]{2}\\d{6}[A-Z]" // ID
+                    + "|[A-Z]{3}\\d{6}"     // ND
+                    + "|\\d{3}[A-Z]{2}\\d{4}" // IA
+                    + "|\\d{2}[A-Z]{3}\\d{5}" // NH
+                    + "|\\d{7}[A-Z]"        // VT
+                    + "|[A-Z]\\d{2}[A-Z]\\d[A-Z]"); // KS
 
     static boolean plausiblePassport(String value) {
         return PASSPORT_VALUE.matcher(value).matches() && value.length() >= 6 && value.length() <= 11;
