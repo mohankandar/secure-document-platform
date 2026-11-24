@@ -4,7 +4,7 @@
  * enforces every rule, the row only hides what would be refused. Imports only pure modules (words.ts and
  * supportRules.ts), so node's test runner can check it directly.
  */
-import { ACTION_WORDS, NEXT_STEP, findingsToReview, sentenceCase } from './words.ts';
+import { ACTION_WORDS, NEXT_STEP, PROCESSING_STEP_WORDS, findingsToReview, sentenceCase } from './words.ts';
 import { canContinueManually } from './support/supportRules.ts';
 import { isLvCode, lvEntry } from './lvCodes.ts';
 
@@ -97,4 +97,42 @@ export function deliveryLabel(delivery: { destinationLabel?: string | null; sour
   const id = delivery.sourceDocumentId?.trim();
   if (id) return `Document ${id.slice(0, 8)}`;
   return 'Destination';
+}
+
+/* ---------- Task 0048: where a case is in processing (case panel) ---------- */
+
+export type ProcessingStepKey = 'text' | 'find' | 'review' | 'redact' | 'exporting';
+
+/** The chip's colour family (the existing [data-stage] styles): processing steps pulse like Redacting. */
+const STEP_CHIP_STAGE: Record<ProcessingStepKey, 'redacting' | 'review' | 'exporting'> = {
+  text: 'redacting', find: 'redacting', redact: 'redacting', review: 'review', exporting: 'exporting',
+};
+
+/**
+ * Task 0048: which processing step a case is at, from its status and its documents' statuses (the same in the inline
+ * and the staged pipeline). Text while any document is still read, Find while any is searched, Review while a finding
+ * waits for a person, Redact while any document waits for redaction, Exporting while an export job is open. Null when
+ * the case is not in processing (new, waiting for approval, finished, stopped): the timeline says enough then.
+ *
+ * @param openFindings findings for a person, or undefined when the viewer cannot see the review queue
+ */
+export function processingStepOf(status: string, documentStatuses: readonly string[], exporting: boolean,
+                                 openFindings: number | undefined): { key: ProcessingStepKey; label: string; chipStage: 'redacting' | 'review' | 'exporting' } | null {
+  const step = ((): ProcessingStepKey | null => {
+    if (exporting) return 'exporting';
+    const any = (...wanted: string[]) => documentStatuses.some(s => wanted.includes(s));
+    if (status === 'SUBMITTED') return 'text';
+    if (status === 'PROCESSING') {
+      if (any('UPLOADED', 'EXTRACTING')) return 'text';
+      if (any('DETECTING')) return 'find';
+      if (any('REDACTING')) return 'redact';
+      return null;
+    }
+    if (status === 'PENDING_REVIEW' || status === 'IN_REVIEW') {
+      if ((openFindings ?? 1) > 0) return 'review';
+      return any('REDACTING') ? 'redact' : 'review';
+    }
+    return null;
+  })();
+  return step ? { key: step, label: PROCESSING_STEP_WORDS[step], chipStage: STEP_CHIP_STAGE[step] } : null;
 }

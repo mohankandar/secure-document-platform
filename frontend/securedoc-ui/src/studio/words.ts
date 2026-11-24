@@ -63,6 +63,21 @@ export const STAGE_NAMES: Record<StageWordKey, string> = {
   unknown: 'Unrecognized',
 };
 
+/** Task 0048: the processing step a case is at (case panel chip). Same words in the inline and staged pipelines. */
+export const PROCESSING_STEP_WORDS = {
+  text: 'Text',
+  find: 'Find',
+  review: 'Review',
+  redact: 'Redact',
+  exporting: 'Exporting',
+} as const;
+
+/** Task 0048: the line that holds the step chip, and what it means for someone who hovers it. */
+export const PROCESSING_STEP_LINE = {
+  label: 'Now at',
+  hint: 'Text: reading the documents. Find: looking for sensitive data. Review: a person decides. Redact: blacking out and checking. Exporting: sending.',
+} as const;
+
 /** The groups on the Cases page. */
 export const CASE_GROUPS = {
   needsYou: 'Needs you',

@@ -11,7 +11,10 @@
 #>
 param(
     [int]$Port = 11499,
-    [string]$Model = "qwen3.5:9b"
+    [string]$Model = "qwen3.5:9b",
+    # Task 0048: how long each chat answer takes (the two-server check keeps Find jobs running long enough to stop a
+    # server in the middle of one). 0, the default, answers at once, as before.
+    [int]$DelayMs = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,6 +42,7 @@ public sealed class LexaVaultFakeValueOllama
     private readonly int port;
     private readonly string model;
     private readonly string chatBody;
+    public int DelayMs;
     private TcpListener listener;
 
     public LexaVaultFakeValueOllama(int port, string model, string chatBody)
@@ -79,6 +83,7 @@ public sealed class LexaVaultFakeValueOllama
                 }
                 else if (path == "/api/chat")
                 {
+                    if (DelayMs > 0) Thread.Sleep(DelayMs);
                     Send(stream, 200, chatBody);
                 }
                 else
@@ -130,6 +135,7 @@ public sealed class LexaVaultFakeValueOllama
 
 Add-Type -TypeDefinition $source -Language CSharp
 $server = New-Object LexaVaultFakeValueOllama($Port, $Model, $chatBody)
+$server.DelayMs = $DelayMs
 $server.Start()
 Write-Host "Fake-value mock Ollama listening on http://127.0.0.1:$Port (model $Model)"
 while ($true) { Start-Sleep -Seconds 1 }

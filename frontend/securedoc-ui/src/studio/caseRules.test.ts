@@ -92,3 +92,26 @@ test('the destination shows once one is chosen', () => {
   assert.equal(rowDestination({ destinationName: '  ' }), null);
   assert.equal(rowDestination({}), null);
 });
+
+// Task 0048: the case panel says which processing step a case is at, in the same words in both pipelines.
+test('processing step: Text, Find, Redact from the documents; Review while a person decides; Exporting', async () => {
+  const { processingStepOf } = await import('./caseRules.ts');
+  const label = (status: string, docs: string[], exporting = false, open?: number) =>
+    processingStepOf(status, docs, exporting, open)?.label ?? null;
+  assert.equal(label('SUBMITTED', ['UPLOADED']), 'Text');
+  assert.equal(label('PROCESSING', ['UPLOADED', 'DETECTING']), 'Text', 'while any document is still read');
+  assert.equal(label('PROCESSING', ['EXTRACTING', 'REDACTING']), 'Text');
+  assert.equal(label('PROCESSING', ['DETECTING', 'REDACTING']), 'Find');
+  assert.equal(label('PROCESSING', ['REDACTING', 'PROCESSED']), 'Redact');
+  assert.equal(label('PENDING_REVIEW', ['REDACTING'], false, 2), 'Review');
+  assert.equal(label('IN_REVIEW', ['REDACTING'], false, undefined), 'Review', 'the queue is not visible: still Review');
+  assert.equal(label('PENDING_REVIEW', ['REDACTING', 'PROCESSED'], false, 0), 'Redact', 'reviewed, being redacted');
+  assert.equal(label('PROCESSING', ['PROCESSED'], true), 'Exporting');
+  assert.equal(label('PROCESSING', ['PROCESSED']), null, 'between the last redaction and the export job');
+  for (const status of ['CREATED', 'PENDING_FINAL_APPROVAL', 'COMPLETED', 'FAILED', 'CANCELLED']) {
+    assert.equal(label(status, ['PROCESSED']), null, status);
+  }
+  assert.equal(processingStepOf('PROCESSING', ['DETECTING'], false, undefined)?.chipStage, 'redacting');
+  assert.equal(processingStepOf('PENDING_REVIEW', ['REDACTING'], false, 1)?.chipStage, 'review');
+  assert.equal(processingStepOf('PROCESSING', [], true, undefined)?.chipStage, 'exporting');
+});

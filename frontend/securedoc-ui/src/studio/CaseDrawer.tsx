@@ -14,11 +14,11 @@ import {
   refusedWhen, type ExportJobView, type ExportState, type ExportTimings,
 } from './exportRules';
 import { useToast } from './toast';
-import { CodeLabel, Notice, Spinner } from './atoms';
+import { CodeLabel, Notice, Spinner, StageChip } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
-import { CASE_SECTIONS, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
-import { deliveryLabel } from './caseRules';
+import { CASE_SECTIONS, PROCESSING_STEP_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
+import { deliveryLabel, processingStepOf } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
 import { technicalProblemText, technicalReasonCode } from './support/supportRules';
 
@@ -51,6 +51,9 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   const stage: StageKey | null = pkg ? (exporting ? 'delivered' : reprocessing ? 'redacting' : stageOf(pkg.status)) : null;
   const actions = pkg ? caseActions(pkg.status, caps, life, reprocessing, openFindings.length)
     .filter(action => action.kind !== 'manual-fallback' || manualEligibility.data?.eligible === true) : [];
+  // Task 0048: which processing step the case is at (Text, Find, Review, Redact, Exporting), in words.
+  const step = pkg ? processingStepOf(pkg.status, pkg.documents.map(d => d.status), exporting,
+    caps.includes(CAP.review) ? openFindings.length : undefined) : null;
 
   return (
     <aside className="cf-drawer" aria-label="Case panel">
@@ -71,6 +74,11 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
       {pkg && stage && (
         <div className="cf-drawer-body">
           {stage !== 'unknown' && <Timeline stage={stage} status={pkg.status} exporting={exporting} />}
+          {step && (
+            <p className="cf-muted cf-small" data-testid="case-processing-step" data-step={step.key} title={PROCESSING_STEP_LINE.hint}>
+              {PROCESSING_STEP_LINE.label} <StageChip stage={step.chipStage} label={step.label} />
+            </p>
+          )}
 
           {exporting && caseExport.data ? (
             <ExportStep state={exportState} jobs={caseExport.data.jobs} timings={caseExport.data.timings ?? null} caps={caps} onChanged={() => Promise.all([caseExport.mutate(), mutate()])} />
