@@ -103,6 +103,13 @@ public enum AuditAction {
     TENANT_ACTIVATED,
     TENANT_SUSPENDED,
     TENANT_DEACTIVATED,
+    // Task 0058: entity slots, an entity's time zone and the entity a person works in. Codes only.
+    ENTITY_ACTIVATED,
+    ENTITY_RENAMED,
+    ENTITY_SUSPENDED,
+    ENTITY_RESUMED,
+    ENTITY_TIME_ZONE_CHANGED,
+    ENTITY_SWITCHED,
     CAPABILITY_CHANGED,
 
     // Policy management

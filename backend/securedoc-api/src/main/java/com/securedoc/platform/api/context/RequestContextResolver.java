@@ -324,6 +324,24 @@ public class RequestContextResolver {
         return java.util.Optional.empty();
     }
 
+    /** The issuer and the groups of the verified sign-in of the current request (task 0058). */
+    public record VerifiedSignIn(java.net.URI issuer, Set<String> groups) {
+    }
+
+    /**
+     * The verified sign-in of the current request: issuer and groups exactly as the normalized token has them. Empty in
+     * LOCAL mode, where there is none.
+     */
+    public java.util.Optional<VerifiedSignIn> verifiedSignIn() {
+        if (securityProperties.getMode() == SecurityMode.LOCAL) return java.util.Optional.empty();
+        var jwt = requireOidcToken().getToken();
+        if (jwt.getIssuer() == null) {
+            throw new SecurityContextException("Authenticated identity has invalid OIDC identity claims", "INVALID_IDENTITY_CLAIMS");
+        }
+        return java.util.Optional.of(new VerifiedSignIn(java.net.URI.create(jwt.getIssuer().toString()),
+                normalizeIdentity(jwt).groups()));
+    }
+
     private SecurityContextException attributed(SecurityContextException refused, TenantId tenantId,
                                                 org.springframework.security.oauth2.jwt.Jwt jwt) {
         try {

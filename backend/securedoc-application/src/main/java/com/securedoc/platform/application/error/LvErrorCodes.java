@@ -370,6 +370,8 @@ public final class LvErrorCodes {
         m.put("LICENSE_CONFIGURATION_ERROR", LIC_003);
         m.put("LICENSE_NOT_PERMITTED", LIC_004);
         m.put("LICENSE_ENTITLEMENT_MISSING", LIC_004);
+        // Task 0058: intake for an entity that is suspended or not activated.
+        m.put("ENTITY_NOT_ACTIVE", AUT_005);
         // Sign-in admission reasons: LexaVault's own (#229 to #250, #273).
         m.put("NO_MAPPED_ROLE", AUT_002);
         m.put("CONNECTION_LOOKUP_NOT_CONFIGURED", AUT_007);

@@ -58,6 +58,7 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
     private volatile Reading last;
     private volatile LicenceStatus lastGood;
     private volatile String lastState;
+    private Predicate<TenantId> entityActive = entity -> true;
     private Runnable afterReading = () -> { };
     private ScheduledExecutorService reader;
 
@@ -76,6 +77,15 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
         this.audit = Objects.requireNonNull(audit);
         this.nanos = nanos;
         read();
+    }
+
+    /**
+     * Task 0058: an entity that is suspended (or not activated) takes nothing in, whatever the licence says. Asked at every
+     * question, never kept; work already taken in is finished. Without it (tests of the licence itself) every entity is active.
+     */
+    public PlatformLicence withEntityActive(Predicate<TenantId> entityActive) {
+        this.entityActive = Objects.requireNonNull(entityActive);
+        return this;
     }
 
     /** Starts the readings. {@code afterEachReading} puts in the pages that still wait. */
@@ -182,6 +192,10 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
             return refused("LICENSE_TENANT_MISMATCH", LicenseValidationStatus.TENANT_MISMATCH, "ENTITY_NOT_IN_LICENCE",
                     "The entity is not in the licence");
         }
+        if (!entityActive.test(tenantId)) {
+            return refused("ENTITY_NOT_ACTIVE", LicenseValidationStatus.ACTIVE, "ENTITY_NOT_ACTIVE",
+                    "The entity is not active");
+        }
         return Optional.empty();
     }
 
@@ -197,7 +211,8 @@ public class PlatformLicence implements IntakeLicence, AutoCloseable {
         LicenseEnforcementException refused = refusal.get();
         // Task 0023 C6: its own transaction, so the record survives the refused request's rollback.
         audit.recordDeniedIndependently(tenantId, actorId, AuditAction.LICENSE_ENFORCEMENT_DENIED, "Tenant",
-                tenantId.toString(), correlationId, "Intake stopped by the licence: " + LvErrorCodes.auditDetail(
+                tenantId.toString(), correlationId, (refused.errorCode().equals("ENTITY_NOT_ACTIVE")
+                        ? "Intake refused, the entity is not active: " : "Intake stopped by the licence: ") + LvErrorCodes.auditDetail(
                         LvErrorCodes.of(refused), refused.errorCode(), "status=" + refused.status() + ", reason="
                                 + refused.platformCode().orElse("none")));
         throw refused;

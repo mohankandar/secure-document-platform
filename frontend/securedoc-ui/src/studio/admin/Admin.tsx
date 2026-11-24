@@ -9,16 +9,18 @@ import IdentityArea from './IdentityArea';
 import AuditArea from './AuditArea';
 import HealthArea from './HealthArea';
 import LicensingArea from './LicensingArea';
+import EntitiesArea from './EntitiesArea';
 import { ErrorBoundary } from '../failure';
 import './admin.css';
 
-type AreaKey = 'policy' | 'fields' | 'integrations' | 'identity' | 'licensing' | 'health' | 'audit';
+type AreaKey = 'policy' | 'entities' | 'fields' | 'integrations' | 'identity' | 'licensing' | 'health' | 'audit';
 
 const AREAS: { key: AreaKey; label: string; short: string; hint: string; allowed: (caps: string[]) => boolean }[] = [
   { key: 'policy', label: 'Redaction & retention', short: 'Redaction', hint: 'What gets redacted, how long copies are kept, and the targets Reports measures against.', allowed: (c) => c.includes(CAP.policy) },
   { key: 'fields', label: 'Case fields', short: 'Fields', hint: 'The fields captured for each new case, and the columns shown on Cases.', allowed: (c) => c.includes(CAP.identifiers) || c.includes(CAP.policy) },
   { key: 'integrations', label: 'Integrations', short: 'Integrations', hint: 'Where documents come from and where they are sent: the document store, and pages by barcode.', allowed: (c) => c.includes(CAP.integrations) },
   { key: 'identity', label: 'Sign-in', short: 'Sign-in', hint: 'How people sign in. It is managed through the login hub.', allowed: (c) => c.includes(CAP.auth) },
+  { key: 'entities', label: 'Entities', short: 'Entities', hint: 'Activate, name, suspend and resume your entities, and set their time zones.', allowed: (c) => c.includes(CAP.policy) },
   { key: 'licensing', label: 'Licensing', short: 'Licence', hint: 'Your licence, whether new cases are taken in, and this month’s use. Read-only.', allowed: (c) => c.includes(CAP.policy) },
   { key: 'health', label: 'Platform operations', short: 'Platform', hint: 'Service health, the watched folder, processing storage, branding and usage data.', allowed: (c) => c.includes(CAP.technicalAdmin) },
   { key: 'audit', label: 'Audit trail', short: 'Audit', hint: 'Who did what, and when.', allowed: (c) => c.includes(CAP.audit) },
@@ -62,6 +64,7 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
           {current.key === 'fields' && <FieldsArea canIdentifiers={caps.includes(CAP.identifiers)} canColumns={caps.includes(CAP.policy)} />}
           {current.key === 'integrations' && <IntegrationsArea />}
           {current.key === 'identity' && <IdentityArea />}
+          {current.key === 'entities' && <EntitiesArea />}
           {current.key === 'licensing' && <LicensingArea />}
           {current.key === 'health' && <HealthArea canOperate={caps.includes(CAP.platformOps)} />}
           {current.key === 'audit' && <AuditArea caps={caps} entityName={me.tenantName} />}

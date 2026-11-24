@@ -244,6 +244,22 @@ test.describe('Licensing (Business Admin, task 0057)', () => {
   });
 });
 
+test.describe('Entities (Business Admin, task 0058)', () => {
+  test('Entities: the list and the dialogs', async ({ page }) => {
+    await signInAs(page, 'business', '/admin/entities');
+    await expect(page.getByRole('table', { name: 'Entities you administer' })).toBeVisible();
+    await scan(page, 'Entities');
+    await page.getByRole('button', { name: 'Activate: ENT-LEX-0003' }).click();
+    await scan(page, 'Entities: activate');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Suspend: Commercial lending' }).click();
+    await scan(page, 'Entities: suspend');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Time zone: Commercial lending' }).click();
+    await scan(page, 'Entities: time zone');
+  });
+});
+
 test.describe('Support status (task 0057)', () => {
   test('IT Admin: checks, what to do, failures and the bundle', async ({ page }) => {
     await signInAs(page, 'it', '/support/status');

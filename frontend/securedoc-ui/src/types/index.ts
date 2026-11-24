@@ -1071,3 +1071,16 @@ export interface GrantHistoryRow {
   setupRunId: string | null;
   issuer: string;
 }
+
+/** Task 0058: the entity slots a Business Admin sees, and the answer to a change of one. */
+export interface EntitySlot {
+  slotId: string;
+  name: string | null;
+  status: string;
+  current: boolean;
+  timeZone: string | null;
+  customerTimeZone: string | null;
+  activatedAt: string | null;
+}
+export interface EntitySlotsOverview { entities: EntitySlot[]; entityChoiceOn: boolean }
+export interface EntityChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null }

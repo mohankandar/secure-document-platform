@@ -110,6 +110,10 @@ export const HELP = {
     name: 'Usage data',
     text: 'Whether LexaVault sends counts about how the product is used, so it can be improved. Only the items listed are sent, never document content or who did what. It is set when LexaVault is installed and cannot be changed here.',
   },
+  entities: {
+    name: 'Entities',
+    text: 'The entities your licence gives you. A new one is activated and named here once. A suspended one lets nobody in and takes nothing new in until it is resumed; its cases are finished and nothing is deleted. You see the entities you are a Business Admin of.',
+  },
   licensing: {
     name: 'Licensing',
     text: 'Your organisation\'s licence: what it covers, when it ends, and how many pages this entity used this month. It is stored by IT with the licence command and cannot be changed here. When it has ended and the grace period is over, new cases are not taken in; everything else keeps working.',

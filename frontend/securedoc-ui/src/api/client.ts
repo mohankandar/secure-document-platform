@@ -64,6 +64,8 @@ import type {
   EnterpriseIdentityOverview,
   SignInTestAnswer,
   GrantHistoryRow,
+  EntitySlotsOverview,
+  EntityChangeAnswer,
 } from '../types';
 
 class ApiClient {
@@ -437,6 +439,31 @@ class ApiClient {
   }
 
   // --- Licensing (task 0057): read only ---
+
+  // --- Admin, Entities (task 0058) ---
+  async getEntities(): Promise<EntitySlotsOverview> {
+    return this.request('/admin/entities');
+  }
+
+  async activateEntity(slotId: string, name: string): Promise<EntityChangeAnswer> {
+    return this.request(`/admin/entities/${encodeURIComponent(slotId)}/activate`, { method: 'POST', body: JSON.stringify({ name }) });
+  }
+
+  async renameEntity(slotId: string, name: string): Promise<EntityChangeAnswer> {
+    return this.request(`/admin/entities/${encodeURIComponent(slotId)}/name`, { method: 'PUT', body: JSON.stringify({ name }) });
+  }
+
+  async suspendEntity(slotId: string): Promise<EntityChangeAnswer> {
+    return this.request(`/admin/entities/${encodeURIComponent(slotId)}/suspend`, { method: 'POST' });
+  }
+
+  async resumeEntity(slotId: string): Promise<EntityChangeAnswer> {
+    return this.request(`/admin/entities/${encodeURIComponent(slotId)}/resume`, { method: 'POST' });
+  }
+
+  async setEntityTimeZone(slotId: string, timeZone: string | null): Promise<EntityChangeAnswer> {
+    return this.request(`/admin/entities/${encodeURIComponent(slotId)}/time-zone`, { method: 'PUT', body: JSON.stringify({ timeZone }) });
+  }
 
   async getLicensing(): Promise<LicensingView> {
     return this.request('/licensing');

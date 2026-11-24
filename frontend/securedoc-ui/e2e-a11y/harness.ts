@@ -335,6 +335,17 @@ export interface MockOptions {
   licensing?: unknown;
 }
 
+/** Task 0058: Admin › Entities. */
+export const ENTITY_SLOTS = {
+  entityChoiceOn: true,
+  entities: [
+    { slotId: 'ENT-LEX-0001', name: 'Residential lending', status: 'ACTIVE', current: true, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: '2026-01-05T09:00:00Z' },
+    { slotId: 'ENT-LEX-0002', name: 'Commercial lending', status: 'ACTIVE', current: false, timeZone: 'Europe/London', customerTimeZone: 'America/Chicago', activatedAt: '2026-02-05T09:00:00Z' },
+    { slotId: 'ENT-LEX-0003', name: null, status: 'NOT_ACTIVATED', current: false, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: null },
+    { slotId: 'ENT-LEX-0004', name: 'Northwind Trust', status: 'SUSPENDED', current: false, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: '2026-03-05T09:00:00Z' },
+  ],
+};
+
 export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
   const roles = [...ROLES[who]];
   const capabilities = roles.length ? capabilitiesFor(...roles) : [];
@@ -403,6 +414,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (path === '/platform/branding') return json(BRANDING);
     if (path === '/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });
     if (path === '/platform/product-telemetry/status') return json(TELEMETRY);
+    if (path === '/admin/entities') return json(ENTITY_SLOTS);
     if (path === '/licensing') return json(options.licensing ?? LICENSING);
     if (path === '/support/status') return json(SUPPORT_STATUS);
 
