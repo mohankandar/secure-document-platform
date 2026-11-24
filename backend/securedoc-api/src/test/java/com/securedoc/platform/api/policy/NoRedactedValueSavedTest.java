@@ -260,8 +260,8 @@ class NoRedactedValueSavedTest {
     }
 
     private static final java.util.regex.Pattern ID_OR_TIME = java.util.regex.Pattern.compile(
-            "\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"
-                    + "|\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z");
+            "\\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\b"
+                    + "|\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z");
 
     /** The shapes left out are exactly an id and a time; the last 4 anywhere else are still found. */
     @Test
