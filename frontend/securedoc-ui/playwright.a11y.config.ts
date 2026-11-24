@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { E2E_PORTS } from './e2ePorts';
 
 /**
  * UI task U026: the accessibility suite. axe (WCAG 2.0 and 2.1, levels A and AA) on every main screen and state, in
@@ -10,7 +11,7 @@ import { defineConfig } from '@playwright/test';
  * Run: npm run test:a11y (part of npm run test:standalone). Uses the installed Microsoft Edge (channel "msedge").
  * A11Y_SURVEY=<file> lists every violation per screen without failing (used for the "before" counts in the report).
  */
-const PORT = 15177;
+const PORT = E2E_PORTS.a11y;
 
 export default defineConfig({
   testDir: './e2e-a11y',

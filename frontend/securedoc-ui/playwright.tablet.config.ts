@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { E2E_PORTS } from './e2ePorts';
 
 /**
  * UI task U021: the tablet-friendly screens (Cases, the case panel, Approve, Review) in WebKit, Safari's engine,
@@ -10,7 +11,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Run: npm run test:tablet (part of npm run test:standalone).
  * Needs Playwright's WebKit browser once per machine: npx playwright install webkit.
  */
-const PORT = 15176;
+const PORT = E2E_PORTS.tablet;
 const IPAD = devices['iPad (gen 7)'];
 const SIZES: [number, number][] = [
   [768, 1024], // portrait

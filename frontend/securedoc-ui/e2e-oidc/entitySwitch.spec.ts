@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { E2E_PORTS } from '../e2ePorts';
 import { capabilitiesFor } from './policyCapabilities';
 
 /**
@@ -169,7 +170,7 @@ test('two entities: switching from A to B shows only B data and B roles, and bac
   await expect(page.getByText('A-CASE-1001')).toHaveCount(0);
   await expect(approveButtons(page)).toHaveCount(0);
   await expect(switchControl(page)).toHaveAccessibleName(/Race Entity B/);
-  await expect(page).toHaveURL(/localhost:15175\/$/);
+  await expect(page).toHaveURL(`http://localhost:${E2E_PORTS.oidcSignin}/`);
   expect(await page.evaluate(() => sessionStorage.getItem('lexavault.oidc.selected-tenant'))).toBe(B.tenantId);
   expect(api.meCalls).toContain(B.tenantId);
 
