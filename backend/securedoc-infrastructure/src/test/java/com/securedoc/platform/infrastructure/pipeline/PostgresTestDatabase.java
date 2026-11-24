@@ -75,6 +75,19 @@ final class PostgresTestDatabase implements AutoCloseable {
         return new PostgresTestDatabase(adminUrl, user, password, name, url);
     }
 
+    /**
+     * Rolls back the last change sets in the order they ran. Liquibase orders them by time, and the test database's
+     * clock can step back during a migration (task 0038); then it would undo another change set. The times are set to
+     * follow the recorded execution order first.
+     */
+    static void rollback(Liquibase liquibase, Connection connection, int changeSets) throws Exception {
+        try (var s = connection.createStatement()) {
+            s.execute("UPDATE databasechangelog SET dateexecuted = TIMESTAMP '2026-01-01' + orderexecuted * INTERVAL '1 second'");
+        }
+        if (!connection.getAutoCommit()) connection.commit();
+        liquibase.rollback(changeSets, (String) null);
+    }
+
     static Liquibase liquibase(Connection connection) throws Exception {
         Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
         return new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(), database);
