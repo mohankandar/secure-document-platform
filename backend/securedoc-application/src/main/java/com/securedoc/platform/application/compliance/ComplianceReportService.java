@@ -382,7 +382,12 @@ public final class ComplianceReportService {
         if (later.isPresent()) {
             SensitiveChange change = PolicyHistory.parseSensitive(later.get().detail());
             if (change != null && change.previousRecorded() && change.previous() != null) return change.previous();
-            if (change != null && change.previousRecorded()) return policyValues(TenantRedactionPolicy.defaults(tenantId));
+            if (change != null && change.previousRecorded()) {
+                // Task 0062: a first save from before the catalog replaced the defaults of that time.
+                boolean catalog = change.now().types() != null && change.now().types().contains("CVV");
+                return policyValues(catalog ? TenantRedactionPolicy.defaults(tenantId)
+                        : TenantRedactionPolicy.defaultsBeforeCatalog(tenantId));
+            }
         }
         return policyValues(redactionPolicyRepository.findByTenantId(tenantId)
                 .orElse(TenantRedactionPolicy.defaults(tenantId)));
@@ -390,7 +395,9 @@ public final class ComplianceReportService {
 
     private static SensitivePolicy policyValues(TenantRedactionPolicy p) {
         return SensitivePolicy.of(p.enabledEntityTypes().stream().map(Enum::name).collect(Collectors.toSet()),
-                p.autoRedactThreshold(), p.reviewMode(), p.maskSsnLastFour());
+                p.autoRedactThreshold(), p.reviewMode(), p.maskSsnLastFour())
+                .with(p.packs().stream().map(Enum::name).collect(Collectors.toSet()),
+                        p.keepLastFour().stream().map(Enum::name).collect(Collectors.toSet()));
     }
 
     private LifecyclePolicy lifecyclePolicyAt(TenantId tenantId, Instant at) {
@@ -425,12 +432,20 @@ public final class ComplianceReportService {
             types = p.types().stream().sorted(SensitiveTypeNames.order()).map(SensitiveTypeNames::name)
                     .collect(Collectors.joining(", "));
         }
+        String packs = p.packs().isEmpty() ? "None" : p.packs().stream().map(PolicyHistory::packName).sorted()
+                .collect(Collectors.joining(", "));
+        // Only kinds that are on have a style in force.
+        String kept = p.keepLastFour().stream().filter(t -> p.types() == null || p.types().contains(t))
+                .sorted(SensitiveTypeNames.order()).map(SensitiveTypeNames::name).collect(Collectors.joining(", "));
         return List.of(new LabelValue("Sensitive types found and redacted", types),
                 new LabelValue("Sent to a person", PolicyHistory.reviewModeWords(p.reviewMode())),
                 new LabelValue("Redacted without review at",
                         p.threshold() == null ? "Not recorded" : PolicyHistory.percent(p.threshold()) + " confidence or higher"),
                 new LabelValue("Labeled last-four SSN treated as sensitive",
-                        p.maskSsnLastFour() == null ? "Not recorded" : PolicyHistory.yesNo(p.maskSsnLastFour())));
+                        p.maskSsnLastFour() == null ? "Not recorded" : PolicyHistory.yesNo(p.maskSsnLastFour())),
+                new LabelValue("Regulation packs in force", packs),
+                new LabelValue("Style", kept.isEmpty() ? "Every value is removed in full"
+                        : "Last 4 digits kept for: " + kept + ". Every other value is removed in full"));
     }
 
     /**

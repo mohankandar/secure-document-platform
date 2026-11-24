@@ -60,8 +60,14 @@ public interface PdfRedactionPort {
             double left,
             double top,
             double width,
-            double height
+            double height,
+            KeptDigits kept
     ) {
+        /** A value removed in full. */
+        public RedactionTarget(int pageNumber, double left, double top, double width, double height) {
+            this(pageNumber, left, top, width, height, null);
+        }
+
         public RedactionTarget {
             if (pageNumber < 1) {
                 throw new IllegalArgumentException("Page number must be >= 1");
@@ -89,6 +95,63 @@ public interface PdfRedactionPort {
         public static RedactionTarget of(int pageNumber, double left, double top,
                                            double width, double height) {
             return new RedactionTarget(pageNumber, left, top, width, height);
+        }
+
+        /** Task 0062: the same area, with the last four digits drawn on the cover. */
+        public RedactionTarget keeping(KeptDigits digits) {
+            return new RedactionTarget(pageNumber, left, top, width, height, digits);
+        }
+
+        public boolean intersects(RedactionTarget other) {
+            return pageNumber == other.pageNumber && left < other.left + other.width && other.left < left + width
+                    && top < other.top + other.height && other.top < top + height;
+        }
+
+        /** The area that is solid in every case: all of it, or the part before the kept digits. */
+        public RedactionTarget solidPart() {
+            return kept == null ? this
+                    : new RedactionTarget(pageNumber, left, top, width * (1 - kept.share()), height);
+        }
+
+        /** The area the kept digits are drawn in (the end of the cover); only with {@code kept}. */
+        public RedactionTarget keptPart() {
+            double start = left + width * (1 - kept.share());
+            return new RedactionTarget(pageNumber, start, top, Math.min(width * kept.share(), 1.0 - start), height);
+        }
+    }
+
+    /**
+     * Task 0062, style "keep the last 4": the four digits, read from the original for one redaction and held in memory
+     * only. Never saved or logged: {@link #toString()} shows none of them, and equality is by identity.
+     */
+    final class KeptDigits {
+        private final String digits;
+        private final double share;
+
+        /** @param share the part of the cover the digits take, at its end (more than 0, at most a half) */
+        public KeptDigits(String digits, double share) {
+            if (digits == null || !digits.matches("[0-9]{4}")) {
+                throw new IllegalArgumentException("Exactly four digits are kept");
+            }
+            if (!(share > 0.0 && share <= 0.5)) {
+                throw new IllegalArgumentException("The kept part is at most half of the cover");
+            }
+            this.digits = digits;
+            this.share = share;
+        }
+
+        /** For drawing them on the cover, nothing else. */
+        public String digitsToDraw() {
+            return digits;
+        }
+
+        public double share() {
+            return share;
+        }
+
+        @Override
+        public String toString() {
+            return "KeptDigits[****]";
         }
     }
 

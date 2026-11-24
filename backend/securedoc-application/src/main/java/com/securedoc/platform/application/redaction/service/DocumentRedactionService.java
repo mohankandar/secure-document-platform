@@ -209,8 +209,6 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     "Redaction location could not be determined");
         }
 
-        // 7. Build targets only from policy-confirmed findings.
-        List<RedactionTarget> targets = buildRedactionTargets(confirmedFindings);
 
         // 9. Load original artifact
         Artifact originalArtifact = artifactRepository
@@ -225,7 +223,13 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         // Task 0044: the entity's output choice, and the values that were redacted (in memory only, for the final check).
         boolean searchable = policyRepository != null && policyRepository.findByTenantId(command.tenantId())
                 .map(TenantRedactionPolicy::searchableRedactedPages).orElse(true);
-        RedactedValues redactedValues = readRedactedValues(originalArtifact, confirmedFindings);
+        java.util.Map<Finding, FoundValue> foundValues = readFoundValues(originalArtifact, confirmedFindings);
+        RedactedValues redactedValues = RedactedValues.of(foundValues.values().stream().map(FoundValue::raw).toList());
+
+        // 10. Build targets only from policy-confirmed findings (task 0062: with the last four digits where they stay).
+        List<RedactionTarget> targets = keepLastFour(confirmedFindings, buildRedactionTargets(confirmedFindings),
+                foundValues);
+        long keptLastFour = targets.stream().filter(t -> t.kept() != null).count();
 
         // 10. Read original PDF content
         InputStream pdfContent = storagePort.retrieve(originalArtifact.storageReference());
@@ -363,6 +367,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     "Redaction completed: redactions=" + redactionOutput.redactionsApplied()
                             + ", pages=" + redactionOutput.pagesRendered()
                             + ", artifactSize=" + redactedSize
+                            + (keptLastFour == 0 ? "" : ", keptLastFour=" + keptLastFour)
             );
 
             long rasterizedTargetPages = targets.stream()
@@ -386,8 +391,8 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
      * Task 0047: only the pages with findings are read again (the values are only there); the final check still
      * compares every output page's text with them.
      */
-    private RedactedValues readRedactedValues(Artifact originalArtifact, List<Finding> confirmedFindings) {
-        if (textExtractionPort == null || confirmedFindings.isEmpty()) return RedactedValues.none();
+    private java.util.Map<Finding, FoundValue> readFoundValues(Artifact originalArtifact, List<Finding> confirmedFindings) {
+        if (textExtractionPort == null || confirmedFindings.isEmpty()) return java.util.Map.of();
         java.util.Set<Integer> pagesWithFindings = new java.util.TreeSet<>();
         for (Finding finding : confirmedFindings) pagesWithFindings.add(finding.location().pageNumber());
         InputStream original = storagePort.retrieve(originalArtifact.storageReference());
@@ -397,18 +402,81 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         } finally {
             closeQuietly(original);
         }
-        java.util.Map<Integer, String> textByPage = new java.util.HashMap<>();
-        for (TextExtractionPort.PageText page : extracted.pages()) textByPage.put(page.pageNumber(), page.text());
-        List<String> raw = new ArrayList<>();
+        java.util.Map<Integer, TextExtractionPort.PageText> pages = new java.util.HashMap<>();
+        for (TextExtractionPort.PageText page : extracted.pages()) pages.put(page.pageNumber(), page);
+        java.util.Map<Finding, FoundValue> values = new java.util.IdentityHashMap<>();
         for (Finding finding : confirmedFindings) {
             FindingLocation location = finding.location();
-            String text = textByPage.get(location.pageNumber());
-            if (text == null) continue;
+            TextExtractionPort.PageText page = pages.get(location.pageNumber());
+            if (page == null) continue;
+            String text = page.text();
             int start = location.startOffset();
             int end = location.endOffset();
-            if (start >= 0 && end > start && end <= text.length()) raw.add(text.substring(start, end));
+            if (start >= 0 && end > start && end <= text.length()) {
+                values.put(finding, new FoundValue(text.substring(start, end),
+                        page.source() == TextExtractionPort.ExtractionSource.NATIVE_PDF_TEXT));
+            }
         }
-        return RedactedValues.of(raw);
+        return values;
+    }
+
+    /** A value read again from the original, in memory for this redaction only; never printed. */
+    private record FoundValue(String raw, boolean exact) {
+        @Override
+        public String toString() {
+            return "FoundValue[exact=" + exact + "]";
+        }
+    }
+
+    /** At least this many letters and digits, so at least as many stay covered as are shown. */
+    private static final int KEEP_LAST_FOUR_MINIMUM = 8;
+    /** Numbers of exactly nine digits. */
+    private static final java.util.Set<com.securedoc.platform.domain.finding.EntityType> NINE_DIGITS = java.util.Set.of(
+            com.securedoc.platform.domain.finding.EntityType.SSN, com.securedoc.platform.domain.finding.EntityType.ITIN,
+            com.securedoc.platform.domain.finding.EntityType.EIN,
+            com.securedoc.platform.domain.finding.EntityType.BANK_ROUTING_NUMBER);
+
+    /**
+     * Task 0062, style "keep the last 4". The digits are taken from the original here, at redaction time. Anything not
+     * certain is removed in full: a locked item; text read by OCR (a misread digit would be drawn as fact); a value
+     * that is too short, goes over a line, or doesn't end in four digits; a box that touches another redaction or is
+     * not a single line of text; and four digits that are themselves a redacted value elsewhere in the document.
+     */
+    private static List<RedactionTarget> keepLastFour(List<Finding> findings, List<RedactionTarget> targets,
+                                                      java.util.Map<Finding, FoundValue> values) {
+        if (findings.size() != targets.size()) return targets;
+        RedactedValues removed = RedactedValues.of(findings.stream()
+                .filter(f -> !wantsLastFour(f) && values.containsKey(f)).map(f -> values.get(f).raw()).toList());
+        List<RedactionTarget> out = new ArrayList<>(targets.size());
+        for (int n = 0; n < findings.size(); n++) {
+            RedactionTarget target = targets.get(n);
+            FoundValue value = values.get(findings.get(n));
+            boolean alone = targets.stream().noneMatch(t -> t != target && t.intersects(target));
+            if (wantsLastFour(findings.get(n)) && value != null && value.exact() && alone
+                    && target.width() > target.height()) {
+                String raw = value.raw().strip();
+                String compared = RedactedValues.comparable(raw);
+                if (raw.indexOf('\n') < 0 && raw.indexOf('\r') < 0
+                        && compared.length() >= KEEP_LAST_FOUR_MINIMUM && raw.matches("(?s).*[0-9]{4}")
+                        // A span that holds only part of such a number would show digits that are not its last four.
+                        && (!NINE_DIGITS.contains(findings.get(n).entityType())
+                                || raw.chars().filter(c -> c >= '0' && c <= '9').count() == 9)) {
+                    String lastFour = raw.substring(raw.length() - 4);
+                    if (!removed.appearsIn(lastFour)) {
+                        out.add(target.keeping(new PdfRedactionPort.KeptDigits(lastFour,
+                                Math.min(0.5, 4.0 / raw.length()))));
+                        continue;
+                    }
+                }
+            }
+            out.add(target);
+        }
+        return out;
+    }
+
+    private static boolean wantsLastFour(Finding finding) {
+        return finding.redactionStyle() == com.securedoc.platform.domain.business.RedactionStyle.KEEP_LAST_FOUR
+                && com.securedoc.platform.domain.business.RedactionCatalog.lastFourAllowed().contains(finding.entityType());
     }
 
     private List<RedactionTarget> buildRedactionTargets(List<Finding> findings) {

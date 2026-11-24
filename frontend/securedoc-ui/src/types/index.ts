@@ -73,6 +73,17 @@ export interface SensitiveDataPolicyConfiguration {
   maskSsnLastFour: boolean;
   /** Task 0044: invisible OCR text on redacted pages; on by default. Not sent = the server keeps its value. */
   searchableRedactedPages?: boolean;
+  /** Task 0062: regulation packs in force, and the kinds whose last four digits stay visible. */
+  enabledPacks?: string[];
+  keepLastFourKinds?: string[];
+  /** Task 0062, read only: false for an entity from before the catalog, until its policy is saved. */
+  lockedItemsOn?: boolean;
+}
+
+/** Task 0062: the redaction catalog and the regulation packs, the same for every entity. */
+export interface RedactionCatalog {
+  kinds: { key: string; name: string; detectionMethod: string; defaultStyle: string; locked: boolean; lastFourAllowed: boolean }[];
+  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[] }[];
 }
 
 export interface LifecyclePolicyConfiguration {
@@ -122,6 +133,7 @@ export interface BusinessAdminConfiguration {
   lifecyclePolicy: LifecyclePolicyConfiguration;
   documentIntelligence: DocumentIntelligenceConfiguration;
   reportingConfiguration: ReportingConfiguration;
+  redactionCatalog?: RedactionCatalog;
 }
 
 export interface BusinessAdminIdentifierDraft extends BusinessIdentifierValidationConfiguration {

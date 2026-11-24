@@ -14,6 +14,34 @@ export interface PolicyValues {
   maskSsnLastFour: boolean;
 }
 
+/** Task 0062: the packs of a policy, and the kinds whose last four digits stay visible. */
+export interface CatalogValues {
+  enabledEntityTypes: string[];
+  enabledPacks?: string[];
+  keepLastFourKinds?: string[];
+}
+
+export interface CatalogPack { key: string; kinds: string[] }
+
+const toggled = (list: readonly string[], key: string, on: boolean) =>
+  on ? [...list.filter((k) => k !== key), key] : list.filter((k) => k !== key);
+
+/** Turning a pack on turns its kinds on. Turning it off leaves them on: protection is never reduced by a side effect. */
+export function setPack<T extends CatalogValues>(values: T, pack: CatalogPack, on: boolean): T {
+  const enabledPacks = toggled(values.enabledPacks ?? [], pack.key, on);
+  if (!on) return { ...values, enabledPacks };
+  return { ...values, enabledPacks, enabledEntityTypes: [...new Set([...values.enabledEntityTypes, ...pack.kinds])] };
+}
+
+/** The kinds of a pack that are off although the pack is on. */
+export function tunedOff(values: CatalogValues, pack: CatalogPack, locked: readonly string[]): string[] {
+  return pack.kinds.filter((k) => !values.enabledEntityTypes.includes(k) && !locked.includes(k));
+}
+
+export function setKeepLastFour<T extends CatalogValues>(values: T, kind: string, keep: boolean): T {
+  return { ...values, keepLastFourKinds: toggled(values.keepLastFourKinds ?? [], kind, keep) };
+}
+
 const BALANCED_THRESHOLD = 0.80;
 const LIGHT_THRESHOLD = 0.70;
 /** Thresholds are saved with two decimals; this only absorbs binary floating-point noise (as on the server). */

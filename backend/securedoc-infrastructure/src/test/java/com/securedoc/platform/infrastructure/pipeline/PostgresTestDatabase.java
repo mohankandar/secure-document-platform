@@ -88,6 +88,13 @@ final class PostgresTestDatabase implements AutoCloseable {
         liquibase.rollback(changeSets, (String) null);
     }
 
+    /** Back to 050, the storage before the redaction catalog (070, task 0062): undoes the last change set. */
+    void backTo050() throws Exception {
+        try (Connection connection = connection()) {
+            rollback(liquibase(connection), connection, 1);
+        }
+    }
+
     static Liquibase liquibase(Connection connection) throws Exception {
         Database database = DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(connection));
         return new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(), database);

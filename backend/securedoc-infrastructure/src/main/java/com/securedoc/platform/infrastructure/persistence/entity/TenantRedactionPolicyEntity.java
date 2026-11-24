@@ -21,20 +21,8 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "review_mode", nullable = false)
     private String reviewMode;
 
-    @Column(name = "ssn_enabled", nullable = false)
-    private boolean ssnEnabled;
-
     @Column(name = "mask_ssn_last_four", nullable = false)
     private boolean maskSsnLastFour;
-
-    @Column(name = "date_of_birth_enabled", nullable = false)
-    private boolean dateOfBirthEnabled;
-
-    @Column(name = "credit_card_number_enabled", nullable = false)
-    private boolean creditCardNumberEnabled;
-
-    @Column(name = "credit_score_enabled", nullable = false)
-    private boolean creditScoreEnabled;
 
     /** Migration 048 (task 0047): "Searchable redacted pages", on by default. */
     @Column(name = "searchable_redacted_pages", nullable = false)
@@ -47,9 +35,15 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "page_batch_overlap", nullable = false)
     private int pageBatchOverlap = 2;
 
+    /** Migration 070 (task 0062): off only for an entity from before the catalog, until its policy is saved. */
+    @Column(name = "locked_items_on", nullable = false)
+    private boolean lockedItemsOn = true;
+
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    public boolean isLockedItemsOn() { return lockedItemsOn; }
+    public void setLockedItemsOn(boolean lockedItemsOn) { this.lockedItemsOn = lockedItemsOn; }
     public int getPageBatchSize() { return pageBatchSize; }
     public void setPageBatchSize(int pageBatchSize) { this.pageBatchSize = pageBatchSize; }
     public int getPageBatchOverlap() { return pageBatchOverlap; }
@@ -62,16 +56,8 @@ public class TenantRedactionPolicyEntity {
     public void setAutoRedactThreshold(double autoRedactThreshold) { this.autoRedactThreshold = autoRedactThreshold; }
     public String getReviewMode() { return reviewMode; }
     public void setReviewMode(String reviewMode) { this.reviewMode = reviewMode; }
-    public boolean isSsnEnabled() { return ssnEnabled; }
-    public void setSsnEnabled(boolean ssnEnabled) { this.ssnEnabled = ssnEnabled; }
     public boolean isMaskSsnLastFour() { return maskSsnLastFour; }
     public void setMaskSsnLastFour(boolean maskSsnLastFour) { this.maskSsnLastFour = maskSsnLastFour; }
-    public boolean isDateOfBirthEnabled() { return dateOfBirthEnabled; }
-    public void setDateOfBirthEnabled(boolean dateOfBirthEnabled) { this.dateOfBirthEnabled = dateOfBirthEnabled; }
-    public boolean isCreditCardNumberEnabled() { return creditCardNumberEnabled; }
-    public void setCreditCardNumberEnabled(boolean creditCardNumberEnabled) { this.creditCardNumberEnabled = creditCardNumberEnabled; }
-    public boolean isCreditScoreEnabled() { return creditScoreEnabled; }
-    public void setCreditScoreEnabled(boolean creditScoreEnabled) { this.creditScoreEnabled = creditScoreEnabled; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }

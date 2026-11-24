@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetName, presetOf,
-  previewHeadline, previewTiles, reviewChanged, saveLabel, type PolicyEstimate, type PolicyValues,
+  previewHeadline, previewTiles, reviewChanged, saveLabel, setKeepLastFour, setPack, tunedOff, type PolicyEstimate, type PolicyValues,
 } from './policyRules.ts';
 
 const BALANCED: PolicyValues = { reviewMode: 'UNCERTAIN_ONLY', autoRedactThreshold: 0.8, enabledEntityTypes: ['SSN', 'DATE_OF_BIRTH'], maskSsnLastFour: true };
@@ -237,4 +237,19 @@ test('confirm words: names, numbers, threshold and the audit line', () => {
   const toCustom = confirmWords(BALANCED, { ...BALANCED, autoRedactThreshold: 0.74 }, estimate([200, 500], [150, 400]));
   assert.deepEqual({ newPhrase: toCustom.newPhrase, keepLabel: toCustom.keepLabel, saveLabel: toCustom.saveLabel }, customWords);
   assert.match(toCustom.auditLine, /as Balanced → Custom\.$/);
+});
+
+test('a pack turns its kinds on, a kind can be fine-tuned off, and turning the pack off leaves the kinds on (task 0062)', () => {
+  const pack = { key: 'FRCP_5_2', kinds: ['SSN', 'EIN', 'CREDIT_CARD_NUMBER'] };
+  const start: { enabledEntityTypes: string[]; enabledPacks?: string[]; keepLastFourKinds?: string[] } = { enabledEntityTypes: ['SSN', 'PASSPORT_NUMBER'] };
+  const on = setPack(start, pack, true);
+  assert.deepEqual(on.enabledEntityTypes, ['SSN', 'PASSPORT_NUMBER', 'EIN', 'CREDIT_CARD_NUMBER']);
+  assert.deepEqual(on.enabledPacks, ['FRCP_5_2']);
+  const tuned = { ...on, enabledEntityTypes: ['SSN', 'PASSPORT_NUMBER'] };
+  assert.deepEqual(tunedOff(tuned, pack, ['CREDIT_CARD_NUMBER']), ['EIN'], 'a locked item is never "turned off by hand"');
+  const off = setPack(on, pack, false);
+  assert.deepEqual(off.enabledPacks, []);
+  assert.deepEqual(off.enabledEntityTypes, on.enabledEntityTypes);
+  assert.deepEqual(setKeepLastFour(on, 'SSN', true).keepLastFourKinds, ['SSN']);
+  assert.deepEqual(setKeepLastFour(setKeepLastFour(on, 'SSN', true), 'SSN', false).keepLastFourKinds, []);
 });
