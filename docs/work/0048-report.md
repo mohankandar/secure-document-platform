@@ -145,3 +145,9 @@ Not pushed, not merged.
 Answer questions 1 and 2. Then task 0049 (P2 part 2: page batches, fairness between entities, the AI's requests at once).
 
 No other product's name or behaviour in code.
+
+## Owner's answers (2026-11-23, recorded by the design chat; owner said "as recommended")
+1. **Switching back from staged to inline:** the stage workers **finish the staged jobs already queued**; only new cases go inline. Task 0049.
+2. **Files left with no record after a server dies:** a **clean-up sweep** removes stored text / redacted files that no record points to, after a safe delay (default 24 h), audited without content; covers the inline flow too. Task 0049.
+- **Unreliable test** `e2e-oidc/exports.spec.ts:225` ("Technical details" never clickable, 3 of 5 full runs since the case-panel stage line): first step of task 0049, cause found and fixed.
+- Merged into `feature/lexavault-r1b-tenant-identity`.
