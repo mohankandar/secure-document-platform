@@ -45,19 +45,21 @@ export async function checked<T>(request: string, answer: Promise<T>, isExpected
 }
 
 /** What a failure can tell IT: a reference (correlation id when the server gave one), the request and the cause. */
-export function failureDetails(error: unknown, request?: string): { reference?: string; request?: string; cause: string } {
+export function failureDetails(error: unknown, request?: string): { reference?: string; request?: string; cause: string; whatToDo?: string } {
   if (error instanceof LoadFailure) {
     return { reference: error.reference, request: error.request, cause: error.kind === 'shape' ? 'unexpected response shape' : error.message };
   }
-  const e = (isRecord(error) ? error : {}) as { correlationId?: unknown; httpStatus?: unknown; errorCode?: unknown; code?: unknown; message?: unknown };
+  const e = (isRecord(error) ? error : {}) as { correlationId?: unknown; reference?: unknown; whatToDo?: unknown; httpStatus?: unknown; errorCode?: unknown; code?: unknown; message?: unknown };
   const status = typeof e.httpStatus === 'number' ? `HTTP ${e.httpStatus}` : undefined;
   // Task 0025: the LV code first, then the internal detail.
   const code = [typeof e.code === 'string' ? e.code : undefined, typeof e.errorCode === 'string' ? e.errorCode : undefined].filter(Boolean).join(' · ') || undefined;
   const message = error instanceof Error ? error.message : typeof e.message === 'string' ? e.message : undefined;
   return {
-    reference: typeof e.correlationId === 'string' ? e.correlationId : undefined,
+    // Task 0057: the reference (R-…) of the shared error shape first: it is the one in the log, on Support and in the bundle.
+    reference: typeof e.reference === 'string' ? e.reference : typeof e.correlationId === 'string' ? e.correlationId : undefined,
     request,
     cause: [status, code, message].filter(Boolean).join(' · ') || 'unknown error',
+    whatToDo: typeof e.whatToDo === 'string' && e.whatToDo.trim() ? e.whatToDo : undefined,
   };
 }
 
@@ -103,6 +105,7 @@ export function LoadErrorCard({ title, error, request, onRetry }: {
           {details.reference && <div><dt>Reference</dt><dd className="cf-mono">{details.reference}</dd></div>}
           {details.request && <div><dt>Request</dt><dd className="cf-mono">{details.request}</dd></div>}
           <div><dt>Cause</dt><dd className="cf-mono">{details.cause}</dd></div>
+          {details.whatToDo && <div><dt>What to do</dt><dd>{details.whatToDo}</dd></div>}
         </dl>
       </TechnicalDetails>
     </section>

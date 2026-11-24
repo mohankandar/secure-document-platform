@@ -78,6 +78,11 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-licensing-spring</artifactId>
         </dependency>
+        <!-- Task 0057: the dependency checks, the start-up refusal, references and the diagnostic bundle. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-monitoring-spring</artifactId>
+        </dependency>
         <!-- Task 0057: only the types the licensing events are registered with (EventCatalogue). Nothing is sent: no
              notifier, and the mail library it brings is left out until notifications are integrated. -->
         <dependency>

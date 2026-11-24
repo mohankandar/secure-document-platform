@@ -156,7 +156,7 @@ test('Platform Operations: overview technical details, closed, hold the codes', 
   const calls: Call[] = [];
   await openPlatform(page, 'PLATFORM_OPERATIONS_ADMIN', calls);
   const sections = page.getByRole('group', { name: 'Platform operations sections' });
-  for (const name of ['Overview', 'Processing storage', 'Licensing', 'Branding', 'Usage data']) await expect(sections.getByRole('button', { name, exact: true })).toBeVisible();
+  for (const name of ['Overview', 'Processing storage', 'Branding', 'Usage data']) await expect(sections.getByRole('button', { name, exact: true })).toBeVisible();
   const details = page.locator('details.cf-disclosure');
   await expect(details).toHaveCount(2);
   for (const d of await details.all()) expect(await d.getAttribute('open')).toBeNull();

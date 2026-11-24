@@ -286,6 +286,7 @@ public final class DemoStep {
                 "org.springframework.boot.liquibase.autoconfigure.LiquibaseAutoConfiguration",
                 // Task 0057: this step reads the licence itself; it checks and serves nothing.
                 "com.documentplatform.licensing.spring.LicensingAutoConfiguration",
+                "com.documentplatform.monitoring.spring.MonitoringAutoConfiguration",
                 // Task 0054: the app makes its own outbound rules (OutboundRulesConfig); this step calls nothing out.
                 "com.documentplatform.outbound.spring.OutboundAutoConfiguration"));
         props.put("logging.level.root", "WARN");

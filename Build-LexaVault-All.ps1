@@ -111,7 +111,7 @@ try {
 finally {
     $zip.Dispose()
 }
-$allowed = '^platform-(identity-core|identity-jdbc|identity-spring|licensing-spring|licensing|notifications|outbound-spring|outbound|errors)-[0-9][^-]*\.jar$'
+$allowed = '^platform-(identity-core|identity-jdbc|identity-spring|licensing-spring|licensing|monitoring-spring|monitoring|notifications|outbound-spring|outbound|errors)-[0-9][^-]*\.jar$'
 $notAllowed = @($platformLibs | Where-Object { $_ -notmatch $allowed })
 if ($notAllowed.Count -gt 0) {
     throw "The app jar carries platform-core modules it may not: $($notAllowed -join ', ')."

@@ -100,7 +100,7 @@ test('IT Administrator and Platform Operations cards have their "?"', async ({ p
   await expect(help(page, HELP.signIn.name)).toBeVisible();
 });
 
-for (const [section, k] of [['storage', 'storage'], ['licensing', 'licensing'], ['branding', 'branding'], ['telemetry', 'telemetry']] as const) {
+for (const [section, k] of [['storage', 'storage'], ['branding', 'branding'], ['telemetry', 'telemetry']] as const) {
   test(`Platform Operations: ${section} has its "?"`, async ({ page }) => {
     await signInAs(page, 'ops', `/admin/health?section=${section}`);
     await expect(help(page, HELP[k].name)).toBeVisible();

@@ -194,6 +194,7 @@ class FreshDatabaseStartPostgresTest {
                     URI.create("http://localhost:" + port + "/api/v1/me")).GET().build(), HttpResponse.BodyHandlers.ofString());
             assertTrue(byDefault.body().contains("\"tenantName\":\"Local Demo Tenant\""), byDefault.body());
             licensingInTheRunningApp(app, port);
+            supportStatusInTheRunningApp(app, port);
         }
         assertEquals(tablesBefore, rowCounts(), "startup inserted nothing into the identity, entity or set-up tables");
     }
@@ -262,6 +263,57 @@ class FreshDatabaseStartPostgresTest {
         assertTrue(call(port, "GET", "/api/v1/licensing", null).body().contains("\"intakeAllowed\":true"));
     }
 
+    /** Task 0057: Support, Status: the checks in the real app, the references, and a bundle without secrets or data. */
+    private static void supportStatusInTheRunningApp(ConfigurableApplicationContext app, int port) throws Exception {
+        app.getBean(com.documentplatform.monitoring.DependencyStatus.class).runAll();
+        HttpResponse<String> status = callAs(port, "TENANT_IT_ADMIN", "/api/v1/support/status");
+        assertEquals(200, status.statusCode(), status.body());
+        for (String check : List.of("\"name\":\"database\"", "\"name\":\"licence\"", "\"name\":\"storage\"", "\"name\":\"login-system\"")) {
+            assertTrue(status.body().contains(check), check + " in " + status.body());
+        }
+        assertFalse(status.body().contains("\"name\":\"database\",\"group\":\"platform\",\"state\":\"DOWN\""), status.body());
+        assertTrue(status.body().contains("LV-LIC-003"), "the refused case is among the last failures: " + status.body());
+        assertEquals(403, callAs(port, "BUSINESS_ADMIN", "/api/v1/support/status").statusCode());
+
+        HttpResponse<String> refused = callAs(port, "BUSINESS_ADMIN", "/api/v1/support/diagnostic-bundle");
+        assertEquals(403, refused.statusCode(), refused.body());
+        assertEquals(403, callAs(port, "PLATFORM_OPERATIONS_ADMIN", "/api/v1/support/diagnostic-bundle").statusCode());
+        String reference = refused.headers().firstValue("X-Request-Id").orElseThrow();
+        assertTrue(refused.body().contains("\"reference\":\"" + reference + "\""), refused.body());
+        assertTrue(refused.body().contains("\"whatToDo\":\""), refused.body());
+
+        HttpResponse<byte[]> bundle = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/api/v1/support/diagnostic-bundle"))
+                .header("X-Tenant-Id", DEMO_ENTITY.toString()).header("X-Actor-Id", "00000000-0000-0000-0000-000000000099")
+                .header("X-Actor-Roles", "TENANT_IT_ADMIN").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, bundle.statusCode());
+        StringBuilder all = new StringBuilder();
+        java.util.Set<String> entries = new java.util.TreeSet<>();
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(bundle.body()))) {
+            for (var e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
+                entries.add(e.getName());
+                all.append(new String(zip.readAllBytes(), StandardCharsets.UTF_8)).append('\n');
+            }
+        }
+        assertTrue(entries.containsAll(Set.of("versions.txt", "checks.txt", "failures.txt", "configuration.properties")), entries.toString());
+        assertTrue(all.toString().contains("LV-LIC-003"), "the failures with their codes");
+        for (String never : List.of(db.password, "spring.datasource", "securedoc_dev_password", "123456789012",
+                "Local Demo Tenant", "Demo Customer", "signature")) {
+            assertFalse(all.toString().contains(never), never);
+        }
+        assertEquals("1", one("select count(*) from audit_records where action = 'DIAGNOSTIC_BUNDLE_DOWNLOADED'"));
+
+        // The open health address says nothing about the checks.
+        HttpResponse<String> health = callAs(port, "BUSINESS_ADMIN", "/actuator/health");
+        assertFalse(health.body().contains("database") || health.body().contains("MON_"), health.body());
+    }
+
+    private static HttpResponse<String> callAs(int port, String role, String path) throws Exception {
+        return HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("X-Tenant-Id", DEMO_ENTITY.toString()).header("X-Actor-Id", "00000000-0000-0000-0000-000000000099")
+                .header("X-Actor-Roles", role).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private static void change(String sql) throws SQLException {
         try (Connection c = db.connect(); Statement s = c.createStatement()) {
             assertEquals(1, s.executeUpdate(sql));
@@ -273,6 +325,10 @@ class FreshDatabaseStartPostgresTest {
     @Order(6)
     void theAppRefusesToStartWithoutAValidLicence() throws Exception {
         Path storage = Files.createDirectories(work.resolve("storage"));
+        // Task 0057: a storage that is gone, where it is required; then the folder is back.
+        change("update processing_storage_providers set root_path = root_path || '-gone'");
+        assertStartRefused(storage, "MON_PATH_MISSING", DevelopmentBuild.class, "--securedoc.monitoring.storage-required=true");
+        change("update processing_storage_providers set root_path = replace(root_path, '-gone', '')");
         assertStartRefused(storage, "LICENCE_UNKNOWN_KEY_ID", ProductionBuild.class);
         assertStartRefused(storage, "LICENCE_WRONG_CUSTOMER", DevelopmentBuild.class, "--platform.licensing.tenant-id=TEN-OTHER-0001");
         assertStartRefused(storage, "platform.licensing.tenant-id", DevelopmentBuild.class, "--platform.licensing.tenant-id=");

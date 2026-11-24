@@ -37,6 +37,8 @@ spring:
 management:
   endpoint:
     health:
+      # Task 0057: the checks' names, codes and causes are on Support, never on the open health address.
+      show-details: never
       probes:
         enabled: false
 
@@ -48,6 +50,15 @@ platform:
   # platform-tenant.properties (docs/install/SETUP.md). Without it, or without a valid stored licence, the app does not start.
   licensing:
     product-code: LEXAVAULT
+    notifications:
+      link: /admin/licensing
+  # Task 0057: the dependency checks (docs/install/MONITORING.md). product-code: for the login-system check.
+  monitoring:
+    product-code: LEXAVAULT
+    bundle-properties:
+      - securedoc.processing.
+      - securedoc.resilience.
+      - securedoc.lifecycle.
   outbound:
     installation: ${PLATFORM_OUTBOUND_INSTALLATION:ON_PREMISES}
     allow-internal-addresses: ${PLATFORM_OUTBOUND_ALLOW_INTERNAL_ADDRESSES:false}
@@ -92,6 +103,10 @@ securedoc:
         USER: ${SECUREDOC_SECURITY_LEGACY_ROLE_USER:securedoc-user}
         REVIEWER: ${SECUREDOC_SECURITY_LEGACY_ROLE_REVIEWER:securedoc-reviewer}
         APPROVER: ${SECUREDOC_SECURITY_LEGACY_ROLE_APPROVER:securedoc-approver}
+  # Task 0057: which of LexaVault's own checks refuse a start while down (and make the app not ready).
+  monitoring:
+    storage-required: ${SECUREDOC_MONITORING_STORAGE_REQUIRED:true}
+    model-server-required: ${SECUREDOC_MONITORING_MODEL_SERVER_REQUIRED:false}
   ai:
     # AI-first discovery is part of the active V1 pipeline. Use "heuristic" only as an
     # explicit development fallback when no local model is available.

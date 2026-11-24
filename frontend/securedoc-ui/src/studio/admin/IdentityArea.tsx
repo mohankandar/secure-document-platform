@@ -58,6 +58,7 @@ export default function IdentityArea() {
             <div role="status" aria-live="polite">
               {answer && answer.passed && <p><strong>The login system answers.</strong> {answer.message}</p>}
               {answer && !answer.passed && <p><strong>Sign-in test failed:</strong> <span className="cf-mono">{answer.code}</span> {answer.message}</p>}
+              {answer && !answer.passed && answer.whatToDo && <p><strong>What to do:</strong> {answer.whatToDo}</p>}
               {answer?.testedAt && <p className="cf-muted">Tested {dayAndTime(answer.testedAt)}.</p>}
               {failed !== null && <p><strong>The test could not be run.</strong> {errorMessage(failed)}</p>}
             </div>

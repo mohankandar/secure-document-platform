@@ -48,7 +48,7 @@ class LvErrorCodeFrontendFileTest {
         ts.append("export type LvKind = 'REFUSED' | 'WARNING' | 'WAITING' | 'STOPPED' | 'EXPORT_FAILED' | 'NOT_ALLOWED' | 'SET_UP' | 'SYSTEM';\n\n");
         ts.append("export interface LvCodeEntry {\n");
         ts.append("  code: string;\n  area: string;\n  title: string;\n  description: string;\n  kind: LvKind;\n");
-        ts.append("  whoActs: string;\n  httpStatus: number | null;\n  reserved: boolean;\n}\n\n");
+        ts.append("  whoActs: string;\n  whatToDo: string;\n  httpStatus: number | null;\n  reserved: boolean;\n}\n\n");
         ts.append("/** Every LexaVault error code, in area order. */\n");
         ts.append("export const LV_CODES: Record<string, LvCodeEntry> = {\n");
         for (LvErrorCode code : LvErrorCode.values()) {
@@ -58,6 +58,7 @@ class LvErrorCodeFrontendFileTest {
                     .append(", description: ").append(q(code.description()))
                     .append(", kind: ").append(q(code.kind().name()))
                     .append(", whoActs: ").append(q(code.whoActs()))
+                    .append(", whatToDo: ").append(q(code.whatToDo()))
                     .append(", httpStatus: ").append(code.httpStatus().map(String::valueOf).orElse("null"))
                     .append(", reserved: ").append(code.reserved()).append(" },\n");
         }

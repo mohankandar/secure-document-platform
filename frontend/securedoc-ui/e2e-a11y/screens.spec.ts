@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { appendFileSync } from 'node:fs';
-import { APPROVAL_CASE, INCIDENT, STOPPED_CASE, go, mockIdentityProvider, mockApi, signInAs } from './harness';
+import { APPROVAL_CASE, INCIDENT, LICENSING_STOPPED, STOPPED_CASE, go, mockIdentityProvider, mockApi, signInAs } from './harness';
 
 /**
  * UI task U026 A2.1: axe with the WCAG 2.0 and 2.1 A and AA rules on every main screen and state, in light and dark
@@ -229,21 +229,46 @@ test.describe('Admin (IT Administrator)', () => {
   });
 });
 
+test.describe('Licensing (Business Admin, task 0057)', () => {
+  test('Licensing: the licence, the test environment and this month', async ({ page }) => {
+    await signInAs(page, 'business', '/admin/licensing');
+    await expect(page.getByRole('heading', { name: 'The licence is valid' })).toBeVisible();
+    await expect(page.getByText('412 of 1,000 pages')).toBeVisible();
+    await scan(page, 'Licensing');
+  });
+  test('Licensing: intake stopped', async ({ page }) => {
+    await signInAs(page, 'business', '/admin/licensing', { licensing: LICENSING_STOPPED });
+    await expect(page.getByRole('heading', { name: 'New cases are not taken in' })).toBeVisible();
+    await expect(page.getByText('Licence expired · LV-LIC-002')).toBeVisible();
+    await scan(page, 'Licensing: intake stopped');
+  });
+});
+
+test.describe('Support status (task 0057)', () => {
+  test('IT Admin: checks, what to do, failures and the bundle', async ({ page }) => {
+    await signInAs(page, 'it', '/support/status');
+    await expect(page.getByRole('heading', { name: '2 of 4 need attention' })).toBeVisible();
+    await expect(page.getByText('R-0J5K2Q7M9X4D')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download diagnostic bundle' })).toBeVisible();
+    await scan(page, 'Support: status');
+  });
+  test('Platform Operations: no bundle', async ({ page }) => {
+    await signInAs(page, 'ops', '/support/status');
+    await expect(page.getByRole('heading', { name: '2 of 4 need attention' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download diagnostic bundle' })).toHaveCount(0);
+  });
+});
+
 test.describe('Platform operations (Platform Operations)', () => {
   for (const [section, ready] of [
     ['', '1 service needs attention'],
     ['storage', 'Where LexaVault works on documents'],
-    ['licensing', 'License enforcement is active'],
     ['branding', 'Branding'],
     ['telemetry', 'Usage data'],
   ] as const) {
     test(`Platform: ${section || 'overview'}`, async ({ page }) => {
       await signInAs(page, 'ops', `/admin/health${section ? `?section=${section}` : ''}`);
       await expect(page.getByRole('heading', { name: ready }).first()).toBeVisible();
-      if (section === 'licensing') {
-        await page.getByText('Northwind Commercial').first().click();
-        await expect(page.getByRole('heading', { name: 'License history' })).toBeVisible();
-      }
       await scan(page, `Platform: ${section || 'overview'}`);
     });
   }

@@ -260,7 +260,9 @@ public class ApplicationServiceConfig {
                                                                ProcessingFingerprintProvider processingFingerprintProvider,
                                                                ProductTelemetryService productTelemetryService) {
         return new ProcessingIncidentService(processingIncidentRepository, processingFingerprintProvider,
-                productTelemetryService);
+                productTelemetryService)
+                .withFailureReferences(code -> com.documentplatform.errors.FailureLog.record(
+                        new com.securedoc.platform.api.error.LvPlatformCode(code)));
     }
 
 

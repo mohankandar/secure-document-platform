@@ -80,11 +80,12 @@ public class EnterpriseIdentityAdminController {
                     "result=FAILED, code=" + result.code() + (result.reason() == null ? "" : ", reason=" + result.reason()));
         }
         return ResponseEntity.ok(new TestAnswer(result.passed(), result.code(), result.message(), result.reason(),
-                result.testedAt()));
+                result.testedAt(), result.whatToDo()));
     }
 
     /** What the screen shows of a test: passed, or the exact code and its words. */
-    public record TestAnswer(boolean passed, String code, String message, String reason, Instant testedAt) {
+    public record TestAnswer(boolean passed, String code, String message, String reason, Instant testedAt,
+                             String whatToDo) {
     }
 
     /** One login connection as the screens show it. {@code displayName} is the provider ID (idn_ keeps no other name). */

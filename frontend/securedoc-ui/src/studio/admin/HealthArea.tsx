@@ -9,13 +9,12 @@ import { useToast } from '../toast';
 import { Loading, when } from './shared';
 import { problemReason } from '../words';
 import StorageSection from './StorageSection';
-import LicensingSection from './LicensingSection';
 import BrandingSection from './BrandingSection';
 import TelemetrySection from './TelemetrySection';
 import { watchedFolderStatus } from './integrationRules';
 import { SECTION_LABELS, intervalText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle } from './platformRules';
 
-type Section = 'overview' | 'storage' | 'licensing' | 'branding' | 'telemetry';
+type Section = 'overview' | 'storage' | 'branding' | 'telemetry';
 const SECTIONS = (Object.keys(SECTION_LABELS) as Section[]).map((k) => [k, SECTION_LABELS[k]] as const);
 
 export default function HealthArea({ canOperate }: { canOperate: boolean }) {
@@ -38,7 +37,6 @@ export default function HealthArea({ canOperate }: { canOperate: boolean }) {
       )}
       {section === 'overview' && <Overview canOperate={canOperate} />}
       {section === 'storage' && <StorageSection />}
-      {section === 'licensing' && <LicensingSection />}
       {section === 'branding' && <BrandingSection />}
       {section === 'telemetry' && <TelemetrySection />}
     </div>

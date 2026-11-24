@@ -25,6 +25,9 @@ securedoc:
   logging:
     environment: local
     node-id: ${SECUREDOC_NODE_ID:LOCAL-APP-01}
+  monitoring:
+    # Task 0057: the local start makes the storage folder itself, after the checks.
+    storage-required: ${SECUREDOC_MONITORING_STORAGE_REQUIRED:false}
   storage:
     local:
       root-path: ./securedoc-storage

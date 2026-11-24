@@ -16,6 +16,8 @@
             <includeMdcKeyName>tenantId</includeMdcKeyName>
             <includeMdcKeyName>actorId</includeMdcKeyName>
             <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <includeMdcKeyName>ref</includeMdcKeyName>
+            <includeMdcKeyName>requestId</includeMdcKeyName>
             <includeMdcKeyName>packageId</includeMdcKeyName>
             <includeMdcKeyName>documentId</includeMdcKeyName>
             <includeMdcKeyName>incidentId</includeMdcKeyName>
