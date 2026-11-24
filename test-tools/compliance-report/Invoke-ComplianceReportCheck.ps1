@@ -187,8 +187,8 @@ function New-Case([string] $tag, [int] $index) {
     return (& $invokeApi -Method POST -Path '/api/v1/packages' -Body $body).packageId
 }
 
-function Set-Policy([string[]] $types, [double] $threshold, [string] $mode, [bool] $mask) {
-    $body = @{ enabledEntityTypes = $types; autoRedactThreshold = $threshold; reviewMode = $mode; maskSsnLastFour = $mask }
+function Set-Policy([string[]] $types, [double] $threshold, [string] $mode, [bool] $mask, [hashtable] $catalog = @{}) {
+    $body = @{ enabledEntityTypes = $types; autoRedactThreshold = $threshold; reviewMode = $mode; maskSsnLastFour = $mask } + $catalog
     & $invokeApi -Method PUT -Path '/api/v1/business-admin/sensitive-data-policy' -Body $body -Roles 'BUSINESS_ADMIN' | Out-Null
 }
 
@@ -254,7 +254,7 @@ try {
     Set-Policy @('CREDIT_SCORE', 'SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER') 0.70 'UNCERTAIN_ONLY' $true  # no change
     $afterNoChange = Count-Audit "action='SENSITIVE_DATA_POLICY_CHANGED'"
     Check 'A4: a sensitive-data policy save with no change writes no record' ($afterNoChange -eq $beforeNoChange) "before=$beforeNoChange after=$afterNoChange"
-    Set-Policy @('SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER') 0.70 'UNCERTAIN_ONLY' $true  # credit score off
+    Set-Policy @('SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER') 0.70 'UNCERTAIN_ONLY' $true @{ enabledPacks = @('FRCP_5_2'); keepLastFourKinds = @('SSN') }  # credit score off; 0062: a pack and a style
     $policyChangeCount = Count-Audit "action='SENSITIVE_DATA_POLICY_CHANGED'"
     Check 'the 0.70 save and the credit-score save are both recorded' ($policyChangeCount -eq $afterNoChange + 1 -and $beforeNoChange -ge 1) "records=$policyChangeCount"
     $firstSave = (Count-Audit "action='SENSITIVE_DATA_POLICY_CHANGED' and detail like '%previous=none'") -eq 1
@@ -510,6 +510,10 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
         "Compliance reports created $($expect.compliance)", "Access refused (wrong role) $($expect.refused)",
         "Preset: Balanced $([char]0x2192) Light", "Redacted without review at: 80% $([char]0x2192) 70%",
         "Credit score turned off", "Social Security Number, Date of birth, Credit card number", "70% confidence or higher",
+        # 0062: the packs and styles in force, and their changes.
+        "Regulation packs in force FRCP 5.2 (court filings)", "Last 4 digits kept for: Social Security Number",
+        "Regulation pack FRCP 5.2 (court filings) turned on",
+        "Social Security Number: remove fully $([char]0x2192) keep the last 4",
         "Originals kept for 48 hours after delivery", "Stopped cases kept for 7 days", "Supervisor approval before delivery Not required",
         "COMPLIANCE REPORT $([char]0x00B7) SUMMARY EDITION", "$tenantName only. Other entities are never included.",
         # 0018 A4: the lifecycle changes table in section 2.

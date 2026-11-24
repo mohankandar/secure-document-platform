@@ -99,7 +99,7 @@
                 alter table tenant_redaction_policies drop constraint if exists ck_tenant_redaction_policies_vision;
                 -- The kinds this task added have no place in the version before it. Open findings of these kinds
                 -- must be decided before a rollback: the older version cannot read them, so it fails closed.
-                delete from tenant_redaction_kinds where kind_key in ('SIGNATURE', 'FACE_PHOTO');
+                delete from tenant_redaction_catalog where kind_key in ('SIGNATURE', 'FACE_PHOTO');
             </sql>
             <dropTable tableName="document_page_routes"/>
             <dropColumn tableName="findings" columnName="ai_models"/>

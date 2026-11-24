@@ -25,6 +25,7 @@ import com.securedoc.platform.domain.artifact.ArtifactStorageReference;
 import com.securedoc.platform.domain.artifact.ArtifactType;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditRecord;
+import com.securedoc.platform.domain.business.RedactionStyle;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.document.Document;
@@ -67,6 +68,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -293,6 +296,154 @@ class SearchableRedactionServiceTest {
         assertEquals(pkg.id().toString(), removed.get(0).resourceId());
     }
 
+    /**
+     * Task 0062, style "keep the last 4": only the SSN's last four digits can be read on the redacted page (the OCR of
+     * the output says so), the card is covered in full, and neither the digits nor the value are in any record or log.
+     */
+    @Test
+    void keepLastFourDrawsTheDigitsFromTheOriginalAndSavesThemNowhere() throws Exception {
+        policy = policy(true);
+        when(findings.findByDocumentIdAndTenantId(document.id(), tenantId)).thenReturn(
+                confirmedFindings(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER, EntityType.DATE_OF_BIRTH));
+        service(new PdfBoxBurnFlatRedactionAdapter(ocr())).execute(command());
+
+        assertEquals(DocumentStatus.PROCESSED, document.status());
+        BufferedImage page = render(stored.get(0));
+        Rectangle box = box(0, page);
+        // The left of the cover is solid; the end shows digits (white on black); nothing is outside the cover.
+        assertEquals(0, light(page, new Rectangle(box.x + 2, box.y + 2, box.width * 6 / 11 - 2, box.height - 4)));
+        int lit = light(page, new Rectangle(box.x + box.width * 7 / 11, box.y + 2, box.width * 4 / 11 - 2, box.height - 4));
+        assertTrue(lit > 20, "digits are drawn: " + lit);
+        for (int other : List.of(1, 2)) {
+            Rectangle full = box(other, page);
+            assertEquals(0, light(page, new Rectangle(full.x + 2, full.y + 2, full.width - 4, full.height - 4)),
+                    "the card (locked) and the date of birth are covered in full");
+        }
+        String shown = ocrOf(page.getSubimage(box.x + box.width * 6 / 11, box.y, box.width * 5 / 11, box.height));
+        assertEquals("7531", shown.replaceAll("[^0-9]", ""), "exactly the last four digits");
+
+        AuditRecord completed = audits.stream().filter(a -> a.action() == AuditAction.DOCUMENT_REDACTION_COMPLETED)
+                .findFirst().orElseThrow();
+        assertTrue(completed.detail().endsWith(", keptLastFour=1"), completed.detail());
+        assertNoValueAnywhere();
+        List<String> texts = new ArrayList<>();
+        audits.forEach(a -> texts.add(String.valueOf(a.detail())));
+        logs.list.forEach(l -> texts.add(l.getFormattedMessage()));
+        for (String text : texts) {
+            String withoutIds = text.replaceAll("[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", "");
+            assertFalse(withoutIds.matches("(?s).*(?<!\\d)7531(?!\\d).*"), "the kept digits are in no record or log line");
+        }
+    }
+
+    /** Anything uncertain is removed in full: a scanned page, a touching box, digits redacted elsewhere, no offsets. */
+    @Test
+    void keepLastFourFallsBackToRemovingInFull() throws Exception {
+        policy = policy(false);
+        PdfBoxTextExtractionAdapter real = new PdfBoxTextExtractionAdapter();
+        TextExtractionPort scanned = (content, mime) -> {
+            TextExtractionPort.TextExtractionOutput out = real.extract(content, mime);
+            return new TextExtractionPort.TextExtractionOutput(out.pages().stream().map(p ->
+                    new TextExtractionPort.PageText(p.pageNumber(), p.width(), p.height(), p.text(), p.spans(),
+                            TextExtractionPort.ExtractionSource.OCR, 0.99)).toList(), out.totalCharacterCount(), false, true);
+        };
+        List<Finding> kept = confirmedFindings(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.DATE_OF_BIRTH);
+        assertPlainCover(kept, scanned, "read by OCR");
+
+        List<Finding> touching = new ArrayList<>(kept);
+        Finding ssn = kept.get(0);
+        touching.add(Finding.reconstitute(FindingId.generate(), tenantId, document.id(), EntityType.PIN, ssn.location(),
+                new Confidence(0.99), DetectorSource.of("test"), Instant.now(), FindingStatus.CONFIRMED, List.of(),
+                Instant.now()));
+        assertPlainCover(touching, real, "another redaction on the same place");
+
+        List<Finding> manual = List.of(Finding.reconstitute(FindingId.generate(), tenantId, document.id(), EntityType.SSN,
+                FindingLocation.withBounds(1, 0, 0, ssn.location().boundingBox()), new Confidence(1.0),
+                DetectorSource.of("manual"), Instant.now(), FindingStatus.CONFIRMED, List.of(), Instant.now(),
+                RedactionStyle.KEEP_LAST_FOUR));
+        assertPlainCover(manual, real, "marked by hand: no text to take the digits from");
+
+        String lockedStyle = "a stored style never reaches a locked item";
+        List<Finding> locked = List.of(Finding.reconstitute(FindingId.generate(), tenantId, document.id(),
+                EntityType.CREDIT_CARD_NUMBER, ssn.location(), new Confidence(1.0), DetectorSource.of("test"),
+                Instant.now(), FindingStatus.CONFIRMED, List.of(), Instant.now(), RedactionStyle.KEEP_LAST_FOUR));
+        assertPlainCover(locked, real, lockedStyle);
+    }
+
+    /** The four digits are a redacted value elsewhere (a labelled last-four SSN): they are not shown here either. */
+    @Test
+    void digitsThatAreARedactedValueElsewhereAreNotKept() throws Exception {
+        policy = policy(false);
+        source = sourcePdf(List.of("Borrower SSN: " + SSN, "SSN ending: 7531"));
+        TextExtractionPort.PageText page = new PdfBoxTextExtractionAdapter()
+                .extract(new ByteArrayInputStream(source), "application/pdf").pages().get(0);
+        List<Finding> both = List.of(finding(page, SSN, 0, EntityType.SSN, RedactionStyle.KEEP_LAST_FOUR),
+                finding(page, "7531", page.text().indexOf("ending"), EntityType.PIN, RedactionStyle.REMOVE_FULLY));
+        assertPlainCover(both, new PdfBoxTextExtractionAdapter(), "redacted elsewhere");
+    }
+
+    private void assertPlainCover(List<Finding> confirmed, TextExtractionPort extraction, String why) throws Exception {
+        stored.clear();
+        audits.clear();
+        Document fresh = Document.reconstitute(document.id(), tenantId, pkg.id(), FileName.of("a.pdf"), MimeType.pdf(),
+                64, Checksum.sha256("a"), DocumentType.PDF, Instant.now(), DocumentStatus.REDACTING,
+                List.of(Page.of(1, 612, 792)), Instant.now());
+        when(documents.findByIdAndTenantId(document.id(), tenantId)).thenReturn(Optional.of(fresh));
+        when(findings.findByDocumentIdAndTenantId(document.id(), tenantId)).thenReturn(confirmed);
+        service(new PdfBoxBurnFlatRedactionAdapter(ocr()), extraction).execute(command());
+        BufferedImage image = render(stored.get(0));
+        FindingLocation.BoundingBox b = confirmed.get(0).location().boundingBox();
+        Rectangle box = rectangle(b, image);
+        assertEquals(0, light(image, new Rectangle(box.x + 2, box.y + 2, box.width - 4, box.height - 4)), why);
+        assertTrue(audits.stream().noneMatch(a -> String.valueOf(a.detail()).contains("keptLastFour")), why);
+        for (Finding f : confirmed) {
+            // markRedacted changed them: the next case needs them confirmed again.
+            org.springframework.test.util.ReflectionTestUtils.setField(f, "status", FindingStatus.CONFIRMED);
+        }
+    }
+
+    private Rectangle box(int finding, BufferedImage image) {
+        return rectangle(confirmedFindings().get(finding).location().boundingBox(), image);
+    }
+
+    private static Rectangle rectangle(FindingLocation.BoundingBox b, BufferedImage image) {
+        return new Rectangle((int) Math.round(b.left() * image.getWidth()), (int) Math.round(b.top() * image.getHeight()),
+                (int) Math.round(b.width() * image.getWidth()), (int) Math.round(b.height() * image.getHeight()));
+    }
+
+    private static int light(BufferedImage image, Rectangle area) {
+        int count = 0;
+        for (int y = area.y; y < area.y + area.height; y++) {
+            for (int x = area.x; x < area.x + area.width; x++) {
+                if ((image.getRGB(x, y) & 0xFF) > 128) count++;
+            }
+        }
+        return count;
+    }
+
+    private static BufferedImage render(byte[] pdf) throws Exception {
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            return new org.apache.pdfbox.rendering.PDFRenderer(doc).renderImageWithDPI(0, 150);
+        }
+    }
+
+    /** Black on white and enlarged, so the reading of four digits does not depend on white-on-black OCR. */
+    private static String ocrOf(BufferedImage part) throws Exception {
+        int scale = 4, edge = 40;
+        BufferedImage big = new BufferedImage(part.getWidth() * scale + 2 * edge, part.getHeight() * scale + 2 * edge,
+                BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = big.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.drawImage(part, edge, edge, part.getWidth() * scale, part.getHeight() * scale, null);
+        g.dispose();
+        for (int y = 0; y < big.getHeight(); y++) {
+            for (int x = 0; x < big.getWidth(); x++) big.setRGB(x, y, ~big.getRGB(x, y) & 0xFFFFFF);
+        }
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(big, "png", png);
+        return ocr().recognize(new com.securedoc.platform.application.port.out.OcrPort.OcrPageInput(1, png.toByteArray(),
+                "image/png", big.getWidth(), big.getHeight())).text();
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private DocumentRedactionService service(PdfRedactionPort engine) {
@@ -324,24 +475,41 @@ class SearchableRedactionServiceTest {
                 .extract(new ByteArrayInputStream(source), "application/pdf").pages().get(0);
         List<Finding> out = new ArrayList<>();
         for (String value : List.of(SSN, CARD, DOB)) {
-            int start = page.text().indexOf(value);
-            assertTrue(start >= 0);
-            int end = start + value.length();
-            double left = 1, top = 1, right = 0, bottom = 0;
-            for (TextExtractionPort.TextSpan s : page.spans()) {
-                if (s.endOffset() <= start || s.startOffset() >= end) continue;
-                left = Math.min(left, s.left());
-                top = Math.min(top, s.top());
-                right = Math.max(right, s.left() + s.width());
-                bottom = Math.max(bottom, s.top() + s.height());
-            }
-            FindingLocation location = FindingLocation.withBounds(1, start, end, FindingLocation.BoundingBox.of(
-                    Math.max(0, left - 0.004), Math.max(0, top - 0.004), right - left + 0.008, bottom - top + 0.008));
-            out.add(Finding.reconstitute(FindingId.generate(), tenantId, document.id(), EntityType.SSN, location,
-                    new Confidence(0.99), DetectorSource.of("test"), Instant.now(), FindingStatus.CONFIRMED,
-                    List.of(), Instant.now()));
+            out.add(finding(page, value, 0, EntityType.SSN, RedactionStyle.REMOVE_FULLY));
         }
         return out;
+    }
+
+    /** The same three places, each of its own kind and each asking for "keep the last 4". */
+    private List<Finding> confirmedFindings(EntityType... kinds) {
+        TextExtractionPort.PageText page = new PdfBoxTextExtractionAdapter()
+                .extract(new ByteArrayInputStream(source), "application/pdf").pages().get(0);
+        List<Finding> out = new ArrayList<>();
+        List<String> values = List.of(SSN, CARD, DOB);
+        for (int n = 0; n < values.size(); n++) {
+            out.add(finding(page, values.get(n), 0, kinds[n], RedactionStyle.KEEP_LAST_FOUR));
+        }
+        return out;
+    }
+
+    private Finding finding(TextExtractionPort.PageText page, String value, int from, EntityType kind,
+                            RedactionStyle style) {
+        int start = page.text().indexOf(value, from);
+        assertTrue(start >= 0);
+        int end = start + value.length();
+        double left = 1, top = 1, right = 0, bottom = 0;
+        for (TextExtractionPort.TextSpan s : page.spans()) {
+            if (s.endOffset() <= start || s.startOffset() >= end) continue;
+            left = Math.min(left, s.left());
+            top = Math.min(top, s.top());
+            right = Math.max(right, s.left() + s.width());
+            bottom = Math.max(bottom, s.top() + s.height());
+        }
+        FindingLocation location = FindingLocation.withBounds(1, start, end, FindingLocation.BoundingBox.of(
+                Math.max(0, left - 0.004), Math.max(0, top - 0.004), right - left + 0.008, bottom - top + 0.008));
+        return Finding.reconstitute(FindingId.generate(), tenantId, document.id(), kind, location,
+                new Confidence(0.99), DetectorSource.of("test"), Instant.now(), FindingStatus.CONFIRMED,
+                List.of(), Instant.now(), style);
     }
 
     private void assertNoValueAnywhere() {
@@ -359,6 +527,26 @@ class SearchableRedactionServiceTest {
 
     private static byte[] sourcePdf() throws Exception {
         return sourcePdf(false);
+    }
+
+    private static byte[] sourcePdf(List<String> lines) throws Exception {
+        try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage(new PDRectangle(612, 792));
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                float y = 700;
+                for (String line : lines) {
+                    cs.beginText();
+                    cs.setFont(FONT, 14);
+                    cs.newLineAtOffset(72, y);
+                    cs.showText(line);
+                    cs.endText();
+                    y -= 40;
+                }
+            }
+            doc.save(out);
+            return out.toByteArray();
+        }
     }
 
     /** {@code copyOnPage2}: a second page that prints the SSN again (test only: detection "missed" it). */

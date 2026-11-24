@@ -26,16 +26,24 @@ public final class PolicyHistory {
 
     /** Sensitive-data policy values; {@code types} is null when the record did not hold the names (before 0016). */
     public record SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
-                                  Boolean maskSsnLastFour, String preset, VisionSettings vision) {
+                                  Boolean maskSsnLastFour, String preset, Set<String> packs,
+                                  Set<String> keepLastFour, VisionSettings vision) {
 
+        /** Without packs or styles (before task 0062: none). */
         public SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
                                Boolean maskSsnLastFour, String preset) {
-            this(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, VisionSettings.DEFAULTS);
+            this(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, Set.of(), Set.of(), VisionSettings.DEFAULTS);
+        }
+
+        public SensitivePolicy with(Set<String> packNames, Set<String> lastFour) {
+            return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset,
+                    new TreeSet<>(packNames), new TreeSet<>(lastFour), vision);
         }
 
         /** Task 0064. */
         public SensitivePolicy withVision(VisionSettings settings) {
-            return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, settings);
+            return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
+                    keepLastFour, settings);
         }
 
         public static SensitivePolicy of(Set<String> types, double threshold, ReviewMode mode, boolean mask) {
@@ -177,6 +185,14 @@ public final class PolicyHistory {
             lines.add("Labeled last-four SSN treated as sensitive: " + yesNo(before.maskSsnLastFour()) + " → "
                     + yesNo(after.maskSsnLastFour()));
         }
+        after.packs().stream().filter(p -> !before.packs().contains(p))
+                .forEach(p -> lines.add("Regulation pack " + packName(p) + " turned on"));
+        before.packs().stream().filter(p -> !after.packs().contains(p))
+                .forEach(p -> lines.add("Regulation pack " + packName(p) + " turned off"));
+        after.keepLastFour().stream().filter(t -> !before.keepLastFour().contains(t)).sorted(SensitiveTypeNames.order())
+                .forEach(t -> lines.add(SensitiveTypeNames.name(t) + ": remove fully → keep the last 4"));
+        before.keepLastFour().stream().filter(t -> !after.keepLastFour().contains(t)).sorted(SensitiveTypeNames.order())
+                .forEach(t -> lines.add(SensitiveTypeNames.name(t) + ": keep the last 4 → remove fully"));
         if (before.vision().enabled() != after.vision().enabled()) {
             lines.add("Hard pages read by the vision model: " + yesNo(before.vision().enabled()) + " → "
                     + yesNo(after.vision().enabled()));
@@ -249,7 +265,26 @@ public final class PolicyHistory {
         }
         return new SensitivePolicy(types, parseInt(k.get("enabledCount")), parseDouble(k.get("threshold")),
                 enumWord(k.get("reviewMode")), k.containsKey("maskSsnLastFour") ? parseBoolean(k.get("maskSsnLastFour")) : null,
-                enumWord(k.get("preset")), vision(k));
+                enumWord(k.get("preset"))).with(list(k.get("packs")), list(k.get("keepLastFour")))
+                .withVision(vision(k));
+    }
+
+    private static Set<String> list(String value) {
+        Set<String> out = new TreeSet<>();
+        if (value != null) {
+            for (String v : value.split(",")) {
+                if (v.matches("[A-Z0-9_]+")) out.add(v);
+            }
+        }
+        return out;
+    }
+
+    public static String packName(String key) {
+        try {
+            return com.securedoc.platform.domain.business.RegulationPack.valueOf(key).displayName();
+        } catch (IllegalArgumentException unknown) {
+            return SensitiveTypeNames.sentenceCase(key);
+        }
     }
 
     /** Task 0064: the keys are written only when not the default. */

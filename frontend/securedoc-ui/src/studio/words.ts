@@ -119,13 +119,15 @@ export const SENSITIVE_TYPES: readonly SensitiveType[] = [
   // Task 0064: found on the page image, not in its text.
   { key: 'SIGNATURE', name: 'Signature or initials', plural: 'Signatures and initials', detects: 'A handwritten signature or initials next to a signature or initials label, and any the vision model finds. Off by default.' },
   { key: 'FACE_PHOTO', name: 'Face photo', plural: 'Face photos', detects: 'A photo of a person’s face, for example on an ID copy. Found by the vision model only. Off by default.' },
+  // Task 0062: locked items with the credit card number: always on, always removed in full.
+  { key: 'CVV', name: 'Card security code (CVV)', plural: 'Card security codes', detects: 'A 3 or 4 digit card security code (CVV, CVC), only next to its label. Always on.' },
+  { key: 'PIN', name: 'PIN', plural: 'PINs', detects: 'A 4 to 6 digit PIN, only next to a PIN label. Always on.' },
 ];
 
 /** Task 0064: not a type to switch on: a page LexaVault could not read and a person must look at. */
 export const UNREAD_PAGE = 'UNREAD_PAGE';
 const NOT_CONFIGURABLE: readonly SensitiveType[] = [
   { key: UNREAD_PAGE, name: 'Page to check', plural: 'Pages to check', detects: 'A page the vision model could not read.' },
-  { key: 'GOVERNMENT_ID', name: 'Government ID', plural: 'Government IDs', detects: 'A driver’s license, ID card or passport number the vision model found.' },
 ];
 
 /** Other spellings the server or older data use for the same types. */
@@ -331,6 +333,22 @@ export function sentenceCase(raw: string): string {
  * legal entity (the entity switch), never a kind of sensitive data.
  */
 export const SENSITIVE_TYPES_HEADING = 'Sensitive types';
+
+/** Task 0062: regulation packs, locked items and styles on the policy screen. */
+export const CATALOG_WORDS = {
+  packsHeading: 'Regulation packs',
+  packsHint: 'Turning a pack on turns on its sensitive types below; then turn single types on or off by hand. Turning a pack off leaves its types on until you turn them off. A pack helps with a rule; it does not make a document compliant by itself.',
+  notCovered: 'Not covered:',
+  tunedOff: 'Turned off by hand:',
+  locked: 'always on',
+  lockedSoon: 'on with your next save',
+  lockedHint: 'Full card numbers, card security codes and PINs are locked: always on, and always removed in full.',
+  lockedPending: 'This entity does not have the locked items yet (full card number, card security code, PIN). They turn on with your next save of this card, for new cases, and can’t be turned off again.',
+  styleHeading: 'What stays visible',
+  styleHint: 'For the types that are on. Keep the last 4 shows only the last four digits on the cover, for values read from the document’s own text with at least eight characters; a scanned or uncertain value is removed in full. New documents only.',
+  removeFully: 'Remove fully',
+  keepLastFour: 'Keep the last 4',
+} as const;
 
 /** Task 0044: the entity's "searchable redacted pages" switch on the policy screen (on by default). */
 export const SEARCHABLE_PAGES_WORDS = {

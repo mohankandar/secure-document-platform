@@ -30,6 +30,8 @@ export const SHORT_TYPE_NAMES: Readonly<Record<string, string>> = {
   PASSPORT_NUMBER: 'passport number',
   SIGNATURE: 'signature',
   FACE_PHOTO: 'face photo',
+  CVV: 'card code',
+  PIN: 'PIN',
 };
 
 /** One vocabulary name ("Social Security Number") as its short name ("SSN"). An unknown name stays as sent. */

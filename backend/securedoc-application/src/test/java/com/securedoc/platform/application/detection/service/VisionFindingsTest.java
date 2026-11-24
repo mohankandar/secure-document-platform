@@ -2,6 +2,7 @@ package com.securedoc.platform.application.detection.service;
 
 import com.securedoc.platform.application.detection.service.PageBatchFindings.Candidate;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
+import com.securedoc.platform.domain.business.RedactionCatalog;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.finding.AiModel;
 import com.securedoc.platform.domain.finding.DetectionPath;
@@ -107,7 +108,7 @@ class VisionFindingsTest {
         assertEquals(EntityType.ITIN, VisionFindings.type(Kind.SSN, Set.of(EntityType.ITIN)));
         assertEquals(EntityType.PASSPORT_NUMBER,
                 VisionFindings.type(Kind.GOVERNMENT_ID, Set.of(EntityType.PASSPORT_NUMBER)));
-        assertEquals(EntityType.GOVERNMENT_ID, VisionFindings.type(Kind.GOVERNMENT_ID,
+        assertEquals(EntityType.DRIVERS_LICENSE_NUMBER, VisionFindings.type(Kind.GOVERNMENT_ID,
                 Set.of(EntityType.PASSPORT_NUMBER, EntityType.DRIVERS_LICENSE_NUMBER)));
         for (Kind kind : Kind.values()) assertNull(VisionFindings.type(kind, Set.of()), kind.name());
     }
@@ -167,8 +168,8 @@ class VisionFindingsTest {
     @Test
     void theNewKindsAreOffByDefaultAndAnUnreadPageIsNeverAKindToSwitchOnOrOff() {
         assertFalse(TenantRedactionPolicy.defaults(TenantId.generate()).isEnabled(EntityType.SIGNATURE));
-        assertTrue(TenantRedactionPolicy.optInTypes().containsAll(Set.of(EntityType.SIGNATURE, EntityType.FACE_PHOTO)));
-        assertFalse(TenantRedactionPolicy.configurableTypes().contains(EntityType.UNREAD_PAGE));
+        assertTrue(RedactionCatalog.kinds().containsAll(Set.of(EntityType.SIGNATURE, EntityType.FACE_PHOTO)));
+        assertFalse(RedactionCatalog.kinds().contains(EntityType.UNREAD_PAGE));
     }
 
     private static TenantRedactionPolicy policy(EntityType first, EntityType... more) {

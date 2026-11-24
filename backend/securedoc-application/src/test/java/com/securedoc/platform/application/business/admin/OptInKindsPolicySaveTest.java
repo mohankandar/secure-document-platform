@@ -9,6 +9,7 @@ import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditRecord;
 import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
+import com.securedoc.platform.domain.business.RedactionCatalog;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -42,13 +43,12 @@ class OptInKindsPolicySaveTest {
     void theOptInKindsAreOptInAndSeparateFromTheV1Four() {
         assertEquals(EnumSet.of(EntityType.BANK_ROUTING_NUMBER, EntityType.BANK_ACCOUNT_NUMBER, EntityType.ITIN,
                 EntityType.EIN, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER,
-                EntityType.SIGNATURE, EntityType.FACE_PHOTO), // task 0064
-                EnumSet.copyOf(TenantRedactionPolicy.optInTypes()));
+                EntityType.SIGNATURE, EntityType.FACE_PHOTO),
+                EnumSet.copyOf(RedactionCatalog.entries().stream().filter(e -> !e.onByDefault())
+                        .map(RedactionCatalog.Entry::kind).toList()));
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
-                EntityType.CREDIT_SCORE), EnumSet.copyOf(TenantRedactionPolicy.v1ConfigurableTypes()));
-        assertEquals(12, TenantRedactionPolicy.configurableTypes().size());
-        assertFalse(TenantRedactionPolicy.configurableTypes().contains(EntityType.FINANCIAL_ACCOUNT), "stays unused");
-        assertFalse(TenantRedactionPolicy.configurableTypes().contains(EntityType.GOVERNMENT_ID), "stays unused");
+                EntityType.CREDIT_SCORE), EnumSet.copyOf(RedactionCatalog.askedOfAi()));
+        assertEquals(14, RedactionCatalog.kinds().size());
     }
 
     @Test
@@ -56,25 +56,25 @@ class OptInKindsPolicySaveTest {
         Set<EntityType> on = EnumSet.of(EntityType.SSN, EntityType.BANK_ROUTING_NUMBER, EntityType.ITIN);
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), on, 0.80,
                 ReviewMode.UNCERTAIN_ONLY, true);
-        assertEquals(on, policies.saved.enabledEntityTypes());
-        assertTrue(lastDetail().contains("enabledTypes=BANK_ROUTING_NUMBER,ITIN,SSN"), lastDetail());
+        assertEquals(withLocked(on), policies.saved.enabledEntityTypes());
+        assertTrue(lastDetail().contains("enabledTypes=BANK_ROUTING_NUMBER,CREDIT_CARD_NUMBER,CVV,ITIN,PIN,SSN"), lastDetail());
 
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(),
                 EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY, true);
-        assertEquals(Set.of(EntityType.SSN), policies.saved.enabledEntityTypes());
-        assertTrue(lastDetail().contains("previous=[enabledCount=3"), lastDetail());
+        assertEquals(withLocked(Set.of(EntityType.SSN)), policies.saved.enabledEntityTypes());
+        assertTrue(lastDetail().contains("previous=[enabledCount=6"), lastDetail());
     }
 
     @Test
     void onlyNewKindsIsAValidPolicy() {
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(),
                 EnumSet.of(EntityType.EIN), 0.80, ReviewMode.UNCERTAIN_ONLY, true);
-        assertEquals(Set.of(EntityType.EIN), policies.saved.enabledEntityTypes());
+        assertEquals(withLocked(Set.of(EntityType.EIN)), policies.saved.enabledEntityTypes());
     }
 
     @Test
-    void theUnusedGenericKindsAreStillRefused() {
-        for (EntityType unused : List.of(EntityType.FINANCIAL_ACCOUNT, EntityType.GOVERNMENT_ID, EntityType.CUSTOM)) {
+    void aKindOutsideTheCatalogIsRefused() {
+        for (EntityType unused : List.of(EntityType.PERSON_NAME, EntityType.CUSTOM)) {
             assertThrows(ValidationException.class, () -> service.updateSensitiveDataPolicy(tenant, ActorId.generate(),
                     CorrelationId.generate(), EnumSet.of(EntityType.SSN, unused), 0.80, ReviewMode.UNCERTAIN_ONLY, true));
         }
@@ -82,16 +82,23 @@ class OptInKindsPolicySaveTest {
 
     @Test
     void everyKindOnStillFitsTheAuditDetail() {
-        Set<EntityType> all = TenantRedactionPolicy.configurableTypes();
+        Set<EntityType> all = RedactionCatalog.kinds();
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), all, 0.99,
                 ReviewMode.UNCERTAIN_ONLY, false);
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), all, 0.50,
-                ReviewMode.UNCERTAIN_ONLY, false, false, 100, 10, false, 0.70);
+                ReviewMode.UNCERTAIN_ONLY, false, false, 100, 10, null, null, false, 0.70);
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(), all, 0.50,
-                ReviewMode.UNCERTAIN_ONLY, false, false, 101, 11, false, 0.71);
+                ReviewMode.UNCERTAIN_ONLY, false, false, 101, 11, null, null, false, 0.71);
         assertTrue(lastDetail().contains("visionEnabled=false, visionOcrThreshold=0.71"), lastDetail());
         assertFalse(lastDetail().contains("[truncated]"));
-        assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=12, threshold=0.50"));
+        assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=14, threshold=0.50"));
+    }
+
+    /** Task 0062: the locked items are on whatever is chosen. */
+    private static Set<EntityType> withLocked(Set<EntityType> chosen) {
+        EnumSet<EntityType> all = EnumSet.copyOf(chosen);
+        all.addAll(RedactionCatalog.lockedKinds());
+        return all;
     }
 
     private String lastDetail() {

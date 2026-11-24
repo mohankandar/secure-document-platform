@@ -76,9 +76,8 @@ class VisionMigrationPostgresTest {
             PackageId pkg = PackageId.generate();
             TestRows.tenant(jdbc, tenant);
             TestRows.packageRow(jdbc, tenant, pkg);
-            jdbc.update("INSERT INTO tenant_redaction_policies (tenant_id, auto_redact_threshold, review_mode,"
-                    + " ssn_enabled, date_of_birth_enabled, credit_card_number_enabled, credit_score_enabled, updated_at)"
-                    + " VALUES (:t, 0.8, 'UNCERTAIN_ONLY', true, true, true, true, now())",
+            jdbc.update("INSERT INTO tenant_redaction_policies (tenant_id, auto_redact_threshold, review_mode, updated_at)"
+                    + " VALUES (:t, 0.8, 'UNCERTAIN_ONLY', now())",
                     new MapSqlParameterSource("t", tenant.value()));
             assertEquals(Boolean.TRUE, jdbc.queryForObject("SELECT vision_enabled AND vision_ocr_threshold = 0.85"
                     + " FROM tenant_redaction_policies", new MapSqlParameterSource(), Boolean.class));

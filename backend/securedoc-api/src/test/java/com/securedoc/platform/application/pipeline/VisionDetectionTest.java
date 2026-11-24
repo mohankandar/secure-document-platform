@@ -25,6 +25,7 @@ import com.securedoc.platform.domain.artifact.ArtifactType;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditRecord;
 import com.securedoc.platform.domain.business.PageBatchSettings;
+import com.securedoc.platform.domain.business.RedactionStyle;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.business.VisionSettings;
@@ -101,6 +102,7 @@ class VisionDetectionTest {
     private final TenantId tenantId = TenantId.generate();
     private VisionSettings settings = VisionSettings.DEFAULTS;
     private Set<EntityType> kinds = EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH);
+    private Set<EntityType> keepLastFour = Set.of();
     private VisionModelPort model = (image, page) -> VisionPageResult.read(page, MODEL, List.of(
             new VisionPageResult.Item(page == 2 ? VisionPageResult.Kind.SSN : VisionPageResult.Kind.DATE_OF_BIRTH,
                     BoundingBox.of(0.5, 0.5, 0.2, 0.03))), false);
@@ -163,6 +165,16 @@ class VisionDetectionTest {
         assertTrue(detail.contains("aiModels=[" + MODEL.encode() + "]"), detail);
         assertTrue(detail.contains("p2:HANDWRITING") && detail.contains("p4:"), detail);
         assertFalse(detail.contains("219-09"), "no value");
+    }
+
+    @Test
+    void theLastFourAreNeverKeptForWhatTheVisionModelFound() {
+        keepLastFour = Set.of(EntityType.SSN);
+        Run run = new Run();
+        run.text.execute(run.extractCommand());
+        run.find.execute(run.detectCommand());
+        assertEquals(RedactionStyle.KEEP_LAST_FOUR, only(run, 1, EntityType.SSN).redactionStyle());
+        assertEquals(RedactionStyle.REMOVE_FULLY, only(run, 2, EntityType.SSN).redactionStyle());
     }
 
     @Test
@@ -341,7 +353,7 @@ class VisionDetectionTest {
             }).when(findingStore).saveAll(any());
             TenantRedactionPolicyRepository policies = mock(TenantRedactionPolicyRepository.class);
             when(policies.findByTenantId(any())).thenAnswer(i -> Optional.of(new TenantRedactionPolicy(tenantId, kinds,
-                    0.80, ReviewMode.UNCERTAIN_ONLY, true, Instant.now(), true, PageBatchSettings.DEFAULTS, settings)));
+                    0.80, ReviewMode.UNCERTAIN_ONLY, true, Instant.now(), true, PageBatchSettings.DEFAULTS, Set.of(), keepLastFour, true, settings)));
             PageRouteRepository routeStore = new PageRouteRepository() {
                 @Override public void save(TenantId tenant, DocumentId doc, List<PageRoute> saved) {
                     saved.forEach(r -> routes.put(r.page(), r));

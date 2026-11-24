@@ -90,9 +90,8 @@ final class VisionFindings {
             case CREDIT_SCORE -> first(enabled, EntityType.CREDIT_SCORE);
             case BANK_ACCOUNT -> first(enabled, EntityType.BANK_ACCOUNT_NUMBER);
             case ROUTING_NUMBER -> first(enabled, EntityType.BANK_ROUTING_NUMBER);
-            case GOVERNMENT_ID -> enabled.contains(EntityType.DRIVERS_LICENSE_NUMBER)
-                    && enabled.contains(EntityType.PASSPORT_NUMBER) ? EntityType.GOVERNMENT_ID
-                    : first(enabled, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER);
+            // One kind for both: the model does not tell them apart.
+            case GOVERNMENT_ID -> first(enabled, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER);
             case SIGNATURE -> first(enabled, EntityType.SIGNATURE);
             case FACE_PHOTO -> first(enabled, EntityType.FACE_PHOTO);
         };
@@ -162,7 +161,7 @@ final class VisionFindings {
     private static EntityType family(EntityType type) {
         return switch (type) {
             case ITIN -> EntityType.SSN;
-            case DRIVERS_LICENSE_NUMBER, PASSPORT_NUMBER -> EntityType.GOVERNMENT_ID;
+            case PASSPORT_NUMBER -> EntityType.DRIVERS_LICENSE_NUMBER;
             default -> type;
         };
     }

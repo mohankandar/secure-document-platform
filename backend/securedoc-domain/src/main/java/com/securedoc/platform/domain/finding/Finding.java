@@ -1,5 +1,6 @@
 package com.securedoc.platform.domain.finding;
 
+import com.securedoc.platform.domain.business.RedactionStyle;
 import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.DocumentId;
@@ -36,6 +37,8 @@ public final class Finding {
     private FindingStatus status;
     private final List<EvidenceRecord> evidenceHistory;
     private Instant updatedAt;
+    /** Task 0062: the style in force when the document was searched; a later policy change doesn't reach it. */
+    private RedactionStyle redactionStyle = RedactionStyle.REMOVE_FULLY;
 
     private Finding(FindingId id, TenantId tenantId, DocumentId documentId, EntityType entityType,
                     FindingLocation location, Confidence confidence,
@@ -97,6 +100,38 @@ public final class Finding {
         finding.evidenceHistory.addAll(evidenceHistory);
         finding.updatedAt = updatedAt;
         return finding;
+    }
+
+    /** As above, with the stored redaction style; null (a finding from before task 0062) means removed in full. */
+    public static Finding reconstitute(FindingId id, TenantId tenantId, DocumentId documentId,
+                                        EntityType entityType, FindingLocation location,
+                                        Confidence confidence, DetectorSource detectorSource,
+                                        Instant detectedAt, FindingStatus status,
+                                        List<EvidenceRecord> evidenceHistory, Instant updatedAt,
+                                        RedactionStyle redactionStyle) {
+        return reconstitute(id, tenantId, documentId, entityType, location, confidence, detectorSource, detectedAt,
+                status, evidenceHistory, updatedAt, FindingOrigin.NOT_RECORDED, redactionStyle);
+    }
+
+    public static Finding reconstitute(FindingId id, TenantId tenantId, DocumentId documentId,
+                                        EntityType entityType, FindingLocation location,
+                                        Confidence confidence, DetectorSource detectorSource,
+                                        Instant detectedAt, FindingStatus status,
+                                        List<EvidenceRecord> evidenceHistory, Instant updatedAt,
+                                        FindingOrigin origin, RedactionStyle redactionStyle) {
+        Finding finding = reconstitute(id, tenantId, documentId, entityType, location, confidence, detectorSource,
+                detectedAt, status, evidenceHistory, updatedAt, origin);
+        if (redactionStyle != null) finding.redactionStyle = redactionStyle;
+        return finding;
+    }
+
+    /** Set once, when the document is searched. */
+    public void applyStyle(RedactionStyle style) {
+        this.redactionStyle = Objects.requireNonNull(style, "style must not be null");
+    }
+
+    public RedactionStyle redactionStyle() {
+        return redactionStyle;
     }
 
     public void confirm(ActorId actorId, String reason) {

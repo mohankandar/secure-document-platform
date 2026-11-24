@@ -10,7 +10,8 @@ public record BusinessAdminConfigurationResponse(
         SensitiveDataPolicyResponse sensitiveDataPolicy,
         LifecyclePolicyResponse lifecyclePolicy,
         DocumentIntelligenceResponse documentIntelligence,
-        ReportingConfigurationResponse reportingConfiguration
+        ReportingConfigurationResponse reportingConfiguration,
+        RedactionCatalogResponse redactionCatalog
 ) {
     public record BusinessIdentifierAdminResponse(
             UUID id,
@@ -52,10 +53,24 @@ public record BusinessAdminConfigurationResponse(
             /* Task 0049: page batches of large documents (defaults 20 pages, 2 shared). */
             int pageBatchSize,
             int pageBatchOverlap,
+            /* Task 0062: regulation packs in force and the kinds whose last four digits stay visible. */
+            Set<String> enabledPacks,
+            Set<String> keepLastFourKinds,
+            /* Task 0062: false for an entity from before the catalog, until its policy is saved. */
+            boolean lockedItemsOn,
             /* Task 0064: routed pages are read by the vision model (on by default), and the routing threshold. */
             boolean visionEnabled,
             double visionOcrThreshold
     ) {}
+
+    /** Task 0062: the redaction catalog and the regulation packs; the same for every entity. */
+    public record RedactionCatalogResponse(List<CatalogKindResponse> kinds, List<RegulationPackResponse> packs) {}
+
+    public record CatalogKindResponse(String key, String name, String detectionMethod, String defaultStyle,
+                                      boolean locked, boolean lastFourAllowed) {}
+
+    public record RegulationPackResponse(String key, String name, String covers, String notCovered,
+                                         List<String> kinds) {}
 
     public record LifecyclePolicyResponse(
             int originalRetentionHours,

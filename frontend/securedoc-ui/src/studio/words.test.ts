@@ -12,18 +12,16 @@ import { MANUAL_WORDS, NAV, SENSITIVE_TYPES, brandHomeName, SENSITIVE_TYPES_HEAD
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
 
-/** The sensitive types a tenant policy can enable, read from the backend (TenantRedactionPolicy.V1_CONFIGURABLE_TYPES). */
-function configurableTypes(): string[] {
+/** The redaction catalog (task 0062), read from the backend: every kind, and the ones off by default. */
+function catalogKinds(factory = '(?:onByDefault|locked|optIn|image)'): string[] {
   const source = readFileSync(resolve(repoRoot, 'backend', 'securedoc-domain', 'src', 'main', 'java', 'com', 'securedoc',
-    'platform', 'domain', 'business', 'TenantRedactionPolicy.java'), 'utf8');
-  const block = /V1_CONFIGURABLE_TYPES\s*=\s*Set\.of\(([^)]*)\)/s.exec(source);
-  assert.ok(block, 'V1_CONFIGURABLE_TYPES must be readable from TenantRedactionPolicy.java');
-  return [...block[1].matchAll(/EntityType\.([A-Z_]+)/g)].map((m) => m[1]);
+    'platform', 'domain', 'business', 'RedactionCatalog.java'), 'utf8');
+  return [...source.matchAll(new RegExp(`\\b${factory}\\(EntityType\\.([A-Z_]+)`, 'g'))].map((m) => m[1]);
 }
 
 test('every sensitive type the policy can enable has a name in the vocabulary', () => {
-  const types = configurableTypes();
-  assert.ok(types.length >= 4, `expected the configurable types, found ${types.join(', ')}`);
+  const types = catalogKinds();
+  assert.equal(types.length, 14, `expected the catalog, found ${types.join(', ')}`);
   for (const type of types) {
     const known = findSensitiveType(type);
     assert.ok(known, `${type} has no name in words.ts`);
@@ -32,11 +30,7 @@ test('every sensitive type the policy can enable has a name in the vocabulary', 
 });
 
 test('task 0043: every opt-in pattern kind has a name, a plural and a one-line "off by default" description', () => {
-  const source = readFileSync(resolve(repoRoot, 'backend', 'securedoc-domain', 'src', 'main', 'java', 'com', 'securedoc',
-    'platform', 'domain', 'business', 'TenantRedactionPolicy.java'), 'utf8');
-  const block = /OPT_IN_TYPES\s*=\s*Set\.of\(([^)]*)\)/s.exec(source);
-  assert.ok(block, 'OPT_IN_TYPES must be readable from TenantRedactionPolicy.java');
-  const kinds = [...block[1].matchAll(/EntityType\.([A-Z_]+)/g)].map((m) => m[1]);
+  const kinds = catalogKinds('(?:optIn|image)');
   assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'FACE_PHOTO', 'ITIN', 'PASSPORT_NUMBER', 'SIGNATURE']);
   for (const kind of kinds) {
     const known = findSensitiveType(kind);

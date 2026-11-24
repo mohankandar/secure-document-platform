@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.persistence.adapter;
 
 import com.securedoc.platform.application.port.out.FindingRepository;
+import com.securedoc.platform.domain.business.RedactionStyle;
 import com.securedoc.platform.domain.finding.DetectorSource;
 import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.finding.Finding;
@@ -104,6 +105,7 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
         entity.setAiModels(finding.origin().encodeModels());
         persistBoundingBox(finding.location(), entity);
         entity.setStatus(finding.status().name());
+        entity.setRedactionStyle(finding.redactionStyle().name());
         entity.setDetectedAt(finding.detectedAt());
         entity.setUpdatedAt(finding.updatedAt());
         return entity;
@@ -137,7 +139,7 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
                 FindingId.of(entity.getId()),
                 TenantId.of(entity.getTenantId()),
                 DocumentId.of(entity.getDocumentId()),
-                EntityType.valueOf(entity.getEntityType()),
+                entityType(entity.getEntityType()),
                 location,
                 Confidence.of(entity.getConfidence()),
                 new DetectorSource(entity.getDetectorName(), entity.getDetectorVersion()),
@@ -145,8 +147,19 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
                 FindingStatus.valueOf(entity.getStatus()),
                 List.of(), // evidence history not persisted in this table
                 entity.getUpdatedAt(),
-                com.securedoc.platform.domain.finding.FindingOrigin.decode(entity.getFoundBy(), entity.getAiModels())
+                com.securedoc.platform.domain.finding.FindingOrigin.decode(entity.getFoundBy(), entity.getAiModels()),
+                // A style this version doesn't know removes the value in full.
+                RedactionStyle.KEEP_LAST_FOUR.name().equals(entity.getRedactionStyle())
+                        ? RedactionStyle.KEEP_LAST_FOUR : RedactionStyle.REMOVE_FULLY
         );
+    }
+
+    /** Task 0062: a stored finding of a removed kind (FINANCIAL_ACCOUNT, GOVERNMENT_ID) is still read, as CUSTOM. */
+    private static EntityType entityType(String stored) {
+        return switch (stored) {
+            case "FINANCIAL_ACCOUNT", "GOVERNMENT_ID" -> EntityType.CUSTOM;
+            default -> EntityType.valueOf(stored);
+        };
     }
 
     private FindingLocation rehydrateLocation(FindingEntity entity) {

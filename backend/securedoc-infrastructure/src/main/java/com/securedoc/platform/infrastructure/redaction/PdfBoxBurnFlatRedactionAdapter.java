@@ -205,8 +205,55 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
 
                 g2d.fillRect(x, y, w, h);
             }
+            // Task 0062: after every cover is drawn, so nothing of the original is under the digits.
+            for (RedactionTarget target : targets) {
+                if (target.kept() != null) drawKeptDigits(g2d, target, imgWidth, imgHeight);
+            }
         } finally {
             g2d.dispose();
+        }
+    }
+
+    private static final String[] DIGIT_GLYPHS = {"zero", "one", "two", "three", "four", "five", "six", "seven",
+            "eight", "nine"};
+    /** Smaller digits are not readable at the page's resolution; the cover then stays plain. */
+    private static final double SMALLEST_DIGIT_PIXELS = 7;
+
+    /** Draws the kept digits in white on the end of the cover. The shapes come from PDFBox's own font. */
+    private static void drawKeptDigits(Graphics2D g2d, RedactionTarget target, int imgWidth, int imgHeight) {
+        RedactionTarget area = target.keptPart();
+        double areaWidth = area.width() * imgWidth;
+        double areaHeight = area.height() * imgHeight;
+        PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+        try {
+            float[] em = font.getFontMatrix().getScaleX() == 0 ? null
+                    : new float[]{font.getFontMatrix().getScaleX(), font.getFontMatrix().getScaleY()};
+            if (em == null) return;
+            String digits = target.kept().digitsToDraw();
+            double capHeight = 0.0;
+            double width = 0.0; // of one em
+            for (char c : digits.toCharArray()) {
+                capHeight = Math.max(capHeight, font.getPath(DIGIT_GLYPHS[c - '0']).getBounds2D().getMaxY() * em[1]);
+                width += font.getStringWidth(String.valueOf(c)) / 1000.0;
+            }
+            if (capHeight <= 0 || width <= 0) return;
+            double size = Math.min(areaHeight * 0.70 / capHeight, areaWidth * 0.92 / width);
+            if (size * capHeight < SMALLEST_DIGIT_PIXELS) return;
+            double x = area.left() * imgWidth + (areaWidth - size * width) / 2;
+            double baseline = area.top() * imgHeight + (areaHeight + size * capHeight) / 2;
+            Object before = g2d.getRenderingHint(RenderingHints.KEY_ANTIALIASING);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setColor(Color.WHITE);
+            for (char c : digits.toCharArray()) {
+                java.awt.geom.AffineTransform place = java.awt.geom.AffineTransform.getTranslateInstance(x, baseline);
+                place.scale(size * em[0], -size * em[1]);
+                g2d.fill(place.createTransformedShape(font.getPath(DIGIT_GLYPHS[c - '0'])));
+                x += size * font.getStringWidth(String.valueOf(c)) / 1000.0;
+            }
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, before);
+            g2d.setColor(Color.BLACK);
+        } catch (IOException e) {
+            // The cover stays plain: the value is removed in full.
         }
     }
 
