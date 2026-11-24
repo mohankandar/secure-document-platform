@@ -176,6 +176,17 @@ public class GlobalExceptionHandler {
                 .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationId));
     }
 
+    /** Task 0067: the safety stop. The sender sends the same request again after the time given. */
+    @ExceptionHandler(com.securedoc.platform.application.exception.IntakeBusyException.class)
+    public ResponseEntity<ApiErrorResponse> handleIntakeBusy(
+            com.securedoc.platform.application.exception.IntakeBusyException ex, HttpServletRequest request) {
+        String correlationId = correlationIdForError(request);
+        log.warn("INTAKE_BUSY_REJECTED code={} route={} correlation={}", ex.errorCode(), route(request), correlationId);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(org.springframework.http.HttpHeaders.RETRY_AFTER, Integer.toString(ex.retryAfterSeconds()))
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationId));
+    }
+
     @ExceptionHandler(IntakeConflictException.class)
     public ResponseEntity<ApiErrorResponse> handleIntakeConflict(IntakeConflictException ex, HttpServletRequest request) {
         String correlationId = correlationIdForError(request);

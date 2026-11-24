@@ -135,6 +135,8 @@ public enum AuditAction {
 
     // IT / Platform administration
     PLATFORM_HEALTH_CHECKED,
+    /** Task 0067: IT's own maximums of workers and AI requests at once; names and numbers only. */
+    PROCESSING_MAXIMUMS_CHANGED,
     WATCHED_FOLDER_SCAN_TRIGGERED,
     INTEGRATION_CONNECTION_CREATED,
     INTEGRATION_CONNECTION_UPDATED,

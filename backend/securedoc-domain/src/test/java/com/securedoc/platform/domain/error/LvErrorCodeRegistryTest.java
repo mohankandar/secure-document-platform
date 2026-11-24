@@ -99,10 +99,10 @@ class LvErrorCodeRegistryTest {
     }
 
     @Test
-    void reservedCodesAreTheThreeTheDesignNames() {
+    void reservedCodesAreTheTwoLeftOfTheThreeTheDesignNames() {
         List<String> reserved = Arrays.stream(LvErrorCode.values()).filter(LvErrorCode::reserved)
                 .map(LvErrorCode::code).toList();
-        assertEquals(List.of("LV-INT-027", "LV-DLV-009", "LV-DLV-015"), reserved);
+        assertEquals(List.of("LV-DLV-009", "LV-DLV-015"), reserved);
     }
 
     @Test

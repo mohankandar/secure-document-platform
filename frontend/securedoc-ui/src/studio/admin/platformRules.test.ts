@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  SECTION_LABELS, USAGE_MODES, eventText, intervalText, latestChecks, neverText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle,
+  SECTION_LABELS, aiServerText, capacityNote, maximumChanges, maximumError, stageName, USAGE_MODES, eventText, intervalText, latestChecks, neverText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle,
   storageKind, storageReadiness, storageReason, storageStatus, storageUsedBy, storageValidated, usageMode, usageSummary,
 } from './platformRules.ts';
 import type { ProcessingStorageNodeValidation, ProcessingStorageOverview } from '../../types';
 
 test('section names are the vocabulary words', () => {
-  assert.deepEqual(Object.values(SECTION_LABELS), ['Overview', 'Processing storage', 'Branding', 'Usage data']);
+  assert.deepEqual(Object.values(SECTION_LABELS), ['Overview', 'Processing storage', 'Workers', 'Branding', 'Usage data']);
+});
+
+test('workers: names, the learned AI limit, what intake does, and maximums', () => {
+  assert.deepEqual(['TEXT', 'FIND', 'VISION', 'REDACT', 'EXPORT', 'NEW'].map(stageName), ['Read the text', 'Find', 'Look at pages', 'Redact', 'Export', 'NEW']);
+  assert.equal(aiServerText({ number: 1, requestsAtOnce: 5, maximum: 64, learned: true }), 'AI server 1: 5 at once (learned)');
+  assert.equal(capacityNote({ staged: true, intakeStopped: false, intakeSlowdown: 1 }), null);
+  assert.equal(capacityNote({ staged: true, intakeStopped: false, intakeSlowdown: 4 })?.tone, 'neutral');
+  assert.match(capacityNote({ staged: true, intakeStopped: true, intakeSlowdown: 8 })?.text ?? '', /LV-INT-027/);
+  assert.deepEqual(['', ' ', '1', '64', '0', '65', '1.5', 'x', '-1'].map(maximumError), [false, false, false, false, true, true, true, true, true]);
+  assert.deepEqual(maximumChanges({ TEXT: 4, AI: null, FIND: 2 }, { TEXT: '', AI: '5', FIND: '2' }), { TEXT: null, AI: 5 });
 });
 
 test('services in plain words', () => {

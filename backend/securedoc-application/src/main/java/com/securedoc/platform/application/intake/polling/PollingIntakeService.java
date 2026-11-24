@@ -31,6 +31,7 @@ public final class PollingIntakeService {
     private final AuditService auditService;
     private final Clock clock;
     private com.securedoc.platform.application.licensing.IntakeLicence licence;
+    private com.securedoc.platform.application.intake.IntakeGate gate = com.securedoc.platform.application.intake.IntakeGate.OPEN;
     private com.securedoc.platform.application.port.out.EntityTimeZonePort zones = com.securedoc.platform.application.port.out.EntityTimeZonePort.NONE;
 
     public PollingIntakeService(IntegrationConnectionService connectionService, PollingRunRepository runRepository,
@@ -42,6 +43,12 @@ public final class PollingIntakeService {
     /** Task 0057: the same service on the word of the licence. Without it (tests of polling itself) nothing is refused. */
     public PollingIntakeService withLicence(com.securedoc.platform.application.licensing.IntakeLicence licence) {
         this.licence = Objects.requireNonNull(licence);
+        return this;
+    }
+
+    /** Task 0067: the same service, taking less while the queue is long and nothing while space is short. */
+    public PollingIntakeService withGate(com.securedoc.platform.application.intake.IntakeGate gate) {
+        this.gate = Objects.requireNonNull(gate);
         return this;
     }
 
@@ -72,13 +79,24 @@ public final class PollingIntakeService {
     public List<PollingSourceRef> dueSources() {
         Instant now = Instant.now(clock);
         List<PollingSourceRef> result = new ArrayList<>();
+        if (gate.full()) return List.of();
+        int slowdown = gate.slowdown();
         for (IntegrationConnection source : connectionService.listEnabledPollingSources()) {
             Instant latestStarted = runRepository.findLatest(source.id()).map(PollingRun::startedAt).orElse(null);
-            if (PollingScheduleCalculator.isDue(source, latestStarted, now, entityZone(source))) {
+            if (PollingScheduleCalculator.isDue(source, latestStarted, now, entityZone(source))
+                    && !tooSoon(source, latestStarted, now, slowdown)) {
                 result.add(new PollingSourceRef(source.tenantId(), source.id()));
             }
         }
         return List.copyOf(result);
+    }
+
+    /** Task 0067: an interval is stretched while the queue is long; a daily run keeps its time and takes less. */
+    private static boolean tooSoon(IntegrationConnection source, Instant latestStarted, Instant now, int slowdown) {
+        if (slowdown == 1 || latestStarted == null || source.pollingScheduleType()
+                != com.securedoc.platform.domain.integration.IntegrationPollingScheduleType.INTERVAL) return false;
+        Instant next = PollingScheduleCalculator.nextRunAt(source, latestStarted, now);
+        return latestStarted.plus(Duration.between(latestStarted, next).multipliedBy(slowdown)).isAfter(now);
     }
 
     public Optional<PollingRunSnapshot> runScheduled(TenantId tenantId, IntegrationConnectionId connectionId) {
@@ -90,6 +108,7 @@ public final class PollingIntakeService {
                     licence.refusal(tenantId).map(com.securedoc.platform.application.licensing.LicenseEnforcementException::errorCode).orElse("none"));
             return Optional.empty();
         }
+        if (gate.full()) return Optional.empty();
         ActorId actor = systemActor(source);
         // Task 0018 A6: the run's records name the connection ("Polling: <connection name>"); cleared after the run.
         // A manual run keeps the person's own name, bound by their request.
@@ -103,6 +122,7 @@ public final class PollingIntakeService {
             throw new AccessDeniedException(LvErrorCode.CFG_010, "Integration connection is not an enabled polling ingestion source");
         }
         if (licence != null) licence.requireIntake(tenantId, actorId, CorrelationId.generate());
+        gate.requireSpace();
         return runInternal(source, PollingRunTrigger.MANUAL, actorId);
     }
 
@@ -153,10 +173,13 @@ public final class PollingIntakeService {
         // Task 0023 B1: every failed package of the run is kept (code and exception type only, never the message).
         List<PackageFailure> failures = new ArrayList<>();
         try {
-            List<PollingSourcePackage> packages = sourcePort.discoverAvailable(source, effectiveBatchLimit(source));
+            List<PollingSourcePackage> packages = sourcePort.discoverAvailable(source,
+                    trigger == PollingRunTrigger.SCHEDULED ? gate.share(effectiveBatchLimit(source)) : effectiveBatchLimit(source));
             discovered = packages.size();
             int position = 0;
             for (PollingSourcePackage sourcePackage : packages) {
+                // Task 0067: space ran short during the run; the rest waits at the source.
+                if (gate.full()) break;
                 position++;
                 expected += sourcePackage.documents().size();
                 try {

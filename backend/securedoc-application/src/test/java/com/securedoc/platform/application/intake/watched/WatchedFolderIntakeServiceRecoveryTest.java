@@ -238,6 +238,30 @@ class WatchedFolderIntakeServiceRecoveryTest {
         assertEquals(WatchedFolderDropReference.of("case-legacy"), harness.observations.latest.sourceReference());
     }
 
+    /* Task 0067: while the queue is long a check takes a few drops; while space is short none. The rest stays there. */
+
+    private static com.securedoc.platform.application.intake.IntakeGate gate(int slowdown, boolean full) {
+        return new com.securedoc.platform.application.intake.IntakeGate() {
+            @Override public int slowdown() { return slowdown; }
+            @Override public boolean full() { return full; }
+            @Override public int retryAfterSeconds() { return 60; }
+        };
+    }
+
+    @Test
+    void whileTheQueueIsLongACheckTakesAFewDropsAndWhileSpaceIsShortNone() {
+        var candidate = candidate("case-many", doc("one.pdf", "one"));
+        var harness = harness(new MemoryPackageRepository(existingPackage("case-many")), candidate, false);
+        harness.source.copies = 100;
+        harness.service.withGate(gate(1, true)).scan(principal, correlationId);
+        assertEquals(0, harness.source.claims);
+        harness.service.withGate(gate(8, false)).scan(principal, correlationId);
+        assertEquals(WatchedFolderIntakeService.DROPS_PER_CHECK / 8, harness.source.claims);
+        harness.source.claims = 0;
+        harness.service.withGate(gate(1, false)).scan(principal, correlationId);
+        assertEquals(100, harness.source.claims);
+    }
+
     /* Task 0038: a drop with more files than a case holds is refused before a case is made. */
 
     @Test
@@ -558,8 +582,11 @@ class WatchedFolderIntakeServiceRecoveryTest {
         private final WatchedFolderCandidate candidate;
         private IntakeDisposition disposition;
         private SourceStub(WatchedFolderCandidate candidate) { this.candidate = candidate; }
-        @Override public List<WatchedFolderCandidate> discover() { return List.of(candidate); }
+        private int copies = 1;
+        private int claims;
+        @Override public List<WatchedFolderCandidate> discover() { return Collections.nCopies(copies, candidate); }
         @Override public Optional<WatchedFolderCandidate> claim(String sourceReference, WatchedFolderScanLease lease, Instant claimedAt) {
+            claims++;
             return Optional.of(candidate);
         }
         @Override public int recoverStaleClaims(WatchedFolderScanLease lease, Duration staleAfter, Instant currentTime) { return 0; }

@@ -8,17 +8,18 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Task 0048: the Text, Find and Redact workers of this server, started with
@@ -26,8 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * open (the setting was switched back), and finish those; new cases go inline. Task 0052: whatever export-mode says, a
  * staged case ends in export jobs, which the export workers finish. Each worker claims the next due job of its stage
  * (claim lock, {@code SKIP LOCKED}, queue order), renews its claim every third of the lease while it works, and saves
- * its result only under its current claim number. One sweep puts jobs whose claim ran out back in the queue. Fixed
- * numbers per stage for now; workers that grow with the queue are P3.
+ * its result only under its current claim number. One sweep puts jobs whose claim ran out back in the queue. Task 0067:
+ * the number of workers per stage follows its queue ({@link ProcessingCapacity}); without it (tests) it is fixed.
  */
 @Component
 public class StageJobWorkers {
@@ -40,11 +41,19 @@ public class StageJobWorkers {
     private volatile boolean running;
     /** Task 0064: a check for open jobs that was under way when the server stopped starts no worker any more. */
     private boolean stopped;
-    private ExecutorService workers;
+    private final ProcessingCapacity capacity;
+    private final List<ElasticWorkers> workers = new ArrayList<>();
     private ScheduledExecutorService timers;
 
+    public StageJobWorkers(StagedProcessingService service, String nodeId) {
+        this(service, nodeId, null);
+    }
+
+    @Autowired
     public StageJobWorkers(StagedProcessingService service,
-                           @Value("${securedoc.logging.node-id:unknown}") String nodeId) {
+                           @Value("${securedoc.logging.node-id:unknown}") String nodeId,
+                           ProcessingCapacity capacity) {
+        this.capacity = capacity;
         this.service = service;
         this.nodeId = nodeId == null || nodeId.isBlank() ? "unknown" : nodeId.trim();
     }
@@ -81,15 +90,7 @@ public class StageJobWorkers {
 
     private void startWorkers() {
         var settings = service.settings();
-        int total = settings.textWorkers() + settings.findWorkers() + settings.visionWorkers()
-                + settings.redactWorkers();
-        AtomicInteger number = new AtomicInteger();
         running = true;
-        workers = Executors.newFixedThreadPool(total, runnable -> {
-            Thread thread = new Thread(runnable, "stage-worker-" + number.incrementAndGet());
-            thread.setDaemon(true);
-            return thread;
-        });
         String instance = UUID.randomUUID().toString();
         submit(PipelineStage.TEXT, settings.textWorkers(), instance);
         submit(PipelineStage.FIND, settings.findWorkers(), instance);
@@ -99,17 +100,16 @@ public class StageJobWorkers {
         timers.scheduleWithFixedDelay(this::sweep, every, every, TimeUnit.MILLISECONDS);
         timers.scheduleWithFixedDelay(this::missedGates, every * OPEN_JOBS_CHECK_POLLS,
                 every * OPEN_JOBS_CHECK_POLLS, TimeUnit.MILLISECONDS);
-        log.info("STAGE_JOB_WORKERS_STARTED text={} find={} vision={} redact={} claimLeaseMs={} nodeId={}",
-                settings.textWorkers(), settings.findWorkers(), settings.visionWorkers(), settings.redactWorkers(),
-                settings.claimLease().toMillis(), nodeId);
+        log.info("STAGE_JOB_WORKERS_STARTED claimLeaseMs={} nodeId={}", settings.claimLease().toMillis(), nodeId);
     }
 
     private void submit(PipelineStage stage, int count, String instance) {
-        for (int i = 1; i <= count; i++) {
-            String owner = nodeId + "/" + stage.name().toLowerCase(java.util.Locale.ROOT) + "-worker-" + i + "/"
-                    + instance;
-            workers.submit(() -> loop(stage, owner));
-        }
+        String name = stage.name().toLowerCase(java.util.Locale.ROOT);
+        ElasticWorkers pool = new ElasticWorkers("stage-" + name, nodeId + "/" + name, instance,
+                service.settings().pollInterval().toMillis(), (owner, started) -> turn(stage, owner, started));
+        workers.add(pool);
+        if (capacity == null) pool.set(count);
+        else capacity.drive(stage, pool);
     }
 
     @PreDestroy
@@ -119,29 +119,22 @@ public class StageJobWorkers {
         synchronized (this) {
             stopped = true;
             running = false;
-            if (workers != null) workers.shutdownNow();
+            workers.forEach(ElasticWorkers::stop);
         }
     }
 
-    private void loop(PipelineStage stage, String owner) {
-        long idle = service.settings().pollInterval().toMillis();
-        while (running && !Thread.currentThread().isInterrupted()) {
-            try {
-                Optional<PipelineJob> job = service.claimNext(stage, owner);
-                if (job.isPresent()) {
-                    runWithRenewal(job.get());
-                } else {
-                    Thread.sleep(idle);
-                }
-            } catch (InterruptedException stopped) {
-                Thread.currentThread().interrupt();
-                return;
-            } catch (RuntimeException failure) {
-                // The job stays RUNNING until its claim runs out, then goes back to the queue (one attempt).
-                log.warn("STAGE_WORKER_FAILED owner={} stage={} type={} code={}", owner, stage,
-                        failure.getClass().getSimpleName(), LvErrorCodes.forPlatformFailure(failure).code());
-                sleepQuietly(idle);
-            }
+    private boolean turn(PipelineStage stage, String owner, Runnable started) {
+        try {
+            Optional<PipelineJob> job = service.claimNext(stage, owner);
+            if (job.isEmpty()) return false;
+            started.run();
+            runWithRenewal(job.get());
+            return true;
+        } catch (RuntimeException failure) {
+            // The job stays RUNNING until its claim runs out, then goes back to the queue (one attempt).
+            log.warn("STAGE_WORKER_FAILED owner={} stage={} type={} code={}", owner, stage,
+                    failure.getClass().getSimpleName(), LvErrorCodes.forPlatformFailure(failure).code());
+            return false;
         }
     }
 
@@ -180,14 +173,6 @@ public class StageJobWorkers {
         } catch (RuntimeException failure) {
             log.warn("STAGE_JOB_MISSED_GATE_SWEEP_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());
-        }
-    }
-
-    private static void sleepQuietly(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException stopped) {
-            Thread.currentThread().interrupt();
         }
     }
 }

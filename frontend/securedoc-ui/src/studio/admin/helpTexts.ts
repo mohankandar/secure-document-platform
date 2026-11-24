@@ -111,6 +111,10 @@ export const HELP = {
     name: 'Processing storage',
     text: 'Where LexaVault keeps documents while it works on them. One storage is the default for every customer; a customer can be given its own. A new storage must work from every server before it can be used.',
   },
+  capacity: {
+    name: 'Workers',
+    text: 'How many documents this server works on at once in each step. LexaVault measures what the machine can do and learns what each AI server takes. A maximum you set here holds for every server and is never exceeded; leave it empty to let LexaVault decide.',
+  },
   telemetry: {
     name: 'Usage data',
     text: 'Whether LexaVault sends counts about how the product is used, so it can be improved. Only the items listed are sent, never document content or who did what. It is set when LexaVault is installed and cannot be changed here.',

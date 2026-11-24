@@ -36,6 +36,7 @@ import type {
   OperationalReports,
   DashboardStage,
   PlatformAdminOverview,
+  ProcessingCapacity,
   ProductTelemetryStatus,
   CurrentUser,
   TechnicalExceptionDetail,
@@ -405,6 +406,14 @@ class ApiClient {
 
   async runPlatformHealthCheck(): Promise<PlatformAdminOverview> {
     return this.request('/platform-admin/health-check', { method: 'POST' });
+  }
+
+  async getProcessingCapacity(): Promise<ProcessingCapacity> {
+    return this.request('/platform-admin/capacity');
+  }
+
+  async changeProcessingMaximums(maximums: Record<string, number | null>): Promise<ProcessingCapacity> {
+    return this.request('/platform-admin/capacity', { method: 'PUT', body: JSON.stringify({ maximums }) });
   }
 
   async getProductTelemetryStatus(): Promise<ProductTelemetryStatus> {

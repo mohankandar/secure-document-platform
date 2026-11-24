@@ -254,6 +254,9 @@ const STORAGE = {
 const DEPLOYMENT_BRAND = { id: 'b-1', tenantId: null, applicationName: 'LexaVault', shortName: null, organizationName: 'Northwind Title & Escrow', pageTitle: null,
   secondaryColor: null, primaryLogoDataUrl: null, compactLogoDataUrl: null, faviconDataUrl: null, updatedBy: 'ops', updatedAt: minsAgo(500) };
 const BRANDING = { deployment: DEPLOYMENT_BRAND, tenants: [{ tenantId: 't-nw', tenantName: 'Northwind Commercial', tenantSlug: 'nwc', customBranding: false }] };
+const CAPACITY = { staged: true, queueLength: 420, intakeSlowdown: 4, intakeStopped: false, aiMaximum: null,
+  stages: ['TEXT', 'FIND', 'VISION', 'REDACT', 'EXPORT'].map((stage) => ({ stage, current: 3, busy: 2, lowest: 1, highest: 7, measured: 7, maximum: null, waiting: 84 })),
+  aiServers: [{ number: 1, requestsAtOnce: 5, maximum: 64, learned: true }] };
 const TELEMETRY = { mode: 'BASIC', enabled: true, installationIdConfigured: true, privacyContract: 'ALLOW_LIST_ONLY',
   eventAllowList: ['package.processing.attempt', 'package.processing.finished'], prohibitedData: ['document/PDF/image content', 'actor identities'] };
 /** Task 0057: Support, Status. */
@@ -413,6 +416,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
 
     // Admin › Platform operations
     if (path === '/platform-admin/overview' || path === '/platform-admin/health-check') return json(OVERVIEW);
+    if (path === '/platform-admin/capacity') return json(CAPACITY);
     if (path === '/platform/processing-storage') return json(STORAGE);
     if (path === '/platform/branding') return json(BRANDING);
     if (path === '/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });
