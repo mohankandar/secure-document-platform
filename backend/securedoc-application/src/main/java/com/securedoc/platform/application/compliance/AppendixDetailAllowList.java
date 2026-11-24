@@ -55,6 +55,7 @@ public final class AppendixDetailAllowList {
             AuditAction.DOCUMENT_UPLOADED, AuditAction.DOCUMENT_EXTRACTION_STARTED,
             AuditAction.DOCUMENT_EXTRACTION_COMPLETED, AuditAction.DOCUMENT_DETECTION_COMPLETED,
             AuditAction.DOCUMENT_REDACTION_COMPLETED, AuditAction.DOCUMENT_REDACTION_VERIFIED,
+            AuditAction.DOCUMENT_SIGNATURE_REMOVED,
             AuditAction.DOCUMENT_EXPORT_FAILED, AuditAction.DOCUMENT_PROCESSING_FAILED,
             AuditAction.FINDING_CONFIRMED, AuditAction.FINDING_DISMISSED, AuditAction.FINDING_BOUNDING_BOX_UPDATED,
             // Review

@@ -33,6 +33,8 @@ public enum TechnicalFailureCode {
     REDACTION_TEXT_LAYER_REMAINS,
     /** Task 0023 C3, verification: the redacted output still has annotations. */
     REDACTION_ANNOTATIONS_REMAIN,
+    /** Task 0050: metadata, an attachment, a script, a form, a layer or the like is left in the output. */
+    REDACTION_HIDDEN_CONTENT_REMAINS,
     /** Task 0023 C3, verification: a redaction box is not dark enough to cover its region. */
     REDACTION_REGION_NOT_COVERED,
     /** Task 0023 C3, verification: the redacted output could not be read back. */

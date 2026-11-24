@@ -51,6 +51,7 @@ public final class AuditSentences {
             entry("DOCUMENT_DETECTION_COMPLETED", "Checked a document for sensitive data"),
             entry("DOCUMENT_REDACTION_COMPLETED", "Redacted a document"),
             entry("DOCUMENT_REDACTION_VERIFIED", "Verified a redacted document"),
+            entry("DOCUMENT_SIGNATURE_REMOVED", "Removed a digital signature by redaction"),
             entry("DOCUMENT_PROCESSING_FAILED", "Could not process a document"),
             entry("DOCUMENT_DOWNLOADED", "Downloaded a document"),
             entry("DOCUMENT_EXPORTED", "Exported a document"),

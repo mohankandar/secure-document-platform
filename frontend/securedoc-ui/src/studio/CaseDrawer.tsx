@@ -17,7 +17,7 @@ import { useToast } from './toast';
 import { CodeLabel, Notice, Spinner, StageChip } from './atoms';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
-import { CASE_SECTIONS, PROCESSING_STEP_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
+import { CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 import { deliveryLabel, processingStepOf } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
 import { technicalProblemText, technicalReasonCode } from './support/supportRules';
@@ -118,6 +118,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
           <p className="cf-muted cf-small" data-testid="case-sensitivity">
             {caseSensitivityLine(pkg.sensitivityLevel)}
           </p>
+          {pkg.signatureRemoved && <p className="cf-muted cf-small" data-testid="case-signature-removed">{SIGNATURE_REMOVED_LINE}</p>}
 
           <DocumentsSection pkg={pkg} openFindings={openFindings} />
 

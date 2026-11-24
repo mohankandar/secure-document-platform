@@ -18,5 +18,7 @@ public record PackageDetailResponse(
         Instant createdAt,
         Instant updatedAt,
         String sensitivityLevel,
-        String effectiveSensitivityLevel
+        String effectiveSensitivityLevel,
+        /* Task 0050: a digitally signed document of this case lost its signature by redaction. */
+        boolean signatureRemoved
 ) {}

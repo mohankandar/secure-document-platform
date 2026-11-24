@@ -58,6 +58,7 @@ final class TechnicalFailureTaxonomy {
             case "REDACTION_LOCATION_MISSING" -> "A confirmed finding has no location on the page, so it could not be covered. Locate or dismiss the finding.";
             case "REDACTION_SOURCE_PAGES_UNKNOWN", "REDACTION_PAGE_COUNT_MISMATCH", "REDACTION_TARGETS_NOT_APPLIED",
                  "REDACTION_OUTPUT_EMPTY", "REDACTION_TEXT_LAYER_REMAINS", "REDACTION_ANNOTATIONS_REMAIN",
+                 "REDACTION_HIDDEN_CONTENT_REMAINS",
                  "REDACTION_REGION_NOT_COVERED", "REDACTION_OUTPUT_UNPARSABLE" ->
                     "The redacted output failed its safety check, so it was not delivered. The code says which check failed.";
             default -> "Processing stopped because of a technical failure. Use the incident or correlation ID for support diagnostics.";

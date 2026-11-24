@@ -237,6 +237,29 @@ class SearchableRedactionServiceTest {
         assertNoValueAnywhere();
     }
 
+    /** Task 0050, item 4: recorded once on the case, with ids only; an unsigned document records nothing. */
+    @Test
+    void aSignatureRemovedByRedactionIsRecordedOnTheCaseWithIdsOnly() {
+        policy = policy(true);
+        PdfBoxBurnFlatRedactionAdapter real = new PdfBoxBurnFlatRedactionAdapter(ocr());
+        PdfRedactionPort signed = new PdfRedactionPort() {
+            @Override public RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets) {
+                return redact(originalPdf, targets, RedactionOptions.IMAGE_ONLY);
+            }
+            @Override public RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets,
+                                                    RedactionOptions options) {
+                RedactionOutput out = real.redact(originalPdf, targets, options);
+                return new RedactionOutput(out.redactedPdfContent(), out.pagesRendered(), out.redactionsApplied(), true);
+            }
+        };
+        service(signed).execute(command());
+        List<AuditRecord> removed = audits.stream()
+                .filter(a -> a.action() == AuditAction.DOCUMENT_SIGNATURE_REMOVED).toList();
+        assertEquals(1, removed.size());
+        assertEquals("Signature removed by redaction: document=" + document.id(), removed.get(0).detail());
+        assertEquals(pkg.id().toString(), removed.get(0).resourceId());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private DocumentRedactionService service(PdfRedactionPort engine) {
