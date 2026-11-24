@@ -1,7 +1,9 @@
 package com.securedoc.platform.api.notifications;
 
 import com.documentplatform.notifications.AppLink;
+import com.documentplatform.notifications.NotificationEvent;
 import com.documentplatform.notifications.NotificationException;
+import com.documentplatform.notifications.Notifier;
 import com.documentplatform.notifications.RecordIdentifier;
 import com.documentplatform.notifications.SettingsStore;
 import com.documentplatform.notifications.approval.ApprovalAction;
@@ -11,6 +13,7 @@ import com.documentplatform.notifications.approval.ApprovalResult;
 import com.documentplatform.notifications.approval.Approvals;
 import com.documentplatform.notifications.approval.NewApprovalRequest;
 import com.documentplatform.notifications.approval.SignedInPerson;
+import com.securedoc.platform.application.audit.RequestActorDisplayName;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.lifecycle.command.ApproveFinalDeliveryCommand;
 import com.securedoc.platform.application.port.in.ApproveFinalDeliveryUseCase;
@@ -18,6 +21,7 @@ import com.securedoc.platform.application.port.out.CasePrimaryIdentifierLookup;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.infrastructure.identity.EntitySlotStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,6 +33,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -74,11 +81,13 @@ public class DeliveryApprovals {
      *
      * @param caseNumber as the Cases list shows it, for this signed-in Supervisor only (never in a message); READY only
      * @param state   READY, APPROVED, DECLINED, ALREADY_DECIDED or REFUSED
+     * @param action  the link's own action, shown first; the page offers both
+     * @param askedBy the submitter's name as the audit log has it; null for an automatic source
      * @param code    the refusal's code; null otherwise
      * @param message a fixed text
      */
-    public record Answer(String state, String action, UUID caseId, String caseNumber, Instant expiresAt, String code,
-                         String message) {
+    public record Answer(String state, String action, UUID caseId, String caseNumber, String askedBy, Instant expiresAt,
+                         String code, String message) {
     }
 
     private static final class Undo extends RuntimeException {
@@ -103,13 +112,21 @@ public class DeliveryApprovals {
     private final NotificationPeople people;
     private final ApprovalLinkAudit audit;
     private final CasePrimaryIdentifierLookup caseNumbers;
+    private final EntitySlotStore slots;
+    private final RequestActorDisplayName names;
+    private final Notifier notifier;
+    private final StoredNotices stored;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
 
     public DeliveryApprovals(ObjectProvider<Approvals> approvals, ApproveFinalDeliveryUseCase approve, SettingsStore channels,
                              NotificationPeople people, ApprovalLinkAudit audit, CasePrimaryIdentifierLookup caseNumbers,
-                             JdbcTemplate jdbc,
-                             PlatformTransactionManager transactions) {
+                             JdbcTemplate jdbc, EntitySlotStore slots, RequestActorDisplayName names, Notifier notifier,
+                             StoredNotices stored, PlatformTransactionManager transactions) {
+        this.slots = slots;
+        this.names = names;
+        this.notifier = notifier;
+        this.stored = stored;
         this.approvals = approvals;
         this.approve = approve;
         this.channels = channels;
@@ -144,6 +161,32 @@ public class DeliveryApprovals {
             }
         } catch (RuntimeException e) {
             log.warn("DELIVERY_APPROVAL_ASKING_FAILED type={}", e.getClass().getSimpleName());
+        }
+    }
+
+    private record OnTheCase(UUID request, UUID entity, UUID caseId, String requester) {
+    }
+
+    /** A request whose case was approved on the case itself: its requester is told too, once. */
+    @Scheduled(fixedDelayString = "${securedoc.notifications.check-interval-ms:60000}", initialDelayString = "${securedoc.notifications.check-interval-ms:60000}")
+    public void tellApprovedOnTheCase() {
+        if (!on()) return;
+        try {
+            for (OnTheCase d : jdbc.query("select r.request_id, r.tenant_id, r.package_id, q.requester from delivery_approval_requests r"
+                    + " join notif_approval_request q on q.request_id = r.request_id and q.tenant_id = r.tenant_id::text and q.decision is null"
+                    + " where r.created_at > now() - interval '2 days' and exists (select 1 from audit_records a where a.tenant_id = r.tenant_id"
+                    + " and a.action = 'PACKAGE_FINAL_APPROVED' and a.resource_id = r.package_id::text and a.occurred_at >= r.created_at"
+                    + " and a.actor_id::text <> q.requester) and not exists (select 1 from notification_published n where n.event_type = ?"
+                    + " and n.item_id = r.request_id)", (rs, i) -> new OnTheCase(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class),
+                            rs.getObject(3, UUID.class), rs.getString(4)), LexaVaultEvents.DELIVERY_APPROVED.value())) {
+                TenantId entity = TenantId.of(d.entity());
+                stored.once(entity, LexaVaultEvents.DELIVERY_APPROVED, d.request(), () -> notifier.publishToPerson(
+                        NotificationEvent.builder(LexaVaultEvents.DELIVERY_APPROVED, EntityNotifications.tenant(entity))
+                                .entity(EntityNotifications.entity(entity)).identifier(RecordIdentifier.of(d.caseId().toString()))
+                                .link(AppLink.of("/case/" + d.caseId())).build(), d.requester()));
+            }
+        } catch (RuntimeException e) {
+            log.warn("DELIVERY_APPROVAL_TELLING_FAILED type={}", e.getClass().getSimpleName());
         }
     }
 
@@ -182,6 +225,7 @@ public class DeliveryApprovals {
     public void removeOld() {
         try {
             people.purge();
+            stored.removeOld();
             jdbc.update("delete from delivery_approval_requests r where r.created_at < now() - interval '31 days'"
                     + " and not exists (select 1 from document_packages p where p.id = r.package_id"
                     + " and p.version = r.case_version and p.status = 'PENDING_FINAL_APPROVAL')");
@@ -199,20 +243,31 @@ public class DeliveryApprovals {
         if (result instanceof ApprovalResult.Ready ready) {
             Bound bound = bound(principal.tenantId(), ready.request());
             if (bound == null || !waitsAt(principal.tenantId(), bound, false)) {
+                Optional<Answer> onTheCase = bound == null ? Optional.empty()
+                        : approvedOnTheCase(principal.tenantId(), bound, ready.request());
+                if (onTheCase.isPresent()) return onTheCase.get();
                 return refusedOpen(principal, ready.request().id().toString(), "CASE_CHANGED");
             }
             String number = Optional.ofNullable(caseNumbers.findByPackageIds(principal.tenantId(), List.of(bound.caseId()))
                     .get(bound.caseId())).map(CasePrimaryIdentifierLookup.CasePrimaryIdentifier::value).orElse(null);
-            return new Answer("READY", ready.action().name(), bound.caseId().value(), number, ready.request().expiresAt(), null, "");
+            return new Answer("READY", ready.action().name(), bound.caseId().value(), number,
+                    askedBy(principal.tenantId(), bound.caseId(), ready.request().requester()), ready.request().expiresAt(), null, "");
         }
-        if (result instanceof ApprovalResult.AlreadyDecided decided) return already(decided.request());
+        if (result instanceof ApprovalResult.AlreadyDecided decided) return already(principal.tenantId(), decided.request());
         ApprovalRefusal refusal = ((ApprovalResult.Refused) result).refusal();
         return refusedOpen(principal, "unknown", refusal.name());
     }
 
     /** The confirming click. */
-    public Answer decide(AuthenticatedPrincipal principal, CorrelationId correlation, String token, String reasonCode) {
+    public Answer decide(AuthenticatedPrincipal principal, CorrelationId correlation, String token, String actionName,
+                         String reasonCode) {
         if (!on() || token == null) return refusedOpen(principal, "unknown", ApprovalRefusal.LINK_INVALID.name());
+        ApprovalAction action;
+        try {
+            action = ApprovalAction.valueOf(actionName == null ? "" : actionName);
+        } catch (IllegalArgumentException unknown) {
+            return refusedOpen(principal, "unknown", ApprovalRefusal.LINK_INVALID.name());
+        }
         String reason = null;
         if (reasonCode != null && !reasonCode.isBlank()) {
             try {
@@ -223,15 +278,16 @@ public class DeliveryApprovals {
         }
         String given = reason;
         try {
-            return transaction.execute(status -> decideHere(principal, correlation, token, given));
+            return transaction.execute(status -> decideHere(principal, correlation, token, action, given));
         } catch (Undo undo) {
             audit.refused(principal.tenantId(), principal.actorId(), undo.request.id().toString(), undo.caseId,
-                    undo.answer.action(), undo.answer.code());
+                    undo.answer.action() == null ? "unknown" : undo.answer.action(), undo.answer.code());
             return undo.answer;
         }
     }
 
-    private Answer decideHere(AuthenticatedPrincipal principal, CorrelationId correlation, String token, String reason) {
+    private Answer decideHere(AuthenticatedPrincipal principal, CorrelationId correlation, String token, ApprovalAction action,
+                              String reason) {
         Approvals links = approvals.getObject();
         SignedInPerson person = person(principal);
         ApprovalResult looked = links.open(token, person);
@@ -239,18 +295,22 @@ public class DeliveryApprovals {
         if (looked instanceof ApprovalResult.Ready ready) {
             bound = bound(principal.tenantId(), ready.request());
             if (bound == null || !waitsAt(principal.tenantId(), bound, true)) {
-                throw new Undo(refusal(ready.action().name(), "CASE_CHANGED"), ready.request(),
+                Optional<Answer> onTheCase = bound == null ? Optional.empty()
+                        : approvedOnTheCase(principal.tenantId(), bound, ready.request());
+                throw new Undo(onTheCase.orElseGet(() -> refusal(action.name(), "CASE_CHANGED")), ready.request(),
                         bound == null ? null : bound.caseId());
             }
         }
-        // All of the link's checks again; the first decision wins in the database. Audited by the platform's callback.
-        ApprovalResult result = links.decide(token, person, reason);
+        // The link's and the request's checks again; the first decision wins in the database. Audited by the platform's
+        // callback. The page offers both actions, so the decision is the button's; the link said who may and on what.
+        ApprovalResult result = looked instanceof ApprovalResult.Ready ready
+                ? links.decide(ready.request().id(), action, person, reason) : links.decide(token, person, reason);
         if (result instanceof ApprovalResult.Refused refused) return refusal(null, refused.refusal().name());
-        if (result instanceof ApprovalResult.AlreadyDecided decided) return already(decided.request());
+        if (result instanceof ApprovalResult.AlreadyDecided decided) return already(principal.tenantId(), decided.request());
         ApprovalRequest request = ((ApprovalResult.Decided) result).request();
         if (bound == null) throw new Undo(refusal(null, "CASE_CHANGED"), request, null);
         if (request.decision().action() == ApprovalAction.DECLINE) {
-            return new Answer("DECLINED", ApprovalAction.DECLINE.name(), bound.caseId().value(), null, null, null,
+            return new Answer("DECLINED", ApprovalAction.DECLINE.name(), bound.caseId().value(), null, null, null, null,
                     "Declined. The case stays where it is; nothing was delivered.");
         }
         try {
@@ -259,7 +319,7 @@ public class DeliveryApprovals {
             log.warn("DELIVERY_APPROVAL_LINK_REFUSED package={} type={}", bound.caseId(), refused.getClass().getSimpleName());
             throw new Undo(refusal(ApprovalAction.APPROVE.name(), "APPROVAL_REFUSED"), request, bound.caseId());
         }
-        return new Answer("APPROVED", ApprovalAction.APPROVE.name(), bound.caseId().value(), null, null, null,
+        return new Answer("APPROVED", ApprovalAction.APPROVE.name(), bound.caseId().value(), null, null, null, null,
                 "Approved. The case is being delivered.");
     }
 
@@ -283,10 +343,35 @@ public class DeliveryApprovals {
         return refusal(null, code);
     }
 
-    private static Answer already(ApprovalRequest request) {
-        String what = request.decided().map(d -> d.action() == ApprovalAction.APPROVE ? "approved" : "declined").orElse("decided");
-        return new Answer("ALREADY_DECIDED", null, null, null, null, "ALREADY_DECIDED", "This request was already " + what + ".");
+    /** "Already approved by Ann Lee at ...", in the entity's time zone. */
+    private Answer already(TenantId entity, ApprovalRequest request) {
+        return already(request.outcomeText(zone(entity)).orElse("This request was already decided") + ".");
     }
+
+    private static Answer already(String text) {
+        return new Answer("ALREADY_DECIDED", null, null, null, null, null, "ALREADY_DECIDED", text);
+    }
+
+    private ZoneId zone(TenantId entity) {
+        return slots.effective(entity).orElse(ZoneOffset.UTC);
+    }
+
+    /** The case was approved on the case itself after the request was made: by whom and when, from the audit log. */
+    private Optional<Answer> approvedOnTheCase(TenantId entity, Bound bound, ApprovalRequest request) {
+        return jdbc.query("select actor_display_name, occurred_at from audit_records where tenant_id = ? and action ="
+                + " 'PACKAGE_FINAL_APPROVED' and resource_id = ? and occurred_at >= ? order by occurred_at limit 1",
+                (rs, i) -> already("Already approved by " + (rs.getString(1) == null ? "someone" : rs.getString(1)) + " at "
+                        + SHOWN.format(rs.getTimestamp(2).toInstant().atZone(zone(entity))) + "."),
+                entity.value(), bound.caseId().value().toString(), Timestamp.from(request.createdAt())).stream().findFirst();
+    }
+
+    private String askedBy(TenantId entity, PackageId caseId, String requester) {
+        return jdbc.queryForList("select actor_display_name from audit_records where tenant_id = ? and case_id = ? and actor_id = ?"
+                + " and actor_display_name is not null order by occurred_at desc limit 1", String.class, entity.value(),
+                caseId.value().toString(), UUID.fromString(requester)).stream().findFirst().orElse(null);
+    }
+
+    private static final DateTimeFormatter SHOWN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z");
 
     private static final Map<String, String> OWN_TEXTS = Map.of(
             "CASE_CHANGED", "The case no longer waits for this approval: it was approved on the case, or it has changed since"
@@ -299,13 +384,13 @@ public class DeliveryApprovals {
         if (code.equals(ApprovalRefusal.LINK_INVALID.name())) {
             text += " If you work in more than one entity, switch to the one the case belongs to and open the link again.";
         }
-        return new Answer("REFUSED", action, null, null, null, code, text);
+        return new Answer("REFUSED", action, null, null, null, null, code, text);
     }
 
-    private static SignedInPerson person(AuthenticatedPrincipal principal) {
+    private SignedInPerson person(AuthenticatedPrincipal principal) {
         try {
-            return new SignedInPerson(EntityNotifications.tenant(principal.tenantId()),
-                    principal.actorId().value().toString(), shown(principal.username()));
+            return new SignedInPerson(EntityNotifications.tenant(principal.tenantId()), principal.actorId().value().toString(),
+                    shown(names.displayNameFor(principal.actorId()).orElse(principal.username())));
         } catch (NotificationException | IllegalArgumentException odd) {
             return new SignedInPerson(EntityNotifications.tenant(principal.tenantId()),
                     principal.actorId().value().toString(), "User");

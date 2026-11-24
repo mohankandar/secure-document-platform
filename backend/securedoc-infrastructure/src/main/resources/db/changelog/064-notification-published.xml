@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Task 0059: what was already told once (a rejected file, a policy change, an approval made on the case), so that several
+         servers tell it once. Ids and a time only; removed after 3 days. -->
+    <changeSet id="064-01-notification-published" author="lexavault">
+        <createTable tableName="notification_published">
+            <column name="event_type" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="item_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="notification_published" columnNames="event_type, item_id" constraintName="pk_notification_published"/>
+        <addForeignKeyConstraint baseTableName="notification_published" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_notification_published_tenant"/>
+        <rollback>
+            <dropTable tableName="notification_published"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

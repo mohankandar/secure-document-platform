@@ -36,7 +36,8 @@ public class ApprovalLinkController {
         }
     }
 
-    public record DecideRequest(String token, String reason) {
+    /** @param action APPROVE or DECLINE, the button the person used */
+    public record DecideRequest(String token, String action, String reason) {
         @Override
         public String toString() {
             return "DecideRequest[]";
@@ -53,7 +54,7 @@ public class ApprovalLinkController {
     @RequireCapability(UserCapability.PACKAGE_APPROVE_DELIVERY)
     public ResponseEntity<Answer> decide(@RequestBody DecideRequest body, HttpServletRequest request) {
         return answer(approvals.decide(context.resolvePrincipal(request), context.resolveCorrelationId(request), body.token(),
-                body.reason()));
+                body.action(), body.reason()));
     }
 
     private static ResponseEntity<Answer> answer(Answer answer) {

@@ -54,6 +54,11 @@ the person's id, the entity, the roles and the e-mail address of the token (not 
 not verified). Nobody else is ever sent anything. The next sign-in replaces it, and it is removed after
 `people-seen-within`. It gives no access.
 
+Messages and their times are set on the same screen: the IT Admin the technical ones, the Business Admin the business ones.
+A lasting problem is told after 15 minutes and again every 4 hours while it lasts (both can be changed; a critical one never
+later than an hour), with one "Recovered" message. Work that waits comes every 4 hours, the licence and its use once a day.
+Each server reports its own AI model and disk checks under its node id (`SECUREDOC_NODE_ID`; give each server one).
+
 ## 5. Approval links
 
 1. Make a key of at least 32 characters, for example `openssl rand -base64 48`.

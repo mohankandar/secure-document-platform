@@ -209,7 +209,7 @@ class NotificationsAppPostgresTest {
 
     private static String link(UUID entity, UUID actor, String roles, String what, String token, String reason) {
         HttpResponse<String> r = call(entity, actor, roles, "POST", "/api/v1/approvals/link/" + what,
-                "{\"token\":\"" + token + "\"" + (reason == null ? "" : ",\"reason\":\"" + reason + "\"") + "}");
+                "{\"token\":\"" + token + "\",\"action\":\"" + (reason == null ? "APPROVE" : "DECLINE") + "\"" + (reason == null ? "" : ",\"reason\":\"" + reason + "\"") + "}");
         assertEquals(200, r.statusCode(), r.body());
         return r.body();
     }
@@ -299,6 +299,9 @@ class NotificationsAppPostgresTest {
     @Order(4)
     void approvingThroughTheLinkIsTheNormalApprovalOnceAndOnlyForThatPerson() throws Exception {
         UUID caseId = waitingCase(A, BOB);
+        jdbc.update("insert into audit_records (id, tenant_id, actor_id, action, resource_type, resource_id, outcome, correlation_id,"
+                + " occurred_at, created_at, actor_display_name, case_id) values (?, ?, ?, 'PACKAGE_SUBMITTED', 'DocumentPackage', ?,"
+                + " 'SUCCESS', ?, now(), now(), 'Bob Submitter', ?)", UUID.randomUUID(), A, BOB, caseId.toString(), UUID.randomUUID(), caseId.toString());
         Map<String, String> links = ask(caseId, 1);
         assertEquals(Set.of("ann@a.example"), links.keySet(), "the submitter and the other entity's Supervisor get none");
         FakeMailServer.Mail mail = mails(0, 1, caseId.toString(), "/approvals/link/").get(0);
@@ -315,6 +318,7 @@ class NotificationsAppPostgresTest {
         for (int i = 0; i < 3; i++) {
             String opened = link(A, ANN, "DOCUMENT_SUPERVISOR", "open", token, null);
             assertTrue(opened.contains("\"state\":\"READY\"") && opened.contains(caseId.toString()), opened);
+            assertTrue(opened.contains("\"askedBy\":\"Bob Submitter\""), "who asked, for the Supervisor on the page: " + opened);
         }
         assertEquals("PENDING_FINAL_APPROVAL", status(caseId));
 
@@ -339,6 +343,8 @@ class NotificationsAppPostgresTest {
                 + " and resource_id = ?", Integer.class, ANN, caseId.toString()), "the normal approval's own record");
         assertEquals(1, audits("DELIVERY_APPROVAL_LINK_USED"));
         assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", token, null).contains("ALREADY_DECIDED"), "single use");
+        String later = link(A, ANN, "DOCUMENT_SUPERVISOR", "open", token, null);
+        assertTrue(later.matches("(?s).*Already approved by demo-user at \\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d .*"), "who decided and when: " + later);
         assertEquals(1, audits("DELIVERY_APPROVAL_LINK_USED"));
         // The submitter, and only they, is told.
         assertEquals(List.of("bob@a.example"), mails(0, 1, "Delivery approved", caseId.toString()).get(0).to());
@@ -366,7 +372,19 @@ class NotificationsAppPostgresTest {
         UUID second = waitingCase(A, BOB);
         String other = token(ask(second, 1).get("ann@a.example"));
         assertEquals(200, call(A, BOB, "DOCUMENT_SUPERVISOR", "POST", "/api/v1/packages/" + second + "/approve-delivery", null).statusCode());
-        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", other, null).contains("CASE_CHANGED"));
+        String afterwards = link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", other, null);
+        assertTrue(afterwards.contains("ALREADY_DECIDED") && afterwards.contains("Already approved by "), afterwards);
+        // Its requester approved it themselves here; nobody is told. With someone else as requester, once.
+        int told = smtp.mails().size();
+        UUID third = waitingCase(A, BUS);
+        assertEquals(2, ask(third, 2).size());
+        assertEquals(200, call(A, BOB, "DOCUMENT_SUPERVISOR", "POST", "/api/v1/packages/" + third + "/approve-delivery", null).statusCode());
+        for (int i = 0; i < 3; i++) app.getBean(DeliveryApprovals.class).tellApprovedOnTheCase();
+        List<FakeMailServer.Mail> result = mails(told, 1, "Delivery approved", third.toString());
+        Thread.sleep(2000);
+        assertEquals(1, mails(told, 1, "Delivery approved", third.toString()).size());
+        assertEquals(List.of("bus@a.example"), result.get(0).to());
+        assertEquals(0, mails(told, 0, "Delivery approved", second.toString()).size());
     }
 
     @Test
@@ -423,7 +441,7 @@ class NotificationsAppPostgresTest {
         int before = smtp.mails().size();
         app.getBean(DeliveryApprovals.class).askForWaitingCases();
         String token = token(mails(before, 1, caseId.toString(), "/approvals/link/").get(0).link("Decline"));
-        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", token, null).contains("REASON_REQUIRED"));
+        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", token, "").contains("REASON_REQUIRED"));
         assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", token, "Jane Customer").contains("REASON_INVALID"));
         assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "decide", token, "CHECK_REDACTION").contains("\"state\":\"DECLINED\""));
         assertEquals("PENDING_FINAL_APPROVAL", status(caseId));
@@ -440,6 +458,10 @@ class NotificationsAppPostgresTest {
                 + " values (?, ?, 'PAUSED', 0, now(), 0) on conflict (connection_id) do update set state = 'PAUSED'", connection, A);
         int before = smtp.mails().size();
         OperationalNotices notices = app.getBean(OperationalNotices.class);
+        for (int i = 0; i < 3; i++) notices.check();
+        Thread.sleep(2500);
+        assertEquals(0, mails(before, 0, "Destination paused").size(), "not before it lasted 15 minutes");
+        lasted();
         for (int i = 0; i < 3; i++) notices.check();
         mails(before, 1, "Destination paused");
         Thread.sleep(2500);
@@ -476,6 +498,8 @@ class NotificationsAppPostgresTest {
         for (int i = 0; i < 20 && mails(others, 0, "storage not usable").isEmpty(); i++) {
             Thread.sleep(1000);
             notices.check();
+            lasted();
+            notices.check();
         }
         mails(others, 1, "Cases waiting for IT");
         for (String name : List.of("Cases waiting for IT", "Destinations can not be reached", "storage not usable")) {
@@ -493,6 +517,90 @@ class NotificationsAppPostgresTest {
         jdbc.update("delete from document_packages where id = ?", stuck);
     }
 
+    /** As if what is going on had started 16 minutes earlier. */
+    private static void lasted() {
+        jdbc.update("update notif_condition set since = since - interval '16 minutes' where event_type <> 'export.destination-busy'");
+    }
+
+    @Test
+    @Order(9)
+    void theOtherAgreedEventsComeFromWhatIsStoredOfTheirOwnEntity() throws Exception {
+        OperationalNotices notices = app.getBean(OperationalNotices.class);
+        String ago = "now() - interval '1 day'";
+        UUID review = UUID.randomUUID();
+        UUID slow = UUID.randomUUID();
+        for (Object[] c : new Object[][] {{review, "PENDING_REVIEW"}, {slow, "PROCESSING"}}) {
+            jdbc.update("insert into document_packages (id, tenant_id, package_type, status, created_by, created_at, updated_at, version,"
+                    + " sensitivity_level) values (?, ?, 'MANUAL_UPLOAD', ?, ?, " + ago + ", " + ago + ", 0, 'STANDARD')", c[0], A, c[1], BUS);
+        }
+        jdbc.update("update reporting_package_facts set received_at = " + ago + ", first_review_created_at = " + ago
+                + " where package_id in (?, ?)", review, slow);
+        UUID connection = jdbc.queryForList("select id from integration_connections where tenant_id = ?", UUID.class, A).get(0);
+        UUID run = UUID.randomUUID();
+        jdbc.update("insert into polling_runs (id, tenant_id, integration_connection_id, trigger_type, status, started_at, completed_at)"
+                + " values (?, ?, ?, 'SCHEDULED', 'FAILED', now(), now())", run, A, connection);
+        for (String action : List.of("INTAKE_REJECTED", "SENSITIVE_DATA_POLICY_CHANGED")) {
+            jdbc.update("insert into audit_records (id, tenant_id, actor_id, action, resource_type, resource_id, outcome, correlation_id, detail,"
+                    + " occurred_at, created_at) values (?, ?, ?, ?, 'X', 'x', 'SUCCESS', ?, 'drop=Jane Customer', now(), now())",
+                    UUID.randomUUID(), A, BUS, action, UUID.randomUUID());
+        }
+        int before = smtp.mails().size();
+        jdbc.update("update processing_incidents set last_observed_at = last_observed_at - interval '2 hours'");
+        for (int i = 0; i < 3; i++) notices.check();
+        List<FakeMailServer.Mail> policy = mails(before, 1, "Redaction policy changed");
+        Thread.sleep(2000);
+        policy = mails(before, 1, "Redaction policy changed");
+        assertEquals(1, policy.size());
+        assertEquals(List.of("bus@a.example"), policy.get(0).to());
+        assertFalse(policy.get(0).text().contains("Jane"));
+        assertEquals(1, jdbc.queryForObject("select count(*) from notif_summary_item where event_type = 'intake.files-rejected'", Integer.class),
+                "in the 4-hour summary, once");
+        Set<String> going = Set.copyOf(jdbc.queryForList("select event_type from notif_condition where tenant_id = ?", String.class, A.toString()));
+        for (String type : List.of("work.review-waiting", "work.review-past-target", "processing.over-target", "intake.source-unreachable")) {
+            assertTrue(going.contains(type), type + " in " + going);
+        }
+        assertEquals(0, jdbc.queryForObject("select count(*) from notif_condition where tenant_id = ? and (event_type like 'work.%'"
+                + " or event_type like 'processing.%' or event_type like 'intake.%')", Integer.class, b.toString()), "nothing of A in B");
+        // Gone again: the source is recovered; the waiting work ends without a message.
+        lasted();
+        notices.check();
+        assertEquals(1, mails(before, 1, "Intake source can not be reached").size());
+        jdbc.update("delete from polling_runs where id = ?", run);
+        jdbc.update("update document_packages set status = 'COMPLETED' where id in (?, ?)", review, slow);
+        notices.check();
+        assertEquals(1, mails(before, 1, "ecovered", "Intake source can not be reached").size());
+        assertEquals(0, jdbc.queryForObject("select count(*) from notif_condition where tenant_id = ? and event_type in"
+                + " ('work.review-waiting', 'work.review-past-target')", Integer.class, A.toString()));
+        assertEquals(0, mails(before, 0, "ecovered", "review").size());
+
+        // Repeated failures: from the number the admin chose.
+        String path = "/events/processing.repeated-failures";
+        assertEquals(400, it(A, "PUT", path, "{\"enabled\":true,\"frequency\":\"IMMEDIATELY\",\"thresholds\":{\"failuresInAnHour\":0}}").statusCode());
+        assertEquals(400, it(A, "PUT", path, "{\"enabled\":true,\"frequency\":\"IMMEDIATELY\",\"repeatMinutes\":5}").statusCode());
+        assertEquals(200, it(A, "PUT", path, "{\"enabled\":true,\"frequency\":\"IMMEDIATELY\",\"alertAfterMinutes\":0,\"repeatMinutes\":120,\"thresholds\":{\"failuresInAnHour\":2}}").statusCode());
+        UUID failed = waitingCase(A, BUS);
+        // The empty test cases that were approved above failed in the running app: not counted here.
+        jdbc.update("update processing_incidents set last_observed_at = last_observed_at - interval '2 hours'");
+        notices.check();
+        int counted = smtp.mails().size();
+        for (int i = 0; i < 2; i++) {
+            jdbc.update("insert into processing_incidents (id, tenant_id, package_id, stage, component, failure_category, reason_code, retryable,"
+                    + " attempt_count, correlation_id, status, first_observed_at, last_observed_at, safe_summary) values (?, ?, ?, 'DETECTION', 'AI', 'X', 'X',"
+                    + " false, 1, ?, 'OPEN', now(), now(), 'x')", UUID.randomUUID(), A, failed, UUID.randomUUID());
+            notices.check();
+            assertEquals(i, jdbc.queryForObject("select count(*) from notif_condition where event_type = 'processing.repeated-failures'", Integer.class));
+        }
+        assertEquals(1, mails(counted, 1, "Repeated processing failures").stream().filter(m -> !m.text().contains("ecovered")).count());
+        jdbc.update("delete from processing_incidents where package_id = ?", failed);
+        jdbc.update("delete from document_packages where id = ?", failed);
+        notices.check();
+        // A critical one can't be told later than an hour; the time of a daily summary is the admin's.
+        assertEquals(400, it(A, "PUT", "/events/export.destination-paused", "{\"enabled\":true,\"frequency\":\"IMMEDIATELY\",\"alertAfterMinutes\":61}").statusCode());
+        assertEquals(200, it(A, "PUT", "/events/processing.over-target", "{\"enabled\":true,\"frequency\":\"ONCE_A_DAY\",\"dailyAt\":\"06:30\"}").statusCode());
+        assertTrue(it(A, "GET", "", null).body().contains("\"dailyAt\":\"06:30\""));
+        assertTrue(it(A, "GET", "", null).body().contains("\"alertAfterMinutes\":15,\"repeatMinutes\":240,\"alertAfterMax\":60"), "the agreed defaults");
+    }
+
     @Test
     @Order(10)
     void licenceNoticesReachEachEntitysOwnPeopleOnly() throws Exception {
@@ -504,6 +612,8 @@ class NotificationsAppPostgresTest {
         mails(before, 1, "Intake stopped");
         Thread.sleep(2000);
         List<FakeMailServer.Mail> stopped = mails(before, 1, "Intake stopped");
+        // The platform's own hourly check may find the licence valid meanwhile, and then says so once.
+        stopped = stopped.stream().filter(m -> !m.text().contains("ecovered")).toList();
         assertEquals(1, stopped.size());
         assertEquals(List.of("it@b.example"), stopped.get(0).to(), "entity B has no Business Admin who signed in");
         // The licence as a whole: every connected entity, each to its own IT Admin.

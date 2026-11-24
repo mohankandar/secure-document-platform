@@ -61,20 +61,22 @@ public class OperationalNotices {
     private final MailSettingsStore mail;
     private final boolean appAddressSet;
     private final Sources sources;
+    private final StoredNotices stored;
     private final Clock clock;
 
     @org.springframework.beans.factory.annotation.Autowired
     public OperationalNotices(Notifier notifier, ConditionStore conditions, MailSettingsStore mail,
                               NotificationsProperties properties, ExportDestinationStateRepository destinations, ExportReachabilityAlertRepository alerts,
-                              ExportJobService exports, ProcessingStorageConfigurationService storage,
+                              ExportJobService exports, StoredNotices stored, ProcessingStorageConfigurationService storage,
                               ProcessingStorageConfigurationRepository storageRepository) {
         this(notifier, conditions, mail, properties.appAddress() != null, new Sources(destinations::findByTenantId,
                 entity -> alerts.find(entity).map(ExportReachabilityAlertRepository.Alert::raised).orElse(false),
-                exports::needsItGroups, entity -> storageStopped(entity, storage, storageRepository)), Clock.systemUTC());
+                exports::needsItGroups, entity -> storageStopped(entity, storage, storageRepository)), stored, Clock.systemUTC());
     }
 
     OperationalNotices(Notifier notifier, ConditionStore conditions, MailSettingsStore mail, boolean appAddressSet,
-                       Sources sources, Clock clock) {
+                       Sources sources, StoredNotices stored, Clock clock) {
+        this.stored = stored;
         this.appAddressSet = appAddressSet;
         this.notifier = notifier;
         this.conditions = conditions;
@@ -117,7 +119,7 @@ public class OperationalNotices {
         Set<String> on = new HashSet<>();
         connected.forEach(e -> on.add(EntityNotifications.tenant(e).value()));
         active.stream().map(ConditionState::key)
-                .filter(k -> LexaVaultEvents.OPERATIONAL.contains(k.type()) && !on.contains(k.tenant().value()))
+                .filter(k -> (LexaVaultEvents.OPERATIONAL.contains(k.type()) || LexaVaultEvents.WORK.contains(k.type())) && !on.contains(k.tenant().value()))
                 .forEach(notifier::conditionSuperseded);
     }
 
@@ -148,6 +150,7 @@ public class OperationalNotices {
         if (sources.storageStopped().test(entity)) {
             failing.add(event.apply(LexaVaultEvents.STORAGE_STOPPED, STATUS_SCREEN).build());
         }
+        failing.addAll(stored.goingOn(entity));
         Set<ConditionKey> reported = new HashSet<>();
         for (NotificationEvent e : failing) {
             notifier.conditionFailing(e);
@@ -155,7 +158,11 @@ public class OperationalNotices {
         }
         String tenant = EntityNotifications.tenant(entity).value();
         active.stream().map(ConditionState::key)
-                .filter(k -> k.tenant().value().equals(tenant) && LexaVaultEvents.OPERATIONAL.contains(k.type()) && !reported.contains(k))
-                .forEach(notifier::conditionCleared);
+                .filter(k -> k.tenant().value().equals(tenant) && !reported.contains(k) && stored.mine(k.type(), k.identifier()))
+                .forEach(k -> {
+                    if (LexaVaultEvents.OPERATIONAL.contains(k.type())) notifier.conditionCleared(k);
+                    else if (LexaVaultEvents.WORK.contains(k.type())) notifier.conditionSuperseded(k);
+                });
+        stored.publishNew(entity, notifier);
     }
 }

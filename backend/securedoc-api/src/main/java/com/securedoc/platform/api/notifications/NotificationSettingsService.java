@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.notifications;
 
 import com.documentplatform.notifications.ChannelKind;
+import com.documentplatform.notifications.ConditionTiming;
 import com.documentplatform.notifications.EventKind;
 import com.documentplatform.notifications.EventSettings;
 import com.documentplatform.notifications.EventType;
@@ -25,10 +26,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -74,11 +77,23 @@ public class NotificationSettingsService {
     public record BusinessOverview(boolean mailOn, List<RoleCount> people, List<EventView> events) {
     }
 
+    /**
+     * @param dailyAt           the time of a daily summary (HH:mm), when that is the frequency
+     * @param alertAfterMinutes how long a problem lasts before it is told; null for what is not a lasting problem
+     * @param repeatMinutes     how often it is told again while it lasts
+     * @param alertAfterMax     the longest an admin may choose (60 for a critical one)
+     */
     public record EventView(String id, String name, boolean enabled, boolean alwaysOn, String frequency,
-                            List<String> frequencies, List<String> roles) {
+                            List<String> frequencies, List<String> roles, String dailyAt, Long alertAfterMinutes,
+                            Long repeatMinutes, long alertAfterMax, List<ThresholdView> thresholds) {
     }
 
-    public record EventRequest(Boolean enabled, String frequency) {
+    public record ThresholdView(String name, String label, long value, long min, long max) {
+    }
+
+    /** A value that is null stays as it is. */
+    public record EventRequest(Boolean enabled, String frequency, String dailyAt, Long alertAfterMinutes, Long repeatMinutes,
+                               Map<String, Long> thresholds) {
     }
 
     private final MailSettingsStore mail;
@@ -200,8 +215,19 @@ public class NotificationSettingsService {
             case IMMEDIATELY -> Schedule.immediately();
             case EVERY_HOUR -> Schedule.everyHour();
             case EVERY_4_HOURS -> Schedule.every4Hours();
-            case ONCE_A_DAY -> Schedule.onceADay(LocalTime.of(8, 0));
+            case ONCE_A_DAY -> Schedule.onceADay(dailyAt(r.dailyAt(), now));
         });
+        if (now.conditionTiming() != null) {
+            changed = changed.withConditionTiming(new ConditionTiming(
+                    r.alertAfterMinutes() == null ? now.conditionTiming().alertAfter() : minutes(r.alertAfterMinutes()),
+                    r.repeatMinutes() == null ? now.conditionTiming().repeatEvery() : minutes(r.repeatMinutes())));
+        }
+        if (r.thresholds() != null) {
+            for (Map.Entry<String, Long> t : r.thresholds().entrySet()) {
+                if (t.getValue() == null) throw refusal("A number is missing", "thresholds");
+                changed = changed.withThreshold(t.getKey(), t.getValue());
+            }
+        }
         try {
             if (kind == EventKind.TECHNICAL) settings.setTechnicalEvent(tenant, type.id(), changed);
             else settings.setBusinessEvent(tenant, EntityNotifications.entity(entity), type.id(), changed);
@@ -210,15 +236,33 @@ public class NotificationSettingsService {
         }
         audit.recordSuccess(entity, principal.actorId(), AuditAction.NOTIFICATION_EVENT_CHANGED, "NotificationEvent",
                 type.id().value(), correlation, "Message setting saved: event=" + type.id().value() + ", enabled="
-                        + changed.enabled() + ", frequency=" + frequency);
+                        + changed.enabled() + ", frequency=" + frequency + (changed.conditionTiming() == null ? ""
+                        : ", alertAfterMinutes=" + changed.conditionTiming().alertAfter().toMinutes() + ", repeatMinutes="
+                        + changed.conditionTiming().repeatEvery().toMinutes()));
     }
 
     // ------------------------------------------------------------------ parts
 
+    private static Duration minutes(long value) {
+        if (value < 0 || value > 24 * 60) throw refusal("The time is not allowed for this message", "event");
+        return Duration.ofMinutes(value);
+    }
+
+    private static LocalTime dailyAt(String value, EventSettings now) {
+        if (value == null || value.isBlank()) {
+            return now.schedule().dailyAt() == null ? LocalTime.of(8, 0) : now.schedule().dailyAt();
+        }
+        try {
+            return LocalTime.parse(value.strip());
+        } catch (java.time.DateTimeException notATime) {
+            throw refusal("The time of day is written HH:mm", "dailyAt");
+        }
+    }
+
     private List<EventType> shown(EventKind kind) {
         return settings.catalogue().all().stream().filter(t -> t.kind() == kind)
                 // The customer's own (the licence as a whole) are not set per entity; the test message is a button.
-                .filter(t -> kind == EventKind.BUSINESS || LexaVaultEvents.OPERATIONAL.contains(t.id())).toList();
+                .filter(t -> kind == EventKind.BUSINESS || LexaVaultEvents.TECHNICAL.contains(t.id())).toList();
     }
 
     private List<EventView> events(TenantId entity, EventKind kind) {
@@ -230,12 +274,19 @@ public class NotificationSettingsService {
                     : t.critical() ? List.of(Frequency.IMMEDIATELY.name(), Frequency.EVERY_HOUR.name())
                     : java.util.Arrays.stream(Frequency.values()).map(Enum::name).toList();
             return new EventView(t.id().value(), t.name(), s.enabled(), t.critical(), s.schedule().frequency().name(), choices,
-                    s.recipientRoles().stream().map(Object::toString).sorted().toList());
+                    s.recipientRoles().stream().map(Object::toString).sorted().toList(),
+                    s.schedule().dailyAt() == null ? null : s.schedule().dailyAt().toString(),
+                    s.conditionTiming() == null ? null : s.conditionTiming().alertAfter().toMinutes(),
+                    s.conditionTiming() == null ? null : s.conditionTiming().repeatEvery().toMinutes(),
+                    t.critical() ? 60 : 24 * 60,
+                    t.thresholds().stream().map(x -> new ThresholdView(x.name(), x.label(),
+                            s.thresholds().getOrDefault(x.name(), x.defaultValue()), x.min(), x.max())).toList());
         }).toList();
     }
 
     private List<RoleCount> people(TenantId entity) {
-        return List.of(LexaVaultEvents.IT_ADMIN, LexaVaultEvents.BUSINESS_ADMIN, LexaVaultEvents.SUPERVISOR).stream()
+        return List.of(LexaVaultEvents.IT_ADMIN, LexaVaultEvents.BUSINESS_ADMIN, LexaVaultEvents.SUPERVISOR,
+                LexaVaultEvents.PROCESSOR).stream()
                 .map(role -> new RoleCount(role.value(), people.count(entity, role))).toList();
     }
 
