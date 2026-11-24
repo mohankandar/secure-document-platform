@@ -23,7 +23,10 @@ param(
     [string] $Ollama = 'http://localhost:11434',
     [string] $Model = 'qwen3.5:9b',
     [string[]] $Modes = @('inline', 'staged'),
-    [int] $TimeoutSeconds = 1800
+    [int] $TimeoutSeconds = 1800,
+    # The demo entity's auto-redact threshold for the run (throwaway database only). 0 sends every located finding
+    # straight to Redact, so the timing covers Redact and Export too; empty keeps the demo policy (some go to Review).
+    [string] $AutoRedactThreshold = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +76,9 @@ foreach ($mode in $Modes) {
         Start-Sleep -Seconds 2
         Initialize-LexaVaultDatabase -Jar $JarPath -DbUrl "jdbc:postgresql://localhost:${DbPort}/securedoc" -DbUser 'securedoc' `
             -DbPassword $pw -StateDir (Join-Path $runDir 'install') | Out-Null
+        if ($AutoRedactThreshold) {
+            Invoke-Sql "update tenant_redaction_policies set auto_redact_threshold = $([double]$AutoRedactThreshold)" | Out-Null
+        }
 
         $env:SPRING_DATASOURCE_URL = "jdbc:postgresql://localhost:$DbPort/securedoc"
         $env:SPRING_DATASOURCE_USERNAME = 'securedoc'
