@@ -48,7 +48,7 @@ param(
     [string] $Model = 'qwen3.5:9b',
     [int] $Cases = 20,
     [int] $AiDelayMs = 2500,
-    [int] $VisionDelayMs = 3000,
+    [int] $VisionDelayMs = 2000,
     [int] $ClaimLeaseMs = 15000,
     [int] $BigPages = 200,
     [int] $FinishTimeoutSeconds = 1800
@@ -119,6 +119,8 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
     $env:SECUREDOC_AI_PROVIDER = 'ollama'
     $env:SECUREDOC_AI_OLLAMA_BASE_URL = "http://localhost:$OllamaPort"
     $env:SECUREDOC_AI_MODEL = $Model
+    # Find and Vision share the limit per AI server; with enough places Redact starts while Text still runs (the kill needs all four).
+    $env:SECUREDOC_AI_REQUESTS_AT_ONCE = '6'
     $env:SECUREDOC_AI_VISION_BASE_URL = "http://localhost:$OllamaPort"
     $env:SECUREDOC_AI_VISION_MODEL = $visionModel
     $env:SECUREDOC_AI_VISION_MODEL_DIGEST = $visionDigest
@@ -420,7 +422,7 @@ finally {
         Write-Host "Removed throwaway container $Container"
     }
     foreach ($name in 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_NODE_ID',
-            'SECUREDOC_AI_VISION_BASE_URL', 'SECUREDOC_AI_VISION_MODEL', 'SECUREDOC_AI_VISION_MODEL_DIGEST',
+            'SECUREDOC_AI_REQUESTS_AT_ONCE', 'SECUREDOC_AI_VISION_BASE_URL', 'SECUREDOC_AI_VISION_MODEL', 'SECUREDOC_AI_VISION_MODEL_DIGEST',
             'SECUREDOC_AI_PROVIDER', 'SECUREDOC_AI_OLLAMA_BASE_URL', 'SECUREDOC_AI_MODEL', 'SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED',
             'SECUREDOC_WATCHED_FOLDER_ENABLED', 'SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED', 'SECUREDOC_LOGGING_CONFIG',
             'SECUREDOC_LOG_DIR', 'SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH', 'SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH',

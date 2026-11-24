@@ -362,6 +362,12 @@ try {
     Audit 'FINDING_CONFIRMED' 'SUCCESS' $actorId 'Finding' ([guid]::NewGuid()) 'Finding confirmed: type=CREDIT_CARD_NUMBER' $T $cases['C2']
     Audit 'FINDING_DISMISSED' 'SUCCESS' $actorId 'Finding' ([guid]::NewGuid()) 'Finding dismissed: type=DATE_OF_BIRTH' $T $cases['C3']
     Audit 'FINDING_CONFIRMED' 'SUCCESS' $system 'Finding' ([guid]::NewGuid()) 'Finding confirmed: type=SSN' $T $cases['C1']
+    # 0064: two searches that say how their pages were read and which AI models took part.
+    $visionDigest = '70e58e37beb15464e19aa903dedb2cba828b89c0fb186f75ff2738c7347b96eb'
+    $textDigest = '56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90'
+    $models = "aiModels=[qwen3.5:9b|text-1.3.0|$textDigest;qwen3-vl:8b-instruct|vision-prompt-v2|$visionDigest]"
+    Audit 'DOCUMENT_DETECTION_COMPLETED' 'SUCCESS' $system 'Document' ([guid]::NewGuid()) "Detection completed: findings=3, decision=REVIEW, types={SSN=3}, textPages=55, signaturePages=50, visionPages=4, visionPagesToPerson=1, $models, routed=[p10:HANDWRITING@ocr0.91 p12:PICTURE->PERSON(LV-AI-008)]" $T $cases['C1']
+    Audit 'DOCUMENT_DETECTION_COMPLETED' 'SUCCESS' $system 'Document' ([guid]::NewGuid()) "Detection completed: findings=0, decision=ALLOW, types={}, textPages=5, signaturePages=0, visionPages=1, visionPagesToPerson=0, aiModels=[qwen3-vl:8b-instruct|vision-prompt-v2|$visionDigest], routed=[p1:PICTURE]" $T $cases['C2']
     Audit 'PACKAGE_FINAL_APPROVED' 'SUCCESS' $actorId 'DocumentPackage' $cases['C2'] 'Final delivery approved' $T $cases['C2']
     Audit 'DOCUMENT_DOWNLOADED' 'DENIED' $actorId 'Artifact' ([guid]::NewGuid()) 'Original artifact access denied: no approved request' $T $cases['C1']
     Audit 'DOCUMENT_EXPORTED' 'SUCCESS' $system 'Document' ([guid]::NewGuid()) "Document exported: destination=LOCAL_FOLDER, filename=$fileMarker-loan-file.pdf" $T $cases['C1']
@@ -518,6 +524,13 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
         "Delivered counts cases first delivered in the period, whenever they were received, as on the Reports page. Shares are of cases received.")
     if ($firstSave) { $expectedLines += "Policy saved for the first time" }
     foreach ($line in $expectedLines) { Check "summary prints: $line" ($s.Contains($line)) }
+    # 0064: section 5, how pages were read and the AI models with their digests.
+    foreach ($line in "5 $([char]0x00B7) How pages were read", 'Read as text 60 91%', 'Of these, also checked for signatures 50 76%', 'Read by the vision model 5 8%', 'Needed the vision model, sent to a person 1 2%') {
+        Check "0064: summary prints: $line" ($s.Contains($line))
+    }
+    $tight = $texts['SUMMARY'] -replace '\s+', ''
+    Check '0064: the report lists each AI model with its version and whole digest' ($tight.Contains($visionDigest) -and $tight.Contains($textDigest) -and $tight.Contains('qwen3-vl:8b-instruct') -and $tight.Contains('vision-prompt-v2'))
+    Check '0064: the appendix says why a page was routed and what happened' (($texts['FULL'] -replace '\s+', '').Contains('p12:PICTURE->PERSON(LV-AI-008)'))
     $section2 = $s.Substring($s.IndexOf("2 $([char]0x00B7) Keeping and deleting"))
     $section2 = $section2.Substring(0, $section2.IndexOf('Proof that deletions ran'))
     Check '0018 A4: section 2 has a "Changes during the period" table' ($section2.Contains('Changes during the period') -and $section2.Contains('WHAT CHANGED')) $section2

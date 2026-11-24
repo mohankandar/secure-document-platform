@@ -444,3 +444,20 @@ test('confirm step leaves out the cases when they don’t drop', async ({ page }
   await saveButton(page).click();
   await expect(page.getByRole('alertdialog')).toHaveAccessibleDescription('With Light, about 40 fewer findings in the last 30 days would have had a person check them.');
 });
+
+/** Task 0064: vision on/off, the routing threshold and the two new kinds are saved with the policy. */
+test('vision settings: on at 85% until changed; switching off and the new kinds are saved', async ({ page }) => {
+  const h = await openPolicy(page);
+  const c = card(page);
+  const vision = c.getByRole('switch', { name: /Read hard pages with the vision model/ }).or(c.getByRole('checkbox', { name: /Read hard pages with the vision model/ }));
+  await expect(vision).toBeChecked();
+  await expect(c.getByText('A scanned page is hard when its text-reading confidence is below 85%')).toBeVisible();
+  await c.getByRole('button', { name: 'Signature or initials' }).click();
+  await c.getByRole('slider', { name: /A scanned page is hard/ }).fill('70');
+  await vision.click({ force: true });
+  if (process.env.P0064_PROOF) await c.screenshot({ path: '../../docs/work/0064-proof/admin-vision-settings.png' });
+  await saveButton(page).click();
+  await expect(page.getByText('Redaction policy saved. New cases use it immediately.')).toBeVisible();
+  expect(h.writes).toHaveLength(1);
+  expect(h.writes[0]).toMatchObject({ visionEnabled: false, visionOcrThreshold: 0.7, enabledEntityTypes: [...BALANCED.enabledEntityTypes, 'SIGNATURE'] });
+});
