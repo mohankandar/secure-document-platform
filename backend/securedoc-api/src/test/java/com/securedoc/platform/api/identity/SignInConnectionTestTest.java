@@ -125,6 +125,7 @@ class SignInConnectionTestTest {
         assertEquals(code, result.code());
         assertEquals(reason, result.reason());
         assertFalse(result.message().isBlank());
+        assertFalse(result.whatToDo().isBlank());
         assertFalse(result.message().contains(issuer.issuer().toString()), result.message());
     }
 

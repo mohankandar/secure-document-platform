@@ -6,7 +6,7 @@ import { Notice } from '../atoms';
 import { whatToDo } from '../lvCodes';
 import { Loading } from './shared';
 import { HelpTip } from './HelpTip';
-import { allowanceText, dayText, levelTone, licenceKind, licenceTerm, licenceTitle, monthText } from './licensingRules';
+import { allowanceText, dayText, licenceKind, licenceTerm, licenceTitle, monthText } from './licensingRules';
 
 /**
  * Admin › Licensing (task 0057, Business Admin): the licence in force and this month's use of this entity. Read-only: a
@@ -30,14 +30,14 @@ export default function LicensingArea() {
         </header>
 
         {data.stopped && (
-          <Notice tone="danger">
+          <Notice tone="mark">
             <strong>{data.stopped.title} · {data.stopped.code}</strong>
             <br />New cases are not taken in. Cases already in LexaVault are finished, and viewing and export keep working.
             <br />What to do: {whatToDo(data.stopped.code)}
           </Notice>
         )}
         {l?.testEnvironment && <Notice>Test environment. This licence is not for production use: every redacted copy is marked “TEST – NOT FOR PRODUCTION USE”, and pages are never billed.</Notice>}
-        {l?.clockMessage && <Notice tone="danger">{l.clockMessage}</Notice>}
+        {l?.clockMessage && <Notice tone="mark">{l.clockMessage}</Notice>}
 
         {l && (
           <dl className="cf-ad-facts">
@@ -65,7 +65,7 @@ export default function LicensingArea() {
               return (
                 <div key={a.type}>
                   <dt>{text.name}</dt>
-                  <dd>{text.use} <span className="cf-ad-tag" data-tone={levelTone(a.level)}>{text.level}</span></dd>
+                  <dd>{text.use} <span className="cf-ad-tag">{text.level}</span></dd>
                 </div>
               );
             })}

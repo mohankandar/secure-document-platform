@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { allowanceText, dayText, levelTone, licenceKind, licenceTerm, licenceTitle, monthText, type LicenceShown } from './licensingRules.ts';
+import { allowanceText, dayText, licenceKind, licenceTerm, licenceTitle, monthText, type LicenceShown } from './licensingRules.ts';
 
 const base: LicenceShown = { licenceId: 'LIC-1', version: 1, customer: 'C', type: 'SUBSCRIPTION', kind: 'PRODUCTION', testEnvironment: false, state: 'VALID', message: '', startsOn: '2026-01-01', expiresOn: '2026-06-30', daysUntilExpiry: 90, graceEndsOn: '2026-07-30' };
 
@@ -28,6 +28,4 @@ test('the term, its last days and its grace', () => {
 test('use against the licence', () => {
   assert.deepEqual(allowanceText({ type: 'PAGES_PER_MONTH', unit: 'pages', used: 1204, limit: 1000, level: 'OVER_LIMIT' }), { name: 'Pages this month', use: '1,204 of 1,000 pages', level: 'Over the limit' });
   assert.equal(allowanceText({ type: 'PAGES_PER_MONTH', unit: 'pages', used: 3, limit: 0, level: 'OVER_LIMIT' }).level, 'Not in the licence');
-  assert.equal(levelTone('AT_LIMIT'), 'danger');
-  assert.equal(levelTone('WITHIN'), undefined);
 });

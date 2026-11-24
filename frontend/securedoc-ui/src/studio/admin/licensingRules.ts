@@ -88,7 +88,3 @@ function levelWord(level: string, limit: number): string {
     default: return 'Within the limit';
   }
 }
-
-export function levelTone(level: string): string | undefined {
-  return level === 'OVER_LIMIT' || level === 'AT_LIMIT' ? 'danger' : undefined;
-}

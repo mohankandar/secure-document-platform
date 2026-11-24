@@ -67,7 +67,7 @@ public class EnterpriseIdentityAdminController {
         LoginConnection active = reads.activeConnection(principal.tenantId().value()).orElse(null);
         if (active == null) {
             return ResponseEntity.ok(new TestAnswer(false, "NO_ACTIVE_CONNECTION",
-                    "No sign-in connection is stored for this entity.", null, null));
+                    "No sign-in connection is stored for this entity.", null, null, null));
         }
         SignInConnectionTest.Result result = tester.run(active);
         var correlation = context.resolveCorrelationId(request);
