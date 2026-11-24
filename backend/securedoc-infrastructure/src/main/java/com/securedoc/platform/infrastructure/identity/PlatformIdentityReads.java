@@ -8,6 +8,7 @@ import com.documentplatform.identity.jdbc.PostgresIdentityLookup;
 import com.documentplatform.identity.jdbc.PostgresMachineEntityBindings;
 import com.securedoc.platform.application.port.out.ActiveOidcMachineTenantBindings;
 import com.securedoc.platform.application.port.out.ActiveOidcTenantCandidates;
+import com.securedoc.platform.application.port.out.PlatformOidcGroupGrants;
 import com.securedoc.platform.application.port.out.TenantOidcGroupGrantRepository;
 import com.securedoc.platform.domain.error.CodedStateException;
 import com.securedoc.platform.domain.error.LvErrorCode;
@@ -40,6 +41,8 @@ import java.util.UUID;
  *   <li>a grant's role must be one of LexaVault's entity roles written exactly, or one of today's identity-name aliases
  *       written exactly ({@link LexaVaultProduct#grantRole}); anything else, the platform role included, refuses the
  *       lookup (LV-AUT-007), as before;</li>
+ *   <li>platform-wide grants ({@code idn_platform_grant}, task 0054) are passed on exactly as stored; the sign-in check
+ *       (platform-identity's PlatformGroupAuthorization) takes only the platform role from them;</li>
  *   <li>a machine binds only through an enabled PUSH_API ingestion source whose authentication proves a bearer-token
  *       client (JWT or OAuth2 client credentials).</li>
  * </ul>
@@ -47,7 +50,7 @@ import java.util.UUID;
  */
 @Repository
 public class PlatformIdentityReads implements ActiveOidcTenantCandidates, TenantOidcGroupGrantRepository,
-        ActiveOidcMachineTenantBindings, OidcConnectionBindingResolver {
+        ActiveOidcMachineTenantBindings, OidcConnectionBindingResolver, PlatformOidcGroupGrants {
 
     private static final Logger log = LoggerFactory.getLogger(PlatformIdentityReads.class);
 
@@ -110,6 +113,12 @@ public class PlatformIdentityReads implements ActiveOidcTenantCandidates, Tenant
             out.put(tenant, Map.copyOf(perGroup));
         });
         return Map.copyOf(out);
+    }
+
+    @Override
+    public Map<String, Set<String>> activePlatformGrants(String providerId, URI issuer, String audience) {
+        ConnectionKey key = key(providerId, issuer, audience);
+        return key == null ? Map.of() : lookup.activePlatformGrants(key);
     }
 
     @Override

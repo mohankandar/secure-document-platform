@@ -32,12 +32,12 @@ if ($existing) { throw "The Phase 1 backend is already running (PID $($existing.
 if (Test-Phase1Port $Phase1.BackendPort) { throw "Port $($Phase1.BackendPort) is already in use by something that is not the Phase 1 backend." }
 
 $jar = Join-Path $Phase1.RepoRoot 'backend\securedoc-api\target\securedoc-api-0.1.0-SNAPSHOT.jar'
-if (-not (Test-Path $jar)) { throw "Backend jar not found: $jar. Build first (cd backend; mvn clean install) with the normal backend stopped." }
+if (-not (Test-Path $jar)) { throw "Backend jar not found: $jar. Build first (cd backend; mvn clean install -Pdev-build) with the normal backend stopped." }
 # The jar is reused only when the caller names the commit it was built from (-JarBuiltFromCommit),
 # backend/ has no uncommitted changes, and git shows no backend change between that commit and HEAD.
 # (File timestamps are not used: branch checkouts rewrite them without changing content.)
 if (-not $JarBuiltFromCommit) {
-    throw 'Name the commit the jar was built from with -JarBuiltFromCommit <sha>, or rebuild (cd backend; mvn clean install) with the normal backend stopped.'
+    throw 'Name the commit the jar was built from with -JarBuiltFromCommit <sha>, or rebuild (cd backend; mvn clean install -Pdev-build) with the normal backend stopped.'
 }
 $dirty = & git -C $Phase1.RepoRoot status --porcelain -- backend
 & git -C $Phase1.RepoRoot diff --quiet $JarBuiltFromCommit HEAD -- backend

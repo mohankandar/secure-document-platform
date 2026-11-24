@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-[ -f "$jar" ] || { echo "Backend jar not found: $jar (build it first: cd backend && mvn clean install)" >&2; exit 1; }
+[ -f "$jar" ] || { echo "Backend jar not found: $jar (build it first: cd backend && mvn clean install -Pdev-build)" >&2; exit 1; }
 
 container="lexavault-0035-pg"
 case "$container" in securedoc-postgres|sdv-postgres|sdv-vault|lexa-keycloak|lexa-keycloak-db) echo "protected name" >&2; exit 1 ;; esac

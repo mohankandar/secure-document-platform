@@ -113,7 +113,7 @@ class GrantHistoryAndSignInViewTest {
         when(reads.activeConnection(ENTITY)).thenReturn(Optional.of(new LoginConnection(connectionId, "TEN-DEMO-0001",
                 "LEXAVAULT", "customer-oidc", IdentityProviderType.OIDC, ISSUER, "lexavault-web", "lexavault-api",
                 "vault:secret/never-shown", IdentityConnectionStatus.ACTIVE, 3)));
-        var overview = new EnterpriseIdentityAdminController(context, reads).overview(request).getBody();
+        var overview = new EnterpriseIdentityAdminController(context, reads, null, null).overview(request).getBody();
         assertEquals(ISSUER.toString(), overview.active().issuerUri());
         assertEquals("customer-oidc", overview.active().displayName());
         assertEquals("ACTIVE", overview.active().status());
@@ -128,6 +128,6 @@ class GrantHistoryAndSignInViewTest {
         assertFalse(json.toLowerCase().contains("secret"), json);
 
         when(reads.activeConnection(ENTITY)).thenReturn(Optional.empty());
-        assertNull(new EnterpriseIdentityAdminController(context, reads).overview(request).getBody().active());
+        assertNull(new EnterpriseIdentityAdminController(context, reads, null, null).overview(request).getBody().active());
     }
 }

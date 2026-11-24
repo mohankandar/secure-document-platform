@@ -155,6 +155,52 @@ class PlatformIdentityReadsPostgresTest {
         }
     }
 
+    /** Task 0054: platform-wide grants through the real tables and platform-identity's check, as sign-in uses them. */
+    @Test
+    void platformWideGrantsReachEveryActiveEntityAndOnlyThePlatformRole() throws SQLException {
+        try (ThrowawayDatabase own = ThrowawayDatabase.create("platformgrants")) {
+            PrintStream quiet = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
+            assertEquals(0, new SchemaStep(quiet, quiet).run(new String[] {"apply"}, own.env(SchemaStep.ENV_PREFIX)));
+            IdnRows r = new IdnRows(own);
+            r.customer(TENANT);
+            UUID one = r.slot(TENANT, "ENT-READS-A", "ACTIVE");
+            UUID two = r.slot(TENANT, "ENT-READS-B", "ACTIVE");
+            UUID three = r.slot(TENANT, "ENT-READS-S", "SUSPENDED");
+            for (UUID id : new UUID[] {one, two, three}) r.lexaTenant(id, "ACTIVE");
+            r.connection(TENANT, PROVIDER, ISSUER, AUDIENCE);
+            r.grants("ENT-READS-A", ISSUER, new Grant("Finance Staff", "DOCUMENT_SUPERVISOR"));
+            PlatformIdentityReads ownReads = new PlatformIdentityReads(new JdbcTemplate(r.ds));
+            assertEquals(Map.of(), ownReads.activePlatformGrants(PROVIDER, ISSUER, AUDIENCE));
+            new com.documentplatform.identity.jdbc.PostgresGroupGrantStore(r.ds).changePlatform(TENANT, "LEXAVAULT", ISSUER,
+                    Set.of(new Grant("Ops", "PLATFORM_OPERATIONS_ADMIN")), Set.of(),
+                    com.documentplatform.identity.store.GrantAuthor.app("test"));
+            assertEquals(Map.of("Ops", Set.of("PLATFORM_OPERATIONS_ADMIN")), ownReads.activePlatformGrants(PROVIDER, ISSUER, AUDIENCE));
+            assertEquals(Map.of(), ownReads.activePlatformGrants(PROVIDER, URI.create("https://other.example"), AUDIENCE));
+
+            var properties = new com.securedoc.platform.api.security.SecurityProperties();
+            properties.getOidc().setProviderId(PROVIDER);
+            properties.getOidc().setAudience(AUDIENCE);
+            properties.getOidc().setSharedIssuerTenantSelectionEnabled(true);
+            var signIn = new com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver(ownReads, ownReads, ownReads, properties);
+            var jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("t").header("alg", "none").issuer(ISSUER.toString())
+                    .subject("s").build();
+            assertEquals(Map.of(TenantId.of(one), Set.of("DOCUMENT_SUPERVISOR", "PLATFORM_OPERATIONS_ADMIN"),
+                            TenantId.of(two), Set.of("PLATFORM_OPERATIONS_ADMIN")),
+                    signIn.authorizedTenants(jwt, Set.of("Finance Staff", "Ops")), "every ACTIVE entity, no suspended one");
+            assertEquals(Map.of(TenantId.of(one), Set.of("DOCUMENT_SUPERVISOR")), signIn.authorizedTenants(jwt, Set.of("Finance Staff", "ops")));
+
+            // A platform-wide grant of an entity role (a row written by hand; setup refuses it) is refused.
+            r.exec("insert into idn_platform_grant (tenant_id, product_code, issuer_uri, external_group, role) values (?, ?, ?, ?, ?)",
+                    TENANT, "LEXAVAULT", ISSUER.toString(), "Wrong", "BUSINESS_ADMIN");
+            var refused = assertThrows(com.securedoc.platform.api.context.SecurityContextException.class,
+                    () -> signIn.authorizedTenants(jwt, Set.of("Wrong")));
+            assertEquals("Only Platform Operations can be granted through a platform-wide grant", refused.getMessage());
+            // An entity grant of the platform role is refused as before.
+            r.grantRow("ENT-READS-B", ISSUER, "Sneaky", "PLATFORM_OPERATIONS_ADMIN");
+            assertThrows(CodedStateException.class, () -> signIn.authorizedTenants(jwt, Set.of("Sneaky")));
+        }
+    }
+
     @Test
     void unreadableTablesGiveNoAnswerSoAdmissionRefuses() throws SQLException {
         ThrowawayDatabase empty = ThrowawayDatabase.create("noidn");
@@ -162,6 +208,7 @@ class PlatformIdentityReadsPostgresTest {
             PlatformIdentityReads noTables = new PlatformIdentityReads(new JdbcTemplate(new IdnRows(empty).ds));
             assertNull(noTables.findCandidates(PROVIDER, ISSUER, AUDIENCE));
             assertNull(noTables.activeGrants(PROVIDER, ISSUER, AUDIENCE));
+            assertNull(noTables.activePlatformGrants(PROVIDER, ISSUER, AUDIENCE));
         }
     }
 }

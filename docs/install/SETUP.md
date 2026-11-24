@@ -30,18 +30,47 @@ ships:
 |---|---|---|
 | `--product` | `LEXAVAULT` | |
 | `--product-roles` | `install/product-roles.json` | LexaVault's roles and aliases (below); `"customerKeys": "optional"` |
-| `--keys` | `install/trusted-keys.json` | The release's production signing keys. **Not shipped yet.** Until then pass `-Keys`; the demo uses `install/demo/development-trusted-keys.json` |
 | `--no-customer-keys` | | LexaVault encrypts nothing with platform-core yet. platform-core 0.2.0 refuses this flag only for a product whose `product-roles.json` says `"customerKeys": "required"`; LexaVault's says `optional` |
+
+**Licence keys (platform-core 0.7.0, task 0054).** There is no `--keys`: the keys that a licence is checked with are inside
+the setup jar (`docs/install/BUILD.md`). Only a development build takes the demo licence; a production build refuses it
+(`SETUP_LICENCE_REFUSED: LICENCE_UNKNOWN_KEY_ID`), and one without keys refuses every licence (`SETUP_KEYS_INVALID`).
+
+**Moving to another login system (platform-core 0.7.0).** Grants stored under the login system that is replaced are kept
+and listed as `not removed ... (under the replaced login system ...)`; setup is done, with exit code 3. They do nothing
+unless that login system is made active again. `-RemoveUnlistedGrants` removes them.
+
+**Group names** count exactly as your login system sends them, in the mapping file and at sign-in: no trimming, no case
+folding, and a groups claim that is one text is one group.
 
 **Login system on a local machine (platform-core 0.2.0).** The sign-in file's issuer must be `https`, except a local
 test login server: `http` on `localhost`, `127.0.0.1` or `[::1]`, and only under a licence signed by a key marked
-`"development": true` in the trusted-keys file (`SETUP_HTTP_ISSUER_NOT_ALLOWED` otherwise). The demo licence and
-`install/demo/development-trusted-keys.json` are such; production keys never are. The local OIDC start uses this.
+`"development": true` that the build trusts (`SETUP_HTTP_ISSUER_NOT_ALLOWED` otherwise). The demo licence's key is such
+in a development build; production keys never are. The local OIDC start uses this.
 
 **Grant history.** Every grant setup adds or removes is recorded in `idn_grant_history` with setup's run ID (identity
 schema version 3). LexaVault's Audit page lists them under "Sign-in access changes" (read-only).
 
-**Sign-in connections are set through setup.** The app's Admin › Sign-in screen only shows the active connection.
+**Sign-in connections are set through setup.** The app's Admin › Sign-in screen only shows the active connection, and
+tests it (task 0054): "Test sign-in" (IT Admin) reads the login system's published details and keys and shows that it
+answers, or the exact `IDN_TEST_…` code. No token is asked for; nothing is stored or changed; each test is audited with
+codes only, and repeated clicks within 10 seconds are one call. It calls only the stored issuer (and the key address that
+issuer names), under the platform's outbound rules:
+
+| Setting | Default | |
+|---|---|---|
+| `platform.outbound.installation` | `ON_PREMISES` | or `HOSTED` |
+| `platform.outbound.allow-internal-addresses` | `false` | `true` when your login system is on an internal address (it then also allows plain http there). Cloud-metadata and link-local addresses are always refused |
+| `platform.outbound.private-ca-file` | none | your private certificate authorities (PEM, absolute path) |
+| `platform.outbound.proxy.host`, `.port`, `.bypass` | none | the outbound proxy. A proxy with sign-in is not supported and stops the app (`OUTBOUND_SETTINGS_INVALID`) |
+
+A login system on `http://localhost` is tested only under a licence signed by a development key, so only in a
+development build; no setting changes that.
+
+**Integration clients are machines (platform-core 0.7.0, task 0054).** A token that carries a person's claim (email, name,
+groups, ...) is refused on the intake paths (LV-AUT-008), whatever user name it names. If your login system puts one of
+those claims into its machine tokens, list the claims that mark a person in
+`securedoc.security.oidc.machine-user-claims`.
 
 Optional, passed through: `-ConfigOut`, `-RunLog`, `-RemoveUnlistedGrants`, `-ReplaceConnection`.
 
@@ -56,7 +85,7 @@ Optional, passed through: `-ConfigOut`, `-RunLog`, `-RemoveUnlistedGrants`, `-Re
 | `TENANT_IT_ADMIN` | IT Admin | |
 | `USER`, `REVIEWER` | Document Processor | Aliases (`"aliases"` in `product-roles.json`, platform-core 0.2.0): setup stores the grant as `DOCUMENT_PROCESSOR` |
 | `APPROVER` | Supervisor | Alias: stored as `DOCUMENT_SUPERVISOR` |
-| `PLATFORM_OPERATIONS_ADMIN` | Platform Operations | The platform role: never granted in a mapping file |
+| `PLATFORM_OPERATIONS_ADMIN` | Platform Operations | The platform role (task 0054): only on a row with `*` as its `entity_id`, for every entity of your organisation. On an entity's row it is refused (`SETUP_PLATFORM_ROLE_ON_ENTITY`), and a `*` row takes no other role (`SETUP_ENTITY_ROLE_PLATFORM_WIDE`) |
 
 Write role and alias names exactly as above (upper case). Any other spelling is refused by setup, and a grant that
 reaches the database some other way with an unknown role refuses sign-in for that login system (LV-AUT-007), as
@@ -66,7 +95,7 @@ before. A grant stored under an alias name before task 0041 is still read as the
 
 These setup inputs come with their own tasks; nothing is needed for them now:
 
-- the release's production `trusted-keys.json`, and the licence used by the app itself
+- the release's production licence keys (`docs/install/BUILD.md`), and the licence used by the app itself
   (`platform.licensing.tenant-id` from `platform-tenant.properties`): task 0038;
 - notifications settings: task 0040;
 - integration client bindings (client ID -> entity -> source): a later task;

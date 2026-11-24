@@ -4,7 +4,7 @@ End-to-end check that a known fake value never reaches the database, the app log
 export, in full, as digits only, or as its last 4.
 
 ```powershell
-cd backend; mvn clean install; cd ..
+cd backend; mvn clean install -Pdev-build; cd ..
 .\test-tools\no-redacted-values\Invoke-NoRedactedValueCheck.ps1
 ```
 

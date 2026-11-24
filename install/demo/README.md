@@ -5,9 +5,9 @@ Demo values only. Nothing here belongs to a real customer, login system or produ
 | File | What it is |
 |---|---|
 | `licence-demo.json` | Licence `LIC-LV-DEMO-0001` v1 for customer `TEN-DEMO-0001` ("LexaVault Demo Customer"), product `LEXAVAULT`, two entity slots `ENT-DEMO-0001` and `ENT-DEMO-0002` (1,000 pages a month each), kind `NON_PRODUCTION` (the app shows "Test environment"), perpetual. Signed with LexaVault's **development** key `dev-lexavault-demo-1`. |
-| `development-trusted-keys.json` | That development public key, marked `"development": true` (task 0041), so setup takes a local `http` login system under the demo licence. Only demo and test installs pass it to setup. A production install never lists it, so it refuses the demo licence (`SETUP_LICENCE_REFUSED: LICENCE_UNKNOWN_KEY_ID`). |
+| `development-trusted-keys.json` | That development public key, marked `"development": true` (task 0041), so setup takes a local `http` login system under the demo licence. It is for reading and tests only: nothing passes it to setup any more (task 0054). The copy that counts is inside a development build's jars (`backend/licence-build/dev`, `mvn -Pdev-build`); a production build does not hold it and refuses the demo licence (`SETUP_LICENCE_REFUSED: LICENCE_UNKNOWN_KEY_ID`). |
 | `signin-demo.json` | Sign-in file (`platform-signin/1`, direct mode) with a placeholder https login system. No secrets. |
-| `role-mapping-lexavault-demo.csv` | Group-to-role grants per slot, with the local development Keycloak's group names. |
+| `role-mapping-lexavault-demo.csv` | Group-to-role grants per slot, with the local development Keycloak's group names, and one platform-wide row (`*`): the platform operations group gets `PLATFORM_OPERATIONS_ADMIN` in every entity (task 0054). |
 
 The development private key was thrown away after signing. To make new files (a new key), from
 `backend/securedoc-api`: `mvn test -Dtest=DemoFilesGenerator -Dlexavault.demo.regenerate=true`.
@@ -15,7 +15,8 @@ The development private key was thrown away after signing. To make new files (a 
 ## How they are used
 
 The local start scripts (`Start-LexaVault-Local.ps1`, `Start-LexaVault-OIDC.ps1`, `Start-LexaVault-Local.sh`) call
-`scripts/Initialize-LexaVault-LocalDatabase.*`, which runs the real install steps in order:
+`scripts/Initialize-LexaVault-LocalDatabase.*`, which runs the real install steps in order (with a development build's
+jars only: `Build-LexaVault-All` without `-Production`, or `mvn -Pdev-build`):
 
 1. the schema step (`docs/install/SCHEMA_STEP.md`);
 2. while the demo step has not made the demo entity yet (`DemoStep installed` exits 4): setup with these files.
@@ -36,10 +37,11 @@ reachable in the LOCAL mode with the header `X-Tenant-Id: 00000000-0000-0000-000
 
 `signin-demo.json` holds a placeholder https login system (`demo-okta`). Since task 0041 (platform-core 0.2.0) setup
 itself takes the local Keycloak: `http` on `localhost` is allowed because the demo licence is signed by
-`dev-lexavault-demo-1`, which `development-trusted-keys.json` marks `"development": true`. On every OIDC start,
+`dev-lexavault-demo-1`, which the development build marks `"development": true`. On every OIDC start,
 `Start-LexaVault-OIDC.ps1` writes `.run\oidc-signin\signin-local-oidc.json` (the demo file with `-IssuerUri`,
 `-ProviderId`, `-Audience` and the web client put in; `com.securedoc.install.LocalOidcSignin`) and runs setup with it
-and `--replace-connection`. That is the connection sign-in uses. When it already matches, setup changes nothing. The
+and `--replace-connection`. When that moves an existing database to another login system, setup keeps the old one's
+grants, lists them and exits 3 (platform-core 0.7.0); the start takes that. That is the connection sign-in uses. When it already matches, setup changes nothing. The
 demo step no longer writes the login connection (its `--oidc-*` options are gone).
 
 ## What the demo step creates

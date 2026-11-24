@@ -1,9 +1,10 @@
 # Building LexaVault: platform-core from GitHub Packages
 
-LexaVault's backend uses platform-core's released libraries (task 0041: **0.2.0**, tag `platform-core-v0.2.0`). The
+LexaVault's backend uses platform-core's released libraries (task 0054: **0.7.0**, tag `platform-core-v0.7.0`, the last one for Spring Boot 3). The
 version is one property, `platform.version` in `backend/pom.xml`, which imports `platform-bom`. LexaVault uses the
 identity modules only: `platform-identity-core`, `-jdbc` and `-spring` in the app, `platform-licensing` (read only, for
-identity), and `platform-setup` in the setup jar (`backend/securedoc-setup`). Never a snapshot, never a private local
+identity), what identity 0.7.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
+Apache HttpClient 5), and `platform-setup` in the setup jar (`backend/securedoc-setup`). Never a snapshot, never a private local
 repository.
 
 ## Where Maven reads them
@@ -38,6 +39,22 @@ from an environment variable.
 Once downloaded, the artifacts stay in `~/.m2/repository/com/documentplatform/platform/`, so later builds also work
 offline (`mvn -o`).
 
+## Development and production builds (task 0054)
+
+Since platform-core 0.7.0 the licence keys a build trusts are inside its own jars: `META-INF/platform/licence-keys.json`
+and `META-INF/platform/licence-build.properties` (`built-at`, the build's time in UTC) in the app jar and the setup jar.
+No option, setting or file at an installation adds a key, and a second copy on the classpath is refused. They come from
+`backend/licence-build/`:
+
+| Build | Command | Keys |
+|---|---|---|
+| **Production: the default** | `mvn clean install`, or `Build-LexaVault-All.ps1 -Production` (`.sh --production`) | `licence-build/production`: production keys only. **No keys file yet**, so setup refuses every licence (`SETUP_KEYS_INVALID`) until the release adds `META-INF/platform/licence-keys.json` there. It never lists a development key |
+| Development | `mvn clean install -Pdev-build`, or `Build-LexaVault-All.ps1` (`.sh`) | `licence-build/dev`: the demo licence's development key (the same as `install/demo/development-trusted-keys.json`; a test compares them) with `development-keys=true` |
+
+The local start scripts, the demo and the test tools need a development build and say so when they get another. A jar
+that leaves the machine is always a production build, from `clean` (a target folder of a development build still holds
+its key); `Build-LexaVault-All -Production` fails if a development key is in either jar.
+
 ## Checks
 
 ```
@@ -46,7 +63,11 @@ mvn -B dependency:tree -pl securedoc-api,securedoc-setup -am "-Dincludes=com.doc
 ```
 
 - `securedoc-api` (the app): `platform-identity-core`, `platform-identity-jdbc`, `platform-identity-spring`,
-  `platform-licensing`, all `0.2.0`, compile scope. `platform-setup` only in test scope.
+  `platform-licensing`, `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `0.7.0`, compile scope.
+  `platform-setup` and `platform-identity-testkit` only in test scope. `platform-notifications`, which platform-outbound
+  declares for a proxy password's secret reference, is excluded and not in the app: the app makes its own outbound rules
+  (`OutboundRulesConfig`) and refuses a proxy with sign-in. HttpClient is pinned to platform-core's own versions
+  (5.6.5, core 5.4.4), which Spring Boot's BOM would take back.
 - `securedoc-setup`: `platform-setup` with `platform-crypto` and `platform-integration` (which bring
   `platform-notifications` and `platform-fields`). These are never on the app's classpath; `Build-LexaVault-All`
   checks the app jar (`BOOT-INF/lib`) for them.

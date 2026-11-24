@@ -93,22 +93,21 @@ class FreshDatabaseStartPostgresTest {
                 "--licence", DEMO.resolve("licence-demo.json").toString(),
                 "--signin", signin.toString(),
                 "--product", "LEXAVAULT",
-                "--keys", DEMO.resolve("development-trusted-keys.json").toString(),
                 "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(),
                 "--no-customer-keys"));
         args.addAll(List.of(extra));
-        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC()).run(args, print, print);
+        int exit = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC(), TestBuild.development()).run(args, print, print);
         return checked(exit, out);
     }
 
     private static Run demoStep(String... extra) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
-        List<String> args = new ArrayList<>(List.of("apply", "--keys", DEMO.resolve("development-trusted-keys.json").toString()));
+        List<String> args = new ArrayList<>(List.of("apply"));
         args.addAll(List.of(extra));
-        int exit = new DemoStep(print, print, Clock.systemUTC()).run(args.toArray(String[]::new), db.env(DemoStep.ENV_PREFIX));
+        int exit = new DemoStep(print, print, Clock.systemUTC(), TestBuild::development).run(args.toArray(String[]::new), db.env(DemoStep.ENV_PREFIX));
         return checked(exit, out);
     }
 
@@ -141,6 +140,12 @@ class FreshDatabaseStartPostgresTest {
         Run first = setup("apply");
         assertEquals(0, first.exit(), first.output());
         assertTrue(first.output().contains("create      entity slot ENT-DEMO-0001 (NOT_ACTIVATED)"), first.output());
+        // Task 0054: the platform role, granted platform-wide (the demo mapping's * row), never to an entity.
+        assertTrue(first.output().contains("platform grant LEXAVAULT (every entity): group \"PlatformOperationsAdmins\" -> "
+                + "PLATFORM_OPERATIONS_ADMIN"), first.output());
+        assertEquals("PlatformOperationsAdmins|PLATFORM_OPERATIONS_ADMIN", one("select external_group || '|' || role from idn_platform_grant"));
+        assertEquals("0", one("select count(*) from idn_group_grant where role = 'PLATFORM_OPERATIONS_ADMIN'"));
+        assertEquals("1", one("select count(*) from idn_grant_history where scope = 'PLATFORM'"));
 
         Run demo = demoStep();
         assertEquals(0, demo.exit(), demo.output());
@@ -213,7 +218,9 @@ class FreshDatabaseStartPostgresTest {
         URI keycloak = URI.create(LocalOidcSigninTest.KEYCLOAK);
         Path signin = LocalOidcSigninTest.write(work.resolve("oidc-signin"));
         Run oidc = setup("apply", signin, "--replace-connection");
-        assertEquals(0, oidc.exit(), oidc.output());
+        // Task 0054 (platform-core 0.7.0, SEC-17): done; exit 3 because the placeholder's grants are kept and listed.
+        assertEquals(3, oidc.exit(), oidc.output());
+        assertTrue(oidc.output().contains("Setup done except 8 item(s)"), oidc.output());
         assertTrue(oidc.output().contains("login connection LEXAVAULT (version 1)"), oidc.output());
         assertEquals(DEMO_ENTITY, reads.findActive("customer-oidc", keycloak, "lexavault-api").orElseThrow().tenantId());
         assertTrue(reads.findActive("demo-okta", issuer, "api://lexavault-demo").isEmpty(), "the placeholder no longer signs in");
@@ -241,6 +248,44 @@ class FreshDatabaseStartPostgresTest {
         assertTrue(history.stream().allMatch(c -> com.securedoc.platform.infrastructure.identity.LexaVaultProduct.ENTITY_ROLES
                 .contains(c.roleAfter())), history.toString());
         assertTrue(admin.activeConnection(UUID.fromString("00000000-0000-0000-0000-000000000001")).isEmpty());
+        // Task 0054: the platform-wide grant under the issuer in use.
+        assertEquals(java.util.Map.of("PlatformOperationsAdmins", Set.of("PLATFORM_OPERATIONS_ADMIN")),
+                reads.activePlatformGrants("customer-oidc", keycloak, "lexavault-api"));
+        assertEquals(java.util.Map.of(), reads.activePlatformGrants("demo-okta", issuer, "api://lexavault-demo"));
+    }
+
+    /**
+     * Task 0054 decision 2: on the same database a build that does not trust the development key does nothing: setup refuses
+     * the demo licence and the demo step refuses to activate under it.
+     */
+    @Test
+    @Order(5)
+    void aProductionBuildRefusesTheStoredAndTheGivenDevelopmentLicence() throws SQLException {
+        String before = rowCounts();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
+        int setup = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC(), TestBuild.production()).run(List.of("apply",
+                "--licence", DEMO.resolve("licence-demo.json").toString(), "--signin", DEMO.resolve("signin-demo.json").toString(),
+                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
+                "--config-out", work.resolve("platform-tenant.properties").toString(),
+                "--run-log", work.resolve("platform-setup-runs.log").toString(), "--no-customer-keys"), print, print);
+        Run refused = checked(setup, out);
+        assertEquals(2, refused.exit(), refused.output());
+        assertTrue(refused.output().contains("LICENCE_UNKNOWN_KEY_ID"), refused.output());
+
+        out.reset();
+        int demo = new DemoStep(print, print, Clock.systemUTC(), TestBuild::production).run(
+                new String[] {"apply", "--slot", "ENT-DEMO-0002", "--name", "Second", "--slug", "second"}, db.env(DemoStep.ENV_PREFIX));
+        refused = checked(demo, out);
+        assertEquals(2, refused.exit(), refused.output());
+        assertTrue(refused.output().contains("DEMO_ACTIVATION_REFUSED"), refused.output());
+        assertEquals("NOT_ACTIVATED", one("select status from idn_entity where slot_id = 'ENT-DEMO-0002'"));
+        assertEquals(before, rowCounts());
+
+        // The app's answer to "is the stored licence a development one" (http login systems on this machine).
+        var ds = new IdnRows(db).ds;
+        assertTrue(com.securedoc.platform.api.identity.StoredLicenceKeyAccess.of(ds, TestBuild::development).signedByDevelopmentKey());
+        assertFalse(com.securedoc.platform.api.identity.StoredLicenceKeyAccess.of(ds, TestBuild::production).signedByDevelopmentKey());
     }
 
     private static String rowCounts() throws SQLException {

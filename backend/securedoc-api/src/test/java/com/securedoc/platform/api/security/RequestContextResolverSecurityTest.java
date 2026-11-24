@@ -120,6 +120,48 @@ class RequestContextResolverSecurityTest {
         }
     }
 
+    /** Task 0054: with one configured entity too, the platform role comes through a platform-wide grant alone. */
+    @Test
+    void aPlatformWideGrantGivesThePlatformRoleInTheConfiguredEntity() {
+        SecurityProperties oidc = oidcProperties();
+        oidc.getOidc().getRoleMappings().remove("PLATFORM_OPERATIONS_ADMIN");
+        java.util.Map<String, java.util.Set<String>> grants = java.util.Map.of("ops", java.util.Set.of("PLATFORM_OPERATIONS_ADMIN"),
+                "wrong", java.util.Set.of("BUSINESS_ADMIN"));
+        RequestContextResolver resolver = resolver(oidc, (provider, issuer, audience) -> grants);
+        signIn(List.of("ops"));
+        assertEquals(java.util.Set.of("PLATFORM_OPERATIONS_ADMIN"), resolver.resolvePrincipal(mock(HttpServletRequest.class)).roles());
+        signIn(List.of("ops", "securedoc-report-viewer"));
+        assertEquals(java.util.Set.of("PLATFORM_OPERATIONS_ADMIN", "REPORT_VIEWER"),
+                resolver.resolvePrincipal(mock(HttpServletRequest.class)).roles());
+        signIn(List.of("securedoc-report-viewer"));
+        assertEquals(java.util.Set.of("REPORT_VIEWER"), resolver.resolvePrincipal(mock(HttpServletRequest.class)).roles());
+        // Refused: no role at all; an entity role through a platform-wide grant; grants that cannot be read.
+        signIn(List.of("other"));
+        assertThrows(SecurityContextException.class, () -> resolver.resolvePrincipal(mock(HttpServletRequest.class)));
+        signIn(List.of("wrong", "securedoc-report-viewer"));
+        assertThrows(SecurityContextException.class, () -> resolver.resolvePrincipal(mock(HttpServletRequest.class)));
+        signIn(List.of("securedoc-report-viewer"));
+        assertThrows(SecurityContextException.class,
+                () -> resolver(oidc, (p, i, a) -> null).resolvePrincipal(mock(HttpServletRequest.class)));
+    }
+
+    /** Task 0054 (platform-core 0.7.0, SEC-44): group names count exactly as the login system sends them. */
+    @Test
+    void groupNamesAreComparedExactly() {
+        SecurityProperties oidc = oidcProperties();
+        for (String almost : List.of("securedoc-report-viewer ", " securedoc-report-viewer", "Securedoc-Report-Viewer",
+                "securedoc-report-viewer,other", "other securedoc-report-viewer")) {
+            signIn(List.of(almost));
+            assertThrows(SecurityContextException.class, () -> resolver(oidc).resolvePrincipal(mock(HttpServletRequest.class)), almost);
+            assertThrows(SecurityContextException.class, () -> new OidcRoleMapper(oidc).map(almost), almost);
+        }
+        assertEquals(java.util.Set.of("REPORT_VIEWER"), new OidcRoleMapper(oidc).map("securedoc-report-viewer"));
+    }
+
+    private void signIn(List<String> groups) {
+        SecurityContextHolder.getContext().setAuthentication(authenticated(jwt("00000000-0000-0000-0000-000000000001", groups)));
+    }
+
     @Test
     void retiredAdminCannotElevateAnOtherwiseAuthorizedOidcIdentity() {
         SecurityProperties oidc = oidcProperties();
@@ -211,6 +253,11 @@ class RequestContextResolverSecurityTest {
     }
 
     private RequestContextResolver resolver(SecurityProperties properties) {
+        return resolver(properties, (provider, issuer, audience) -> java.util.Map.of());
+    }
+
+    private RequestContextResolver resolver(SecurityProperties properties,
+                                            com.securedoc.platform.application.port.out.PlatformOidcGroupGrants platformGrants) {
         return new RequestContextResolver(
                 "00000000-0000-0000-0000-000000000001",
                 "00000000-0000-0000-0000-000000000099",
@@ -218,7 +265,7 @@ class RequestContextResolverSecurityTest {
                 new OidcRoleMapper(properties),
                 new OidcTenantResolver(properties, persistedConnectionResolver(properties)),
                 new OidcTenantMembershipResolver(mock(TenantOidcGroupGrantRepository.class),
-                        mock(ActiveOidcTenantCandidates.class), properties),
+                        mock(ActiveOidcTenantCandidates.class), platformGrants, properties),
                 mock(ActiveOidcMachineTenantBindings.class),
                 new TrustedActorResolver(),
                 new OidcJwtIdentityNormalizer(

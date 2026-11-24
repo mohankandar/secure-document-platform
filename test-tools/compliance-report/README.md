@@ -5,7 +5,7 @@ container (`lexavault-0017-pg`, 127.0.0.1:55417). It never touches `securedoc-po
 container named in `CLAUDE.md`, and removes only its own container at the end.
 
 ```powershell
-cd backend; mvn -o clean install; cd ..
+cd backend; mvn -o clean install -Pdev-build; cd ..
 .\test-tools\compliance-report\Invoke-ComplianceReportCheck.ps1
 ```
 

@@ -16,7 +16,8 @@
         Task 0041: platform-core's setup command (com.documentplatform.setup.SetupCommand) in its own runnable jar.
         Setup brings platform-crypto and platform-integration (customer keys, integration profile checks); the app's
         classpath may not carry them (task 0041), so setup is not run from the app jar. No LexaVault code here: the
-        scripts pass LexaVault's files (install/product-roles.json, trusted keys) as arguments.
+        scripts pass install/product-roles.json as an argument. The licence keys it trusts are inside this jar (task
+        0054, SEC-12): META-INF/platform, see licence.build in the parent pom.
     </description>
 
     <properties>
@@ -25,6 +26,22 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Task 0054: as in securedoc-api. -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>${httpclient5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -49,6 +66,20 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Task 0054: the licence keys this build trusts (SEC-12; see licence.build in the parent pom). -->
+            <resource>
+                <directory>${project.basedir}/../licence-build/${licence.build}</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>META-INF/platform/licence-keys.json</include>
+                    <include>META-INF/platform/licence-build.properties</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

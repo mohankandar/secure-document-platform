@@ -172,7 +172,7 @@ function Start-Backend {
         Fail "A backend is already running at $BackendUrl. Stop it first so this test can own the process lifecycle, or pass -SkipBackendManagement."
     }
     if (-not (Test-Path $JarPath)) {
-        Fail "Backend jar not found: $JarPath (build it first: mvn -pl securedoc-api -am package)."
+        Fail "Backend jar not found: $JarPath (build it first: mvn -Pdev-build -pl securedoc-api -am package)."
     }
 
     $stdout = Join-Path $EvidenceDir 'backend.out.log'

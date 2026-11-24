@@ -29,6 +29,23 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Task 0054: platform-outbound's HTTP client at the versions platform-core 0.7.0 is built and fixed with
+                 (SEC-14); Spring Boot's BOM would take them back to 5.3.1 and 5.2.5. -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>${httpclient5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -66,6 +83,15 @@
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-identity-spring</artifactId>
+            <!-- Task 0054 decision 1: of platform-core only the outbound modules and platform-errors come with it.
+                 platform-outbound 0.7.0 also declares platform-notifications, for the proxy password's secret reference
+                 only; the app does not carry it, so OutboundRulesConfig refuses a proxy with sign-in. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>com.documentplatform.platform</groupId>
+                    <artifactId>platform-notifications</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Task 0037: the idn_ stores. platform-licensing (the licence, read only for identity: slots and the
@@ -85,6 +111,12 @@
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-setup</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Task 0054: the mock login server for the test sign-in, and the in-memory identity store. Tests only. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-identity-testkit</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -148,6 +180,20 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Task 0054: the licence keys this build trusts (SEC-12; see licence.build in the parent pom). -->
+            <resource>
+                <directory>${project.basedir}/../licence-build/${licence.build}</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>META-INF/platform/licence-keys.json</include>
+                    <include>META-INF/platform/licence-build.properties</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

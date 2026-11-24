@@ -31,8 +31,9 @@ import java.util.regex.Pattern;
  *
  * Usage (database settings in the environment only: {@code LEXAVAULT_SCHEMA_DB_URL}, {@code _USER}, {@code _PASSWORD}):
  * <pre>
- * schema-step apply [--runtime-user NAME]   run the three steps; with --runtime-user, grant that user DML on the
- *                                           idn_ and lic_ tables (SELECT on their version tables) and nothing more
+ * schema-step apply [--runtime-user NAME]   run the three steps; with --runtime-user, give that user exactly the rights
+ *                                           platform-core lists on the idn_ and lic_ tables, taking away any other
+ *                                           right it has on them
  * schema-step status                        print each step's version
  * schema-step customer-installed            exit 0 when setup has stored a customer, 4 when not (for the local start)
  * </pre>
@@ -51,6 +52,23 @@ public final class SchemaStep {
     static final List<PlatformRun> PLATFORM_RUNS = List.of(
             new PlatformRun("identity", "classpath:db/platform/identity", "idn_schema_history", "idn_schema_version", "idn_"),
             new PlatformRun("licensing", "classpath:db/platform/licensing", "lic_schema_history", "lic_schema_version", "lic_"));
+
+    private static final String DML = "select, insert, update, delete";
+
+    /**
+     * The tables where the app's database user gets less than SELECT, INSERT, UPDATE and DELETE (task 0054; platform-core
+     * 0.7.0, docs/install/identity.md section 1 and licensing.md section 1). Histories and applied clock resets are insert
+     * only; the latest time seen moves forward and is never deleted; the version floor is kept by the database itself.
+     */
+    static final Map<String, String> NARROWER_RIGHTS = Map.of(
+            "idn_schema_version", "select",
+            "idn_grant_history", "select, insert",
+            "idn_login_connection_history", "select, insert",
+            "idn_machine_binding_history", "select, insert",
+            "lic_schema_version", "select",
+            "lic_version_floor", "select",
+            "lic_last_seen", "select, insert, update",
+            "lic_clock_reset", "select, insert");
 
     private static final Pattern ROLE_NAME = Pattern.compile("[a-z_][a-z0-9_]{0,62}");
 
@@ -169,21 +187,44 @@ public final class SchemaStep {
         }
     }
 
-    /** DML on the platform tables, SELECT on their version tables; nothing on the history tables. */
+    /**
+     * Exactly the rights of platform-core's install guides on the platform tables ({@link #NARROWER_RIGHTS}, else DML), and
+     * none on Flyway's own history tables. Rights an earlier release gave that are no longer needed are taken away: each
+     * table's rights are revoked and granted again, in one transaction. A user that owns the tables keeps every right
+     * whatever is revoked, so it is refused: the app's user must not be the schema owner.
+     */
     private void grantRuntimeUser(InstallDb db, String runtimeUser) {
         try (Connection c = db.open(); Statement s = c.createStatement()) {
-            List<String> granted = new ArrayList<>();
+            c.setAutoCommit(false);
+            int granted = 0;
             for (PlatformRun run : PLATFORM_RUNS) {
                 for (String table : tables(c, run.tablePrefix())) {
+                    if (owns(c, runtimeUser, table)) {
+                        throw new InstallException(2, "RUNTIME_USER_OWNS_TABLES", runtimeUser + " owns " + table
+                                + ": the app's database user must not own the tables. Give another user, or leave out "
+                                + "--runtime-user where the app connects as the schema owner (local development)");
+                    }
+                    s.execute("revoke all on " + table + " from \"" + runtimeUser + "\"");
                     if (table.equals(run.historyTable())) continue;
-                    String rights = table.equals(run.versionTable()) ? "select" : "select, insert, update, delete";
-                    s.execute("grant " + rights + " on " + table + " to \"" + runtimeUser + "\"");
-                    granted.add(table);
+                    s.execute("grant " + NARROWER_RIGHTS.getOrDefault(table, DML) + " on " + table + " to \"" + runtimeUser + "\"");
+                    granted++;
                 }
             }
-            out.println("  runtime user     DML granted on " + granted.size() + " platform tables");
+            c.commit();
+            out.println("  runtime user     rights set on " + granted + " platform tables");
         } catch (SQLException e) {
             throw new InstallException(1, "SCHEMA_GRANT_FAILED", "SQL state " + e.getSQLState());
+        }
+    }
+
+    private static boolean owns(Connection c, String user, String table) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("select 1 from pg_catalog.pg_tables where schemaname = current_schema() "
+                + "and tablename = ? and tableowner = ?")) {
+            ps.setString(1, table);
+            ps.setString(2, user);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         }
     }
 

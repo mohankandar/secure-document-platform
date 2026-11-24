@@ -215,6 +215,7 @@ public class RequestContextResolver {
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
+        requireMachine(jwt);
         TenantId tenantId;
         if (securityProperties.getOidc().isSharedIssuerTenantSelectionEnabled()) {
             if (!securityProperties.getOidc().isPersistentConnectionEnabled()
@@ -232,6 +233,21 @@ public class RequestContextResolver {
         }
         ActorId actorId = trustedActorResolver.resolve(jwt);
         return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), Set.of());
+    }
+
+    /**
+     * Task 0054 (platform-core 0.7.0, SEC-7): a machine path takes a machine's token only. A token that carries a value a
+     * person's sign-in has (a name, an address, an interactive sign-in, groups; securedoc.security.oidc.machine-user-claims)
+     * is refused, whatever user name it names. An empty value (such as an empty group list) marks nobody.
+     */
+    private void requireMachine(org.springframework.security.oauth2.jwt.Jwt jwt) {
+        for (String claim : securityProperties.getOidc().getMachineUserClaims()) {
+            Object value = jwt.getClaims().get(claim);
+            if (value == null || value instanceof String text && text.isBlank()
+                    || value instanceof java.util.Collection<?> list && list.isEmpty()) continue;
+            throw new SecurityContextException("A person's sign-in cannot be used as an integration client",
+                    "MACHINE_IDENTITY_IS_A_PERSON");
+        }
     }
 
     private AuthenticatedPrincipal resolveOidcPrincipal(HttpServletRequest request) {
@@ -259,7 +275,7 @@ public class RequestContextResolver {
         } else {
             tenantId = oidcTenantResolver.resolve(jwt);
             try {
-                roles = oidcRoleMapper.map(identity.groups());
+                roles = singleEntityRoles(jwt, identity);
             } catch (SecurityContextException refused) {
                 // Task 0023 C5: the entity comes from trusted configuration and the person from the verified token,
                 // so this refusal (most often "no LexaVault group") is audited in that entity's log.
@@ -274,6 +290,23 @@ public class RequestContextResolver {
         return principal;
     }
 
+
+    /**
+     * Roles with one configured entity: the configured role mapping, plus the platform role from the customer's
+     * platform-wide grants (task 0054, with persisted connections). A platform-wide grant alone is enough.
+     */
+    private Set<String> singleEntityRoles(org.springframework.security.oauth2.jwt.Jwt jwt, AuthenticatedIdentity identity) {
+        Set<String> platformRoles = securityProperties.getOidc().isPersistentConnectionEnabled()
+                ? oidcTenantMembershipResolver.platformRoles(jwt, identity.groups()) : Set.of();
+        if (platformRoles.isEmpty()) return oidcRoleMapper.map(identity.groups());
+        Set<String> roles = new LinkedHashSet<>(platformRoles);
+        try {
+            roles.addAll(oidcRoleMapper.map(identity.groups()));
+        } catch (SecurityContextException noMappedRole) {
+            // The platform role is all this person has.
+        }
+        return Set.copyOf(roles);
+    }
 
     /**
      * The verified person of the current OIDC request, when there is one (task 0023 C5: to audit a refusal that

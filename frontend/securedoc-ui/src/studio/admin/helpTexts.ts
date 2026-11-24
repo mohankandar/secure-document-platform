@@ -94,7 +94,7 @@ export const HELP = {
   // Admin › Sign-in
   signIn: {
     name: 'Sign-in',
-    text: 'Shows the login system your people use to sign in to LexaVault. It is managed through the login hub and cannot be changed here. To change it, contact LexaVault support.',
+    text: 'Shows the login system your people use to sign in to LexaVault. It is managed through the login hub and cannot be changed here. Test sign-in checks that it answers; it changes nothing. To change it, contact LexaVault support.',
   },
 
   // Admin › Platform operations

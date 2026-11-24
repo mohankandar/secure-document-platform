@@ -18,6 +18,8 @@
     With -OidcIssuer (Start-LexaVault-OIDC.ps1; task 0041), setup runs on every start with a sign-in file that names the
     local development login system (http on localhost is taken because the demo licence is signed by a development
     key), so the customer's LexaVault login connection is that issuer. Setup changes nothing when it already is.
+    The jars must be a development build (Build-LexaVault-All.ps1 without -Production, or mvn -Pdev-build): only that one
+    trusts the demo licence's key (task 0054).
     Setup runs from its own jar, backend\securedoc-setup\target (found next to -JarPath).
 #>
 [CmdletBinding()]
