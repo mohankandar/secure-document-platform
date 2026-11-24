@@ -1,9 +1,9 @@
 package com.securedoc.platform.api.security;
 
 import com.documentplatform.identity.spring.RequiredAudienceValidator;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -79,7 +79,7 @@ class BearerTokenRefusalEntryPointTest {
         request.setAttribute(RequestCorrelationFilter.REQUEST_ATTRIBUTE_CORRELATION_ID, correlation);
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
         try (LogCapture logs = LogCapture.of(BearerTokenRefusalEntryPoint.class)) {
             new BearerTokenRefusalEntryPoint(mapper).commence(request, response, rejected(token));
@@ -91,10 +91,10 @@ class BearerTokenRefusalEntryPointTest {
         assertEquals(401, response.getStatus());
         assertEquals(correlation.toString(), response.getHeader("X-Correlation-Id"));
         JsonNode body = mapper.readTree(response.getContentAsString());
-        assertEquals("AUTHENTICATION_REQUIRED", body.path("errorCode").asText());
-        assertEquals("Please sign in again", body.path("message").asText());
-        assertEquals("LV-AUT-001", body.path("code").asText());
-        assertEquals(correlation.toString(), body.path("correlationId").asText());
+        assertEquals("AUTHENTICATION_REQUIRED", body.path("errorCode").asString());
+        assertEquals("Please sign in again", body.path("message").asString());
+        assertEquals("LV-AUT-001", body.path("code").asString());
+        assertEquals(correlation.toString(), body.path("correlationId").asString());
         assertFalse(response.getContentAsString().contains("audience"));
     }
 

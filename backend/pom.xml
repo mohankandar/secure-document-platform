@@ -28,19 +28,21 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- platform-core, one released version for all platform-* modules (task 0054: v0.7.0, tag platform-core-v0.7.0),
+        <!-- platform-core, one released version for all platform-* modules (task 0056: v0.8.1, tag platform-core-v0.8.1),
              read from GitHub Packages (repository github-platform-core below; docs/install/BUILD.md). -->
-        <platform.version>0.7.0</platform.version>
+        <platform.version>0.8.1</platform.version>
         <!-- Task 0054 (platform-core 0.7.0, SEC-12): the licence keys a build trusts are inside its jars, from
              backend/licence-build/<licence.build>/META-INF/platform (securedoc-api and securedoc-setup; docs/install/BUILD.md).
              production is the default and carries no development key; only -Pdev-build does. -->
         <licence.build>production</licence.build>
         <maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
         <licence.built-at>${maven.build.timestamp}</licence.built-at>
-        <!-- The HTTP client platform-outbound is built with (platform-core 0.7.0's own versions). -->
-        <httpclient5.version>5.6.5</httpclient5.version>
-        <httpcore5.version>5.4.4</httpcore5.version>
-        <jackson.version>2.18.9</jackson.version>
+        <!-- Task 0056: one Spring Boot line for every module that uses it. -->
+        <spring-boot.version>4.2.0</spring-boot.version>
+        <!-- Jackson 3 at the version Spring Boot manages, named for securedoc-ai, which does not import its BOM. -->
+        <jackson.version>3.1.8</jackson.version>
+        <!-- The last Apache-2.0 release. Spring Boot 4.2 manages 5.0.4, which is FSL-1.1-ALv2 (not open source). -->
+        <liquibase.version>4.33.0</liquibase.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

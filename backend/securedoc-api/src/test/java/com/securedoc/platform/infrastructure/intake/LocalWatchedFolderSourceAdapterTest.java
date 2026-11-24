@@ -199,7 +199,7 @@ class LocalWatchedFolderSourceAdapterTest {
         assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.SOURCE_IO_ERROR,
                 LocalWatchedFolderSourceAdapter.readFailureCode(new java.io.UncheckedIOException(new java.io.IOException())));
         assertEquals(com.securedoc.platform.application.intake.model.IntakeRejectionCode.MALFORMED_TRIGGER,
-                LocalWatchedFolderSourceAdapter.readFailureCode(new com.fasterxml.jackson.core.JsonParseException(null, "x")));
+                LocalWatchedFolderSourceAdapter.readFailureCode(new tools.jackson.core.exc.StreamReadException(null, "x")));
     }
 
     private LocalWatchedFolderSourceAdapter adapter(String acceptedBehavior, String rejectedBehavior) {

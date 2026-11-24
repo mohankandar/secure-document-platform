@@ -3,7 +3,8 @@ package com.securedoc.platform.ai.analysis;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.PageContent;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -29,7 +30,7 @@ class SensitiveContentResponseParserDropCountTest {
                   {"pageNumber":9,"entityType":"SSN","matchedText":"987-65-4321","confidence":0.9}
                 ]}
                 """;
-        SensitiveContentResponseParser parser = new SensitiveContentResponseParser(new ObjectMapper());
+        SensitiveContentResponseParser parser = new SensitiveContentResponseParser(JsonMapper.builderWithJackson2Defaults().build());
 
         Logger logger = (Logger) LoggerFactory.getLogger(SensitiveContentResponseParser.class);
         ListAppender<ILoggingEvent> logs = new ListAppender<>();

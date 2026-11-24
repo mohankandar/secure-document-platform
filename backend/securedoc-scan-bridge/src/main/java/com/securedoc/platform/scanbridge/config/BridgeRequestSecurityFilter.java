@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.exc.JacksonIOException;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.scanbridge.model.ApiErrorResponse;
 import com.securedoc.platform.scanbridge.service.BridgeRuntimeIdentity;
 import jakarta.servlet.FilterChain;
@@ -109,6 +110,10 @@ public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(errorCode));
+        try {
+            objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(errorCode));
+        } catch (JacksonIOException e) {
+            throw e.getCause();
+        }
     }
 }

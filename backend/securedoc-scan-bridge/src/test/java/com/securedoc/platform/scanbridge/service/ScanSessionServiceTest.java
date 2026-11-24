@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSessionStatus;
@@ -304,7 +305,7 @@ class ScanSessionServiceTest {
         fixture.service.markAttentionRequired(waiting.sessionId(), "DELIVERY_POLICY_REJECTED");
 
         var diagnostics = fixture.service.deliveryDiagnostics();
-        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(diagnostics);
+        String json = JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(diagnostics);
 
         assertEquals(1, diagnostics.size());
         assertEquals(sourceDocumentId, diagnostics.get(0).sourceDocumentId());
@@ -342,7 +343,7 @@ class ScanSessionServiceTest {
     @Test
     void aPurgeThatCannotDeleteOneSessionKeepsItAndCarriesOnWithTheOthers() throws Exception {
         ScanBridgeProperties props = properties();
-        FileScanSessionStore store = spy(new FileScanSessionStore(props, new ObjectMapper().findAndRegisterModules()));
+        FileScanSessionStore store = spy(new FileScanSessionStore(props, JsonMapper.builderWithJackson2Defaults().build()));
         ScanArtifactService artifacts = new ScanArtifactService(store);
         ScanSessionService service = new ScanSessionService(props, store, artifacts, clock);
         service.recoverDurableState();
@@ -361,7 +362,7 @@ class ScanSessionServiceTest {
 
     private Fixture fixture() {
         ScanBridgeProperties props = properties();
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
         FileScanSessionStore store = new FileScanSessionStore(props, mapper);
         ScanArtifactService artifacts = new ScanArtifactService(store);
         ScanSessionService service = new ScanSessionService(props, store, artifacts, clock);

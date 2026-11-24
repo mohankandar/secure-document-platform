@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,7 +25,7 @@ class FileScanSessionStoreTest {
         Files.writeString(dir.resolve(FileScanSessionStore.STATE_FILE), "{\"contract\": 000900009901 broken");
         ScanBridgeProperties props = new ScanBridgeProperties();
         props.setWorkPath(workRoot.toString());
-        FileScanSessionStore store = new FileScanSessionStore(props, new ObjectMapper().findAndRegisterModules());
+        FileScanSessionStore store = new FileScanSessionStore(props, JsonMapper.builderWithJackson2Defaults().build());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, store::loadAll);
 

@@ -1,9 +1,9 @@
 package com.securedoc.platform.infrastructure.licensing;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.licensing.LicenseTokenVerifier;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.licensing.LicenseClaims;
@@ -37,7 +37,7 @@ public final class Ed25519LicenseTokenVerifier implements LicenseTokenVerifier {
     private final PublicKey publicKey;
 
     public Ed25519LicenseTokenVerifier(String configuredPublicKey) {
-        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        this.objectMapper = JsonMapper.builderWithJackson2Defaults().build();
         this.publicKey = parsePublicKey(configuredPublicKey);
     }
 
@@ -138,8 +138,8 @@ public final class Ed25519LicenseTokenVerifier implements LicenseTokenVerifier {
         JsonNode entitlementsNode = node.get("entitlements");
         if (entitlementsNode != null && entitlementsNode.isArray()) {
             for (JsonNode entitlement : entitlementsNode) {
-                if (entitlement.isTextual() && !entitlement.textValue().isBlank()) {
-                    entitlements.add(entitlement.textValue().trim().toUpperCase());
+                if (entitlement.isString() && !entitlement.stringValue().isBlank()) {
+                    entitlements.add(entitlement.stringValue().trim().toUpperCase());
                 }
             }
         }
@@ -155,10 +155,10 @@ public final class Ed25519LicenseTokenVerifier implements LicenseTokenVerifier {
 
     private static String requiredText(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        if (value == null || !value.isTextual() || value.textValue().isBlank()) {
+        if (value == null || !value.isString() || value.stringValue().isBlank()) {
             throw new IllegalArgumentException("Missing " + field);
         }
-        return value.textValue().trim();
+        return value.stringValue().trim();
     }
 
     private static int requiredInt(JsonNode node, String field) {
@@ -169,7 +169,7 @@ public final class Ed25519LicenseTokenVerifier implements LicenseTokenVerifier {
 
     private static String optionalText(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        return value == null || value.isNull() ? null : value.asText(null);
+        return value == null || value.isNull() ? null : value.isContainer() ? "" : value.asString(null);
     }
 
     private static Instant optionalInstant(JsonNode node, String field) {

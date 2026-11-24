@@ -14,21 +14,8 @@
     <name>SecureDoc - Scan Bridge</name>
     <description>Local, customer-managed PDF scanner bridge for operator-assisted LexaVault intake.</description>
 
-    <properties>
-        <spring-boot.version>3.3.2</spring-boot.version>
-    </properties>
-
     <dependencyManagement>
         <dependencies>
-            <!-- Keep the Jackson family aligned on one patched line. This import must precede
-                 Spring Boot's BOM because Maven uses the first imported BOM on version conflicts. -->
-            <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -42,7 +29,7 @@
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -55,7 +42,7 @@
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>8.0</version>
+            <version>9.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.pdfbox</groupId>

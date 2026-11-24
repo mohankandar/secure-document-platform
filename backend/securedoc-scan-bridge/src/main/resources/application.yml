@@ -6,6 +6,22 @@ server:
 spring:
   application:
     name: securedoc-scan-bridge
+  # Task 0056: Spring Boot 4 uses Jackson 3, whose defaults differ. These keep the JSON byte for byte as with Spring Boot 3
+  # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its size limits.
+  jackson:
+    use-jackson2-defaults: true
+    mapper:
+      detect-parameter-names: true
+    json:
+      write:
+        combine-unicode-surrogates-in-utf8: false
+    factory:
+      constraints:
+        read:
+          max-string-length: 20000000
+          max-nesting-depth: 1000
+        write:
+          max-nesting-depth: 1000
   servlet:
     multipart:
       # Simulator QA acquisition and large scanner packages must stream/spool instead of relying on tiny defaults.
@@ -83,8 +99,21 @@ management:
   endpoint:
     health:
       show-details: never
+      # Task 0056: as with Spring Boot 3, the liveness and readiness addresses exist under Kubernetes only.
+      probes:
+        enabled: false
 
 logging:
   level:
     root: INFO
     com.securedoc.platform.scanbridge: INFO
+---
+spring:
+  config:
+    activate:
+      on-cloud-platform: kubernetes
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

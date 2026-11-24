@@ -64,12 +64,12 @@ class ClientMistakeResponsesTest {
 
     private static String errorCode(MvcResult result) throws Exception {
         String body = result.getResponse().getContentAsString();
-        return new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("errorCode").asText();
+        return tools.jackson.databind.json.JsonMapper.builderWithJackson2Defaults().build().readTree(body).path("errorCode").asString();
     }
 
     private static String message(MvcResult result) throws Exception {
         String body = result.getResponse().getContentAsString();
-        return new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("message").asText();
+        return tools.jackson.databind.json.JsonMapper.builderWithJackson2Defaults().build().readTree(body).path("message").asString();
     }
 
     private MockMultipartFile pdf() {
@@ -164,8 +164,8 @@ class ClientMistakeResponsesTest {
 
     // ---------- task 0026: the API detail field; unknown address and wrong method ----------
 
-    private static com.fasterxml.jackson.databind.JsonNode body(MvcResult result) throws Exception {
-        return new com.fasterxml.jackson.databind.ObjectMapper().readTree(result.getResponse().getContentAsString());
+    private static tools.jackson.databind.JsonNode body(MvcResult result) throws Exception {
+        return tools.jackson.databind.json.JsonMapper.builderWithJackson2Defaults().build().readTree(result.getResponse().getContentAsString());
     }
 
     @Test
@@ -173,8 +173,8 @@ class ClientMistakeResponsesTest {
         MvcResult result = mvc.perform(multipart(PUSH_UPLOAD).file(pdf()).header("Idempotency-Key", "k-secret-key-value"))
                 .andReturn();
         assertEquals(400, result.getResponse().getStatus());
-        assertEquals("LV-INT-002", body(result).path("code").asText());
-        assertEquals("Header X-Content-SHA256 is missing", body(result).path("detail").asText());
+        assertEquals("LV-INT-002", body(result).path("code").asString());
+        assertEquals("Header X-Content-SHA256 is missing", body(result).path("detail").asString());
         assertFalse(result.getResponse().getContentAsString().contains("k-secret-key-value"));
     }
 
@@ -182,11 +182,11 @@ class ClientMistakeResponsesTest {
     void task0026DetailNamesTheMissingPartAndTheAcceptedTypes() throws Exception {
         MvcResult part = mvc.perform(multipart(PUSH_UPLOAD).header("Idempotency-Key", "k-1")
                 .header("X-Content-SHA256", SHA)).andReturn();
-        assertEquals("Part file is missing", body(part).path("detail").asText());
+        assertEquals("Part file is missing", body(part).path("detail").asString());
 
         MvcResult type = mvc.perform(post(SCANNER_UPLOAD).contentType("text/x-secret-value").content("x")
                 .header("Idempotency-Key", "k-1").header("X-Content-SHA256", SHA)).andReturn();
-        String detail = body(type).path("detail").asText();
+        String detail = body(type).path("detail").asString();
         assertTrue(detail.startsWith("Content-Type must be one of: "), detail);
         assertFalse(type.getResponse().getContentAsString().contains("x-secret-value"));
     }
@@ -196,12 +196,12 @@ class ClientMistakeResponsesTest {
         MvcResult result = mvc.perform(post("/api/v1/no-such-endpoint-secret-path")).andReturn();
         assertEquals(404, result.getResponse().getStatus());
         var json = body(result);
-        assertEquals("LV-SYS-009", json.path("code").asText());
-        assertEquals("Unknown request", json.path("message").asText());
-        assertEquals("NOT_FOUND", json.path("errorCode").asText());
-        assertEquals("No endpoint at this address", json.path("detail").asText());
-        assertFalse(json.path("correlationId").asText().isBlank());
-        assertFalse(json.path("timestamp").asText().isBlank());
+        assertEquals("LV-SYS-009", json.path("code").asString());
+        assertEquals("Unknown request", json.path("message").asString());
+        assertEquals("NOT_FOUND", json.path("errorCode").asString());
+        assertEquals("No endpoint at this address", json.path("detail").asString());
+        assertFalse(json.path("correlationId").asString().isBlank());
+        assertFalse(json.path("timestamp").asString().isBlank());
         assertFalse(result.getResponse().getContentAsString().contains("secret-path"));
         saveForProof("404-unknown-endpoint.json", result);
     }
@@ -215,7 +215,7 @@ class ClientMistakeResponsesTest {
         if (folder == null || folder.isBlank()) return;
         java.nio.file.Path dir = java.nio.file.Path.of(folder);
         java.nio.file.Files.createDirectories(dir);
-        String pretty = new com.fasterxml.jackson.databind.ObjectMapper().writerWithDefaultPrettyPrinter()
+        String pretty = tools.jackson.databind.json.JsonMapper.builderWithJackson2Defaults().build().writerWithDefaultPrettyPrinter()
                 .writeValueAsString(body(result));
         java.nio.file.Files.writeString(dir.resolve(name), "HTTP " + result.getResponse().getStatus() + " "
                 + result.getRequest().getMethod() + " " + result.getRequest().getRequestURI() + "\n" + pretty);
@@ -227,9 +227,9 @@ class ClientMistakeResponsesTest {
                 .delete(SCANNER_UPLOAD)).andReturn();
         assertEquals(405, result.getResponse().getStatus());
         var json = body(result);
-        assertEquals("LV-SYS-009", json.path("code").asText());
-        assertEquals("METHOD_NOT_ALLOWED", json.path("errorCode").asText());
-        assertTrue(json.path("detail").asText().startsWith("This address accepts only "), json.toString());
+        assertEquals("LV-SYS-009", json.path("code").asString());
+        assertEquals("METHOD_NOT_ALLOWED", json.path("errorCode").asString());
+        assertTrue(json.path("detail").asString().startsWith("This address accepts only "), json.toString());
         saveForProof("405-wrong-method.json", result);
     }
 
@@ -238,7 +238,7 @@ class ClientMistakeResponsesTest {
         MvcResult result = mvc.perform(post("/api/v1/external-intakes").contentType(MediaType.APPLICATION_JSON)
                 .content("{not json")).andReturn();
         assertEquals(400, result.getResponse().getStatus());
-        assertEquals("LV-INT-001", body(result).path("code").asText());
+        assertEquals("LV-INT-001", body(result).path("code").asString());
         assertFalse(body(result).has("detail"), "no detail key when there is none");
     }
 
@@ -248,6 +248,6 @@ class ClientMistakeResponsesTest {
                 + "\"businessIdentifiers\":{\"loanNumber\":null},\"documents\":[{\"externalSourceDocumentId\":\"D-1\"}]}";
         MvcResult result = mvc.perform(post("/api/v1/external-intakes").contentType(MediaType.APPLICATION_JSON)
                 .content(nullIdentifier)).andReturn();
-        assertEquals("businessIdentifiers must not contain null values", body(result).path("detail").asText());
+        assertEquals("businessIdentifiers must not contain null values", body(result).path("detail").asString());
     }
 }

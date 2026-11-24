@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.exc.JacksonIOException;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.api.dto.ApiErrorResponse;
 import com.securedoc.platform.api.observability.RequestCorrelationFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,8 +59,12 @@ public final class BearerTokenRefusalEntryPoint implements AuthenticationEntryPo
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setHeader(RequestCorrelationFilter.HEADER_CORRELATION_ID, correlationId);
-        objectMapper.writeValue(response.getOutputStream(),
-                ApiErrorResponse.of("AUTHENTICATION_REQUIRED", com.securedoc.platform.domain.error.LvErrorCode.AUT_001, correlationId));
+        try {
+            objectMapper.writeValue(response.getOutputStream(),
+                    ApiErrorResponse.of("AUTHENTICATION_REQUIRED", com.securedoc.platform.domain.error.LvErrorCode.AUT_001, correlationId));
+        } catch (JacksonIOException e) {
+            throw e.getCause();
+        }
     }
 
     /** The reason category; reads only exception types and Spring's own fixed error descriptions. */

@@ -280,11 +280,10 @@ public final class DemoStep {
         props.put("spring.liquibase.enabled", "false");
         props.put("spring.flyway.enabled", "false");
         props.put("spring.autoconfigure.exclude", String.join(",",
-                "org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration",
-                "org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration",
-                "org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration",
-                "org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration",
-                "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+                "org.springframework.boot.security.autoconfigure.SecurityAutoConfiguration",
+                "org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration",
+                "org.springframework.boot.security.oauth2.server.resource.autoconfigure.OAuth2ResourceServerAutoConfiguration",
+                "org.springframework.boot.liquibase.autoconfigure.LiquibaseAutoConfiguration",
                 // Task 0054: the app makes its own outbound rules (OutboundRulesConfig); this step calls nothing out.
                 "com.documentplatform.outbound.spring.OutboundAutoConfiguration"));
         props.put("logging.level.root", "WARN");

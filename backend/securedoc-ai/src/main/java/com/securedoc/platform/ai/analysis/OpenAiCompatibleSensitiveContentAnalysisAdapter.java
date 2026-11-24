@@ -1,7 +1,9 @@
 package com.securedoc.platform.ai.analysis;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -80,7 +82,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         this.pageMaxAttempts = pageMaxAttempts;
         this.pageRetryBackoff = pageRetryBackoff == null ? Duration.ZERO : pageRetryBackoff;
         this.httpClient = HttpClient.newBuilder().connectTimeout(this.timeout).build();
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = JsonMapper.builderWithJackson2Defaults().build();
         this.promptBuilder = new SensitiveContentPromptBuilder();
         this.responseParser = new SensitiveContentResponseParser(this.objectMapper);
     }
@@ -197,7 +199,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         final String body;
         try {
             body = objectMapper.writeValueAsString(requestBody);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, false,
                     "AI request could not be prepared", e);
         }
@@ -241,7 +243,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                     objectMapper, response.body(), "Invalid provider envelope");
             JsonNode choices = envelope.path("choices");
             String content = choices.isArray() && choices.size() > 0
-                    ? choices.get(0).path("message").path("content").asText(null)
+                    ? choices.get(0).path("message").path("content").asString(null)
                     : null;
             if (content == null || content.isBlank()) {
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,

@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.operations;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.api.controller.OperationsController;
 import com.securedoc.platform.api.dto.OperationalReportsResponse;
 import com.securedoc.platform.api.security.ProductAuthorizationPolicy;
@@ -44,7 +45,7 @@ class TimeSavedResponseTest {
         OperationalReportsResponse.TimeSaved t = timeSaved(new OperationalReportSnapshot.TimeSaved(512, 348, 67, 14_220, 1_873,
                 3_912, List.of("Social Security Number", "Date of birth"), 9_690, 1.0, 9_690));
         @SuppressWarnings("unchecked")
-        Map<String, Object> json = new ObjectMapper().readValue(new ObjectMapper().writeValueAsString(t), Map.class);
+        Map<String, Object> json = JsonMapper.builderWithJackson2Defaults().build().readValue(JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(t), Map.class);
         assertEquals(List.of("casesDelivered", "casesNoPerson", "percentNoPerson", "pagesChecked", "documentsChecked",
                 "itemsRedacted", "itemTypes", "pagesNoPerson", "minutesPerPage", "minutesSaved"), List.copyOf(json.keySet()));
         assertEquals(348, json.get("casesNoPerson"));
@@ -59,7 +60,7 @@ class TimeSavedResponseTest {
     void noDeliveredCasesGivesZerosAndANullPercent() throws Exception {
         OperationalReportsResponse.TimeSaved t = timeSaved(new OperationalReportSnapshot.TimeSaved(0, 0, null, 0, 0, 0,
                 List.of(), 0, 1.0, 0));
-        String json = new ObjectMapper().writeValueAsString(t);
+        String json = JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(t);
         assertTrue(json.contains("\"percentNoPerson\":null"), json);
         assertTrue(json.contains("\"casesDelivered\":0") && json.contains("\"minutesSaved\":0"), json);
     }

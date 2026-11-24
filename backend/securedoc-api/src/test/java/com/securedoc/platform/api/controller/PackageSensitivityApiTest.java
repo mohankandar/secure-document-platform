@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.CreatePackageRequest;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.*;
 
 /** Task 0021: New case's "Sensitivity" choice, and the case panel's read-only levels. */
 class PackageSensitivityApiTest {
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     private CreatePackageCommand createWith(String json) throws Exception {
         CreatePackageUseCase create = mock(CreatePackageUseCase.class);

@@ -14,37 +14,14 @@
     <name>SecureDoc - API</name>
     <description>REST API layer with Spring Boot. Runnable local/demo entry point.</description>
 
-    <properties>
-        <spring-boot.version>3.3.2</spring-boot.version>
-    </properties>
-
     <dependencyManagement>
         <dependencies>
-            <!-- Keep the Jackson family aligned on one patched line. This import must precede
-                 Spring Boot's BOM because Maven uses the first imported BOM on version conflicts. -->
+            <!-- Task 0056: Liquibase stays open source (see liquibase.version in the parent pom). Before Spring Boot's BOM, which
+                 would bring 5.x. -->
             <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <!-- Task 0054: platform-outbound's HTTP client at the versions platform-core 0.7.0 is built and fixed with
-                 (SEC-14); Spring Boot's BOM would take them back to 5.3.1 and 5.2.5. -->
-            <dependency>
-                <groupId>org.apache.httpcomponents.client5</groupId>
-                <artifactId>httpclient5</artifactId>
-                <version>${httpclient5.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents.core5</groupId>
-                <artifactId>httpcore5</artifactId>
-                <version>${httpcore5.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents.core5</groupId>
-                <artifactId>httpcore5-h2</artifactId>
-                <version>${httpcore5.version}</version>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-core</artifactId>
+                <version>${liquibase.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -134,14 +111,14 @@
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
 
         <!-- Structured JSON console logging for SaaS/production. -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>8.0</version>
+            <version>9.0</version>
         </dependency>
 
         <!-- Production identity / API security (Unit 25) -->
@@ -151,7 +128,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
         </dependency>
 
         <!-- Validation -->

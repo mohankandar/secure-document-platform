@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.delivery;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.port.out.DeliveryPort;
@@ -30,7 +31,7 @@ class SdvDeliveryAdapterExportJobTest {
         List<HttpRequest> requests = new ArrayList<>();
         HttpClient client = client(requests, new ArrayDeque<>(List.of(response(503, "{}"), response(503, "{}"),
                 response(503, "{}"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
                 client, true);
 
         TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
@@ -46,7 +47,7 @@ class SdvDeliveryAdapterExportJobTest {
         List<HttpRequest> requests = new ArrayList<>();
         HttpClient client = client(requests, new ArrayDeque<>(List.of(response(503, "{}"), response(503, "{}"),
                 response(503, "{}"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
                 client);
 
         assertThrows(TechnicalDependencyException.class, () -> com.securedoc.platform.application.pipeline
@@ -60,7 +61,7 @@ class SdvDeliveryAdapterExportJobTest {
         List<HttpRequest> requests = new ArrayList<>();
         HttpClient client = client(requests, new ArrayDeque<>(List.of(response(503, "{}"), response(503, "{}"),
                 response(503, "{}"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
                 client);
 
         assertThrows(TechnicalDependencyException.class, () -> adapter.deliverBatch(batch()));
@@ -76,7 +77,7 @@ class SdvDeliveryAdapterExportJobTest {
             HttpClient client = client(new ArrayList<>(), new ArrayDeque<>(List.of(
                     response(201, "{\"submissionId\":\"sdv-sub-1\"}"), response(200, upload),
                     response(200, "{\"status\":\"COMPLETE\"}"))));
-            SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), new ObjectMapper(),
+            SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
                     client, true);
 
             var result = adapter.deliverBatch(batch());
@@ -92,7 +93,7 @@ class SdvDeliveryAdapterExportJobTest {
                 response(201, "{\"submissionId\":\"sdv-sub-1\"}"),
                 response(201, "{\"documentId\":\"d1\",\"sourceDocumentId\":\"source-doc-1\",\"receiptAcknowledgement\":\"RECEIVED\"}"),
                 response(200, "{\"status\":\"COMPLETE\"}"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
                 client, true);
 
         assertFalse(adapter.deliverBatch(batch()).alreadyReceived());
@@ -102,7 +103,7 @@ class SdvDeliveryAdapterExportJobTest {
     void veroAnswering409IsSameKeyDifferentContentSoItStaysRefusedTheFile() throws Exception {
         HttpClient client = client(new ArrayList<>(), new ArrayDeque<>(List.of(response(409,
                 "{\"code\":\"CONFLICT\",\"message\":\"sourceSubmissionId already exists with a different submission create request.\"}"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), new ObjectMapper(),
+        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
                 client, true);
 
         TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,

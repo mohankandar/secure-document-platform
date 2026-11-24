@@ -1,6 +1,7 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.ScanSession;
 import org.springframework.stereotype.Component;
@@ -56,7 +57,7 @@ public class FileScanSessionStore {
                 Files.deleteIfExists(temp);
                 throw new IllegalStateException("Scanner Bridge requires atomic state replacement on its work filesystem", ex);
             }
-        } catch (IOException ex) {
+        } catch (IOException | JacksonException ex) {
             throw new IllegalStateException("Unable to durably persist Scanner Bridge state", ex);
         }
     }
@@ -75,7 +76,7 @@ public class FileScanSessionStore {
             List<ScanSession> sessions = new ArrayList<>();
             for (Path stateFile : stateFiles) {
                 try {
-                    ScanSession session = objectMapper.readValue(stateFile.toFile(), ScanSession.class);
+                    ScanSession session = objectMapper.readValue(Files.readAllBytes(stateFile), ScanSession.class);
                     validateStateLocation(stateFile, session);
                     sessions.add(session);
                 } catch (Exception ex) {

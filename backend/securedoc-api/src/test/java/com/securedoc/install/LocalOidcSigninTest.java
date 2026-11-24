@@ -1,7 +1,8 @@
 package com.securedoc.install;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -43,12 +44,12 @@ class LocalOidcSigninTest {
         // Task 0054: platform-setup's SigninFile is internal since 0.6.0; setup itself reads this file in
         // FreshDatabaseStartPostgresTest. Everything but these four values is the demo file's (the customer, the mode, the
         // role mapping, which is copied next to it).
-        ObjectMapper json = new ObjectMapper();
+        ObjectMapper json = JsonMapper.builderWithJackson2Defaults().build();
         ObjectNode expected = (ObjectNode) json.readTree(Files.readString(DEMO.resolve("signin-demo.json")));
         ((ObjectNode) expected.get("loginSystem")).put("issuer", KEYCLOAK).put("providerId", "customer-oidc");
         ((ObjectNode) expected.get("products").get("LEXAVAULT")).put("browserClientId", "lexavault-web").put("apiAudience", "lexavault-api");
         assertEquals(expected, json.readTree(new String(bytes, StandardCharsets.UTF_8)));
-        String mapping = expected.get("products").get("LEXAVAULT").get("roleMappingFile").asText();
+        String mapping = expected.get("products").get("LEXAVAULT").get("roleMappingFile").asString();
         assertArrayEquals(Files.readAllBytes(DEMO.resolve(mapping)), Files.readAllBytes(out.resolve(mapping)));
         // Written again: the same file.
         assertEquals(Files.readString(file), Files.readString(write(out)));

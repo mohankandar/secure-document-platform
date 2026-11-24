@@ -4,6 +4,22 @@ server:
 spring:
   application:
     name: securedoc-platform
+  # Task 0056: Spring Boot 4 uses Jackson 3, whose defaults differ. These keep the JSON byte for byte as with Spring Boot 3
+  # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its size limits.
+  jackson:
+    use-jackson2-defaults: true
+    mapper:
+      detect-parameter-names: true
+    json:
+      write:
+        combine-unicode-surrogates-in-utf8: false
+    factory:
+      constraints:
+        read:
+          max-string-length: 20000000
+          max-nesting-depth: 1000
+        write:
+          max-nesting-depth: 1000
   jpa:
     open-in-view: false
   # Task 0037: the platform Flyway runs (idn_, lic_) belong to the schema step (com.securedoc.install.SchemaStep),
@@ -14,6 +30,13 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 55MB
+
+# Task 0056: as with Spring Boot 3, the liveness and readiness addresses exist under Kubernetes only.
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: false
 
 # Task 0054: the platform's outbound rules, used by the test sign-in on Admin > Sign-in only (it calls the stored login
 # system's issuer, nothing else). Internal addresses stay off unless the customer's login system is on an internal address.
@@ -238,3 +261,13 @@ logging:
     root: ${SECUREDOC_LOG_LEVEL_ROOT:INFO}
     com.securedoc.platform: ${SECUREDOC_LOG_LEVEL_APP:INFO}
     org.springframework: ${SECUREDOC_LOG_LEVEL_SPRING:WARN}
+---
+spring:
+  config:
+    activate:
+      on-cloud-platform: kubernetes
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -1,7 +1,8 @@
 package com.securedoc.platform.infrastructure.redaction;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionOptions;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionOutput;
 import com.securedoc.platform.application.port.out.PdfRedactionPort.RedactionTarget;
@@ -39,13 +40,13 @@ class SearchableRedactionTimingTest {
     void secondsPerRedactedPage() throws Exception {
         Path pdf = Path.of(System.getenv("LEXAVAULT_TIMING_PDF"));
         byte[] source = Files.readAllBytes(pdf);
-        JsonNode truth = new ObjectMapper().readTree(pdf.resolveSibling(
+        JsonNode truth = JsonMapper.builderWithJackson2Defaults().build().readTree(pdf.resolveSibling(
                 pdf.getFileName().toString().replaceAll("\\.pdf$", ".truth.json")).toFile());
         List<RedactionTarget> targets = new ArrayList<>();
         int pages = truth.get("pages").size();
         for (JsonNode page : truth.get("pages")) {
             for (JsonNode item : page.get("items")) {
-                if (!TEXT_TYPES.contains(item.get("type").asText())) continue;
+                if (!TEXT_TYPES.contains(item.get("type").asString())) continue;
                 JsonNode b = item.get("box");
                 double l = b.get(0).asDouble(), t = b.get(1).asDouble();
                 double w = Math.min(b.get(2).asDouble(), 1 - l), h = Math.min(b.get(3).asDouble(), 1 - t);

@@ -223,7 +223,7 @@ class LvErrorCodeFollowupsTest {
 
     @Test
     void detailIsLeftOutOfTheJsonWhenThereIsNone() throws Exception {
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        var mapper = tools.jackson.databind.json.JsonMapper.builderWithJackson2Defaults().build();
         String without = mapper.writeValueAsString(ApiErrorResponse.of("X", LvErrorCode.SYS_001, "c"));
         assertFalse(without.contains("\"detail\""), without);
         String with = mapper.writeValueAsString(ApiErrorResponse.of("X", LvErrorCode.INT_002, "c")

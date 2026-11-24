@@ -1,8 +1,9 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.PreparedScan;
 import com.securedoc.platform.scanbridge.model.ScanSession;
@@ -31,7 +32,7 @@ class ScannerDeliveryLvCodeTest {
     @TempDir Path temp;
     private final Instant now = Instant.parse("2026-11-21T09:00:00Z");
     private final Clock clock = Clock.fixed(now, ZoneOffset.UTC);
-    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper mapper = JsonMapper.builderWithJackson2Defaults().build();
 
     @Test
     void aLexaVaultRefusalIsScn016WithLexaVaultsCodesAsTheDetail() throws Exception {
@@ -99,8 +100,8 @@ class ScannerDeliveryLvCodeTest {
         f.sessions.markAttentionRequired(id, "ACCESS_DENIED", 403, "LV-AUT-003");
 
         JsonNode json = mapper.readTree(mapper.writeValueAsString(f.sessions.get(id)));
-        assertEquals("LV-SCN-016", json.get("lastDeliveryLvCode").asText());
-        assertEquals("LV-AUT-003", json.get("lastDeliveryLexaVaultCode").asText());
+        assertEquals("LV-SCN-016", json.get("lastDeliveryLvCode").asString());
+        assertEquals("LV-AUT-003", json.get("lastDeliveryLexaVaultCode").asString());
 
         // A restarted bridge reads it back (the strict test mapper fails on unknown properties).
         Fixture restarted = fixture();

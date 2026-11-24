@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.routing;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.port.out.DerivedDestinationDeliveryPort;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -28,7 +29,7 @@ class DerivedDestinationDeliveryAdapterTest {
         when(response.statusCode()).thenReturn(200);
         when(response.body()).thenReturn("{}");
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client);
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), client);
 
         TechnicalDependencyException ex = assertThrows(TechnicalDependencyException.class,
                 () -> adapter.deliver(httpConnection("https://example.test/derived"), request()));
@@ -47,7 +48,7 @@ class DerivedDestinationDeliveryAdapterTest {
             captured[0] = invocation.getArgument(0);
             return response;
         });
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client);
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), client);
 
         var receipt = adapter.deliver(httpConnection("https://example.test/derived"), request());
         assertEquals("receipt-42", receipt.destinationReference());
@@ -73,7 +74,7 @@ class DerivedDestinationDeliveryAdapterTest {
             when(response.body()).thenReturn(answer[1]);
             when(response.headers()).thenReturn(HttpHeaders.of(Map.of(), (a, b) -> true));
             when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
-            var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client, true);
+            var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), client, true);
 
             TechnicalDependencyException ex = assertThrows(TechnicalDependencyException.class,
                     () -> adapter.deliver(httpConnection("https://example.test/derived"), request()));
@@ -93,7 +94,7 @@ class DerivedDestinationDeliveryAdapterTest {
             captured[0] = invocation.getArgument(0);
             return response;
         });
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client);
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), client);
         byte[] body = "PDF-CONTENT".getBytes(StandardCharsets.UTF_8);
         var request = new DerivedDestinationDeliveryPort.DeliveryRequest("derived-123", "routed.pdf", "application/pdf",
                 body.length, "a".repeat(64), "77777777", Map.of("packageId", "pkg-1",
@@ -110,7 +111,7 @@ class DerivedDestinationDeliveryAdapterTest {
     @Test
     void fileShareWritesOnlyBeneathConfiguredRoot() throws Exception {
         var root = Files.createTempDirectory("derived-destination-");
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), mock(HttpClient.class));
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), mock(HttpClient.class));
         adapter.deliver(fileConnection(root.toString()), request());
 
         // Task 0023 (B4): the receipt no longer carries the file name, so the written file is found on the share.
@@ -124,7 +125,7 @@ class DerivedDestinationDeliveryAdapterTest {
     @Test
     void fileShareReceiptCarriesTheDerivedIdOnly() throws Exception {
         var root = Files.createTempDirectory("derived-destination-");
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), mock(HttpClient.class));
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), mock(HttpClient.class));
         var receipt = adapter.deliver(fileConnection(root.toString()), request());
 
         assertEquals("derived-123", receipt.destinationReference());
@@ -137,7 +138,7 @@ class DerivedDestinationDeliveryAdapterTest {
     @Test
     void aFailedFileShareWriteLeavesNoTempFile() throws Exception {
         var root = Files.createTempDirectory("derived-destination-");
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), mock(HttpClient.class));
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), mock(HttpClient.class));
         var failing = new DerivedDestinationDeliveryPort.DeliveryRequest("derived-123", "routed.pdf", "application/pdf",
                 3, "a".repeat(64), null, Map.of(), () -> new InputStream() {
                     @Override public int read() throws IOException { throw new IOException("disk"); }
@@ -157,7 +158,7 @@ class DerivedDestinationDeliveryAdapterTest {
         HttpClient client = mock(HttpClient.class);
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenThrow(new IOException("down"));
-        var adapter = new DerivedDestinationDeliveryAdapter(new ObjectMapper(), client);
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), client);
         IntegrationConnection connection = IntegrationConnection.create(TenantId.generate(), "HTTP", null,
                 IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
                 IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE, null,

@@ -1,7 +1,8 @@
 package com.securedoc.platform.scanbridge.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
 import com.securedoc.platform.scanbridge.model.BridgeLvCodes;
 import com.securedoc.platform.scanbridge.model.ScanSession;
@@ -88,7 +89,7 @@ public class LexaVaultScannerDeliveryClient {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofByteArray(json));
             return parseIntake(send(builder.build()));
-        } catch (IOException ex) {
+        } catch (JacksonException ex) {
             // Task 0023 D2 (#82): serialising our own request fails the same way every time; do not retry it.
             throw DeliveryException.terminal("LEXAVAULT_REQUEST_SERIALIZATION_FAILED", ex);
         }
@@ -162,12 +163,12 @@ public class LexaVaultScannerDeliveryClient {
         try {
             JsonNode json = objectMapper.readTree(response.body());
             if (json.hasNonNull("errorCode")) {
-                String candidate = json.get("errorCode").asText().trim();
+                String candidate = json.get("errorCode").asString("").trim();
                 // Only a code-shaped value reaches the screen and the log; free text could hold content.
                 if (SAFE_ERROR_CODE.matcher(candidate).matches()) code = candidate;
             }
             // Task 0025: LexaVault's own LV code, kept as the detail when it is LV-shaped. Its message is never read.
-            if (json.hasNonNull("code")) lexaVaultLvCode = BridgeLvCodes.safeLexaVaultLvCode(json.get("code").asText());
+            if (json.hasNonNull("code")) lexaVaultLvCode = BridgeLvCodes.safeLexaVaultLvCode(json.get("code").asString(""));
         } catch (Exception ignored) {
             // Never include response body in logs/errors; keep only safe status-derived code.
         }
@@ -230,7 +231,7 @@ public class LexaVaultScannerDeliveryClient {
     }
 
     private String requiredText(JsonNode json, String field) {
-        String value = json.path(field).asText(null);
+        String value = json.path(field).asString(null);
         if (value == null || value.isBlank()) throw new IllegalArgumentException("Missing response field " + field);
         return value;
     }

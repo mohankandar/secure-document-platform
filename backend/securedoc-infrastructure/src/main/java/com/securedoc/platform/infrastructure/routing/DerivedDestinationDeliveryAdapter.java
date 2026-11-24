@@ -1,7 +1,7 @@
 package com.securedoc.platform.infrastructure.routing;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.securedoc.platform.application.exception.*;
 import com.securedoc.platform.application.port.out.DerivedDestinationDeliveryPort;
 import com.securedoc.platform.domain.integration.*;
@@ -65,8 +65,8 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
         try{
             if(resp.body()!=null&&!resp.body().isBlank()){
                 JsonNode j=mapper.readTree(resp.body());
-                if(j.hasNonNull("receiptId"))ref=j.get("receiptId").asText();
-                else if(j.hasNonNull("documentId"))ref=j.get("documentId").asText();
+                if(j.hasNonNull("receiptId"))ref=j.get("receiptId").asString("");
+                else if(j.hasNonNull("documentId"))ref=j.get("documentId").asString("");
             }
         }catch(Exception e){
             throw failure(true,TechnicalFailureCode.DELIVERY_IO,"Derived destination returned an unreadable receipt",e).withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_007);
@@ -104,7 +104,7 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
     /** Task 0030: the {@code code} field of a JSON answer, or null when there is none or it can't be read. */
     private String destinationCode(HttpResponse<String> resp){
         if(resp.body()==null||resp.body().isBlank())return null;
-        try{JsonNode code=mapper.readTree(resp.body()).get("code");return code==null||code.isNull()||!code.isValueNode()?null:code.asText();}
+        try{JsonNode code=mapper.readTree(resp.body()).get("code");return code==null||code.isNull()||!code.isValueNode()?null:code.asString();}
         catch(Exception unreadable){return null;}
     }
     private void addMetadataHeader(HttpRequest.Builder b,String name,String value){if(value!=null&&!value.isBlank())b.header(name,safeHeader(value));}

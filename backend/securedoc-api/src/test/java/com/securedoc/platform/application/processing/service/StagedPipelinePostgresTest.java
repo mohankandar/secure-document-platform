@@ -901,7 +901,7 @@ class StagedPipelinePostgresTest {
                     "hibernate.physical_naming_strategy",
                     "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy",
                     "hibernate.implicit_naming_strategy",
-                    "org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy"));
+                    "org.springframework.boot.hibernate.SpringImplicitNamingStrategy"));
             return factory;
         }
 

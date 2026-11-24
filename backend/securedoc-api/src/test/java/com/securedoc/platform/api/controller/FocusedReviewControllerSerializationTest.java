@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.application.review.model.ReviewReason;
 import com.securedoc.platform.application.review.result.ReviewBoundingBoxSummary;
 import com.securedoc.platform.application.review.result.ReviewFoundText;
@@ -41,7 +42,7 @@ class FocusedReviewControllerSerializationTest {
         FocusedReviewController.ReviewQueueResponse response =
                 FocusedReviewController.ReviewQueueResponse.from(new ReviewQueueResult(List.of(summary), 1));
 
-        String json = new ObjectMapper().writeValueAsString(response);
+        String json = JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(response);
 
         assertThat(json).contains("\"findingId\":\"" + findingUuid + "\"");
         assertThat(json).contains("\"packageId\":\"" + packageUuid + "\"");
@@ -62,7 +63,7 @@ class FocusedReviewControllerSerializationTest {
 
         FocusedReviewController.ReviewQueueResponse response =
                 FocusedReviewController.ReviewQueueResponse.from(new ReviewQueueResult(List.of(summary), 1, 0.85));
-        String json = new ObjectMapper().writeValueAsString(response);
+        String json = JsonMapper.builderWithJackson2Defaults().build().writeValueAsString(response);
 
         assertThat(json).contains("\"autoRedactThreshold\":0.85");
         assertThat(json).contains(

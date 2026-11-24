@@ -14,21 +14,14 @@
     <name>SecureDoc - Infrastructure</name>
     <description>Infrastructure adapters (persistence, storage, messaging). Uses Spring Data JPA, PostgreSQL, Liquibase.</description>
 
-    <properties>
-        <spring-boot.version>3.3.2</spring-boot.version>
-        <liquibase.version>4.28.0</liquibase.version>
-    </properties>
-
     <dependencyManagement>
         <dependencies>
-            <!-- Keep the Jackson family aligned on one patched line. This import must precede
-                 Spring Boot's BOM because Maven uses the first imported BOM on version conflicts. -->
+            <!-- Task 0056: Liquibase stays open source (see liquibase.version in the parent pom). Before Spring Boot's BOM, which
+                 would bring 5.x. -->
             <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
+                <groupId>org.liquibase</groupId>
+                <artifactId>liquibase-core</artifactId>
+                <version>${liquibase.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -81,23 +74,21 @@
             <artifactId>liquibase-core</artifactId>
             <version>${liquibase.version}</version>
         </dependency>
+        <!-- Spring Boot 4: the Liquibase run at start (LOCAL) is a module of its own. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-liquibase</artifactId>
+        </dependency>
 
         <!-- Jackson for safe JSON serialization (outbox, metadata) -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
+            <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.3</version>
             <scope>test</scope>
         </dependency>
 

@@ -3,8 +3,9 @@ package com.securedoc.install;
 import com.documentplatform.identity.EntityUuid;
 import com.documentplatform.licensing.LicenceVerifier;
 import com.documentplatform.licensing.TrustedKeys;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.infrastructure.identity.LexaVaultProduct;
 import org.junit.jupiter.api.Test;
 
@@ -86,16 +87,16 @@ class DemoStepTest {
         // Supervisor; they are aliases, no longer roles of their own. Customer keys are optional for LexaVault.
         // Task 0054: platform-setup's ProductRoles is internal since 0.6.0, so the file is read here; setup itself reads
         // it in FreshDatabaseStartPostgresTest and LicenceBuildTest.
-        ObjectMapper json = new ObjectMapper();
+        ObjectMapper json = JsonMapper.builderWithJackson2Defaults().build();
         JsonNode file = json.readTree(Files.readString(REPO.resolve("install/product-roles.json")));
-        assertEquals("LEXAVAULT", file.get("productCode").asText());
+        assertEquals("LEXAVAULT", file.get("productCode").asString());
         Set<String> roles = Set.of(json.convertValue(file.get("roles"), String[].class));
         Map<?, ?> aliases = json.convertValue(file.get("aliases"), Map.class);
         assertEquals(Set.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR", "BUSINESS_ADMIN", "REPORT_VIEWER", "TENANT_IT_ADMIN"), roles);
         assertEquals(Map.of("USER", "DOCUMENT_PROCESSOR", "REVIEWER", "DOCUMENT_PROCESSOR", "APPROVER", "DOCUMENT_SUPERVISOR"),
                 aliases);
         assertEquals(Set.of("PLATFORM_OPERATIONS_ADMIN"), Set.of(json.convertValue(file.get("platformRoles"), String[].class)));
-        assertEquals("optional", file.get("customerKeys").asText());
+        assertEquals("optional", file.get("customerKeys").asString());
         // The same names LexaVault accepts when it reads a stored grant.
         assertEquals(LexaVaultProduct.ENTITY_ROLES, roles);
         assertEquals(LexaVaultProduct.ROLE_ALIASES, aliases);

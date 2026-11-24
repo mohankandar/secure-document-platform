@@ -1,6 +1,6 @@
 package com.securedoc.platform.api.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.documentplatform.identity.IdentityClaimConfig;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.documentplatform.identity.spring.RequiredAudienceValidator;
