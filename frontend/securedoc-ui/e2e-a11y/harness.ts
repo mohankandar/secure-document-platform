@@ -256,16 +256,33 @@ const DEPLOYMENT_BRAND = { id: 'b-1', tenantId: null, applicationName: 'LexaVaul
 const BRANDING = { deployment: DEPLOYMENT_BRAND, tenants: [{ tenantId: 't-nw', tenantName: 'Northwind Commercial', tenantSlug: 'nwc', customBranding: false }] };
 const TELEMETRY = { mode: 'BASIC', enabled: true, installationIdConfigured: true, privacyContract: 'ALLOW_LIST_ONLY',
   eventAllowList: ['package.processing.attempt', 'package.processing.finished'], prohibitedData: ['document/PDF/image content', 'actor identities'] };
-const CLAIMS = { schemaVersion: 1, licenseId: 'lic-nw-2026', tenantId: 't-nw', customerName: 'Northwind Commercial', edition: 'ENTERPRISE', issuedAt: minsAgo(90000),
-  notBefore: minsAgo(90000), expiresAt: minsAgo(-300000), entitlements: ['REDACTION', 'REPORTS'], limits: { pagesPerMonth: 100000 } };
-const LICENSING = {
-  enforcementEnabled: true, verificationKeyConfigured: true,
-  tenants: [
-    { tenantId: 't-nw', tenantName: 'Northwind Commercial', tenantSlug: 'nwc', status: 'VALID', processingAllowed: true, licenseRecordId: 'lr-1', claims: CLAIMS, reasonCode: 'LICENSE_VALID' },
-    { tenantId: 't-co', tenantName: 'Contoso Lending', tenantSlug: 'col', status: 'MISSING', processingAllowed: false, licenseRecordId: null, claims: null, reasonCode: 'LICENSE_MISSING' },
+/** Task 0057: Support, Status. */
+export const SUPPORT_STATUS = {
+  overall: 'DOWN',
+  checks: [
+    { name: 'database', group: 'platform', state: 'WORKING', code: 'MON_WORKING', cause: null, whatToDo: null, required: true, checkedAt: minsAgo(1) },
+    { name: 'licence', group: 'platform', state: 'HAVING_PROBLEMS', code: 'MON_LICENCE_EXPIRING', cause: 'The licence ends on 2026-12-20, in 26 days.', whatToDo: 'Ask your account manager for the renewed licence and store it with the licence command before that date.', required: false, checkedAt: minsAgo(1) },
+    { name: 'storage', group: 'services', state: 'WORKING', code: 'MON_WORKING', cause: null, whatToDo: null, required: true, checkedAt: minsAgo(1) },
+    { name: 'service-model-server', group: 'services', state: 'DOWN', code: 'MON_HTTP_UNREACHABLE', cause: 'The service model-server does not answer at http://ai-1.example:11434.', whatToDo: 'Check that the service runs and that this server may reach its address.', required: false, checkedAt: minsAgo(1) },
   ],
+  failures: [{ at: minsAgo(4), code: 'LV-AI-001', reference: 'R-0J5K2Q7M9X4D', cause: "The AI model couldn't be reached on any server.", whatToDo: 'Check that the AI server is running.' }],
 };
-const LICENSE_HISTORY = [{ recordId: 'lr-1', licenseId: 'lic-nw-2026', installedAt: minsAgo(90000), installedBy: 'ops', active: true, status: 'VALID', claims: CLAIMS, reasonCode: 'LICENSE_VALID', verificationEvidence: 'CURRENT_KEY' }];
+
+/** Task 0057: the Licensing read (Business Admin). */
+export const LICENSING = {
+  intakeAllowed: true, stopped: null,
+  licence: { licenceId: 'LIC-NW-0001', version: 2, customer: 'Northwind Title & Escrow', type: 'SUBSCRIPTION', kind: 'NON_PRODUCTION', testEnvironment: true,
+    state: 'VALID', message: 'The licence is valid until 2027-06-30.', startsOn: '2026-07-01', expiresOn: '2027-06-30', updatesUntil: null,
+    daysUntilExpiry: 218, graceEndsOn: '2027-07-30', clockMessage: null, waiting: null },
+  entity: { slotId: 'ENT-NW-0001', month: '2026-11', allowances: [{ type: 'PAGES_PER_MONTH', unit: 'pages', used: 412, limit: 1000, level: 'WITHIN' }] },
+};
+export const LICENSING_STOPPED = {
+  ...LICENSING, intakeAllowed: false,
+  stopped: { code: 'LV-LIC-002', title: 'Licence expired', platformCode: 'EXPIRED_GRACE_OVER' },
+  licence: { ...LICENSING.licence, kind: 'PRODUCTION', testEnvironment: false, state: 'EXPIRED_GRACE_OVER', expiresOn: '2026-10-01', graceEndsOn: '2026-10-31', daysUntilExpiry: -54,
+    message: 'The licence expired on 2026-10-01 and the grace period ended on 2026-10-31. Intake is stopped; viewing and export still work. Install a renewed licence to resume intake.' },
+  entity: { ...LICENSING.entity, allowances: [{ type: 'PAGES_PER_MONTH', unit: 'pages', used: 1204, limit: 1000, level: 'OVER_LIMIT' }] },
+};
 
 /* ---------- Audit trail ---------- */
 
@@ -314,6 +331,8 @@ export interface MockOptions {
   twoEntities?: boolean;
   /** Task 0029: the export screens' data (cases in every export state, refused cases, IT groups, the alert). */
   exports?: boolean;
+  /** Task 0057: the Licensing read. */
+  licensing?: unknown;
 }
 
 export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
@@ -384,8 +403,8 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (path === '/platform/branding') return json(BRANDING);
     if (path === '/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });
     if (path === '/platform/product-telemetry/status') return json(TELEMETRY);
-    if (path === '/platform/licensing') return json(LICENSING);
-    if (/^\/platform\/licensing\/tenants\/[^/]+\/history$/.test(path)) return json(LICENSE_HISTORY);
+    if (path === '/licensing') return json(options.licensing ?? LICENSING);
+    if (path === '/support/status') return json(SUPPORT_STATUS);
 
     // Audit trail
     if (path === '/audit-records/count') return json({ count: RECORDS.length });

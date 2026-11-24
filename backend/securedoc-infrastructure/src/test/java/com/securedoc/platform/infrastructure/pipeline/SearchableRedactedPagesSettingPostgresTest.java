@@ -31,7 +31,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void upgradingFrom047CopiesEveryValueRemovesTheRowsAndLeavesTheKindsAlone() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.empty("m048up")) {
-            migrateThenRollBack(db, 4); // back to 047 (080, 050, 049, then 048): the 0044 storage
+            migrateThenRollBack(db, 5); // back to 047 (080, 060, 050, 049, then 048): the 0044 storage
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId turnedOff = tenantWithPolicy(jdbc);
             TenantId savedOn = tenantWithPolicy(jdbc);
@@ -57,7 +57,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void aSwitchRowWithNoPolicyToCopyItToHaltsTheMigration() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.empty("m048halt")) {
-            migrateThenRollBack(db, 4); // 080, 050, 049, then 048
+            migrateThenRollBack(db, 5); // 080, 060, 050, 049, then 048
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = TenantId.generate();
             TestRows.tenant(jdbc, tenant);
@@ -80,7 +80,7 @@ class SearchableRedactedPagesSettingPostgresTest {
                     new MapSqlParameterSource("t", off.value()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 4); // 080, 050, 049, then 048
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 5); // 080, 060, 050, 049, then 048
             }
             assertEquals(0, columnCount(jdbc), "the column is dropped");
             assertEquals(1, count(jdbc, "SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key = '" + ROW

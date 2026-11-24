@@ -1,7 +1,6 @@
 package com.securedoc.platform.application.processing.service;
 
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.pipeline.ExportJobScheduler;
 import com.securedoc.platform.application.pipeline.PageBatch;
 import com.securedoc.platform.application.pipeline.PageBatchCommand;
@@ -354,13 +353,13 @@ class StagedPipelinePostgresTest {
                 mock(ArtifactRepository.class), mock(ProcessingLockPort.class), startPackage, startDocument, extract,
                 detect, redact, inlineExport, mock(ProcessDerivedRoutingUseCase.class),
                 mock(SelectiveRetryExecutor.class), lifecycle, mock(DocumentIntelligenceExecutionService.class), audit,
-                incidents, mock(TenantLicensingService.class), telemetry, scheduler);
+                incidents, telemetry, scheduler);
         recovery = new PackageProcessingRecoveryService(packages, lifecycle, incidents, audit, telemetry);
         StagedProcessingSettings settings = new StagedProcessingSettings(PipelineMode.STAGED, Duration.ofSeconds(30),
                 3, 1, 1, 1, Duration.ofMillis(200));
         serviceWith = chosen -> new StagedProcessingService(chosen, jobs, packages, documents, mock(ProcessingLockPort.class),
                 startPackage, startDocument, extract, detect, redact, lifecycle, incidents, recovery, audit,
-                mock(TenantLicensingService.class), telemetry, inline, transactions, storage,
+                telemetry, inline, transactions, storage,
                 new StagedProcessingService.PageBatching(t -> batchSettings,
                         d -> pages == 0 ? OptionalInt.empty() : OptionalInt.of(pages),
                         t -> severalPagesPerAiRequest));

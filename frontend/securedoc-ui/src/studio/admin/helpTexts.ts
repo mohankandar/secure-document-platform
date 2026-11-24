@@ -112,7 +112,7 @@ export const HELP = {
   },
   licensing: {
     name: 'Licensing',
-    text: 'Shows each customer\'s license: what it allows, its limits and when it ends. When enforcement is on, a customer without a valid license cannot process new cases. A new license is installed by pasting the signed license LexaVault sends.',
+    text: 'Your organisation\'s licence: what it covers, when it ends, and how many pages this entity used this month. It is stored by IT with the licence command and cannot be changed here. When it has ended and the grace period is over, new cases are not taken in; everything else keeps working.',
   },
 } as const satisfies Record<string, HelpText>;
 

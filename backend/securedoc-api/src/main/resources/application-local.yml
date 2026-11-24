@@ -16,18 +16,21 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.xml
     enabled: true
 
+# Task 0057: the demo customer of install/demo/licence-demo.json (the local start's setup stores that licence).
+platform:
+  licensing:
+    tenant-id: ${PLATFORM_LICENSING_TENANT_ID:TEN-DEMO-0001}
+
 securedoc:
   logging:
     environment: local
     node-id: ${SECUREDOC_NODE_ID:LOCAL-APP-01}
+  monitoring:
+    # Task 0057: the local start makes the storage folder itself, after the checks.
+    storage-required: ${SECUREDOC_MONITORING_STORAGE_REQUIRED:false}
   storage:
     local:
       root-path: ./securedoc-storage
-  licensing:
-    # Keep normal developer/demo workflows frictionless. LOCAL alone may override the vendor key for ephemeral test licenses.
-    enforcement: ${SECUREDOC_LICENSING_ENFORCEMENT:DISABLED}
-    allow-development-key-override: true
-    development-public-key: ${SECUREDOC_LICENSING_PUBLIC_KEY:}
   security:
     mode: LOCAL
     cors:

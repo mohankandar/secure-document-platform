@@ -52,6 +52,8 @@ import java.util.stream.Collectors;
  *   <li>Task 0044 (option B, searchable on): a page with redaction targets also gets an invisible text layer made by
  *       OCR of its already-redacted image, so the page is searchable and a covered value cannot reach the text.
  *       Off is exactly the output above.</li>
+ *   <li>Task 0057: under a licence for tests only, every page carries a mark ({@link NonProductionMark}). Without it the
+ *       output is exactly the output above.</li>
  * </ul>
  *
  * <p>This keeps irreversible redaction semantics while avoiding the large file-size and
@@ -94,6 +96,7 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
     @Override
     public RedactionOutput redact(InputStream originalPdf, List<RedactionTarget> targets, RedactionOptions options) {
         boolean searchable = options != null && options.searchableText();
+        boolean mark = options != null && options.nonProductionMark();
         if (searchable && ocr == null) {
             // Fail closed: never return image-only pages when a text layer was asked for.
             throw new RedactionEngineException("Searchable redacted pages need OCR, which is not available",
@@ -129,16 +132,19 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
                             // Option B: OCR of the already-redacted image, so a covered value cannot reach the text.
                             addInvisibleText(outputDoc, outputPage, recognize(pageNumber, pageImage));
                         }
+                        if (mark) NonProductionMark.draw(outputDoc, outputPage, pageTargets);
                     } finally {
                         pageImage.flush();
                     }
                 } else {
                     PdfOutputCleaner.copyPage(sourceDoc, outputDoc, sourcePage);
+                    if (mark) NonProductionMark.draw(outputDoc, outputDoc.getPage(pageIndex), List.of());
                 }
             }
 
             boolean signed = !sourceDoc.getSignatureDictionaries().isEmpty();
             PdfOutputCleaner.clean(outputDoc, clock.instant());
+            if (mark) NonProductionMark.flag(outputDoc);
             outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-redaction-output-");
             outputDoc.save(outputPath.toFile());
             content = TempFileReplayableContent.owned(outputPath);

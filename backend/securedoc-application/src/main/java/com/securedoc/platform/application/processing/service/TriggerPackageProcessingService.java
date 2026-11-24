@@ -7,7 +7,6 @@ import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.export.command.ExportPackageDocumentsCommand;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
 import com.securedoc.platform.application.extraction.command.ExtractDocumentTextCommand;
 import com.securedoc.platform.application.extraction.result.ExtractDocumentTextResult;
@@ -96,7 +95,6 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     private final DocumentIntelligenceExecutionService documentIntelligenceExecutionService;
     private final AuditService auditService;
     private final ProcessingIncidentService processingIncidentService;
-    private final TenantLicensingService tenantLicensingService;
     private final ProductTelemetryService productTelemetryService;
     private final ExportJobScheduler exportJobScheduler;
     private final MasterExportCompletion masterExportCompletion;
@@ -119,13 +117,12 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
                                            AuditService auditService,
                                            ProcessingIncidentService processingIncidentService,
-                                           TenantLicensingService tenantLicensingService,
                                            ProductTelemetryService productTelemetryService) {
         this(packageRepository, documentRepository, findingRepository, artifactRepository, processingLockPort,
                 startPackageProcessingUseCase, startDocumentProcessingUseCase, extractDocumentTextUseCase,
                 detectSensitiveDataUseCase, redactDocumentUseCase, exportPackageDocumentsUseCase,
                 processDerivedRoutingUseCase, selectiveRetryExecutor, lifecycleService,
-                documentIntelligenceExecutionService, auditService, processingIncidentService, tenantLicensingService,
+                documentIntelligenceExecutionService, auditService, processingIncidentService,
                 productTelemetryService, ExportJobScheduler.INLINE);
     }
 
@@ -150,7 +147,6 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
                                            DocumentIntelligenceExecutionService documentIntelligenceExecutionService,
                                            AuditService auditService,
                                            ProcessingIncidentService processingIncidentService,
-                                           TenantLicensingService tenantLicensingService,
                                            ProductTelemetryService productTelemetryService,
                                            ExportJobScheduler exportJobScheduler) {
         this.packageRepository = Objects.requireNonNull(packageRepository);
@@ -169,7 +165,6 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
         this.documentIntelligenceExecutionService = Objects.requireNonNull(documentIntelligenceExecutionService);
         this.auditService = Objects.requireNonNull(auditService);
         this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
-        this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
         this.productTelemetryService = Objects.requireNonNull(productTelemetryService);
         this.exportJobScheduler = Objects.requireNonNull(exportJobScheduler);
         this.masterExportCompletion = new MasterExportCompletion(
@@ -179,7 +174,6 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
     @Override
     public void execute(TriggerPackageProcessingCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
-        tenantLicensingService.requireDocumentProcessing(command.tenantId(), command.actorId(), command.correlationId());
         DocumentPackage pkg = packageRepository
                 .findByIdAndTenantId(command.packageId(), command.tenantId())
                 .orElseThrow(() -> new NotFoundException("DocumentPackage", command.packageId().toString()));

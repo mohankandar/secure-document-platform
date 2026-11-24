@@ -22,9 +22,8 @@
        and that no marker or fake value appears in either PDF, the report audit records or the new log lines.
     8. Saves one PDF of each edition under test-tools\compliance-report\output\ (git-ignored).
 
-    Task 0018 additions: the entity name alone without a licence, then a throwaway test licence (MakeTestLicence.java,
-    a new key pair per run, private key never written) and the licence's customer name on the cover and header line
-    (A1); a 403 from the capability check recorded as AUTHORIZATION_FAILED with capability, method and route pattern
+    Task 0018 additions: the customer name of the licence in force (task 0057: the stored platform licence, here the
+    demo licence) on the cover and header line (A1); a 403 from the capability check recorded as AUTHORIZATION_FAILED with capability, method and route pattern
     only (A2); no "Rejected" rows (A3); lifecycle previous= values and the "Changes during the period" table (A4);
     the note under section 3 (A5); single spaces in the footer fingerprint (A7).
 
@@ -241,13 +240,8 @@ try {
         -DbPassword $dbPassword -StateDir (Join-Path $runDir 'install')
 
     # --- 2. app ------------------------------------------------------------------------------
-    # A1: a throwaway test licence; the app trusts its public key through the LOCAL development-key override.
-    $customerName = 'Acme Test Lending Group'
-    $pubFile = Join-Path $runDir 'test-licence-public-key.txt'
-    $tokenFile = Join-Path $runDir 'test-licence-token.txt'
-    & java (Join-Path $here 'MakeTestLicence.java') $tenantId $customerName $pubFile $tokenFile
-    if ($LASTEXITCODE -ne 0) { throw "test licence was not made" }
-    $env:SECUREDOC_LICENSING_PUBLIC_KEY = [System.IO.File]::ReadAllText($pubFile).Trim()
+    # A1: the customer of the demo licence that setup stored (task 0057).
+    $customerName = 'LexaVault Demo Customer'
     $app = Start-App $dbPassword
     $tenantName = Sql "select name from tenants where id='$tenantId'"
     Write-Host "Entity: $tenantName"
@@ -495,7 +489,7 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
         Check "$edition`: the cover prints the recorded content fingerprint" ((Flat $text).Contains($grouped)) $grouped
         $footer = "Fingerprint $($fp.Substring(0,4)) $($fp.Substring(4,4)) $([char]0x2026) $($fp.Substring(60,4)) $([char]0x00B7) created by LexaVault"
         Check "$edition`: 0018 A7: footer fingerprint with single spaces" ($text.Contains($footer) -and -not $text.Contains("$($fp.Substring(0,4))  ")) $footer
-        Check "$edition`: 0018 A1: no licence yet: no customer name" (-not $text.Contains($customerName))
+        Check "$edition`: 0018 A1: the customer name of the licence in force" ($text.Contains($customerName))
     }
 
     # --- 7. numbers, wording and leaks -------------------------------------------------------
@@ -575,12 +569,7 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
     }
     Check 'no marker or fake value in the log lines written while reports were created' ($logHits.Count -eq 0) ($logHits -join ', ')
 
-    # --- 8. 0018 A1: with an installed licence, its customer name is on the cover and in the header line ----
-    $token = [System.IO.File]::ReadAllText($tokenFile).Trim()
-    $install = & $invokeApi -Method POST -Path "/api/v1/platform/licensing/tenants/$tenantId/licenses" `
-        -Body @{ licenseToken = $token } -Roles 'PLATFORM_OPERATIONS_ADMIN'
-    Remove-Item -LiteralPath $tokenFile -Force
-    Check '0018 A1: the throwaway test licence installs' ($null -ne $install) "status=$($install.status)"
+    # --- 8. 0018 A1: the licence's customer name is on the cover and in the header line ----
     foreach ($edition in 'SUMMARY', 'FULL') {
         $role = if ($edition -eq 'FULL') { 'TENANT_IT_ADMIN' } else { 'BUSINESS_ADMIN' }
         $r = New-Report $role ($edition -eq 'FULL') $from $to
@@ -619,7 +608,7 @@ finally {
     foreach ($name in 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED',
             'SECUREDOC_WATCHED_FOLDER_ENABLED', 'SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED', 'SECUREDOC_LOG_DIR',
             'SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH', 'SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH',
-            'SECUREDOC_BACKEND_URL', 'SECUREDOC_TENANT_ID', 'SECUREDOC_ACTOR_ID', 'SECUREDOC_LICENSING_PUBLIC_KEY') {
+            'SECUREDOC_BACKEND_URL', 'SECUREDOC_TENANT_ID', 'SECUREDOC_ACTOR_ID') {
         Remove-Item "Env:$name" -ErrorAction SilentlyContinue
     }
 }

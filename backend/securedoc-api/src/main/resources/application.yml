@@ -6,6 +6,9 @@ server:
 spring:
   application:
     name: securedoc-platform
+  config:
+    # Task 0057: setup's platform-tenant.properties (platform.licensing.tenant-id), beside the app unless named.
+    import: "${PLATFORM_TENANT_CONFIG:optional:file:./platform-tenant.properties}"
   # Task 0056: Spring Boot 4 uses Jackson 3, whose defaults differ. These keep the JSON byte for byte as with Spring Boot 3
   # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its text size limit.
   jackson:
@@ -34,6 +37,8 @@ spring:
 management:
   endpoint:
     health:
+      # Task 0057: the checks' names, codes and causes are on Support, never on the open health address.
+      show-details: never
       probes:
         enabled: false
 
@@ -41,6 +46,19 @@ management:
 # system's issuer, nothing else). Internal addresses stay off unless the customer's login system is on an internal address.
 # The http login system of a local development start needs nothing here (it is allowed by the development licence alone).
 platform:
+  # Task 0057: the licence. The product code is fixed; the customer ID (TEN-...) is the one setup wrote into
+  # platform-tenant.properties (docs/install/SETUP.md). Without it, or without a valid stored licence, the app does not start.
+  licensing:
+    product-code: LEXAVAULT
+    notifications:
+      link: /admin/licensing
+  # Task 0057: the dependency checks (docs/install/MONITORING.md). product-code: for the login-system check.
+  monitoring:
+    product-code: LEXAVAULT
+    bundle-properties:
+      - securedoc.processing.
+      - securedoc.resilience.
+      - securedoc.lifecycle.
   outbound:
     installation: ${PLATFORM_OUTBOUND_INSTALLATION:ON_PREMISES}
     allow-internal-addresses: ${PLATFORM_OUTBOUND_ALLOW_INTERNAL_ADDRESSES:false}
@@ -52,13 +70,6 @@ securedoc:
   demo:
     tenant-id: "30216241-b724-5a3a-aef3-3034fd546d17"
     actor-id: "00000000-0000-0000-0000-000000000099"
-  licensing:
-    # On-prem/SaaS tenant licensing foundation. Production defaults fail closed.
-    # Production trusts only the vendor public key packaged with the application; the private signing key never ships.
-    enforcement: ${SECUREDOC_LICENSING_ENFORCEMENT:ENFORCED}
-    verification-key-resource: classpath:licensing/lexavault-license-public-key.pem
-    allow-development-key-override: false
-    development-public-key: ""
   security:
     # Unit 25: secure default. The explicit local profile overrides this to LOCAL.
     mode: ${SECUREDOC_SECURITY_MODE:OIDC}
@@ -92,6 +103,10 @@ securedoc:
         USER: ${SECUREDOC_SECURITY_LEGACY_ROLE_USER:securedoc-user}
         REVIEWER: ${SECUREDOC_SECURITY_LEGACY_ROLE_REVIEWER:securedoc-reviewer}
         APPROVER: ${SECUREDOC_SECURITY_LEGACY_ROLE_APPROVER:securedoc-approver}
+  # Task 0057: which of LexaVault's own checks refuse a start while down (and make the app not ready).
+  monitoring:
+    storage-required: ${SECUREDOC_MONITORING_STORAGE_REQUIRED:true}
+    model-server-required: ${SECUREDOC_MONITORING_MODEL_SERVER_REQUIRED:false}
   ai:
     # AI-first discovery is part of the active V1 pipeline. Use "heuristic" only as an
     # explicit development fallback when no local model is available.

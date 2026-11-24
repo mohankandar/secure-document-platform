@@ -6,7 +6,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.intake.command.UploadDocumentCommand;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.intake.command.UploadDocumentResult;
 import com.securedoc.platform.application.port.in.UploadDocumentUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
@@ -52,7 +52,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
     private final TenantContextService tenantContextService;
     private final CapabilityEnforcementService capabilityEnforcement;
     private final PackageRepository packageRepository;
-    private final TenantLicensingService tenantLicensingService;
+    private final IntakeLicence intakeLicence;
     private final DocumentRepository documentRepository;
     private final ArtifactRepository artifactRepository;
     private final StoragePort storagePort;
@@ -64,7 +64,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
 
     public UploadDocumentService(TenantContextService tenantContextService,
                                   CapabilityEnforcementService capabilityEnforcement,
-                                  TenantLicensingService tenantLicensingService,
+                                  IntakeLicence intakeLicence,
                                   PackageRepository packageRepository,
                                   DocumentRepository documentRepository,
                                   ArtifactRepository artifactRepository,
@@ -76,7 +76,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
         this.pdfValidationPort = Objects.requireNonNull(pdfValidationPort);
         this.tenantContextService = Objects.requireNonNull(tenantContextService);
         this.capabilityEnforcement = Objects.requireNonNull(capabilityEnforcement);
-        this.tenantLicensingService = Objects.requireNonNull(tenantLicensingService);
+        this.intakeLicence = Objects.requireNonNull(intakeLicence);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
@@ -94,7 +94,7 @@ public final class UploadDocumentService implements UploadDocumentUseCase {
         // 1. Validate tenant context
         Tenant tenant = tenantContextService.resolveAndValidate(principal);
         capabilityEnforcement.require(tenant, Capability.DOCUMENT_UPLOAD);
-        tenantLicensingService.requireDocumentProcessing(principal.tenantId(), principal.actorId(), command.correlationId());
+        intakeLicence.requireIntake(principal.tenantId(), principal.actorId(), command.correlationId());
 
         // 2. Validate package exists and belongs to tenant.
         // Task 0039: lock the case first, so the file count below and the file added after it can't interleave with

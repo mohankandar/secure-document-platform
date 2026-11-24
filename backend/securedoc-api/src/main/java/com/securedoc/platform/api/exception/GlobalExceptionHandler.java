@@ -127,7 +127,17 @@ public class GlobalExceptionHandler {
                 Map.of("reasonCode", ex.errorCode(), "licenseStatus", ex.status().name()),
                 "Tenant license rejected the requested operation");
         return ResponseEntity.status(status)
-                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationIdForError(request)));
+                .body(ApiErrorResponse.of(ex.errorCode(), LvErrorCodes.of(ex), correlationIdForError(request))
+                        .withPlatformCode(ex.platformCode().orElse(null), null));
+    }
+
+    /**
+     * Task 0057: a refusal of the shared platform that reaches a request keeps its own code and its own "what to do",
+     * beside LexaVault's code. Its message is never sent or logged.
+     */
+    private static ApiErrorResponse withPlatform(ApiErrorResponse body, Throwable failure) {
+        return com.securedoc.platform.api.error.PlatformRefusals.codeOf(failure)
+                .map(code -> body.withPlatformCode(code.code(), code.fix())).orElse(body);
     }
 
     @ExceptionHandler(ValidationException.class)
@@ -288,7 +298,7 @@ public class GlobalExceptionHandler {
         String correlationId = correlationIdForError(request);
         logRejected("INVALID_STATE_REJECTED", "INVALID_STATE", ex, request, correlationId);
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiErrorResponse.of("INVALID_STATE", LvErrorCodes.of(ex), correlationId));
+                .body(withPlatform(ApiErrorResponse.of("INVALID_STATE", LvErrorCodes.of(ex), correlationId), ex));
     }
 
     /** #290: the message can echo a value the client sent (UUID or enum parsing), so it is never sent or logged. */
@@ -442,7 +452,7 @@ public class GlobalExceptionHandler {
                 Map.of("reasonCode", ex.getClass().getSimpleName(), "component", origin(ex)),
                 "Unhandled exception route=" + route(request) + " correlation=" + correlationId + " code=" + code.code());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiErrorResponse.of("INTERNAL_ERROR", code, correlationId));
+                .body(withPlatform(ApiErrorResponse.of("INTERNAL_ERROR", code, correlationId), ex));
     }
 
     /**

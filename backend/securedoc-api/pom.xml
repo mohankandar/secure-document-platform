@@ -60,15 +60,6 @@
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-identity-spring</artifactId>
-            <!-- Task 0054 decision 1: of platform-core only the outbound modules and platform-errors come with it.
-                 platform-outbound 0.7.0 also declares platform-notifications, for the proxy password's secret reference
-                 only; the app does not carry it, so OutboundRulesConfig refuses a proxy with sign-in. -->
-            <exclusions>
-                <exclusion>
-                    <groupId>com.documentplatform.platform</groupId>
-                    <artifactId>platform-notifications</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <!-- Task 0037: the idn_ stores. platform-licensing (the licence, read only for identity: slots and the
@@ -81,6 +72,28 @@
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-licensing</artifactId>
+        </dependency>
+        <!-- Task 0057: the stored licence checked at start, enforced at intake (PlatformLicence) and metered. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-licensing-spring</artifactId>
+        </dependency>
+        <!-- Task 0057: the dependency checks, the start-up refusal, references and the diagnostic bundle. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-monitoring-spring</artifactId>
+        </dependency>
+        <!-- Task 0057: only the types the licensing events are registered with (EventCatalogue). Nothing is sent: no
+             notifier, and the mail library it brings is left out until notifications are integrated. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-notifications</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.eclipse.angus</groupId>
+                    <artifactId>angus-mail</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- Task 0041: the setup command runs from its own jar (securedoc-setup), because it brings platform-crypto and
              platform-integration, which the app's classpath may not carry (task 0041). Here only for the tests that

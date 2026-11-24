@@ -4,7 +4,7 @@ import com.securedoc.platform.application.business.model.BusinessIdentitySnapsho
 import com.securedoc.platform.application.business.service.BusinessIdentityService;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.command.CreatePackageCommand;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.domain.audit.AuditAction;
@@ -34,7 +34,7 @@ class CreatePackageSensitivityTest {
                 .thenReturn(new BusinessIdentitySnapshot(BusinessRecordId.generate(), false, List.of()));
         List<AuditRecord> audits = new ArrayList<>();
         CreatePackageService service = new CreatePackageService(mock(TenantContextService.class),
-                mock(CapabilityEnforcementService.class), identity, mock(TenantLicensingService.class), packages,
+                mock(CapabilityEnforcementService.class), identity, mock(IntakeLicence.class), packages,
                 mock(DomainEventPublisher.class), new AuditService(audits::add));
         AuthenticatedPrincipal principal = AuthenticatedPrincipal.of(ActorId.generate(), TenantId.generate(), "person", Set.of());
         service.execute(CreatePackageCommand.of(PackageType.MANUAL_UPLOAD, Map.of("contractNumber", "C-1"), Map.of(),

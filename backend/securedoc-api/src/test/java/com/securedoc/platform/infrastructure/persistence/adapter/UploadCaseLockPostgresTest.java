@@ -4,7 +4,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.intake.command.UploadContent;
 import com.securedoc.platform.application.intake.command.UploadDocumentCommand;
-import com.securedoc.platform.application.licensing.TenantLicensingService;
+import com.securedoc.platform.application.licensing.IntakeLicence;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.ChecksumPort;
 import com.securedoc.platform.application.port.out.DomainEventPublisher;
@@ -143,7 +143,7 @@ class UploadCaseLockPostgresTest {
         ChecksumPort checksum = in -> Checksum.sha256("a".repeat(64));
         PdfIntakeValidationPort onePage = in -> new PdfIntakeValidationPort.PdfInfo(1);
         uploads = new UploadDocumentService(tenants, mock(CapabilityEnforcementService.class),
-                mock(TenantLicensingService.class), packages, documents, mock(ArtifactRepository.class), storage, checksum,
+                mock(IntakeLicence.class), packages, documents, mock(ArtifactRepository.class), storage, checksum,
                 mock(DomainEventPublisher.class), new AuditService(r -> { }), onePage);
         // The package is saved through the adapter as the service saves it.
         packagesForSetup = packages;

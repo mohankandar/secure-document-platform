@@ -1552,57 +1552,53 @@ Reserved: not used yet.
 
 ### LV-LIC-001 No licence installed
 
-- **Means:** This entity has no LexaVault licence.
+- **Means:** No licence is stored for this installation.
 - **Kind:** Set-up
-- **Who acts:** Platform Ops
+- **Who acts:** IT Admin
 - **HTTP status:** 403
 
 **What to do:**
 
-1. Get this entity's licence from your LexaVault supplier.
-2. Install it under Licence.
-3. Ask sources to send again any cases that were refused while there was no licence.
-4. Then choose **Retry processing** in Support for cases that stopped while the licence was missing.
+1. Ask your IT team to store the licence file you received, with the licence command (install guide: Setup).
+2. Ask sources to send again any cases that were refused meanwhile.
 
 ### LV-LIC-002 Licence expired
 
-- **Means:** The licence has expired or isn't valid yet.
+- **Means:** The licence has expired, its grace period is over, or it hasn't started yet. No new cases are taken in; cases already in LexaVault are finished.
 - **Kind:** Set-up
-- **Who acts:** Platform Ops
+- **Who acts:** IT Admin
 - **HTTP status:** 403
 
 **What to do:**
 
-1. Check the licence's start and end dates under Licence.
-2. Get a renewed licence from your supplier and install it.
-3. Ask sources to send again any cases that were refused meanwhile.
-4. Then choose **Retry processing** in Support for cases that stopped while the licence was expired.
+1. See the licence's dates under Admin, Licensing.
+2. Get a renewed licence from your supplier and ask your IT team to store it with the licence command. No restart is needed.
+3. Ask sources to send again any cases that were refused meanwhile. Watched folders and polling go on by themselves.
 
 ### LV-LIC-003 Licence not valid
 
-- **Means:** The licence's signature or entity doesn't match.
+- **Means:** The licence can't be read or trusted, or it doesn't cover this entity.
 - **Kind:** Set-up
-- **Who acts:** Platform Ops
+- **Who acts:** IT Admin
 - **HTTP status:** 403
 
 **What to do:**
 
-1. Check that the licence was issued for this entity and was installed unchanged.
-2. If not, get the right licence from your supplier and install it.
-3. If the right licence is still refused, ask your IT Admin to check LexaVault's licence check set-up.
+1. Ask your IT team to read the licence's own code in Support, Status.
+2. Store the original licence file again with the licence command. If the entity isn't in it, ask your supplier for a licence that lists the entity.
+3. If it is still refused, get a new licence file from your supplier.
 
 ### LV-LIC-004 Licence doesn't include this
 
-- **Means:** The licence doesn't cover this feature.
+- **Means:** The licence doesn't cover LexaVault.
 - **Kind:** Set-up
-- **Who acts:** Platform Ops
+- **Who acts:** IT Admin
 - **HTTP status:** 403
 
 **What to do:**
 
-1. Check which features the licence covers under Licence.
-2. If you need this feature, ask your supplier for a licence that includes it.
-3. Install the new licence.
+1. See what the licence covers under Admin, Licensing.
+2. Ask your supplier for a licence that covers LexaVault, and ask your IT team to store it with the licence command.
 
 ## CFG: settings
 
