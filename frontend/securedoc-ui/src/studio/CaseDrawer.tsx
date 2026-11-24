@@ -14,6 +14,8 @@ import {
   refusedWhen, type ExportJobView, type ExportState, type ExportTimings,
 } from './exportRules';
 import { useToast } from './toast';
+import { RejectCase } from './RejectCase';
+import { isRejectionCode, rejectStep, rejectionName } from './rejectRules';
 import { CodeLabel, Notice, Spinner, StageChip } from './atoms';
 import { useEntityZone } from './EntityZoneContext';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
@@ -104,6 +106,12 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
             onConfirm={() => confirming && run(confirming)}
             onCancel={() => setConfirming(null)}
           />}
+          {!exporting && rejectStep(pkg.status, caps) && (
+            <div className="cf-next-action">
+              <RejectCase packageId={packageId} caseName={title?.primary ?? 'this case'} step={rejectStep(pkg.status, caps)!}
+                onRejected={() => Promise.all([mutate(), mutateLife()])} />
+            </div>
+          )}
           {runner.error && <Notice tone="danger">{runner.error}</Notice>}
           {pkg.status === 'FAILED' && caps.includes(CAP.review) && manualEligibility.data?.eligible === false && (
             <Notice tone="neutral">Continuing manually is not possible: {manualEligibility.data.reason}</Notice>
@@ -198,7 +206,7 @@ function NextStep({ pkg, life, technical, stage, status, reprocessing, caps, pac
   const actionable = actions.some((a) => a.primary);
   const tone: 'mark' | 'neutral' | 'danger' | 'ok' = stage === 'stopped' ? 'danger' : stage === 'delivered' ? 'ok' : actionable ? 'mark' : 'neutral';
   const settled = stage === 'delivered' || status === 'REJECTED';
-  const heading = headingFor(stage, status, openFindings, actionable, reprocessing, life);
+  const heading = status === 'REJECTED' && isRejectionCode(pkg.rejectionCode) ? `Rejected: ${rejectionName(pkg.rejectionCode!).toLowerCase()}` : headingFor(stage, status, openFindings, actionable, reprocessing, life);
   const waitingOn = !actionable ? waitingCopy(stage, status, caps) : null;
   const body = bodyFor(status, info.detail, life, technical) + (waitingOn ? ` ${waitingOn}` : '');
   const confirmCopy = confirming ? CONFIRM_COPY[confirming] : null;
@@ -356,8 +364,8 @@ function bodyFor(status: string, detail: string, life: PackageLifecycleSummary |
       : `${reason} The original is kept, so the case can still be finished.`;
   }
   if (status === 'REJECTED') {
-    // The API returns no rejection reason today (see report U003); nothing is invented here.
-    return 'The source was not accepted. Nothing was processed.';
+    // Task 0071: a person rejected it; the reason is in the heading.
+    return 'A person rejected this case. Nothing is exported, and its files are deleted when their keeping time ends.';
   }
   if (['COMPLETED', 'EXPORTED', 'DELIVERED'].includes(status) && life?.lastExportedAt) {
     const kept: string[] = [];
@@ -379,7 +387,7 @@ function headingFor(stage: StageKey, status: string, openFindings: number, actio
       return 'No open findings in the current queue';
     case 'approval': return actionable ? 'Ready for your sign-off' : 'Waiting for sign-off';
     case 'delivered': return life?.lastExportedAt ? `${STAGE_NAMES.delivered} to ${destinationName(life.lastDestinationType)}` : STAGE_NAMES.delivered;
-    case 'stopped': return status === 'REJECTED' ? 'Not accepted at intake' : 'Processing stopped';
+    case 'stopped': return status === 'REJECTED' ? 'Case rejected' : 'Processing stopped';
     default: return 'Status not recognised';
   }
 }

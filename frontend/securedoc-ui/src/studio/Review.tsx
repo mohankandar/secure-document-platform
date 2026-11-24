@@ -10,6 +10,7 @@ import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkC
 import { Kbd, Notice, Spinner } from './atoms';
 import { ConfirmDialog } from './admin/shared';
 import { useToast } from './toast';
+import { RejectCase } from './RejectCase';
 import { useUnsavedWork } from './unsavedWork';
 import { REVIEW_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
 
@@ -251,6 +252,12 @@ export default function Review({ caps }: { caps: string[] }) {
         </p>
       )}
 
+      {selected && (
+        <div className="cf-next-action">
+          <RejectCase key={selected.packageId} packageId={selected.packageId} step="review" small
+            caseName={titles.get(selected.packageId) ?? queueTitles.get(selected.packageId) ?? 'this case'} />
+        </div>
+      )}
       {error && <Notice tone="danger">The review queue couldn&apos;t be loaded.</Notice>}
       {isLoading && <div className="cf-center"><Spinner label="Loading queue" /></div>}
 

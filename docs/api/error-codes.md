@@ -1243,6 +1243,66 @@ Reserved: not used yet.
 1. Reload the review page; it then shows only the document's own pages.
 2. If it happens again, give IT the reference number shown.
 
+### LV-REV-010 Rejected: wrong document
+
+- **Means:** A person rejected the case: it holds the wrong document.
+- **Kind:** Stopped
+- **Who acts:** Source system
+- **HTTP status:** —
+
+**What to do:**
+
+1. Check which document the case should hold.
+2. Send a new case with the right document.
+
+### LV-REV-011 Rejected: unreadable
+
+- **Means:** A person rejected the case: its document is unreadable.
+- **Kind:** Stopped
+- **Who acts:** Source system
+- **HTTP status:** —
+
+**What to do:**
+
+1. Make a better copy of the document.
+2. Send a new case with it.
+
+### LV-REV-012 Rejected: out of scope
+
+- **Means:** A person rejected the case: it is out of scope.
+- **Kind:** Stopped
+- **Who acts:** Source system
+- **HTTP status:** —
+
+**What to do:**
+
+1. Check with the reviewer's team what should be sent.
+2. Send a new case only if it belongs here.
+
+### LV-REV-013 Rejected: duplicate
+
+- **Means:** A person rejected the case: it is a duplicate.
+- **Kind:** Stopped
+- **Who acts:** Source system
+- **HTTP status:** —
+
+**What to do:**
+
+1. Find the other case for the same document.
+2. Send nothing more for this one.
+
+### LV-REV-014 Rejected: other (see ticket)
+
+- **Means:** A person rejected the case for another reason, written in a ticket.
+- **Kind:** Stopped
+- **Who acts:** Source system
+- **HTTP status:** —
+
+**What to do:**
+
+1. Read the ticket.
+2. Send a new case if the ticket says so.
+
 ## DLV: export
 
 ### LV-DLV-001 Destination can't be reached

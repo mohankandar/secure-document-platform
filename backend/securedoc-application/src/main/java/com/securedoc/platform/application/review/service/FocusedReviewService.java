@@ -212,7 +212,10 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
             // and dispatch the potentially slow redaction/verification/export continuation separately so
             // the review HTTP response is not held open while background document work runs.
             pkg.resumeProcessingAfterReview();
-            packageRepository.save(pkg);
+            if (!packageRepository.changeStatus(pkg, java.util.Set.of(PackageStatus.PENDING_REVIEW, PackageStatus.IN_REVIEW))) {
+                // Task 0071: rejected meanwhile. The rejection stands.
+                throw new ValidationException(LvErrorCode.REV_002, "Package is not awaiting manual review");
+            }
             auditService.recordSuccess(command.tenantId(), command.actorId(),
                     AuditAction.PACKAGE_PROCESSING_STARTED, "DocumentPackage", pkg.id().toString(),
                     command.correlationId(), "Package processing resumed after final manual-review decision");

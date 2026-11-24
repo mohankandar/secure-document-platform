@@ -21,7 +21,9 @@ public record ExternalIntakeSnapshot(
         Instant expiresAt,
         Instant acceptedAt,
         Instant expiredAt,
-        List<IntakeWarning> warnings) {
+        List<IntakeWarning> warnings,
+        /** Task 0071: the LV code of a rejected case's reason; null otherwise. */
+        String rejectionCode) {
 
     public ExternalIntakeSnapshot {
         warnings = warnings == null ? List.of() : List.copyOf(warnings);
@@ -34,13 +36,29 @@ public record ExternalIntakeSnapshot(
                                   Instant expiresAt, Instant acceptedAt, Instant expiredAt) {
         this(packageId, externalSourcePackageId, sourceRevision, attemptNumber, intakeStatus, packageStatus,
                 expectedDocuments, receivedDocuments, missingExternalSourceDocumentIds, createdAt, expiresAt,
-                acceptedAt, expiredAt, List.of());
+                acceptedAt, expiredAt, List.of(), null);
+    }
+
+    public ExternalIntakeSnapshot(UUID packageId, String externalSourcePackageId, String sourceRevision,
+                                  int attemptNumber, ExternalIntakeStatus intakeStatus, PackageStatus packageStatus,
+                                  int expectedDocuments, int receivedDocuments,
+                                  List<String> missingExternalSourceDocumentIds, Instant createdAt,
+                                  Instant expiresAt, Instant acceptedAt, Instant expiredAt, List<IntakeWarning> warnings) {
+        this(packageId, externalSourcePackageId, sourceRevision, attemptNumber, intakeStatus, packageStatus,
+                expectedDocuments, receivedDocuments, missingExternalSourceDocumentIds, createdAt, expiresAt,
+                acceptedAt, expiredAt, warnings, null);
     }
 
     /** The same snapshot carrying the warnings of the create request it answers. */
     public ExternalIntakeSnapshot withWarnings(List<IntakeWarning> value) {
         return new ExternalIntakeSnapshot(packageId, externalSourcePackageId, sourceRevision, attemptNumber,
                 intakeStatus, packageStatus, expectedDocuments, receivedDocuments, missingExternalSourceDocumentIds,
-                createdAt, expiresAt, acceptedAt, expiredAt, value);
+                createdAt, expiresAt, acceptedAt, expiredAt, value, rejectionCode);
+    }
+
+    public ExternalIntakeSnapshot withRejection(String code) {
+        return new ExternalIntakeSnapshot(packageId, externalSourcePackageId, sourceRevision, attemptNumber,
+                intakeStatus, packageStatus, expectedDocuments, receivedDocuments, missingExternalSourceDocumentIds,
+                createdAt, expiresAt, acceptedAt, expiredAt, warnings, code);
     }
 }

@@ -15,7 +15,7 @@ public record PackageSummaryResponse(
         String exportState,
         /**
          * Task 0038: why the case stopped or waits, as an LV code (the screen shows its plain title); null when it
-         * neither stopped nor waits, or the reason is not known. A rejected case has none: no rejection reason is stored.
+         * neither stopped nor waits, or the reason is not known. Task 0071: a rejected case has its reason.
          */
         String stopReasonCode,
         /** Task 0038: the delivery destination's name once one is chosen; null before. */
