@@ -170,7 +170,7 @@ test('0025: the Reason filter has one option per LV code, groups reason codes th
   }
   const red = options.find((o) => o.code === 'LV-RED-002');
   assert.equal(red?.label, 'Redacted copy failed the safety check · LV-RED-002');
-  assert.equal(red?.reasonCodes.length, 8);
+  assert.equal(red?.reasonCodes.length, 9);
   assert.deepEqual(options.find((o) => o.code === 'LV-PRC-005')?.reasonCodes, ['OCR_UNAVAILABLE', 'OCR_PROCESS_FAILED']);
   assert.deepEqual(options.find((o) => o.code === 'LV-PRC-004')?.reasonCodes, ['OCR_TIMEOUT']);
 

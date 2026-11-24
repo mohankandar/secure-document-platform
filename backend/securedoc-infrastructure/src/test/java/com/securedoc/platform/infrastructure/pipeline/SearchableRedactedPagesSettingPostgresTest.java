@@ -80,7 +80,7 @@ class SearchableRedactedPagesSettingPostgresTest {
                     new MapSqlParameterSource("t", off.value()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.liquibase(connection).rollback(3, (String) null); // 050, 049, then 048
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 3); // 050, 049, then 048
             }
             assertEquals(0, columnCount(jdbc), "the column is dropped");
             assertEquals(1, count(jdbc, "SELECT count(*) FROM tenant_redaction_kinds WHERE kind_key = '" + ROW
@@ -111,7 +111,7 @@ class SearchableRedactedPagesSettingPostgresTest {
         try (Connection connection = db.connection()) {
             var liquibase = PostgresTestDatabase.liquibase(connection);
             liquibase.update(new Contexts());
-            liquibase.rollback(changeSets, (String) null);
+            PostgresTestDatabase.rollback(liquibase, connection, changeSets);
         }
     }
 

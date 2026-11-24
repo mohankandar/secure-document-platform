@@ -86,7 +86,7 @@ class PdfBoxSelectivePermanentRedactionTest {
     }
 
     @Test
-    void pageWithAnnotationIsRasterizedSoActiveAnnotationIsNotCopied() throws Exception {
+    void pageWithAnnotationKeepsItsTextAndTheAnnotationIsNotCopied() throws Exception {
         byte[] source = threePageTextPdf(true);
 
         RedactionOutput output = redaction.redact(new ByteArrayInputStream(source), List.of());
@@ -97,10 +97,10 @@ class PdfBoxSelectivePermanentRedactionTest {
             PDDocument document = staged.document();
             assertTrue(pageText(document, 1).contains("KEEP-ONE"));
             assertTrue(pageText(document, 2).contains("SECRET-TWO"));
-            assertTrue(pageText(document, 3).isBlank(),
-                    "annotated page should be flattened instead of copying active annotation content");
+            // Task 0050: the page keeps its text; the annotation becomes part of the page as it looks.
+            assertTrue(pageText(document, 3).contains("KEEP-THREE"));
             assertTrue(document.getPage(2).getAnnotations().isEmpty());
-            assertTrue(imageXObjectCount(document.getPage(2)) >= 1);
+            assertEquals(0, imageXObjectCount(document.getPage(2)));
         }
     }
 

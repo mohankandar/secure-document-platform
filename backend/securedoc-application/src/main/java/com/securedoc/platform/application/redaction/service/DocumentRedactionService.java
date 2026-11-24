@@ -294,6 +294,13 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                                     : ", redactedPagesExtractableText=false"
                                             + (redactedValues.isEmpty() ? "" : ", valuesChecked=" + redactedValues.size())));
 
+            if (redactionOutput.signatureRemoved()) {
+                // Task 0050: no signer name. The case is the record's resource, so the case panel can ask for it.
+                auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SIGNATURE_REMOVED,
+                        "DocumentPackage", command.packageId().toString(), command.packageId(), correlationId,
+                        "Signature removed by redaction: document=" + command.documentId());
+            }
+
             Checksum redactedChecksum;
             InputStream checksumStream = redactedContent.openStream();
             try {

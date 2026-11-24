@@ -208,6 +208,8 @@ export interface PackageDetail extends PackageSummary {
   /** Task 0021: the case level as sent by the source system, and the case's effective level (read-only). */
   sensitivityLevel?: string;
   effectiveSensitivityLevel?: string;
+  /** Task 0050: a digitally signed document of this case lost its signature by redaction. */
+  signatureRemoved?: boolean;
   metadata?: Record<string, string>;
   documents: DocumentSummary[];
 }

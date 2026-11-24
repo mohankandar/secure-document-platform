@@ -2,17 +2,14 @@ package com.securedoc.platform.infrastructure.redaction;
 
 import com.securedoc.platform.application.port.out.OcrPort;
 import com.securedoc.platform.application.port.out.PdfRedactionPort;
-import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 import org.apache.pdfbox.util.Matrix;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
@@ -45,12 +42,12 @@ import java.util.stream.Collectors;
  * selective rather than flattening the entire document:
  * <ul>
  *   <li>Pages that contain redaction targets are rendered and burn-flattened.</li>
- *   <li>Pages with interactive annotations are also rendered so visible annotation/form
- *       appearance is preserved without copying active annotation objects.</li>
- *   <li>Static untouched pages are imported losslessly so their native text/vector content,
- *       searchability, and compact representation are preserved.</li>
- *   <li>A new document is always created, so source document metadata/catalog attachments are
- *       not copied. Imported static pages are stripped of page-level metadata/actions.</li>
+ *   <li>Untouched pages are imported losslessly so their native text/vector content,
+ *       searchability, and compact representation are preserved. Task 0050: their annotations and form
+ *       fields become part of the page as they look, and nothing hidden is copied ({@link PdfOutputCleaner}).
+ *       A page that can show a hidden layer is drawn as an image instead.</li>
+ *   <li>A new document is always created, so source document metadata, attachments and earlier
+ *       saves are not copied.</li>
  *   <li>Original text is never preserved on a page that contains a redaction target.</li>
  *   <li>Task 0044 (option B, searchable on): a page with redaction targets also gets an invisible text layer made by
  *       OCR of its already-redacted image, so the page is searchable and a covered value cannot reach the text.
@@ -72,6 +69,9 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
      * before OCR, because Tesseract reads 150 DPI text poorly. The page itself stays the 150 DPI image.
      */
     private static final int OCR_UPSCALE = 2;
+
+    /** The dates of the output (task 0050). Fixed by tests that compare two outputs byte for byte. */
+    java.time.Clock clock = java.time.Clock.systemUTC();
 
     /** Null when built without OCR (tests of today's output); a searchable request then refuses. */
     private final OcrPort ocr;
@@ -117,7 +117,7 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
                 PDPage sourcePage = sourceDoc.getPage(pageIndex);
                 List<RedactionTarget> pageTargets = targetsByPage.getOrDefault(pageNumber, List.of());
 
-                if (!pageTargets.isEmpty() || hasAnnotations(sourcePage)) {
+                if (!pageTargets.isEmpty() || mustBeDrawn(sourceDoc, sourcePage)) {
                     BufferedImage pageImage = renderer.renderImageWithDPI(pageIndex, RENDER_DPI);
                     try {
                         if (!pageTargets.isEmpty()) {
@@ -125,7 +125,7 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
                             totalRedactions += pageTargets.size();
                         }
                         PDPage outputPage = addImagePage(outputDoc, pageImage);
-                        if (searchable && !pageTargets.isEmpty()) {
+                        if (searchable) {
                             // Option B: OCR of the already-redacted image, so a covered value cannot reach the text.
                             addInvisibleText(outputDoc, outputPage, recognize(pageNumber, pageImage));
                         }
@@ -133,15 +133,17 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
                         pageImage.flush();
                     }
                 } else {
-                    importStaticPage(outputDoc, sourcePage);
+                    PdfOutputCleaner.copyPage(sourceDoc, outputDoc, sourcePage);
                 }
             }
 
+            boolean signed = !sourceDoc.getSignatureDictionaries().isEmpty();
+            PdfOutputCleaner.clean(outputDoc, clock.instant());
             outputPath = PdfBoxTempFileSupport.newOutputPath("lexavault-redaction-output-");
             outputDoc.save(outputPath.toFile());
             content = TempFileReplayableContent.owned(outputPath);
             outputPath = null;
-            return new RedactionOutput(content, pageCount, totalRedactions);
+            return new RedactionOutput(content, pageCount, totalRedactions, signed);
         } catch (IOException e) {
             // Task 0023 B9 (#373): also reached when closing the staged source fails after the
             // output was created; the caller never receives it, so remove it here.
@@ -159,30 +161,17 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
         }
     }
 
-    private boolean hasAnnotations(PDPage page) throws IOException {
-        return !page.getAnnotations().isEmpty();
-    }
-
-    /**
-     * Imports an untouched static page without rasterizing it. Effective resources are explicitly
-     * retained because PDFBox importPage intentionally ignores inherited page-tree resources.
-     * Page-level active/auxiliary objects are removed so the output remains a controlled artifact.
-     */
-    private void importStaticPage(PDDocument outputDoc, PDPage sourcePage) throws IOException {
-        PDPage importedPage = outputDoc.importPage(sourcePage);
-
-        PDResources effectiveResources = sourcePage.getResources();
-        if (effectiveResources != null) {
-            importedPage.setResources(effectiveResources);
+    /** A page that could show a hidden layer, or whose content cannot be read, is never copied. */
+    private static boolean mustBeDrawn(PDDocument source, PDPage page) {
+        try {
+            if (PdfOutputCleaner.hasHiddenLayer(source, page)) return true;
+            try (var content = page.getContents()) {
+                if (content != null) new org.apache.pdfbox.pdfparser.PDFStreamParser(content.readAllBytes()).parse();
+            }
+            return false;
+        } catch (IOException | RuntimeException unreadable) {
+            return true;
         }
-
-        COSDictionary pageDictionary = importedPage.getCOSObject();
-        pageDictionary.removeItem(COSName.ANNOTS);
-        pageDictionary.removeItem(COSName.AA);
-        pageDictionary.removeItem(COSName.METADATA);
-        pageDictionary.removeItem(COSName.getPDFName("PieceInfo"));
-        pageDictionary.removeItem(COSName.getPDFName("Thumb"));
-        pageDictionary.removeItem(COSName.getPDFName("StructParents"));
     }
 
     /** Draws solid black rectangles on the rendered page image at normalized coordinates. */

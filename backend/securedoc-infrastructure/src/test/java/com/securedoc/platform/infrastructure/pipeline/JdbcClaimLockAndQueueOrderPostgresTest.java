@@ -308,7 +308,7 @@ class JdbcClaimLockAndQueueOrderPostgresTest {
             try (Connection connection = m045.connection()) {
                 Liquibase liquibase = PostgresTestDatabase.liquibase(connection);
                 liquibase.update(new Contexts());
-                liquibase.rollback(6, (String) null); // back to 044 (050, 049, 048, 047, 046, then 045): no queue_seq
+                PostgresTestDatabase.rollback(liquibase, connection, 6); // back to 044 (050, 049, 048, 047, 046, then 045): no queue_seq
             }
             NamedParameterJdbcTemplate own = m045.jdbc();
             Boolean hasColumn = own.queryForObject("SELECT EXISTS (SELECT 1 FROM information_schema.columns"

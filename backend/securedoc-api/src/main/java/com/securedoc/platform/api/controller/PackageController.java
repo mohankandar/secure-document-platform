@@ -62,6 +62,7 @@ public class PackageController {
     private final GetPackageQuery getPackageQuery;
     private final ListPackagesQuery listPackagesQuery;
     private final RequestContextResolver contextResolver;
+    private com.securedoc.platform.application.port.out.AuditQueryPort auditQuery;
     /** Task 0029: the Cases list shows each case's export state; null in tests that do not need it (all NONE). */
     private final ExportJobService exportJobs;
 
@@ -182,6 +183,20 @@ public class PackageController {
         return ResponseEntity.ok(response);
     }
 
+    /** Task 0050: read from the case's audit (ids only); nothing else of the record is used. */
+    private boolean signatureRemoved(AuthenticatedPrincipal principal, PackageId packageId) {
+        if (auditQuery == null) return false;
+        return !auditQuery.findByFilter(new com.securedoc.platform.application.audit.query.AuditRecordFilter(
+                principal.tenantId(), "DOCUMENT_SIGNATURE_REMOVED", null, "DocumentPackage", packageId.toString(),
+                null, null, null, null, 1, true)).isEmpty();
+    }
+
+    /** Optional so that the controller's tests need no audit store. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAuditQuery(com.securedoc.platform.application.port.out.AuditQueryPort auditQuery) {
+        this.auditQuery = auditQuery;
+    }
+
     @GetMapping("/{packageId}")
     @RequireCapability(UserCapability.DASHBOARD_ACCESS)
     @Transactional(readOnly = true)
@@ -218,7 +233,8 @@ public class PackageController {
                 detail.createdAt(),
                 detail.updatedAt(),
                 detail.sensitivityLevel().name(),
-                detail.effectiveSensitivityLevel().name()
+                detail.effectiveSensitivityLevel().name(),
+                signatureRemoved(principal, pkgId)
         );
         return ResponseEntity.ok(response);
     }

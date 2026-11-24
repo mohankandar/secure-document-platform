@@ -100,6 +100,21 @@ public class PdfBoxRedactionVerificationAdapter implements RedactionVerification
                         "A redacted value appears in the output text");
             }
 
+            // Task 0050: the whole file, not only the text of its pages.
+            switch (PdfWholeFileCheck.run(document, values)) {
+                case REDACTED_VALUE -> {
+                    return VerificationResult.failed(pageCount, targets.size(), covered, true,
+                            TechnicalFailureCode.REDACTION_VALUE_IN_OUTPUT_TEXT,
+                            "A redacted value appears in the output file");
+                }
+                case HIDDEN_CONTENT -> {
+                    return VerificationResult.failed(pageCount, targets.size(), covered, false,
+                            TechnicalFailureCode.REDACTION_HIDDEN_CONTENT_REMAINS,
+                            "Generated PDF still contains hidden or active content");
+                }
+                case CLEAN -> { }
+            }
+
             return VerificationResult.safe(pageCount, targets.size(), covered);
         } catch (IOException | RuntimeException e) {
             return VerificationResult.failed(0, targets.size(), 0, false,

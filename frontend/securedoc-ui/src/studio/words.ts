@@ -401,6 +401,9 @@ export function sensitivityName(raw: string | null | undefined): string {
  * as sent (nothing sent = Standard), not the highest level in the case (owner's answer, task 0022 A1). A document whose
  * own level differs is marked next to its name instead (documentSensitivityNote).
  */
+/** Task 0050: the redacted copy of a signed document. */
+export const SIGNATURE_REMOVED_LINE = 'A digital signature was removed by redaction. The redacted copy is not signed.';
+
 export function caseSensitivityLine(caseLevel: string | null | undefined): string {
   return `Sensitivity: ${sensitivityName(caseLevel)}, as sent by the source system`;
 }

@@ -93,9 +93,16 @@ public interface PdfRedactionPort {
     }
 
     /**
-     * Result of the redaction operation.
+     * Result of the redaction operation. Task 0050: {@code signatureRemoved} says the input was digitally signed; the
+     * output is not.
      */
-    record RedactionOutput(ReplayableContent redactedPdfContent, int pagesRendered, int redactionsApplied) {
+    record RedactionOutput(ReplayableContent redactedPdfContent, int pagesRendered, int redactionsApplied,
+                           boolean signatureRemoved) {
+        /** An input without a digital signature. */
+        public RedactionOutput(ReplayableContent redactedPdfContent, int pagesRendered, int redactionsApplied) {
+            this(redactedPdfContent, pagesRendered, redactionsApplied, false);
+        }
+
         public RedactionOutput {
             if (redactedPdfContent == null || redactedPdfContent.contentLength() <= 0) {
                 throw new IllegalArgumentException("Redacted PDF content must not be empty");

@@ -256,6 +256,20 @@ test.describe('The "Exporting" status', () => {
     await expect(panel.getByRole('status', { name: 'Opening case' })).toHaveCount(0);
   });
 
+  test('a signature removed by redaction is one plain line in the case panel (task 0050)', async ({ page }) => {
+    const c = caseOf('LN-7011');
+    await signInAs(page, 'processor', '/', { exports: true });
+    await page.route((url) => url.pathname === `/api/v1/packages/${c.packageId}`, (route) => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ documents: [], ...c, signatureRemoved: true }) }));
+    await go(page, `/case/${c.packageId}`);
+    const panel = page.getByRole('complementary', { name: 'Case panel' });
+    await expect(panel.getByTestId('case-signature-removed')).toHaveText('A digital signature was removed by redaction. The redacted copy is not signed.');
+    await go(page, `/case/${caseOf('LN-7004').packageId}`);
+    await expect(panel.locator('h2')).toHaveText('LN-7004');
+    await expect(panel.getByTestId('case-sensitivity')).toBeVisible();
+    await expect(panel.getByTestId('case-signature-removed')).toHaveCount(0);
+  });
+
   // Task 0030: every chip on one line, whole and inside its column, at 1440 and 1024, with and without the case panel.
   for (const width of [1440, 1024]) {
     for (const withPanel of [false, true]) {

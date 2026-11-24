@@ -62,6 +62,8 @@ public enum AuditAction {
     DOCUMENT_DETECTION_COMPLETED,
     DOCUMENT_REDACTION_COMPLETED,
     DOCUMENT_REDACTION_VERIFIED,
+    /** Task 0050: a digitally signed document lost its signature by redaction (document id only, no signer). */
+    DOCUMENT_SIGNATURE_REMOVED,
     DOCUMENT_EXPORTED,
     DOCUMENT_EXPORT_FAILED,
     DOCUMENT_PROCESSING_FAILED,
