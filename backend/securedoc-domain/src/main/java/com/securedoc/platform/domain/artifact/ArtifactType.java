@@ -20,6 +20,9 @@ public enum ArtifactType {
     /** Task 0064: what the vision model found on one page (kinds and boxes; no value), until it is gathered. */
     VISION_PAGE,
 
+    /** Task 0065: the AI's short summary of the document, until its page batches are gathered. Document text. */
+    DOCUMENT_SUMMARY,
+
     /** OCR-extracted text output (scanned image documents). */
     OCR_TEXT,
 

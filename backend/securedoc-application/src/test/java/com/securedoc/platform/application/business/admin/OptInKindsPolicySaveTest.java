@@ -100,6 +100,27 @@ class OptInKindsPolicySaveTest {
                 .contains("Second check of the finished file: No → Yes"));
     }
 
+    /** Task 0065: off by default; the pack suggests it and never turns it on. */
+    @Test
+    void theDocumentContextIsOffUntilTheEntityTurnsItOn() {
+        Set<com.securedoc.platform.domain.business.RegulationPack> frcp =
+                Set.of(com.securedoc.platform.domain.business.RegulationPack.FRCP_5_2);
+        assertTrue(com.securedoc.platform.domain.business.RegulationPack.FRCP_5_2.suggestsDocumentContext());
+        assertFalse(TenantRedactionPolicy.defaults(tenant).documentContext());
+        save(frcp, null);
+        assertFalse(policies.saved.documentContext());
+        for (Boolean sent : new Boolean[]{true, null}) {
+            service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(),
+                    EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY, true, true, null, null, frcp, null, null,
+                    null, null, sent);
+            assertTrue(policies.saved.documentContext(), "null keeps it");
+        }
+        assertTrue(lastDetail().contains("documentContext=true"), lastDetail());
+        assertTrue(com.securedoc.platform.application.compliance.PolicyHistory.changeLines(com.securedoc.platform
+                .application.compliance.PolicyHistory.parseSensitive(lastDetail()))
+                .contains("Document summary and case instructions: No → Yes"));
+    }
+
     private void save(Set<com.securedoc.platform.domain.business.RegulationPack> packs, Boolean check) {
         service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(),
                 EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY, true, true, null, null, packs, null, null,

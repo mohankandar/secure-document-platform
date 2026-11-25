@@ -17,7 +17,9 @@ public record PushIntakeCreateInput(
         boolean retry,
         String caseSensitivityLevel,
         /* Task 0073: as sent, or null; anything but URGENT, NORMAL or LOW is refused. */
-        String priority) {
+        String priority,
+        /* Task 0065: the case's instructions, as sent, or null. Document text. */
+        String instructions) {
     /** Task 0061: case field values are in no text form of this. */
     @Override
     public String toString() {
@@ -33,6 +35,14 @@ public record PushIntakeCreateInput(
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         documents = documents == null ? List.of() : List.copyOf(documents);
+    }
+
+    public PushIntakeCreateInput(String externalSourcePackageId, String sourceRevision,
+                                 Map<String, String> businessIdentifiers, Map<String, String> metadata,
+                                 List<ManifestDocumentInput> documents, boolean retry, String caseSensitivityLevel,
+                                 String priority) {
+        this(externalSourcePackageId, sourceRevision, businessIdentifiers, metadata, documents, retry,
+                caseSensitivityLevel, priority, null);
     }
 
     public PushIntakeCreateInput(String externalSourcePackageId, String sourceRevision,

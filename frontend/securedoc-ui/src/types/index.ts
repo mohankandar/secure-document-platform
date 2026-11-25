@@ -92,6 +92,8 @@ export interface SensitiveDataPolicyConfiguration {
   visionOcrThreshold?: number;
   /** Task 0083: a second AI reads the finished file. Absent from an older server: off. */
   secondCheckEnabled?: boolean;
+  /** Task 0065: a document's people are looked for on every page. Absent from an older server: off. */
+  documentContextEnabled?: boolean;
   /** Task 0062: regulation packs in force, and the kinds whose last four digits stay visible. */
   enabledPacks?: string[];
   keepLastFourKinds?: string[];
@@ -102,7 +104,7 @@ export interface SensitiveDataPolicyConfiguration {
 /** Task 0062: the redaction catalog and the regulation packs, the same for every entity. */
 export interface RedactionCatalog {
   kinds: { key: string; name: string; detectionMethod: string; defaultStyle: string; locked: boolean; lastFourAllowed: boolean }[];
-  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[]; suggestedKinds?: string[]; secondCheck?: boolean }[];
+  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[]; suggestedKinds?: string[]; secondCheck?: boolean; suggestsDocumentContext?: boolean }[];
 }
 
 export interface LifecyclePolicyConfiguration {
@@ -269,6 +271,8 @@ export interface DocumentSummary {
 }
 
 export interface CreatePackageRequest {
+  /** Task 0065: the New case "Instructions for the AI"; only where the entity switched them on. */
+  caseInstructions?: string;
   /** Task 0073: the New case "Priority" choice. */
   priority?: string;
   packageType: string;

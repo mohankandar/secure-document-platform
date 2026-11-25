@@ -301,6 +301,35 @@ test('Scan paper sends the Priority choice to the scan bridge', async ({ page })
   await expect.poll(() => sent.find((s) => s.method === 'POST' && s.path.endsWith('/scan-sessions'))?.body).toMatchObject({ casePriority: 'LOW' });
 });
 
+test('task 0065: case instructions on New case and in the case panel, only where they are switched on', async ({ page }) => {
+  const sent: Sent[] = [];
+  await signIn(page, sent);
+  let enabled = false;
+  await page.route('**/api/v1/intake/case-instructions', (r) => r.fulfill({ json: { enabled, maxCharacters: 2000 } }));
+  await page.route(`**/api/v1/packages/${CASE.packageId}/instructions`, (r) => {
+    if (r.request().method() === 'PUT') sent.push({ method: 'PUT', path: new URL(r.request().url()).pathname, body: r.request().postDataJSON() } as Sent);
+    return r.fulfill({ json: { enabled, text: r.request().method() === 'PUT' ? r.request().postDataJSON().text : '' } });
+  });
+  await page.goto('/intake');
+  await expect(page.getByLabel('Priority')).toBeVisible();
+  await expect(page.getByLabel(/Instructions for the AI/)).toHaveCount(0);
+  enabled = true;
+  await page.reload();
+  await page.getByLabel(/Loan number/).fill('LN204905');
+  await page.getByLabel(/Instructions for the AI/).fill('Protect Robin, the child.');
+  await page.locator('input[type=file]').setInputFiles([{ name: 'Note.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n', 'latin1') }]);
+  await page.getByRole('button', { name: 'Create case' }).click();
+  await expect.poll(() => sent.find((s) => s.method === 'POST' && s.path === '/api/v1/packages')?.body).toMatchObject({ caseInstructions: 'Protect Robin, the child.' });
+  await page.goto('/');
+  await row(page).getByRole('link').click();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await panel.getByLabel('Instructions for the AI').fill('Protect Wren.');
+  await panel.getByRole('button', { name: 'Save instructions' }).click();
+  await expect.poll(() => sent.find((s) => s.method === 'PUT' && s.path.endsWith('/instructions'))?.body).toMatchObject({ text: 'Protect Wren.' });
+  await expect(page.getByText('Instructions saved.')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Save instructions' })).toHaveCount(0);
+});
+
 test('a reviewer changes the priority in the case panel', async ({ page }) => {
   const sent: Sent[] = [];
   await signIn(page, sent);

@@ -88,6 +88,51 @@ class OllamaPageRetryTest {
         assertEquals(0, bodies.stream().filter(b -> !b.contains("\"properties\":{\"kind\":")).count(), "kind first");
     }
 
+    /** Task 0065: a document's beginning has its own prompt; a name that does not stand in the text is dropped. */
+    @Test
+    void theFirstPassAsksForThePeopleAndDropsWhatIsNotThere() throws Exception {
+        java.util.List<String> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        startServer(exchange -> {
+            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            send(exchange, 200, envelope("{\"kind\":\"Complaint\",\"matter\":\"m\",\"people\":[{\"name\":\"Hope Banks\",\"role\":\"r\","
+                    + "\"alsoCalled\":[\"Banks\",\"Hopeless\"]},{\"name\":\"Nobody Here\",\"role\":\"r\",\"alsoCalled\":[]}]}"));
+        });
+        var output = batchedAdapter(1, 2).analyze(request(com.securedoc.platform.application.port.out
+                .SensitiveContentAnalysisPort.AnalysisPolicy.Ask.SUMMARY, "HOPE\nBANKS, called Banks"));
+        assertEquals(List.of("SUMMARY_PERSON:Hope Banks", "SUMMARY_ALSO_CALLED:Banks"), output.findings().stream()
+                .map(f -> f.entityType() + ":" + f.matchedText()).toList());
+        assertEquals("text-document-summary-v1", output.models().get(0).version());
+        assertEquals(1, bodies.size());
+        assertEquals(true, bodies.get(0).contains("\"properties\":{\"kind\":"), "in the measured order");
+    }
+
+    /** Task 0065: ten sentences a request; a sentence without a usable answer is taken as a person. */
+    @Test
+    void knownNamesAreAskedInTensAndAnUnansweredOneIsAPerson() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        startServer(exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            requests.incrementAndGet();
+            send(exchange, 200, envelope("{\"answers\":[{\"number\":1,\"is\":\"thing_or_word\"},{\"number\":2,\"is\":\"person\"},"
+                    + "{\"number\":3,\"is\":\"unheard of\"}," + java.util.stream.IntStream.rangeClosed(4, 10)
+                    .mapToObj(n -> "{\"number\":" + n + ",\"is\":\"place_or_street\"}").collect(java.util.stream.Collectors.joining(",")) + "]}"));
+        });
+        String[] sentences = java.util.stream.IntStream.rangeClosed(1, 12).mapToObj(n -> "\"Banks\" in: " + n).toArray(String[]::new);
+        var output = batchedAdapter(1, 2).analyze(request(com.securedoc.platform.application.port.out
+                .SensitiveContentAnalysisPort.AnalysisPolicy.Ask.KNOWN_NAMES, sentences));
+        assertEquals(2, requests.get());
+        assertEquals(List.of(2, 3, 12), output.findings().stream().map(f -> f.pageNumber()).toList());
+        assertEquals("text-known-names-v1", output.models().get(0).version());
+    }
+
+    private static com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisRequest request(
+            com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisPolicy.Ask ask, String... texts) {
+        List<PageContent> pages = new java.util.ArrayList<>();
+        for (String text : texts) pages.add(new PageContent(pages.size() + 1, text));
+        return new com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisRequest(null, pages,
+                com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisPolicy.of(ask));
+    }
+
     @Test
     void retriesInvalidStructuredResponseAndRecoversTheSameBatch() throws Exception {
         AtomicInteger requests = new AtomicInteger();
