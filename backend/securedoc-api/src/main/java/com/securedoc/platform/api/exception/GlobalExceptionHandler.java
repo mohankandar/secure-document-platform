@@ -21,6 +21,7 @@ import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.domain.error.LvCoded;
 import com.securedoc.platform.domain.error.LvErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
+import com.securedoc.platform.api.upload.RequestBodyTooLargeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -221,6 +222,7 @@ public class GlobalExceptionHandler {
         // D1 (#32): a request record refused a value while the body was read (RequestValues): its own 400 text.
         for (Throwable cause = ex.getCause(); cause != null && cause != cause.getCause(); cause = cause.getCause()) {
             if (cause instanceof ValidationException refused) return handleValidation(refused, request);
+            if (cause instanceof RequestBodyTooLargeException tooLarge) return handleRequestTooLarge(tooLarge, request);
         }
         String correlationId = correlationIdForError(request);
         log.warn("REQUEST_BODY_INVALID route={} correlation={}", route(request), correlationId);
@@ -334,6 +336,17 @@ public class GlobalExceptionHandler {
                 .body(ApiErrorResponse.of("INVALID_ARGUMENT", argumentCode(null, request), name == null ? null
                         : "Invalid value for request parameter '" + name + "'", correlationId)
                         .withDetail(name == null ? null : "Parameter " + name + " has the wrong type"));
+    }
+
+    /** Task 0055: a body that is not a file is over the limit. */
+    @ExceptionHandler(RequestBodyTooLargeException.class)
+    public ResponseEntity<ApiErrorResponse> handleRequestTooLarge(RequestBodyTooLargeException ex,
+                                                                  HttpServletRequest request) {
+        String correlationId = correlationIdForError(request);
+        log.warn("REQUEST_TOO_LARGE_REJECTED route={} correlation={}", route(request), correlationId);
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(ApiErrorResponse.of("REQUEST_TOO_LARGE", LvErrorCode.SYS_015, correlationId)
+                        .withDetail("The request is larger than the limit of " + ex.limit() + " bytes"));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

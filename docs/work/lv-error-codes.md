@@ -236,6 +236,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-012 | Stored file not opened | A stored file has no record of how it is protected, or it was changed, so it was not opened. | System | IT Admin | 502 | 0060 |
 | LV-SYS-013 | Waiting for the erase replay | The database was restored from a backup: no work is taken until the erase replay has run. | System | IT Admin | 503 | 0060 |
 | LV-SYS-014 | Erase log not available | LexaVault can't use its erase log, so nothing is erased and no work is taken. | System | IT Admin | 503 | 0060 |
+| LV-SYS-015 | Request too large | The request's data (not a file) is larger than LexaVault takes, so it was not read. | Refused | Source system, IT Admin | 413 | 0055 |
 
 **Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064; LV-SYS-010 to 014 by task 0060; LV-SCN-022 and LV-CFG-012 to 015 by task 0061.)*
 

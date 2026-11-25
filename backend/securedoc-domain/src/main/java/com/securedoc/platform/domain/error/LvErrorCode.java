@@ -500,7 +500,10 @@ public enum LvErrorCode {
             Kind.SYSTEM, "IT Admin", 503, false),
     SYS_014("LV-SYS-014", Area.SYS, "Erase log not available",
             "LexaVault can't use its erase log, so nothing is erased and no work is taken.",
-            Kind.SYSTEM, "IT Admin", 503, false);
+            Kind.SYSTEM, "IT Admin", 503, false),
+    SYS_015("LV-SYS-015", Area.SYS, "Request too large",
+            "The request's data (not a file) is larger than LexaVault takes, so it was not read.",
+            Kind.REFUSED, "Source system, IT Admin", 413, false);
 
     /** The area a code belongs to, in the order the customer guide lists them. */
     public enum Area { INT, SCN, PRC, AI, RED, REV, DLV, AUT, LIC, CFG, SYS }

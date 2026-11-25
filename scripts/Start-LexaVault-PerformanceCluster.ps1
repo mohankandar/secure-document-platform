@@ -127,7 +127,8 @@ if (-not (Test-TcpPort -HostName "127.0.0.1" -Port 5432)) {
     Require-Command "docker"
     if (-not (Test-Path $ComposeFile)) { throw "PostgreSQL is unavailable and compose file was not found: $ComposeFile" }
     Write-Host "Starting PostgreSQL..."
-    & docker compose -f $ComposeFile up -d
+    # Task 0055: an existing container is started as it is, never made again for a changed setting.
+    & docker compose -f $ComposeFile up -d --no-recreate
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed to start PostgreSQL." }
     $deadline = (Get-Date).AddSeconds(45)
     while ((Get-Date) -lt $deadline -and -not (Test-TcpPort -HostName "127.0.0.1" -Port 5432)) { Start-Sleep -Seconds 1 }
