@@ -70,6 +70,20 @@ class WatchedFolderSchedulerFailureTest {
         });
     }
 
+    /** Task 0077: the folder of an entity the licence doesn't cover waits; the log line has the LV code. */
+    @Test
+    void aFolderStoppedByTheLicenceIsLoggedWithItsCode() {
+        when(intake.licenceRefusal(any())).thenReturn(java.util.Optional.of(
+                new com.securedoc.platform.application.licensing.LicenseEnforcementException("LICENSE_TENANT_MISMATCH", "x",
+                        com.securedoc.platform.domain.licensing.LicenseValidationStatus.TENANT_MISMATCH)));
+
+        scheduler.scheduledScan();
+
+        assertTrue(logs.list.stream().anyMatch(e -> e.getFormattedMessage()
+                .endsWith("reasonCode=LICENSE_TENANT_MISMATCH code=LV-LIC-003")));
+        verify(intake, never()).scan(any(), any(), any());
+    }
+
     @Test
     void anInvalidScheduledIdentityIsLoggedOnceWithTheSettingNameNotItsValue() {
         admin.setWatchedFolderTenantId("Jane-Doe-not-a-uuid");
