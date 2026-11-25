@@ -1,11 +1,11 @@
 # LexaVault error codes: customer guide
 
-**Reviewed by the design chat, 2026-11-21.**
+**Reviewed by the design chat, 2026-11-21.** The "Support tells the customer" lines were added by task 0082 and wait for review.
 
 Every refusal, stop or warning in LexaVault has a code like `LV-INT-001`: `LV`, then the area (for example `INT` for intake), then a number.
 You see the code in the API error body as `code` (next to the older `errorCode`), and on screens as "Title · LV-XXX-NNN"; when you ask IT for help, give them the code and the reference number (correlation id) shown with it.
 
-**How to read each entry.** The heading gives the code and the title people see. **Means** says what happened. **Kind** says what state things are in: Refused (nothing taken in), Warning (taken in, something to know), Waiting (not a failure yet), Stopped (taken in, processing stopped), Export failed, Not allowed (a person or client was refused), Set-up (a setting is wrong) or System (LexaVault or something it depends on). **Who acts** is the person or system that can fix it. **HTTP status** is the status an API call gets ("—" when the code is not an API answer). **What to do** lists the steps for the person who acts.
+**How to read each entry.** The heading gives the code and the title people see. **Means** says what happened. **Kind** says what state things are in: Refused (nothing taken in), Warning (taken in, something to know), Waiting (not a failure yet), Stopped (taken in, processing stopped), Export failed, Not allowed (a person or client was refused), Set-up (a setting is wrong) or System (LexaVault or something it depends on). **Who acts** is the person or system that can fix it. **HTTP status** is the status an API call gets ("—" when the code is not an API answer). **Support tells the customer** is what support says to the person who reports the code. **What to do** lists the steps for the person who acts.
 
 The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC processing, AI AI model, RED redaction, REV review and approval, DLV export, AUT sign-in and access, LIC licence, CFG settings, SYS system.
 
@@ -17,6 +17,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** LexaVault couldn't read the request your system sent. Please have the team that runs that system correct the format and send it again.
 
 **What to do:**
 
@@ -30,6 +31,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The upload came without a header or file part that LexaVault needs. Please have the team that runs the source system add it and send the upload again.
 
 **What to do:**
 
@@ -43,6 +45,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** A required field was missing, blank or too long. The message names the field; please have it corrected and the request sent again.
 
 **What to do:**
 
@@ -56,6 +59,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The file is larger than the limit set for this source. Please send a smaller file or split it, or ask your IT Admin about the limit.
 
 **What to do:**
 
@@ -70,6 +74,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Warning
 - **Who acts:** Source system
 - **HTTP status:** 201
+- **Support tells the customer:** The sensitivity level sent wasn't one LexaVault knows, so it was taken in as Standard. If a higher level is needed, please tell the person responsible for the case before it is exported.
 
 **What to do:**
 
@@ -83,6 +88,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The file that arrived has no content. Please create or export it again and send it once more.
 
 **What to do:**
 
@@ -96,6 +102,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, person uploading
 - **HTTP status:** 400
+- **Support tells the customer:** LexaVault takes in PDFs only, and this file isn't one. Please save the document as a PDF and send or upload it again.
 
 **What to do:**
 
@@ -110,6 +117,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** The PDF couldn't be opened because it is damaged or has a password. Please check that it opens in a normal PDF reader; a file with a password has to be sent through the API.
 
 **What to do:**
 
@@ -123,6 +131,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The PDF has more pages than the limit set for this source. Please split it into smaller documents, or ask your IT Admin about the limit.
 
 **What to do:**
 
@@ -136,6 +145,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The case lists more documents than the limit set for this source. Please split it into several cases, or ask your IT Admin about the limit.
 
 **What to do:**
 
@@ -149,6 +159,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** The checksum sent with the file isn't the one listed for it in the case. Please have the team that runs the source system check it and send the document again.
 
 **What to do:**
 
@@ -162,6 +173,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** The file received doesn't match its checksum, so it changed on the way. Please send the same file again; if it repeats, ask your IT team to check the network.
 
 **What to do:**
 
@@ -175,6 +187,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** A case field that is required is missing. The message names it; please send the case again with that field filled in.
 
 **What to do:**
 
@@ -188,6 +201,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, Business Admin
 - **HTTP status:** 400
+- **Support tells the customer:** A case field was sent that isn't set up for this entity. Either the source system corrects the field, or your Business Admin adds it.
 
 **What to do:**
 
@@ -202,6 +216,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, person
 - **HTTP status:** 400
+- **Support tells the customer:** The value of a case field breaks the rule set for it. The message names the field and the rule; please correct the value and send or save the case again.
 
 **What to do:**
 
@@ -216,6 +231,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, Business Admin
 - **HTTP status:** 400
+- **Support tells the customer:** The case fields sent match an existing case but don't agree with it. Please compare the two and correct the one that is wrong.
 
 **What to do:**
 
@@ -229,6 +245,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Nobody
 - **HTTP status:** 400
+- **Support tells the customer:** LexaVault already has this content, so nothing new was created. No action is needed unless you meant to send something new.
 
 **What to do:**
 
@@ -242,6 +259,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** This revision was sent before with different content. Please send the changed content as a new revision.
 
 **What to do:**
 
@@ -254,6 +272,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** This document id was already used for different content. Please have the source system use its own id for each document, or send the change as a new revision.
 
 **What to do:**
 
@@ -267,6 +286,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The document isn't in the case's list, or is in it twice. Please have the source system correct the list and send the case as a new revision.
 
 **What to do:**
 
@@ -280,6 +300,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** The source system used the same idempotency key for two different documents. Please have it use a new key for each document and send the upload again.
 
 **What to do:**
 
@@ -293,6 +314,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** All documents of this case were already received, so it can't take more. New or changed documents need a new revision.
 
 **What to do:**
 
@@ -306,6 +328,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 410
+- **Support tells the customer:** Not all documents of the case arrived before the deadline. Please have the case sent again with retry switched on.
 
 **What to do:**
 
@@ -319,6 +342,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 409
+- **Support tells the customer:** A retry was asked for, but there is no earlier attempt to retry. Please check the package id and revision, or send the case without retry.
 
 **What to do:**
 
@@ -331,6 +355,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, person
 - **HTTP status:** 404
+- **Support tells the customer:** There is no case with this id in the entity you are working in. Please check the id and the entity; if the case should exist, send us the reference number.
 
 **What to do:**
 
@@ -344,6 +369,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Person
 - **HTTP status:** 409
+- **Support tells the customer:** The case can't take documents: it was already submitted, or it has none to submit. Please open the case to see which, or start a new case for more documents.
 
 **What to do:**
 
@@ -357,6 +383,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 429
+- **Support tells the customer:** LexaVault couldn't take this in because it was full at that moment; nothing was lost. The source system can send the same request again after the time given in the answer.
 
 **What to do:**
 
@@ -370,6 +397,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Person, source system
 - **HTTP status:** 400
+- **Support tells the customer:** A PDF can have up to 500 pages, and nothing was taken in from this file. Please split it and send the parts as separate documents.
 
 **What to do:**
 
@@ -383,6 +411,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Person, source system
 - **HTTP status:** 400
+- **Support tells the customer:** A case can hold up to 50 files, and nothing more was taken in. Please split the files over several cases.
 
 **What to do:**
 
@@ -396,6 +425,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Waiting
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** The folder drop is waiting for its trigger file, so it hasn't been taken in. Please check that the source system writes the trigger file into the same drop.
 
 **What to do:**
 
@@ -409,6 +439,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system, IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The trigger file isn't in the expected format or points outside its folder. Please have the source system correct it and send a new drop.
 
 **What to do:**
 
@@ -423,6 +454,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** The trigger file lists a document that isn't in the drop. Please have the source system copy every document first, write the trigger file last, and send the drop again.
 
 **What to do:**
 
@@ -436,6 +468,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** The folder drop has a trigger file but no PDFs. Please copy the PDFs in before the trigger file and send the drop again.
 
 **What to do:**
 
@@ -448,6 +481,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault can't work with files in the watched folder. Please have your IT Admin check that the folder can be reached, its access rights and its free space.
 
 **What to do:**
 
@@ -461,6 +495,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** The files in this drop are no longer the ones LexaVault started with. Please send the complete drop again as a new drop.
 
 **What to do:**
 
@@ -474,6 +509,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The password sent with the PDF doesn't open it, and nothing was taken in. Please check the password with the person who protected the file and send it again.
 
 **What to do:**
 
@@ -486,6 +522,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 400
+- **Support tells the customer:** The password was sent in a way LexaVault doesn't accept, and nothing was taken in. Please have the source system's team correct it; if the password was in the address, it should be changed. Never send us the password.
 
 **What to do:**
 
@@ -499,6 +536,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** IT Admin, source system
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault couldn't reach your source system. Please check that it is running, and have your IT Admin check the network and the connection's address.
 
 **What to do:**
 
@@ -512,6 +550,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** Your source system answered LexaVault with an error. Please have the team that runs it check its own logs for that time.
 
 **What to do:**
 
@@ -525,6 +564,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault couldn't understand the answer of your source system. Please have the team that runs it check the agreed polling format.
 
 **What to do:**
 
@@ -538,6 +578,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Warning
 - **Who acts:** IT Admin, source system
 - **HTTP status:** —
+- **Support tells the customer:** The case was taken in, but LexaVault couldn't confirm that to your source system, which may send it again. Please have your IT Admin check the source's receipt address.
 
 **What to do:**
 
@@ -551,6 +592,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Nobody
 - **HTTP status:** 409
+- **Support tells the customer:** A collection from this source was already running, so a second one wasn't started. Please look at the run history for its result.
 
 **What to do:**
 
@@ -566,6 +608,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** A scan has to be sent as exactly one PDF. Please have your IT Admin check the Scan Bridge; if it repeats, send us the reference number.
 
 **What to do:**
 
@@ -579,6 +622,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 409
+- **Support tells the customer:** The scanned file received isn't the size the scanner announced. Please scan again; if it repeats, have your IT Admin check the workstation and its network.
 
 **What to do:**
 
@@ -592,6 +636,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** The scan came without the scanner details LexaVault needs. Please have your IT Admin check the Scan Bridge settings on that workstation.
 
 **What to do:**
 
@@ -605,6 +650,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Operator
 - **HTTP status:** 400
+- **Support tells the customer:** The scan had no pages or wasn't a PDF. Please check the paper and the scanner, and scan again.
 
 **What to do:**
 
@@ -618,6 +664,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Operator, IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** The scan is over the size limit, or the workstation is low on disk space. Please scan fewer pages at a time and have your IT Admin check the disk.
 
 **What to do:**
 
@@ -631,6 +678,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Operator
 - **HTTP status:** 409
+- **Support tells the customer:** Another scan is still waiting on this workstation. Please finish or cancel it, then scan again.
 
 **What to do:**
 
@@ -644,6 +692,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** The Scan Bridge on this workstation is switched off or in the wrong mode. Please have your IT Admin check its settings.
 
 **What to do:**
 
@@ -657,6 +706,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** The Scan Bridge can't find a supported scanner. Please check that it is connected and switched on, and have your IT Admin check the scanner setting.
 
 **What to do:**
 
@@ -670,6 +720,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Operator
 - **HTTP status:** 504
+- **Support tells the customer:** The scan stopped before it finished. Please check the scanner for a paper jam or an error, and scan again in smaller parts if the stack is large.
 
 **What to do:**
 
@@ -683,6 +734,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Operator
 - **HTTP status:** 409
+- **Support tells the customer:** The scan session ended, or the scan wasn't ready to send. Please wait until it shows as ready, or reload the page and scan again.
 
 **What to do:**
 
@@ -696,6 +748,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** Operator, IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The browser can't reach the Scan Bridge on this workstation. Please start it or restart the workstation; if that doesn't help, ask your IT Admin.
 
 **What to do:**
 
@@ -709,6 +762,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Not allowed
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The Scan Bridge didn't accept a request from this page. Please reload the page; if it repeats, have your IT Admin check the Scan Bridge's allowed addresses.
 
 **What to do:**
 
@@ -722,6 +776,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** The Scan Bridge can't read or write its working files. Please have your IT Admin check them, and contact us before deleting anything.
 
 **What to do:**
 
@@ -735,6 +790,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The Scan Bridge couldn't start. Please have your IT Admin read its start-up log, which names the problem.
 
 **What to do:**
 
@@ -748,6 +804,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The Scan Bridge can't reach LexaVault; the scan is kept on the workstation. Please have your IT Admin check the network and the bridge's settings.
 
 **What to do:**
 
@@ -761,6 +818,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault refused the scan and gave its own code for the reason. Please send us that code, or look it up in this guide.
 
 **What to do:**
 
@@ -774,6 +832,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault hasn't accepted the scan within the time limit. Please have your IT Admin check that LexaVault is running and whether the case arrived before it is sent again.
 
 **What to do:**
 
@@ -787,6 +846,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The scan couldn't be sent after 3 tries; it is kept on the workstation. Please have your IT Admin check the network and send it again.
 
 **What to do:**
 
@@ -799,6 +859,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Operator
 - **HTTP status:** 409
+- **Support tells the customer:** The scan can't be cancelled because it is being sent or needs attention first. Please wait, or ask your IT Admin to look at it before scanning the case again.
 
 **What to do:**
 
@@ -811,6 +872,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Warning
 - **Who acts:** Nobody
 - **HTTP status:** —
+- **Support tells the customer:** The Scan Bridge restarted and picked the scan up where it left off. No action is needed; LexaVault takes the scan in only once.
 
 **What to do:**
 
@@ -823,6 +885,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Waiting
 - **Who acts:** Nobody
 - **HTTP status:** —
+- **Support tells the customer:** The scan was sent and LexaVault hasn't confirmed it yet. Please wait; the Scan Bridge checks again by itself.
 
 **What to do:**
 
@@ -835,6 +898,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Person
 - **HTTP status:** —
+- **Support tells the customer:** After a restart, the Scan Bridge no longer has the sensitive case fields, so this scan can't be sent. Please cancel it, fill in the fields again in a new case and scan once more.
 
 **What to do:**
 
@@ -849,6 +913,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** The PDF couldn't be opened because it is damaged or has a password. Please make a copy that opens without a password and send it as a new case or revision.
 
 **What to do:**
 
@@ -862,6 +927,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** No text could be read in the document. Please check that it isn't blank, and send a clearer scan or the original electronic PDF.
 
 **What to do:**
 
@@ -875,6 +941,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** A page's scan quality is too low to read reliably. Please scan it again with better quality and send the document again.
 
 **What to do:**
 
@@ -888,6 +955,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** Reading the text of a page took too long, so processing stopped. Your IT Admin can retry it from Support.
 
 **What to do:**
 
@@ -901,6 +969,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The text reader isn't available on the LexaVault server. Please have your IT Admin check it, then retry processing.
 
 **What to do:**
 
@@ -914,6 +983,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** A page couldn't be prepared for reading. Your IT Admin can retry it; if a good PDF keeps failing, please send us the reference number.
 
 **What to do:**
 
@@ -927,6 +997,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The original file isn't in storage. Please have your IT Admin check the storage first, and send us the reference number so we can help find out why.
 
 **What to do:**
 
@@ -940,6 +1011,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** Processing failed 3 times, so it stopped. Please have your IT Admin look up the earlier failure on the case's Problem page and fix that first.
 
 **What to do:**
 
@@ -953,6 +1025,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Nobody
 - **HTTP status:** —
+- **Support tells the customer:** The document is already being processed. Please wait and refresh; if it stays stuck, tell your IT Admin.
 
 **What to do:**
 
@@ -966,6 +1039,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Processor
 - **HTTP status:** —
+- **Support tells the customer:** This kind of form can't be read by LexaVault, so it was not processed. Please ask the sender for the form printed to an ordinary PDF.
 
 **What to do:**
 
@@ -981,6 +1055,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault couldn't reach its AI model on any server. Please have your IT Admin check the AI servers, then retry processing.
 
 **What to do:**
 
@@ -994,6 +1069,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The AI model took too long to answer. Your IT Admin can retry processing, and check the AI servers' load if it repeats.
 
 **What to do:**
 
@@ -1007,6 +1083,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The AI model was too busy to answer. Please have your IT Admin retry after a few minutes.
 
 **What to do:**
 
@@ -1019,6 +1096,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The AI model didn't accept the request: it isn't installed, or its key or settings are wrong. Please have your IT Admin check the AI settings.
 
 **What to do:**
 
@@ -1032,6 +1110,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The AI model's answer couldn't be used. Your IT Admin can retry processing, or a reviewer can continue the case by hand.
 
 **What to do:**
 
@@ -1045,6 +1124,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** Platform Ops
 - **HTTP status:** —
+- **Support tells the customer:** No AI settings exist for this entity yet. The platform operations team has to set them up before processing is retried.
 
 **What to do:**
 
@@ -1057,6 +1137,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The AI model couldn't be loaded when LexaVault started. Please have your IT Admin check the model's name and the AI servers.
 
 **What to do:**
 
@@ -1070,6 +1151,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The installed AI model isn't the version approved for LexaVault, so it wasn't used. Please have your IT Admin install the approved version.
 
 **What to do:**
 
@@ -1085,6 +1167,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Reviewer
 - **HTTP status:** —
+- **Support tells the customer:** One finding has no box on the page, so it can't be blacked out. Please have a reviewer draw its box or dismiss it, then submit the review again.
 
 **What to do:**
 
@@ -1098,6 +1181,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The redacted copy didn't pass LexaVault's safety check, so it was not exported. Please don't send the document another way; have your IT Admin retry, and send us the reference number if it repeats.
 
 **What to do:**
 
@@ -1111,6 +1195,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The redactions couldn't be applied to this PDF. Your IT Admin can retry; if it repeats, please send us the reference number.
 
 **What to do:**
 
@@ -1124,6 +1209,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The redacted copy couldn't be stored. Please have your IT Admin check the document storage, then retry processing.
 
 **What to do:**
 
@@ -1136,6 +1222,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The final check found a redacted value in the text of the redacted copy, so it was not exported. Please have your IT Admin follow the steps in this guide, and never send us the value.
 
 **What to do:**
 
@@ -1151,6 +1238,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Nobody
 - **HTTP status:** 409
+- **Support tells the customer:** Another person decided this first. Please refresh the page to see the decision.
 
 **What to do:**
 
@@ -1163,6 +1251,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Nobody
 - **HTTP status:** 409
+- **Support tells the customer:** The case moved on before this action. Please refresh the page to see where it is now.
 
 **What to do:**
 
@@ -1175,6 +1264,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Reviewer
 - **HTTP status:** 400
+- **Support tells the customer:** Some findings haven't been decided yet. Please confirm or dismiss each one, then continue.
 
 **What to do:**
 
@@ -1188,6 +1278,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Reviewer
 - **HTTP status:** 400
+- **Support tells the customer:** The confirmation wasn't ticked. Please read it, tick it and submit again.
 
 **What to do:**
 
@@ -1200,6 +1291,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Not allowed
 - **Who acts:** Reviewer
 - **HTTP status:** 403
+- **Support tells the customer:** This review is assigned to someone else. If you should do it, please ask your supervisor to assign it to you.
 
 **What to do:**
 
@@ -1212,6 +1304,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Reviewer
 - **HTTP status:** 400
+- **Support tells the customer:** The box is outside the page or has no size. Please draw it again and save.
 
 **What to do:**
 
@@ -1224,6 +1317,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Nobody
 - **HTTP status:** 400
+- **Support tells the customer:** This case can't be processed again in LexaVault. If it is still needed, please ask for the document to be sent as a new case.
 
 **What to do:**
 
@@ -1236,6 +1330,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Reviewer
 - **HTTP status:** 400
+- **Support tells the customer:** Continuing by hand works only for cases stopped at the AI step. Please check on the Problem page where this case stopped.
 
 **What to do:**
 
@@ -1247,6 +1342,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Nobody
 - **HTTP status:** 400
+- **Support tells the customer:** The page asked for isn't in the document. Please reload the review page; if it repeats, send us the reference number.
 
 **What to do:**
 
@@ -1259,6 +1355,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** A person rejected the case because it holds the wrong document. Please send a new case with the right one.
 
 **What to do:**
 
@@ -1271,6 +1368,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** A person rejected the case because its document couldn't be read. Please send a new case with a better copy.
 
 **What to do:**
 
@@ -1283,6 +1381,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** A person rejected the case because it doesn't belong here. Please ask the reviewer's team what should be sent.
 
 **What to do:**
 
@@ -1295,6 +1394,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** A person rejected the case as a duplicate. Please use the other case for the same document; nothing more needs to be sent.
 
 **What to do:**
 
@@ -1307,6 +1407,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Stopped
 - **Who acts:** Source system
 - **HTTP status:** —
+- **Support tells the customer:** A person rejected the case and wrote the reason in a ticket. Please read the ticket, and send a new case if it says so.
 
 **What to do:**
 
@@ -1319,6 +1420,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Refused
 - **Who acts:** Another supervisor
 - **HTTP status:** 400
+- **Support tells the customer:** In a bulk approval nobody can approve a case they reviewed themselves. Please ask another supervisor to approve it.
 
 **What to do:**
 
@@ -1333,6 +1435,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault couldn't connect to the destination. Please have your IT Admin check the destination and the network, then retry the export.
 
 **What to do:**
 
@@ -1346,6 +1449,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The destination said it was busy or had an error. Please have your IT Admin retry after a few minutes, and contact the destination's team if it repeats.
 
 **What to do:**
 
@@ -1358,6 +1462,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The destination doesn't accept the sensitivity level of the case or of a document. Please have your IT Admin settle this with the destination's team.
 
 **What to do:**
 
@@ -1371,6 +1476,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The destination refused the case or a document and gave its own code. Please have your IT Admin ask the destination's team what that code means.
 
 **What to do:**
 
@@ -1384,6 +1490,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault couldn't sign in to the destination. Please have your IT Admin check the stored credential with the destination's team, and never send us the credential.
 
 **What to do:**
 
@@ -1397,6 +1504,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** This entity has no enabled destination, or its address isn't valid. Please have your IT Admin check it under Integrations.
 
 **What to do:**
 
@@ -1410,6 +1518,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault couldn't understand the destination's answer. Please have your IT Admin check with the destination's team that its version is supported.
 
 **What to do:**
 
@@ -1423,6 +1532,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The destination didn't confirm every document of the case. Please have your IT Admin check which ones arrived, then retry the export.
 
 **What to do:**
 
@@ -1436,6 +1546,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 - **Kind:** Warning
 - **Who acts:** Nobody
 - **HTTP status:** —
+- **Support tells the customer:** The destination already has this case, so it counts as exported. No action is needed unless you expected a newer version there.
 
 Reserved: not used yet.
 
@@ -1450,6 +1561,7 @@ Reserved: not used yet.
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** A folder for this case run is already in the export location. Please have your IT Admin check it before removing or moving it, then send the case again.
 
 **What to do:**
 
@@ -1463,6 +1575,7 @@ Reserved: not used yet.
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The case has nothing ready to export: a document isn't finished, or its redacted copy is missing. Please have your IT Admin check the case.
 
 **What to do:**
 
@@ -1476,6 +1589,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** Business Admin
 - **HTTP status:** —
+- **Support tells the customer:** A page matched more than one split rule. Please have your Business Admin make the rules more specific.
 
 **What to do:**
 
@@ -1489,6 +1603,7 @@ Reserved: not used yet.
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The split document couldn't be made. Your IT Admin can retry it; if it repeats, please send us the reference number.
 
 **What to do:**
 
@@ -1502,6 +1617,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** Retrying can't help with this failure until its cause is fixed. Please have your IT Admin look up the original code under Technical details.
 
 **What to do:**
 
@@ -1515,6 +1631,7 @@ Reserved: not used yet.
 - **Kind:** Export failed
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** A resend failed, so the case is now with your IT team. Please have your IT Admin look up the original code under Technical details.
 
 Reserved: not used yet.
 
@@ -1532,6 +1649,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** Person
 - **HTTP status:** 401
+- **Support tells the customer:** Your session ended or couldn't be checked. Please sign in again; if it keeps happening, tell your IT Admin.
 
 **What to do:**
 
@@ -1545,6 +1663,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** You are signed in but have no LexaVault role. Please ask your IT Admin for access.
 
 **What to do:**
 
@@ -1558,6 +1677,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** Your account can't open this entity. Please ask your IT Admin to check your access.
 
 **What to do:**
 
@@ -1571,6 +1691,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Person
 - **HTTP status:** 403
+- **Support tells the customer:** You have access to more than one entity. Please choose the one you want to work in.
 
 **What to do:**
 
@@ -1583,6 +1704,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** Platform Ops
 - **HTTP status:** 403
+- **Support tells the customer:** This entity is switched off or not set up yet. Please ask the platform operations team about it.
 
 **What to do:**
 
@@ -1596,6 +1718,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** Business Admin, IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** Your role doesn't allow this action. If you should be able to do it, please ask your Business Admin or IT Admin.
 
 **What to do:**
 
@@ -1609,6 +1732,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** Sign-in isn't working because LexaVault and the login system don't match or can't reach each other. Please give your IT Admin the reference number.
 
 **What to do:**
 
@@ -1622,6 +1746,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The source system isn't allowed to work on this entity or this case. Please have your IT Admin check its connection under Integrations.
 
 **What to do:**
 
@@ -1635,6 +1760,7 @@ Reserved: not used yet.
 - **Kind:** Not allowed
 - **Who acts:** Person, IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The sign-in stopped part way. Please go back to the LexaVault start page and sign in again; if it repeats, tell your IT Admin.
 
 **What to do:**
 
@@ -1648,6 +1774,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** Platform Ops
 - **HTTP status:** 403
+- **Support tells the customer:** This feature isn't switched on for your entity. Please ask the platform operations team whether it should be.
 
 **What to do:**
 
@@ -1663,6 +1790,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** No licence is stored for this installation. Please have your IT team store the licence file you received.
 
 **What to do:**
 
@@ -1675,6 +1803,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The licence isn't in force, so no new cases are taken in; cases already in LexaVault are finished. Please have your IT Admin check its dates and get a renewed licence if needed.
 
 **What to do:**
 
@@ -1688,6 +1817,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The licence can't be read or trusted, or doesn't cover this entity. Please have your IT team store the original licence file again and send us the licence's own code if it is still refused.
 
 **What to do:**
 
@@ -1701,6 +1831,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The stored licence doesn't cover LexaVault. Please have your IT Admin check what it covers and ask your supplier for one that does.
 
 **What to do:**
 
@@ -1715,6 +1846,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Admin who saved it
 - **HTTP status:** 400
+- **Support tells the customer:** A setting wasn't saved because its value isn't allowed. The message names the field and the allowed range.
 
 **What to do:**
 
@@ -1728,6 +1860,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** Business Admin
 - **HTTP status:** 400
+- **Support tells the customer:** This entity's case fields aren't set up completely. Please have your Business Admin make sure exactly one active field is Primary.
 
 **What to do:**
 
@@ -1741,6 +1874,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** The connection's settings are missing, duplicated or not allowed. The message says which one; please have your IT Admin correct it.
 
 **What to do:**
 
@@ -1754,6 +1888,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** The connection test failed. Please have your IT Admin read the details, which say at which step, and fix that step.
 
 **What to do:**
 
@@ -1767,6 +1902,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 409
+- **Support tells the customer:** Only one main export destination can be switched on for each entity. Please have your IT Admin choose one.
 
 **What to do:**
 
@@ -1780,6 +1916,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** A split rule is incomplete, repeats another or points to a missing destination. Please have your IT Admin correct it.
 
 **What to do:**
 
@@ -1793,6 +1930,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The watched folder belongs to another entity or isn't set up. Please have your IT Admin check which entity it is for.
 
 **What to do:**
 
@@ -1806,6 +1944,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** The draft login settings are incomplete or failed their test. Please have your IT Admin complete them and run the test again.
 
 **What to do:**
 
@@ -1819,6 +1958,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 500
+- **Support tells the customer:** A scanner setting is outside its allowed range. Please have your IT Admin correct it in the Scan Bridge.
 
 **What to do:**
 
@@ -1832,6 +1972,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** 403
+- **Support tells the customer:** The connection is switched off or isn't the right kind for this action. Please have your IT Admin check it under Integrations.
 
 **What to do:**
 
@@ -1844,6 +1985,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** IT Admin
 - **HTTP status:** 409
+- **Support tells the customer:** The case or incident can't take this action in its current state. Please reload the page to see its state.
 
 **What to do:**
 
@@ -1857,6 +1999,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** Business Admin, IT Admin
 - **HTTP status:** 400
+- **Support tells the customer:** A sensitive case field can't be used until the key service is set up. Please save the field without Sensitive, or ask your IT team to set up the key service.
 
 **What to do:**
 
@@ -1869,6 +2012,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Business Admin
 - **HTTP status:** 400
+- **Support tells the customer:** This item is always removed from documents and can't be kept as a case field. Please have your Business Admin remove it from the list.
 
 **What to do:**
 
@@ -1881,6 +2025,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Business Admin
 - **HTTP status:** 400
+- **Support tells the customer:** An item can be redacted or kept as a case field, not both. Please have your Business Admin decide which for this entity.
 
 **What to do:**
 
@@ -1894,6 +2039,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Business Admin
 - **HTTP status:** 400
+- **Support tells the customer:** The field already has values, so these settings can't change any more. Please have your Business Admin add a new field instead.
 
 **What to do:**
 
@@ -1908,6 +2054,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 500
+- **Support tells the customer:** An unexpected error happened. Please send us the reference number and the time, and tell us what you were doing, without any document content.
 
 **What to do:**
 
@@ -1921,6 +2068,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** LexaVault can't read or write its document storage. Please have your IT Admin check the storage, then retry the failed work.
 
 **What to do:**
 
@@ -1934,6 +2082,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** LexaVault can't reach its database. Please have your IT Admin check that it is running and can be reached.
 
 **What to do:**
 
@@ -1947,6 +2096,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** LexaVault couldn't take more work at that moment. Please try again after a few minutes.
 
 **What to do:**
 
@@ -1959,6 +2109,7 @@ Reserved: not used yet.
 - **Kind:** Set-up
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** LexaVault didn't start because a setting is wrong. Please have your IT Admin read the start-up log, which names it.
 
 **What to do:**
 
@@ -1972,6 +2123,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** A part LexaVault depends on failed its health check. Please have your IT Admin see which part it is and follow the steps for it.
 
 **What to do:**
 
@@ -1985,6 +2137,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** —
+- **Support tells the customer:** A temporary file couldn't be deleted after a failure and may hold document content. Please have your IT Admin find and delete it safely, and don't send it to us.
 
 **What to do:**
 
@@ -1998,6 +2151,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Person, IT Admin
 - **HTTP status:** 404
+- **Support tells the customer:** The item asked for doesn't exist in this entity. Please reload the page and check the entity; if it should be there, send us the reference number.
 
 **What to do:**
 
@@ -2011,6 +2165,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Source system
 - **HTTP status:** 404 / 405
+- **Support tells the customer:** The source system called an address or method that LexaVault doesn't offer. Please have its team check the call against the API documentation.
 
 **What to do:**
 
@@ -2023,6 +2178,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** LexaVault can't reach its key service, so it can't open or store documents. Please have your IT Admin check the key service, then retry the failed work.
 
 **What to do:**
 
@@ -2035,6 +2191,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** The key service refused LexaVault, or the customer's keys are missing or switched off. Please have your IT Admin check it, and tell us first if this is part of a customer exit.
 
 **What to do:**
 
@@ -2048,6 +2205,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 502
+- **Support tells the customer:** LexaVault didn't open a stored file because its protection couldn't be confirmed. Please don't retry; have your IT Admin find out what changed in the storage.
 
 **What to do:**
 
@@ -2060,6 +2218,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** The database was restored from a backup, so LexaVault takes no work until the erase replay has run. Please have your IT Admin run it.
 
 **What to do:**
 
@@ -2072,6 +2231,7 @@ Reserved: not used yet.
 - **Kind:** System
 - **Who acts:** IT Admin
 - **HTTP status:** 503
+- **Support tells the customer:** LexaVault can't use its erase log, so nothing is erased and no work is taken. Please have your IT Admin check the erase log's location.
 
 **What to do:**
 
@@ -2084,6 +2244,7 @@ Reserved: not used yet.
 - **Kind:** Refused
 - **Who acts:** Source system, IT Admin
 - **HTTP status:** 413
+- **Support tells the customer:** The request's data is larger than LexaVault takes, so it was not read. Please send less at a time, or have your IT Admin check the limit.
 
 **What to do:**
 

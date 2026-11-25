@@ -27,6 +27,8 @@ import SupportStatus from './support/SupportStatus';
 import SupportList from './support/SupportList';
 import { CaseProblem, IncidentProblem } from './support/ProblemDetail';
 import ManualCase from './support/ManualCase';
+import ErrorCodes from './help/ErrorCodes';
+import { HELP_PATH } from './help/guideRules';
 import './studio.css';
 
 const MOD_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
@@ -194,6 +196,9 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/packages/new" element={canIntake ? <Navigate to="/intake?via=upload" replace /> : <Navigate to={home} replace />} />
           <Route path="/scanner-intake" element={canIntake ? <Navigate to="/intake?via=scan" replace /> : <Navigate to={home} replace />} />
           <Route path="/packages/:caseId" element={<LegacyCaseRedirect />} />
+          {/* Task 0082: static text, so every signed-in role may read it. */}
+          <Route path={HELP_PATH} element={<ErrorCodes />} />
+          <Route path={`${HELP_PATH}/:code`} element={<ErrorCodes />} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
         </ErrorBoundary>

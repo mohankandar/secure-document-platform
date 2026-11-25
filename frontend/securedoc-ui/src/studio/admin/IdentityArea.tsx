@@ -10,6 +10,7 @@ import { useUnsavedWork } from '../unsavedWork';
 import { HelpTip } from './HelpTip';
 import { ConfirmDialog, TextField, when } from './shared';
 import { changedByWords, draftProblem, draftStatus, type SignInDraft } from './signInRules';
+import { LvText } from '../help/LvCodeLink';
 
 /**
  * Admin › Sign-in (IT Admin). The connection people sign in through, with the read-only test (task 0054), and since task
@@ -52,10 +53,10 @@ export default function IdentityArea() {
             <button type="button" className="cf-btn" data-size="sm" onClick={() => void test()} disabled={testing}>{testing && <Spinner label="Testing" />}Test sign-in</button>
             <div role="status" aria-live="polite">
               {answer && answer.passed && <p><strong>The login system answers.</strong> {answer.message}</p>}
-              {answer && !answer.passed && <p><strong>Sign-in test failed:</strong> <span className="cf-mono">{answer.code}</span> {answer.message}</p>}
-              {answer && !answer.passed && answer.whatToDo && <p><strong>What to do:</strong> {answer.whatToDo}</p>}
+              {answer && !answer.passed && <p><strong>Sign-in test failed:</strong> <span className="cf-mono"><LvText>{answer.code}</LvText></span> {answer.message}</p>}
+              {answer && !answer.passed && answer.whatToDo && <p><strong>What to do:</strong> <LvText>{answer.whatToDo}</LvText></p>}
               {answer?.testedAt && <p className="cf-muted">Tested {dayAndTime(answer.testedAt)}.</p>}
-              {failed !== null && <p><strong>The test could not be run.</strong> {errorMessage(failed)}</p>}
+              {failed !== null && <p><strong>The test could not be run.</strong> <LvText>{errorMessage(failed)}</LvText></p>}
             </div>
           </div>
         )}
@@ -173,9 +174,9 @@ function ChangeSignIn({ data, active, reload }: { data: EnterpriseIdentityOvervi
       )}
 
       <div role="status" aria-live="polite">
-        {answer && <p><strong>Not done:</strong> <span className="cf-mono">{answer.code}</span> {answer.message}{answer.reason ? ` (${answer.reason})` : ''}</p>}
-        {answer?.whatToDo && <p><strong>What to do:</strong> {answer.whatToDo}</p>}
-        {problem && <p><strong>Not done.</strong> {problem}</p>}
+        {answer && <p><strong>Not done:</strong> <span className="cf-mono"><LvText>{answer.code}</LvText></span> {answer.message}{answer.reason ? ` (${answer.reason})` : ''}</p>}
+        {answer?.whatToDo && <p><strong>What to do:</strong> <LvText>{answer.whatToDo}</LvText></p>}
+        {problem && <p><strong>Not done.</strong> <LvText>{problem}</LvText></p>}
       </div>
 
       {confirm === 'switch' && draft && (

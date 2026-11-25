@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { Children, type ReactNode } from 'react';
 import { stageLabel, type StageKey } from './data';
 import { exportStatusLabel, exportTone, reasonLabel, type ExportState } from './exportRules';
+import { LvCodeLink, LvText } from './help/LvCodeLink';
 
 export function Kbd({ children }: { children: ReactNode }) {
   return <kbd className="cf-kbd">{children}</kbd>;
@@ -33,12 +34,13 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
 }
 
 export function Notice({ tone = 'neutral', children }: { tone?: 'neutral' | 'danger' | 'mark'; children: ReactNode }) {
-  return <div className="cf-notice" data-tone={tone} role={tone === 'danger' ? 'alert' : 'status'}>{children}</div>;
+  return <div className="cf-notice" data-tone={tone} role={tone === 'danger' ? 'alert' : 'status'}>{Children.map(children, (c) => (typeof c === 'string' ? <LvText>{c}</LvText> : c))}</div>;
 }
 
-/** Task 0029: "Destination refused the file · LV-DLV-004", the code in the code style (it never breaks inside). */
-export function CodeLabel({ code }: { code: string | null | undefined }) {
+/** Task 0029: "Destination refused the file · LV-DLV-004", the code in the code style (it never breaks inside).
+ * Task 0082: the code links to its entry in the guide; `plain` where the code stands inside another link. */
+export function CodeLabel({ code, plain }: { code: string | null | undefined; plain?: boolean }) {
   const label = reasonLabel(code);
   const cut = label.lastIndexOf(' · ');
-  return <>{label.slice(0, cut)} · <code className="cf-code">{label.slice(cut + 3)}</code></>;
+  return <>{label.slice(0, cut)} · {plain ? <code className="cf-code">{label.slice(cut + 3)}</code> : <LvCodeLink code={label.slice(cut + 3)} />}</>;
 }

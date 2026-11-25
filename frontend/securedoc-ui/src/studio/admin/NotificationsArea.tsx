@@ -10,6 +10,7 @@ import { useUnsavedWork } from '../unsavedWork';
 import { HelpTip } from './HelpTip';
 import { Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
 import { FREQUENCY_WORDS, ROLE_WORDS, deliveryState, eventTiming, mailForm, mailRequest, needsSecret, peopleText, roleNames, type MailForm } from './notificationRules';
+import { LvText } from '../help/LvCodeLink';
 
 /**
  * Admin › Notifications (task 0059), always for the entity the person is in: the IT Admin sets the e-mail and the technical
@@ -216,7 +217,7 @@ function RecentCard({ recent }: { recent: NotificationItOverview['recent'] }) {
               {recent.map((r, i) => (
                 <tr key={i}>
                   <th scope="row">{r.event}</th>
-                  <td><span className="cf-ad-tag" data-tone={r.state === 'SENT' ? 'ok' : undefined}>{deliveryState(r.state)}</span>{r.reason && <><br /><span className="cf-muted">{r.reason} ({r.code})</span></>}</td>
+                  <td><span className="cf-ad-tag" data-tone={r.state === 'SENT' ? 'ok' : undefined}>{deliveryState(r.state)}</span>{r.reason && <><br /><span className="cf-muted">{r.reason} (<LvText>{r.code}</LvText>)</span></>}</td>
                   <td>{when(r.at)}</td>
                 </tr>
               ))}

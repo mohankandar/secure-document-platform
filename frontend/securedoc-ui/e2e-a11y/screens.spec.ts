@@ -376,3 +376,29 @@ test.describe('Export screens (task 0029)', () => {
     await scan(page, 'Admin: keeping exported copies');
   });
 });
+
+test.describe('Help (task 0082)', () => {
+  test('Error codes', async ({ page }) => {
+    await signInAs(page, 'viewer', '/help/error-codes');
+    await expect(page.getByRole('heading', { level: 1, name: 'Error codes' })).toBeVisible();
+    await scan(page, 'Help › Error codes');
+  });
+
+  test('Error codes, one entry open', async ({ page }) => {
+    await signInAs(page, 'viewer', '/help/error-codes/LV-SYS-006');
+    await expect(page.locator('details[data-code="LV-SYS-006"]')).toHaveAttribute('open', '');
+    await scan(page, 'Help › Error codes, one entry');
+  });
+
+  test('Error codes, unknown code', async ({ page }) => {
+    await signInAs(page, 'viewer', '/help/error-codes/LV-XYZ-999');
+    await expect(page.locator('.cf-notice')).toBeVisible();
+    await scan(page, 'Help › Error codes, unknown code');
+  });
+
+  test('Error codes in a tab without a session', async ({ page }) => {
+    await page.goto('/help/error-codes/LV-INT-001');
+    await expect(page.locator('details[data-code="LV-INT-001"]')).toHaveAttribute('open', '');
+    await scan(page, 'Help › Error codes, no session');
+  });
+});

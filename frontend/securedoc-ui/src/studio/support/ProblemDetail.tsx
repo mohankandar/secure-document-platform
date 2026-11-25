@@ -10,6 +10,7 @@ import { useToast } from '../toast';
 import { CONFIRM_COPY } from '../caseActionRunner';
 import { ConfirmDialog, when } from '../admin/shared';
 import { MORE_ACTIONS, SUPPORT_CAPS, fromIncident, fromTechnical, problemActions, type ProblemView } from './supportRules';
+import { LvText } from '../help/LvCodeLink';
 import './support.css';
 
 /**
@@ -91,7 +92,7 @@ function ProblemPage({ view, caps, tenantId, refresh }: { view: ProblemView; cap
             <span className="cf-mono">{view.caseValue ?? 'Case'}</span>
           </nav>
           <div className="cf-pb-title">
-            <h1 className="cf-title">{view.title}</h1>
+            <h1 className="cf-title"><LvText>{view.title}</LvText></h1>
             <span className="cf-stage" data-stage={view.impact.stage}><span className="cf-stage-dot" aria-hidden="true" />{view.impact.label}</span>
             <span className="cf-muted cf-pb-status">Problem: {view.status}</span>
           </div>
@@ -146,7 +147,7 @@ function ProblemPage({ view, caps, tenantId, refresh }: { view: ProblemView; cap
                     ? 'Nothing right now: the case is no longer stopped.'
                     : 'Retry and keeping the original are for IT Administrators. Send them the reference under Technical details.'}</p>
             )}
-            {failure && !pending && <p className="cf-danger-text" role="alert">{failure}</p>}
+            {failure && !pending && <p className="cf-danger-text" role="alert"><LvText>{failure}</LvText></p>}
           </div>
         </section>
       </div>
@@ -171,7 +172,7 @@ function ProblemPage({ view, caps, tenantId, refresh }: { view: ProblemView; cap
       <p className="cf-sp-count">Support never shows document text or sensitive values.</p>
 
       <ConfirmDialog open={pending !== null} title={pending ? `${pending.label}?` : ''}
-        facts={[['Case', <span className="cf-mono" key="c">{view.caseValue ?? view.packageId}</span>], ['Problem', view.title]]}
+        facts={[['Case', <span className="cf-mono" key="c">{view.caseValue ?? view.packageId}</span>], ['Problem', <LvText key="p">{view.title}</LvText>]]}
         consequence={pending?.consequence ?? ''} confirmLabel={pending?.label ?? ''} danger={pending?.danger} busy={busy} error={failure}
         onCancel={() => { setPending(null); setFailure(null); }}
         onConfirm={() => pending && void run(pending.action, pending.holdDays, pending.action === 'REPROCESS' ? 'Retry started.' : 'Done.')} />

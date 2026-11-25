@@ -594,16 +594,38 @@ public enum LvErrorCode {
      */
     public String whatToDo() { return WhatToDo.TEXTS.getProperty(code, ""); }
 
-    private static final class WhatToDo {
-        static final java.util.Properties TEXTS = new java.util.Properties();
+    /** Task 0082: the numbered steps of {@link #whatToDo()}, one by one, as the guide lists them. */
+    public List<String> whatToDoSteps() {
+        return java.util.stream.IntStream.rangeClosed(1, 4).mapToObj(i -> Guide.TEXTS.getProperty(code + ".step." + i, ""))
+                .filter(step -> !step.isBlank()).toList();
+    }
 
-        static {
-            try (var in = LvErrorCode.class.getResourceAsStream("/lv-what-to-do.properties")) {
-                TEXTS.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
-            } catch (java.io.IOException e) {
-                throw new java.io.UncheckedIOException(e);
-            }
+    /** Task 0082: what support tells the customer who reports this code, from the same guide. */
+    public String supportTells() { return Guide.TEXTS.getProperty(code + ".support", ""); }
+
+    /** Task 0082: who acts, as the guide's groups. */
+    public List<LvWhoActs> whoActsGroups() { return LvWhoActs.groups(whoActs); }
+
+    /** Task 0082: an area's name in the guide, for example "Scanner and Scan Bridge". */
+    public static String areaName(Area area) { return Guide.TEXTS.getProperty("area." + area.name(), ""); }
+
+    private static final class WhatToDo {
+        static final java.util.Properties TEXTS = load("/lv-what-to-do.properties");
+    }
+
+    /** {@code LvErrorCodeGuideTest} keeps {@code lv-error-guide.properties} equal to {@code docs/api/error-codes.md}. */
+    private static final class Guide {
+        static final java.util.Properties TEXTS = load("/lv-error-guide.properties");
+    }
+
+    private static java.util.Properties load(String resource) {
+        java.util.Properties texts = new java.util.Properties();
+        try (var in = LvErrorCode.class.getResourceAsStream(resource)) {
+            texts.load(new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
         }
+        return texts;
     }
 
     /** The title and the code, as screens show them: "Destination busy or down · LV-DLV-002". */

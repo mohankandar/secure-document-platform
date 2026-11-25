@@ -11,6 +11,7 @@ import { useToast } from '../toast';
 import { MANUAL_WORDS, NAV, sensitiveTypeName } from '../words';
 import { PREVIEW_PIXELS_PER_CSS_PIXEL, nextZoom } from '../reviewRules';
 import { canFinish, pagesLine } from './supportRules';
+import { LvText } from '../help/LvCodeLink';
 import './support.css';
 
 /**
@@ -216,7 +217,7 @@ export default function ManualCase() {
                 {busy && <Spinner label="Working" />}Finish and send to approval
               </button>
             </div>
-            {failure && <p className="cf-danger-text" role="alert">{failure}</p>}
+            {failure && <p className="cf-danger-text" role="alert"><LvText>{failure}</LvText></p>}
           </aside>
         </div>
       )}

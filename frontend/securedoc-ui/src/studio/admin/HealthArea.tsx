@@ -15,6 +15,7 @@ import BrandingSection from './BrandingSection';
 import TelemetrySection from './TelemetrySection';
 import { watchedFolderStatus } from './integrationRules';
 import { SECTION_LABELS, intervalText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle } from './platformRules';
+import { LvText } from '../help/LvCodeLink';
 
 type Section = 'overview' | 'storage' | 'capacity' | 'branding' | 'telemetry';
 const SECTIONS = (Object.keys(SECTION_LABELS) as Section[]).map((k) => [k, SECTION_LABELS[k]] as const);
@@ -92,7 +93,7 @@ function Overview({ canOperate }: { canOperate: boolean }) {
                 <span className="cf-ad-health" data-h={s.tone} aria-hidden="true" />
                 <span className="cf-ad-service-name">{serviceName(p)}</span>
                 {product && <span className="cf-ad-service-product">{product}</span>}
-                <span className="cf-ad-status" data-tone={s.tone}>{serviceStatusText(p.status, p.lvCode)}</span>
+                <span className="cf-ad-status" data-tone={s.tone}><LvText>{serviceStatusText(p.status, p.lvCode)}</LvText></span>
               </li>
             );
           })}
@@ -169,7 +170,7 @@ function Overview({ canOperate }: { canOperate: boolean }) {
               <li key={item.packageId} className="cf-ad-conn">
                 <span className="cf-ad-health" data-h="danger" aria-hidden="true" />
                 <div className="cf-ad-conn-main">
-                  <div className="cf-ad-conn-name">Technical processing failure<span className="cf-ad-tag">{problemReason(item.reasonCode, item.lvCode).label}</span></div>
+                  <div className="cf-ad-conn-name">Technical processing failure<span className="cf-ad-tag"><LvText>{problemReason(item.reasonCode, item.lvCode).label}</LvText></span></div>
                   <div className="cf-ad-conn-meta">
                     <span>{item.documentCount} document{item.documentCount === 1 ? '' : 's'}</span>
                     <span>Failed {when(item.failedAt)}</span>

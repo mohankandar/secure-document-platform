@@ -880,3 +880,9 @@
 .cf-case-tick { display: flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; padding-left: 14px; cursor: pointer; }
 .cf-case-tick input { width: 20px; height: 20px; }
 .cf-tick-why { grid-column: 1 / -1; padding: 0 12px 10px 72px; font-size: 12px; color: var(--cf-muted); }
+
+/* Task 0082: a code that links to the error code guide. The tap area grows up and down without moving the text. */
+.cf a.cf-lv-link { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; white-space: nowrap; }
+.cf a.cf-lv-link:hover { text-decoration-thickness: 2px; }
+.cf-lv-plain { font: inherit; letter-spacing: inherit; }
+@media (pointer: coarse) { .cf a.cf-lv-link { padding: 15px 0; } }

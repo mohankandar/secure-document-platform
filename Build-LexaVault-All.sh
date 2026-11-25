@@ -85,6 +85,17 @@ else
   run_step 'BACKEND - Maven clean install (all modules)' mvn clean install ${profile_args[@]+"${profile_args[@]}"}
 fi
 
+# Task 0082: the error code guide for installations without internet, written by the infrastructure module's tests.
+guide_pdf="$backend_dir/securedoc-infrastructure/target/LexaVault-error-codes.pdf"
+if [[ -f "$guide_pdf" ]]; then
+  printf '  error code guide: %s\n' "$guide_pdf"
+elif "$skip_tests"; then
+  printf '  error code guide (PDF): not made, because the tests were skipped.\n'
+else
+  printf 'The error code guide was not made: %s\n' "$guide_pdf" >&2
+  exit 1
+fi
+
 # Task 0041: the app's classpath carries platform-core's identity modules, licensing (task 0057) and nothing else of
 # platform-core. Task 0054 decision 1: and what platform-identity 1.0.0 itself needs (outbound rules, error shape).
 # Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).
