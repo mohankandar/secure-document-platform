@@ -137,7 +137,7 @@ class StageJobsMigrationPostgresTest {
             jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, destination, null, 1, Instant.now()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 9); // 081, 071, 080, 070, 062, 061, 060, 050, then 049
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 13); // 083, 082, 081, 071, 080, 070, 064, 063, 062, 061, 060, 050, then 049
             }
             assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM pipeline_jobs", new MapSqlParameterSource(),
                     Integer.class), "the export job stays; the stage jobs are removed");
@@ -173,6 +173,8 @@ class StageJobsMigrationPostgresTest {
                 assertThrows(DataIntegrityViolationException.class, () -> jdbc.update(
                         "UPDATE tenant_redaction_policies SET " + bad + " WHERE tenant_id = :t", t), bad);
             }
+            // Queuing reads it (task 0073, migration 082).
+            jdbc.getJdbcOperations().execute("CREATE TABLE case_priorities (package_id uuid, tenant_id uuid, priority varchar(16), source_key varchar(128))");
             JdbcPipelineJobRepository jobs = new JdbcPipelineJobRepository(jdbc);
             PackageId pkg = PackageId.generate();
             TestRows.packageRow(jdbc, tenant, pkg);

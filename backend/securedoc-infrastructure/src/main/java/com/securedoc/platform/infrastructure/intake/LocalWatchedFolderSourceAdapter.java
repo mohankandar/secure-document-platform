@@ -172,6 +172,14 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
             Map<String,Object> manifest = objectMapper.readValue(Files.readAllBytes(trigger), new TypeReference<>(){});
             Map<String,String> identifiers = stringMap(manifest.get("businessIdentifiers"));
             Map<String,String> metadata = stringMap(manifest.get("metadata"));
+            Object sentPriority = manifest.get("priority");
+            com.securedoc.platform.domain.pipeline.PipelinePriority priority;
+            try {
+                priority = com.securedoc.platform.application.intake.CasePriorityService.read(
+                        sentPriority == null ? null : sentPriority.toString());
+            } catch (com.securedoc.platform.application.exception.ValidationException notAPriority) {
+                return rejected(sourceReference, IntakeRejectionCode.MALFORMED_TRIGGER);
+            }
             List<String> requestedFiles = stringList(manifest.get("files"));
             List<Path> pdfs;
             if (requestedFiles.isEmpty()) {
@@ -198,7 +206,7 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
             List<WatchedFolderDocument> documents = pdfs.stream()
                     .map(p -> new WatchedFolderDocument(p.getFileName().toString(), "application/pdf", new PathUploadContent(p)))
                     .toList();
-            return new WatchedFolderCandidate(sourceReference, true, true, null, identifiers, metadata, documents);
+            return new WatchedFolderCandidate(sourceReference, true, true, null, identifiers, metadata, documents, priority);
         } catch (Exception e) {
             // Task 0023 C2/#61: keep the real reason; log the drop reference, the code and the type, never the
             // message (it names the folder, a file or an absolute path).

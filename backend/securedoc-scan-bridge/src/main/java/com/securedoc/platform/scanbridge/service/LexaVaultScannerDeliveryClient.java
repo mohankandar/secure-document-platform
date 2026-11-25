@@ -82,7 +82,7 @@ public class LexaVaultScannerDeliveryClient {
                 Map.copyOf(metadata),
                 List.of(new ManifestDocument(session.preparedScan().sourceDocumentId().toString(),
                         session.preparedScan().fileName(), session.preparedScan().sha256())),
-                retry, session.caseSensitivityLevel());
+                retry, session.caseSensitivityLevel(), session.casePriority());
         try {
             byte[] json = objectMapper.writeValueAsBytes(body);
             HttpRequest.Builder builder = requestBuilder("/scanner-intakes")
@@ -242,7 +242,8 @@ public class LexaVaultScannerDeliveryClient {
 
     private record CreateRequest(String externalSourcePackageId, String sourceRevision,
                                  Map<String, String> businessIdentifiers, Map<String, String> metadata,
-                                 List<ManifestDocument> documents, boolean retry, String caseSensitivityLevel) { }
+                                 List<ManifestDocument> documents, boolean retry, String caseSensitivityLevel,
+                                 String priority) { }
     private record ManifestDocument(String externalSourceDocumentId, String fileName, String sha256) { }
     public record IntakeStatus(UUID packageId, String intakeStatus, String packageStatus) { }
     public record DocumentReceipt(UUID packageId, String intakeStatus, boolean duplicateAcknowledgement) { }

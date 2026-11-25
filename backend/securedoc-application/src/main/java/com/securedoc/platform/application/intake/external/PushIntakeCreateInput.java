@@ -15,7 +15,9 @@ public record PushIntakeCreateInput(
         Map<String, String> metadata,
         List<ManifestDocumentInput> documents,
         boolean retry,
-        String caseSensitivityLevel) {
+        String caseSensitivityLevel,
+        /* Task 0073: as sent, or null; anything but URGENT, NORMAL or LOW is refused. */
+        String priority) {
     public PushIntakeCreateInput {
         // Task 0023 D1 (#32): a null value is the source's mistake (400), not a NullPointerException (500).
         requireNoNull(businessIdentifiers == null ? null : businessIdentifiers.values(),
@@ -25,6 +27,13 @@ public record PushIntakeCreateInput(
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         documents = documents == null ? List.of() : List.copyOf(documents);
+    }
+
+    public PushIntakeCreateInput(String externalSourcePackageId, String sourceRevision,
+                                 Map<String, String> businessIdentifiers, Map<String, String> metadata,
+                                 List<ManifestDocumentInput> documents, boolean retry, String caseSensitivityLevel) {
+        this(externalSourcePackageId, sourceRevision, businessIdentifiers, metadata, documents, retry,
+                caseSensitivityLevel, null);
     }
 
     public PushIntakeCreateInput(String externalSourcePackageId, String sourceRevision,

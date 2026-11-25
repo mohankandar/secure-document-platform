@@ -213,6 +213,8 @@ export interface PackageSummary {
   updatedAt: string;
   /** Task 0029: the case's export state (GET /packages); absent from an older server and on the detail (= NONE). */
   exportState?: string;
+  /** Task 0073: URGENT, NORMAL or LOW. */
+  priority?: string;
   /** Task 0038: why the case stopped or waits, as an LV code (GET /packages); null or absent when it doesn't. */
   stopReasonCode?: string | null;
   /** Task 0038: the delivery destination's name once one is chosen (GET /packages). */
@@ -225,6 +227,8 @@ export interface PackageDetail extends PackageSummary {
   effectiveSensitivityLevel?: string;
   /** Task 0050: a digitally signed document of this case lost its signature by redaction. */
   signatureRemoved?: boolean;
+  /** Task 0073: URGENT, NORMAL or LOW. */
+  priority?: string;
   /** Task 0071: why a person rejected the case (LV code). */
   rejectionCode?: string | null;
   metadata?: Record<string, string>;
@@ -244,6 +248,8 @@ export interface DocumentSummary {
 }
 
 export interface CreatePackageRequest {
+  /** Task 0073: the New case "Priority" choice. */
+  priority?: string;
   packageType: string;
   businessIdentifiers: Record<string, string>;
   metadata?: Record<string, string>;
@@ -770,6 +776,15 @@ export interface PipelineQueue {
 }
 
 /** Task 0067: the workers of the server that answered, and IT's own maximums. */
+/** Task 0079: a migration source; the times are the entity's local times. */
+export interface BulkSource {
+  source: string; from: string; to: string; weekends: boolean; open: boolean;
+  done: number; waiting: number; failed: number; perOpenHour?: number | null; expectedFinish?: string | null;
+}
+export interface BulkSources { sources: BulkSource[] }
+
+export interface SourcePriorities { sources: Record<string, string> }
+
 export interface ProcessingCapacity {
   staged: boolean;
   stages: { stage: string; current: number; busy: number; lowest: number; highest: number; measured: number; maximum?: number | null; waiting: number }[];
@@ -1123,4 +1138,21 @@ export interface EntitySlot {
   activatedAt: string | null;
 }
 export interface EntitySlotsOverview { entities: EntitySlot[] }
+/** Task 0059: Admin › Notifications, and the answer to an approval link. */
+export interface NotificationMail {
+  enabled: boolean; mode: string; host: string | null; port: number | null; security: string | null; username: string | null;
+  fromAddress: string | null; fromName: string | null; directoryId: string | null; clientId: string | null; credentialType: string | null;
+  secretNamed: boolean;
+}
+export interface NotificationRoleCount { role: string; people: number }
+export interface NotificationEvent { id: string; name: string; enabled: boolean; alwaysOn: boolean; frequency: string; frequencies: string[]; roles: string[]; dailyAt: string | null; alertAfterMinutes: number | null; repeatMinutes: number | null; alertAfterMax: number; thresholds: { name: string; label: string; value: number; min: number; max: number }[] }
+export interface NotificationEventChange { enabled: boolean; frequency: string; dailyAt?: string; alertAfterMinutes?: number; repeatMinutes?: number; thresholds?: Record<string, number> }
+export interface NotificationItOverview {
+  mail: NotificationMail | null; appAddressSet: boolean; approvalLinksOn: boolean; secretNamePrefix: string; mailPorts: number[];
+  people: NotificationRoleCount[]; events: NotificationEvent[];
+  recent: { event: string; state: string; code: string | null; reason: string | null; at: string }[];
+}
+export interface NotificationBusinessOverview { mailOn: boolean; people: NotificationRoleCount[]; events: NotificationEvent[] }
+export interface ApprovalAnswer { state: string; action: string | null; caseId: string | null; caseNumber: string | null; askedBy: string | null; expiresAt: string | null; code: string | null; message: string }
+
 export interface EntityChangeAnswer { done: boolean; code: string; message: string; whatToDo: string | null }

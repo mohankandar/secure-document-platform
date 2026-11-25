@@ -196,6 +196,30 @@ test('0021: Tenant IT sets the level every file from the watched folder gets (de
     .toEqual({ sensitivityLevel: 'HIGHLY_CONFIDENTIAL' });
   await expect(page.getByText('Files from this folder will be Highly Confidential.')).toBeVisible();
   await expect(folder.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  // Task 0079: marked as a migration with the usual times; the times can be changed; ending it asks first.
+  let bulk: object[] = [];
+  await page.route('**/api/v1/bulk-sources**', async (route) => {
+    const r = route.request();
+    if (r.method() === 'PUT') bulk = [{ source: 'folder:installed', from: '19:00', to: '06:00', weekends: true, open: false, done: 12400, waiting: 27600, failed: 0, perOpenHour: 120, expectedFinish: null, ...JSON.parse(r.postData() || '{}') }];
+    if (r.method() === 'DELETE') bulk = [];
+    if (r.method() !== 'GET') calls.push({ method: r.method(), path: new URL(r.url()).pathname, body: JSON.parse(r.postData() || '{}') });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sources: bulk }) });
+  });
+  await page.reload();
+  await folder.getByRole('switch', { name: /Migration \(Bulk\)/ }).click({ force: true });
+  await expect(folder.getByTestId('bulk-progress')).toHaveText('12,400 of 40,000 done · about 120 an hour while open');
+  await expect(folder.getByLabel('Weeknights from')).toHaveValue('19:00');
+  await folder.getByLabel('Weeknights from').fill('21:30');
+  await folder.getByRole('button', { name: 'Save times' }).click();
+  await expect.poll(() => calls.filter((c) => c.method === 'PUT' && c.path.includes('/bulk-sources/')).map((c) => c.body)).toEqual([{}, { from: '21:30', to: '06:00', weekends: true }]);
+  await folder.getByRole('switch', { name: /Migration \(Bulk\)/ }).click({ force: true });
+  await page.getByRole('button', { name: 'End migration' }).click();
+  await expect.poll(() => calls.some((c) => c.method === 'DELETE' && c.path.includes('/bulk-sources/'))).toBe(true);
+  await expect(folder.getByTestId('bulk-progress')).toHaveCount(0);
+
+  // Task 0073: every receiving source has a default priority.
+  await folder.getByLabel('Priority of cases from this source').selectOption({ label: 'Low' });
+  await expect.poll(() => calls.find((c) => c.method === 'PUT' && c.path.includes('/source-priorities/'))?.body).toEqual({ priority: 'LOW' });
   // The other connections get no level choice: it belongs to the folder only.
   const los = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Loan origination system' });
   await expect(los.getByLabel('Sensitivity of files from this folder')).toHaveCount(0);

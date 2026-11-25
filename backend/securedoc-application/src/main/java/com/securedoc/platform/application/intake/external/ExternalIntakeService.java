@@ -184,7 +184,7 @@ public final class ExternalIntakeService {
         validateScannerProvenance(metadata);
         PushIntakeCreateInput scannerInput = new PushIntakeCreateInput(
                 input.externalSourcePackageId(), input.sourceRevision(), input.businessIdentifiers(), metadata,
-                input.documents(), input.retry(), input.caseSensitivityLevel());
+                input.documents(), input.retry(), input.caseSensitivityLevel(), input.priority());
         return createMachineIntake(scannerInput, source, ExternalIntakeChannel.SCANNER, principal, correlationId);
     }
 
@@ -269,6 +269,7 @@ public final class ExternalIntakeService {
                                                         CorrelationId correlationId) {
         Objects.requireNonNull(input, "External intake request is required");
         validateCreateInput(input, source);
+        var priority = com.securedoc.platform.application.intake.CasePriorityService.read(input.priority());
 
         // Task 0021: levels are read, never refused. An unknown value is taken as Standard with LV-INT-005.
         SensitivityLevel.Received caseSensitivity = SensitivityLevel.fromSource(input.caseSensitivityLevel());
@@ -322,7 +323,7 @@ public final class ExternalIntakeService {
                 ? PackageType.SCANNER_INTAKE : PackageType.API_SUBMISSION;
         var createResult = createPackageUseCase.execute(new CreatePackageCommand(packageType,
                 input.businessIdentifiers(), input.metadata(), intakeFingerprint, sourcePackageId, correlationId,
-                caseSensitivity), principal);
+                caseSensitivity).withPriority(priority, source.id().value().toString()), principal);
 
         Instant createdAt = Instant.now(clock);
         ExternalIntake intake;
@@ -696,6 +697,8 @@ public final class ExternalIntakeService {
         if (input.caseSensitivityLevel() != null) {
             appendCanonical(canonical, "case:sensitivity", input.caseSensitivityLevel());
         }
+        // Task 0073: likewise.
+        if (input.priority() != null) appendCanonical(canonical, "case:priority", input.priority());
         Map<String, String> sentDocumentLevels = new HashMap<>();
         input.documents().forEach(d -> {
             if (d.sensitivityLevel() != null && d.externalSourceDocumentId() != null) {

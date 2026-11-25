@@ -2,7 +2,11 @@
  * Task 0067: a load run on one server. Many small documents (one page, every second one a picture that needs OCR) are
  * sent as cases of 10; the workers per stage, the learned AI limit and the memory are read while they are processed.
  *
- *   node test-tools/load-run/load-run.mjs [documents=400] [heap=4g] [memoryLimitMb=8192] [aiMs=120]
+ *   node test-tools/load-run/load-run.mjs [documents=400] [heap=4g] [memoryLimitMb=8192] [aiMs=120 | priority]
+ *
+ * With "priority" (task 0073): that many Normal cases of one document, and behind them 1 Urgent case and then 30 more.
+ * Checks: the first Urgent case is exported before every Normal case that had not started; Normal cases still finish while
+ * Urgent ones wait.
  *
  * A THROWAWAY database container (lexavault-0067-load-pg) and a mock AI server are started here and removed at the end;
  * nothing else is touched. The mock works on 5 requests at once and queues the rest, so the learned limit should settle
@@ -25,9 +29,10 @@ import { fileURLToPath } from 'node:url';
 const documents = Number(process.argv[2] ?? 400);
 const heap = process.argv[3] ?? '4g';
 const memoryLimitMb = Number(process.argv[4] ?? 8192);
-const PER_CASE = 10;
+const priorityMode = process.argv[5] === 'priority';
+const PER_CASE = priorityMode ? 1 : 10;
 const MOCK_AT_ONCE = 5;
-const MOCK_MS = Number(process.argv[5] ?? 120);
+const MOCK_MS = priorityMode ? 120 : Number(process.argv[5] ?? 120);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const jar = join(root, 'backend', 'securedoc-api', 'target', 'securedoc-api-0.1.0-SNAPSHOT.jar');
 const container = 'lexavault-0067-load-pg';
@@ -154,26 +159,40 @@ try {
   let sent = 0;
   let sendingDone = false;
   const errors = [];
+  const send = async (n, priority) => {
+    const { packageId } = await api('POST', '/api/v1/packages', { packageType: 'MANUAL_UPLOAD', metadata: { source: 'load-run' }, priority,
+      businessIdentifiers: { contract_number: `88${String(n).padStart(4, '0')}${suffix}`, member_number: `9${String(n).padStart(4, '0')}${suffix}`, service_entity: '001' } });
+    for (let d = 0; d < PER_CASE; d++) {
+      const form = new FormData();
+      const kind = d % 2 ? 'scanned' : 'typed';
+      form.append('file', new Blob([pdf[kind]], { type: 'application/pdf' }), `${kind}-${d}.pdf`);
+      await api('POST', `/api/v1/packages/${packageId}/documents`, form);
+      sent++;
+    }
+    await api('POST', `/api/v1/packages/${packageId}/submit`);
+    return packageId;
+  };
   const senders = Array.from({ length: 4 }, async () => {
     while (next < cases) {
       const n = next++;
       try {
-        const { packageId } = await api('POST', '/api/v1/packages', { packageType: 'MANUAL_UPLOAD', metadata: { source: 'load-run' },
-          businessIdentifiers: { contract_number: `88${String(n).padStart(4, '0')}${suffix}`, member_number: `9${String(n).padStart(4, '0')}${suffix}`, service_entity: '001' } });
-        for (let d = 0; d < PER_CASE; d++) {
-          const form = new FormData();
-          const kind = d % 2 ? 'scanned' : 'typed';
-          form.append('file', new Blob([pdf[kind]], { type: 'application/pdf' }), `${kind}-${d}.pdf`);
-          await api('POST', `/api/v1/packages/${packageId}/documents`, form);
-          sent++;
-        }
-        await api('POST', `/api/v1/packages/${packageId}/submit`);
+        await send(n);
       } catch (e) {
         errors.push(e.message);
       }
     }
   });
-  Promise.all(senders).then(() => { sendingDone = true; });
+  const urgent = { ids: [] };
+  Promise.all(senders).then(async () => {
+    if (priorityMode) {
+      const done = () => Number(sql("select count(*) from document_packages where status = 'COMPLETED'"));
+      urgent.waitingBefore = cases - done();
+      urgent.ids.push(await send(cases, 'URGENT'));
+      for (let i = 1; i <= 30; i++) urgent.ids.push(await send(cases + i, 'URGENT'));
+      // Each finished case, in the order it was exported (the export job's last change).
+    }
+    sendingDone = true;
+  }).catch((e) => { errors.push(e.message); sendingDone = true; });
 
   const most = {};
   const samples = [];
@@ -208,6 +227,8 @@ try {
     }
   }
   const last = samples.at(-1);
+  const order = priorityMode ? sql("select package_id from pipeline_jobs where stage = 'EXPORT' and status = 'DONE' order by updated_at").split('\n') : [];
+  const places = urgent.ids.map((id) => order.indexOf(id) + 1).sort((a, b) => a - b);
   const statuses = sql("select status || ' ' || count(*) from document_packages group by status").split('\n');
   const doubles = sql('select count(*) from (select 1 from pipeline_jobs where stage in (\'TEXT\', \'FIND\', \'REDACT\') group by document_id, stage, page_from having count(*) > 1) x');
   // The database says when the last job ended; its clock and this machine's are the same clock.
@@ -224,13 +245,19 @@ try {
   const etaRows = [0, 0.1, 0.25, 0.5, 0.75].map(etaAt);
   for (const r of etaRows) console.log(`ETA at ${r.part * 100}% of the drain: ${r.text}`);
   const checks = [
-    ['the ETA is within 20% at a quarter and at half of the drain', etaRows[2].ok && etaRows[3].ok, `${etaRows[2].text}; ${etaRows[3].text}`],
+    ...(priorityMode ? [] : [['the ETA is within 20% at a quarter and at half of the drain', etaRows[2].ok && etaRows[3].ok, `${etaRows[2].text}; ${etaRows[3].text}`]]),
     ['no request failed', errors.length === 0, errors.slice(0, 3).join('; ') || 'none'],
-    ['every case exported', statuses.length === 1 && statuses[0] === `COMPLETED ${cases}`, statuses.join(', ')],
+    ['every case exported', statuses.length === 1 && statuses[0] === `COMPLETED ${cases + urgent.ids.length}`, statuses.join(', ')],
     ['no job twice', doubles === '0', doubles],
-    ['Text workers rose to their highest', most.TEXT === highest.TEXT, `${most.TEXT} of ${highest.TEXT}`],
+    ...(priorityMode ? [
+      ['Normal cases still waited when the Urgent ones came', urgent.waitingBefore > 300, `${urgent.waitingBefore} of ${cases}`],
+      ['the Urgent cases finished ahead of the Normal ones still waiting', places[0] > 0 && order.indexOf(urgent.ids[0]) + 1 < cases - urgent.waitingBefore / 2 && places.at(-1) < cases,
+        `first Urgent case at place ${order.indexOf(urgent.ids[0]) + 1}, the 31 at ${places[0]} to ${places.at(-1)} of ${order.length}; ${cases - urgent.waitingBefore} were done before`],
+      ['Normal cases finished among the Urgent ones', places.at(-1) - places[0] + 1 > places.length, `${places.at(-1) - places[0] + 1 - places.length} Normal cases between the first and the last Urgent one`],
+    ] : []),
+    ['Text workers rose to their highest', priorityMode || most.TEXT === highest.TEXT, `${most.TEXT} of ${highest.TEXT}`],
     ['every stage came back to its lowest', Object.values(last.workers).every((n) => n === 1), JSON.stringify(last.workers)],
-    ['the learned AI limit stayed within one of what the AI server takes', aiMost <= MOCK_AT_ONCE + 1 && aiMost > 1, `most ${aiMost}, at the end ${last.ai}, AI server takes ${MOCK_AT_ONCE}`],
+    ['the learned AI limit stayed within one of what the AI server takes', aiMost <= MOCK_AT_ONCE + 1 && (priorityMode || aiMost > 1), `most ${aiMost}, at the end ${last.ai}, AI server takes ${MOCK_AT_ONCE}`],
     ['memory stayed under the limit', memoryMost.both > 0 && memoryMost.both < memoryLimitMb, `${memoryMost.both} MB of ${memoryLimitMb} MB`],
   ];
   for (const [name, ok, detail] of checks) console.log(ok ? 'PASS' : 'FAIL', name, '-', detail);

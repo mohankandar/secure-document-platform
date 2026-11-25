@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Task 0078 (P6): the work of each stage and the time until the queue is empty. Numbers only, never content.
@@ -29,7 +30,7 @@ public final class QueueView {
             PipelineStage.REDACT, PipelineStage.EXPORT);
 
     /**
-     * @param held    not due: waiting for a retry's time, a paused destination, or a person; not in the time
+     * @param held    not due: waiting for a retry's time, a paused destination, a Bulk source's window, or a person; not in the time
      * @param toCome  jobs the stages before will still bring
      * @param done    finished in the time the pace is taken from
      * @param busySeconds the part of that time in which the stage had work
@@ -55,8 +56,8 @@ public final class QueueView {
     }
 
     /** @param tenantId null for every entity together (the numbers are added up, nothing else) */
-    public View of(TenantId tenantId) {
-        return view(port.work(tenantId, WINDOW));
+    public View of(TenantId tenantId, Set<String> openBulkSources) {
+        return view(port.work(tenantId, WINDOW, openBulkSources));
     }
 
     static View view(Map<PipelineStage, Work> work) {

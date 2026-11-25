@@ -252,7 +252,9 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                     CreatePackageCommand.watchedFolder(candidate.businessIdentifiers(), candidate.metadata(), fingerprint,
                             dropReference(candidate), correlationId,
                             com.securedoc.platform.domain.document.SensitivityLevel.Received.of(
-                                    folderSensitivityLevel.apply(principal.tenantId()))), principal).packageId();
+                                    folderSensitivityLevel.apply(principal.tenantId())))
+                            .withPriority(candidate.priority(), com.securedoc.platform.application.intake.CasePriorityService.folder(
+                                    WatchedFolderSettingsService.INSTALLED_FOLDER)), principal).packageId();
         } catch (RuntimeException createFailure) {
             // A competing transaction may have won the unique fingerprint insert after our pre-check.
             // Re-read and classify the winner rather than translating the race to SOURCE_IO_ERROR.

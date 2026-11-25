@@ -49,7 +49,9 @@ public record ScanSession(
          */
         Integer lastDeliveryHttpStatus,
         /** Task 0025: LexaVault's own LV code from its error body (the detail under LV-SCN-016); null when none. */
-        String lastDeliveryLexaVaultCode
+        String lastDeliveryLexaVaultCode,
+        /** Task 0073: the priority chosen on New case, carried to LexaVault as sent (null when none). */
+        String casePriority
 ) {
     public ScanSession {
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
@@ -65,7 +67,7 @@ public record ScanSession(
         this(sessionId, submissionId, tenantId, bridgeId, siteId, scannerId, captureMode, status, businessIdentifiers,
                 createdAt, updatedAt, preparedScan, lexavaultPackageId, deliveryAttemptCount, queuedAt,
                 nextDeliveryAttemptAt, lastDeliveryErrorCode, lastDeliveryErrorAt, submittedAt, caseSensitivityLevel,
-                acceptancePendingSince, null, null);
+                acceptancePendingSince, null, null, null);
     }
 
     /**

@@ -26,13 +26,15 @@ import java.util.regex.Pattern;
  *       {@code databasechangelog});</li>
  *   <li>platform-identity: Flyway run {@code classpath:db/platform/identity}, history table {@code idn_schema_history};</li>
  *   <li>platform-licensing: Flyway run {@code classpath:db/platform/licensing}, history table {@code lic_schema_history}
- *       (the setup command stores the licence there; LexaVault's own use of it comes with task 0038).</li>
+ *       (the setup command stores the licence there; LexaVault's own use of it comes with task 0038);</li>
+ *   <li>platform-notifications (task 0059): Flyway run {@code classpath:db/platform/notifications}, history table
+ *       {@code notif_schema_history}.</li>
  * </ol>
  *
  * Usage (database settings in the environment only: {@code LEXAVAULT_SCHEMA_DB_URL}, {@code _USER}, {@code _PASSWORD}):
  * <pre>
- * schema-step apply [--runtime-user NAME]   run the three steps; with --runtime-user, give that user exactly the rights
- *                                           platform-core lists on the idn_ and lic_ tables, taking away any other
+ * schema-step apply [--runtime-user NAME]   run the four steps; with --runtime-user, give that user exactly the rights
+ *                                           platform-core lists on the idn_, lic_ and notif_ tables, taking away any other
  *                                           right it has on them
  * schema-step status                        print each step's version
  * schema-step customer-installed            exit 0 when setup has stored a customer, 4 when not (for the local start)
@@ -51,7 +53,10 @@ public final class SchemaStep {
 
     static final List<PlatformRun> PLATFORM_RUNS = List.of(
             new PlatformRun("identity", "classpath:db/platform/identity", "idn_schema_history", "idn_schema_version", "idn_"),
-            new PlatformRun("licensing", "classpath:db/platform/licensing", "lic_schema_history", "lic_schema_version", "lic_"));
+            new PlatformRun("licensing", "classpath:db/platform/licensing", "lic_schema_history", "lic_schema_version", "lic_"),
+            // Task 0059: the module names no history table of its own; this is the one its install guide proposes.
+            new PlatformRun("notifications", "classpath:db/platform/notifications", "notif_schema_history",
+                    "notif_schema_version", "notif_"));
 
     private static final String DML = "select, insert, update, delete";
 
@@ -66,6 +71,7 @@ public final class SchemaStep {
             "idn_login_connection_history", "select, insert",
             "idn_machine_binding_history", "select, insert",
             "lic_schema_version", "select",
+            "notif_schema_version", "select",
             "lic_version_floor", "select",
             "lic_last_seen", "select, insert, update",
             "lic_clock_reset", "select, insert");

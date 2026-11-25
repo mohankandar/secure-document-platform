@@ -50,6 +50,12 @@
 | **Before a push / release candidate** | Everything above, plus L5 in full, L8 (live with Vero), L9 baseline unchanged or better, and the **AI model change gate** (owner, 2026-11-22: any change to a model, its digest, a prompt or an AI setting re-runs the model test set and must meet the approved pass marks; the result is recorded for the model register, `Model-Governance-Design.md`) |
 | **Before the first customer** | All of the above, plus L10 (pen test), the install checklist (`First-Install-Success-Criteria.md`), and the vision benchmark part B on their samples |
 
+**The AI model change gate, how it is measured (task 0080, 2026-11-24):**
+- The product benchmark (`test-tools/vision-product`) is run three times on the approved state; a change is compared against the **lowest** of the three. Run-to-run spread measured on 2026-11-24: none on routed pages, one item of 274 overall.
+- **The AI server's own version counts**: an update of it is a model change, also with the same model digest. Record it with the result. (0064: 122 of 130 on Ollama 0.40.17; the same commit and digests: 119 of 130, three times, on 0.40.18.)
+- Baseline since 2026-11-24 (Ollama 0.40.18, `qwen3.5:9b`, `qwen3-vl:8b-instruct`, names off): **119 of 130** on routed pages, **262 of 274** overall, at most 2 V1 misses, at most 8 false flags, no unread page.
+- Person names (task 0072): at least **85%** found and at most **1 false name per 10 pages**, on documents the prompt was not tuned on.
+
 ## 6. Where the work goes in the order
 
 | When | Testing work |

@@ -19,5 +19,7 @@ public record PackageSummaryResponse(
          */
         String stopReasonCode,
         /** Task 0038: the delivery destination's name once one is chosen; null before. */
-        String destinationName
+        String destinationName,
+        /** Task 0073: URGENT, NORMAL or LOW. */
+        String priority
 ) {}

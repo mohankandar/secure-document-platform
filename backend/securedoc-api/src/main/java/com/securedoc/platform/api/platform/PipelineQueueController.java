@@ -5,6 +5,7 @@ import com.securedoc.platform.api.processing.ProcessingCapacity;
 import com.securedoc.platform.api.security.ProductAuthorizationPolicy;
 import com.securedoc.platform.api.security.RequireCapability;
 import com.securedoc.platform.api.security.UserCapability;
+import com.securedoc.platform.application.intake.BulkSourceService;
 import com.securedoc.platform.application.pipeline.QueueView;
 import com.securedoc.platform.application.port.out.QueueWorkPort;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
@@ -27,13 +28,15 @@ import java.util.stream.Collectors;
 public class PipelineQueueController {
     private final QueueView queue;
     private final ProcessingCapacity capacity;
+    private final BulkSourceService bulkSources;
     private final ProductAuthorizationPolicy authorization;
     private final RequestContextResolver contextResolver;
 
-    public PipelineQueueController(QueueWorkPort port, ProcessingCapacity capacity, ProductAuthorizationPolicy authorization,
-                                   RequestContextResolver contextResolver) {
+    public PipelineQueueController(QueueWorkPort port, ProcessingCapacity capacity, BulkSourceService bulkSources,
+                                   ProductAuthorizationPolicy authorization, RequestContextResolver contextResolver) {
         this.queue = new QueueView(port);
         this.capacity = capacity;
+        this.bulkSources = bulkSources;
         this.authorization = authorization;
         this.contextResolver = contextResolver;
     }
@@ -50,7 +53,7 @@ public class PipelineQueueController {
         boolean all = authorization.has(principal, UserCapability.PLATFORM_OPERATIONS);
         int window = (int) QueueView.WINDOW.toMinutes();
         if (!capacity.staged()) return new Queue(false, all, window, null, List.of());
-        var view = queue.of(all ? null : principal.tenantId());
+        var view = queue.of(all ? null : principal.tenantId(), bulkSources.openSources());
         Map<PipelineStage, ProcessingCapacity.StageState> workers = capacity.stages().stream()
                 .collect(Collectors.toMap(ProcessingCapacity.StageState::stage, Function.identity()));
         return new Queue(true, all, window, view.etaSeconds(), view.stages().stream().map(s -> {

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0079 (owner approved): Bulk sources with their window (the entity's local time), and the source of a case with
+        a stored priority. A case of a Bulk source has priority BULK. Rolling back turns what is left of them into LOW.
+    -->
+    <changeSet id="083-01-bulk-sources" author="lexavault">
+        <createTable tableName="bulk_sources">
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="source_key" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="window_from" type="TIME"><constraints nullable="false"/></column>
+            <column name="window_to" type="TIME"><constraints nullable="false"/></column>
+            <column name="weekends" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="marked_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="bulk_sources" columnNames="tenant_id,source_key" constraintName="pk_bulk_sources"/>
+        <addForeignKeyConstraint baseTableName="bulk_sources" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_bulk_sources_tenant"/>
+        <addColumn tableName="case_priorities">
+            <column name="source_key" type="VARCHAR(128)"/>
+        </addColumn>
+        <sql>
+            alter table case_priorities drop constraint ck_case_priorities_priority;
+            alter table case_priorities add constraint ck_case_priorities_priority
+                check (priority in ('URGENT', 'NORMAL', 'LOW', 'BULK'));
+            alter table bulk_sources add constraint ck_bulk_sources_window check (window_from is distinct from window_to);
+            create index idx_case_priorities_source on case_priorities (tenant_id, source_key) where source_key is not null;
+        </sql>
+        <rollback>
+            <sql>
+                update pipeline_jobs set priority = 'LOW' where priority = 'BULK';
+                update case_priorities set priority = 'LOW' where priority = 'BULK';
+                alter table case_priorities drop constraint ck_case_priorities_priority;
+                alter table case_priorities add constraint ck_case_priorities_priority
+                    check (priority in ('URGENT', 'NORMAL', 'LOW'));
+            </sql>
+            <dropIndex tableName="case_priorities" indexName="idx_case_priorities_source"/>
+            <dropColumn tableName="case_priorities" columnName="source_key"/>
+            <dropTable tableName="bulk_sources"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

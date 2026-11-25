@@ -4,6 +4,7 @@ import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.processing.ProcessingCapacity;
 import com.securedoc.platform.api.security.ProductAuthorizationPolicy;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
+import com.securedoc.platform.application.intake.BulkSourceService;
 import com.securedoc.platform.application.pipeline.QueueView;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -29,10 +30,12 @@ class PipelineQueueControllerTest {
     private final List<TenantId> asked = new ArrayList<>();
     private final ProcessingCapacity capacity = mock(ProcessingCapacity.class);
     private final RequestContextResolver resolver = mock(RequestContextResolver.class);
-    private final PipelineQueueController controller = new PipelineQueueController((t, w) -> {
+    private final BulkSourceService bulk = mock(BulkSourceService.class);
+    private final PipelineQueueController controller = new PipelineQueueController((t, w, open) -> {
         asked.add(t);
+        assertEquals(Set.of("open"), open);
         return Map.of(PipelineStage.FIND, new QueueView.Work(6, 2, 1, 75L, 2, 10, 20));
-    }, capacity, new ProductAuthorizationPolicy(), resolver);
+    }, capacity, bulk, new ProductAuthorizationPolicy(), resolver);
 
     @Test
     void theEntityOfTheSignedInItAdminOnly() {
@@ -61,6 +64,7 @@ class PipelineQueueControllerTest {
     }
 
     private void signedIn(String role, boolean staged) {
+        when(bulk.openSources()).thenReturn(Set.of("open"));
         when(capacity.staged()).thenReturn(staged);
         when(resolver.resolvePrincipal(any())).thenReturn(AuthenticatedPrincipal.of(ActorId.generate(), tenant, "it", Set.of(role)));
     }

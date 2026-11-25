@@ -71,7 +71,7 @@ export function queueHeadline(q: PipelineQueue): string {
 export const queueHow = (q: Pick<PipelineQueue, 'windowMinutes'>): string[] => [
   `Pace: the jobs each step finished in the last ${q.windowMinutes} minutes (in the last minute, if they were 20 or more), divided by the time in which that step had work.`,
   'Time: the jobs waiting and running, and those the steps before will still bring, divided by the pace. A step never ends before the step before it, so the last time is the queue\'s.',
-  'Not in the time: jobs on hold (a retry, a paused destination or a person) and cases in Review or Approval. A case that will still stop for a person is counted as if it went on. New documents make it longer.',
+  'Not in the time: jobs on hold (a retry, a paused destination, the window of a Bulk source, or a person) and cases in Review or Approval. A case that will still stop for a person is counted as if it went on. New documents make it longer.',
   'Workers are this server\'s. With fewer than 5 finished jobs, no time is shown.',
 ];
 

@@ -38,6 +38,8 @@ import type {
   PlatformAdminOverview,
   PipelineQueue,
   ProcessingCapacity,
+  SourcePriorities,
+  BulkSources,
   ProductTelemetryStatus,
   CurrentUser,
   TechnicalExceptionDetail,
@@ -69,6 +71,10 @@ import type {
   GrantHistoryRow,
   EntitySlotsOverview,
   EntityChangeAnswer,
+  ApprovalAnswer,
+  NotificationBusinessOverview,
+  NotificationEventChange,
+  NotificationItOverview,
 } from '../types';
 
 class ApiClient {
@@ -413,6 +419,30 @@ class ApiClient {
     return this.request('/platform-admin/queue');
   }
 
+  async changeCasePriority(packageId: string, priority: string): Promise<{ priority: string }> {
+    return this.request(`/packages/${packageId}/priority`, { method: 'PUT', body: JSON.stringify({ priority }) });
+  }
+
+  async getBulkSources(): Promise<BulkSources> {
+    return this.request('/bulk-sources');
+  }
+
+  async markBulkSource(source: string, window: { from?: string; to?: string; weekends?: boolean }): Promise<BulkSources> {
+    return this.request(`/bulk-sources/${encodeURIComponent(source)}`, { method: 'PUT', body: JSON.stringify(window) });
+  }
+
+  async unmarkBulkSource(source: string): Promise<BulkSources> {
+    return this.request(`/bulk-sources/${encodeURIComponent(source)}`, { method: 'DELETE' });
+  }
+
+  async getSourcePriorities(): Promise<SourcePriorities> {
+    return this.request('/source-priorities');
+  }
+
+  async changeSourcePriority(source: string, priority: string): Promise<SourcePriorities> {
+    return this.request(`/source-priorities/${encodeURIComponent(source)}`, { method: 'PUT', body: JSON.stringify({ priority }) });
+  }
+
   async getProcessingCapacity(): Promise<ProcessingCapacity> {
     return this.request('/platform-admin/capacity');
   }
@@ -506,6 +536,35 @@ class ApiClient {
 
   async setEntityTimeZone(slotId: string, timeZone: string | null): Promise<EntityChangeAnswer> {
     return this.request(`/admin/entities/${encodeURIComponent(slotId)}/time-zone`, { method: 'PUT', body: JSON.stringify({ timeZone }) });
+  }
+
+  // --- Admin, Notifications, and approval links (task 0059). A token goes in the body, never in an address. ---
+  async getNotificationsIt(): Promise<NotificationItOverview> {
+    return this.request('/admin/notifications/it');
+  }
+
+  async saveNotificationMail(body: Record<string, unknown>): Promise<NotificationItOverview> {
+    return this.request('/admin/notifications/it/mail', { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async sendNotificationTest(): Promise<void> {
+    await this.request('/admin/notifications/it/test', { method: 'POST' });
+  }
+
+  async getNotificationsBusiness(): Promise<NotificationBusinessOverview> {
+    return this.request('/admin/notifications/business');
+  }
+
+  async saveNotificationEvent(part: 'it' | 'business', id: string, body: NotificationEventChange): Promise<NotificationItOverview | NotificationBusinessOverview> {
+    return this.request(`/admin/notifications/${part}/events/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) });
+  }
+
+  async openApprovalLink(token: string): Promise<ApprovalAnswer> {
+    return this.request('/approvals/link/open', { method: 'POST', body: JSON.stringify({ token }), cache: 'no-store' });
+  }
+
+  async decideApprovalLink(token: string, action: 'APPROVE' | 'DECLINE', reason: string | null): Promise<ApprovalAnswer> {
+    return this.request('/approvals/link/decide', { method: 'POST', body: JSON.stringify({ token, action, reason }), cache: 'no-store' });
   }
 
   async getLicensing(): Promise<LicensingView> {

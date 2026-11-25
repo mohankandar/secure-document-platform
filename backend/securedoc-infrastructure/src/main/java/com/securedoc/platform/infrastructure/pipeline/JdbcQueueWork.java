@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.pipeline;
 
 import com.securedoc.platform.application.pipeline.QueueView;
+import com.securedoc.platform.application.port.out.PipelineJobRepository;
 import com.securedoc.platform.application.port.out.QueueWorkPort;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
@@ -12,6 +13,7 @@ import java.time.Duration;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /** Task 0078: counts and times from pipeline_jobs and the states of cases and documents. Every time is the database's. */
 @Repository
@@ -20,18 +22,23 @@ public class JdbcQueueWork implements QueueWorkPort {
     /** One entity, or each of them, so that the index of (entity, status, time) serves both. */
     private static final String ENTITIES = "j.tenant_id IN (SELECT t.id FROM tenants t WHERE (:tenant)::uuid IS NULL OR t.id = (:tenant)::uuid)";
 
+    /** Due, and (task 0079) not a Bulk job whose window is closed: the same rule as the claim's. */
+    private static final String DUE = "((j.status = 'READY' OR (j.status = 'WAITING_RETRY' AND j.next_attempt_at <= clock_timestamp()))"
+            + " AND " + JdbcPipelineJobRepository.BULK_ALLOWED + ")";
+    private static final String BULK_CASE_ALLOWED = """
+            (:everyBulk OR NOT EXISTS (SELECT 1 FROM case_priorities c WHERE c.package_id = j.id AND c.priority = 'BULK'
+                        AND (c.tenant_id || '/' || c.source_key) NOT IN (:openBulk)))""";
+
     private static final String OPEN_SQL = """
             SELECT %s AS stage,
-                   count(*) FILTER (WHERE j.status = 'READY' OR (j.status = 'WAITING_RETRY' AND j.next_attempt_at <= clock_timestamp())) AS waiting,
+                   count(*) FILTER (WHERE %s) AS waiting,
                    count(*) FILTER (WHERE j.status = 'RUNNING') AS running,
-                   count(*) FILTER (WHERE j.status IN ('PAUSED', 'WAITING_FOR_YOU', 'NEEDS_IT')
-                                       OR (j.status = 'WAITING_RETRY' AND j.next_attempt_at > clock_timestamp())) AS held,
-                   extract(epoch FROM clock_timestamp() - min(j.created_at) FILTER (
-                       WHERE j.status = 'READY' OR (j.status = 'WAITING_RETRY' AND j.next_attempt_at <= clock_timestamp()))) AS oldest
+                   count(*) FILTER (WHERE j.status <> 'RUNNING' AND NOT %s) AS held,
+                   extract(epoch FROM clock_timestamp() - min(j.created_at) FILTER (WHERE %s)) AS oldest
               FROM pipeline_jobs j
              WHERE j.status IN ('READY', 'RUNNING', 'WAITING_RETRY', 'PAUSED', 'WAITING_FOR_YOU', 'NEEDS_IT') AND %s
              GROUP BY 1
-            """.formatted(STAGE, ENTITIES);
+            """.formatted(STAGE, DUE, DUE, DUE, ENTITIES);
 
     /** A job is work of its stage from its creation to its end; the stage's busy time is these spans, overlaps once. */
     private static final String PACE_SQL = """
@@ -41,7 +48,7 @@ public class JdbcQueueWork implements QueueWorkPort {
                        CASE WHEN j.status = 'DONE' THEN j.updated_at ELSE clock_timestamp() END AS ends
                   FROM pipeline_jobs j
                  WHERE %s AND ((j.status = 'DONE' AND j.updated_at > clock_timestamp() - (:windowSeconds * interval '1 second'))
-                           OR j.status IN ('READY', 'RUNNING'))),
+                           OR j.status = 'RUNNING' OR (j.status = 'READY' AND %s))),
             covered AS (
                 SELECT stage, status, document_id, begins, ends,
                        max(ends) OVER (PARTITION BY stage ORDER BY begins, ends ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS before
@@ -51,12 +58,12 @@ public class JdbcQueueWork implements QueueWorkPort {
                    count(DISTINCT document_id) FILTER (WHERE status = 'DONE') AS documents,
                    sum(extract(epoch FROM greatest(ends - greatest(begins, coalesce(before, begins)), interval '0'))) AS busy
               FROM covered GROUP BY stage
-            """.formatted(STAGE, ENTITIES);
+            """.formatted(STAGE, ENTITIES, JdbcPipelineJobRepository.BULK_ALLOWED);
 
     /** What will still reach each stage: documents and cases that are not stopped for a person. */
     private static final String TO_COME_SQL = """
             WITH cases AS (
-                SELECT j.id, j.tenant_id, j.status FROM document_packages j WHERE j.status IN ('SUBMITTED', 'PROCESSING') AND %s)
+                SELECT j.id, j.tenant_id, j.status FROM document_packages j WHERE j.status IN ('SUBMITTED', 'PROCESSING') AND %s AND %s)
             SELECT
                 (SELECT count(*) FROM cases c JOIN documents d ON d.package_id = c.id AND d.tenant_id = c.tenant_id
                   WHERE c.status = 'SUBMITTED') AS text_documents,
@@ -71,7 +78,7 @@ public class JdbcQueueWork implements QueueWorkPort {
                   WHERE NOT EXISTS (SELECT 1 FROM pipeline_jobs e WHERE e.package_id = c.id AND e.tenant_id = c.tenant_id
                                        AND e.stage = 'EXPORT'
                                        AND e.status NOT IN ('DONE', 'STOPPED'))) AS export_cases
-            """.formatted(ENTITIES);
+            """.formatted(ENTITIES, BULK_CASE_ALLOWED);
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -98,9 +105,12 @@ public class JdbcQueueWork implements QueueWorkPort {
     }
 
     @Override
-    public Map<PipelineStage, QueueView.Work> work(TenantId tenantId, Duration window) {
+    public Map<PipelineStage, QueueView.Work> work(TenantId tenantId, Duration window, Set<String> openBulkSources) {
         var params = new MapSqlParameterSource().addValue("tenant", tenantId == null ? null : tenantId.value().toString())
-                .addValue("windowSeconds", window.toSeconds());
+                .addValue("windowSeconds", window.toSeconds())
+                .addValue("everyBulk", openBulkSources.contains(PipelineJobRepository.EVERY_BULK_SOURCE))
+                .addValue("someBulk", !openBulkSources.isEmpty())
+                .addValue("openBulk", openBulkSources.isEmpty() ? Set.of("-") : openBulkSources);
         Map<PipelineStage, Open> open = new HashMap<>();
         jdbc.query(OPEN_SQL, params, rs -> {
             double oldest = rs.getDouble("oldest");

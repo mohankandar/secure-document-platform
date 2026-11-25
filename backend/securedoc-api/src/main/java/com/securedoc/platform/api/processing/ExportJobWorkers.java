@@ -3,6 +3,7 @@ package com.securedoc.platform.api.processing;
 import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.application.pipeline.ExportJobService;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
+import com.securedoc.platform.domain.pipeline.PipelinePriority;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -105,17 +106,31 @@ public class ExportJobWorkers {
     }
 
     private boolean turn(String owner, Runnable started) {
+        java.util.Set<String> bulk = capacity == null ? java.util.Set.of() : capacity.bulkTurn(PipelineStage.EXPORT);
         try {
-            Optional<PipelineJob> job = service.claimNext(owner);
+            Optional<PipelineJob> job = capacity == null ? service.claimNext(owner) : service.claimNext(owner, bulk);
             if (job.isEmpty()) return false;
+            if (job.get().priority() != PipelinePriority.BULK) {
+                // Not a Bulk job: the place kept for one is free again before the job runs.
+                if (capacity != null) capacity.bulkDone(PipelineStage.EXPORT, bulk);
+                bulk = java.util.Set.of();
+            }
+            boolean bulkJob = capacity != null && job.get().priority() == PipelinePriority.BULK;
+            if (bulkJob) capacity.bulkStarted(PipelineStage.EXPORT);
             started.run();
-            runWithRenewal(job.get());
+            try {
+                runWithRenewal(job.get());
+            } finally {
+                if (bulkJob) capacity.bulkEnded(PipelineStage.EXPORT);
+            }
             return true;
         } catch (RuntimeException failure) {
             // The job stays RUNNING until its claim runs out, then goes back to the queue (one attempt).
             log.warn("EXPORT_WORKER_FAILED owner={} type={} code={}", owner, failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());
             return false;
+        } finally {
+            if (capacity != null) capacity.bulkDone(PipelineStage.EXPORT, bulk);
         }
     }
 

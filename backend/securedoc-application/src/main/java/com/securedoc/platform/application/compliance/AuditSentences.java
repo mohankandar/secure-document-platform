@@ -125,6 +125,9 @@ public final class AuditSentences {
             entry("WATCHED_FOLDER_SCAN_TRIGGERED", "Checked the watched folder"),
             entry("PLATFORM_HEALTH_CHECKED", "Ran health checks"),
             entry("PROCESSING_MAXIMUMS_CHANGED", "Changed the processing maximums"),
+            entry("CASE_PRIORITY_CHANGED", "Changed the case’s priority"),
+            entry("SOURCE_PRIORITY_CHANGED", "Changed a source’s default priority"),
+            entry("SOURCE_BULK_CHANGED", "Changed a source’s migration setting"),
             entry("PROCESSING_STORAGE_PROVIDER_CREATED", "Added processing storage"),
             entry("PROCESSING_STORAGE_PROVIDER_TESTED", "Tested processing storage"),
             entry("PROCESSING_STORAGE_PROVIDER_ACTIVATED", "Made processing storage the default"),
@@ -147,6 +150,11 @@ public final class AuditSentences {
             entry("LICENSE_VALIDATION_FAILED", "The licence could not be checked"),
             entry("LICENSE_ENFORCEMENT_DENIED", "Refused by the licence"),
             entry("DIAGNOSTIC_BUNDLE_DOWNLOADED", "Downloaded a diagnostic bundle"),
+            entry("NOTIFICATION_SETTINGS_CHANGED", "Changed the e-mail settings for notifications"),
+            entry("NOTIFICATION_EVENT_CHANGED", "Changed when a notification is sent"),
+            entry("NOTIFICATION_TEST_SENT", "Sent a test notification"),
+            entry("DELIVERY_APPROVAL_LINK_USED", "Used an approval link"),
+            entry("DELIVERY_APPROVAL_LINK_REFUSED", "An approval link was refused"),
             // Exports
             entry("REPORT_CSV_EXPORTED", "Exported a report"),
             entry("AUDIT_EXPORTED", "Exported the audit trail"));

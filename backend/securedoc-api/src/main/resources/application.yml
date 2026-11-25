@@ -67,6 +67,9 @@ platform:
       - securedoc.processing.
       - securedoc.resilience.
       - securedoc.lifecycle.
+  # Task 0059: notifications (docs/install/NOTIFICATIONS.md). platform.notifications.mail.* and .teams/.slack are not used:
+  # each entity's mail server is set on Admin > Notifications. Approval links are on when
+  # platform.notifications.approvals.link-key-secret names the key (env:LEXAVAULT_SECRET_INSTALL_...).
   outbound:
     installation: ${PLATFORM_OUTBOUND_INSTALLATION:ON_PREMISES}
     allow-internal-addresses: ${PLATFORM_OUTBOUND_ALLOW_INTERNAL_ADDRESSES:false}
@@ -283,6 +286,16 @@ securedoc:
       # this many days (7 to 3650; outside that LexaVault stops at start with LV-SYS-005). Rows per delete batch.
       keep-finished-days: ${SECUREDOC_EXPORT_JOBS_KEEP_FINISHED_DAYS:90}
       cleanup-batch-size: ${SECUREDOC_EXPORT_JOBS_CLEANUP_BATCH_SIZE:1000}
+  notifications:
+    # Task 0059: where people reach the app (https://...). Links in messages start with it; without it nothing is sent.
+    app-base-url: ${SECUREDOC_NOTIFICATIONS_APP_BASE_URL:}
+    # Messages go to people who signed in within this time, with the roles that sign-in gave.
+    people-seen-within: ${SECUREDOC_NOTIFICATIONS_PEOPLE_SEEN_WITHIN:14d}
+    mail-ports: ${SECUREDOC_NOTIFICATIONS_MAIL_PORTS:25,465,587,2525}
+    check-interval-ms: ${SECUREDOC_NOTIFICATIONS_CHECK_INTERVAL_MS:60000}
+  secrets:
+    # Task 0059: the folder of secrets named file:LEXAVAULT_SECRET_... (empty: only env: secrets).
+    directory: ${SECUREDOC_SECRETS_DIRECTORY:}
   platform-admin:
     # Unit 24. Provider credentials remain deployment-managed and are never returned by the admin API.
     watched-folder-scheduling-enabled: ${SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED:false}

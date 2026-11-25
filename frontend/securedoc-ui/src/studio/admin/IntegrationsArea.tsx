@@ -13,7 +13,8 @@ import type {
   WatchedFolderSettings,
 } from '../../types';
 import { errorMessage } from '../data';
-import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, sensitivityName, type SensitivityLevelCode } from '../words';
+import SourceBulk from './SourceBulk';
+import { PRIORITIES, PRIORITY_FIELD, PRIORITY_NAMES, priorityChoice, type PriorityCode, SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, sensitivityName, type SensitivityLevelCode } from '../words';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
 import { ConfirmDialog, DurationField, Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
@@ -265,6 +266,8 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
         <StatusText s={status} />
         {address && <div className="cf-ad-conn-endpoint cf-mono">{address}</div>}
         {folder && <FolderSensitivity />}
+        {folder ? <><SourcePriority source="folder:installed" /><SourceBulk source="folder:installed" name={c.name} /></>
+          : c.purpose === 'INGESTION_SOURCE' && <><SourcePriority source={c.connectionId} /><SourceBulk source={c.connectionId} name={c.name} /></>}
         <details className="cf-disclosure">
           <summary>Technical details</summary>
           <dl className="cf-ad-facts cf-ad-facts-compact">
@@ -336,6 +339,37 @@ function FolderSensitivity() {
   );
 }
 
+/** Task 0073: the priority of a source's cases when it sends none. */
+function SourcePriority({ source }: { source: string }) {
+  const toast = useToast();
+  const { data, mutate } = useSWR('source-priorities', () => apiClient.getSourcePriorities(), { revalidateOnFocus: false });
+  const [saving, setSaving] = useState(false);
+  if (!data) return null;
+  async function save(next: PriorityCode) {
+    setSaving(true);
+    try {
+      await mutate(await apiClient.changeSourcePriority(source, next), { revalidate: false });
+      toast(`Cases from this source will be ${PRIORITY_NAMES[next]}.`);
+    } catch (e) {
+      toast(errorMessage(e, "The source's priority couldn't be saved."), 'danger');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div data-testid="source-priority">
+      <SelectField<PriorityCode>
+        label={PRIORITY_FIELD.sourceLabel}
+        value={priorityChoice(data.sources?.[source])}
+        options={PRIORITIES.map((p) => [p, PRIORITY_NAMES[p]] as [PriorityCode, string])}
+        onChange={(v) => void save(v)}
+        hint={PRIORITY_FIELD.sourceHint}
+        disabled={saving}
+      />
+    </div>
+  );
+}
+
 /** The installed watched folder when no single connection stands for it. It is set when LexaVault is installed, so it has no Edit. */
 function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; onChanged: () => Promise<unknown> }) {
   const toast = useToast();
@@ -362,6 +396,8 @@ function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; on
         <StatusText s={status} />
         <div className="cf-ad-conn-endpoint cf-mono">{folder.rootPath}</div>
         <FolderSensitivity />
+        <SourcePriority source="folder:installed" />
+        <SourceBulk source="folder:installed" name="the watched folder" />
         <details className="cf-disclosure">
           <summary>Technical details</summary>
           <dl className="cf-ad-facts cf-ad-facts-compact">

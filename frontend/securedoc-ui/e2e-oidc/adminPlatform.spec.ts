@@ -234,7 +234,7 @@ test('Branding: one form with Apply to, preview of the top bar; Usage data in pl
   await expect(queue.getByRole('row').filter({ hasText: 'Look at pages' }).getByRole('cell').last()).toHaveText('—');
   await queue.getByRole('button', { name: 'How is this worked out?' }).click();
   await expect(queue.getByText(/last 10 minutes/)).toBeVisible();
-  if (process.env.PROOF_DIR) { await queue.scrollIntoViewIfNeeded(); await queue.screenshot({ path: `${process.env.PROOF_DIR}/queue.png` }); }
+  if (process.env.PROOF_DIR) { await expect(page.getByText('Branding saved for everyone.')).toBeHidden({ timeout: 15_000 }); await queue.scrollIntoViewIfNeeded(); await queue.screenshot({ path: `${process.env.PROOF_DIR}/queue.png` }); }
 
   // Task 0067: the workers, the learned AI limit, and IT's own maximums; only what changed is sent.
   await sections.getByRole('button', { name: 'Workers' }).click();

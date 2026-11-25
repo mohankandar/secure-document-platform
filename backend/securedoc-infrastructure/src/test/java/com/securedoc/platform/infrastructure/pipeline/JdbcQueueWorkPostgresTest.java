@@ -1,6 +1,7 @@
 package com.securedoc.platform.infrastructure.pipeline;
 
 import com.securedoc.platform.application.pipeline.QueueView;
+import com.securedoc.platform.application.port.out.PipelineJobRepository;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Task 0078: the numbers of the queue against a real, throwaway PostgreSQL. */
 @EnabledIfEnvironmentVariable(named = "LEXAVAULT_TEST_PG_URL", matches = "jdbc:postgresql:.*")
 class JdbcQueueWorkPostgresTest {
+    private static final Set<String> NONE_MARKED = Set.of(PipelineJobRepository.EVERY_BULK_SOURCE);
 
     @Test
     void theNumbersOfOneEntityAndOfAllOfThem() throws Exception {
@@ -58,7 +62,7 @@ class JdbcQueueWorkPostgresTest {
             job(jdbc, b, other, theirs, "FIND", "READY", 400, 0);
             job(jdbc, b, other, null, "EXPORT", "PAUSED", 400, 0);
 
-            Map<PipelineStage, QueueView.Work> mine = queue.work(a, QueueView.WINDOW);
+            Map<PipelineStage, QueueView.Work> mine = queue.work(a, QueueView.WINDOW, NONE_MARKED);
             QueueView.Work text = mine.get(PipelineStage.TEXT);
             assertEquals(1, text.running());
             assertEquals(2, text.toCome(), "the documents of the case not started");
@@ -76,12 +80,12 @@ class JdbcQueueWorkPostgresTest {
             assertEquals(2, mine.get(PipelineStage.EXPORT).toCome());
             assertEquals(0, mine.get(PipelineStage.EXPORT).held());
 
-            Map<PipelineStage, QueueView.Work> all = queue.work(null, QueueView.WINDOW);
+            Map<PipelineStage, QueueView.Work> all = queue.work(null, QueueView.WINDOW, NONE_MARKED);
             assertEquals(2, all.get(PipelineStage.FIND).waiting());
             assertEquals(400, all.get(PipelineStage.FIND).oldestWaitingSeconds(), 2);
             assertEquals(1, all.get(PipelineStage.EXPORT).held());
             assertEquals(5, all.get(PipelineStage.REDACT).toCome());
-            assertTrue(queue.work(b, QueueView.WINDOW).get(PipelineStage.TEXT).running() == 0);
+            assertTrue(queue.work(b, QueueView.WINDOW, NONE_MARKED).get(PipelineStage.TEXT).running() == 0);
         }
     }
 
@@ -95,15 +99,64 @@ class JdbcQueueWorkPostgresTest {
             TestRows.packageRow(jdbc, tenant, pkg);
             UUID doc = document(jdbc, tenant, pkg, "DETECTING");
             for (int page = 1; page <= 19; page++) job(jdbc, tenant, pkg, doc, "FIND", "DONE", 300, 5, page);
-            QueueView.Work find = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW).get(PipelineStage.FIND);
+            QueueView.Work find = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW, NONE_MARKED).get(PipelineStage.FIND);
             assertEquals(19, find.done());
             assertEquals(295, find.busySeconds(), 2);
             job(jdbc, tenant, pkg, doc, "FIND", "DONE", 300, 5, 20);
             job(jdbc, tenant, pkg, doc, "FIND", "DONE", 300, 200, 21);
-            find = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW).get(PipelineStage.FIND);
+            find = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW, NONE_MARKED).get(PipelineStage.FIND);
             assertEquals(20, find.done(), "only the last minute's");
             assertEquals(55, find.busySeconds(), 2);
         }
+    }
+
+    @Test
+    void aBulkJobIsHeldUntilItsWindowOpens() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("queuebulk")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            TenantId tenant = TenantId.generate();
+            TestRows.tenant(jdbc, tenant);
+            PackageId live = PackageId.generate();
+            PackageId night = PackageId.generate();
+            PackageId notStarted = PackageId.generate();
+            for (PackageId p : new PackageId[]{live, night, notStarted}) TestRows.packageRow(jdbc, tenant, p);
+            status(jdbc, notStarted, "SUBMITTED");
+            for (PackageId p : new PackageId[]{night, notStarted}) bulkCase(jdbc, tenant, p);
+            UUID liveDoc = document(jdbc, tenant, live, "DETECTING");
+            UUID nightDoc = document(jdbc, tenant, night, "DETECTING");
+            document(jdbc, tenant, notStarted, "UPLOADED");
+            job(jdbc, tenant, live, liveDoc, "FIND", "READY", 30, 0);
+            job(jdbc, tenant, live, liveDoc, "FIND", "DONE", 40, 20, 1);
+            job(jdbc, tenant, night, nightDoc, "FIND", "READY", 500, 0);
+            jdbc.update("update pipeline_jobs set priority = 'BULK' where package_id = :id",
+                    new MapSqlParameterSource("id", night.value()));
+
+            for (Set<String> closed : List.of(Set.<String>of(), Set.of("another/source"))) {
+                var work = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW, closed);
+                var find = work.get(PipelineStage.FIND);
+                assertEquals(1, find.waiting());
+                assertEquals(1, find.held());
+                assertEquals(30, find.oldestWaitingSeconds(), 2);
+                assertEquals(40, find.busySeconds(), 2, "the wait for the window is not work");
+                assertEquals(0, work.get(PipelineStage.TEXT).toCome());
+                assertEquals(0, find.toCome());
+                assertEquals(1, work.get(PipelineStage.REDACT).toCome());
+                assertEquals(1, work.get(PipelineStage.EXPORT).toCome());
+            }
+            for (Set<String> open : List.of(NONE_MARKED, Set.of(tenant.value() + "/archive"))) {
+                var work = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW, open);
+                assertEquals(2, work.get(PipelineStage.FIND).waiting());
+                assertEquals(0, work.get(PipelineStage.FIND).held());
+                assertEquals(1, work.get(PipelineStage.TEXT).toCome());
+                assertEquals(3, work.get(PipelineStage.EXPORT).toCome());
+            }
+        }
+    }
+
+    private static void bulkCase(NamedParameterJdbcTemplate jdbc, TenantId tenant, PackageId id) {
+        jdbc.update("insert into case_priorities (package_id, tenant_id, priority, changed_at, source_key)"
+                        + " values (:id, :tenant, 'BULK', clock_timestamp(), 'archive')",
+                new MapSqlParameterSource("id", id.value()).addValue("tenant", tenant.value()));
     }
 
     private static void status(NamedParameterJdbcTemplate jdbc, PackageId id, String status) {

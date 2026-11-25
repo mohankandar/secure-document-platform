@@ -69,6 +69,7 @@ class SchemaStepPostgresTest {
         // platform-core 0.7.0 (task 0054): identity V5, licensing V2.
         assertTrue(first.contains("identity         5 migration(s) run, at version 5"), first);
         assertTrue(first.contains("licensing        2 migration(s) run, at version 2"), first);
+        assertTrue(first.contains("notifications    1 migration(s) run, at version 1"), first); // task 0059
         try (Connection c = db.connect()) {
             assertEquals(5, count(c, "select count(*) from idn_schema_history where version in ('1','2','3','4','5') and success"));
             assertEquals(2, count(c, "select count(*) from lic_schema_history where version in ('1','2') and success"));
@@ -127,11 +128,16 @@ class SchemaStepPostgresTest {
                 Map.entry("lic_licence", DML), Map.entry("lic_usage", DML), Map.entry("lic_chain_head", DML),
                 Map.entry("lic_notice_sent", DML), Map.entry("lic_last_seen", "INSERT,SELECT,UPDATE"),
                 Map.entry("lic_clock_reset", "INSERT,SELECT"), Map.entry("lic_version_floor", "SELECT"),
-                Map.entry("lic_schema_version", "SELECT")));
+                Map.entry("lic_schema_version", "SELECT"),
+                // Task 0059: platform-core 1.0.0, docs/install/notifications.md section 4.
+                Map.entry("notif_tenant", DML), Map.entry("notif_destination", DML), Map.entry("notif_event_settings", DML),
+                Map.entry("notif_outbox", DML), Map.entry("notif_summary_item", DML), Map.entry("notif_condition", DML),
+                Map.entry("notif_approval_request", DML), Map.entry("notif_schema_version", "SELECT")));
         // platform-core's own start-up checks pass as this user.
         var ds = new org.springframework.jdbc.datasource.DriverManagerDataSource(db.url, RUNTIME_USER, RUNTIME_PASSWORD);
         com.documentplatform.identity.jdbc.IdentitySchema.verify(ds);
         com.documentplatform.licensing.jdbc.LicensingSchema.verify(ds);
+        com.documentplatform.notifications.jdbc.NotificationSchema.verify(ds);
     }
 
     private static final String DML = "DELETE,INSERT,SELECT,UPDATE";
@@ -167,7 +173,8 @@ class SchemaStepPostgresTest {
                     "delete from lic_version_floor", "update lic_clock_reset set reset_id = 'x'", "delete from lic_clock_reset",
                     "update idn_login_connection_history set changed_by = 'x'", "delete from idn_login_connection_history",
                     "update idn_machine_binding_history set changed_by = 'x'", "delete from idn_machine_binding_history",
-                    "update lic_schema_version set version = 9", "truncate lic_usage", "select count(*) from lic_schema_history"}) {
+                    "update lic_schema_version set version = 9", "update notif_schema_version set version = 9",
+                    "select count(*) from notif_schema_history", "truncate lic_usage", "select count(*) from lic_schema_history"}) {
                 SQLException e = assertThrows(SQLException.class, () -> s.execute(refused), refused);
                 assertEquals("42501", e.getSQLState(), refused + ": " + e.getMessage());
             }

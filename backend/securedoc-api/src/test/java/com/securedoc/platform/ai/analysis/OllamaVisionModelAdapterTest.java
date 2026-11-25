@@ -33,6 +33,9 @@ class OllamaVisionModelAdapterTest {
 
     private HttpServer server;
     private final List<String> digests = new CopyOnWriteArrayList<>();
+    private final java.util.concurrent.ExecutorService threads = java.util.concurrent.Executors.newCachedThreadPool();
+    /** The model list is late (6 s, the limit is 5 s) this many times. */
+    private final AtomicInteger lateTags = new AtomicInteger();
     private final AtomicInteger tagsAsked = new AtomicInteger();
     private final List<String> asked = new CopyOnWriteArrayList<>();
     private final List<Integer> statuses = new ArrayList<>();
@@ -43,7 +46,15 @@ class OllamaVisionModelAdapterTest {
     void start() throws Exception {
         digests.add(DIGEST);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.setExecutor(threads);
         server.createContext("/api/tags", exchange -> {
+            if (lateTags.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+                try {
+                    Thread.sleep(6_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             String digest = digests.get(Math.min(tagsAsked.getAndIncrement(), digests.size() - 1));
             String body = digest.isEmpty() ? "{\"models\":[]}" : "{\"models\":[{\"name\":\"other:1\",\"digest\":\"00\"},"
                     + "{\"name\":\"" + MODEL + "\",\"digest\":\"" + digest + "\"}]}";
@@ -61,6 +72,16 @@ class OllamaVisionModelAdapterTest {
     @AfterEach
     void stop() {
         server.stop(0);
+        threads.shutdownNow();
+    }
+
+    /** Task 0080. */
+    @Test
+    void aModelListThatIsLateOnceIsAskedOnceMore() {
+        lateTags.set(1);
+        assertTrue(adapter().read(IMAGE, 1).read());
+        lateTags.set(2);
+        assertNotRead(adapter().read(IMAGE, 1), "LV-AI-002", "TIMEOUT");
     }
 
     @Test

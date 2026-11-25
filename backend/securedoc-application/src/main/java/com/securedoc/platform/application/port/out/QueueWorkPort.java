@@ -6,8 +6,9 @@ import com.securedoc.platform.domain.pipeline.PipelineStage;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 
-/** Task 0078: the work of each stage, for one entity or (null) all of them. */
+/** Task 0078: the work of each stage, for one entity or (null) all of them; openBulkSources as the claim is asked with. */
 public interface QueueWorkPort {
-    Map<PipelineStage, QueueView.Work> work(TenantId tenantId, Duration window);
+    Map<PipelineStage, QueueView.Work> work(TenantId tenantId, Duration window, Set<String> openBulkSources);
 }

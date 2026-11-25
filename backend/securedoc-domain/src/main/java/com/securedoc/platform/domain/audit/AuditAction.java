@@ -139,6 +139,11 @@ public enum AuditAction {
     PLATFORM_HEALTH_CHECKED,
     /** Task 0067: IT's own maximums of workers and AI requests at once; names and numbers only. */
     PROCESSING_MAXIMUMS_CHANGED,
+    /** Task 0073: names of priorities only ("priority=NORMAL->URGENT"). */
+    CASE_PRIORITY_CHANGED,
+    SOURCE_PRIORITY_CHANGED,
+    /** Task 0079: the window's times only. */
+    SOURCE_BULK_CHANGED,
     WATCHED_FOLDER_SCAN_TRIGGERED,
     INTEGRATION_CONNECTION_CREATED,
     INTEGRATION_CONNECTION_UPDATED,
@@ -167,6 +172,12 @@ public enum AuditAction {
     LICENSE_ENFORCEMENT_DENIED,
     /** Task 0057. */
     DIAGNOSTIC_BUNDLE_DOWNLOADED,
+    // Task 0059: notifications and approval links. Codes, ids and field names only.
+    NOTIFICATION_SETTINGS_CHANGED,
+    NOTIFICATION_EVENT_CHANGED,
+    NOTIFICATION_TEST_SENT,
+    DELIVERY_APPROVAL_LINK_USED,
+    DELIVERY_APPROVAL_LINK_REFUSED,
     BRANDING_CONFIGURATION_CHANGED,
 
     // Derived-document routing

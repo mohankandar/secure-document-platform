@@ -334,6 +334,8 @@ const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUl
 /* ---------- The API ---------- */
 
 export interface MockOptions {
+  /** Task 0059: Admin › Notifications as the IT Admin sees it. */
+  notificationsIt?: object;
   /** Paths (without /api/v1) that answer 500, to show a screen's problem card. */
   broken?: string[];
   /** Two entities: the chooser shows after sign-in. */
@@ -355,6 +357,38 @@ export const ENTITY_SLOTS = {
     { slotId: 'ENT-LEX-0002', name: 'Commercial lending', status: 'ACTIVE', current: false, timeZone: 'Europe/London', customerTimeZone: 'America/Chicago', activatedAt: '2026-02-05T09:00:00Z' },
     { slotId: 'ENT-LEX-0003', name: null, status: 'NOT_ACTIVATED', current: false, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: null },
     { slotId: 'ENT-LEX-0004', name: 'Northwind Trust', status: 'SUSPENDED', current: false, timeZone: null, customerTimeZone: 'America/Chicago', activatedAt: '2026-03-05T09:00:00Z' },
+  ],
+};
+
+/* ---------- Task 0059: notifications and the approval link ---------- */
+
+export const APPROVAL_TOKEN = 'AQEBfaketokenfaketokenfaketoken.c2lnbmF0dXJlc2lnbmF0dXJl';
+export const APPROVAL_READY = { state: 'READY', action: 'APPROVE', caseId: APPROVAL_CASE.packageId, caseNumber: 'LN-3002', askedBy: 'Maria Alvarez', expiresAt: '2027-01-15T10:00:00Z', code: null, message: '' };
+const NOTIFICATION_PEOPLE = [{ role: 'TENANT_IT_ADMIN', people: 2 }, { role: 'BUSINESS_ADMIN', people: 1 }, { role: 'DOCUMENT_SUPERVISOR', people: 4 }, { role: 'DOCUMENT_PROCESSOR', people: 11 }];
+const PLAIN = { dailyAt: null, alertAfterMinutes: null, repeatMinutes: null, alertAfterMax: 1440, thresholds: [] };
+const LASTING = { ...PLAIN, alertAfterMinutes: 15, repeatMinutes: 240 };
+const critical = (id: string, name: string) => ({ ...LASTING, alertAfterMax: 60, id, name, enabled: true, alwaysOn: true, frequency: 'IMMEDIATELY', frequencies: ['IMMEDIATELY', 'EVERY_HOUR'], roles: ['TENANT_IT_ADMIN'] });
+const ALL_FREQUENCIES = ['IMMEDIATELY', 'EVERY_HOUR', 'EVERY_4_HOURS', 'ONCE_A_DAY'];
+export const NOTIFICATIONS_IT = {
+  mail: { enabled: true, mode: 'MICROSOFT_365', host: null, port: null, security: null, username: null, fromAddress: 'lexavault@northwind.example', fromName: 'LexaVault', directoryId: '00000000-0000-0000-0000-000000000001', clientId: '00000000-0000-0000-0000-000000000002', credentialType: 'CERTIFICATE', secretNamed: true },
+  appAddressSet: true, approvalLinksOn: true, secretNamePrefix: 'LEXAVAULT_SECRET_C9C9C9C900004000800000000000000C_', mailPorts: [25, 465, 587, 2525],
+  people: NOTIFICATION_PEOPLE,
+  events: [critical('export.destination-paused', 'Destination paused'), critical('export.destination-needs-it', 'Destination needs IT'), critical('export.destinations-unreachable', 'Destinations can not be reached'), critical('export.cases-need-it', 'Cases waiting for IT'),
+    { ...LASTING, alertAfterMinutes: 30, id: 'export.destination-busy', name: 'Destination busy for more than 30 minutes', enabled: true, alwaysOn: false, frequency: 'IMMEDIATELY', frequencies: ALL_FREQUENCIES, roles: ['TENANT_IT_ADMIN'] },
+    critical('storage.processing-stopped', 'Processing stopped, storage not usable'), critical('system.ai-model-down', 'AI model down'), critical('system.disk-almost-full', 'Disk almost full'),
+    { ...LASTING, id: 'intake.source-unreachable', name: 'Intake source can not be reached', enabled: true, alwaysOn: false, frequency: 'IMMEDIATELY', frequencies: ALL_FREQUENCIES, roles: ['TENANT_IT_ADMIN'] },
+    { ...LASTING, thresholds: [{ name: 'failuresInAnHour', label: 'Problems in an hour', value: 3, min: 1, max: 1000 }], id: 'processing.repeated-failures', name: 'Repeated processing failures', enabled: true, alwaysOn: false, frequency: 'IMMEDIATELY', frequencies: ALL_FREQUENCIES, roles: ['TENANT_IT_ADMIN'] },
+    { ...PLAIN, id: 'intake.files-rejected', name: 'File rejected at intake', enabled: true, alwaysOn: false, frequency: 'EVERY_4_HOURS', frequencies: ALL_FREQUENCIES, roles: ['TENANT_IT_ADMIN'] }],
+  recent: [{ event: 'Destination paused', state: 'SENT', code: null, reason: null, at: '2026-11-24T14:05:00Z' }, { event: 'Test message', state: 'FAILED', code: 'MAIL_SMTP_AUTH_DISABLED', reason: 'SMTP AUTH is disabled for the sender mailbox', at: '2026-11-24T13:40:00Z' }],
+};
+export const NOTIFICATIONS_BUSINESS = {
+  mailOn: true, people: NOTIFICATION_PEOPLE,
+  events: [
+    { ...LASTING, alertAfterMinutes: 0, id: 'work.review-waiting', name: 'Cases waiting for review', enabled: true, alwaysOn: false, frequency: 'EVERY_4_HOURS', frequencies: ALL_FREQUENCIES, roles: ['DOCUMENT_PROCESSOR', 'DOCUMENT_SUPERVISOR'] },
+    { ...PLAIN, dailyAt: '08:00', id: 'licensing.licence-expiring', name: 'Licence expiring', enabled: true, alwaysOn: false, frequency: 'ONCE_A_DAY', frequencies: ALL_FREQUENCIES, roles: ['BUSINESS_ADMIN'] },
+    { ...LASTING, alertAfterMinutes: 0, alertAfterMax: 60, id: 'licensing.intake-stopped', name: 'Intake stopped, licence expired', enabled: true, alwaysOn: true, frequency: 'IMMEDIATELY', frequencies: ['IMMEDIATELY', 'EVERY_HOUR'], roles: ['BUSINESS_ADMIN', 'TENANT_IT_ADMIN'] },
+    { ...PLAIN, dailyAt: '08:00', thresholds: [{ name: 'nearLimitPercent', label: 'Warn at percent used', value: 80, min: 50, max: 99 }], id: 'licensing.usage-near-limit', name: 'Usage near limit', enabled: true, alwaysOn: false, frequency: 'ONCE_A_DAY', frequencies: ALL_FREQUENCIES, roles: ['BUSINESS_ADMIN'] },
+    { ...PLAIN, id: 'approval.delivery-waiting', name: 'Case waiting for delivery approval', enabled: true, alwaysOn: false, frequency: 'IMMEDIATELY', frequencies: ['IMMEDIATELY'], roles: ['DOCUMENT_SUPERVISOR'] },
   ],
 };
 
@@ -429,6 +463,9 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     if (path === '/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });
     if (path === '/platform/product-telemetry/status') return json(TELEMETRY);
     if (path === '/admin/entities') return json(ENTITY_SLOTS);
+    if (path === '/admin/notifications/it') return json(options.notificationsIt ?? NOTIFICATIONS_IT);
+    if (path === '/admin/notifications/business') return json(NOTIFICATIONS_BUSINESS);
+    if (path === '/approvals/link/open') return json(APPROVAL_READY);
     if (path === '/licensing') return json(options.licensing ?? LICENSING);
     if (path === '/support/status') return json(SUPPORT_STATUS);
 

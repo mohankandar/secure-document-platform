@@ -407,8 +407,28 @@ public class ApplicationServiceConfig {
                 reportingConfigurationRepository, auditService);
     }
 
+    /** Task 0079. */
+    @Bean
+    public com.securedoc.platform.application.intake.BulkSourceService bulkSourceService(
+            com.securedoc.platform.application.port.out.BulkSourceRepository bulkSourceRepository,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones, AuditService auditService) {
+        return new com.securedoc.platform.application.intake.BulkSourceService(bulkSourceRepository, entityTimeZones,
+                auditService, java.time.Clock.systemUTC());
+    }
+
+    /** Task 0073. */
+    @Bean
+    public com.securedoc.platform.application.intake.CasePriorityService casePriorityService(
+            com.securedoc.platform.application.port.out.CasePriorityRepository casePriorityRepository,
+            PackageRepository packageRepository, AuditService auditService,
+            com.securedoc.platform.application.intake.BulkSourceService bulkSourceService) {
+        return new com.securedoc.platform.application.intake.CasePriorityService(casePriorityRepository, packageRepository,
+                auditService).withBulk(bulkSourceService);
+    }
+
     @Bean
     public CreatePackageUseCase createPackageUseCase(
+            com.securedoc.platform.application.intake.CasePriorityService casePriorityService,
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
             BusinessIdentityService businessIdentityService,
@@ -418,7 +438,7 @@ public class ApplicationServiceConfig {
             AuditService auditService) {
         return new CreatePackageService(
                 tenantContextService, capabilityEnforcementService, businessIdentityService, intakeLicence,
-                packageRepository, eventPublisher, auditService);
+                packageRepository, eventPublisher, auditService).withPriorities(casePriorityService);
     }
 
     @Bean
@@ -973,10 +993,11 @@ public class ApplicationServiceConfig {
             PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService,
             ArtifactRepository artifactRepository,
-            StoragePort storagePort) {
+            StoragePort storagePort,
+            com.securedoc.platform.application.intake.CasePriorityService casePriorityService) {
         return new FocusedReviewService(packageRepository, documentRepository, findingRepository,
                 tenantRedactionPolicyRepository, packageProcessingDispatcher, auditService,
-                new ReviewFoundTextReader(artifactRepository, storagePort));
+                new ReviewFoundTextReader(artifactRepository, storagePort)).withPriorities(casePriorityService);
     }
 
     @Bean

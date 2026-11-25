@@ -84,7 +84,8 @@ public final class PollingIntakeService {
         for (IntegrationConnection source : connectionService.listEnabledPollingSources()) {
             Instant latestStarted = runRepository.findLatest(source.id()).map(PollingRun::startedAt).orElse(null);
             if (PollingScheduleCalculator.isDue(source, latestStarted, now, entityZone(source))
-                    && !tooSoon(source, latestStarted, now, slowdown)) {
+                    && !tooSoon(source, latestStarted, now, slowdown)
+                    && gate.sourceOpen(source.tenantId(), source.id().value().toString())) {
                 result.add(new PollingSourceRef(source.tenantId(), source.id()));
             }
         }
@@ -108,7 +109,7 @@ public final class PollingIntakeService {
                     licence.refusal(tenantId).map(com.securedoc.platform.application.licensing.LicenseEnforcementException::errorCode).orElse("none"));
             return Optional.empty();
         }
-        if (gate.full()) return Optional.empty();
+        if (gate.full() || !gate.sourceOpen(tenantId, source.id().value().toString())) return Optional.empty();
         ActorId actor = systemActor(source);
         // Task 0018 A6: the run's records name the connection ("Polling: <connection name>"); cleared after the run.
         // A manual run keeps the person's own name, bound by their request.
@@ -265,7 +266,7 @@ public final class PollingIntakeService {
                     sourcePackage.businessIdentifiers(), sourcePackage.metadata(), sourcePackage.documents().stream()
                     .map(d -> new PushIntakeCreateInput.ManifestDocumentInput(d.externalSourceDocumentId(), d.fileName(), d.sha256(),
                             d.sensitivityLevel())).toList(),
-                    sourcePackage.retry(), sourcePackage.caseSensitivityLevel());
+                    sourcePackage.retry(), sourcePackage.caseSensitivityLevel(), sourcePackage.priority());
             ExternalIntakeSnapshot intake = externalIntakeService.createPollingIntake(input, source, principal, correlationId);
             if (intake.intakeStatus() == ExternalIntakeStatus.INCOMPLETE_EXPIRED) return new PackageOutcome(0, false);
             Set<String> missing = new HashSet<>(intake.missingExternalSourceDocumentIds());
