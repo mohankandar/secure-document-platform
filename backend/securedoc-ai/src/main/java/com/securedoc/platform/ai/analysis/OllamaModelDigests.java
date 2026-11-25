@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -28,8 +29,14 @@ final class OllamaModelDigests {
 
     /** Empty when the model is not installed. */
     Optional<String> of(String model) throws IOException, InterruptedException {
-        HttpResponse<String> response = http.send(HttpRequest.newBuilder(tags).timeout(TIMEOUT).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
+        HttpRequest request = HttpRequest.newBuilder(tags).timeout(TIMEOUT).GET().build();
+        HttpResponse<String> response;
+        try {
+            response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (HttpTimeoutException busy) {
+            // Task 0080: a server busy with an answer can be late once; a page is not unread for that.
+            response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        }
         if (response.statusCode() != 200) throw new IOException("The model list is not available");
         String wanted = withTag(model);
         try {
