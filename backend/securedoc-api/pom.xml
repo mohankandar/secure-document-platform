@@ -123,8 +123,12 @@
             <artifactId>platform-erase-log-testkit</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Task 0041: the setup command runs from its own jar (securedoc-setup), because it brings platform-crypto and
-             platform-integration, which the app's classpath may not carry (task 0041). Here only for the tests that
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-integration-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Task 0041: the setup command runs from its own jar (securedoc-setup), which the app's classpath may not carry (task 0041). Here only for the tests that
              run setup before the demo step. -->
         <dependency>
             <groupId>com.documentplatform.platform</groupId>

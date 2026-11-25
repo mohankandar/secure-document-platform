@@ -171,6 +171,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-DLV-013 | Split document couldn't be made | Finding the split pages or building the split PDF failed. | Export failed | IT Admin | — | 189, 191, 181 |
 | LV-DLV-014 | Can't retry this failure | This failure needs a fix first; retrying won't help. | Refused | IT Admin | 400 | 177, 194 |
 | LV-DLV-015 | Resend failed | A person's resend failed, so the case went to the IT error queue. *(Reserved for the export redesign.)* | Export failed | IT Admin | — | — |
+| LV-DLV-016 | Delivery begun with another set-up | Part of this case was sent by an earlier release, or with another connection, address or profile. | Export failed | IT Admin | — | — |
 
 ### AUT: sign-in and access (001–029)
 

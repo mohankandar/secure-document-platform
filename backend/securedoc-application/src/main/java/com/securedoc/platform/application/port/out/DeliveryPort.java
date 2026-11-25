@@ -49,9 +49,32 @@ public interface DeliveryPort {
     interface DeliveryProgressListener {
         default void submissionAccepted(String destinationSubmissionReference) { }
         default void documentAcknowledged(DeliveryReference reference) { }
+        /** Task 0087: the delivery step's own note of how far it got, handed back as {@link DeliveryContext#progress()}. */
+        default void progressed(String progress) { }
     }
 
     DeliveryProgressListener NOOP_PROGRESS = new DeliveryProgressListener() { };
+
+    /**
+     * Task 0087: what a delivery through a destination's profile needs beside the batch.
+     *
+     * @param progress     what an earlier attempt of this delivery noted, or null
+     * @param fieldList    the field list {@code caseFields} was written with, or null
+     * @param acknowledged the documents an earlier attempt delivered (they are not sent again)
+     */
+    record DeliveryContext(String progress, com.documentplatform.fields.FieldSet fieldList, List<DeliveryItem> acknowledged) {
+        public static final DeliveryContext NONE = new DeliveryContext(null, null, List.of());
+
+        public DeliveryContext {
+            progress = progress == null || progress.isBlank() ? null : progress;
+            acknowledged = List.copyOf(acknowledged == null ? List.of() : acknowledged);
+        }
+
+        @Override
+        public String toString() {
+            return "DeliveryContext[progress=" + (progress != null) + ", acknowledged=" + acknowledged.size() + "]";
+        }
+    }
 
     record DeliveryBatch(TenantId tenantId, PackageId packageId, int exportCycle, String sourceSubmissionId,
                          String existingDestinationSubmissionReference,
@@ -60,7 +83,7 @@ public interface DeliveryPort {
                          SensitivityLevel caseSensitivityLevel,
                          /* Task 0061: the case fields as platform-core's delivery document (key, type and value, with the list
                             of a multi-value field); null when there are none. For a destination that takes it. */
-                         String caseFields) {
+                         String caseFields, DeliveryContext context) {
         /** The values are in no text form of a delivery. */
         @Override
         public String toString() {
@@ -70,9 +93,17 @@ public interface DeliveryPort {
         public DeliveryBatch(TenantId tenantId, PackageId packageId, int exportCycle, String sourceSubmissionId,
                              String existingDestinationSubmissionReference, Map<String,String> businessIdentifiers,
                              Map<String,String> metadata, List<DeliveryItem> items, DeliveryProgressListener progressListener,
+                             SensitivityLevel caseSensitivityLevel, String caseFields) {
+            this(tenantId, packageId, exportCycle, sourceSubmissionId, existingDestinationSubmissionReference,
+                    businessIdentifiers, metadata, items, progressListener, caseSensitivityLevel, caseFields, null);
+        }
+
+        public DeliveryBatch(TenantId tenantId, PackageId packageId, int exportCycle, String sourceSubmissionId,
+                             String existingDestinationSubmissionReference, Map<String,String> businessIdentifiers,
+                             Map<String,String> metadata, List<DeliveryItem> items, DeliveryProgressListener progressListener,
                              SensitivityLevel caseSensitivityLevel) {
             this(tenantId, packageId, exportCycle, sourceSubmissionId, existingDestinationSubmissionReference,
-                    businessIdentifiers, metadata, items, progressListener, caseSensitivityLevel, null);
+                    businessIdentifiers, metadata, items, progressListener, caseSensitivityLevel, (String) null);
         }
 
         public DeliveryBatch {
@@ -86,7 +117,8 @@ public interface DeliveryPort {
             items = List.copyOf(items == null ? List.of() : items);
             progressListener = progressListener == null ? NOOP_PROGRESS : progressListener;
             caseSensitivityLevel = caseSensitivityLevel == null ? SensitivityLevel.STANDARD : caseSensitivityLevel;
-            if (items.isEmpty() && existingDestinationSubmissionReference == null) {
+            context = context == null ? DeliveryContext.NONE : context;
+            if (items.isEmpty() && existingDestinationSubmissionReference == null && context.progress() == null) {
                 throw new IllegalArgumentException("Delivery batch must contain documents when no destination submission exists");
             }
         }

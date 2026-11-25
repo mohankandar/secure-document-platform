@@ -98,11 +98,11 @@ fi
 
 # Task 0041: the app's classpath carries platform-core's identity modules, licensing (task 0057) and nothing else of
 # platform-core. Task 0054 decision 1: and what platform-identity 1.0.0 itself needs (outbound rules, error shape).
-# Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).
+# Setup runs from its own jar (securedoc-setup). Task 0087: platform-integration is the app's own too (delivery).
 printf '\nBACKEND - app jar classpath check (task 0041)\n'
 app_jar="$backend_dir/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar"
 platform_libs="$(jar tf "$app_jar" | sed -n 's#^BOOT-INF/lib/\(platform-[^/]*\.jar\)$#\1#p')"
-not_allowed="$(printf '%s\n' "$platform_libs" | grep -Ev '^platform-(crypto-spring|crypto|erase-log-spring|erase-log|fields|identity-core|identity-jdbc|identity-spring|licensing-spring|licensing|monitoring-spring|monitoring|notifications-spring|notifications|outbound-spring|outbound|errors)-[0-9][^-]*\.jar$' | grep -v '^$' || true)"
+not_allowed="$(printf '%s\n' "$platform_libs" | grep -Ev '^platform-(crypto-spring|crypto|erase-log-spring|erase-log|fields|identity-core|identity-jdbc|identity-spring|integration|licensing-spring|licensing|monitoring-spring|monitoring|notifications-spring|notifications|outbound-spring|outbound|errors)-[0-9][^-]*\.jar$' | grep -v '^$' || true)"
 if [[ -n "$not_allowed" ]]; then
   printf 'The app jar carries platform-core modules it may not: %s\n' "$not_allowed" >&2
   exit 1

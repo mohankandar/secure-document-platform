@@ -1509,7 +1509,7 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 **What to do:**
 
 1. Under Integrations, check that this entity has an enabled destination.
-2. Check that its address is a valid web address (http or https).
+2. Check that its profile is chosen and that its address is a valid web address (http or https). The code under Technical details says what is wrong.
 3. Switch it on or correct it, then retry the export from Support.
 
 ### LV-DLV-007 Destination's answer not understood
@@ -1640,6 +1640,20 @@ Reserved: not used yet.
 1. Open the case in the IT error queue.
 2. Look under Technical details for the code of the failure, and follow its steps in this guide.
 3. Send the case again once the cause is fixed.
+
+### LV-DLV-016 Delivery begun with another set-up
+
+- **Means:** Part of this case was sent by an earlier release, or with another connection, address or profile.
+- **Kind:** Export failed
+- **Who acts:** IT Admin
+- **HTTP status:** —
+- **Support tells the customer:** Part of this case went to the destination with an earlier set-up, so LexaVault stopped instead of sending it twice. Please have your IT Admin look in the destination whether the case is complete there.
+
+**What to do:**
+
+1. Look in the destination whether the case is there and complete, by its time and case number. Nothing is sent until this is clear, so it can't arrive twice.
+2. If the connection, address or profile was changed, put the earlier one back and send the case again from the IT error queue.
+3. Otherwise ask support, with the code and the reference number.
 
 ## AUT: sign-in and access
 

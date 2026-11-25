@@ -38,6 +38,16 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-identity-core</artifactId>
         </dependency>
+        <!-- Task 0087: delivery to a destination through its published profile. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-integration</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-integration-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Task 0060: stored files encrypted with the customer's keys, and the erase log with its handlers. -->
         <dependency>
             <groupId>com.documentplatform.platform</groupId>

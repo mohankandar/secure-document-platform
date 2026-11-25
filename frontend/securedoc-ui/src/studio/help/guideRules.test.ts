@@ -32,7 +32,7 @@ test('0082: search by code, part of a code and words, in any case', () => {
   assert.deepEqual(searchGuide('LV-INT-003').map((a) => a.name), ['Intake']);
   assert.equal(foundText(0), 'No code matches');
   assert.equal(foundText(1), '1 code');
-  assert.equal(foundText(161), '161 codes');
+  assert.equal(foundText(162), '162 codes');
 });
 
 test('0082: addresses', () => {

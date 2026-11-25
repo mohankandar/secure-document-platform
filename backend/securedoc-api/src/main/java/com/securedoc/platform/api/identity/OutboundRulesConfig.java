@@ -20,8 +20,8 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 
 /**
- * The platform's safe outbound rules for LexaVault's one use of them (task 0054): the test sign-in's read of the login
- * system's discovery document and keys. https only, the address guard (no cloud-metadata or link-local address ever, no
+ * The platform's safe outbound rules for LexaVault's calls: the test sign-in's read of the login system's discovery
+ * document and keys (task 0054), mail, and delivery to a destination (task 0087). https only, the address guard (no cloud-metadata or link-local address ever, no
  * internal address unless the installation allows it), connection pinning, no redirects, timeouts and size limits.
  * Settings: {@code platform.outbound.installation}, {@code .allow-internal-addresses} (off by default), {@code
  * .private-ca-file} and {@code .proxy.host/.port/.bypass}. A setting that is wrong stops the app ({@code
@@ -63,7 +63,8 @@ public class OutboundRulesConfig {
         if (hosted && settings.isAllowInternalAddresses()) {
             throw invalid("allow-internal-addresses is never allowed on the hosted service");
         }
-        return new Installation(hosted, settings.isAllowInternalAddresses(), false, proxy(settings.getProxy()),
+        if (hosted && settings.isAllowSignInNone()) throw invalid("allow-sign-in-none is never allowed on the hosted service");
+        return new Installation(hosted, settings.isAllowInternalAddresses(), settings.isAllowSignInNone(), proxy(settings.getProxy()),
                 privateCa(settings.getPrivateCaFile()));
     }
 

@@ -3,6 +3,7 @@ import useSWR, { useSWRConfig } from 'swr';
 import { apiClient } from '../../api/client';
 import type {
   DerivedDelivery,
+  DestinationProfile,
   IntegrationConnection,
   IntegrationConnectionRequest,
   IntegrationProviderType,
@@ -26,6 +27,8 @@ import {
   type Method, type StatusLine, type View,
 } from './integrationRules';
 import RoutingRules from './RoutingRules';
+import DestinationFields from './DestinationFields';
+import { emptyDestination, signInsOf, toDestination } from './destinationRules';
 import { useUnsavedWork } from '../unsavedWork';
 import { HelpTip } from './HelpTip';
 import type { HelpKey } from './helpTexts';
@@ -67,7 +70,7 @@ function applyMethod(cur: Draft, method: Method): Draft {
       pollingScheduleType: cur.pollingScheduleType || 'INTERVAL', pollingIntervalMinutes: cur.pollingIntervalMinutes || 60,
       pollingLocalTime: cur.pollingLocalTime, pollingTimeZone: cur.pollingTimeZone, pollingBatchLimit: cur.pollingBatchLimit || 100,
     });
-    case 'DOCUMENT_STORE': return { ...base, purpose: 'DOCUMENT_STORE_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'SUBMISSION_ACK' };
+    case 'DOCUMENT_STORE': return { ...base, destination: cur.destination ?? emptyDestination(), purpose: 'DOCUMENT_STORE_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'SUBMISSION_ACK' };
     case 'BARCODE_WEB': return { ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'HTTP_API', endpoint: cur.endpoint, acknowledgementMode: 'DESTINATION_RECEIPT' };
     case 'BARCODE_SHARE': return { ...base, purpose: 'DERIVED_DOCUMENT_DELIVERY', direction: 'OUTBOUND', providerType: 'FILE_SHARE', authenticationType: 'NONE', fileShareRoot: cur.fileShareRoot, acknowledgementMode: 'DURABLE_FILE_WRITE' };
   }
@@ -81,11 +84,12 @@ function toDraft(c: IntegrationConnection): Draft {
     incompleteWindowHours: c.incompleteWindowHours, maxDocumentsPerIntake: c.maxDocumentsPerIntake, maxPdfSizeBytes: c.maxPdfSizeBytes,
     maxPdfPages: c.maxPdfPages, pollingScheduleType: c.pollingScheduleType || undefined, pollingIntervalMinutes: c.pollingIntervalMinutes || undefined,
     pollingLocalTime: c.pollingLocalTime || undefined, pollingTimeZone: c.pollingTimeZone || undefined, pollingBatchLimit: c.pollingBatchLimit || undefined,
-    acknowledgementMode: c.acknowledgementMode, enabled: c.enabled, secretReference: '', secretConfigured: c.secretConfigured,
+    acknowledgementMode: c.acknowledgementMode, enabled: c.enabled,
+    destination: c.purpose === 'DOCUMENT_STORE_DELIVERY' ? c.destination ?? emptyDestination() : undefined, secretReference: '', secretConfigured: c.secretConfigured,
   });
 }
 
-function toPayload(d: Draft): IntegrationConnectionRequest {
+function toPayload(d: Draft, profile?: DestinationProfile): IntegrationConnectionRequest {
   const polling = isPolling(d);
   const scanner = d.providerType === 'SCANNER';
   return {
@@ -112,6 +116,8 @@ function toPayload(d: Draft): IntegrationConnectionRequest {
     pollingBatchLimit: polling ? d.pollingBatchLimit : undefined,
     acknowledgementMode: scanner ? 'NONE' : d.acknowledgementMode,
     enabled: d.connectionId ? undefined : Boolean(d.enabled),
+    // Without a profile nothing is sent: a stored one stays, and a new connection is saved switched off.
+    destination: d.purpose === 'DOCUMENT_STORE_DELIVERY' && d.destination?.profileFile ? toDestination(d.destination, d.authenticationType, profile) : undefined,
   };
 }
 
@@ -274,6 +280,7 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
           <dl className="cf-ad-facts cf-ad-facts-compact">
             <div><dt>Provider</dt><dd>{c.providerType} · {c.direction}</dd></div>
             <div><dt>Sign-in</dt><dd>{authName(c.authenticationType)}{c.authenticationType !== 'NONE' && (c.secretConfigured ? ' · key stored' : ' · no key stored')}</dd></div>
+            {c.purpose === 'DOCUMENT_STORE_DELIVERY' && <div><dt>Profile</dt><dd>{c.destination ? `${c.destination.profileName ?? c.destination.profileFile} ${c.destination.profileVersion ?? ''}` : 'Not chosen: nothing is sent'}</dd></div>}
             {c.clientPrincipal && <div><dt>Signs in as</dt><dd className="cf-mono">{c.clientPrincipal}</dd></div>}
             <div><dt>Settings</dt><dd>{advancedSummary(c)}</dd></div>
             {polls && <div><dt>Next collection</dt><dd>{pollStatus.data?.nextScheduledAt ? when(pollStatus.data.nextScheduledAt) : 'not scheduled'}</dd></div>}
@@ -542,11 +549,13 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
   const key = draft ? draft.connectionId ?? 'new' : null;
   if (key !== openKey) { setOpenKey(key); setError(null); setTested(null); setStep(draft?.connectionId ? 2 : 1); }
 
+  const profiles = useSWR<DestinationProfile[]>(draft?.purpose === 'DOCUMENT_STORE_DELIVERY' ? 'destination-profiles' : null, () => apiClient.listDestinationProfiles(), { revalidateOnFocus: false });
   if (!draft) return <Sheet open={false} title="" onClose={onClose}>{null}</Sheet>;
   const d = draft;
   const editing = !!d.connectionId;
   const receive = d.purpose === 'INGESTION_SOURCE';
   const method = methodOf(d);
+  const profile = profiles.data?.find((p) => p.file === d.destination?.profileFile && !p.problems.length);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => { setTested(null); onChange({ ...d, [k]: v }); };
   const nameMissing = !d.name.trim();
   const outbound = d.direction === 'OUTBOUND';
@@ -559,7 +568,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
     setSaving(true);
     setError(null);
     try {
-      const body = toPayload(d);
+      const body = toPayload(d, profile);
       const saved = d.connectionId ? await apiClient.updateIntegrationConnection(d.connectionId, body) : await apiClient.createIntegrationConnection(body);
       toast(`${saved.name} saved.`);
       onClose();
@@ -586,7 +595,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
           : { tone: 'danger', text: "The connection didn't work. Check the address and sign-in, then test again." });
       } else {
         // New or changed settings: tested before saving. Nothing is saved and the status doesn't change.
-        const r = await apiClient.testDraftConnection(toPayload(d), d.connectionId ?? undefined);
+        const r = await apiClient.testDraftConnection(toPayload(d, profile), d.connectionId ?? undefined);
         setTested(draftTestResult(r));
       }
     } catch (e) {
@@ -665,13 +674,18 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
                     hint="The sign-in name the sending system uses (its OIDC subject or user name). Only this account can send documents here." /></div>
                 )}
                 {method !== 'BARCODE_SHARE' && (
-                  <SelectField label={outbound ? 'How LexaVault proves who it is' : 'How the system proves who it is'} value={d.authenticationType} options={AUTH_NAMES}
+                  <SelectField label={outbound ? 'How LexaVault proves who it is' : 'How the system proves who it is'} value={d.authenticationType}
+                    options={method === 'DOCUMENT_STORE' ? AUTH_NAMES.filter(([a]) => a === d.authenticationType || signInsOf(profile).includes(a)) : AUTH_NAMES}
                     onChange={(v) => set('authenticationType', v)} hint="The sign-in method the other side expects." />
                 )}
                 {d.authenticationType !== 'NONE' && (
                   <TextField label="Where the key is stored" type="password" value={d.secretReference || ''}
-                    placeholder={d.secretConfigured ? 'A key is stored. Leave empty to keep it.' : 'For example vault:servicing/api-key'}
+                    placeholder={d.secretConfigured ? 'A key is stored. Leave empty to keep it.' : method === 'DOCUMENT_STORE' ? 'env:LEXAVAULT_SECRET_…' : 'For example vault:servicing/api-key'}
                     onChange={(v) => set('secretReference', v)} hint="A reference to your secrets store. The key itself is never shown." />
+                )}
+                {method === 'DOCUMENT_STORE' && d.destination && (
+                  <DestinationFields value={d.destination} auth={d.authenticationType} profiles={profiles.data ?? []} unavailable={!!profiles.error}
+                    onChange={(v) => set('destination', v)} />
                 )}
                 {method === 'POLL' && <>
                   <SelectField label="Collect" value={d.pollingScheduleType || 'INTERVAL'} options={[['INTERVAL', 'Every few minutes or hours'], ['DAILY', 'Once a day']]}
@@ -723,6 +737,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
             <div><dt>{receive ? 'How documents arrive' : 'Where documents go'}</dt><dd>{methodLabel}</dd></div>
             {(d.endpoint || d.fileShareRoot) && <div className="cf-ad-span"><dt>{method === 'BARCODE_SHARE' ? 'Folder' : 'Address'}</dt><dd className="cf-mono cf-ad-address">{slashParts((hasAddress ? d.endpoint : d.fileShareRoot) ?? '').map((part, i) => <span key={i}>{part}<wbr /></span>)}</dd></div>}
             {method !== 'BARCODE_SHARE' && method !== 'FOLDER' && <div><dt>Sign-in</dt><dd>{authName(d.authenticationType)}</dd></div>}
+            {method === 'DOCUMENT_STORE' && <div><dt>Profile</dt><dd>{profile ? `${profile.name} ${profile.version}` : d.destination?.profileFile || 'Not chosen: nothing is sent'}</dd></div>}
             <div><dt>Advanced</dt><dd>{advancedSummary(d)}</dd></div>
             {!editing && <div><dt>When saved</dt><dd>{d.enabled ? 'Switched on' : 'Switched off'}</dd></div>}
           </dl>

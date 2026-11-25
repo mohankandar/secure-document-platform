@@ -22,7 +22,7 @@ scripts/Setup-LexaVault.ps1 apply -Licence licence.json -Signin signin.json
 (`scripts/Setup-LexaVault.sh plan|apply --licence ... --signin ...` on Linux.)
 
 Setup runs from its own jar, `backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar` (task 0041), not from
-the app jar: setup brings platform-integration (integration profile checks), and the app's classpath does not carry it. The wrapper finds it (`-JarPath` names another one). It passes what LexaVault
+the app jar: setup is not on the app's classpath. The wrapper finds it (`-JarPath` names another one). It passes what LexaVault
 ships:
 
 | Option | File | Note |

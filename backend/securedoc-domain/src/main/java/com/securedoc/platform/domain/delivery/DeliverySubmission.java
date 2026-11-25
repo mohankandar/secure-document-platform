@@ -24,6 +24,8 @@ public final class DeliverySubmission {
     private DeliverySubmissionStatus status;
     private int attemptCount;
     private String destinationSubmissionReference;
+    /* Task 0087: how far the delivery step got (its own text: step names, identifiers, codes). Never a value of a case. */
+    private String destinationProgress;
     private String lastFailureCategory;
     private Instant updatedAt;
     private Instant completedAt;
@@ -49,6 +51,17 @@ public final class DeliverySubmission {
         this.completedAt = completedAt;
         this.documents = new ArrayList<>(documents == null ? List.of() : documents);
         if (this.documents.isEmpty()) throw new IllegalArgumentException("Delivery submission requires documents");
+    }
+
+    /** Task 0087: as stored, with how far the delivery step got. */
+    public DeliverySubmission withStoredProgress(String progress) {
+        this.destinationProgress = normalize(progress);
+        return this;
+    }
+
+    public void recordDestinationProgress(String progress, Instant now) {
+        this.destinationProgress = normalize(progress);
+        this.updatedAt = Objects.requireNonNull(now);
     }
 
     public static DeliverySubmission create(TenantId tenantId, PackageId packageId, int exportCycle,
@@ -159,6 +172,7 @@ public final class DeliverySubmission {
     public DeliverySubmissionStatus status() { return status; }
     public int attemptCount() { return attemptCount; }
     public String destinationSubmissionReference() { return destinationSubmissionReference; }
+    public String destinationProgress() { return destinationProgress; }
     public String lastFailureCategory() { return lastFailureCategory; }
     public Instant createdAt() { return createdAt; }
     public Instant updatedAt() { return updatedAt; }
