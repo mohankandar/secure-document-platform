@@ -79,6 +79,9 @@ catch { $script:Transcribing = $false }
 $script:Result = 'FAIL'
 $script:Blocker = $null
 $script:PackageId = $null
+$releaseWindowHours = 72   # the least the product allows
+$script:WindowChanged = $false
+$script:WindowBefore = ''
 $script:IncidentId = $null
 $script:BackendProcess = $null
 $script:Evidence = [ordered]@{
@@ -289,6 +292,12 @@ try {
     if (-not ($preserveHoldUtc -gt $beforeHoldUtc)) { Fail "Preserve did not move technical_hold_until forward ($($script:Evidence.beforeHold) -> $($script:Evidence.afterPreserveHold))." }
 
     Write-Step "PHASE 3 - Release Hold via the real Support Incident UI"
+    # The entity's window is $releaseWindowHours hours for the release (put back in the cleanup): the default, 168 hours, is
+    # as long as the investigation extension, so the hold would look the same with and without a release.
+    $script:WindowBefore = "$(Get-Scalar "SELECT never_exported_hold_hours FROM tenant_lifecycle_policies WHERE tenant_id = '$($Cfg.TenantId)';")"
+    $script:WindowChanged = $true
+    & $RunQuery -Sql ("INSERT INTO tenant_lifecycle_policies (tenant_id, never_exported_hold_hours, updated_at) VALUES ('$($Cfg.TenantId)', $releaseWindowHours, now())" +
+        " ON CONFLICT (tenant_id) DO UPDATE SET never_exported_hold_hours = $releaseWindowHours;") | Out-Null
     $pwRelease = Invoke-HoldSpec -Step 'RELEASE'
     $script:Evidence.playwrightRelease = $(if ($pwRelease -eq 0) { 'PASS' } else { 'FAIL' })
     if ($pwRelease -ne 0) { Fail "Playwright RELEASE step failed (exit $pwRelease)." }
@@ -303,10 +312,14 @@ try {
     if ($releaseLease.status -ne 'FAILED') { Fail "Release changed package status to $($releaseLease.status); expected FAILED." }
     if ($releaseLease.attemptCount -ne 3) { Fail "Release changed attempt_count to $($releaseLease.attemptCount); expected 3." }
     if ($null -eq $releaseHoldUtc) { Fail "technical_hold_until became null after release; product resets it to the normal window (non-null)." }
-    # Normal retention resumes: the special (far-future) investigation extension is withdrawn, so the
-    # released hold is earlier than the preserved hold, and still in the future.
-    if (-not ($releaseHoldUtc -lt $preserveHoldUtc)) {
+    # Normal retention resumes: the investigation extension is withdrawn (the hold is earlier than the preserved one), and the
+    # hold is now + the entity's own window.
+    if (-not ($releaseHoldUtc -lt $preserveHoldUtc.AddHours(-1))) {
         Fail "Release did not withdraw the investigation extension (release hold $($script:Evidence.afterReleaseHold) not earlier than preserve hold $($script:Evidence.afterPreserveHold))."
+    }
+    $expectedHold = (Get-Date).ToUniversalTime().AddHours($releaseWindowHours)
+    if ([math]::Abs(($releaseHoldUtc - $expectedHold).TotalMinutes) -gt 2) {
+        Fail "Release did not reset the hold to now + $releaseWindowHours hours (release hold $($script:Evidence.afterReleaseHold))."
     }
     if (-not ($releaseHoldUtc -gt (Get-Date).ToUniversalTime())) {
         Fail "Released technical_hold_until is not in the future ($($script:Evidence.afterReleaseHold))."
@@ -336,6 +349,12 @@ catch {
     Write-Host "`n[$($script:Result)] $($_.Exception.Message)" -ForegroundColor Red
 }
 finally {
+    if ($script:WindowChanged) {
+        $undo = if ($script:WindowBefore) { "UPDATE tenant_lifecycle_policies SET never_exported_hold_hours = $($script:WindowBefore) WHERE tenant_id = '$($Cfg.TenantId)';" }
+            else { "DELETE FROM tenant_lifecycle_policies WHERE tenant_id = '$($Cfg.TenantId)';" }
+        try { & $RunQuery -Sql $undo | Out-Null; Write-Info "  the entity's hold window is put back ($(if ($script:WindowBefore) { "$($script:WindowBefore) hours" } else { 'no own policy' }))" }
+        catch { Write-Host "  the entity's hold window could NOT be put back (it was '$($script:WindowBefore)'): $($_.Exception.Message)" -ForegroundColor Yellow }
+    }
     $testDataDisposition = 'RETAINED'
     if ($script:PackageId) {
         if ($script:Result -eq 'PASS' -and -not $KeepTestData) {

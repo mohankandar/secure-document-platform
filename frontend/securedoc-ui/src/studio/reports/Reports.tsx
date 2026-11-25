@@ -6,6 +6,7 @@ import type { DailyReport, OperationalReports, ReportSource } from '../../types'
 import { CAP, errorMessage, type StageKey } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
+import { onArrowKeys } from '../arrowKeys';
 import { ErrorBoundary, LoadErrorCard, checked, isRecord } from '../failure';
 import { axisTicks, bucketDate, hours, labelledBuckets, pct, ratio } from './reportRules';
 import { isTimeSaved, timeSavedWords } from './timeSavedRules';
@@ -135,9 +136,9 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
       </div>
 
       <div className="cf-rp-filters" role="group" aria-label="Report filters">
-        <div className="cf-segment" role="radiogroup" aria-label="Period">
+        <div className="cf-segment" role="radiogroup" aria-label="Period" onKeyDown={onArrowKeys}>
           {PRESETS.map((p) => (
-            <button key={p.key} type="button" role="radio" aria-checked={preset === p.key} className={preset === p.key ? 'is-active' : ''} onClick={() => setChosen(p.key)}>
+            <button key={p.key} type="button" role="radio" aria-checked={preset === p.key} tabIndex={preset === p.key ? 0 : -1} className={preset === p.key ? 'is-active' : ''} onClick={() => setChosen(p.key)}>
               {p.label}
             </button>
           ))}
@@ -569,7 +570,7 @@ function Dimension({ dim }: { dim: OperationalReports['dimensions'][number] }) {
   if (!dim.values.length) return null;
   return (
     <Section title={`By ${dim.label.toLowerCase()}`}>
-      <div className="cf-rp-table-wrap">
+      <div className="cf-rp-table-wrap" tabIndex={0} role="group" aria-label={dim.label || 'Breakdown'}>
         <table className="cf-rp-table">
           <thead>
             <tr><th scope="col">{dim.label}</th><th scope="col">Cases</th><th scope="col">Delivered</th><th scope="col">Delivery rate</th><th scope="col">Typical time</th></tr>

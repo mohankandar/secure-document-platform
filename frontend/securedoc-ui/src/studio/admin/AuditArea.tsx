@@ -6,6 +6,7 @@ import type { ApiError, AuditRecordResult, GrantHistoryRow } from '../../types';
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
+import { onArrowKeys } from '../arrowKeys';
 import { SelectField, TextField, when } from './shared';
 import {
   AUDIT_TYPES, PERIODS, SYSTEM_ACTOR_ID, actionOptions, caseId, caseSearch, changeLine, grantChangeBy, grantChangeLine, periodStart,
@@ -162,9 +163,9 @@ export default function AuditArea({ caps, entityName }: { caps: string[]; entity
     <section className="cf-ad-audit" aria-label="Audit records" aria-busy={isValidating || undefined}>
 
       <div className="cf-ad-audit-bar">
-        <div className="cf-segment cf-ad-audit-cats" role="radiogroup" aria-label="Type">
+        <div className="cf-segment cf-ad-audit-cats" role="radiogroup" aria-label="Type" onKeyDown={onArrowKeys}>
           {AUDIT_TYPES.map((t) => (
-            <button key={t.key} type="button" role="radio" aria-checked={type === t.key} className={type === t.key ? 'is-active' : ''} onClick={() => setType(t.key)}>{t.label}</button>
+            <button key={t.key} type="button" role="radio" aria-checked={type === t.key} tabIndex={type === t.key ? 0 : -1} className={type === t.key ? 'is-active' : ''} onClick={() => setType(t.key)}>{t.label}</button>
           ))}
         </div>
         <label className="cf-ad-audit-pick">

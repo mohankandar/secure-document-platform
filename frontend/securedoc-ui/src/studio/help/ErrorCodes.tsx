@@ -14,6 +14,7 @@ export default function ErrorCodes() {
   const { code: asked } = useParams();
   const wanted = codeFromAddress(asked);
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const areas = useMemo(() => searchGuide(query), [query]);
   const found = areas.reduce((n, a) => n + a.entries.length, 0);
 
@@ -38,8 +39,8 @@ export default function ErrorCodes() {
         <label className="cf-search">
           <Search size={15} aria-hidden="true" />
           <span className="cf-sr">{HELP_WORDS.search}</span>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={HELP_WORDS.search} autoComplete="off" spellCheck={false} />
-          {query && <button type="button" className="cf-search-clear" onClick={() => setQuery('')} aria-label="Clear search"><X size={14} /></button>}
+          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={HELP_WORDS.search} autoComplete="off" spellCheck={false} />
+          {query && <button type="button" className="cf-search-clear" onClick={() => { setQuery(''); searchRef.current?.focus(); }} aria-label="Clear search"><X size={14} /></button>}
         </label>
         <p className="cf-muted" role="status">{foundText(found)}</p>
       </div>

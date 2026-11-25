@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { IdentifierDefinition } from '../types';
 import { DIGITS_PATTERN, HIDDEN_VALUE, readAddress, readValues, writeAddress, writeValues, type AddressParts } from '../studio/identity';
 
@@ -56,25 +57,33 @@ function One({ id, definition, value, locked, invalid, describedBy, onChange, on
 /** Task 0061: one case field, whatever its type; a field that takes several values shows one row for each. */
 export default function CaseFieldInput(props: Props) {
   const { id, definition, value, locked, onChange } = props;
+  // Task 0089: a new value is where the person types next, and removing one never loses focus.
+  const rows = useRef<HTMLSpanElement>(null);
+  const [focusRow, setFocusRow] = useState<number | null>(null);
+  useEffect(() => {
+    if (focusRow === null) return;
+    rows.current?.querySelectorAll('.cf-several-row')[focusRow]?.querySelector<HTMLElement>('input, select')?.focus();
+    setFocusRow(null);
+  }, [focusRow]);
   // A sensitive value is not read back (a scan session in progress): it is shown as hidden.
   if (value === HIDDEN_VALUE) return <input id={id} value={value} readOnly aria-label={`${definition.label}: hidden`} />;
   if (!definition.multiValue) return <One {...props} />;
   const values = readValues(value);
   const set = (next: string[]) => onChange(writeValues(next));
   return (
-    <span className="cf-several">
+    <span className="cf-several" ref={rows}>
       {values.map((one, i) => (
         <span key={i} className="cf-several-row">
           <One {...props} id={i === 0 ? id : `${id}-${i}`} value={one} label={values.length > 1 ? `${definition.label} ${i + 1}` : undefined}
             onChange={(next) => set(values.map((v, j) => (j === i ? next : v)))} />
           {!locked && values.length > 1 && (
             <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" aria-label={`Remove ${definition.label} ${i + 1}`}
-              onClick={() => set(values.filter((_, j) => j !== i))}>Remove</button>
+              onClick={() => { set(values.filter((_, j) => j !== i)); setFocusRow(Math.min(i, values.length - 2)); }}>Remove</button>
           )}
         </span>
       ))}
       {!locked && values.length < 50 && (
-        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => set([...values, ''])}>Add another</button>
+        <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => { set([...values, '']); setFocusRow(values.length); }}>Add another</button>
       )}
     </span>
   );

@@ -105,7 +105,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 .cf-ad-tag[data-tone='danger'] { color: var(--cf-danger); background: var(--cf-danger-soft); }
 
 /* Canvas table.t: a bordered box, a raised head row (12/600 muted), lines between rows. */
-.cf-ad-table-wrap { overflow-x: auto; border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
+.cf-ad-table-wrap { position: relative; overflow-x: auto; border: 1px solid var(--cf-line); border-radius: var(--cf-radius); }
 .cf-ad-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .cf-ad-table th, .cf-ad-table td { padding: 10px 14px; border-top: 1px solid var(--cf-line); text-align: center; vertical-align: middle; }
 .cf-ad-table thead th { padding: 9px 14px; border-top: 0; background: var(--cf-raised); font-size: 12px; font-weight: 600; color: var(--cf-muted); white-space: nowrap; }
@@ -175,7 +175,7 @@ p.cf-ad-hint, .cf-ad-radio .cf-ad-hint, .cf-ad-inline-actions > .cf-ad-hint { fo
 
 /* Destructive action variant, shared by admin confirmations. */
 .cf-btn[data-variant='danger'] { background: var(--cf-danger); color: var(--cf-surface); border-color: var(--cf-danger); }
-.cf-btn[data-variant='danger']:hover:not(:disabled) { filter: brightness(1.08); }
+.cf-btn[data-variant='danger']:hover:not(:disabled) { background: color-mix(in srgb, var(--cf-danger) 88%, var(--cf-ink)); } /* 0089: the general hover made the words 1.06:1 */
 
 /* Side sheet on the native modal dialog. */
 .cf-ad-sheet {
@@ -557,6 +557,12 @@ details.cf-sp-section { display: block; }
 .cf-ad-timesaved-title .cf-help { margin-left: 6px; }
 
 @media (max-width: 640px) { .cf-ad-tabs { position: static; } }
+/* Task 0089 (reflow): at 320 px nothing in Admin makes the page scroll sideways. */
+@media (max-width: 640px) {
+  .cf-admin .cf-segment { flex-wrap: wrap; max-width: 100%; }
+  .cf-admin .cf-ad-card-head:has(> .cf-ad-pill) { flex-wrap: wrap; overflow-wrap: anywhere; }
+  .cf-admin .cf-ad-pill { flex: 0 1 auto; white-space: normal; }
+}
 
 /* Task 0059: Admin, Notifications, and the approval page. */
 .cf-nt-people { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0; }

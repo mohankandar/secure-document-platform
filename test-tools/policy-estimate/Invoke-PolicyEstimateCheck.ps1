@@ -45,6 +45,8 @@ if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\targe
 if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first)." }
 $adapterSource = Join-Path $repoRoot 'backend\securedoc-infrastructure\src\main\java\com\securedoc\platform\infrastructure\business\JpaPolicyEstimateReadAdapter.java'
 
+$catalogSource = Join-Path $repoRoot 'backend/securedoc-domain/src/main/java/com/securedoc/platform/domain/business/RedactionCatalog.java'
+
 $Container = 'lexavault-0019-pg'
 $Protected = @('securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db')
 if ($Protected -contains $Container) { throw "Refusing to use a protected container name." }
@@ -394,7 +396,10 @@ analyze document_packages; analyze documents; analyze findings;
     $javaText = [System.IO.File]::ReadAllText($adapterSource)
     $m = [regex]::Match($javaText, 'static final String SQL = """(?s)(.*?)""";')
     if (-not $m.Success) { throw "could not read the adapter SQL" }
-    $planSql = $m.Groups[1].Value.Replace(':tenant', "'$perfTenant'::uuid").Replace(':since', "now() - interval '30 days'").Replace(':until', 'now()').Replace(':manual', "'MANUAL_FALLBACK'")
+    # The kinds every finding of which goes to a person (task 0072: the AI-only ones), as RedactionCatalog.alwaysReviewed().
+    $reviewed = @([regex]::Matches([System.IO.File]::ReadAllText($catalogSource), 'aiOnly[(]EntityType[.]([A-Z_]+)') | ForEach-Object { "'$($_.Groups[1].Value)'" }) -join ','
+    if (-not $reviewed) { throw "could not read the AI-only kinds" }
+    $planSql = $m.Groups[1].Value.Replace(':reviewed', $reviewed).Replace(':tenant', "'$perfTenant'::uuid").Replace(':since', "now() - interval '30 days'").Replace(':until', 'now()').Replace(':manual', "'MANUAL_FALLBACK'")
     $plan = Sql "explain (analyze, buffers) $planSql"
     $planFile = Join-Path $runDir 'estimate-query-plan.txt'
     [System.IO.File]::WriteAllText($planFile, $plan)

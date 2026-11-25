@@ -16,7 +16,7 @@ import { test, expect, type Page } from '@playwright/test';
  * Selectors intentionally match the shipped ReviewPage component:
  *   - .review-dismiss        -> "Not Sensitive"
  *   - .review-dismiss-final  -> "Yes, not sensitive"
- *   - .success-msg           -> success banner ("...processing has resumed...")
+ *   - .ui-alert.tone-success -> success banner ("...processing has resumed...")
  */
 
 const packageId = process.env.LV_OC_PACKAGE_ID;
@@ -39,7 +39,7 @@ test.describe('Operational Continuity: recovery + manual review preserves attemp
     await resolveAllReviewItems(page);
 
     // Once the last review item is resolved, the UI reports that processing resumed.
-    const banner = page.locator('.success-msg');
+    const banner = page.locator('.ui-alert.tone-success');
     await expect(banner).toBeVisible({ timeout: 30_000 });
     await expect(banner).toContainText(/processing has resumed/i);
   });
@@ -54,8 +54,11 @@ async function resolveAllReviewItems(page: Page): Promise<void> {
   const maxItems = 20; // safety bound; the credit-score fixture yields very few items.
 
   for (let i = 0; i < maxItems; i++) {
-    const emptyState = page.locator('.review-empty');
+    const emptyState = page.locator('.review-empty-layout');
     const dismissButton = page.locator('button.review-dismiss').first();
+
+    // The queue is read again after each decision: wait for what it shows, an item or the empty state.
+    await expect(dismissButton.or(emptyState).first()).toBeVisible({ timeout: 30_000 });
 
     // Stop once the queue is empty.
     if (await emptyState.isVisible().catch(() => false)) {
@@ -73,7 +76,7 @@ async function resolveAllReviewItems(page: Page): Promise<void> {
     // queue re-renders with one fewer item. A short settle wait keeps this stable without polling DB.
     await page.waitForTimeout(1_500);
 
-    if (await page.locator('.success-msg').isVisible().catch(() => false)) {
+    if (await page.locator('.ui-alert.tone-success').filter({ hasText: /processing has resumed/i }).isVisible().catch(() => false)) {
       return;
     }
   }

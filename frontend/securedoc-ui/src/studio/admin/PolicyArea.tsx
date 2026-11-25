@@ -5,6 +5,7 @@ import type { BusinessAdminConfiguration, BusinessReviewMode, DocumentIntelligen
 import { errorMessage } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
+import { onArrowKeys } from '../arrowKeys';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, humanize, ConfirmDialog, SelectField, DurationField } from './shared';
 import { HOUR_UNITS, MINUTE_UNITS, bundleLabel, bundleName, bundleNames, durationText } from './adminRules';
 import { ErrorBoundary, checked, isRecord } from '../failure';
@@ -129,9 +130,9 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
             <div className="cf-sp-fine">
           <fieldset className="cf-ad-fieldset" aria-labelledby={`${radioName}-review`}>
             <legend className="cf-ad-title"><span id={`${radioName}-review`}>Send to review</span><HelpTip topic="fineTune" /></legend>
-            <div className="cf-segment" role="radiogroup" aria-label="Review mode">
+            <div className="cf-segment" role="radiogroup" aria-label="Review mode" onKeyDown={onArrowKeys}>
               {(['UNCERTAIN_ONLY', 'REVIEW_ALL'] as BusinessReviewMode[]).map((m) => (
-                <button key={m} type="button" role="radio" aria-checked={d.reviewMode === m} className={d.reviewMode === m ? 'is-active' : ''} onClick={() => set({ ...d, reviewMode: m })}>
+                <button key={m} type="button" role="radio" aria-checked={d.reviewMode === m} tabIndex={d.reviewMode === m ? 0 : -1} className={d.reviewMode === m ? 'is-active' : ''} onClick={() => set({ ...d, reviewMode: m })}>
                   {MODE_WORDS[m].button}
                 </button>
               ))}

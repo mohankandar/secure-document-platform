@@ -30,7 +30,14 @@
    11. Task 0049: a file left by a killed worker. Server B is killed while a Text step has stored its file and cannot
        save its record (the artifacts table is locked). The file's age is set back; B, started again, finishes the case
        and its clean-up sweep removes that file and no file a record points to.
-   12. Stops B and the mock and removes only the throwaway container.
+   12. Task 0086: a server killed after it wrote a case's export folder and before it recorded the delivery. A trigger in the
+       throwaway database holds exactly that save; when the folder is there, the server that holds the export is killed.
+       The other one must finish the case with the folder as it is: one export record, one delivery, nothing written again.
+   13. Stops the servers and the mock and removes only the throwaway container.
+
+    Task 0086: with -Encrypted a throwaway Vault (lexavault-0048-2s-vault, dev mode, in memory) is the key service of both
+    servers, so every stored file is encrypted (task 0060). The same checks run, and: every stored file is recorded as
+    encrypted, and none holds a PDF header or a fake value.
 
     The container password is generated per run and never printed. The run folder holds fake test values only.
 
@@ -47,11 +54,13 @@ param(
     [int] $OllamaPort = 11548,
     [string] $Model = 'qwen3.5:9b',
     [int] $Cases = 20,
-    [int] $AiDelayMs = 2500,
-    [int] $VisionDelayMs = 2000,
+    [int] $AiDelayMs = 800,
+    [int] $VisionDelayMs = 600,
     [int] $ClaimLeaseMs = 15000,
     [int] $BigPages = 200,
-    [int] $FinishTimeoutSeconds = 1800
+    [int] $FinishTimeoutSeconds = 1800,
+    [switch] $Encrypted,
+    [int] $VaultPort = 28248
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +72,7 @@ if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\targe
 if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first)." }
 
 $Container = 'lexavault-0048-2s-pg'
+$VaultContainer = 'lexavault-0048-2s-vault'
 $Protected = @('securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db')
 if ($Protected -contains $Container) { throw "Refusing to use a protected container name." }
 
@@ -108,6 +118,48 @@ function Send-Document([string] $Backend, [string] $PackageId, [string] $Pdf, [s
     } finally { $client.Dispose() }
 }
 
+$vaultAppEnv = @{}
+function Invoke-Vault([string] $Method, [string] $Path, $Body = $null, [string] $Token = $vaultRoot) {
+    $req = @{ Method = $Method; Uri = "http://127.0.0.1:$VaultPort/v1/$Path"; Headers = @{ 'X-Vault-Token' = $Token }; TimeoutSec = 10 }
+    if ($null -ne $Body) { $req.Body = ($Body | ConvertTo-Json -Depth 5); $req.ContentType = 'application/json' }
+    return Invoke-RestMethod @req
+}
+# The three policies of the key service guide (docs/install/KEY_SERVICE.md); the app gets platform-crypto-app only.
+function Start-Vault {
+    docker run -d --name $VaultContainer --cap-add IPC_LOCK -p "127.0.0.1:${VaultPort}:8200" -e "VAULT_DEV_ROOT_TOKEN_ID=$vaultRoot" `
+        -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' hashicorp/vault:1.17.6 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "docker run failed (vault)" }
+    $script:vaultStarted = $true
+    $up = $false
+    for ($i = 0; $i -lt 30 -and -not $up; $i++) {
+        Start-Sleep -Seconds 1
+        try { Invoke-Vault GET 'sys/health' | Out-Null; $up = $true } catch { }
+    }
+    if (-not $up) { throw "the throwaway Vault did not start" }
+    Invoke-Vault POST 'sys/mounts/transit' @{ type = 'transit' } | Out-Null
+    Invoke-Vault POST 'sys/auth/approle' @{ type = 'approle' } | Out-Null
+    Invoke-Vault PUT 'sys/policies/acl/platform-crypto-app' @{ policy = @'
+path "transit/datakey/plaintext/customer-*" { capabilities = ["update"] }
+path "transit/decrypt/customer-*" { capabilities = ["update"] }
+path "transit/rewrap/customer-*" { capabilities = ["update"] }
+path "transit/hmac/customer-*" { capabilities = ["update"] }
+path "transit/keys/customer-*" { capabilities = ["read"] }
+path "secret/data/platform/*" { capabilities = ["read"] }
+'@ } | Out-Null
+    Invoke-Vault PUT 'sys/policies/acl/platform-crypto-setup' @{ policy = @'
+path "transit/keys/+" { capabilities = ["create", "update", "read"] }
+path "transit/keys/+/rotate" { capabilities = ["update"] }
+'@ } | Out-Null
+    Invoke-Vault POST 'auth/approle/role/app' @{ token_policies = @('platform-crypto-app') } | Out-Null
+    $script:vaultAppEnv = @{
+        PLATFORM_CRYPTO_VAULT_ADDRESS = "http://127.0.0.1:$VaultPort"
+        PLATFORM_CRYPTO_VAULT_ROLEID = (Invoke-Vault GET 'auth/approle/role/app/role-id').data.role_id
+        PLATFORM_CRYPTO_VAULT_SECRETID = (Invoke-Vault POST 'auth/approle/role/app/secret-id').data.secret_id
+    }
+    $env:PLATFORM_SETUP_VAULT_ADDR = "http://127.0.0.1:$VaultPort"
+    $env:PLATFORM_SETUP_VAULT_TOKEN = (Invoke-Vault POST 'auth/token/create' @{ policies = @('platform-crypto-setup'); ttl = '1h' }).auth.client_token
+}
+
 function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $PurgeIntervalMs = 900000) {
     $logDir = Join-Path $runDir "logs-$Name"
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -121,6 +173,11 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
     $env:SECUREDOC_AI_MODEL = $Model
     # Find and Vision share the limit per AI server; with enough places Redact starts while Text still runs (the kill needs all four).
     $env:SECUREDOC_AI_REQUESTS_AT_ONCE = '6'
+    # Task 0067 sets the workers from the queue: up to 11 Text workers finish every document's text before the first case
+    # reaches Redact, so no server ever held all four claims. One Text worker, and an AI limit learned quickly, keep the
+    # four stages going at the same time.
+    $env:SECUREDOC_STAGE_JOBS_TEXT_WORKERS = '1'
+    $env:SECUREDOC_AI_LEARN_UP_EVERY_MS = '2000'
     $env:SECUREDOC_AI_VISION_BASE_URL = "http://localhost:$OllamaPort"
     $env:SECUREDOC_AI_VISION_MODEL = $visionModel
     $env:SECUREDOC_AI_VISION_MODEL_DIGEST = $visionDigest
@@ -134,9 +191,11 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
     $env:SECUREDOC_PROCESSING_PIPELINE_MODE = 'staged'
     $env:SECUREDOC_PROCESSING_EXPORT_MODE = 'job'
     $env:SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS = "$ClaimLeaseMs"
+    $env:SECUREDOC_EXPORT_JOBS_CLAIM_LEASE_MS = "$ClaimLeaseMs"
     $env:SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS = '500'
     $env:SECUREDOC_LIFECYCLE_PURGE_INTERVAL_MS = "$PurgeIntervalMs"
     $env:SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS = '1000'
+    foreach ($name in $vaultAppEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $vaultAppEnv[$name], 'Process') }
     try {
         return Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
             -ArgumentList @('-jar', $JarPath, '--spring.profiles.active=local',
@@ -144,6 +203,7 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
             -RedirectStandardOutput (Join-Path $logDir 'backend.out.log') -RedirectStandardError (Join-Path $logDir 'backend.err.log')
     } finally {
         Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue
+        foreach ($name in $vaultAppEnv.Keys) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
     }
 }
 
@@ -161,6 +221,8 @@ $serverA = $null
 $serverB = $null
 $ollama = $null
 $containerStarted = $false
+$vaultStarted = $false
+$vaultRoot = [guid]::NewGuid().ToString('N')
 $exitCode = 1
 $checks = New-Object System.Collections.ArrayList
 function Add-Check([string] $name, [bool] $ok, [string] $detail) {
@@ -182,6 +244,10 @@ try {
     while ($LASTEXITCODE -ne 0 -and (Get-Date) -lt $deadline)
     Start-Sleep -Seconds 2
     . (Join-Path $repoRoot 'scripts\lib\LexaVaultTools.ps1')
+    if ($Encrypted) {
+        if (@(docker ps -a --filter "name=^/$VaultContainer$" --format '{{.Names}}').Count -gt 0) { throw "Container $VaultContainer already exists; remove it first." }
+        Start-Vault
+    }
     Initialize-LexaVaultDatabase -Jar $JarPath -DbUrl "jdbc:postgresql://localhost:${DbPort}/securedoc" -DbUser 'securedoc' `
         -DbPassword $dbPassword -StateDir (Join-Path $runDir 'install')
 
@@ -288,6 +354,7 @@ try {
         $done = [int](Invoke-Sql "select count(*) from document_packages where id in ($ids) and status = 'COMPLETED'")
         $stopped = [int](Invoke-Sql "select count(*) from document_packages where id in ($ids) and status in ('FAILED','CANCELLED','PENDING_REVIEW','IN_REVIEW')")
     } while ($done + $stopped -lt $Cases -and (Get-Date) -lt $deadline)
+    Write-Host ("Exports not done: " + (Invoke-Sql "select coalesce(string_agg(status || ' ' || coalesce(last_lv_code, '-'), ', '), 'none') from pipeline_jobs where stage = 'EXPORT' and status <> 'DONE'"))
     $finishedAfter = [int]((Get-Date) - $killedAt).TotalSeconds
     Write-Host "Cases exported: $done of $Cases ($finishedAfter s after the kill)"
 
@@ -367,6 +434,21 @@ try {
     }
     Add-Check 'no redacted value saved (database dump)' ($valueHits -eq 0) "$valueHits matches"
 
+    # Task 0086: how the stored files are protected, and by which server they were written.
+    $protections = Invoke-Sql "select string_agg(distinct protection, ',') from stored_files"
+    $unrecorded = Invoke-Sql "select count(*) from artifacts a where a.status <> 'DELETED' and a.storage_key is not null and not exists (select 1 from stored_files s where s.storage_key = a.storage_key)"
+    Add-Check 'every stored file has its record' ($unrecorded -eq '0') "$unrecorded without"
+    if ($Encrypted) {
+        $readable = 0
+        $storedFiles = @(Get-ChildItem -LiteralPath $shared -Recurse -File)
+        foreach ($file in $storedFiles) {
+            $text = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes($file.FullName))
+            foreach ($needle in '%PDF-', '412-55-7531', '4000 0566 5566 5556') { if ($text.Contains($needle)) { $readable++; break } }
+        }
+        Add-Check 'every stored file is encrypted' ($protections -eq 'ENCRYPTED' -and $readable -eq 0 -and $storedFiles.Count -gt 0) "$protections; $readable of $($storedFiles.Count) files readable"
+    }
+    else { Add-Check 'the stored files are plain, as recorded' ($protections -eq 'PLAIN') "$protections" }
+
     # --- 11. a file left by a killed worker, and the clean-up sweep ------------------------------------------
     function Get-StoredKeys {
         @(Get-ChildItem -LiteralPath $shared -Recurse -File | ForEach-Object { $_.FullName.Substring($shared.Length + 1).Replace('\', '/') })
@@ -407,6 +489,48 @@ try {
     $sweepAudit = Invoke-Sql "select string_agg(detail, '; ') from audit_records where action = 'UNRECORDED_FILES_CLEANED'"
     Add-Check 'one audit record of the sweep, counts only' ($sweepAudit -match '^Files without a record removed: text=\d+, redacted=\d+$') "$sweepAudit"
 
+    # --- 12. killed between the export folder and its record -------------------------------------------------------
+    $serverA = Start-Server 'a' $PortA $dbPassword
+    Wait-Healthy $serverA $backendA
+    Start-Sleep -Seconds 5
+    Invoke-Sql ("create function hold_the_record() returns trigger language plpgsql as 'begin perform pg_sleep(600); return new; end';" +
+        " create trigger hold_the_record before update on delivery_submissions for each row when (new.status = 'DELIVERED') execute function hold_the_record()") | Out-Null
+    $created = Invoke-Api $backendA POST '/api/v1/packages' @{
+        packageType = 'MANUAL_UPLOAD'
+        businessIdentifiers = @{ contract_number = "884898$suffix"; member_number = "94898$suffix"; service_entity = '001' }
+        metadata = @{ source = 'task-0086-export-kill' } }
+    $case = $created.packageId
+    Send-Document $backendA $case $typed 'typed-1.pdf'
+    Send-Document $backendA $case $scanned 'scanned.pdf'
+    Invoke-Api $backendA POST "/api/v1/packages/$case/submit" | Out-Null
+    $cycleDir = Join-Path $exportDir (Join-Path $tenantId (Join-Path $case 'cycle-1'))
+    $held = '0'
+    $deadline = (Get-Date).AddSeconds(180)
+    do {
+        Start-Sleep -Milliseconds 300
+        if (Test-Path -LiteralPath $cycleDir) { $held = Invoke-Sql "select count(*) from pg_stat_activity where wait_event = 'PgSleep' and query ilike '%delivery_submissions%'" }
+    } while ($held -eq '0' -and (Get-Date) -lt $deadline)
+    $owner = Invoke-Sql "select claim_owner from pipeline_jobs where package_id = '$case' and stage = 'EXPORT' and status = 'RUNNING'"
+    if ($owner -like 'node-a/*') { $holder = $serverA; $other = 'B' } elseif ($owner -like 'node-b/*') { $holder = $serverB; $other = 'A' } else { $holder = $null; $other = '' }
+    if ($holder) { Stop-Process -Id $holder.Id -Force }
+    Start-Sleep -Seconds 1
+    Invoke-Sql "select pg_terminate_backend(pid) from pg_stat_activity where wait_event = 'PgSleep' and pid <> pg_backend_pid()" | Out-Null
+    Invoke-Sql "drop trigger hold_the_record on delivery_submissions" | Out-Null
+    function Get-Exported {
+        @(Get-ChildItem -LiteralPath $cycleDir -Recurse -File | Sort-Object FullName | ForEach-Object { "$($_.FullName) $($_.LastWriteTimeUtc.Ticks) $((Get-FileHash -LiteralPath $_.FullName).Hash)" }) -join "`n"
+    }
+    $before = if (Test-Path -LiteralPath $cycleDir) { Get-Exported } else { '' }
+    $recorded = Invoke-Sql "select (select count(*) from package_export_records where package_id = '$case') || ' ' || (select count(*) from delivery_submissions where package_id = '$case' and status = 'DELIVERED') || ' ' || (select count(*) from delivery_submission_documents d join delivery_submissions s on s.id = d.submission_id where s.package_id = '$case' and d.acknowledged)"
+    Add-Check 'a server was killed with the export folder written and nothing recorded' ($holder -and $before -ne '' -and $recorded -eq '0 0 0') "holder $(($owner -split '/')[0]), records, deliveries, acknowledgements: $recorded"
+    $deadline = (Get-Date).AddSeconds(180)
+    do { Start-Sleep -Seconds 2; $caseState = Invoke-Sql "select p.status || ' ' || coalesce((select j.status || ' ' || coalesce(j.last_lv_code, '-') from pipeline_jobs j where j.package_id = p.id and j.stage = 'EXPORT'), '-') from document_packages p where p.id = '$case'" }
+    while ($caseState -notmatch '^COMPLETED|NEEDS_IT|WAITING_FOR_YOU' -and (Get-Date) -lt $deadline)
+    Add-Check "server $other finished the case, as already there (LV-DLV-009)" ($caseState -eq 'COMPLETED DONE LV-DLV-009') "$caseState"
+    Add-Check 'the exported files are the ones the killed server wrote' ($before -ne '' -and (Get-Exported) -eq $before -and @(Get-ChildItem -LiteralPath (Split-Path $cycleDir)).Count -eq 1) "$(@($before -split "`n").Count) files"
+    $once = Invoke-Sql "select (select count(*) from package_export_records where package_id = '$case') || ' ' || (select count(*) from document_export_records r join documents d on d.id = r.document_id where d.package_id = '$case') || ' ' || (select count(*) from delivery_submissions where package_id = '$case' and status = 'DELIVERED') || ' ' || (select count(*) from audit_records where action = 'EXPORT_JOB_STATUS_CHANGED' and detail like '%to=DONE%' and case_id = '$case') || ' ' || (select count(*) from audit_records a join documents d on d.id::text = a.resource_id where a.action = 'DOCUMENT_EXPORTED' and d.package_id = '$case')"
+    Add-Check 'recorded once: export, documents, delivery, DONE audit, document audits' ($once -eq '1 2 1 1 2') "$once"
+    Add-Check 'no export staging left' (@(Get-ChildItem -LiteralPath (Join-Path $exportDir (Join-Path $tenantId '.staging')) -Force -ErrorAction SilentlyContinue).Count -eq 0) ''
+
     $failed = @($checks | Where-Object { -not $_.ok }).Count
     [pscustomobject]@{ cases = $Cases; documents = $documentsN; killedClaims = $killed; secondsToFinishAfterKill = $finishedAfter
         checks = $checks } | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $runDir 'summary.json')
@@ -421,12 +545,16 @@ finally {
         docker rm -f $Container | Out-Null
         Write-Host "Removed throwaway container $Container"
     }
-    foreach ($name in 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_NODE_ID',
-            'SECUREDOC_AI_REQUESTS_AT_ONCE', 'SECUREDOC_AI_VISION_BASE_URL', 'SECUREDOC_AI_VISION_MODEL', 'SECUREDOC_AI_VISION_MODEL_DIGEST',
+    if ($vaultStarted) {
+        docker rm -f $VaultContainer | Out-Null
+        Write-Host "Removed throwaway container $VaultContainer"
+    }
+    foreach ($name in 'PLATFORM_SETUP_VAULT_ADDR', 'PLATFORM_SETUP_VAULT_TOKEN', 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_NODE_ID',
+            'SECUREDOC_AI_REQUESTS_AT_ONCE', 'SECUREDOC_STAGE_JOBS_TEXT_WORKERS', 'SECUREDOC_AI_LEARN_UP_EVERY_MS', 'SECUREDOC_AI_VISION_BASE_URL', 'SECUREDOC_AI_VISION_MODEL', 'SECUREDOC_AI_VISION_MODEL_DIGEST',
             'SECUREDOC_AI_PROVIDER', 'SECUREDOC_AI_OLLAMA_BASE_URL', 'SECUREDOC_AI_MODEL', 'SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED',
             'SECUREDOC_WATCHED_FOLDER_ENABLED', 'SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED', 'SECUREDOC_LOGGING_CONFIG',
             'SECUREDOC_LOG_DIR', 'SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH', 'SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH',
-            'SECUREDOC_PROCESSING_PIPELINE_MODE', 'SECUREDOC_PROCESSING_EXPORT_MODE', 'SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS',
+            'SECUREDOC_PROCESSING_PIPELINE_MODE', 'SECUREDOC_PROCESSING_EXPORT_MODE', 'SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS', 'SECUREDOC_EXPORT_JOBS_CLAIM_LEASE_MS',
             'SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS', 'SECUREDOC_LIFECYCLE_PURGE_INTERVAL_MS', 'SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS') {
         Remove-Item "Env:$name" -ErrorAction SilentlyContinue
     }

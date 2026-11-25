@@ -209,7 +209,7 @@ function RecentCard({ recent }: { recent: NotificationItOverview['recent'] }) {
     <section className="cf-ad-card" aria-labelledby="cf-nt-recent">
       <header className="cf-ad-card-head"><div><h2 id="cf-nt-recent">Last messages</h2><p>The last 10 of this entity, with the reason when one could not be sent.</p></div></header>
       {recent.length === 0 ? <p className="cf-muted">None yet.</p> : (
-        <div className="cf-ad-table-wrap">
+        <div className="cf-ad-table-wrap" tabIndex={0} role="group" aria-label="Last messages">
           <table className="cf-ad-table cf-ad-table-left">
             <caption className="cf-sr">Last messages</caption>
             <thead><tr><th scope="col">Message</th><th scope="col">State</th><th scope="col">When</th></tr></thead>

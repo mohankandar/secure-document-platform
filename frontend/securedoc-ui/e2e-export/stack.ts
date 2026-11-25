@@ -10,9 +10,10 @@
  *   file where its folder was (the adapter creates missing folders, so only a file in the way makes it unreachable);
  *   "up" puts the folder back.
  *
- * Every scenario uses its own entity (tenant id), so destination states, pauses and the backup rule's count of
- * failing cases never mix between scenarios. The UI screens use the same entities by setting the LOCAL identity
- * headers on the page's API calls.
+ * Every scenario starts on a fresh copy of the installed database, with empty folders and a newly started app (task 0086),
+ * so destination states, pauses and the backup rule's count of failing cases never mix between scenarios. They all use the
+ * demo entity: since task 0057 the licence says which entities take in cases, and the demo licence has no slot for an
+ * entity per scenario. The UI screens use it by setting the LOCAL identity headers on the page's API calls.
  */
 import { E2E_PORTS } from '../e2ePorts';
 import { execFileSync, spawn } from 'node:child_process';
@@ -45,8 +46,8 @@ export const ROLES = {
   platformOps: 'PLATFORM_OPERATIONS_ADMIN',
 } as const;
 export const ACTOR = '00000000-0000-0000-0000-000000000099';
-/** Each scenario's own entity. The local folder's destination id is derived from it (ExportDestinations). */
-export const tenantFor = (n: number) => `00000000-0000-4035-8000-${String(n).padStart(12, '0')}`;
+/** The demo entity (demo slot ENT-DEMO-0001). The local folder's destination id is derived from it (ExportDestinations). */
+export const TENANT = '30216241-b724-5a3a-aef3-3034fd546d17';
 export const localFolderDestination = (tenant: string) => {
   // UUID.nameUUIDFromBytes("lexavault:local-export-folder:" + tenant): MD5, version 3, IETF variant.
   const md5 = createHash('md5').update(`lexavault:local-export-folder:${tenant}`, 'utf8').digest();
@@ -229,29 +230,21 @@ export function sqlRows(query: string): string[][] {
   return out ? out.split(/\r?\n/).map((l) => l.split('|')) : [];
 }
 
-/**
- * A scenario's entity in the throwaway database: an ACTIVE tenant with the LOCAL demo entity's set-up copied (its
- * capabilities, identifier rules and sensitive-data policy; the demo step creates those for the demo entity, whose
- * UUID is derived from demo slot ENT-DEMO-0001 since task 0037).
- */
-export function ensureEntity(tenant: string, name: string): void {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  sql(`DO $$
-DECLARE t text; cols text; sel text; nt uuid := '${tenant}'; demo uuid := '30216241-b724-5a3a-aef3-3034fd546d17';
-BEGIN
-  IF EXISTS (SELECT 1 FROM tenants WHERE id = nt) THEN RETURN; END IF;
-  INSERT INTO tenants (id, name, slug, status, created_at, updated_at, version)
-    VALUES (nt, '${name.replace(/'/g, "''")}', '${slug}', 'ACTIVE', now(), now(), 0);
-  FOREACH t IN ARRAY ARRAY['tenant_capabilities','fld_field_definition','tenant_redaction_policies','tenant_redaction_catalog'] LOOP
-    SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
-           string_agg(CASE WHEN column_name IN ('tenant_id','entity_uuid') THEN quote_literal(nt) || '::uuid'
-                           WHEN column_name IN ('id','definition_id') AND data_type = 'uuid' THEN 'gen_random_uuid()'
-                           ELSE quote_ident(column_name) END, ', ' ORDER BY ordinal_position)
-      INTO cols, sel FROM information_schema.columns WHERE table_schema = 'public' AND table_name = t;
-    EXECUTE format('INSERT INTO %I (%s) SELECT %s FROM %I WHERE %I = %L', t, cols, sel, t,
-        CASE WHEN t = 'fld_field_definition' THEN 'entity_uuid' ELSE 'tenant_id' END, demo);
-  END LOOP;
-END $$;`);
+let installedKept = false;
+const adminSql = (query: string) => execFileSync('docker', ['exec', DB_CONTAINER, 'psql', '-q', '-U', 'securedoc', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', query],
+  { encoding: 'utf8', windowsHide: true });
+
+/** A scenario's start (task 0086): the database as the install steps left it, empty folders, the app started on them. */
+export async function freshStack(): Promise<void> {
+  await stopApp();
+  if (!installedKept) {
+    adminSql('create database installed template securedoc');
+    installedKept = true;
+  }
+  adminSql('drop database securedoc with (force)');
+  adminSql('create database securedoc template installed');
+  for (const dir of [OUT_DIR, path.join(RUN_DIR, 'storage'), path.join(RUN_DIR, 'erase-log')]) fs.rmSync(dir, { recursive: true, force: true });
+  await startApp();
 }
 
 export interface JobRow { id: string; packageId: string; status: string; attempts: number; lvCode: string; detail: string; rebuilt: boolean; createdAt: string; updatedAt: string }

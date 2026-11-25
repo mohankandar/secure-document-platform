@@ -52,7 +52,7 @@ export default function Admin({ caps, me }: { caps: string[]; me: CurrentUser })
         {visible.map((a) => (
           <NavLink key={a.key} to={`/admin/${a.key}`} className={({ isActive }) => `cf-ad-tab${isActive ? ' is-active' : ''}`}>
             <span className="cf-ad-tab-full">{a.label}</span>
-            <span className="cf-ad-tab-short" aria-hidden="true">{a.short}</span>
+            <span className="cf-ad-tab-short">{a.short}</span>
           </NavLink>
         ))}
       </nav>
