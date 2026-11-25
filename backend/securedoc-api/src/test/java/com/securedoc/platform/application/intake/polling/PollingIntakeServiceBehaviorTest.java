@@ -107,6 +107,27 @@ class PollingIntakeServiceBehaviorTest {
         order.verify(sourcePort).acknowledgeReceived(source, pkg, 1);
     }
 
+    /** Task 0081: the source lists it again on every run; it is one refused package. A source that can't be reached is none. */
+    @Test
+    void aRefusedPackageIsCountedOnceAndAnUnreachableSourceIsNot() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        List<String> counted = new java.util.ArrayList<>();
+        service.withRefusals((t, key, code) -> counted.add(t.value() + " " + key + " " + code.code()));
+        var pkg = packageWith("DOC-A");
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of(pkg));
+        when(external.createPollingIntake(any(), eq(source), any(), any())).thenThrow(
+                new com.securedoc.platform.application.exception.IntakeConflictException("SOURCE_REVISION_REUSED", "x"));
+        service.runNow(tenant, source.id(), ActorId.generate());
+        service.runNow(tenant, source.id(), ActorId.generate());
+        assertEquals(1, counted.size());
+        assertTrue(counted.get(0).startsWith(tenant.value() + " " + source.id().value() + " LV-INT-"), counted.get(0));
+        reset(external);
+        when(external.createPollingIntake(any(), eq(source), any(), any())).thenThrow(new PollingSourceException("RETRIEVAL_FAILED", "x"));
+        service.runNow(tenant, source.id(), ActorId.generate());
+        assertEquals(1, counted.size());
+    }
+
     /* Task 0067: less often and less while the queue is long; nothing while space is short. */
 
     private static com.securedoc.platform.application.intake.IntakeGate gate(int slowdown, boolean full) {

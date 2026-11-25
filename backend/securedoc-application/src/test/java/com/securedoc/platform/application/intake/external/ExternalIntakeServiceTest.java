@@ -605,6 +605,22 @@ class ExternalIntakeServiceTest {
         assertEquals(1, h.unknownLevelAudits());
     }
 
+    /** Task 0081: a case sent again after it was taken in is a duplicate; one still waiting for a document is a retry. */
+    @Test
+    void aCaseSentAgainAfterItWasTakenInIsCountedAsADuplicate() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        List<String> counted = new ArrayList<>();
+        h.service.withRefusals((t, key, code) -> counted.add(code.code()));
+        PushIntakeCreateInput input = new PushIntakeCreateInput("SRC-DUP", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(doc("DOC-1", null)), false, null);
+        ExternalIntakeSnapshot created = h.service.createPushIntake(input, h.principal, CorrelationId.generate());
+        h.service.createPushIntake(input, h.principal, CorrelationId.generate());
+        assertEquals(List.of(), counted);
+        h.receive(created.packageId(), "DOC-1");
+        h.service.createPushIntake(input, h.principal, CorrelationId.generate());
+        assertEquals(List.of("LV-INT-017"), counted);
+    }
+
     @Test
     void aDifferentLevelOnTheSameRevisionIsAChangedRequest() {
         LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);

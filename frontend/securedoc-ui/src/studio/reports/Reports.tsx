@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import useSWR from 'swr';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { OperationalReports } from '../../types';
+import type { DailyReport, OperationalReports, ReportSource } from '../../types';
 import { CAP, errorMessage, type StageKey } from '../data';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
@@ -11,54 +11,16 @@ import { axisTicks, bucketDate, hours, labelledBuckets, pct, ratio } from './rep
 import { isTimeSaved, timeSavedWords } from './timeSavedRules';
 import { ComplianceReportButton } from '../compliance/ComplianceReport';
 import { complianceEdition } from '../compliance/complianceRules';
-import { dayFrom, dayIn, dayText, plusDays, startOfDay, type Day } from '../entityZone';
+import { dayIn, dayText, plusDays } from '../entityZone';
 import { useEntityZone, useEntityZoneSet } from '../EntityZoneContext';
+import QueueSection from '../admin/QueueSection';
+import { SENSITIVITY_LEVELS, SENSITIVITY_NAMES } from '../words';
+import DailyTab from './DailyTab';
+import { PRESETS, TABS, defaultPreset, isDailyReport, periodFor, tabFrom, type Preset, type Tab } from './dailyRules';
+import '../admin/admin.css';
 import './reports.css';
 
-type Preset = 'TODAY' | '7D' | '30D' | 'THIS_MONTH' | 'THIS_QUARTER' | 'CUSTOM';
-
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: 'TODAY', label: 'Today' },
-  { key: '7D', label: '7 days' },
-  { key: '30D', label: '30 days' },
-  { key: 'THIS_MONTH', label: 'Month' },
-  { key: 'THIS_QUARTER', label: 'Quarter' },
-  { key: 'CUSTOM', label: 'Custom' },
-];
-
-const SOURCES = [
-  { value: 'ALL', label: 'All sources' },
-  { value: 'MANUAL', label: 'Manual upload' },
-  { value: 'API', label: 'API' },
-  { value: 'WATCHED_FOLDER', label: 'Watched folder' },
-  { value: 'SCANNER', label: 'Scanner' },
-];
-
-const OUTCOMES = [
-  { value: 'ALL', label: 'All outcomes' },
-  { value: 'DELIVERED', label: 'Delivered' },
-  { value: 'IN_PROGRESS', label: 'In progress' },
-  { value: 'ATTENTION', label: 'Stopped' },
-];
-
-/** Days of the entity's time zone (task 0058; the browser's when none is set), exclusive `to`, sent as ISO instants. */
-function periodFor(preset: Preset, customFrom: string, customTo: string, zone: string): { from: Date; to: Date; fromDay: Day; toDay: Day; label: string } | null {
-  const today = dayIn(new Date(), zone);
-  const range = (fromDay: Day, toDay: Day, label: string) => ({ from: startOfDay(fromDay, zone), to: startOfDay(plusDays(toDay, 1), zone), fromDay, toDay, label });
-  switch (preset) {
-    case 'TODAY': return range(today, today, 'Today');
-    case '7D': return range(plusDays(today, -6), today, 'Last 7 days');
-    case '30D': return range(plusDays(today, -29), today, 'Last 30 days');
-    case 'THIS_MONTH': return range({ ...today, d: 1 }, today, 'This month');
-    case 'THIS_QUARTER': return range({ y: today.y, m: Math.floor((today.m - 1) / 3) * 3 + 1, d: 1 }, today, 'This quarter');
-    case 'CUSTOM': {
-      const from = dayFrom(customFrom);
-      const to = dayFrom(customTo);
-      if (!from || !to || dayText(to) < dayText(from)) return null;
-      return range(from, to, `${customFrom} – ${customTo}`);
-    }
-  }
-}
+const EMPTY_SOURCES: ReportSource[] = [];
 
 function delta(current: number, previous: number) {
   if (!previous) return null;
@@ -73,33 +35,49 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
   const canExecutive = caps.includes(CAP.reportExecutive);
   const compliance = complianceEdition('reports', caps);
 
-  const [preset, setPreset] = useState<Preset>('30D');
+  const [params, setParams] = useSearchParams();
+  const tab = tabFrom(params.get('tab'));
+  const [chosen, setChosen] = useState<Preset | null>(null);
+  const preset = chosen ?? defaultPreset(tab);
   const zone = useEntityZone();
   const zoneSet = useEntityZoneSet();
   const [customFrom, setCustomFrom] = useState(() => dayText(plusDays(dayIn(new Date(), zone), -13)));
   const [customTo, setCustomTo] = useState(() => dayText(dayIn(new Date(), zone)));
-  const [source, setSource] = useState('ALL');
-  const [outcome, setOutcome] = useState('ALL');
+  const [sourceSystem, setSourceSystem] = useState('ALL');
+  const [level, setLevel] = useState('ALL');
   const [exporting, setExporting] = useState(false);
+  const tabsId = useId();
 
   const period = useMemo(() => periodFor(preset, customFrom, customTo, zone), [preset, customFrom, customTo, zone]);
-  const params = period ? { from: period.from.toISOString(), to: period.to.toISOString(), source, outcome } : null;
+  const asked = period ? { from: period.from.toISOString(), to: period.to.toISOString(), sourceSystem, level } : null;
+  const key = asked ? [asked.from, asked.to, sourceSystem, level] : null;
 
-  const { data, error, isLoading, isValidating, mutate } = useSWR<OperationalReports>(
-    params ? ['reports', params.from, params.to, source, outcome] : null,
-    () => checked('GET /operations/reports', apiClient.getOperationalReports(params!), isOperationalReports),
+  // A filter without its source systems still has All; a report never waits for it.
+  const { data: sources = EMPTY_SOURCES } = useSWR<ReportSource[]>('report-sources',
+    () => checked('GET /operations/reports/sources', apiClient.getReportSources(), Array.isArray), { revalidateOnFocus: false });
+  const reports = useSWR<OperationalReports>(
+    key && tab !== 'daily' ? ['reports', ...key] : null,
+    () => checked('GET /operations/reports', apiClient.getOperationalReports(asked!), isOperationalReports),
     { keepPreviousData: true, revalidateOnFocus: false },
   );
+  const daily = useSWR<DailyReport>(
+    key && tab === 'daily' ? ['reports-daily', ...key] : null,
+    () => checked('GET /operations/reports/daily', apiClient.getDailyReport(asked!), isDailyReport),
+    { keepPreviousData: true, revalidateOnFocus: false },
+  );
+  const { data: shown, error, isLoading, isValidating, mutate } = tab === 'daily' ? daily : reports;
+  const data = reports.data;
+  const request = tab === 'daily' ? 'GET /operations/reports/daily' : 'GET /operations/reports';
 
   async function exportCsv() {
-    if (!params) return;
+    if (!asked) return;
     setExporting(true);
     try {
-      const blob = await apiClient.exportOperationalReports(params);
+      const blob = await apiClient.exportReportTab(tab, asked);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `lexavault-report-${dayText(period!.fromDay)}-to-${dayText(period!.toDay)}.csv`;
+      a.download = `lexavault-${tab}-${dayText(period!.fromDay)}-to-${dayText(period!.toDay)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast('Report exported.');
@@ -110,6 +88,19 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
     }
   }
 
+  function openTab(next: Tab) {
+    setParams(next === 'overview' ? {} : { tab: next }, { replace: true });
+  }
+  function onTabKey(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const i = TABS.findIndex((t) => t.key === tab);
+    const to = event.key === 'ArrowRight' ? (i + 1) % TABS.length : event.key === 'ArrowLeft' ? (i + TABS.length - 1) % TABS.length
+      : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : -1;
+    if (to < 0) return;
+    event.preventDefault();
+    openTab(TABS[to].key);
+    event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[to]?.focus();
+  }
+
   return (
     <div className="cf-reports">
       <header className="cf-page-head">
@@ -118,15 +109,15 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
           <h1 className="cf-title">How the work is going</h1>
           <p className="cf-lede">
             {period ? period.label : 'Choose a valid range'}
-            {data && <> · updated {new Date(data.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: zone })}</>}
+            {shown && <> · updated {new Date(shown.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: zone })}</>}
             {zoneSet && <> · days in {zoneSet}</>}
-            {isValidating && data && <> · refreshing</>}
+            {isValidating && shown && <> · refreshing</>}
           </p>
         </div>
         {(canExport || compliance) && (
           <div className="cf-rp-actions">
             {canExport && (
-              <button type="button" className="cf-btn" onClick={exportCsv} disabled={!data || exporting}>
+              <button type="button" className="cf-btn" onClick={exportCsv} disabled={!shown || exporting}>
                 {exporting ? <Spinner label="Exporting" /> : null}
                 Export CSV
               </button>
@@ -136,10 +127,17 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
         )}
       </header>
 
+      <div className="cf-rp-tabs" role="tablist" aria-label="Reports" onKeyDown={onTabKey}>
+        {TABS.map((t) => (
+          <button key={t.key} type="button" role="tab" id={`${tabsId}-${t.key}`} aria-controls={`${tabsId}-panel`} aria-selected={tab === t.key}
+            tabIndex={tab === t.key ? 0 : -1} onClick={() => openTab(t.key)}>{t.label}</button>
+        ))}
+      </div>
+
       <div className="cf-rp-filters" role="group" aria-label="Report filters">
         <div className="cf-segment" role="radiogroup" aria-label="Period">
           {PRESETS.map((p) => (
-            <button key={p.key} type="button" role="radio" aria-checked={preset === p.key} className={preset === p.key ? 'is-active' : ''} onClick={() => setPreset(p.key)}>
+            <button key={p.key} type="button" role="radio" aria-checked={preset === p.key} className={preset === p.key ? 'is-active' : ''} onClick={() => setChosen(p.key)}>
               {p.label}
             </button>
           ))}
@@ -151,40 +149,59 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
             <label><span className="cf-sr">To</span><input type="date" value={customTo} min={customFrom} onChange={(e) => setCustomTo(e.target.value)} /></label>
           </div>
         )}
-        <label className="cf-rp-select"><span className="cf-sr">Source</span>
-          <select value={source} onChange={(e) => setSource(e.target.value)}>{SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+        <label className="cf-rp-select"><span className="cf-sr">Source system</span>
+          <select value={sourceSystem} onChange={(e) => setSourceSystem(e.target.value)}>
+            <option value="ALL">All source systems</option>
+            {sources.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+          </select>
         </label>
-        <label className="cf-rp-select"><span className="cf-sr">Outcome</span>
-          <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>{OUTCOMES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+        <label className="cf-rp-select"><span className="cf-sr">Level</span>
+          <select value={level} onChange={(e) => setLevel(e.target.value)}>
+            <option value="ALL">All levels</option>
+            {SENSITIVITY_LEVELS.map((l) => <option key={l} value={l}>{SENSITIVITY_NAMES[l]}</option>)}
+          </select>
         </label>
       </div>
 
-      {!period && <Notice>The end date must be on or after the start date.</Notice>}
-      {error && !data && <LoadErrorCard title="Reports couldn't be loaded" error={error} request="GET /operations/reports" onRetry={() => void mutate()} />}
-      {isLoading && !data && <div className="cf-center"><Spinner label="Loading reports" /></div>}
+      <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${tab}`}>
+        {!period && <Notice>The end date must be on or after the start date.</Notice>}
+        {error && !shown && <LoadErrorCard title="Reports couldn't be loaded" error={error} request={request} onRetry={() => void mutate()} />}
+        {isLoading && !shown && <div className="cf-center"><Spinner label="Loading reports" /></div>}
 
-      {data && (
-        <div className="cf-rp-body" aria-busy={isValidating}>
-          {canExecutive && <Card name="What LexaVault did for you"><DidForYou r={data} /></Card>}
-          <Card name="The headline"><Executive r={data} /></Card>
-          <Card name="The trend"><Trend r={data} /></Card>
-          <Card name="Service levels"><ServiceLevel r={data} /></Card>
-          {canOperational ? (
-            <>
-              <Card name="The pipeline"><Pipeline r={data} /></Card>
-              <div className="cf-rp-pair">
-                <Card name="The backlog"><Backlog r={data} /></Card>
-                <Card name="Keeping and deleting"><Retention r={data} /></Card>
-              </div>
-              <Card name="Timing"><Timing r={data} /></Card>
-              <Card name="Receiving"><Intake r={data} /></Card>
-              {data.dimensions.map((d) => <Card key={d.key} name={d.label || 'A breakdown'}><Dimension dim={d} /></Card>)}
-            </>
-          ) : (
-            <p className="cf-rp-scope">More detail is available to Business Administrators.</p>
-          )}
-        </div>
-      )}
+        {tab === 'overview' && data && (
+          <div className="cf-rp-body" aria-busy={isValidating}>
+            {canExecutive && <Card name="What LexaVault did for you"><DidForYou r={data} /></Card>}
+            <Card name="The headline"><Executive r={data} /></Card>
+            <Card name="The trend"><Trend r={data} /></Card>
+            <Card name="Service levels"><ServiceLevel r={data} /></Card>
+          </div>
+        )}
+        {tab === 'daily' && daily.data && period && (
+          <div className="cf-rp-body" aria-busy={isValidating}>
+            <ErrorBoundary title="Daily intake and delivery couldn't be shown" request={request}>
+              <DailyTab r={daily.data} preset={preset} period={period} caps={caps} zone={zone} />
+            </ErrorBoundary>
+          </div>
+        )}
+        {tab === 'operations' && data && (
+          <div className="cf-rp-body" aria-busy={isValidating}>
+            {canOperational ? (
+              <>
+                <ErrorBoundary title="The queue couldn't be shown" request="GET /operations/reports/queue"><QueueSection own /></ErrorBoundary>
+                <Card name="The pipeline"><Pipeline r={data} links={caps.includes(CAP.desk)} /></Card>
+                <div className="cf-rp-pair">
+                  <Card name="The backlog"><Backlog r={data} /></Card>
+                  <Card name="Keeping and deleting"><Retention r={data} /></Card>
+                </div>
+                <Card name="Timing"><Timing r={data} /></Card>
+                {data.dimensions.map((d) => <Card key={d.key} name={d.label || 'A breakdown'}><Dimension dim={d} /></Card>)}
+              </>
+            ) : (
+              <p className="cf-rp-scope">More detail is available to Business Administrators.</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -449,7 +466,7 @@ function ServiceLevel({ r }: { r: OperationalReports }) {
   );
 }
 
-function Pipeline({ r }: { r: OperationalReports }) {
+function Pipeline({ r, links }: { r: OperationalReports; links: boolean }) {
   const p = r.processing;
   const rows: { label: string; value: number; stage: StageKey; tone?: 'danger' }[] = [
     { label: 'Redacting', value: p.processing, stage: 'redacting' },
@@ -460,14 +477,21 @@ function Pipeline({ r }: { r: OperationalReports }) {
     { label: 'Rejected', value: p.rejected, stage: 'stopped', tone: 'danger' },
   ];
   return (
-    <Section title="Pipeline" note="Select a stage to open the matching cases">
+    <Section title="Pipeline" note={links ? 'Select a stage to open the matching cases' : undefined}>
       <ul className="cf-rp-pipeline">
         {rows.map((row) => (
           <li key={row.label}>
-            <Link to={`/?stage=${row.stage}`} className="cf-rp-pipe" data-tone={row.value > 0 ? row.tone : undefined}>
-              <span className="cf-rp-pipe-value">{row.value}</span>
-              <span className="cf-rp-pipe-label">{row.label}</span>
-            </Link>
+            {links ? (
+              <Link to={`/?stage=${row.stage}`} className="cf-rp-pipe" data-tone={row.value > 0 ? row.tone : undefined}>
+                <span className="cf-rp-pipe-value">{row.value}</span>
+                <span className="cf-rp-pipe-label">{row.label}</span>
+              </Link>
+            ) : (
+              <span className="cf-rp-pipe" data-tone={row.value > 0 ? row.tone : undefined}>
+                <span className="cf-rp-pipe-value">{row.value}</span>
+                <span className="cf-rp-pipe-label">{row.label}</span>
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -537,21 +561,6 @@ function Timing({ r }: { r: OperationalReports }) {
         <Stat label="Documents per case" value={u.averageDocumentsPerPackage.toFixed(1)} sub={`${u.averagePagesPerPackage.toFixed(1)} pages`} />
         <Stat label="Reprocessed" value={u.reprocessedPackages.toLocaleString()} sub={`of ${u.packages.toLocaleString()} cases`} />
       </dl>
-    </Section>
-  );
-}
-
-function Intake({ r }: { r: OperationalReports }) {
-  const i = r.intake;
-  return (
-    <Section title="Intake channels" note={`${i.duplicateObservations} duplicates and ${i.rejectedObservations} rejected submissions filtered out`}>
-      <Bars rows={[
-        { label: 'Manual upload', value: i.manual },
-        { label: 'API', value: i.api },
-        { label: 'Watched folder', value: i.watchedFolder },
-        { label: 'Scanner', value: i.scanner },
-        { label: 'Waiting for trigger file', value: i.waitingForTrigger },
-      ]} />
     </Section>
   );
 }

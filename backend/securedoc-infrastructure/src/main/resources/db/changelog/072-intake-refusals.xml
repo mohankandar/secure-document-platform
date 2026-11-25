@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0081 (owner approved): what intake refused, or had already taken in, per source system: the LV code and the time
+        only. No content, file name, user or request data. source_key as in case_priorities, and type:MANUAL_UPLOAD.
+        The watched folder's are in intake_observations and are not written here.
+    -->
+    <changeSet id="072-01-intake-refusals" author="lexavault">
+        <createTable tableName="intake_refusals">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="source_key" type="VARCHAR(128)"><constraints nullable="false"/></column>
+            <column name="lv_code" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="kind" type="VARCHAR(16)"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="intake_refusals" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_intake_refusals_tenant"/>
+        <createIndex tableName="intake_refusals" indexName="idx_intake_refusals_time">
+            <column name="tenant_id"/>
+            <column name="occurred_at"/>
+        </createIndex>
+        <sql>
+            alter table intake_refusals add constraint ck_intake_refusals_kind check (kind in ('REFUSED', 'DUPLICATE'));
+        </sql>
+        <rollback>
+            <dropTable tableName="intake_refusals"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -68,4 +68,5 @@
     <include file="db/changelog/082-case-priority.xml"/>
     <include file="db/changelog/083-bulk-sources.xml"/>
     <include file="db/changelog/084-second-check.xml"/>
+    <include file="db/changelog/072-intake-refusals.xml"/>
 </databaseChangeLog>

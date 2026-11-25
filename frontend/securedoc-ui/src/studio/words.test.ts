@@ -235,9 +235,9 @@ test('0021: a refused level reads as LV-DLV-003 in Support', () => {
   assert.equal(reason.sentence, 'The destination doesn\'t accept the case\'s or a document\'s sensitivity level.');
 });
 
-test('0021: the level appears only in the case panel, New case and the watched-folder setting (no badge elsewhere)', () => {
+test('0021: the level appears only in the case panel, New case, the watched-folder setting and (0081) Reports (no badge elsewhere)', () => {
   const studio = resolve(here);
-  const allowed = new Set(['CaseDrawer.tsx', 'Intake.tsx', join('admin', 'IntegrationsArea.tsx'), 'words.ts']);
+  const allowed = new Set(['CaseDrawer.tsx', 'Intake.tsx', join('admin', 'IntegrationsArea.tsx'), 'words.ts', join('reports', 'Reports.tsx'), join('reports', 'DailyTab.tsx')]);
   const pattern = /sensitivityName|caseSensitivityLine|documentSensitivityNote|SENSITIVITY_NAMES|sensitivityLevel|effectiveSensitivityLevel/;
   const offenders: string[] = [];
   const walk = (dir: string, rel: string) => {

@@ -788,6 +788,32 @@ export interface WatchedFolderAdminStatus {
   } | null;
 }
 
+/** Task 0081: the filters all Reports tabs share. */
+export interface ReportFilters { from: string; to: string; sourceSystem: string; level: string }
+export interface ReportSource { key: string; name: string }
+interface UsualRange { low: number; high: number }
+
+/** Reports › Daily intake and delivery. Counts, LV codes and connection names only. */
+export interface DailyReport {
+  generatedAt: string;
+  from: string;
+  to: string;
+  includesNow: boolean;
+  /** False with a level filter: a refusal has no case, so no level. */
+  refusalsCounted: boolean;
+  quiet: { sourceKey: string; name: string; lastReceivedAt?: string | null; usualMinutes: number }[];
+  received: { cases: number; documents: number; pages: number; urgent: number; usual?: UsualRange | null };
+  exported: { cases: number; documents: number; pages: number; splitDocuments: number; urgent: number; usual?: UsualRange | null };
+  notExported: { cases: number; ready: number; waitingToRetry: number; destinationPaused: number; waitingForYou: number; urgent: number; oldestWaitingSeconds?: number | null };
+  attention: { refused: number; stopped: number; exportFailed: number; rejected: number };
+  reasons: { code: string; where: string; cases: number }[];
+  destinations: { key: string; name: string; split: boolean; paused: boolean; exported: number; documents: number; pages: number; failed: number; waitingToRetry: number }[];
+  sources: { key: string; name: string; lastReceivedAt?: string | null; received: number; duplicates: number; refused: number; exported: number; inProgress: number; stopped: number; quiet: boolean }[];
+  handled: { noPerson: number; afterReview: number; byHand: number; inProgress: number; stopped: number; rejected: number };
+  levels: { level: string; received: number; exported: number }[];
+  waitingForTrigger: number;
+}
+
 /** Task 0078: the queue of each stage (one entity's, or every entity's added up) and its ETA. */
 export interface PipelineQueue {
   staged: boolean;

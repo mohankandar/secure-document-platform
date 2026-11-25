@@ -3,6 +3,7 @@ package com.securedoc.platform.application.port.out;
 import com.securedoc.platform.application.operations.model.DashboardPage;
 import com.securedoc.platform.application.operations.model.DashboardStage;
 import com.securedoc.platform.application.operations.model.OperationalReportSnapshot;
+import com.securedoc.platform.application.operations.model.ReportScope;
 import com.securedoc.platform.domain.identity.TenantId;
 
 import java.time.Instant;
@@ -14,4 +15,8 @@ public interface OperationsReadPort {
 
     OperationalReportSnapshot loadReports(TenantId tenantId, Instant now, Instant from, Instant to,
                                           String source, String outcome);
+
+    /** Task 0081: as above, of one source system or one sensitivity level. */
+    OperationalReportSnapshot loadReports(TenantId tenantId, Instant now, Instant from, Instant to,
+                                          String source, String outcome, ReportScope scope);
 }

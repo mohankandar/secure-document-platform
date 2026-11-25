@@ -26,6 +26,15 @@ test('Cases and the Approve dialog at 320 px', async ({ page }) => {
   expect(await sideways(page)).toBeLessThanOrEqual(0);
 });
 
+test('Reports: Daily intake and delivery, and Operations, at 320 px', async ({ page }) => {
+  await signInAs(page, 'business', '/reports');
+  for (const name of ['Daily intake and delivery', 'Operations']) {
+    await page.getByRole('tab', { name }).click();
+    await expect(page.locator('.cf-rp-body')).toBeVisible();
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+  }
+});
+
 test('Reports and the Compliance report dialog at 320 px', async ({ page }) => {
   await signInAs(page, 'business', '/reports');
   await expect(page.getByRole('heading', { name: 'How the work is going' })).toBeVisible();

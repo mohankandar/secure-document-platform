@@ -122,6 +122,15 @@ test.describe('Reports (Business Administrator, Report viewer)', () => {
     await scan(page, 'Reports');
   });
 
+  for (const [name, heading] of [['Daily intake and delivery', 'Received today'], ['Operations', 'Queue']] as const) {
+    test(`Reports: ${name}`, async ({ page }) => {
+      await signInAs(page, 'business', '/reports');
+      await page.getByRole('tab', { name }).click();
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+      await scan(page, `Reports: ${name}`);
+    });
+  }
+
   test('Reports: How is this worked out?', async ({ page }) => {
     await signInAs(page, 'business', '/reports');
     await page.getByRole('button', { name: 'How is this worked out?' }).click();

@@ -4,6 +4,7 @@ import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.operations.model.DashboardPage;
 import com.securedoc.platform.application.operations.model.DashboardStage;
 import com.securedoc.platform.application.operations.model.OperationalReportSnapshot;
+import com.securedoc.platform.application.operations.model.ReportScope;
 import com.securedoc.platform.application.port.in.GetOperationalReportsQuery;
 import com.securedoc.platform.application.port.in.GetOperationsDashboardQuery;
 import com.securedoc.platform.application.port.out.OperationsReadPort;
@@ -38,6 +39,12 @@ public final class OperationsQueryService implements GetOperationsDashboardQuery
     @Override
     public OperationalReportSnapshot execute(AuthenticatedPrincipal principal, Instant from, Instant to,
                                              String source, String outcome) {
+        return execute(principal, from, to, source, outcome, ReportScope.EVERYTHING);
+    }
+
+    @Override
+    public OperationalReportSnapshot execute(AuthenticatedPrincipal principal, Instant from, Instant to,
+                                             String source, String outcome, ReportScope scope) {
         Objects.requireNonNull(principal);
         Instant safeTo = to == null ? Instant.now() : to;
         Instant safeFrom = from == null ? safeTo.minusSeconds(30L * 24 * 60 * 60) : from;
@@ -54,6 +61,9 @@ public final class OperationsQueryService implements GetOperationsDashboardQuery
                 "TECHNICAL_ATTENTION", "REJECTED").contains(safeOutcome)) {
             throw new IllegalArgumentException("Unsupported report outcome");
         }
-        return readPort.loadReports(principal.tenantId(), Instant.now(), safeFrom, safeTo, safeSource, safeOutcome);
+        if (ReportScope.EVERYTHING.equals(scope)) {
+            return readPort.loadReports(principal.tenantId(), Instant.now(), safeFrom, safeTo, safeSource, safeOutcome);
+        }
+        return readPort.loadReports(principal.tenantId(), Instant.now(), safeFrom, safeTo, safeSource, safeOutcome, scope);
     }
 }
