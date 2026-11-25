@@ -37,7 +37,7 @@ Outcome: **Step 1 DONE. Step 2 NOT BUILT**, on purpose: the product already does
 4. Excluding locked items from the existing rule would change today's behaviour (frozen) and needs a decision (question 2).
 
 ## What could cut reviews (not built)
-Vision-only findings by kind: SSN, date of birth, credit score, card number, signature and face photo have no wrong one here; account and routing numbers do. But face photos apart, every case that goes to Review has its own reasons, and **lowering the bar to 0.75 lets 4 cases through that miss an item**. A person in Review sees the page and can add the missed item; without Review nobody does. That is the real price, and the finding's confidence says nothing about it.
+Vision-only findings by kind: SSN, date of birth, credit score, card number, signature and face photo have no wrong one here; account and routing numbers do. But **lowering the bar to 0.75 lets 4 cases through that miss an item**. A person in Review sees the page and can add the missed item; without Review nobody does. That is the real price, and the finding's confidence says nothing about it.
 
 ## Limits
 - **Synthetic samples, small numbers**: 0 wrong of 19 SSNs does not show that fewer than about 1 in 7 is wrong (95%). No customer documents.
