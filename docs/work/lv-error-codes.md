@@ -92,6 +92,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SCN-019 | Scan can't be cancelled now | The scan is already being sent, or needs attention first. | Refused | Operator | 409 | 92 |
 | LV-SCN-020 | Scan resumed after a restart | The Scan Bridge restarted and picked up the scan where it left off. | Warning | Nobody | — | 0025 (RECOVERED_AFTER_RESTART) |
 | LV-SCN-021 | Waiting for LexaVault to accept the scan | The scan was sent; LexaVault hasn't confirmed it yet. | Waiting | Nobody | — | 0024 (acceptance pending) |
+| LV-SCN-022 | Scan needs its sensitive fields again | The Scan Bridge restarted; it never writes sensitive case fields to its disk, so this scan can't be sent. | Stopped | Person | — | 0061 |
 
 ### PRC: processing (001–019)
 
@@ -212,6 +213,10 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-CFG-009 | Scanner settings not valid | A scanner setting is out of range. | Set-up | IT Admin | 500 | 315 |
 | LV-CFG-010 | Connection switched off | The connection is disabled or not of the right kind. | Set-up | IT Admin | 403 | 302, 303 |
 | LV-CFG-011 | Support action not possible now | The case or incident isn't in a state that allows this action (for example the incident is closed). | Refused | IT Admin | 409 | 0025 (hold extension, restart, closed incident, Dashboard removal) |
+| LV-CFG-012 | Sensitive field needs the key service | A sensitive case field is kept only encrypted, and no key service is set up here. | Set-up | Business Admin, IT Admin | 400 | 0061 |
+| LV-CFG-013 | Can't be a case field | A locked item (Social Security Number, card number, CVV, PIN) is never kept as a case field. | Refused | Business Admin | 400 | 0061 |
+| LV-CFG-014 | Case field or redaction item, not both | The same item is redacted in this entity and named as a case field. | Refused | Business Admin | 400 | 0061 |
+| LV-CFG-015 | Case field can't change any more | The case field has values, so its type, Sensitive, Primary and several-values settings stay as they are. | Refused | Business Admin | 400 | 0061 |
 
 ### SYS: system (001–019)
 
@@ -232,7 +237,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-013 | Waiting for the erase replay | The database was restored from a backup: no work is taken until the erase replay has run. | System | IT Admin | 503 | 0060 |
 | LV-SYS-014 | Erase log not available | LexaVault can't use its erase log, so nothing is erased and no work is taken. | System | IT Admin | 503 | 0060 |
 
-**Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064; LV-SYS-010 to 014 by task 0060.)*
+**Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064; LV-SYS-010 to 014 by task 0060; LV-SCN-022 and LV-CFG-012 to 015 by task 0061.)*
 
 ## 3. Rows with no code on purpose
 

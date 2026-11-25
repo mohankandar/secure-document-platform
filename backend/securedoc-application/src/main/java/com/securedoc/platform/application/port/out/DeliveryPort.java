@@ -57,7 +57,24 @@ public interface DeliveryPort {
                          String existingDestinationSubmissionReference,
                          Map<String,String> businessIdentifiers, Map<String,String> metadata,
                          List<DeliveryItem> items, DeliveryProgressListener progressListener,
-                         SensitivityLevel caseSensitivityLevel) {
+                         SensitivityLevel caseSensitivityLevel,
+                         /* Task 0061: the case fields as platform-core's delivery document (key, type and value, with the list
+                            of a multi-value field); null when there are none. For a destination that takes it. */
+                         String caseFields) {
+        /** The values are in no text form of a delivery. */
+        @Override
+        public String toString() {
+            return "DeliveryBatch[packageId=" + packageId + ", exportCycle=" + exportCycle + ", items=" + items.size() + "]";
+        }
+
+        public DeliveryBatch(TenantId tenantId, PackageId packageId, int exportCycle, String sourceSubmissionId,
+                             String existingDestinationSubmissionReference, Map<String,String> businessIdentifiers,
+                             Map<String,String> metadata, List<DeliveryItem> items, DeliveryProgressListener progressListener,
+                             SensitivityLevel caseSensitivityLevel) {
+            this(tenantId, packageId, exportCycle, sourceSubmissionId, existingDestinationSubmissionReference,
+                    businessIdentifiers, metadata, items, progressListener, caseSensitivityLevel, null);
+        }
+
         public DeliveryBatch {
             Objects.requireNonNull(tenantId); Objects.requireNonNull(packageId);
             if (exportCycle < 1) throw new IllegalArgumentException("Export cycle must be >= 1");

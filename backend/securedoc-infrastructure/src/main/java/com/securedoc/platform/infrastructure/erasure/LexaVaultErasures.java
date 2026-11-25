@@ -8,6 +8,8 @@ import com.documentplatform.eraselog.Eraser;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
+import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.port.out.CaseFieldLock;
 import com.securedoc.platform.application.port.out.ErasurePort;
 import com.securedoc.platform.domain.artifact.Artifact;
 import com.securedoc.platform.domain.artifact.ArtifactStatus;
@@ -17,6 +19,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -29,8 +34,16 @@ public class LexaVaultErasures implements ErasurePort {
 
     private final Eraser eraser;
     private final JdbcTemplate jdbc;
+    private final CaseFieldErasure caseFields;
+    private final CaseFieldLock lock;
+    private final TransactionTemplate locked;
 
-    public LexaVaultErasures(Eraser eraser, JdbcTemplate jdbc) {
+    public LexaVaultErasures(Eraser eraser, JdbcTemplate jdbc, CaseFieldErasure caseFields, CaseFieldLock lock,
+                             PlatformTransactionManager transactions) {
+        this.caseFields = Objects.requireNonNull(caseFields);
+        this.lock = Objects.requireNonNull(lock);
+        this.locked = new TransactionTemplate(transactions);
+        this.locked.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.eraser = Objects.requireNonNull(eraser);
         this.jdbc = Objects.requireNonNull(jdbc);
     }
@@ -48,6 +61,22 @@ public class LexaVaultErasures implements ErasurePort {
     @Override
     public void eraseCaseFiles(TenantId tenantId, PackageId packageId, Reason reason) {
         erase(tenantId, EraseRecord.CASE_FILES, EraseRecord.CASE, packageId.value().toString(), reason);
+    }
+
+    @Override
+    public int eraseUnusedCaseFields(int limit, Reason reason) {
+        int erased = 0;
+        for (CaseFieldErasure.Unused record : caseFields.unused(limit)) {
+            // The lock only keeps new cases from joining the record meanwhile; the erasing is done and committed by itself.
+            boolean done = Boolean.TRUE.equals(locked.execute(status -> {
+                lock.changing(record.tenantId());
+                if (!caseFields.stillUnused(record)) return false;
+                erase(record.tenantId(), EraseRecord.CASE_FIELDS, CaseFieldService.RECORD_TYPE, record.recordId().toString(), reason);
+                return true;
+            }));
+            if (done) erased++;
+        }
+        return erased;
     }
 
     /** A file no record points to (the sweep). */

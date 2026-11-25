@@ -829,6 +829,18 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 1. Wait: the Scan Bridge checks again by itself.
 2. If it waits longer than the time limit, it shows LV-SCN-017; then ask your IT Admin.
 
+### LV-SCN-022 Scan needs its sensitive fields again
+
+- **Means:** The Scan Bridge restarted; it never writes sensitive case fields to its disk, so this scan can't be sent.
+- **Kind:** Stopped
+- **Who acts:** Person
+- **HTTP status:** —
+
+**What to do:**
+
+1. Cancel this scan in the Scan screen.
+2. Start New case again, fill in the case fields and scan the document once more. Nothing was sent.
+
 ## PRC: processing
 
 ### LV-PRC-001 PDF can't be opened
@@ -1838,6 +1850,55 @@ Reserved: not used yet.
 1. Reload the page to see the case's or incident's current state.
 2. Holds and restarts are only for cases that stopped and were never exported; a closed incident allows no more actions.
 3. If the case needs work again, open it from Support while it still shows a problem.
+
+### LV-CFG-012 Sensitive field needs the key service
+
+- **Means:** A sensitive case field is kept only encrypted, and no key service is set up here.
+- **Kind:** Set-up
+- **Who acts:** Business Admin, IT Admin
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Save the field without **Sensitive**, or ask your IT team to set up the key service first (`docs/install/KEY_SERVICE.md`).
+2. Nothing was saved.
+
+### LV-CFG-013 Can't be a case field
+
+- **Means:** A locked item (Social Security Number, card number, CVV, PIN) is never kept as a case field.
+- **Kind:** Refused
+- **Who acts:** Business Admin
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Remove the field from the list. Locked items are always removed from documents and never kept beside them.
+2. If the field is something else, give it a name that says so.
+
+### LV-CFG-014 Case field or redaction item, not both
+
+- **Means:** The same item is redacted in this entity and named as a case field.
+- **Kind:** Refused
+- **Who acts:** Business Admin
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Decide for this entity: either the item is redacted, or it is kept as a case field.
+2. To keep it as a case field, switch the item off under Safe policy first. To redact it, remove the case field first.
+3. Save again.
+
+### LV-CFG-015 Case field can't change any more
+
+- **Means:** The case field has values, so its type, Sensitive, Primary and several-values settings stay as they are.
+- **Kind:** Refused
+- **Who acts:** Business Admin
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Leave these settings as they were, or add a new field with the new settings and switch the old one off.
+2. Existing values stay with the old field.
 
 ## SYS: system
 

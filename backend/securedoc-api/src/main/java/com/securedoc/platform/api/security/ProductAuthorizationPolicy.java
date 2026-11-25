@@ -15,6 +15,7 @@ public class ProductAuthorizationPolicy {
     private static final EnumSet<UserCapability> DOCUMENT_PROCESSOR_CAPABILITIES = EnumSet.of(
             UserCapability.DASHBOARD_ACCESS,
             UserCapability.DOCUMENT_INTAKE,
+            UserCapability.CASE_FIELD_SENSITIVE_VIEW,
             UserCapability.MANUAL_REVIEW,
             UserCapability.FINDING_DECISION,
             UserCapability.REDACTION_ADJUST,

@@ -146,6 +146,24 @@ class EraseReplayDrillPostgresTest {
                 FreshDatabaseStartPostgresTest.DevelopmentBuild.class).profiles("local").run(args.toArray(String[]::new));
     }
 
+    private String ownRecord;
+    private String sharedRecord;
+
+    private static String record(ConfigurableApplicationContext app, String contract, PackageId... cases) throws SQLException {
+        String id = app.getBean(com.securedoc.platform.application.casefields.CaseFieldService.class).resolveOrCreate(ENTITY,
+                Map.of("contract_number", contract, "member_number", "12345678901", "service_entity", "001")).businessRecordId().toString();
+        for (PackageId pkg : cases) {
+            change("update document_packages set business_record_id = '" + id + "' where id = '" + pkg + "'");
+        }
+        return id;
+    }
+
+    private static void assertValues(String record, boolean there) throws SQLException {
+        assertEquals(there ? "3" : "0", one("select count(*) from fld_value v join fld_record r on r.record_uuid = v.record_uuid"
+                + " where r.record_id = '" + record + "'"));
+        assertEquals(there ? "1" : "0", one("select count(*) from fld_record where record_id = '" + record + "'"));
+    }
+
     @Test
     void theDrill() throws Exception {
         PackageId redactedDue = PackageId.generate();
@@ -173,6 +191,10 @@ class EraseReplayDrillPostgresTest {
                     assertFalse(Files.readString(file, StandardCharsets.ISO_8859_1).contains(MARKER), file.toString());
                 }
             }
+            // Task 0061: one business record only the case due for purging points to, one it shares with a live case.
+            app.getBean(com.securedoc.platform.application.casefields.CaseFieldSettings.class);
+            ownRecord = record(app, "100000000001", finalDue);
+            sharedRecord = record(app, "100000000002", rejected, live);
             lifecycle(redactedDue, 1, "null", "now() - interval '1 hour'", "null");
             lifecycle(finalDue, 1, "now() - interval '1 hour'", "now() + interval '9 hours'", "null");
             lifecycle(rejected, 0, "null", "null", "now() - interval '1 hour'");
@@ -202,10 +224,13 @@ class EraseReplayDrillPostgresTest {
             assertGone(app, erased);
             for (String file : kept) assertReadable(app, file);
         }
+        assertValues(ownRecord, false);
+        assertValues(sharedRecord, true); // a live case still needs it
         assertEquals("7", one("select count(*) from audit_records where action = 'FILES_ERASED'"));
-        assertEquals("7", one("select applied_seq from erl_position"));
+        assertEquals("1", one("select count(*) from audit_records where action = 'CASE_FIELDS_ERASED' and resource_id = '" + ownRecord + "'"));
+        assertEquals("8", one("select applied_seq from erl_position"));
         String log = Files.readString(work.resolve("erase-log/erase-log.jsonl"));
-        for (String kind : List.of("case-files", "redacted-copy", "document", "working-file", "export-copy", "unrecorded-file")) {
+        for (String kind : List.of("case-files", "redacted-copy", "document", "working-file", "export-copy", "unrecorded-file", "case-fields")) {
             assertTrue(log.contains("\"" + kind + "\""), kind + " in " + log);
         }
         assertTrue(log.contains("\"mac\""), "keyed");
@@ -217,6 +242,7 @@ class EraseReplayDrillPostgresTest {
             WorkGate gate = app.getBean(WorkGate.class);
             assertFalse(gate.mayTakeWork(), "blocked");
             for (String file : erased) assertReadable(app, file); // the restore brought them back
+            assertValues(ownRecord, true);
             int port = ((WebServerApplicationContext) app).getWebServer().getPort();
             HttpResponse<String> refused = call(port, "POST", "/api/v1/packages", newCaseBody());
             assertEquals(503, refused.statusCode(), refused.body());
@@ -242,7 +268,9 @@ class EraseReplayDrillPostgresTest {
         // ------------------------------------------------------------------------------- the replay
         var report = replay();
         assertTrue(report.passed(), report.describe());
-        assertEquals(7, report.appliedCount(), report.describe());
+        assertEquals(8, report.appliedCount(), report.describe());
+        assertValues(ownRecord, false);
+        assertValues(sharedRecord, true);
         try (ConfigurableApplicationContext app = start()) {
             assertTrue(app.getBean(WorkGate.class).mayTakeWork(), "work resumes");
             assertGone(app, erased);
@@ -251,6 +279,10 @@ class EraseReplayDrillPostgresTest {
             HttpResponse<String> made = call(port, "POST", "/api/v1/packages", newCaseBody());
             assertTrue(made.statusCode() == 200 || made.statusCode() == 201, made.body());
             assertEquals("7", one("select count(*) from audit_records where action = 'FILES_ERASED'"), "written again, under their ids");
+            assertEquals("1", one("select count(*) from audit_records where action = 'CASE_FIELDS_ERASED'"));
+            // The case itself is still there and has no values any more; the same number makes a new record.
+            assertEquals(200, call(port, "GET", "/api/v1/packages", null).statusCode());
+            assertFalse(ownRecord.equals(record(app, "100000000001")));
             // The next purge finds the cases due and nothing left to erase.
             var again = app.getBean(PurgeDueRetentionUseCase.class).execute(new PurgeDueRetentionCommand(Instant.now(), 100,
                     SYSTEM, CorrelationId.generate()));

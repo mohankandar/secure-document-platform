@@ -159,7 +159,7 @@ class FreshDatabaseStartPostgresTest {
         assertEquals("NOT_ACTIVATED", one("select status from idn_entity where slot_id = 'ENT-DEMO-0002'"));
         assertEquals("ACTIVE|local-demo", one("select status || '|' || slug from tenants where id = '" + DEMO_ENTITY + "'"));
         assertEquals("7", one("select count(*) from tenant_capabilities where tenant_id = '" + DEMO_ENTITY + "' and status = 'ENABLED'"));
-        assertEquals("3", one("select count(*) from business_identifier_definitions where tenant_id = '" + DEMO_ENTITY + "' and active_flag"));
+        assertEquals("3", one("select count(*) from fld_field_definition where entity_uuid = '" + DEMO_ENTITY + "' and active"));
         assertEquals("1", one("select count(*) from tenant_redaction_policies where tenant_id = '" + DEMO_ENTITY + "'"));
         assertEquals("1", one("select count(*) from integration_connections where tenant_id = '" + DEMO_ENTITY
                 + "' and provider_type = 'SCANNER' and client_principal = 'scanner-bridge-local'"));
@@ -492,7 +492,7 @@ class FreshDatabaseStartPostgresTest {
 
     private static String rowCounts() throws SQLException {
         return one("select (select count(*) from tenants) || '/' || (select count(*) from tenant_capabilities) || '/' || "
-                + "(select count(*) from business_identifier_definitions) || '/' || (select count(*) from integration_connections) "
+                + "(select count(*) from fld_field_definition) || '/' || (select count(*) from integration_connections) "
                 + "|| '/' || (select count(*) from idn_entity) || '/' || (select count(*) from idn_login_connection) || '/' || "
                 + "(select count(*) from enterprise_identity_connection_history)");
     }

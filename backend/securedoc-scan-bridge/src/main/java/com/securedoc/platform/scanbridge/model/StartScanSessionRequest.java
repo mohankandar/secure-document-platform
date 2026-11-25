@@ -13,13 +13,25 @@ public record StartScanSessionRequest(
         Map<String, String> businessIdentifiers,
         String caseSensitivityLevel,
         /** Task 0073: the optional priority chosen on New case; LexaVault reads it. */
-        String casePriority
+        String casePriority,
+        /** Task 0061: the keys whose values are sensitive; the bridge keeps those in memory only. */
+        java.util.List<String> sensitiveFields
 ) {
+    /** Case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "StartScanSessionRequest[]";
+    }
+
+    public StartScanSessionRequest(Map<String, String> businessIdentifiers, String caseSensitivityLevel, String casePriority) {
+        this(businessIdentifiers, caseSensitivityLevel, casePriority, null);
+    }
+
     public StartScanSessionRequest(Map<String, String> businessIdentifiers, String caseSensitivityLevel) {
-        this(businessIdentifiers, caseSensitivityLevel, null);
+        this(businessIdentifiers, caseSensitivityLevel, null, null);
     }
 
     public StartScanSessionRequest(Map<String, String> businessIdentifiers) {
-        this(businessIdentifiers, null, null);
+        this(businessIdentifiers, null, null, null);
     }
 }

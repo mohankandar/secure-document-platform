@@ -545,21 +545,40 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         }
     }
 
+    private java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, List<Map<String, String>>>
+            fieldsForDigest = (tenant, fields) -> List.of(fields);
+
+    /** Task 0061: the case fields as they may take part in a plain digest. */
+    public WatchedFolderIntakeService withCaseFields(com.securedoc.platform.application.casefields.CaseFieldService caseFields) {
+        this.fieldsForDigest = caseFields::forDigest;
+        return this;
+    }
+
+    /** The drop's fingerprint; after a key rotation the one by an older key when a case with it exists. */
     private String fingerprint(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate) throws Exception {
-        MessageDigest digest=MessageDigest.getInstance("SHA-256");
-        update(digest, principal.tenantId().toString());
-        candidate.businessIdentifiers().entrySet().stream().sorted(Map.Entry.comparingByKey())
-                .forEach(e->{update(digest,e.getKey().trim().toLowerCase(Locale.ROOT));update(digest,e.getValue().trim().toUpperCase(Locale.ROOT));});
-        candidate.metadata().entrySet().stream().sorted(Map.Entry.comparingByKey())
-                .forEach(e->{update(digest,e.getKey().trim());update(digest,e.getValue().trim());});
+        List<MessageDigest> digests = new java.util.ArrayList<>();
+        for (Map<String, String> fields : fieldsForDigest.apply(principal.tenantId(), candidate.businessIdentifiers())) {
+            MessageDigest digest=MessageDigest.getInstance("SHA-256");
+            update(digest, principal.tenantId().toString());
+            fields.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .forEach(e->{update(digest,e.getKey().trim().toLowerCase(Locale.ROOT));update(digest,e.getValue().trim().toUpperCase(Locale.ROOT));});
+            candidate.metadata().entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .forEach(e->{update(digest,e.getKey().trim());update(digest,e.getValue().trim());});
+            digests.add(digest);
+        }
         for(WatchedFolderDocument doc:candidate.documents().stream().sorted(Comparator.comparing(WatchedFolderDocument::fileName)).toList()){
-            update(digest,doc.fileName()); update(digest,Long.toString(doc.content().contentLength()));
+            for (MessageDigest digest : digests) {
+                update(digest,doc.fileName()); update(digest,Long.toString(doc.content().contentLength()));
+            }
             try(InputStream in=doc.content().openStream()){
                 byte[] buf=new byte[8192];int n;
-                while((n=in.read(buf))>=0){if(n>0)digest.update(buf,0,n);}
+                while((n=in.read(buf))>=0){if(n>0)for (MessageDigest digest : digests) digest.update(buf,0,n);}
             }
         }
-        return HexFormat.of().formatHex(digest.digest());
+        List<String> fingerprints = digests.stream().map(d -> HexFormat.of().formatHex(d.digest())).toList();
+        return fingerprints.stream().skip(1).filter(f -> packageRepository
+                        .findByTenantIdAndIntakeFingerprint(principal.tenantId(), f).isPresent())
+                .findFirst().orElse(fingerprints.getFirst());
     }
 
     private static void update(MessageDigest digest,String value){

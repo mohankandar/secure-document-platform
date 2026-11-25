@@ -50,7 +50,7 @@ export default function ScanCapture({ gate, onLock, onCreated }: {
   const start = () => act('start', async () => {
     const identity = gate.require();
     if (!identity) throw new Error('Complete the case identity first.');
-    await mutate(await scanBridgeClient.startSession(identity, gate.sensitivity, gate.priority), { revalidate: false });
+    await mutate(await scanBridgeClient.startSession(identity, gate.sensitivity, gate.priority, gate.sensitiveFields), { revalidate: false });
   });
 
   const stage = (file: File) => act('stage', async () => {

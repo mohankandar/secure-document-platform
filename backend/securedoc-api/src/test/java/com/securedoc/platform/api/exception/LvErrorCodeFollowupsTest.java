@@ -1,19 +1,25 @@
 package com.securedoc.platform.api.exception;
 
+import com.documentplatform.crypto.CustomerId;
+import com.documentplatform.crypto.testkit.InMemoryKeyService;
+import com.documentplatform.fields.FieldDefinitions;
+import com.documentplatform.fields.FieldSpec;
+import com.documentplatform.fields.FieldType;
+import com.documentplatform.fields.inmemory.InMemoryFieldStore;
+import com.documentplatform.fields.inmemory.InMemoryValueStore;
+import com.documentplatform.fields.values.FieldValues;
+import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.port.out.CaseFieldLock;
 import com.securedoc.platform.api.config.StartupFailureLogger;
 import com.securedoc.platform.api.dto.ApiErrorResponse;
 import com.securedoc.platform.api.testsupport.LogCapture;
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
 import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.application.exception.IntakeValidationException;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.ValidationException;
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
-import com.securedoc.platform.application.port.out.BusinessRecordRepository;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort;
 import com.securedoc.platform.application.resilience.TenantRoutingSensitiveContentAnalysisPort;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.extraction.HybridPdfTextExtractionAdapter;
@@ -182,11 +188,14 @@ class LvErrorCodeFollowupsTest {
     @Test
     void anIntakeCaseFieldRefusalNamesTheFieldNeverTheValueSent() {
         TenantId tenant = TenantId.generate();
-        BusinessIdentifierDefinition loan = BusinessIdentifierDefinition.create(tenant, "loan_number", "Loan number",
-                true, true, true, false, true, 1);
-        BusinessIdentifierDefinitionRepository definitions = mock(BusinessIdentifierDefinitionRepository.class);
-        when(definitions.findActiveByTenantId(tenant)).thenReturn(List.of(loan));
-        BusinessIdentityService identities = new BusinessIdentityService(definitions, mock(BusinessRecordRepository.class));
+        InMemoryFieldStore fieldStore = new InMemoryFieldStore();
+        InMemoryValueStore valueStore = new InMemoryValueStore();
+        FieldDefinitions definitions = new FieldDefinitions(fieldStore, valueStore);
+        definitions.create(CaseFieldService.scope(tenant), FieldSpec.builder("loan_number", "Loan number", FieldType.TEXT)
+                .required(true).primary(true).searchable(true).build(), "test");
+        CustomerId customer = CustomerId.fromTenantId("TEN-TEST-0001");
+        CaseFieldService identities = new CaseFieldService(definitions, new FieldValues(customer, fieldStore, valueStore,
+                new InMemoryKeyService(), java.time.Clock.systemUTC()), CaseFieldLock.NONE, null, customer);
 
         IntakeValidationException unknown = assertThrows(IntakeValidationException.class,
                 () -> identities.resolveOrCreate(tenant, Map.of("loan_number", "LN-1", "jane_doe_ssn", "123-45-6789")));

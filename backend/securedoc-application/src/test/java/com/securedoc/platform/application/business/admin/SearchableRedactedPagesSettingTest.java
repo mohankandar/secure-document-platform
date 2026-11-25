@@ -1,13 +1,12 @@
 package com.securedoc.platform.application.business.admin;
 
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
+import com.securedoc.platform.application.casefields.TestCaseFields;
 import com.securedoc.platform.application.port.out.ReportingConfigurationRepository;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditRecord;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -34,7 +33,7 @@ class SearchableRedactedPagesSettingTest {
     private final List<AuditRecord> audits = new ArrayList<>();
     private final InMemoryPolicies policies = new InMemoryPolicies();
     private final BusinessAdminConfigurationService service = new BusinessAdminConfigurationService(
-            new NoDefinitions(), policies, new NoLifecycle(), new DefaultReporting(), new AuditService(audits::add));
+            new TestCaseFields().settings(), policies, new NoLifecycle(), new DefaultReporting(), new AuditService(audits::add));
     private final Set<EntityType> types = EnumSet.of(EntityType.SSN);
 
     @Test
@@ -80,13 +79,6 @@ class SearchableRedactedPagesSettingTest {
         private TenantRedactionPolicy saved;
         public Optional<TenantRedactionPolicy> findByTenantId(TenantId tenantId) { return Optional.ofNullable(saved); }
         public void save(TenantRedactionPolicy policy) { saved = policy; }
-    }
-
-    private static final class NoDefinitions implements BusinessIdentifierDefinitionRepository {
-        public List<BusinessIdentifierDefinition> findActiveByTenantId(TenantId tenantId) { return List.of(); }
-        public List<BusinessIdentifierDefinition> findAllByTenantId(TenantId tenantId) { return List.of(); }
-        public void save(BusinessIdentifierDefinition definition) { }
-        public void saveAll(List<BusinessIdentifierDefinition> definitions) { }
     }
 
     private static final class NoLifecycle implements TenantLifecyclePolicyRepository {

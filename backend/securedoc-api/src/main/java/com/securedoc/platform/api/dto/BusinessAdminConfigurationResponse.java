@@ -11,7 +11,11 @@ public record BusinessAdminConfigurationResponse(
         LifecyclePolicyResponse lifecyclePolicy,
         DocumentIntelligenceResponse documentIntelligence,
         ReportingConfigurationResponse reportingConfiguration,
-        RedactionCatalogResponse redactionCatalog
+        RedactionCatalogResponse redactionCatalog,
+        /* Task 0061: fields switched off (never deleted); each can be switched on again. */
+        List<BusinessIdentifierAdminResponse> switchedOffIdentifiers,
+        /* Task 0061: a key service is set up, so a field can be sensitive. */
+        boolean sensitiveFieldsAvailable
 ) {
     public record BusinessIdentifierAdminResponse(
             UUID id,
@@ -23,15 +27,17 @@ public record BusinessAdminConfigurationResponse(
             boolean extractable,
             boolean displayable,
             int displayOrder,
-            String validationType,
-            Integer exactLength,
-            Integer minLength,
-            Integer maxLength,
-            String caseNormalization,
-            boolean stripSeparators,
-            Set<String> allowedValues,
-            String customPattern
-    ) {}
+            @com.fasterxml.jackson.annotation.JsonUnwrapped CaseFieldRules rules,
+            /* Task 0061: values exist, so type, sensitive, primary and several-values stay. */
+            boolean locked
+    ) {
+        public static BusinessIdentifierAdminResponse of(com.securedoc.platform.application.casefields.CaseFieldSettings.Field f) {
+            var spec = f.spec();
+            return new BusinessIdentifierAdminResponse(f.id(), f.key(), spec.label(), spec.required(), spec.primary(),
+                    spec.searchable(), f.extractable(), spec.displayable(), spec.displayOrder(), CaseFieldRules.of(spec),
+                    f.locked());
+        }
+    }
 
     public record DashboardAdminColumnResponse(
             String key,

@@ -294,14 +294,17 @@ public final class ExternalIntakeService {
             throw new ValidationException(LvErrorCode.INT_003, e.getMessage());
         }
         validateManifest(manifest);
-        String requestFingerprint = requestFingerprint(input, manifest);
+        // Task 0061: a sensitive value takes part only as its keyed fingerprint; after a key rotation also by the older key.
+        List<String> requestFingerprints = fieldsForDigest.apply(principal.tenantId(), input.businessIdentifiers()).stream()
+                .map(fields -> requestFingerprint(input, fields, manifest)).toList();
+        String requestFingerprint = requestFingerprints.getFirst();
         Optional<ExternalIntake> existing = externalIntakeRepository.findBySourceIdentity(principal.tenantId(), source.id(),
                 normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId"),
                 normalizeRequired(input.sourceRevision(), "sourceRevision"));
         int attemptNumber = 1;
         if (existing.isPresent()) {
             ExternalIntake latest = existing.get();
-            if (!latest.requestFingerprint().equals(requestFingerprint)) {
+            if (!requestFingerprints.contains(latest.requestFingerprint())) {
                 throw new IntakeConflictException("SOURCE_REVISION_REUSED",
                         "The source package/revision already exists with a different manifest or business payload; use a new revision for resubmission");
             }
@@ -672,6 +675,15 @@ public final class ExternalIntakeService {
                         : rejections.find(intake.tenantId(), intake.packageId()).map(r -> r.code().code()).orElse(null));
     }
 
+    private java.util.function.BiFunction<com.securedoc.platform.domain.identity.TenantId, Map<String, String>, List<Map<String, String>>>
+            fieldsForDigest = (tenant, fields) -> List.of(fields);
+
+    /** Task 0061: the case fields as they may take part in a plain digest. */
+    public ExternalIntakeService withCaseFields(com.securedoc.platform.application.casefields.CaseFieldService caseFields) {
+        this.fieldsForDigest = caseFields::forDigest;
+        return this;
+    }
+
     /** Task 0071: with the reasons of rejected cases. */
     public ExternalIntakeService withRejections(PackageRejectionRepository value) {
         this.rejections = Objects.requireNonNull(value);
@@ -684,11 +696,11 @@ public final class ExternalIntakeService {
                 intake.expectedCount(), intake.receivedCount(), intake.missingExternalSourceDocumentIds(), intake.expiresAt());
     }
 
-    private String requestFingerprint(PushIntakeCreateInput input, List<ExternalManifestDocument> manifest) {
+    private String requestFingerprint(PushIntakeCreateInput input, Map<String, String> fields, List<ExternalManifestDocument> manifest) {
         StringBuilder canonical = new StringBuilder();
         appendCanonical(canonical, "package", normalizeRequired(input.externalSourcePackageId(), "externalSourcePackageId"));
         appendCanonical(canonical, "revision", normalizeRequired(input.sourceRevision(), "sourceRevision"));
-        new TreeMap<>(input.businessIdentifiers()).forEach((k, v) ->
+        new TreeMap<>(fields).forEach((k, v) ->
                 appendCanonical(canonical, "business:" + k, v));
         new TreeMap<>(input.metadata()).forEach((k, v) ->
                 appendCanonical(canonical, "metadata:" + k, v));

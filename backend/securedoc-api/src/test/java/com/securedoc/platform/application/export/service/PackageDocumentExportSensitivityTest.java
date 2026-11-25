@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.export.service;
 
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -56,7 +57,7 @@ class PackageDocumentExportSensitivityTest {
                 TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Document store unavailable"));
 
         PackageDocumentExportService service = new PackageDocumentExportService(documents, packages,
-                mock(BusinessRecordRepository.class), artifacts, storage, delivery, submissions, lifecycle,
+                mock(CaseFieldService.class), artifacts, storage, delivery, submissions, lifecycle,
                 mock(AuditService.class));
 
         assertThrows(TechnicalDependencyException.class,
@@ -109,7 +110,7 @@ class PackageDocumentExportSensitivityTest {
         });
 
         PackageDocumentExportService service = new PackageDocumentExportService(documents, packages,
-                mock(BusinessRecordRepository.class), artifacts, mock(StoragePort.class), delivery, submissions, lifecycle, audit);
+                mock(CaseFieldService.class), artifacts, mock(StoragePort.class), delivery, submissions, lifecycle, audit);
         service.execute(ExportPackageDocumentsCommand.of(pkg.id(), tenant, CorrelationId.generate()));
 
         ArgumentCaptor<String> detail = ArgumentCaptor.forClass(String.class);

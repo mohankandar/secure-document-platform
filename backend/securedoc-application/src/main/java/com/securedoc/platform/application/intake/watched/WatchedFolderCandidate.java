@@ -14,6 +14,12 @@ public record WatchedFolderCandidate(
         /* Task 0073: the trigger file's, or null. */
         com.securedoc.platform.domain.pipeline.PipelinePriority priority
 ) {
+    /** Task 0061: case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "WatchedFolderCandidate[" + "fields=" + businessIdentifiers.size() + "]";
+    }
+
     public WatchedFolderCandidate(String sourceReference, boolean triggerPresent, boolean manifestValid,
                                   IntakeRejectionCode rejectionCode, Map<String,String> businessIdentifiers,
                                   Map<String,String> metadata, List<WatchedFolderDocument> documents) {

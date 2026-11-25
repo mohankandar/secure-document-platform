@@ -25,6 +25,12 @@ public record CreatePackageCommand(
         com.securedoc.platform.domain.pipeline.PipelinePriority priority,
         String sourceKey
 ) {
+    /** Task 0061: case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "CreatePackageCommand[" + packageType + ", fields=" + businessIdentifiers.size() + "]";
+    }
+
     public CreatePackageCommand {
         Objects.requireNonNull(packageType, "PackageType must not be null");
         Objects.requireNonNull(correlationId, "CorrelationId must not be null");

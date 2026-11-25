@@ -45,6 +45,13 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         this.zones = zones;
     }
 
+    private java.util.function.BiFunction<TenantId, String, List<UUID>> sensitiveSearch = (tenant, term) -> List.of();
+
+    @Autowired(required = false)
+    void useCaseFields(com.securedoc.platform.application.casefields.CaseFieldService caseFields) {
+        this.sensitiveSearch = caseFields::findSensitive;
+    }
+
     @Override
     public DashboardPage loadDashboard(TenantId tenantId, DashboardStage stage, String search,
                                        int offset, int limit, String sortField, boolean descending) {
@@ -52,11 +59,13 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         DashboardOverview overview = loadOverview(tenant, true);
         List<DashboardColumnDefinition> columns = loadColumns(tenant);
 
+        // Task 0061: records whose sensitive field holds exactly this (the dashboard is for the roles that see the values).
+        List<UUID> sensitive = search == null || search.isBlank() ? List.of() : sensitiveSearch.apply(tenantId, search);
         String where = " p.tenant_id = :tenant and p.dashboard_hidden_at is null " + stageClause(stage)
-                + (search == null || search.isBlank() ? "" : searchClause());
+                + (search == null || search.isBlank() ? "" : searchClause(sensitive));
 
         Query countQuery = entityManager.createNativeQuery("select count(*) from document_packages p where " + where);
-        bindCommon(countQuery, tenant, search);
+        bindCommon(countQuery, tenant, search, sensitive);
         long totalItems = number(countQuery.getSingleResult());
 
         String sql = """
@@ -72,7 +81,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 """.formatted(where, orderExpression(sortField), descending ? "desc" : "asc");
 
         Query query = entityManager.createNativeQuery(sql);
-        bindCommon(query, tenant, search);
+        bindCommon(query, tenant, search, sensitive);
         query.setFirstResult(offset);
         query.setMaxResults(limit);
 
@@ -447,10 +456,11 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     private List<OperationalReportSnapshot.DimensionBreakdown> dimensionBreakdowns(
             UUID tenant, Instant from, Instant to, String source, String outcome) {
         Query definitionQuery = entityManager.createNativeQuery("""
-                select rd.dimension_key, rd.dimension_label, bid.allowed_values, rd.display_order
+                select rd.dimension_key, rd.dimension_label, array_to_string(bid.options, chr(10)), rd.display_order
                   from reporting_dimension_definitions rd
-                  join business_identifier_definitions bid
-                    on bid.tenant_id=rd.tenant_id and bid.id=rd.definition_id
+                  join fld_field_definition bid
+                    on bid.entity_uuid=rd.tenant_id and bid.product_code='LEXAVAULT'
+                   and lower(bid.field_key)=lower(rd.dimension_key)
                  where rd.tenant_id=:tenant and rd.enabled_flag=true
                  order by rd.display_order, rd.dimension_label
                 """).setParameter("tenant", tenant);
@@ -466,15 +476,16 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                            case
                              when d.dimension_value is null
                                then cast(:unknownValue as varchar)
-                             when d.dimension_value = any(string_to_array(coalesce(bid.allowed_values,''), chr(10)))
+                             when d.dimension_value = any(coalesce(bid.options, cast(array[] as text[])))
                                then d.dimension_value
                              else cast(:legacyValue as varchar)
                            end as normalized_value,
                            f.received_at,
                            f.first_delivered_at
                       from reporting_dimension_definitions rd
-                      join business_identifier_definitions bid
-                        on bid.tenant_id=rd.tenant_id and bid.id=rd.definition_id
+                      join fld_field_definition bid
+                        on bid.entity_uuid=rd.tenant_id and bid.product_code='LEXAVAULT'
+                       and lower(bid.field_key)=lower(rd.dimension_key)
                       join reporting_package_facts f
                         on f.tenant_id=rd.tenant_id
                       left join reporting_package_dimensions d
@@ -650,9 +661,9 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         Map<String, ColumnPolicy> policies = loadColumnPolicies(tenant);
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entityManager.createNativeQuery("""
-                select identifier_key,label,primary_flag,searchable_flag,display_order
-                  from business_identifier_definitions
-                 where tenant_id=:tenant and active_flag=true and displayable_flag=true
+                select field_key,label,primary_flag,searchable,display_order
+                  from fld_field_definition
+                 where entity_uuid=:tenant and product_code='LEXAVAULT' and active and displayable
                  order by display_order asc, label asc
                 """).setParameter("tenant", tenant).getResultList();
         List<DashboardColumnDefinition> result = new ArrayList<>();
@@ -717,23 +728,25 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         if (ids.isEmpty()) return Map.of();
         StringBuilder sql = new StringBuilder("""
-                select bri.business_record_id, bid.identifier_key, bid.label, bri.identifier_value,
-                       bid.primary_flag, bid.display_order
-                  from business_record_identifiers bri
-                  join business_identifier_definitions bid on bid.id=bri.definition_id and bid.tenant_id=bri.tenant_id
-                 where bri.tenant_id=?1 and bid.active_flag=true and bid.displayable_flag=true
-                   and bri.business_record_id in (
+                select r.record_id, d.field_key, d.label, v.display_value, d.primary_flag, d.display_order, v.sensitive
+                  from fld_value v
+                  join fld_record r on r.record_uuid = v.record_uuid
+                  join fld_field_definition d on d.entity_uuid = v.entity_uuid and d.product_code = v.product_code
+                                             and lower(d.field_key) = lower(v.field_key)
+                 where v.entity_uuid=?1 and v.product_code='LEXAVAULT' and v.record_type='business-record'
+                   and d.active and d.displayable
+                   and r.record_id in (
                 """);
         int parameter = 1;
         for (int i = 0; i < ids.size(); i++) {
             if (i > 0) sql.append(',');
             sql.append('?').append(++parameter);
         }
-        sql.append(") order by bid.display_order asc, bid.label asc");
+        sql.append(") order by d.display_order asc, d.label asc, v.position asc");
         Query query = entityManager.createNativeQuery(sql.toString());
         query.setParameter(1, tenant);
         parameter = 1;
-        for (UUID id : ids) query.setParameter(++parameter, id);
+        for (UUID id : ids) query.setParameter(++parameter, id.toString());
         @SuppressWarnings("unchecked")
         List<Object[]> rows = query.getResultList();
         Set<String> allowedIdentifierKeys = columns.stream()
@@ -745,8 +758,18 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
             String identifierKey = string(row[1]);
             if (!allowedIdentifierKeys.contains(identifierKey)) continue;
             UUID businessRecordId = uuid(row[0]);
-            result.computeIfAbsent(businessRecordId, ignored -> new ArrayList<>()).add(
-                    new DashboardIdentifierValue(identifierKey, string(row[2]), string(row[3]), bool(row[4]), integer(row[5])));
+            // Task 0061: a sensitive value is never read here; a list shows that there is one.
+            String shown = bool(row[6]) ? com.securedoc.platform.application.casefields.CaseFieldSnapshot.HIDDEN
+                    : com.securedoc.platform.application.casefields.CaseFieldText.shown(string(row[3]));
+            List<DashboardIdentifierValue> values = result.computeIfAbsent(businessRecordId, ignored -> new ArrayList<>());
+            DashboardIdentifierValue last = values.isEmpty() ? null : values.getLast();
+            if (last != null && last.key().equals(identifierKey)) {
+                // A further value of a field that takes several.
+                if (!bool(row[6])) values.set(values.size() - 1, new DashboardIdentifierValue(identifierKey, last.label(),
+                        last.value() + "; " + shown, last.primary(), last.displayOrder()));
+            } else {
+                values.add(new DashboardIdentifierValue(identifierKey, string(row[2]), shown, bool(row[4]), integer(row[5])));
+            }
         }
         return result;
     }
@@ -763,24 +786,39 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         };
     }
 
-    private String searchClause() {
+    /** As each field's search mode says: exact, its beginning, or a part. A sensitive value only by its fingerprint. */
+    private String searchClause(List<UUID> sensitive) {
         return """
-                 and exists (
+                 and (exists (
                    select 1
-                     from business_record_identifiers bri
-                     join business_identifier_definitions bid
-                       on bid.id=bri.definition_id and bid.tenant_id=bri.tenant_id
-                    where bri.tenant_id=p.tenant_id
-                      and bri.business_record_id=p.business_record_id
-                      and bid.active_flag=true and bid.searchable_flag=true
-                      and lower(bri.identifier_value) like :search escape '!'
-                 )
-                """;
+                     from fld_value v
+                     join fld_record r on r.record_uuid = v.record_uuid
+                     join fld_field_definition d on d.entity_uuid = v.entity_uuid and d.product_code = v.product_code
+                                                and lower(d.field_key) = lower(v.field_key)
+                    where v.entity_uuid=p.tenant_id and v.product_code='LEXAVAULT' and v.record_type='business-record'
+                      and r.record_id=cast(p.business_record_id as text)
+                      and d.active and d.searchable and not v.sensitive
+                      and case d.search_mode
+                            when 'EXACT' then v.search_value = case when d.strip='SEPARATORS' then :stripped else :term end
+                            when 'PREFIX' then v.search_value like case when d.strip='SEPARATORS' then :strippedPrefix else :prefix end escape '!'
+                            else v.search_value like case when d.strip='SEPARATORS' then :strippedPart else :part end escape '!'
+                          end
+                 )%s)
+                """.formatted(sensitive.isEmpty() ? "" : " or p.business_record_id in (:sensitive)");
     }
 
-    private void bindCommon(Query query, UUID tenant, String search) {
+    private void bindCommon(Query query, UUID tenant, String search, List<UUID> sensitive) {
         query.setParameter("tenant", tenant);
-        if (search != null && !search.isBlank()) query.setParameter("search", likeContains(search));
+        if (search == null || search.isBlank()) return;
+        String term = search.trim().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
+        String stripped = term.replace("-", "").replace(" ", "");
+        query.setParameter("term", term);
+        query.setParameter("stripped", stripped);
+        query.setParameter("prefix", likeContains(term).substring(1));
+        query.setParameter("strippedPrefix", likeContains(stripped).substring(1));
+        query.setParameter("part", likeContains(term));
+        query.setParameter("strippedPart", likeContains(stripped));
+        if (!sensitive.isEmpty()) query.setParameter("sensitive", sensitive);
     }
 
     private static String likeContains(String value) {

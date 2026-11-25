@@ -208,9 +208,9 @@ export const scanBridgeClient = {
   getConfiguration: () => refreshConfigurationToken(),
   getScannerStatus: () => execute<ScannerStatus>('/scanner-status'),
   /** Task 0021: caseSensitivityLevel is the New case "Sensitivity" choice; the bridge carries it to LexaVault. */
-  startSession: (businessIdentifiers: Record<string, string>, caseSensitivityLevel?: string, casePriority?: string) => execute<ScanSession>('/scan-sessions', {
+  startSession: (businessIdentifiers: Record<string, string>, caseSensitivityLevel?: string, casePriority?: string, sensitiveFields?: string[]) => execute<ScanSession>('/scan-sessions', {
     method: 'POST',
-    body: JSON.stringify({ businessIdentifiers, caseSensitivityLevel, casePriority }),
+    body: JSON.stringify({ businessIdentifiers, caseSensitivityLevel, casePriority, ...(sensitiveFields?.length ? { sensitiveFields } : {}) }),
   }),
   getCurrentSession: () => execute<ScanSession | undefined>('/scan-sessions/current'),
   getSession: (sessionId: string) => execute<ScanSession>(`/scan-sessions/${encodeURIComponent(sessionId)}`),

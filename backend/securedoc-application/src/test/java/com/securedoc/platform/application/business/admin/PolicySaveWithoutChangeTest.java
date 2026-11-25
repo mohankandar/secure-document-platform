@@ -1,13 +1,12 @@
 package com.securedoc.platform.application.business.admin;
 
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
+import com.securedoc.platform.application.casefields.TestCaseFields;
 import com.securedoc.platform.application.port.out.ReportingConfigurationRepository;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditRecord;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.business.ReviewMode;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.finding.EntityType;
@@ -32,7 +31,7 @@ class PolicySaveWithoutChangeTest {
     private final InMemoryPolicies policies = new InMemoryPolicies();
     private final InMemoryLifecycle lifecycle = new InMemoryLifecycle();
     private final BusinessAdminConfigurationService service = new BusinessAdminConfigurationService(
-            new NoDefinitions(), policies, lifecycle, new DefaultReporting(), new AuditService(audits::add));
+            new TestCaseFields().settings(), policies, lifecycle, new DefaultReporting(), new AuditService(audits::add));
 
     @Test
     void sensitiveDataPolicySavedTwiceWithTheSameValuesIsAuditedOnce() {
@@ -120,13 +119,6 @@ class PolicySaveWithoutChangeTest {
         private int saves;
         public Optional<TenantLifecyclePolicy> findByTenantId(TenantId tenantId) { return Optional.ofNullable(saved); }
         public void save(TenantLifecyclePolicy policy) { saved = policy; saves++; }
-    }
-
-    private static final class NoDefinitions implements BusinessIdentifierDefinitionRepository {
-        public List<BusinessIdentifierDefinition> findActiveByTenantId(TenantId tenantId) { return List.of(); }
-        public List<BusinessIdentifierDefinition> findAllByTenantId(TenantId tenantId) { return List.of(); }
-        public void save(BusinessIdentifierDefinition definition) { }
-        public void saveAll(List<BusinessIdentifierDefinition> definitions) { }
     }
 
     private static final class DefaultReporting implements ReportingConfigurationRepository {

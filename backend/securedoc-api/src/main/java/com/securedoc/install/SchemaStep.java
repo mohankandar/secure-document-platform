@@ -1,5 +1,6 @@
 package com.securedoc.install;
 
+import com.documentplatform.fields.jdbc.FieldSchema;
 import liquibase.integration.spring.SpringLiquibase;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.output.MigrateResult;
@@ -30,13 +31,16 @@ import java.util.regex.Pattern;
  *   <li>platform-notifications (task 0059): Flyway run {@code classpath:db/platform/notifications}, history table
  *       {@code notif_schema_history};</li>
  *   <li>platform-erase-log (task 0060): Flyway run {@code classpath:db/platform/erase-log}, history table
- *       {@code erl_schema_history}.</li>
+ *       {@code erl_schema_history};</li>
+ *   <li>platform-fields (task 0061): Flyway run {@code classpath:db/platform/fields}, history table
+ *       {@code fld_schema_history}. It runs first: {@link CaseFieldCarryOver} then moves the case fields of a database from
+ *       before it, and the app's own tables that held them are dropped by the changelog.</li>
  * </ol>
  *
  * Usage (database settings in the environment only: {@code LEXAVAULT_SCHEMA_DB_URL}, {@code _USER}, {@code _PASSWORD}):
  * <pre>
- * schema-step apply [--runtime-user NAME]   run the five steps; with --runtime-user, give that user exactly the rights
- *                                           platform-core lists on the idn_, lic_, notif_ and erl_ tables, taking away any other
+ * schema-step apply [--runtime-user NAME]   run the six steps; with --runtime-user, give that user exactly the rights
+ *                                           platform-core lists on the idn_, lic_, notif_, erl_ and fld_ tables, taking away any other
  *                                           right it has on them
  * schema-step status                        print each step's version
  * schema-step customer-installed            exit 0 when setup has stored a customer, 4 when not (for the local start)
@@ -60,7 +64,11 @@ public final class SchemaStep {
             new PlatformRun("notifications", "classpath:db/platform/notifications", "notif_schema_history",
                     "notif_schema_version", "notif_"),
             // Task 0060: where the database stands in the erase log (the log itself is kept outside it).
-            new PlatformRun("erase log", "classpath:db/platform/erase-log", "erl_schema_history", "erl_schema_version", "erl_"));
+            new PlatformRun("erase log", "classpath:db/platform/erase-log", "erl_schema_history", "erl_schema_version", "erl_"),
+            new PlatformRun("case fields", FieldSchema.LOCATION, FieldSchema.HISTORY_TABLE, FieldSchema.VERSION_TABLE, "fld_"));
+
+    /** Task 0061: before the changelog, which drops the tables this one replaces. */
+    static final PlatformRun FIELDS_RUN = PLATFORM_RUNS.getLast();
 
     private static final String DML = "select, insert, update, delete";
 
@@ -77,6 +85,7 @@ public final class SchemaStep {
             Map.entry("lic_schema_version", "select"),
             Map.entry("notif_schema_version", "select"),
             Map.entry("erl_schema_version", "select"),
+            Map.entry("fld_schema_version", "select"),
             Map.entry("erl_position", "select, insert, update"),
             Map.entry("lic_version_floor", "select"),
             Map.entry("lic_last_seen", "select, insert, update"),
@@ -123,24 +132,30 @@ public final class SchemaStep {
     }
 
     private int apply(InstallDb db, String runtimeUser) {
-        out.println("Schema step: app tables (Liquibase), then the platform runs (Flyway). Nothing runs at startup.");
+        out.println("Schema step: app tables (Liquibase) and the platform runs (Flyway). Nothing runs at startup.");
+        migrate(db, FIELDS_RUN);
+        new CaseFieldCarryOver(db, out).run();
         liquibaseUpdate(db);
         out.println("  app tables       up to date (" + CHANGELOG + ", history databasechangelog)");
         for (PlatformRun run : PLATFORM_RUNS) {
-            MigrateResult result;
-            try {
-                result = flyway(db, run).migrate();
-            } catch (RuntimeException e) {
-                throw new InstallException(1, "SCHEMA_STEP_FAILED", run.name() + " (" + run.location() + "): "
-                        + e.getClass().getSimpleName());
-            }
-            out.println("  " + pad(run.name()) + " " + result.migrationsExecuted + " migration(s) run, at version "
-                    + (result.targetSchemaVersion == null ? result.initialSchemaVersion : result.targetSchemaVersion)
-                    + " (history " + run.historyTable() + ")");
+            if (run != FIELDS_RUN) migrate(db, run);
         }
         if (runtimeUser != null) grantRuntimeUser(db, runtimeUser);
         out.println("Schema step done.");
         return 0;
+    }
+
+    private void migrate(InstallDb db, PlatformRun run) {
+        MigrateResult result;
+        try {
+            result = flyway(db, run).migrate();
+        } catch (RuntimeException e) {
+            throw new InstallException(1, "SCHEMA_STEP_FAILED", run.name() + " (" + run.location() + "): "
+                    + e.getClass().getSimpleName());
+        }
+        out.println("  " + pad(run.name()) + " " + result.migrationsExecuted + " migration(s) run, at version "
+                + (result.targetSchemaVersion == null ? result.initialSchemaVersion : result.targetSchemaVersion)
+                + " (history " + run.historyTable() + ")");
     }
 
     private int status(InstallDb db) {

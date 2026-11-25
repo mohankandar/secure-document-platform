@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Task 0061: case fields are platform-core's (the fld_ tables, the schema step's own Flyway run, made before this).
+         document_packages.business_record_id stays: it now holds the record id of fld_record. Its foreign key goes, because
+         a record's values are erased when no case needs them any more while the case rows stay. -->
+    <changeSet id="066-01-cases-point-to-field-records" author="lexavault" dbms="postgresql">
+        <dropForeignKeyConstraint baseTableName="document_packages" constraintName="fk_document_package_business_record"/>
+        <rollback>
+            <sql>
+                ALTER TABLE document_packages ADD CONSTRAINT fk_document_package_business_record
+                    FOREIGN KEY (business_record_id) REFERENCES business_records (id) NOT VALID
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <!-- Report breakdowns read the field by its key (its stable name) and its value from the fld_ tables. A sensitive value
+         is never readable there and is never copied. -->
+    <changeSet id="066-02-report-breakdowns-read-fields" author="lexavault" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            create or replace function reporting_capture_package_dimensions(
+                p_tenant uuid, p_package uuid, p_business_record uuid
+            ) returns void language plpgsql as $$
+            begin
+                if p_business_record is null or not exists (
+                        select 1 from reporting_dimension_definitions where tenant_id=p_tenant and enabled_flag=true) then
+                    return;
+                end if;
+                insert into reporting_package_dimensions (
+                    tenant_id, package_id, dimension_key, dimension_label, dimension_value, captured_at
+                )
+                select p_tenant, p_package, rd.dimension_key, rd.dimension_label, v.display_value, now()
+                  from reporting_dimension_definitions rd
+                  join fld_record r
+                    on r.entity_uuid=rd.tenant_id and r.product_code='LEXAVAULT' and r.record_type='business-record'
+                   and r.record_id=p_business_record::text
+                  join fld_value v
+                    on v.record_uuid=r.record_uuid and lower(v.field_key)=lower(rd.dimension_key)
+                   and v.position=0 and not v.sensitive
+                 where rd.tenant_id=p_tenant and rd.enabled_flag=true
+                on conflict (tenant_id, package_id, dimension_key) do update set
+                    dimension_label=excluded.dimension_label,
+                    dimension_value=excluded.dimension_value;
+            end $$;
+
+            create or replace function reporting_backfill_tenant_dimensions(p_tenant uuid)
+            returns integer language plpgsql as $$
+            declare affected integer;
+            begin
+                insert into reporting_package_dimensions (
+                    tenant_id, package_id, dimension_key, dimension_label, dimension_value, captured_at
+                )
+                select f.tenant_id, f.package_id, rd.dimension_key, rd.dimension_label, v.display_value, now()
+                  from reporting_package_facts f
+                  join reporting_dimension_definitions rd
+                    on rd.tenant_id=f.tenant_id and rd.enabled_flag=true
+                  join fld_record r
+                    on r.entity_uuid=f.tenant_id and r.product_code='LEXAVAULT' and r.record_type='business-record'
+                   and r.record_id=f.business_record_id::text
+                  join fld_value v
+                    on v.record_uuid=r.record_uuid and lower(v.field_key)=lower(rd.dimension_key)
+                   and v.position=0 and not v.sensitive
+                 where f.tenant_id=p_tenant and f.business_record_id is not null
+                on conflict (tenant_id, package_id, dimension_key) do update set
+                    dimension_label=excluded.dimension_label,
+                    dimension_value=excluded.dimension_value;
+                get diagnostics affected = row_count;
+                return affected;
+            end $$;
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                create or replace function reporting_capture_package_dimensions(
+                    p_tenant uuid, p_package uuid, p_business_record uuid
+                ) returns void language plpgsql as $$
+                begin
+                    if p_business_record is null then
+                        return;
+                    end if;
+                    insert into reporting_package_dimensions (
+                        tenant_id, package_id, dimension_key, dimension_label, dimension_value, captured_at
+                    )
+                    select p_tenant, p_package, rd.dimension_key, rd.dimension_label,
+                           bri.identifier_value, now()
+                      from reporting_dimension_definitions rd
+                      join business_record_identifiers bri
+                        on bri.tenant_id=rd.tenant_id and bri.definition_id=rd.definition_id
+                     where rd.tenant_id=p_tenant and rd.enabled_flag=true
+                       and bri.business_record_id=p_business_record
+                    on conflict (tenant_id, package_id, dimension_key) do update set
+                        dimension_label=excluded.dimension_label,
+                        dimension_value=excluded.dimension_value;
+                end $$;
+
+                create or replace function reporting_backfill_tenant_dimensions(p_tenant uuid)
+                returns integer language plpgsql as $$
+                declare affected integer;
+                begin
+                    insert into reporting_package_dimensions (
+                        tenant_id, package_id, dimension_key, dimension_label, dimension_value, captured_at
+                    )
+                    select f.tenant_id, f.package_id, rd.dimension_key, rd.dimension_label,
+                           bri.identifier_value, now()
+                      from reporting_package_facts f
+                      join reporting_dimension_definitions rd
+                        on rd.tenant_id=f.tenant_id and rd.enabled_flag=true
+                      join business_record_identifiers bri
+                        on bri.tenant_id=f.tenant_id and bri.business_record_id=f.business_record_id
+                       and bri.definition_id=rd.definition_id
+                     where f.tenant_id=p_tenant and f.business_record_id is not null
+                    on conflict (tenant_id, package_id, dimension_key) do update set
+                        dimension_label=excluded.dimension_label,
+                        dimension_value=excluded.dimension_value;
+                    get diagnostics affected = row_count;
+                    return affected;
+                end $$;
+            ]]></sql>
+        </rollback>
+    </changeSet>
+
+    <!-- LexaVault's own field model is gone. The schema step moves what it held to the fld_ tables before this runs
+         (install/CaseFieldCarryOver); the rollback makes the tables again, empty. -->
+    <changeSet id="066-03-drop-own-field-model" author="lexavault" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            DROP TABLE business_record_identifiers;
+            DROP TABLE business_records;
+            DROP TABLE business_identifier_definitions;
+            DROP FUNCTION IF EXISTS enforce_primary_business_identifier_unique();
+            DROP FUNCTION IF EXISTS validate_primary_business_identifier_definition();
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+                CREATE TABLE business_identifier_definitions (
+                    id UUID NOT NULL CONSTRAINT business_identifier_definitions_pkey PRIMARY KEY,
+                    tenant_id UUID NOT NULL CONSTRAINT fk_business_identifier_definition_tenant REFERENCES tenants (id),
+                    identifier_key VARCHAR(64) NOT NULL,
+                    label VARCHAR(128) NOT NULL,
+                    required_flag BOOLEAN DEFAULT FALSE NOT NULL,
+                    primary_flag BOOLEAN DEFAULT FALSE NOT NULL,
+                    searchable_flag BOOLEAN DEFAULT TRUE NOT NULL,
+                    extractable_flag BOOLEAN DEFAULT FALSE NOT NULL,
+                    displayable_flag BOOLEAN DEFAULT TRUE NOT NULL,
+                    display_order INT DEFAULT 0 NOT NULL,
+                    active_flag BOOLEAN DEFAULT TRUE NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    validation_type VARCHAR(32) DEFAULT 'TEXT' NOT NULL,
+                    exact_length INT,
+                    min_length INT,
+                    max_length INT,
+                    case_normalization VARCHAR(16) DEFAULT 'UPPER' NOT NULL,
+                    strip_separators_flag BOOLEAN DEFAULT FALSE NOT NULL,
+                    allowed_values TEXT,
+                    custom_pattern VARCHAR(512),
+                    CONSTRAINT uq_business_identifier_definition_key UNIQUE (tenant_id, identifier_key)
+                );
+                CREATE INDEX idx_business_identifier_definitions_tenant_order
+                    ON business_identifier_definitions (tenant_id, display_order);
+                CREATE UNIQUE INDEX uq_business_identifier_one_active_primary
+                    ON business_identifier_definitions (tenant_id) WHERE primary_flag = TRUE AND active_flag = TRUE;
+                CREATE TABLE business_records (
+                    id UUID NOT NULL CONSTRAINT business_records_pkey PRIMARY KEY,
+                    tenant_id UUID NOT NULL CONSTRAINT fk_business_records_tenant REFERENCES tenants (id),
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    version BIGINT DEFAULT 0 NOT NULL
+                );
+                CREATE INDEX idx_business_records_tenant ON business_records (tenant_id);
+                CREATE TABLE business_record_identifiers (
+                    id UUID NOT NULL CONSTRAINT business_record_identifiers_pkey PRIMARY KEY,
+                    tenant_id UUID NOT NULL CONSTRAINT fk_business_record_identifier_tenant REFERENCES tenants (id),
+                    business_record_id UUID NOT NULL CONSTRAINT fk_business_record_identifier_record
+                        REFERENCES business_records (id),
+                    definition_id UUID NOT NULL CONSTRAINT fk_business_record_identifier_definition
+                        REFERENCES business_identifier_definitions (id),
+                    identifier_value VARCHAR(512) NOT NULL,
+                    normalized_value VARCHAR(512) NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                    CONSTRAINT uq_business_record_definition UNIQUE (business_record_id, definition_id)
+                );
+                CREATE INDEX idx_business_record_identifiers_record ON business_record_identifiers (business_record_id);
+                CREATE INDEX idx_business_record_identifiers_tenant_record
+                    ON business_record_identifiers (tenant_id, business_record_id);
+                CREATE INDEX idx_business_identifier_lookup
+                    ON business_record_identifiers (tenant_id, definition_id, normalized_value);
+
+                CREATE OR REPLACE FUNCTION enforce_primary_business_identifier_unique()
+                RETURNS trigger AS $$
+                DECLARE
+                    is_active_primary BOOLEAN;
+                BEGIN
+                    SELECT EXISTS (
+                        SELECT 1 FROM business_identifier_definitions d
+                         WHERE d.id = NEW.definition_id AND d.tenant_id = NEW.tenant_id
+                           AND d.primary_flag = TRUE AND d.active_flag = TRUE
+                    ) INTO is_active_primary;
+                    IF is_active_primary THEN
+                        PERFORM pg_advisory_xact_lock(hashtext(NEW.tenant_id::text || ':' || NEW.definition_id::text),
+                            hashtext(NEW.normalized_value));
+                        IF EXISTS (
+                            SELECT 1 FROM business_record_identifiers bri
+                             WHERE bri.tenant_id = NEW.tenant_id AND bri.definition_id = NEW.definition_id
+                               AND bri.normalized_value = NEW.normalized_value AND bri.id <> NEW.id
+                        ) THEN
+                            RAISE EXCEPTION 'Duplicate primary business identifier value for tenant'
+                                USING ERRCODE = '23505', CONSTRAINT = 'uq_business_primary_identifier_value';
+                        END IF;
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+                CREATE TRIGGER trg_business_identifier_primary_unique
+                    BEFORE INSERT OR UPDATE OF tenant_id, definition_id, normalized_value ON business_record_identifiers
+                    FOR EACH ROW EXECUTE FUNCTION enforce_primary_business_identifier_unique();
+
+                CREATE OR REPLACE FUNCTION validate_primary_business_identifier_definition()
+                RETURNS trigger AS $$
+                BEGIN
+                    IF NEW.primary_flag = TRUE AND NEW.active_flag = TRUE AND EXISTS (
+                        SELECT 1 FROM business_record_identifiers bri
+                         WHERE bri.tenant_id = NEW.tenant_id AND bri.definition_id = NEW.id
+                         GROUP BY bri.normalized_value HAVING COUNT(*) > 1
+                    ) THEN
+                        RAISE EXCEPTION 'Identifier definition cannot become Primary because existing values are not unique'
+                            USING ERRCODE = '23505', CONSTRAINT = 'uq_business_primary_identifier_value';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+                CREATE TRIGGER trg_business_identifier_definition_primary_unique
+                    BEFORE INSERT OR UPDATE OF primary_flag, active_flag ON business_identifier_definitions
+                    FOR EACH ROW EXECUTE FUNCTION validate_primary_business_identifier_definition();
+            ]]></sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,12 +1,13 @@
 package com.securedoc.platform.application.operations.service;
 
+import com.documentplatform.fields.FieldKey;
+import com.documentplatform.fields.FieldSpec;
+import com.documentplatform.fields.FieldType;
+import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.casefields.TestCaseFields;
 import com.securedoc.platform.application.operations.model.DashboardColumnSetting;
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.DashboardColumnSettingsRepository;
 import com.securedoc.platform.application.service.AuditService;
-import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
-import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -24,22 +25,21 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class DashboardColumnKeysTest {
     private final TenantId tenant = TenantId.generate();
-    private final Definitions definitions = new Definitions();
+    private final TestCaseFields definitions = new TestCaseFields();
     private final Settings settings = new Settings();
     private final DashboardColumnConfigurationService service =
-            new DashboardColumnConfigurationService(definitions, settings, new AuditService(r -> { }));
+            new DashboardColumnConfigurationService(definitions.settings(), settings, new AuditService(r -> { }));
 
     @Test
     void aSavedChoiceSurvivesARenameOfItsIdentifier() {
-        definitions.values.add(identifier("loan_number", "Loan number", true, 1));
-        definitions.values.add(identifier("borrower_ref", "Borrower ref", false, 2));
+        definitions.add(tenant, identifier("loan_number", "Loan number", true, 1));
+        definitions.add(tenant, identifier("borrower_ref", "Borrower ref", false, 2));
         List<DashboardColumnSetting> choice = reversedWithBorrowerHidden();
         service.updateConfiguration(tenant, ActorId.generate(), CorrelationId.generate(), choice);
         List<String> before = keys();
 
         // The Business Admin renames the identifier (its key cannot change).
-        definitions.values.set(1, definitions.values.get(1).reconfigure("Customer reference", false, false, true, false,
-                true, 2));
+        definitions.definitions.relabel(CaseFieldService.scope(tenant), FieldKey.of("borrower_ref"), "Customer reference", "test");
         assertEquals(before, keys(), "same order after the rename");
         var renamed = service.getConfiguration(tenant).stream().filter(c -> c.key().equals("identifier:borrower_ref"))
                 .findFirst().orElseThrow();
@@ -49,12 +49,12 @@ class DashboardColumnKeysTest {
 
     @Test
     void aColumnAddedAfterTheSaveGoesAfterTheSavedOnesNotIntoTheirPlaces() {
-        definitions.values.add(identifier("loan_number", "Loan number", true, 1));
-        definitions.values.add(identifier("borrower_ref", "Borrower ref", false, 2));
+        definitions.add(tenant, identifier("loan_number", "Loan number", true, 1));
+        definitions.add(tenant, identifier("borrower_ref", "Borrower ref", false, 2));
         service.updateConfiguration(tenant, ActorId.generate(), CorrelationId.generate(), reversedWithBorrowerHidden());
         List<String> saved = keys();
 
-        definitions.values.add(identifier("aaa_first_by_name", "AAA first by name", false, 0));
+        definitions.add(tenant, identifier("aaa_first_by_name", "AAA first by name", false, 0));
         List<String> after = keys();
         assertEquals(saved, after.subList(0, saved.size()), "the saved order is kept as it was");
         assertEquals("identifier:aaa_first_by_name", after.get(after.size() - 1));
@@ -77,18 +77,9 @@ class DashboardColumnKeysTest {
                 .toList();
     }
 
-    private BusinessIdentifierDefinition identifier(String key, String label, boolean primary, int order) {
-        return BusinessIdentifierDefinition.create(tenant, key, label, primary, primary, true, false, true, order,
-                BusinessIdentifierValidationType.ALPHANUMERIC, null, null, null,
-                BusinessIdentifierCaseNormalization.PRESERVE, false, Set.of(), null);
-    }
-
-    private static final class Definitions implements BusinessIdentifierDefinitionRepository {
-        final List<BusinessIdentifierDefinition> values = new ArrayList<>();
-        public List<BusinessIdentifierDefinition> findActiveByTenantId(TenantId tenantId) { return List.copyOf(values); }
-        public List<BusinessIdentifierDefinition> findAllByTenantId(TenantId tenantId) { return List.copyOf(values); }
-        public void save(BusinessIdentifierDefinition definition) { values.add(definition); }
-        public void saveAll(List<BusinessIdentifierDefinition> definitions) { values.clear(); values.addAll(definitions); }
+    private FieldSpec.Builder identifier(String key, String label, boolean primary, int order) {
+        return FieldSpec.builder(key, label, FieldType.TEXT).required(primary).primary(primary).searchable(true)
+                .displayable(true).displayOrder(order).pattern("[A-Za-z0-9]+");
     }
 
     private static final class Settings implements DashboardColumnSettingsRepository {

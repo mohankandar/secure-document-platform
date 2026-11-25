@@ -1,6 +1,6 @@
 package com.securedoc.platform.application.service;
 
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.command.CreatePackageCommand;
 import com.securedoc.platform.application.intake.command.SubmitPackageCommand;
@@ -65,7 +65,7 @@ class IntakeStoppedByLicenceTest {
 
     @Test
     void noCaseIsMade() {
-        BusinessIdentityService identity = mock(BusinessIdentityService.class);
+        CaseFieldService identity = mock(CaseFieldService.class);
         CreatePackageService service = new CreatePackageService(mock(TenantContextService.class),
                 mock(CapabilityEnforcementService.class), identity, stopped, packages, events, mock(AuditService.class));
         for (PackageType entry : PackageType.values()) {

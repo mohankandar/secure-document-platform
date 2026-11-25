@@ -16,6 +16,8 @@ class ProductAuthorizationPolicyTest {
         assertEquals(EnumSet.of(
                 UserCapability.DASHBOARD_ACCESS,
                 UserCapability.DOCUMENT_INTAKE,
+                // Task 0061: the people who work on the documents see the sensitive case fields.
+                UserCapability.CASE_FIELD_SENSITIVE_VIEW,
                 UserCapability.MANUAL_REVIEW,
                 UserCapability.FINDING_DECISION,
                 UserCapability.REDACTION_ADJUST,

@@ -320,8 +320,8 @@ test('Safari: on New case, "choose files" opens the file picker and the picked P
   await signIn(page);
   // Registered after signIn so it takes precedence over the catch-all API mock.
   await page.route('**/api/v1/intake/identifier-definitions', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
-    { key: 'loan_number', label: 'Loan number', required: true, primary: true, searchable: true, extractable: false, displayable: true, displayOrder: 1, validationType: 'ALPHANUMERIC', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: [] },
-    { key: 'property_state', label: 'Property state', required: false, primary: false, searchable: false, extractable: false, displayable: true, displayOrder: 2, validationType: 'ALLOW_LIST', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: ['FL', 'GA', 'TX'] },
+    { key: 'loan_number', label: 'Loan number', required: true, primary: true, searchable: true, extractable: false, displayable: true, displayOrder: 1, validationType: 'TEXT', customPattern: '[A-Za-z0-9]+', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: [] },
+    { key: 'property_state', label: 'Property state', required: false, primary: false, searchable: false, extractable: false, displayable: true, displayOrder: 2, validationType: 'DROPDOWN', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: ['FL', 'GA', 'TX'] },
   ]) }));
   await page.getByRole('link', { name: 'New case' }).first().tap();
   await expect(page.getByRole('heading', { name: 'New case', level: 1 })).toBeVisible();

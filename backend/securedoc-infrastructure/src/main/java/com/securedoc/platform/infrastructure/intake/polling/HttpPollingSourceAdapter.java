@@ -175,6 +175,7 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
 
     private record DiscoveryEnvelope(List<SourcePackage> items) {}
     private record SourcePackage(String externalSourcePackageId, String sourceRevision, Boolean retry,
+                                 @tools.jackson.databind.annotation.JsonDeserialize(contentUsing = com.securedoc.platform.infrastructure.casefields.CaseFieldJson.class)
                                  Map<String,String> businessIdentifiers, Map<String,String> metadata, List<SourceDocument> documents,
                                  tools.jackson.databind.JsonNode caseSensitivityLevel,
                                  tools.jackson.databind.JsonNode priority) {}

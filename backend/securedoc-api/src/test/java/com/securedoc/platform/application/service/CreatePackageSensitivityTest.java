@@ -1,7 +1,7 @@
 package com.securedoc.platform.application.service;
 
-import com.securedoc.platform.application.business.model.BusinessIdentitySnapshot;
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
+import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.casefields.CaseFieldSnapshot;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.command.CreatePackageCommand;
 import com.securedoc.platform.application.licensing.IntakeLicence;
@@ -29,9 +29,9 @@ class CreatePackageSensitivityTest {
 
     private Run create(SensitivityLevel.Received received) {
         PackageRepository packages = mock(PackageRepository.class);
-        BusinessIdentityService identity = mock(BusinessIdentityService.class);
+        CaseFieldService identity = mock(CaseFieldService.class);
         when(identity.resolveOrCreate(any(), anyMap()))
-                .thenReturn(new BusinessIdentitySnapshot(BusinessRecordId.generate(), false, List.of()));
+                .thenReturn(new CaseFieldSnapshot(BusinessRecordId.generate(), false, List.of()));
         List<AuditRecord> audits = new ArrayList<>();
         CreatePackageService service = new CreatePackageService(mock(TenantContextService.class),
                 mock(CapabilityEnforcementService.class), identity, mock(IntakeLicence.class), packages,

@@ -568,7 +568,7 @@ function HoursField({ label, value, min, max, defaultHours, defaultText, onChang
 function eligibleDimensions(data: BusinessAdminConfiguration, rc: ReportingConfiguration) {
   const current = new Map(rc.dimensions.map((x) => [x.definitionId, x]));
   return data.identifiers
-    .filter((i) => i.allowedValues.length > 0 && i.allowedValues.length <= 100)
+    .filter((i) => i.allowedValues.length > 0 && i.allowedValues.length <= 100 && !i.sensitive && !i.multiValue)
     .map((i, n) => ({ definitionId: i.id, key: i.key, label: i.label, enabled: current.get(i.id)?.enabled ?? false, displayOrder: current.get(i.id)?.displayOrder ?? n }));
 }
 

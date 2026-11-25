@@ -28,6 +28,9 @@ public final class EraseRecord {
     /** A file no record points to. */
     public static final String UNRECORDED_FILE = "unrecorded-file";
 
+    /** Task 0061: the case field values of a business record; platform-core's own kind and handler. */
+    public static final String CASE_FIELDS = com.documentplatform.eraselog.fields.CaseFieldsEraseHandler.KIND;
+
     private EraseRecord() {
     }
 

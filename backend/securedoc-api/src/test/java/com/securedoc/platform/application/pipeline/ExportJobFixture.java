@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.pipeline;
 
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -7,7 +8,6 @@ import com.securedoc.platform.application.export.service.PackageDocumentExportSe
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
 import com.securedoc.platform.application.port.in.ProcessDerivedRoutingUseCase;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
-import com.securedoc.platform.application.port.out.BusinessRecordRepository;
 import com.securedoc.platform.application.port.out.CasePrimaryIdentifierLookup;
 import com.securedoc.platform.application.port.out.DeliveryPort;
 import com.securedoc.platform.application.port.out.DeliverySubmissionRepository;
@@ -165,7 +165,7 @@ final class ExportJobFixture {
         };
 
         export = new PackageDocumentExportService(documentRepository, packageRepository,
-                mock(BusinessRecordRepository.class), artifactRepository, storage, destination, submissionRepository,
+                mock(CaseFieldService.class), artifactRepository, storage, destination, submissionRepository,
                 lifecycle, audit);
         probe = (tenantId, connectionId) -> {
             synchronized (checked) {

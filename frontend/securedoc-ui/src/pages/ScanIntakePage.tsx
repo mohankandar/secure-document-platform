@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { scanBridgeClient, type ScanBridgeConfiguration, type ScanBridgeError, type ScanSession, type ScannerStatus } from '../api/scanBridgeClient';
+import CaseFieldInput from '../components/CaseFieldInput';
+import { canonicalValue, sensitiveKeys, validateValue } from '../studio/identity';
 import type { ApiError, IdentifierDefinition } from '../types';
 import './ScanIntakePage.css';
 import { lvCodeFor, lvLabel } from '../studio/lvCodes';
@@ -15,29 +17,11 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const canonicalIdentifierValue = (definition: IdentifierDefinition, raw: string) => {
-  let value = raw.trim().replace(/\s+/g, ' ');
-  if (definition.stripSeparators) value = value.replace(/[ -]/g, '');
-  if (definition.caseNormalization === 'UPPER') value = value.toUpperCase();
-  if (definition.caseNormalization === 'LOWER') value = value.toLowerCase();
-  return value;
-};
+const canonicalIdentifierValue = canonicalValue;
 
 const validateIdentifierValue = (definition: IdentifierDefinition, raw: string): string | null => {
-  if (!raw.trim()) return definition.required ? `${definition.label} is required.` : null;
-  const value = canonicalIdentifierValue(definition, raw);
-  if (definition.validationType === 'NUMERIC' && !/^[0-9]+$/.test(value)) return `${definition.label} must contain digits only.`;
-  if (definition.validationType === 'ALPHANUMERIC' && !/^[A-Za-z0-9]+$/.test(value)) return `${definition.label} must contain letters and digits only.`;
-  if (definition.validationType === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `${definition.label} must be a valid email address.`;
-  if (definition.validationType === 'UUID' && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)) return `${definition.label} must be a valid UUID.`;
-  if (definition.exactLength != null && value.length !== definition.exactLength) return `${definition.label} must contain exactly ${definition.exactLength} characters.`;
-  if (definition.minLength != null && value.length < definition.minLength) return `${definition.label} must contain at least ${definition.minLength} characters.`;
-  if (definition.maxLength != null && value.length > definition.maxLength) return `${definition.label} must contain no more than ${definition.maxLength} characters.`;
-  if (definition.allowedValues.length > 0) {
-    const allowed = definition.allowedValues.map((item) => canonicalIdentifierValue(definition, item));
-    if (!allowed.includes(value)) return `${definition.label} must be one of: ${definition.allowedValues.join(', ')}.`;
-  }
-  return null;
+  const problem = validateValue(definition, raw);
+  return problem === null ? null : problem === 'Required' ? `${definition.label} is required.` : `${definition.label}: ${problem}`;
 };
 
 const isBridgeUnavailableError = (error: ScanBridgeError) => error.source === 'scanBridge' && !error.errorCode;
@@ -203,7 +187,7 @@ export default function ScanIntakePage() {
       const businessIdentifiers = Object.fromEntries(definitions
         .map((definition) => [definition.key, canonicalIdentifierValue(definition, identifierValues[definition.key] || '')] as const)
         .filter(([, value]) => value.length > 0));
-      setSession(await scanBridgeClient.startSession(businessIdentifiers));
+      setSession(await scanBridgeClient.startSession(businessIdentifiers, undefined, undefined, sensitiveKeys(definitions)));
       setBridgeAvailable(true); setBridgeError(null);
     } catch (err) {
       const scanError = err as ScanBridgeError;
@@ -313,16 +297,9 @@ export default function ScanIntakePage() {
               {definitions.map((definition) => (
                 <div className="form-group" key={definition.key}>
                   <label htmlFor={`scan-id-${definition.key}`}>{definition.label}{definition.required ? ' *' : ''}</label>
-                  {definition.allowedValues.length > 0 ? (
-                    <select id={`scan-id-${definition.key}`} value={identifierValues[definition.key] || ''} disabled={!!session}
-                      onChange={(event) => setIdentifierValues((current) => ({ ...current, [definition.key]: event.target.value }))}>
-                      <option value="">Select…</option>
-                      {definition.allowedValues.map((value) => <option key={value} value={value}>{value}</option>)}
-                    </select>
-                  ) : (
-                    <input id={`scan-id-${definition.key}`} value={identifierValues[definition.key] || ''} disabled={!!session}
-                      onChange={(event) => setIdentifierValues((current) => ({ ...current, [definition.key]: event.target.value }))} />
-                  )}
+                  <CaseFieldInput id={`scan-id-${definition.key}`} definition={definition} value={identifierValues[definition.key] || ''} locked={!!session}
+                    invalid={!!identifierErrors[definition.key]}
+                    onChange={(next) => setIdentifierValues((current) => ({ ...current, [definition.key]: next }))} />
                   {identifierErrors[definition.key] && <span className="field-error">{identifierErrors[definition.key]}</span>}
                 </div>
               ))}

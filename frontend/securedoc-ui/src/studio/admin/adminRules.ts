@@ -106,16 +106,32 @@ export interface FieldRuleInput {
   caseNormalization: string;
   stripSeparators: boolean;
   allowedValues: string[];
+  customPattern?: string | null;
+  currency?: string | null;
+  sensitive?: boolean;
+  multiValue?: boolean;
 }
 
 const TYPE_WORDS: Record<string, string> = {
   TEXT: 'Text',
-  NUMERIC: 'Numbers only',
-  ALPHANUMERIC: 'Letters and numbers',
+  NUMBER: 'Whole number',
+  DECIMAL: 'Number with decimals',
+  MONEY: 'Amount',
+  DATE: 'Date',
+  DATE_TIME: 'Date and time',
   EMAIL: 'Email address',
   UUID: 'System ID',
+  ADDRESS: 'US address',
   CUSTOM_PATTERN: 'Must match a set pattern',
 };
+
+/** "Numbers only" and "Letters and numbers" are a type with a pattern (the same texts as identity.ts). */
+export function fieldKind(i: Pick<FieldRuleInput, 'validationType' | 'customPattern'>): string {
+  if (i.validationType === 'NUMBER' && i.customPattern === '[0-9]+') return 'DIGITS';
+  if (i.validationType === 'TEXT' && i.customPattern === '[A-Za-z0-9]+') return 'LETTERS_DIGITS';
+  return i.validationType;
+}
+const KIND_WORDS: Record<string, string> = { ...TYPE_WORDS, DIGITS: 'Numbers only', LETTERS_DIGITS: 'Letters and numbers' };
 
 const characters = (n: number) => `${n} character${n === 1 ? '' : 's'}`;
 
@@ -124,16 +140,17 @@ export function fieldRule(i: FieldRuleInput): string {
   const values = i.allowedValues.filter((v) => v.trim()).length;
   const valuesText = `one of ${values} allowed value${values === 1 ? '' : 's'}`;
   const out: string[] = [];
-  if (i.validationType === 'ALLOW_LIST') out.push(valuesText);
-  else out.push(TYPE_WORDS[i.validationType] ?? 'Text');
+  if (i.validationType === 'DROPDOWN') out.push(valuesText);
+  else out.push((KIND_WORDS[fieldKind(i)] ?? 'Text') + (i.validationType === 'MONEY' && i.currency ? ` in ${i.currency}` : ''));
   if (i.exactLength != null) out.push(`exactly ${characters(i.exactLength)}`);
   else if (i.minLength != null && i.maxLength != null) out.push(i.minLength === i.maxLength ? `exactly ${characters(i.minLength)}` : `${i.minLength}–${i.maxLength} characters`);
   else if (i.minLength != null) out.push(`at least ${characters(i.minLength)}`);
   else if (i.maxLength != null) out.push(`up to ${characters(i.maxLength)}`);
-  if (i.validationType !== 'ALLOW_LIST' && values > 0) out.push(valuesText);
+  if (i.multiValue) out.push('several values');
   if (i.caseNormalization === 'UPPER') out.push('saved in capitals');
   if (i.caseNormalization === 'LOWER') out.push('saved in lower case');
   if (i.stripSeparators) out.push('spaces and dashes removed');
+  if (i.sensitive) out.push('sensitive');
   const text = out.join(' · ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

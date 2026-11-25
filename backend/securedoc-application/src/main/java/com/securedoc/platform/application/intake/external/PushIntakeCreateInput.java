@@ -18,6 +18,12 @@ public record PushIntakeCreateInput(
         String caseSensitivityLevel,
         /* Task 0073: as sent, or null; anything but URGENT, NORMAL or LOW is refused. */
         String priority) {
+    /** Task 0061: case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "PushIntakeCreateInput[" + "fields=" + businessIdentifiers.size() + ", documents=" + documents.size() + "]";
+    }
+
     public PushIntakeCreateInput {
         // Task 0023 D1 (#32): a null value is the source's mistake (400), not a NullPointerException (500).
         requireNoNull(businessIdentifiers == null ? null : businessIdentifiers.values(),
