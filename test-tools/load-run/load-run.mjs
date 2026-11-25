@@ -2,7 +2,7 @@
  * Task 0067: a load run on one server. Many small documents (one page, every second one a picture that needs OCR) are
  * sent as cases of 10; the workers per stage, the learned AI limit and the memory are read while they are processed.
  *
- *   node test-tools/load-run/load-run.mjs [documents=400] [heap=4g] [memoryLimitMb=8192] [priority]
+ *   node test-tools/load-run/load-run.mjs [documents=400] [heap=4g] [memoryLimitMb=8192] [aiMs=120 | priority]
  *
  * With "priority" (task 0073): that many Normal cases of one document, and behind them 1 Urgent case and then 30 more.
  * Checks: the first Urgent case is exported before every Normal case that had not started; Normal cases still finish while
@@ -14,6 +14,9 @@
  *
  * Checks: every case is exported; Text reaches its highest and every stage comes back to its lowest; the memory of the
  * app and its OCR processes stays under the limit; the learned AI limit is never above the mock's 5 plus the one tried.
+ *
+ * Task 0078: once everything is sent, the queue's ETA is read too and compared with the real time until the last job
+ * ended. It must be within 20% a quarter and half of the way through the drain.
  */
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -29,7 +32,7 @@ const memoryLimitMb = Number(process.argv[4] ?? 8192);
 const priorityMode = process.argv[5] === 'priority';
 const PER_CASE = priorityMode ? 1 : 10;
 const MOCK_AT_ONCE = 5;
-const MOCK_MS = 120;
+const MOCK_MS = priorityMode ? 120 : Number(process.argv[5] ?? 120);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const jar = join(root, 'backend', 'securedoc-api', 'target', 'securedoc-api-0.1.0-SNAPSHOT.jar');
 const container = 'lexavault-0067-load-pg';
@@ -193,6 +196,7 @@ try {
 
   const most = {};
   const samples = [];
+  const etas = [];
   let highest = {};
   let aiMost = 0;
   let quiet = 0;
@@ -209,6 +213,10 @@ try {
     aiMost = Math.max(aiMost, ai);
     samples.push({ s: Math.round((Date.now() - begin) / 1000), queue: state.queueLength, ai, slowdown: state.intakeSlowdown,
       workers: Object.fromEntries(state.stages.map((s) => [s.stage, s.current])) });
+    if (sendingDone) {
+      const q = await api('GET', '/api/v1/platform-admin/queue').catch((e) => { errors.push(e.message); return null; });
+      if (q) etas.push({ at: Date.now(), eta: q.etaSeconds ?? null, left: q.stages.map((s) => `${s.stage} ${s.waiting + s.running}+${s.toCome} ${s.etaSeconds ?? '?'}`).join(', ') });
+    }
     if (samples.length % 15 === 0) console.log(JSON.stringify(samples.at(-1)), `sent ${sent}`, JSON.stringify(memoryMost));
     if (sendingDone && state.queueLength === 0 && state.stages.every((s) => s.busy === 0)) {
       exportedAt ??= Date.now();
@@ -223,7 +231,21 @@ try {
   const places = urgent.ids.map((id) => order.indexOf(id) + 1).sort((a, b) => a - b);
   const statuses = sql("select status || ' ' || count(*) from document_packages group by status").split('\n');
   const doubles = sql('select count(*) from (select 1 from pipeline_jobs where stage in (\'TEXT\', \'FIND\', \'REDACT\') group by document_id, stage, page_from having count(*) > 1) x');
+  // The database says when the last job ended; its clock and this machine's are the same clock.
+  const ended = Number(sql("select extract(epoch from max(updated_at)) from pipeline_jobs where status = 'DONE'")) * 1000;
+  const draining = etas.filter((e) => e.at < ended);
+  const drainStart = draining[0]?.at ?? ended;
+  const etaAt = (part) => {
+    const e = draining.find((x) => x.at >= drainStart + (ended - drainStart) * part);
+    if (!e || e.eta === null) return { part, ok: false, text: 'no ETA' };
+    const real = (ended - e.at) / 1000;
+    const off = (e.eta - real) / real;
+    return { part, ok: Math.abs(off) <= 0.2, text: `said ${e.eta} s, was ${Math.round(real)} s (${off >= 0 ? '+' : ''}${Math.round(off * 100)}%)` };
+  };
+  const etaRows = [0, 0.1, 0.25, 0.5, 0.75].map(etaAt);
+  for (const r of etaRows) console.log(`ETA at ${r.part * 100}% of the drain: ${r.text}`);
   const checks = [
+    ...(priorityMode ? [] : [['the ETA is within 20% at a quarter and at half of the drain', etaRows[2].ok && etaRows[3].ok, `${etaRows[2].text}; ${etaRows[3].text}`]]),
     ['no request failed', errors.length === 0, errors.slice(0, 3).join('; ') || 'none'],
     ['every case exported', statuses.length === 1 && statuses[0] === `COMPLETED ${cases + urgent.ids.length}`, statuses.join(', ')],
     ['no job twice', doubles === '0', doubles],
@@ -240,7 +262,7 @@ try {
   ];
   for (const [name, ok, detail] of checks) console.log(ok ? 'PASS' : 'FAIL', name, '-', detail);
   const summary = { documents, cases, seconds: Math.round(((exportedAt ?? Date.now()) - begin) / 1000), most, highest, aiMost, mockMost, memoryMost, checks };
-  writeFileSync(join(run, 'summary.json'), JSON.stringify({ ...summary, samples }, null, 1));
+  writeFileSync(join(run, 'summary.json'), JSON.stringify({ ...summary, samples, etas, etaRows, ended }, null, 1));
   console.log(JSON.stringify(summary));
   console.log('Run folder:', run);
   failed = checks.filter((c) => !c[1]).length;

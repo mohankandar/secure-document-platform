@@ -2,9 +2,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   SECTION_LABELS, aiServerText, capacityNote, maximumChanges, maximumError, stageName, USAGE_MODES, eventText, intervalText, latestChecks, neverText, serviceName, serviceProduct, serviceStatus, serviceStatusText, servicesTitle,
-  storageKind, storageReadiness, storageReason, storageStatus, storageUsedBy, storageValidated, usageMode, usageSummary,
+  storageKind, storageReadiness, storageReason, storageStatus, storageUsedBy, storageValidated, usageMode, usageSummary, durationText, isPipelineQueue, queueHeadline, queueHow, stageEta,
 } from './platformRules.ts';
 import type { ProcessingStorageNodeValidation, ProcessingStorageOverview } from '../../types';
+
+test('task 0078: the time left in words, never a time that is not known', () => {
+  assert.equal(durationText(20), 'under 1 min');
+  assert.equal(durationText(2400), '40 min');
+  assert.equal(durationText(7500), '2 h 5 min');
+  assert.equal(durationText(3600), '1 h');
+  assert.equal(durationText(90000), '1 day 1 h');
+  const stage = { stage: 'FIND', waiting: 3, running: 1, held: 0, toCome: 2, workers: 1, highest: 4, oldestWaitingSeconds: 5, perMinute: 3, etaSeconds: 120 };
+  assert.equal(stageEta(stage), 'About 2 min');
+  assert.equal(stageEta({ ...stage, etaSeconds: null }), 'Not known yet');
+  assert.equal(stageEta({ ...stage, waiting: 0, running: 0, toCome: 0, etaSeconds: 0 }), '—');
+  const queue = { staged: true, allEntities: false, windowMinutes: 10, etaSeconds: 120, stages: [stage] };
+  assert.equal(queueHeadline(queue), 'About 2 min at this pace.');
+  assert.match(queueHeadline({ ...queue, etaSeconds: null }), /not known yet/);
+  assert.equal(queueHeadline({ ...queue, stages: [] }), 'Nothing is waiting.');
+  assert.match(queueHeadline({ ...queue, staged: false }), /processed in steps/);
+  assert.match(queueHow(queue)[0], /last 10 minutes/);
+  assert.equal(isPipelineQueue({}), false);
+});
 
 test('section names are the vocabulary words', () => {
   assert.deepEqual(Object.values(SECTION_LABELS), ['Overview', 'Processing storage', 'Workers', 'Branding', 'Usage data']);

@@ -126,6 +126,7 @@ async function openPlatform(page: Page, role: 'TENANT_IT_ADMIN' | 'PLATFORM_OPER
     if (url.pathname === '/api/v1/platform/branding/deployment') return json(DEPLOYMENT_BRAND);
     if (url.pathname === '/api/v1/platform/product-telemetry/status') return json(TELEMETRY);
     if (url.pathname === '/api/v1/platform-admin/capacity') return json(CAPACITY);
+    if (url.pathname === '/api/v1/platform-admin/queue') return json(QUEUE);
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
   });
@@ -135,6 +136,13 @@ async function openPlatform(page: Page, role: 'TENANT_IT_ADMIN' | 'PLATFORM_OPER
   await page.getByRole('navigation', { name: 'Administration areas' }).getByRole('link', { name: /Platform operations/ }).click();
   await expect(page.getByRole('region', { name: '1 service needs attention' })).toBeVisible();
 }
+
+const QUEUE = { staged: true, allEntities: true, windowMinutes: 10, etaSeconds: 2400, stages: [
+  { stage: 'TEXT', waiting: 120, running: 4, held: 0, toCome: 0, workers: 4, highest: 6, oldestWaitingSeconds: 310, perMinute: 40, etaSeconds: 190 },
+  { stage: 'FIND', waiting: 84, running: 5, held: 0, toCome: 124, workers: 5, highest: 5, oldestWaitingSeconds: 540, perMinute: 5.3, etaSeconds: 2400 },
+  { stage: 'VISION', waiting: 0, running: 0, held: 0, toCome: 0, workers: 1, highest: 2, oldestWaitingSeconds: null, perMinute: null, etaSeconds: 0 },
+  { stage: 'REDACT', waiting: 2, running: 1, held: 0, toCome: 210, workers: 1, highest: 6, oldestWaitingSeconds: 4, perMinute: 30, etaSeconds: 2400 },
+  { stage: 'EXPORT', waiting: 0, running: 0, held: 3, toCome: 22, workers: 1, highest: 8, oldestWaitingSeconds: null, perMinute: 4, etaSeconds: 2400 }] };
 
 /** Text without Technical details and hidden options, where codes are allowed. */
 const mainText = (el: ReturnType<Page['getByRole']>) =>
@@ -217,6 +225,16 @@ test('Branding: one form with Apply to, preview of the top bar; Usage data in pl
   await expect(card.getByLabel('Product name')).toHaveAttribute('placeholder', "Everyone's look");
   await expect(card.getByRole('button', { name: 'Save' })).toHaveCount(1);
   await expect(page.getByText(/Deployment branding|Tenant overrides|sidebar/i)).toHaveCount(0);
+
+  // Task 0078: the queue of each step, its ETA and how it is worked out.
+  await sections.getByRole('button', { name: 'Overview' }).click();
+  const queue = page.getByRole('region', { name: 'Queue, every entity together' });
+  await expect(queue.getByText('About 40 min at this pace.')).toBeVisible();
+  await expect(queue.getByRole('row').filter({ hasText: 'Read the text' })).toContainText('About 3 min');
+  await expect(queue.getByRole('row').filter({ hasText: 'Look at pages' }).getByRole('cell').last()).toHaveText('—');
+  await queue.getByRole('button', { name: 'How is this worked out?' }).click();
+  await expect(queue.getByText(/last 10 minutes/)).toBeVisible();
+  if (process.env.PROOF_DIR) { await expect(page.getByText('Branding saved for everyone.')).toBeHidden({ timeout: 15_000 }); await queue.scrollIntoViewIfNeeded(); await queue.screenshot({ path: `${process.env.PROOF_DIR}/queue.png` }); }
 
   // Task 0067: the workers, the learned AI limit, and IT's own maximums; only what changed is sent.
   await sections.getByRole('button', { name: 'Workers' }).click();

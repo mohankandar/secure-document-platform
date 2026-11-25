@@ -36,6 +36,7 @@ import type {
   OperationalReports,
   DashboardStage,
   PlatformAdminOverview,
+  PipelineQueue,
   ProcessingCapacity,
   SourcePriorities,
   BulkSources,
@@ -412,6 +413,10 @@ class ApiClient {
 
   async runPlatformHealthCheck(): Promise<PlatformAdminOverview> {
     return this.request('/platform-admin/health-check', { method: 'POST' });
+  }
+
+  async getPipelineQueue(): Promise<PipelineQueue> {
+    return this.request('/platform-admin/queue');
   }
 
   async changeCasePriority(packageId: string, priority: string): Promise<{ priority: string }> {

@@ -5,6 +5,7 @@
  * names and node names stay under Technical details.
  */
 import type {
+  PipelineQueue,
   ProcessingCapacity,
   PlatformHealthItem,
   ProcessingStorageNodeValidation,
@@ -38,6 +39,41 @@ export function capacityNote(c: Pick<ProcessingCapacity, 'intakeStopped' | 'inta
   if (c.intakeSlowdown > 1) return { tone: 'neutral', text: 'Many documents are waiting, so the watched folder and polling are checked less often. The files wait where they are.' };
   return null;
 }
+
+/* ---------- The queue and its ETA (task 0078) ---------- */
+
+export const isPipelineQueue = (v: unknown): v is PipelineQueue =>
+  typeof v === 'object' && v !== null && typeof (v as PipelineQueue).staged === 'boolean' && Array.isArray((v as PipelineQueue).stages);
+
+/** "under 1 min", "40 min", "2 h 5 min", "3 days 4 h". */
+export function durationText(seconds: number): string {
+  const min = Math.round(seconds / 60);
+  if (min < 1) return 'under 1 min';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return min % 60 === 0 ? `${h} h` : `${h} h ${min % 60} min`;
+  const d = Math.floor(h / 24);
+  return `${d} ${d === 1 ? 'day' : 'days'}${h % 24 === 0 ? '' : ` ${h % 24} h`}`;
+}
+
+/** A stage's time: "—" with nothing to do, "Not known yet" while the pace is not known. */
+export function stageEta(s: PipelineQueue['stages'][number]): string {
+  if (s.waiting + s.running + s.toCome === 0) return '—';
+  return s.etaSeconds === null || s.etaSeconds === undefined ? 'Not known yet' : `About ${durationText(s.etaSeconds)}`;
+}
+
+export function queueHeadline(q: PipelineQueue): string {
+  if (!q.staged) return 'Shown only while documents are processed in steps.';
+  if (q.stages.every((s) => s.waiting + s.running + s.toCome === 0)) return 'Nothing is waiting.';
+  return q.etaSeconds === null || q.etaSeconds === undefined ? 'The time is not known yet: too few jobs have finished in the last minutes.' : `About ${durationText(q.etaSeconds)} at this pace.`;
+}
+
+export const queueHow = (q: Pick<PipelineQueue, 'windowMinutes'>): string[] => [
+  `Pace: the jobs each step finished in the last ${q.windowMinutes} minutes (in the last minute, if they were 20 or more), divided by the time in which that step had work.`,
+  'Time: the jobs waiting and running, and those the steps before will still bring, divided by the pace. A step never ends before the step before it, so the last time is the queue\'s.',
+  'Not in the time: jobs on hold (a retry, a paused destination, the window of a Bulk source, or a person) and cases in Review or Approval. A case that will still stop for a person is counted as if it went on. New documents make it longer.',
+  'Workers are this server\'s. With fewer than 5 finished jobs, no time is shown.',
+];
 
 export const maximumError = (value: string): boolean => {
   const v = value.trim();

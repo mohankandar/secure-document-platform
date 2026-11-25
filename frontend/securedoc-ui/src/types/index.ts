@@ -769,6 +769,16 @@ export interface WatchedFolderAdminStatus {
   } | null;
 }
 
+/** Task 0078: the queue of each stage (one entity's, or every entity's added up) and its ETA. */
+export interface PipelineQueue {
+  staged: boolean;
+  allEntities: boolean;
+  windowMinutes: number;
+  etaSeconds?: number | null;
+  stages: { stage: string; waiting: number; running: number; held: number; toCome: number; workers: number; highest: number;
+    oldestWaitingSeconds?: number | null; perMinute?: number | null; etaSeconds?: number | null }[];
+}
+
 /** Task 0067: the workers of the server that answered, and IT's own maximums. */
 /** Task 0079: a migration source; the times are the entity's local times. */
 export interface BulkSource {

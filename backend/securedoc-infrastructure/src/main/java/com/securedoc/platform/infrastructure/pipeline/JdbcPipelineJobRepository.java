@@ -69,7 +69,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
      * any more (its source was unmarked as the job was queued) is taken with them. With no window open the sub-query is
      * never run, so a long Bulk queue costs an idle worker nothing more.
      */
-    private static final String BULK_ALLOWED = """
+    static final String BULK_ALLOWED = """
             (j.priority <> 'BULK' OR :everyBulk OR :someBulk AND NOT EXISTS (
                     SELECT 1 FROM case_priorities c WHERE c.package_id = j.package_id AND c.priority = 'BULK'
                        AND (c.tenant_id || '/' || c.source_key) NOT IN (:openBulk)))""";
