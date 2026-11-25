@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { SWRConfig } from 'swr';
 import type { CurrentUser, TenantSwitchActions } from '../types';
@@ -20,6 +20,8 @@ import Intake from './Intake';
 import Review from './Review';
 import Reports from './reports/Reports';
 import Admin from './admin/Admin';
+import ApprovalLink from './ApprovalLink';
+import { approvalLinkHeld } from './approvalLinkStore';
 import NoAccess from './NoAccess';
 import SupportStatus from './support/SupportStatus';
 import SupportList from './support/SupportList';
@@ -55,6 +57,12 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
   const { branding } = useBranding();
   const location = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Task 0059: a link opened before sign-in (which lands on the start page) is shown once, right after it.
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (approvalLinkHeld() && window.location.pathname === '/') navigate('/approvals/link', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const canDesk = caps.includes(CAP.desk);
   const canIntake = caps.includes(CAP.intake);
   const canReview = caps.includes(CAP.review);
@@ -167,6 +175,7 @@ function Workspace({ me, caps, onSignOut, localMode, selectedRole, onRoleChange,
           <Route path="/review" element={canReview ? <Review caps={caps} /> : <Navigate to={home} replace />} />
           <Route path="/reports" element={canReports ? <Reports caps={caps} entityName={me.tenantName} /> : <Navigate to={home} replace />} />
           <Route path="/admin" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
+          <Route path="/approvals/link/*" element={<ApprovalLink caps={caps} entityName={me.tenantName} />} />
           <Route path="/admin/:area" element={canAdmin ? <Admin caps={caps} me={me} /> : <Navigate to={home} replace />} />
           <Route path="/administration" element={<Navigate to={canAdmin ? '/admin' : home} replace />} />
           <Route path="/business-admin" element={<Navigate to={caps.includes(CAP.policy) ? '/admin/policy' : caps.includes(CAP.identifiers) ? '/admin/fields' : home} replace />} />

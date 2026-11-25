@@ -205,6 +205,25 @@ test.describe('Admin (IT Administrator)', () => {
     await scan(page, 'Admin: Sign-in');
   });
 
+  test('Notifications (IT Admin)', async ({ page }) => {
+    await signInAs(page, 'it', '/admin/notifications');
+    await expect(page.getByRole('region', { name: 'Last messages' })).toBeVisible();
+    await scan(page, 'Admin: Notifications (IT)');
+  });
+
+  test('Notifications (Business Admin)', async ({ page }) => {
+    await signInAs(page, 'business', '/admin/notifications');
+    await expect(page.getByRole('table', { name: 'Business messages' })).toBeVisible();
+    await scan(page, 'Admin: Notifications (business)');
+  });
+
+  test('Approval link', async ({ page }) => {
+    await signInAs(page, 'supervisor');
+    await page.goto('/approvals/link/AQEBfake.c2ln');
+    await expect(page.getByRole('heading', { name: 'Deliver case LN-3002?' })).toBeVisible();
+    await scan(page, 'Approval link');
+  });
+
   test('Audit trail', async ({ page }) => {
     await signInAs(page, 'it', '/admin/audit');
     await expect(page.getByRole('region', { name: 'Audit records' })).toBeVisible();

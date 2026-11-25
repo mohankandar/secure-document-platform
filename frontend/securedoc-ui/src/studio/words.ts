@@ -29,7 +29,7 @@ export const NAV = {
  * "Review · LexaVault". The admin area comes from the address (/admin/<area>).
  */
 const ADMIN_TITLES: Record<string, string> = {
-  policy: 'Redaction & retention', fields: 'Case fields', integrations: 'Integrations', identity: 'Sign-in', health: 'Platform operations', audit: 'Audit trail',
+  policy: 'Redaction & retention', fields: 'Case fields', integrations: 'Integrations', identity: 'Sign-in', health: 'Platform operations', audit: 'Audit trail', notifications: 'Notifications',
 };
 export function screenTitle(pathname: string, product: string): string {
   const [first, second, third] = pathname.split('/').filter(Boolean);
@@ -42,6 +42,7 @@ export function screenTitle(pathname: string, product: string): string {
   else if (first === 'reports') screen = NAV.reports;
   else if (first === 'admin') screen = second && ADMIN_TITLES[second] ? `${ADMIN_TITLES[second]} · ${NAV.admin}` : NAV.admin;
   else if (first === 'support') screen = second === 'incidents' && third ? `Problem · ${NAV.support}` : second === 'export' ? `Export · ${NAV.support}` : NAV.support;
+  else if (first === 'approvals') screen = 'Delivery approval';
   else if (first === 'technical-exceptions') screen = `Problem · ${NAV.support}`;
   else if (first === 'packages' && third === 'manual-processing') screen = 'Continue manually';
   else screen = '';

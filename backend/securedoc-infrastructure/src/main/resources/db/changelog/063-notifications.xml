@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0059 (owner approved the migrations the task needs): LexaVault's part of notifications. Everything is per entity.
+        The notif_ tables are platform-notifications' own and are made by the schema step.
+
+        notification_mail_settings: how an entity's e-mail is sent. secret_reference says where the password, client secret or
+        certificate is kept; the secret itself is never here.
+        notification_people: who signed in with which roles in which entity, and the e-mail address the login system gave. One
+        row per person and entity, replaced at each sign-in and removed when it is too old. No name.
+        delivery_approval_requests: which case, at which version of it, an approval request is for. Ids only.
+    -->
+    <changeSet id="063-01-notifications" author="lexavault">
+        <createTable tableName="notification_mail_settings">
+            <column name="tenant_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="enabled" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="mode" type="VARCHAR(20)"><constraints nullable="false"/></column>
+            <column name="host" type="VARCHAR(253)"/>
+            <column name="port" type="INTEGER"/>
+            <column name="security" type="VARCHAR(10)"/>
+            <column name="username" type="VARCHAR(320)"/>
+            <column name="from_address" type="VARCHAR(320)"><constraints nullable="false"/></column>
+            <column name="from_name" type="VARCHAR(100)"/>
+            <column name="directory_id" type="VARCHAR(253)"/>
+            <column name="client_id" type="VARCHAR(64)"/>
+            <column name="credential_type" type="VARCHAR(20)"/>
+            <column name="secret_reference" type="VARCHAR(256)"/>
+            <column name="updated_by" type="UUID"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="notification_mail_settings" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_notification_mail_settings_tenant"/>
+        <sql>
+            alter table notification_mail_settings
+                add constraint ck_notification_mail_mode check (mode in ('MICROSOFT_365', 'OWN_SERVER')),
+                add constraint ck_notification_mail_reference
+                    check (secret_reference is null or secret_reference ~ '^(env|file):LEXAVAULT_SECRET_[A-Z0-9_]+$');
+        </sql>
+        <createTable tableName="notification_people">
+            <column name="actor_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="email" type="VARCHAR(320)"><constraints nullable="false"/></column>
+            <column name="roles" type="VARCHAR(500)"><constraints nullable="false"/></column>
+            <column name="seen_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="notification_people" columnNames="tenant_id, actor_id" constraintName="pk_notification_people"/>
+        <addForeignKeyConstraint baseTableName="notification_people" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_notification_people_tenant"/>
+        <createTable tableName="delivery_approval_requests">
+            <column name="request_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="case_version" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="delivery_approval_requests" columnNames="package_id, case_version"
+                             constraintName="ux_delivery_approval_requests_case"/>
+        <addForeignKeyConstraint baseTableName="delivery_approval_requests" baseColumnNames="package_id"
+                                 referencedTableName="document_packages" referencedColumnNames="id" onDelete="CASCADE"
+                                 constraintName="fk_delivery_approval_requests_case"/>
+        <rollback>
+            <dropTable tableName="delivery_approval_requests"/>
+            <dropTable tableName="notification_people"/>
+            <dropTable tableName="notification_mail_settings"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

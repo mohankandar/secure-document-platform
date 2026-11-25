@@ -5,7 +5,10 @@ import com.documentplatform.identity.spring.OutboundIssuerFetch;
 import com.documentplatform.outbound.Installation;
 import com.documentplatform.outbound.Outbound;
 import com.documentplatform.outbound.ProxySettings;
+import com.documentplatform.notifications.secret.SecretRef;
 import com.documentplatform.outbound.spring.OutboundProperties;
+import com.securedoc.platform.api.notifications.AppSecretResolver;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,8 +27,8 @@ import java.nio.file.Path;
  * .private-ca-file} and {@code .proxy.host/.port/.bypass}. A setting that is wrong stops the app ({@code
  * OUTBOUND_SETTINGS_INVALID}), never with a value in the message.
  *
- * <p>This takes the place of platform-outbound-spring's own wiring, which needs platform-notifications (for the proxy
- * password's secret reference); the app does not carry that module, so a proxy with sign-in is refused.
+ * <p>A proxy with sign-in is allowed since task 0059 ({@code .proxy.user}, {@code .proxy.password-secret}): the password is
+ * a reference that {@link AppSecretResolver} reads at each call, never the password.
  *
  * <p>An {@code http} login system on this machine needs no setting here: the fetch takes it only when the test sign-in has
  * found it allowed, that is under a licence signed by a development key, which only a development build trusts.
@@ -34,10 +37,24 @@ import java.nio.file.Path;
 @EnableConfigurationProperties(OutboundProperties.class)
 public class OutboundRulesConfig {
 
-    /** Only the fetch is a bean: {@link Outbound} itself has a constructor the app cannot load. */
     @Bean
-    IssuerFetch signInTestIssuerFetch(OutboundProperties settings) {
-        return new OutboundIssuerFetch(new Outbound(installation(settings)));
+    Installation outboundInstallation(OutboundProperties settings) {
+        return installation(settings);
+    }
+
+    @Bean
+    AppSecretResolver appSecretResolver(@Value("${securedoc.secrets.directory:}") String directory) {
+        return new AppSecretResolver(System::getenv, directory);
+    }
+
+    @Bean(destroyMethod = "close")
+    Outbound outbound(Installation installation, AppSecretResolver secrets) {
+        return new Outbound(installation, secrets);
+    }
+
+    @Bean
+    IssuerFetch signInTestIssuerFetch(Outbound outbound) {
+        return new OutboundIssuerFetch(outbound);
     }
 
     static Installation installation(OutboundProperties settings) {
@@ -51,16 +68,29 @@ public class OutboundRulesConfig {
     }
 
     private static ProxySettings proxy(OutboundProperties.Proxy proxy) {
-        if (proxy.getUser() != null || proxy.getPasswordSecret() != null) {
-            throw invalid("proxy.user and proxy.password-secret: a proxy with sign-in is not supported");
-        }
-        if (proxy.getHost() == null && proxy.getPort() == null && proxy.getBypass().isEmpty()) return null;
+        boolean user = present(proxy.getUser());
+        boolean password = present(proxy.getPasswordSecret());
+        if (proxy.getHost() == null && proxy.getPort() == null && proxy.getBypass().isEmpty() && !user && !password) return null;
         if (proxy.getHost() == null || proxy.getPort() == null) throw invalid("proxy.host and proxy.port go together");
+        if (user != password) throw invalid("proxy.user and proxy.password-secret go together");
+        SecretRef secret = null;
+        if (password) {
+            try {
+                secret = AppSecretResolver.installRef(proxy.getPasswordSecret().strip());
+            } catch (IllegalArgumentException e) {
+                throw invalid("proxy.password-secret is not a secret reference of this installation (docs/install/NOTIFICATIONS.md)");
+            }
+        }
         try {
-            return new ProxySettings(proxy.getHost().strip(), proxy.getPort(), proxy.getBypass());
+            ProxySettings plain = new ProxySettings(proxy.getHost().strip(), proxy.getPort(), proxy.getBypass());
+            return user ? plain.withSignIn(proxy.getUser().strip(), secret) : plain;
         } catch (IllegalArgumentException e) {
             throw invalid("proxy is not valid");
         }
+    }
+
+    private static boolean present(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static String privateCa(String file) {

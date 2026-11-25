@@ -161,7 +161,7 @@ class PlatformLicenceTest {
 
     @Test
     void theLicensingEventsAreRegisteredForTheAdmins() {
-        EventCatalogue catalogue = new PlatformLicensingConfig().lexaVaultEventCatalogue();
+        EventCatalogue catalogue = com.securedoc.platform.api.notifications.LexaVaultEvents.catalogue();
         LicensingEvents.ALL.forEach(id -> assertTrue(catalogue.find(id).isPresent(), id.value()));
         assertEquals("TENANT_IT_ADMIN", catalogue.itAdminRole().value());
     }

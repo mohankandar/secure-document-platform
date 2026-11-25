@@ -123,6 +123,14 @@ export const HELP = {
     name: 'Entities',
     text: 'The entities your licence gives you. A new one is activated and named here once. A suspended one lets nobody in and takes nothing new in until it is resumed; its cases are finished and nothing is deleted. You see the entities you are a Business Admin of.',
   },
+  notifications: {
+    name: 'E-mail for notifications',
+    text: 'LexaVault sends short messages: what happened, when, how many, and a link. The password, client secret or certificate is kept by whoever runs the server, under a name that belongs to this entity; here you only give that name. Messages go through Microsoft 365, or through your own server.',
+  },
+  notificationPeople: {
+    name: 'Who gets messages',
+    text: 'Roles come from your login system and are known when a person signs in. Someone who has not signed in for a while, or whose sign-in gives no e-mail address, gets no messages. A message never gives access: what someone may do is checked when they do it.',
+  },
   licensing: {
     name: 'Licensing',
     text: 'Your organisation\'s licence: what it covers, when it ends, and how many pages this entity used this month. It is stored by IT with the licence command and cannot be changed here. When it has ended and the grace period is over, new cases are not taken in; everything else keeps working.',
