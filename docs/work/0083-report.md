@@ -1,7 +1,7 @@
 # Report 0083: a second, independent AI check of the finished file
 
 Date: 2026-11-24
-Branch: `feature/0083-second-check`, from `67c7b2e`, with the integration branch (0079, `95bf9ee`) merged in
+Branch: `feature/0083-second-check`, from `67c7b2e`, with the integration branch (0079, `95bf9ee`) merged in, then 0060 (`ad5d346`; only roll-back counts conflicted)
 Outcome: **DONE** (7 questions)
 
 ## Measured
@@ -36,7 +36,7 @@ My answer schema was built with Java's `Map.of`, whose order changes at every st
 ## Commands run and results
 | What | Result |
 |---|---|
-| `mvn -B -o -fae -Pdev-build clean test` with a throwaway PostgreSQL | 89 + 320 + 137 + 141 + 906, 0 failed, 3 skipped |
+| `mvn -B -o -fae -Pdev-build clean test` with a throwaway PostgreSQL | 89 + 320 + 137 + 141 + 906, 0 failed, 3 skipped; after merging 0060: 89 + 321 + 137 + 153 + 915, 0 failed, 3 skipped |
 | `npm run test:standalone`, once (port base 15375) | 10 + 224 + 19 + 205 + 95 + 174, 0 failed |
 | Model change gate, one run (switch off, Ollama 0.40.18) | 119 of 130, 262 of 274, 2 V1 misses, 8 false flags, 0 unread: the baseline exactly |
 | `node test-tools/second-check/measure.mjs`, 3 sets | table above |
