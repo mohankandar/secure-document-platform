@@ -123,7 +123,8 @@ public class PlatformHealthService {
                 ai.isSecondaryEnabled(), ai.getSecondaryProvider(), safe(ai.getSecondaryModel()));
         String deliveryType = environment.getProperty("securedoc.delivery.type", "local");
         String identityMode = environment.getProperty("securedoc.security.mode", "OIDC").trim().toUpperCase();
-        boolean documentStoreConfigured = integrationConnections.findEnabledDocumentStoreByTenantId(tenantId).isPresent();
+        boolean documentStoreConfigured = integrationConnections.findEnabledDocumentStoreByTenantId(tenantId)
+                .filter(c -> c.destination() != null).isPresent(); // task 0087: without its profile nothing is sent
         var integrationSummary = new PlatformAdminOverviewResponse.IntegrationSummary(
                 deliveryType, documentStoreConfigured, identityMode, "OIDC".equals(identityMode));
 
@@ -392,6 +393,10 @@ public class PlatformHealthService {
                         "No enabled tenant document store connection");
             }
             var c = configured.get();
+            if (c.destination() == null) {
+                return item("delivery", "Final delivery", "Delivery", "document-store", "NOT_CONFIGURED", false,
+                        "The destination's profile is not chosen; nothing is sent (Integrations)");
+            }
             String status = c.healthStatus().name();
             return item("delivery", "Final delivery", "Delivery", "document-store", status, true,
                     "Tenant document store connection configured; secrets are protected");
