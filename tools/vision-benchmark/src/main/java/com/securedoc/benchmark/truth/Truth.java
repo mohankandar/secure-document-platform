@@ -20,10 +20,14 @@ import java.util.Set;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record Truth(int version, List<PageTruth> pages) {
 
-    /** Item types a sample can hold. The first four are the text path's types today (V1). */
+    /** Item types the vision model is asked for. The first four are the text path's types today (V1). */
     public static final List<String> ITEM_TYPES = List.of(
             "SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE",
-            "BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID", "SIGNATURE", "FACE_PHOTO", "PERSON_NAME");
+            "BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID", "SIGNATURE", "FACE_PHOTO");
+
+    /** Item types an answer file can hold: names are found in the text only (task 0072). */
+    private static final List<String> ANSWER_TYPES = java.util.stream.Stream.concat(ITEM_TYPES.stream(),
+            java.util.stream.Stream.of("PERSON_NAME")).toList();
 
     /** The types the product's text path can find today (TenantRedactionPolicy V1 set). */
     public static final Set<String> TEXT_PATH_TYPES = Set.of(
@@ -61,7 +65,7 @@ public record Truth(int version, List<PageTruth> pages) {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Item(String type, double[] box, Boolean handwritten) {
         public Item {
-            if (type == null || !ITEM_TYPES.contains(type)) {
+            if (type == null || !ANSWER_TYPES.contains(type)) {
                 throw new IllegalArgumentException("unknown item type " + type);
             }
             if (box == null || box.length != 4) {
