@@ -8,6 +8,7 @@ import { canonicalIdentity, identityErrors, sensitiveKeys, sortDefinitions } fro
 import { Notice, Spinner } from './atoms';
 import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
+import { onArrowKeys } from './arrowKeys';
 import { useUnsavedWork } from './unsavedWork';
 import { prefillIdentifier, scannedWords, uploadedWords } from './intakeRules';
 import useSWR from 'swr';
@@ -146,16 +147,16 @@ export default function Intake({ entityName }: { entityName: string }) {
             </div>
           </header>
 
-          <div className="cf-method" role="tablist" aria-label="Capture method">
+          <div className="cf-method" role="tablist" aria-label="Capture method" onKeyDown={onArrowKeys}>
             <button
-              type="button" role="tab" aria-selected={method === 'upload'}
+              type="button" role="tab" id="cf-tab-upload" aria-selected={method === 'upload'} aria-controls="cf-capture-panel" tabIndex={method === 'upload' ? 0 : -1}
               disabled={!!lockedBy && method !== 'upload'}
               onClick={() => setParams({ via: 'upload' }, { replace: true })}
             >
               Upload PDFs
             </button>
             <button
-              type="button" role="tab" aria-selected={method === 'scan'}
+              type="button" role="tab" id="cf-tab-scan" aria-selected={method === 'scan'} aria-controls="cf-capture-panel" tabIndex={method === 'scan' ? 0 : -1}
               disabled={!!lockedBy && method !== 'scan'}
               onClick={() => setParams({ via: 'scan' }, { replace: true })}
             >
@@ -163,7 +164,7 @@ export default function Intake({ entityName }: { entityName: string }) {
             </button>
           </div>
 
-          <div role="tabpanel">
+          <div role="tabpanel" id="cf-capture-panel" aria-labelledby={`cf-tab-${method}`}>
             {method === 'upload'
               ? <UploadCapture gate={gate} onLock={lock} onCreated={finish} />
               : <ScanCapture gate={gate} onLock={lock} onCreated={finish} />}

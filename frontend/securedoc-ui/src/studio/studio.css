@@ -190,7 +190,7 @@
   padding: 10px 12px; border-radius: var(--cf-radius); font-size: 13px;
   background: var(--cf-raised); border: 1px solid var(--cf-line); color: var(--cf-ink);
 }
-.cf-notice[data-tone='danger'] { background: var(--cf-danger-soft); border-color: color-mix(in srgb, var(--cf-danger) 30%, transparent); color: var(--cf-danger); }
+.cf-notice[data-tone='danger'] { background: var(--cf-danger-soft); border-color: color-mix(in srgb, var(--cf-danger) 30%, transparent); color: color-mix(in srgb, var(--cf-danger) 88%, var(--cf-ink)); } /* 0089: was 4.41:1 in light */
 .cf-notice[data-tone='mark'] { background: var(--cf-mark-soft); border-color: color-mix(in srgb, var(--cf-mark) 60%, transparent); }
 
 /* Stage chip */
@@ -364,7 +364,7 @@
 .cf-next[data-tone='ok'] { background: var(--cf-stage-delivered-soft); border-color: color-mix(in srgb, var(--cf-stage-delivered) 35%, transparent); }
 .cf-next-text { display: flex; flex-direction: column; gap: 8px; }
 .cf-next .cf-eyebrow { letter-spacing: 0.06em; }
-.cf-next[data-tone='danger'] .cf-eyebrow { color: var(--cf-danger); }
+.cf-next[data-tone='danger'] .cf-eyebrow { color: color-mix(in srgb, var(--cf-danger) 88%, var(--cf-ink)); } /* 0089: was 4.41:1 in light */
 .cf-next[data-tone='ok'] .cf-eyebrow { color: var(--cf-stage-delivered); }
 .cf-next-heading { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; }
 .cf-next-body { color: var(--cf-ink); font-size: 14px; text-wrap: pretty; }
@@ -444,7 +444,7 @@
 .cf-toasts { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 45; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .cf-toast { pointer-events: auto; padding: 10px 16px; border-radius: 8px; background: var(--cf-ink); color: var(--cf-surface); box-shadow: var(--cf-shadow-pop); font-size: 13px; font-weight: 500; animation: cf-rise 200ms ease-out; max-width: min(520px, calc(100vw - 32px)); }
 .cf-toast[data-tone='mark'] { background: var(--cf-mark); color: var(--cf-mark-ink); }
-.cf-toast[data-tone='danger'] { background: var(--cf-danger); color: var(--cf-paper); }
+.cf-toast[data-tone='danger'] { background: var(--cf-danger); color: var(--cf-surface); } /* 0089: was 2.53:1 in dark */
 @keyframes cf-rise { from { opacity: 0; transform: translateY(8px); } }
 
 /* ---------- Intake ---------- */
@@ -486,6 +486,8 @@
 .cf-several-row > :first-child { flex: 1; min-width: 0; }
 .cf-intake .cf-field-hint { min-height: 0; }
 .cf-intake .cf-field-hint:empty { display: none; }
+/* 0089: a wrong field keeps its red border in focus, so the ring around it is 2 px on its own. */
+.cf-field[data-invalid] :is(input, select):focus { box-shadow: 0 0 0 2px var(--cf-ink), 0 0 0 5px color-mix(in srgb, var(--cf-ink) 12%, transparent); }
 .cf-field[data-invalid] .cf-field-hint { color: var(--cf-danger); }
 
 /* Canvas .chips: the capture method is the same white strip as the Cases chips, sized to its words. */

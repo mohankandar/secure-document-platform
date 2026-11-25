@@ -347,6 +347,7 @@ function SourcePriority({ source }: { source: string }) {
   const [saving, setSaving] = useState(false);
   if (!data) return null;
   async function save(next: PriorityCode) {
+    if (saving) return;
     setSaving(true);
     try {
       await mutate(await apiClient.changeSourcePriority(source, next), { revalidate: false });
@@ -365,7 +366,6 @@ function SourcePriority({ source }: { source: string }) {
         options={PRIORITIES.map((p) => [p, PRIORITY_NAMES[p]] as [PriorityCode, string])}
         onChange={(v) => void save(v)}
         hint={PRIORITY_FIELD.sourceHint}
-        disabled={saving}
       />
     </div>
   );

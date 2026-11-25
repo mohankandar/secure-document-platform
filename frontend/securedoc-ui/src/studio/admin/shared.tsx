@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { apiClient } from '../../api/client';
 import type { BusinessAdminConfiguration } from '../../types';
@@ -198,6 +198,11 @@ export function Sheet({ open, title, description, onClose, children, footer, wid
     if (open && !d.open) d.showModal();
     if (!open && d.open) d.close();
   }, [open]);
+  // Task 0089: a sheet taken off the screen while open is closed first, so the browser gives focus back to the button that opened it.
+  useLayoutEffect(() => {
+    const d = ref.current;
+    return () => { if (d?.open) d.close(); };
+  }, []);
   return (
     <dialog ref={ref} className="cf-ad-sheet" data-wide={wide || undefined} aria-labelledby={titleId} onCancel={(e) => { e.preventDefault(); onClose(); }}>
       {open && (

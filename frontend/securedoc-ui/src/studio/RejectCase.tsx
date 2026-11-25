@@ -43,11 +43,11 @@ export function RejectCase({ packageId, caseName, step, onRejected, small }: {
         consequence={<>
           <div className="cf-field">
             <label htmlFor="cf-reject-reason"><span>{REJECT_WORDS.reason}</span></label>
-            <select id="cf-reject-reason" value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)}>
+            <select id="cf-reject-reason" value={reason} disabled={busy} aria-describedby={reason === 'LV-REV-014' ? 'cf-reject-hint' : undefined} onChange={(e) => setReason(e.target.value)}>
               <option value="">{REJECT_WORDS.choose}</option>
               {REJECTION_CODES.map((code) => <option key={code} value={code}>{rejectionName(code)}</option>)}
             </select>
-            {reason === 'LV-REV-014' && <span className="cf-field-hint">{REJECT_WORDS.otherHint}</span>}
+            {reason === 'LV-REV-014' && <span id="cf-reject-hint" className="cf-field-hint">{REJECT_WORDS.otherHint}</span>}
           </div>
           <p>{REJECT_WORDS.consequence}</p>
         </>}

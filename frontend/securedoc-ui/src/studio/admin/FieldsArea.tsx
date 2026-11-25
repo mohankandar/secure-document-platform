@@ -141,9 +141,9 @@ function IdentifierEditor({ value, isNew, canRemove, sensitiveAvailable, onApply
           {d.validationType === 'DROPDOWN' && (
             <div className="cf-field">
               <label htmlFor="idf-allowed"><span>Allowed values</span></label>
-              <textarea id="idf-allowed" rows={4} value={d.allowedValues.join('\n')}
+              <textarea id="idf-allowed" rows={4} aria-describedby="idf-allowed-hint" value={d.allowedValues.join('\n')}
                 onChange={(e) => set({ allowedValues: e.target.value.split(/[\n,]/) })} />
-              <span className="cf-field-hint">One per line or separated by commas. With 1–100 values, Reports can also break down by this field.</span>
+              <span id="idf-allowed-hint" className="cf-field-hint">One per line or separated by commas. With 1–100 values, Reports can also break down by this field.</span>
             </div>
           )}
           {d.validationType === 'CUSTOM_PATTERN' && (
