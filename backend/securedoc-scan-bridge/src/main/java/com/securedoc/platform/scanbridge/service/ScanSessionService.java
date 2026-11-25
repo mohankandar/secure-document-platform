@@ -97,7 +97,8 @@ public class ScanSessionService {
                 UUID.randomUUID(), UUID.randomUUID(), properties.getTenantId(), properties.getBridgeId(), properties.getSiteId(),
                 properties.getScannerId(), properties.getMode(), ScanSessionStatus.WAITING_FOR_SCAN, identifiers,
                 now, now, null, null, 0, null, null, null, null, null,
-                carriedSensitivityLevel(request == null ? null : request.caseSensitivityLevel()), null);
+                carriedSensitivityLevel(request == null ? null : request.caseSensitivityLevel()), null, null, null,
+                carriedSensitivityLevel(request == null ? null : request.casePriority()));
         store.save(session);
         sessions.put(session.sessionId(), session);
         actionableSessionId.set(session.sessionId());
@@ -518,7 +519,7 @@ public class ScanSessionService {
                 existing.siteId(), existing.scannerId(), existing.captureMode(), status, identifiers, existing.createdAt(),
                 clock.instant(), preparedScan, packageId, attempts, queuedAt, nextAttemptAt, errorCode, errorAt, submittedAt,
                 existing.caseSensitivityLevel(), acceptancePendingSince, errorHttpStatus,
-                BridgeLvCodes.safeLexaVaultLvCode(lexaVaultLvCode));
+                BridgeLvCodes.safeLexaVaultLvCode(lexaVaultLvCode), existing.casePriority());
     }
 
     /** Transport safety only (task 0021): a level is a short name, so anything longer is cut; LexaVault reads the value. */

@@ -16,6 +16,8 @@ The configured base endpoint exposes the LexaVault V1 pickup contract below it:
 
 Discovery returns the source package identity, source revision, optional retry indicator, tenant-required business identifiers, safe metadata, and expected document manifest.
 
+Optional `priority` on the package (task 0073): as in the push API ("Priority"); a wrong one fails that package.
+
 Optional sensitivity levels (task 0021): `caseSensitivityLevel` on the package and `sensitivityLevel` on each document, with the same values and rules as the push API (`EXTERNAL_INGESTION_V1.md`, "Sensitivity levels"). An unknown value is taken as `STANDARD` with the audit warning `LV-INT-005`; it is never refused.
 
 ## Scheduling

@@ -275,3 +275,39 @@ if (process.env.P0022_PROOF) {
     await page.screenshot({ path: `${OUT}/a4-new-case-sensitivity-open-light-1440.png` });
   });
 }
+
+// Task 0073: priority, on the same screens.
+test('New case has a Priority choice, Normal by default; only Urgent or Low is sent', async ({ page }) => {
+  const sent: Sent[] = [];
+  await signIn(page, sent);
+  await page.goto('/intake');
+  const choice = page.getByLabel('Priority');
+  await expect(choice).toHaveValue('NORMAL');
+  expect(await choice.locator('option').allTextContents()).toEqual(['Urgent', 'Normal', 'Low']);
+  await page.getByLabel(/Loan number/).fill('LN204903');
+  await choice.selectOption({ label: 'Urgent' });
+  await page.locator('input[type=file]').setInputFiles([{ name: 'Note.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n', 'latin1') }]);
+  await page.getByRole('button', { name: 'Create case' }).click();
+  await expect.poll(() => sent.find((s) => s.method === 'POST' && s.path === '/api/v1/packages')?.body).toMatchObject({ priority: 'URGENT' });
+});
+
+test('Scan paper sends the Priority choice to the scan bridge', async ({ page }) => {
+  const sent: Sent[] = [];
+  await signIn(page, sent);
+  await page.goto('/intake?via=scan');
+  await page.getByLabel(/Loan number/).fill('LN204904');
+  await page.getByLabel('Priority').selectOption({ label: 'Low' });
+  await page.getByRole('button', { name: 'Start scan session' }).click();
+  await expect.poll(() => sent.find((s) => s.method === 'POST' && s.path.endsWith('/scan-sessions'))?.body).toMatchObject({ casePriority: 'LOW' });
+});
+
+test('a reviewer changes the priority in the case panel', async ({ page }) => {
+  const sent: Sent[] = [];
+  await signIn(page, sent);
+  await row(page).getByRole('link').click();
+  const choice = page.getByRole('complementary', { name: 'Case panel' }).getByLabel('Priority');
+  await expect(choice).toHaveValue('NORMAL');
+  await choice.selectOption({ label: 'Urgent' });
+  await expect.poll(() => sent.find((s) => s.method === 'PUT')).toMatchObject({ path: `/api/v1/packages/${CASE.packageId}/priority`, body: { priority: 'URGENT' } });
+  await expect(page.getByText('Priority is now Urgent.')).toBeVisible();
+});

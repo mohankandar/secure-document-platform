@@ -11,7 +11,7 @@ import { useUnsavedWork } from './unsavedWork';
 import { prefillIdentifier, scannedWords, uploadedWords } from './intakeRules';
 import useSWR from 'swr';
 import { apiClient } from '../api/client';
-import { SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, type SensitivityLevelCode } from './words';
+import { PRIORITIES, PRIORITY_FIELD, PRIORITY_NAMES, priorityChoice, type PriorityCode, SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, type SensitivityLevelCode } from './words';
 
 type Method = 'upload' | 'scan';
 
@@ -21,6 +21,8 @@ export interface IdentityGate {
   valid: boolean;
   /** Task 0021: the "Sensitivity" choice, applied as the case level. Standard unless changed. */
   sensitivity: SensitivityLevelCode;
+  /** Task 0073: the "Priority" choice. Nothing is sent for Normal. */
+  priority?: PriorityCode;
 }
 
 export default function Intake({ entityName }: { entityName: string }) {
@@ -33,6 +35,7 @@ export default function Intake({ entityName }: { entityName: string }) {
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   const [lockedBy, setLockedBy] = useState<string | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityLevelCode>('STANDARD');
+  const [priority, setPriority] = useState<PriorityCode>('NORMAL');
   const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method; files: number } | null>(null);
   useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
@@ -51,18 +54,20 @@ export default function Intake({ entityName }: { entityName: string }) {
   const gate: IdentityGate = {
     valid,
     sensitivity,
+    priority: priority === 'NORMAL' ? undefined : priority,
     require: () => {
       setTouched(new Set(definitions.map((d) => d.key)));
       return valid ? canonicalIdentity(definitions, values) : null;
     },
   };
 
-  const lock = useCallback((identity: Record<string, string> | null, reason: string, sensitivityLevel?: string | null) => {
+  const lock = useCallback((identity: Record<string, string> | null, reason: string, sensitivityLevel?: string | null, sentPriority?: string | null) => {
     if (identity) {
       setValues(identity);
       setLockedBy(reason);
       // A resumed scan session shows the level it was started with; Standard when it carries none (task 0023 A4).
       setSensitivity(sensitivityChoice(sensitivityLevel));
+      if (sentPriority !== undefined) setPriority(priorityChoice(sentPriority));
     } else {
       setLockedBy(null);
     }
@@ -79,6 +84,7 @@ export default function Intake({ entityName }: { entityName: string }) {
     setTouched(new Set());
     setLockedBy(null);
     setSensitivity('STANDARD');
+    setPriority('NORMAL');
     setCreated(null);
   };
 
@@ -121,9 +127,10 @@ export default function Intake({ entityName }: { entityName: string }) {
                 onBlur={() => setTouched((t) => new Set(t).add(definition.key))}
               />
             ))}
-            {definitions.length > 0 && (
+            {definitions.length > 0 && (<>
               <SensitivityField value={sensitivity} locked={!!lockedBy} onChange={setSensitivity} />
-            )}
+              <PriorityField value={priority} locked={!!lockedBy} onChange={setPriority} />
+            </>)}
           </div>
         </section>
 
@@ -215,6 +222,22 @@ function SensitivityField({ value, locked, onChange }: {
         {SENSITIVITY_LEVELS.map((level) => <option key={level} value={level}>{SENSITIVITY_NAMES[level]}</option>)}
       </select>
       <span id="cf-id-sensitivity-hint" className="cf-field-hint">{SENSITIVITY_FIELD.hint}</span>
+    </div>
+  );
+}
+
+/** Task 0073: Urgent, Normal or Low; Normal by default. */
+function PriorityField({ value, locked, onChange }: { value: PriorityCode; locked: boolean; onChange: (value: PriorityCode) => void }) {
+  return (
+    <div className="cf-field">
+      <label htmlFor="cf-id-priority">
+        {PRIORITY_FIELD.label}
+        <span className="cf-field-opt">Optional</span>
+      </label>
+      <select id="cf-id-priority" value={value} disabled={locked} onChange={(e) => onChange(e.target.value as PriorityCode)} aria-describedby="cf-id-priority-hint">
+        {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_NAMES[p]}</option>)}
+      </select>
+      <span id="cf-id-priority-hint" className="cf-field-hint">{PRIORITY_FIELD.hint}</span>
     </div>
   );
 }

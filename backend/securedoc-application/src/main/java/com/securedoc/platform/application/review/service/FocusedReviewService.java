@@ -80,6 +80,14 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         this.auditService = Objects.requireNonNull(auditService);
     }
 
+    private com.securedoc.platform.application.intake.CasePriorityService priorities;
+
+    /** Task 0073: the same service, Urgent cases first. Without it every case is Normal. */
+    public FocusedReviewService withPriorities(com.securedoc.platform.application.intake.CasePriorityService priorities) {
+        this.priorities = Objects.requireNonNull(priorities);
+        return this;
+    }
+
     @Override
     public ReviewQueueResult execute(TenantId tenantId, Optional<PackageId> packageId, int limit) {
         Objects.requireNonNull(tenantId);
@@ -96,6 +104,10 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                         .orElseThrow(() -> new NotFoundException("DocumentPackage", id.toString()))))
                 .orElseGet(() -> packageRepository.findByTenantId(tenantId, 0, 250));
 
+        Map<PackageId, com.securedoc.platform.domain.pipeline.PipelinePriority> casePriorities = priorities == null ? Map.of()
+                : priorities.find(tenantId, packages.stream().map(DocumentPackage::id).toList());
+        Map<PackageId, java.time.Instant> createdAt = new HashMap<>();
+        packages.forEach(pkg -> createdAt.put(pkg.id(), pkg.createdAt()));
         for (DocumentPackage pkg : packages) {
             if (pkg.status() != PackageStatus.PENDING_REVIEW && pkg.status() != PackageStatus.IN_REVIEW) {
                 continue;
@@ -116,7 +128,11 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
 
         List<ReviewItemSummary> sorted = result.stream()
                 .sorted(Comparator
-                        .comparing((ReviewItemSummary item) -> item.packageId().toString())
+                        // Task 0073: Urgent, Normal, Low; the oldest case first within each.
+                        .comparing((ReviewItemSummary item) -> casePriorities.getOrDefault(item.packageId(),
+                                com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL).rank())
+                        .thenComparing(item -> createdAt.get(item.packageId()))
+                        .thenComparing(item -> item.packageId().toString())
                         .thenComparing(item -> item.documentId().toString())
                         .thenComparingInt(ReviewItemSummary::pageNumber)
                         .thenComparing(item -> item.findingId().toString()))

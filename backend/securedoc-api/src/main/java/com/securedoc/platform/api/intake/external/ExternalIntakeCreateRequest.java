@@ -20,7 +20,9 @@ public record ExternalIntakeCreateRequest(
         Map<String, String> metadata,
         List<ManifestDocument> documents,
         Boolean retry,
-        JsonNode caseSensitivityLevel) {
+        JsonNode caseSensitivityLevel,
+        /* Task 0073: URGENT, NORMAL or LOW; optional. Anything else is refused. */
+        JsonNode priority) {
 
     /** Task 0023 D1 (#32): a JSON null identifier or metadata value, or a null document entry, is a 400. */
     public ExternalIntakeCreateRequest {
@@ -37,7 +39,7 @@ public record ExternalIntakeCreateRequest(
         return new PushIntakeCreateInput(externalSourcePackageId, sourceRevision, businessIdentifiers, metadata,
                 docs.stream().map(d -> new PushIntakeCreateInput.ManifestDocumentInput(
                         d.externalSourceDocumentId(), d.fileName(), d.sha256(), sent(d.sensitivityLevel()))).toList(),
-                Boolean.TRUE.equals(retry), sent(caseSensitivityLevel));
+                Boolean.TRUE.equals(retry), sent(caseSensitivityLevel), sent(priority));
     }
 
     /** The value as sent: null when absent or JSON null, the text of a string, otherwise its JSON form (never a level). */

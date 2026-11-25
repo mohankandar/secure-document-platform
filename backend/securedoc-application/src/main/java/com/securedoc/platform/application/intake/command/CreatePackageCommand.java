@@ -20,7 +20,10 @@ public record CreatePackageCommand(
         String intakeFingerprint,
         String sourceReference,
         CorrelationId correlationId,
-        SensitivityLevel.Received caseSensitivity
+        SensitivityLevel.Received caseSensitivity,
+        /* Task 0073: as sent; null when none was, then the source's default (sourceKey), else Normal. */
+        com.securedoc.platform.domain.pipeline.PipelinePriority priority,
+        String sourceKey
 ) {
     public CreatePackageCommand {
         Objects.requireNonNull(packageType, "PackageType must not be null");
@@ -30,6 +33,14 @@ public record CreatePackageCommand(
         intakeFingerprint = normalizeOptional(intakeFingerprint);
         sourceReference = normalizeOptional(sourceReference);
         caseSensitivity = caseSensitivity == null ? SensitivityLevel.Received.standard() : caseSensitivity;
+    }
+
+    /** A command without a priority or a source default. */
+    public CreatePackageCommand(PackageType packageType, Map<String, String> businessIdentifiers,
+                                Map<String, String> metadata, String intakeFingerprint, String sourceReference,
+                                CorrelationId correlationId, SensitivityLevel.Received caseSensitivity) {
+        this(packageType, businessIdentifiers, metadata, intakeFingerprint, sourceReference, correlationId,
+                caseSensitivity, null, null);
     }
 
     /** A command with no level sent (Standard). */
@@ -70,7 +81,13 @@ public record CreatePackageCommand(
     /** The same command with the case level the source sent. */
     public CreatePackageCommand withCaseSensitivity(SensitivityLevel.Received received) {
         return new CreatePackageCommand(packageType, businessIdentifiers, metadata, intakeFingerprint,
-                sourceReference, correlationId, received);
+                sourceReference, correlationId, received, priority, sourceKey);
+    }
+
+    /** The same command with the priority sent (null when none) and the source whose default holds otherwise. */
+    public CreatePackageCommand withPriority(com.securedoc.platform.domain.pipeline.PipelinePriority sent, String source) {
+        return new CreatePackageCommand(packageType, businessIdentifiers, metadata, intakeFingerprint,
+                sourceReference, correlationId, caseSensitivity, sent, source);
     }
 
     private static String normalizeOptional(String value) {

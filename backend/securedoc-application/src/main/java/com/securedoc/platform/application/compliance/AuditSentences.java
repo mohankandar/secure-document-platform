@@ -125,6 +125,8 @@ public final class AuditSentences {
             entry("WATCHED_FOLDER_SCAN_TRIGGERED", "Checked the watched folder"),
             entry("PLATFORM_HEALTH_CHECKED", "Ran health checks"),
             entry("PROCESSING_MAXIMUMS_CHANGED", "Changed the processing maximums"),
+            entry("CASE_PRIORITY_CHANGED", "Changed the case’s priority"),
+            entry("SOURCE_PRIORITY_CHANGED", "Changed a source’s default priority"),
             entry("PROCESSING_STORAGE_PROVIDER_CREATED", "Added processing storage"),
             entry("PROCESSING_STORAGE_PROVIDER_TESTED", "Tested processing storage"),
             entry("PROCESSING_STORAGE_PROVIDER_ACTIVATED", "Made processing storage the default"),

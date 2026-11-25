@@ -114,7 +114,8 @@ public class PackageController {
 
         CreatePackageCommand command = CreatePackageCommand.of(packageType, request.businessIdentifiers(), request.metadata(), correlationId)
                 .withCaseSensitivity(com.securedoc.platform.domain.document.SensitivityLevel.fromSource(
-                        request.sentSensitivityLevel()));
+                        request.sentSensitivityLevel()))
+                .withPriority(com.securedoc.platform.application.intake.CasePriorityService.read(request.priority()), null);
         CreatePackageResult result = createPackageUseCase.execute(command, principal);
 
         CreatePackageResponse response = new CreatePackageResponse(
@@ -191,6 +192,19 @@ public class PackageController {
                 null, null, null, null, 1, true)).isEmpty();
     }
 
+    private com.securedoc.platform.application.intake.CasePriorityService priorities;
+
+    /** Task 0073. Optional so that the controller's tests need no store (then every case shows Normal). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setPriorities(com.securedoc.platform.application.intake.CasePriorityService priorities) {
+        this.priorities = priorities;
+    }
+
+    private Map<PackageId, com.securedoc.platform.domain.pipeline.PipelinePriority> prioritiesOf(
+            AuthenticatedPrincipal principal, List<PackageId> ids) {
+        return priorities == null ? Map.of() : priorities.find(principal.tenantId(), ids);
+    }
+
     private com.securedoc.platform.application.port.out.PackageRejectionRepository rejections;
 
     /** Task 0071. Optional, as below. */
@@ -243,7 +257,8 @@ public class PackageController {
                 detail.sensitivityLevel().name(),
                 detail.effectiveSensitivityLevel().name(),
                 signatureRemoved(principal, pkgId),
-                rejections == null ? null : rejections.find(principal.tenantId(), pkgId).map(r -> r.code().code()).orElse(null)
+                rejections == null ? null : rejections.find(principal.tenantId(), pkgId).map(r -> r.code().code()).orElse(null),
+                prioritiesOf(principal, List.of(pkgId)).getOrDefault(pkgId, com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL).name()
         );
         return ResponseEntity.ok(response);
     }
@@ -267,6 +282,7 @@ public class PackageController {
                         summaries.stream().map(PackageSummary::packageId).toList());
         ExportJobService.CaseExportRow none = new ExportJobService.CaseExportRow(ExportJobService.CaseExportState.NONE,
                 null, null);
+        var casePriorities = prioritiesOf(principal, summaries.stream().map(PackageSummary::packageId).toList());
         List<PackageSummaryResponse> response = summaries.stream()
                 .map(s -> new PackageSummaryResponse(
                         s.packageId().toString(),
@@ -279,7 +295,8 @@ public class PackageController {
                         exportRows.getOrDefault(s.packageId(), none).state().name(),
                         s.stopReasonCode() != null ? s.stopReasonCode()
                                 : exportRows.getOrDefault(s.packageId(), none).reasonCode(),
-                        exportRows.getOrDefault(s.packageId(), none).destinationName()
+                        exportRows.getOrDefault(s.packageId(), none).destinationName(),
+                        casePriorities.getOrDefault(s.packageId(), com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL).name()
                 ))
                 .toList();
         return ResponseEntity.ok(response);
