@@ -18,5 +18,7 @@ public record UpdateSensitiveDataPolicyRequest(
         Set<String> keepLastFourKinds,
         /* Task 0064: null keeps the stored value. */
         Boolean visionEnabled,
-        Double visionOcrThreshold
+        Double visionOcrThreshold,
+        /* Task 0083: null keeps the stored value (a pack newly turned on can turn it on). */
+        Boolean secondCheckEnabled
 ) {}

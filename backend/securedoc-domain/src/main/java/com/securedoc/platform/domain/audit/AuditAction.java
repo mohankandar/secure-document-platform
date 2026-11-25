@@ -64,6 +64,8 @@ public enum AuditAction {
     DOCUMENT_REDACTION_VERIFIED,
     /** Task 0050: a digitally signed document lost its signature by redaction (document id only, no signer). */
     DOCUMENT_SIGNATURE_REMOVED,
+    /** Task 0083: a second AI read the finished file. Pages, kinds and counts only. */
+    DOCUMENT_SECOND_CHECK,
     DOCUMENT_EXPORTED,
     DOCUMENT_EXPORT_FAILED,
     DOCUMENT_PROCESSING_FAILED,

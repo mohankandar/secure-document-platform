@@ -46,6 +46,7 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
         entity.setPageBatchOverlap(policy.pageBatches().overlap());
         entity.setVisionEnabled(policy.vision().enabled());
         entity.setVisionOcrThreshold(policy.vision().ocrThreshold());
+        entity.setSecondCheckEnabled(policy.secondCheck());
         entity.setLockedItemsOn(policy.lockedItemsOn());
         entity.setUpdatedAt(policy.updatedAt());
         repository.save(entity);
@@ -64,6 +65,7 @@ public class JpaTenantRedactionPolicyRepositoryAdapter implements TenantRedactio
                         entity.getPageBatchSize(), entity.getPageBatchOverlap()),
                 stored.packs(), stored.keepLastFour(), entity.isLockedItemsOn(),
                 new com.securedoc.platform.domain.business.VisionSettings(
-                        entity.isVisionEnabled(), entity.getVisionOcrThreshold()));
+                        entity.isVisionEnabled(), entity.getVisionOcrThreshold()),
+                entity.isSecondCheckEnabled());
     }
 }

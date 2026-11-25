@@ -131,7 +131,7 @@ public class BusinessAdminController {
                 body.pageBatchSize(), body.pageBatchOverlap(),
                 body.enabledPacks() == null ? null : parsePacks(body.enabledPacks()),
                 body.keepLastFourKinds() == null ? null : parseTypes(body.keepLastFourKinds()),
-                body.visionEnabled(), body.visionOcrThreshold());
+                body.visionEnabled(), body.visionOcrThreshold(), body.secondCheckEnabled());
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));
     }
 
@@ -226,7 +226,7 @@ public class BusinessAdminController {
                 policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour(),
                 policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap(),
                 names(policy.packs()), names(policy.keepLastFour()), policy.lockedItemsOn(),
-                policy.vision().enabled(), policy.vision().ocrThreshold());
+                policy.vision().enabled(), policy.vision().ocrThreshold(), policy.secondCheck());
         var lifecycle = configuration.lifecyclePolicy();
         var lifecycleResponse = new BusinessAdminConfigurationResponse.LifecyclePolicyResponse(
                 lifecycle.originalRetentionHours(), lifecycle.redactedCacheHours(), lifecycle.neverExportedHoldHours(),
@@ -261,7 +261,8 @@ public class BusinessAdminController {
                             new BusinessAdminConfigurationResponse.RegulationPackResponse(p.name(), p.displayName(),
                                     p.covers(), p.notCovered(),
                                     RedactionCatalog.kinds().stream().filter(p.kinds()::contains).map(Enum::name).toList(),
-                                    RedactionCatalog.kinds().stream().filter(p.suggested()::contains).map(Enum::name).toList()))
+                                    RedactionCatalog.kinds().stream().filter(p.suggested()::contains).map(Enum::name).toList(),
+                                    p.secondCheck()))
                             .toList());
 
     private static Set<String> names(Set<? extends Enum<?>> values) {

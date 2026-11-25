@@ -245,6 +245,11 @@ test('a pack turns its kinds on, a kind can be fine-tuned off, and turning the p
   const on = setPack(start, pack, true);
   assert.deepEqual(on.enabledEntityTypes, ['SSN', 'PASSPORT_NUMBER', 'EIN', 'CREDIT_CARD_NUMBER']);
   assert.deepEqual(on.enabledPacks, ['FRCP_5_2']);
+  assert.equal('secondCheckEnabled' in on, false);
+  // Task 0083: a pack that asks for the second check turns it on; turning the pack off leaves it on.
+  const checked: { enabledEntityTypes: string[]; enabledPacks?: string[]; secondCheckEnabled?: boolean } = setPack(start, { ...pack, secondCheck: true }, true);
+  assert.equal(checked.secondCheckEnabled, true);
+  assert.equal(setPack(checked, { ...pack, secondCheck: true }, false).secondCheckEnabled, true);
   const tuned = { ...on, enabledEntityTypes: ['SSN', 'PASSPORT_NUMBER'] };
   assert.deepEqual(tunedOff(tuned, pack, ['CREDIT_CARD_NUMBER']), ['EIN'], 'a locked item is never "turned off by hand"');
   const off = setPack(on, pack, false);

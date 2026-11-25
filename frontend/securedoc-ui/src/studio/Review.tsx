@@ -5,7 +5,7 @@ import { Minus, MousePointerSquareDashed, Plus, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
-import { NAV, REVIEW_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, foundByText, sensitiveTypeName, whyAsked } from './words';
+import { NAV, REVIEW_WORDS, SECOND_CHECK_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, foundByText, secondCheckBanner, sensitiveTypeName, whyAsked } from './words';
 import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
 import { ConfirmDialog } from './admin/shared';
@@ -334,13 +334,13 @@ export default function Review({ caps }: { caps: string[] }) {
               </div>
             )}
 
-            {pageCheck && <p className="cf-page-unreadable"><strong>{UNREAD_PAGE_WORDS.label}</strong></p>}
-            <p className="cf-decision-reason">{selected.entityType === UNREAD_PAGE ? UNREAD_PAGE_WORDS.why : whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
+            {pageCheck && <p className="cf-page-unreadable"><strong>{secondCheckBanner(selected.secondCheck, selected.pageNumber) ?? UNREAD_PAGE_WORDS.label}</strong></p>}
+            <p className="cf-decision-reason">{selected.entityType === UNREAD_PAGE ? (selected.secondCheck ? SECOND_CHECK_WORDS.why : UNREAD_PAGE_WORDS.why) : whyAsked(selected.reason, selected.confidence, queue?.autoRedactThreshold)}</p>
 
             <dl className="cf-facts">
               <div><dt>Case</dt><dd className="cf-mono">{titles.get(selected.packageId) ?? '—'}</dd></div>
               <div><dt>Document</dt><dd>{selected.fileName}, page {selected.pageNumber}</dd></div>
-              {foundByText(selected.foundBy) && <div><dt>Found by</dt><dd>{foundByText(selected.foundBy)}</dd></div>}
+              {foundByText(selected.foundBy) && <div><dt>Found by</dt><dd>{selected.secondCheck ? SECOND_CHECK_WORDS.foundBy : foundByText(selected.foundBy)}</dd></div>}
             </dl>
 
             {pageCheck && (
@@ -491,7 +491,7 @@ function PageStage({ item, draft, onDraft, boxes, zoom, onZoom, onAlreadyDecided
   return (
     <section className="cf-viewer" aria-label={`Page ${item.pageNumber} of ${item.fileName}`}>
       <div className="cf-viewer-bar">
-        <span className="cf-doc-meta">{item.fileName} · page {item.pageNumber}{boxes ? ` · ${UNREAD_PAGE_WORDS.label}` : ''}</span>
+        <span className="cf-doc-meta">{item.fileName} · page {item.pageNumber}{boxes ? ` · ${secondCheckBanner(item.secondCheck, item.pageNumber) ?? UNREAD_PAGE_WORDS.label}` : ''}</span>
         <div className="cf-viewer-tools">
           {draft && <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => onDraft(null)}>Clear mark</button>}
           <div className="cf-zoom" role="group" aria-label="Zoom">

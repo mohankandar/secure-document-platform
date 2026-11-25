@@ -90,6 +90,8 @@ export interface SensitiveDataPolicyConfiguration {
   /** Task 0064. Absent from an older server: on, 0.85. */
   visionEnabled?: boolean;
   visionOcrThreshold?: number;
+  /** Task 0083: a second AI reads the finished file. Absent from an older server: off. */
+  secondCheckEnabled?: boolean;
   /** Task 0062: regulation packs in force, and the kinds whose last four digits stay visible. */
   enabledPacks?: string[];
   keepLastFourKinds?: string[];
@@ -100,7 +102,7 @@ export interface SensitiveDataPolicyConfiguration {
 /** Task 0062: the redaction catalog and the regulation packs, the same for every entity. */
 export interface RedactionCatalog {
   kinds: { key: string; name: string; detectionMethod: string; defaultStyle: string; locked: boolean; lastFourAllowed: boolean }[];
-  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[]; suggestedKinds?: string[] }[];
+  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[]; suggestedKinds?: string[]; secondCheck?: boolean }[];
 }
 
 export interface LifecyclePolicyConfiguration {
@@ -363,6 +365,8 @@ export interface FocusedReviewItem {
   foundText?: ReviewFoundText | null;
   /** Task 0064: TEXT, SIGNATURE, VISION, PAGE_CHECK. Empty for findings saved before. */
   foundBy?: string[] | null;
+  /** Task 0083: the kinds the second check of the finished file found on this page; absent for every other item. */
+  secondCheck?: string[] | null;
 }
 
 
