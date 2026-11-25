@@ -106,9 +106,12 @@ public class OperationsController {
             @RequestParam(required = false) Instant to,
             @RequestParam(defaultValue = "ALL") String source,
             @RequestParam(defaultValue = "ALL") String outcome,
+            @RequestParam(defaultValue = "ALL") String sourceSystem,
+            @RequestParam(defaultValue = "ALL") String level,
             HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
-        var report = reportsQuery.execute(principal, from, to, source, outcome);
+        var report = reportsQuery.execute(principal, from, to, source, outcome,
+                new com.securedoc.platform.application.operations.model.ReportScope(sourceSystem, level));
         return ResponseEntity.ok(toResponse(report,
                 authorizationPolicy.has(principal, UserCapability.REPORT_OPERATIONAL_VIEW),
                 authorizationPolicy.has(principal, UserCapability.TENANT_POLICY_MANAGE)));

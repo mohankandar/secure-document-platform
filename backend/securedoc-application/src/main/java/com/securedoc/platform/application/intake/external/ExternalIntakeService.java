@@ -135,6 +135,15 @@ public final class ExternalIntakeService {
         this.clock = Objects.requireNonNull(clock);
     }
 
+    private com.securedoc.platform.application.port.out.IntakeRefusalPort refusals =
+            com.securedoc.platform.application.port.out.IntakeRefusalPort.NONE;
+
+    /** Task 0081: counts the cases sent again. */
+    public ExternalIntakeService withRefusals(com.securedoc.platform.application.port.out.IntakeRefusalPort port) {
+        this.refusals = Objects.requireNonNull(port);
+        return this;
+    }
+
     /** The caller's enabled push source; its configured name becomes the display name of this request's records. */
     private IntegrationConnection pushSource(AuthenticatedPrincipal principal) {
         IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
@@ -312,6 +321,10 @@ public final class ExternalIntakeService {
                 attemptNumber = latest.attemptNumber() + 1;
             } else {
                 // A replay of the same request: the same warnings, not recorded again.
+                // Task 0081: one already taken in is a duplicate. A polled source lists its cases until it is told, so it is not.
+                if (latest.status() == ExternalIntakeStatus.ACCEPTED_FOR_PROCESSING && channel != ExternalIntakeChannel.POLLING) {
+                    refusals.record(principal.tenantId(), source.id().value().toString(), LvErrorCode.INT_017);
+                }
                 return snapshot(latest).withWarnings(warnings);
             }
         } else if (input.retry()) {

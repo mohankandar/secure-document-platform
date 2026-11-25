@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { capabilitiesFor } from './policyCapabilities';
+import { reportTabsAnswer } from './dailyReportFixture';
 
 /**
  * UI task U006: Reports in plain words, the trend chart with a left axis and the numbers on hover, and the one line a
@@ -54,6 +55,7 @@ async function mockApi(page: Page, roles: string[], capabilities: string[], answ
         authenticationMode: 'OIDC', capabilities });
     }
     if (url.pathname === '/api/v1/operations/reports') return json(answer(url));
+    if (url.pathname.startsWith('/api/v1/operations/reports/')) { const part = reportTabsAnswer(url.pathname.slice('/api/v1'.length)); if (part) return json(part); }
     if (url.pathname.startsWith('/api/v1/branding')) return json({});
     return json({});
   });
@@ -148,6 +150,7 @@ test('a Report Viewer sees the headline, trend and service levels, and one line 
   await expect(page.getByText('Typical time to delivery')).toBeVisible();
   await expect(page.getByTestId('trend-chart')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Service levels' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Operations' }).click();
   await expect(page.getByText('More detail is available to Business Administrators.')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Pipeline' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Backlog age' })).toHaveCount(0);
@@ -156,6 +159,7 @@ test('a Report Viewer sees the headline, trend and service levels, and one line 
 
 test('a Business Administrator sees the detail and Export CSV, not the Report Viewer line', async ({ page }) => {
   await openReports(page, ['BUSINESS_ADMIN'], ADMIN_CAPS);
+  await page.getByRole('tab', { name: 'Operations' }).click();
   await expect(page.getByRole('region', { name: 'Pipeline' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Export CSV' })).toBeVisible();
   await expect(page.getByText('More detail is available to Business Administrators.')).toHaveCount(0);
@@ -324,14 +328,14 @@ test('U024: the tiles follow the chosen period and filters', async ({ page }) =>
   const asked: URLSearchParams[] = [];
   await openReports(page, ['BUSINESS_ADMIN'], ADMIN_CAPS, (url) => {
     asked.push(url.searchParams);
-    return url.searchParams.get('source') === 'API' ? withTimeSaved({ pagesChecked: 7, documentsChecked: 2 })() : reports();
+    return url.searchParams.get('sourceSystem') === 'c-push' ? withTimeSaved({ pagesChecked: 7, documentsChecked: 2 })() : reports();
   });
   const pages = didForYou(page).locator('.cf-rp-did-tile').nth(1);
   await expect(pages).toContainText('14,220');
-  await page.getByLabel('Source').selectOption('API');
+  await page.getByLabel('Source system').selectOption('c-push');
   await expect(pages.locator('.cf-rp-did-value')).toHaveText('7');
   await expect(pages).toContainText('in 2 delivered documents');
-  expect(asked.at(-1)!.get('source')).toBe('API');
+  expect(asked.at(-1)!.get('sourceSystem')).toBe('c-push');
 });
 
 test('U024: an answer without the block fails only this card', async ({ page }) => {

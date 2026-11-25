@@ -34,6 +34,9 @@ import type {
   PackageLifecycleSummary,
   OperationsDashboard,
   OperationalReports,
+  DailyReport,
+  ReportFilters,
+  ReportSource,
   DashboardStage,
   PlatformAdminOverview,
   PipelineQueue,
@@ -314,14 +317,35 @@ class ApiClient {
     return this.request(`/operations/dashboard?${query.toString()}`);
   }
 
-  async getOperationalReports(params: { from: string; to: string; source: string; outcome: string }): Promise<OperationalReports> {
-    const query = new URLSearchParams(params);
+  async getOperationalReports(params: ReportFilters | { from: string; to: string; source: string; outcome: string }): Promise<OperationalReports> {
+    const query = new URLSearchParams({ ...params });
     return this.request(`/operations/reports?${query.toString()}`);
   }
 
   async exportOperationalReports(params: { from: string; to: string; source: string; outcome: string }): Promise<Blob> {
     const query = new URLSearchParams(params);
     const response = await this.request<Response>(`/operations/reports/export?${query.toString()}`);
+    return response.blob();
+  }
+
+  /** Task 0081: the source systems of the Reports filter. */
+  async getReportSources(): Promise<ReportSource[]> {
+    return this.request('/operations/reports/sources');
+  }
+
+  async getDailyReport(params: ReportFilters): Promise<DailyReport> {
+    const query = new URLSearchParams({ ...params });
+    return this.request(`/operations/reports/daily?${query.toString()}`);
+  }
+
+  /** The stage view of the reader's own entity. */
+  async getReportQueue(): Promise<PipelineQueue> {
+    return this.request('/operations/reports/queue');
+  }
+
+  async exportReportTab(tab: 'overview' | 'daily' | 'operations', params: ReportFilters): Promise<Blob> {
+    const query = new URLSearchParams({ ...params });
+    const response = await this.request<Response>(`/operations/reports/${tab}/export?${query.toString()}`);
     return response.blob();
   }
 

@@ -46,6 +46,35 @@ public final class PollingIntakeService {
         return this;
     }
 
+    private com.securedoc.platform.application.port.out.IntakeRefusalPort refusals =
+            com.securedoc.platform.application.port.out.IntakeRefusalPort.NONE;
+    private static final int COUNTED_KEPT = 10_000;
+    /** A source lists a refused package again on every run; it is counted once (per server, until it restarts). */
+    private final Set<String> counted = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(
+            new java.util.LinkedHashMap<>() {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> eldest) {
+                    return size() > COUNTED_KEPT;
+                }
+            }));
+
+    /** Task 0081: counts the packages LexaVault refused. */
+    public PollingIntakeService withRefusals(com.securedoc.platform.application.port.out.IntakeRefusalPort port) {
+        this.refusals = Objects.requireNonNull(port);
+        return this;
+    }
+
+    /** Only LexaVault's own refusal; a source or storage that could not be reached is not one. */
+    private void countRefusal(IntegrationConnection source, PollingSourcePackage sourcePackage, RuntimeException failure) {
+        if (!(failure instanceof com.securedoc.platform.application.exception.ValidationException
+                || failure instanceof com.securedoc.platform.application.exception.IntakeConflictException)) return;
+        LvErrorCode code = IntakeFailure.of(failure).lvCode();
+        if (code != null && counted.add(source.id() + "|" + sourcePackage.externalSourcePackageId() + "|"
+                + sourcePackage.sourceRevision() + "|" + code)) {
+            refusals.record(source.tenantId(), source.id().value().toString(), code);
+        }
+    }
+
     /** Task 0067: the same service, taking less while the queue is long and nothing while space is short. */
     public PollingIntakeService withGate(com.securedoc.platform.application.intake.IntakeGate gate) {
         this.gate = Objects.requireNonNull(gate);
@@ -194,6 +223,7 @@ public final class PollingIntakeService {
                     }
                     PackageFailure failure = new PackageFailure(position, IntakeFailure.of(packageFailure));
                     failures.add(failure);
+                    countRefusal(source, sourcePackage, packageFailure);
                     log.warn("POLLING_PACKAGE_FAILED connectionId={} package=#{} code={} exceptionType={}",
                             source.id(), position, failure.failure().code(), failure.failure().exceptionType());
                     auditService.recordFailure(source.tenantId(), actorId, AuditAction.POLLING_PACKAGE_FAILED,
