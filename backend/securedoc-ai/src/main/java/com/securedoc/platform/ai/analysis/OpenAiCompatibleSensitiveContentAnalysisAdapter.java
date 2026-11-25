@@ -106,12 +106,19 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         int parallelism = Math.min(configuredParallelism, nonBlankPages.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
         // Task 0072: one request for the other kinds, exactly as before, and one for names where they are on.
-        boolean secondCheck = request.policy().secondCheck();
-        boolean names = !secondCheck && SensitiveContentPromptBuilder.asksForNames(request.policy());
+        AnalysisPolicy.Ask ask = request.policy().ask();
+        boolean names = ask == AnalysisPolicy.Ask.KINDS && SensitiveContentPromptBuilder.asksForNames(request.policy());
         AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(request.policy());
         Map<String, String> prompts = new java.util.LinkedHashMap<>();
-        if (secondCheck) {
-            prompts.put(SensitiveContentPromptBuilder.SECOND_CHECK_VERSION, SensitiveContentPromptBuilder.secondCheck());
+        if (ask != AnalysisPolicy.Ask.KINDS) {
+            String version = switch (ask) {
+                case SUMMARY -> SensitiveContentPromptBuilder.SUMMARY_VERSION;
+                case KNOWN_NAMES -> SensitiveContentPromptBuilder.KNOWN_NAMES_VERSION;
+                default -> SensitiveContentPromptBuilder.SECOND_CHECK_VERSION;
+            };
+            // No answer schema here: the shape is said in words.
+            prompts.put(version, SensitiveContentPromptBuilder.text(version) + (ask == AnalysisPolicy.Ask.KNOWN_NAMES
+                    ? " Return JSON only: answers[] with number, is." : ""));
         } else if (!names || !others.enabledEntityTypes().isEmpty()) prompts.put(VERSION, promptBuilder.build(others));
         if (names) prompts.put(SensitiveContentPromptBuilder.NAMES_VERSION, promptBuilder.buildNames());
         long startedNanos = System.nanoTime();
@@ -200,13 +207,16 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
 
     private List<DiscoveredSensitiveContent> analyzePage(PageContent page, String systemPrompt, String version) {
         boolean secondCheck = SensitiveContentPromptBuilder.SECOND_CHECK_VERSION.equals(version);
+        boolean summary = SensitiveContentPromptBuilder.SUMMARY_VERSION.equals(version);
+        boolean knownNames = SensitiveContentPromptBuilder.KNOWN_NAMES_VERSION.equals(version);
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", model);
         requestBody.put("temperature", 0);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", secondCheck
+                Map.of("role", "user", "content", secondCheck || summary
                         ? SensitiveContentPromptBuilder.secondCheckPage(page.text())
+                        : knownNames ? SensitiveContentResponseParser.knownNames(List.of(page))
                         : "Page " + page.pageNumber() + " text:\n" + page.text())
         ));
 
@@ -263,6 +273,8 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "AI provider returned no analysis content", null);
             }
+            if (summary) return responseParser.parseSummary(content, page, PROVIDER + ":" + model);
+            if (knownNames) return responseParser.parseKnownNames(content, List.of(page), PROVIDER + ":" + model);
             if (secondCheck) return responseParser.parseSecondCheck(content, page, PROVIDER + ":" + model);
             return responseParser.parse(content, page, PROVIDER, model,
                     PROVIDER + ":" + model, version);

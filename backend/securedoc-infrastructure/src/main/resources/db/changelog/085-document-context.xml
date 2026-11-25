@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0065 (owner approved). The setting of an entity (off for every entity), and where a case's instructions are
+        stored: a file of the case, encrypted like the documents. The text itself is in no column.
+    -->
+    <changeSet id="085-01-document-context" author="lexavault">
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="document_context_enabled" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <createTable tableName="case_instructions">
+            <column name="package_id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="file_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="storage_provider" type="VARCHAR(100)"><constraints nullable="false"/></column>
+            <column name="storage_bucket" type="VARCHAR(255)"/>
+            <column name="storage_key" type="VARCHAR(1024)"><constraints nullable="false"/></column>
+            <column name="changed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="case_instructions" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_case_instructions_tenant"/>
+        <rollback>
+            <dropTable tableName="case_instructions"/>
+            <dropColumn tableName="tenant_redaction_policies" columnName="document_context_enabled"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

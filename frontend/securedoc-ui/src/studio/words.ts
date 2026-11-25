@@ -223,6 +223,23 @@ export const SECOND_CHECK_WORDS = {
   why: 'The finished file was read a second time. Look over the whole page for anything that is still to be redacted. What was already redacted stays redacted.',
 } as const;
 
+/** Task 0065. */
+export const DOCUMENT_CONTEXT_WORDS = {
+  toggle: 'Find the people of a document on every page',
+  toggleHint: 'One first pass reads the beginning of each document for the people it is about and the short names used for them. Every page is then searched for those names, also where they look like ordinary words. New case and the case panel get a box for instructions. Names always go to Review, so expect more items there, some of them wrong. Needs Person name. Adds a few seconds a document and up to about a second a page.',
+  needsNames: 'Turn on Person name as well: without it nothing is searched for.',
+  suggested: (pack: string) => `Suggested with ${pack}.`,
+} as const;
+export const CASE_INSTRUCTIONS = {
+  label: 'Instructions for the AI',
+  hint: 'The people in this case and whose names to protect. Do not write anything else here.',
+  caseHint: 'The people in this case and whose names to protect. Used the next time the case is searched.',
+  max: 2000,
+  save: 'Save instructions',
+  saved: 'Instructions saved.',
+  notSaved: "The instructions couldn't be saved.",
+} as const;
+
 /** The banner of a page the second check sent, or null for any other item. */
 export function secondCheckBanner(kinds: readonly string[] | null | undefined, page: number): string | null {
   if (!Array.isArray(kinds)) return null;

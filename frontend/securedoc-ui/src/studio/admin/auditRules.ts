@@ -280,6 +280,7 @@ const SENTENCES: Record<string, string> = {
   PLATFORM_HEALTH_CHECKED: 'Ran health checks',
   PROCESSING_MAXIMUMS_CHANGED: 'Changed the processing maximums',
   CASE_PRIORITY_CHANGED: 'Changed the case’s priority',
+  CASE_INSTRUCTIONS_CHANGED: 'Changed the case’s instructions for the AI',
   SOURCE_PRIORITY_CHANGED: 'Changed a source’s default priority',
   SOURCE_BULK_CHANGED: 'Changed a source’s migration setting',
   PROCESSING_STORAGE_PROVIDER_CREATED: 'Added processing storage',

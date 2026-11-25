@@ -44,7 +44,7 @@ import java.util.regex.Pattern;
 public class UnrecordedFileSweepAdapter implements UnrecordedFileSweepPort {
     private static final Logger log = LoggerFactory.getLogger(UnrecordedFileSweepAdapter.class);
     private static final Set<String> TEXT_KINDS = Set.of("EXTRACTED_TEXT", "EXTRACTED_TEXT_BATCH", "FINDINGS_BATCH",
-            "VISION_PAGE");
+            "VISION_PAGE", "DOCUMENT_SUMMARY");
     private static final String REDACTED_KIND = "REDACTED";
     private static final Pattern CYCLE = Pattern.compile("cycle-\\d+");
     private static final Pattern UUID_NAME =

@@ -19,6 +19,10 @@ public interface DetectSensitiveDataUseCase {
 
     DetectSensitiveDataResult execute(DetectSensitiveDataCommand command);
 
+    /** Task 0065: before a page batch's transaction: what all batches of the document share is made once. */
+    default void prepareBatch(DetectSensitiveDataCommand command) {
+    }
+
     /** Task 0049: searches one page batch of a DETECTING document and keeps the places for {@link #completeFromBatches}. */
     default void detectBatch(PageBatchCommand command) {
         throw new UnsupportedOperationException("Page batches are not supported");

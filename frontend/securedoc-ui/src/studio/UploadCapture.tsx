@@ -94,7 +94,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
     let packageId = draftPackageId;
     try {
       if (!packageId) {
-        const pkg = await apiClient.createPackage({ packageType: 'MANUAL_UPLOAD', businessIdentifiers: identity, sensitivityLevel: gate.sensitivity, priority: gate.priority });
+        const pkg = await apiClient.createPackage({ packageType: 'MANUAL_UPLOAD', businessIdentifiers: identity, sensitivityLevel: gate.sensitivity, priority: gate.priority, caseInstructions: gate.instructions });
         packageId = pkg.packageId;
         setDraftPackageId(packageId);
       }

@@ -54,6 +54,14 @@ public final class CreatePackageService implements CreatePackageUseCase {
         return this;
     }
 
+    private com.securedoc.platform.application.intake.CaseInstructionsService instructions;
+
+    /** Task 0065: without it case instructions are refused. */
+    public CreatePackageService withInstructions(com.securedoc.platform.application.intake.CaseInstructionsService service) {
+        this.instructions = Objects.requireNonNull(service);
+        return this;
+    }
+
     /** One transaction, the caller's when there is one. */
     public interface Unit {
         <T> T run(java.util.function.Supplier<T> work);
@@ -89,6 +97,11 @@ public final class CreatePackageService implements CreatePackageUseCase {
                     "This intake batch has already been accepted");
         }
 
+        boolean instructed = command.instructions() != null && !command.instructions().isBlank();
+        if (instructed && instructions == null) {
+            throw new com.securedoc.platform.application.exception.ValidationException("Case instructions are not taken in here");
+        }
+        if (instructed) instructions.check(principal.tenantId(), command.instructions());
         Created created = unit.run(() -> {
             CaseFieldSnapshot record = caseFields.resolveOrCreate(principal.tenantId(), command.businessIdentifiers());
             DocumentPackage made = DocumentPackage.createIntake(
@@ -96,6 +109,10 @@ public final class CreatePackageService implements CreatePackageUseCase {
                     command.intakeFingerprint(), command.sourceReference(), principal.actorId(),
                     PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
             packageRepository.save(made);
+            if (instructed) {
+                instructions.atIntake(principal.tenantId(), principal.actorId(), made.id(), command.instructions(),
+                        command.correlationId());
+            }
             return new Created(record, made, priorities == null ? com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL
                     : priorities.atIntake(principal.tenantId(), made.id(), command.priority(), command.sourceKey()));
         });

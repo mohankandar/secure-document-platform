@@ -12,7 +12,7 @@ import useSWR from 'swr';
 import { RETENTION_WORDS, retentionPlaceholder, retentionValueError, type RetentionSettings } from '../exportRules';
 import { HelpTip } from './HelpTip';
 import { MAX_MINUTES_PER_PAGE, MIN_MINUTES_PER_PAGE, MINUTES_PER_PAGE_ERROR, TIME_SAVED_SETTING_IS_NEW, minutesPerPageError } from '../reports/timeSavedRules';
-import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, CATALOG_WORDS, SEARCHABLE_PAGES_WORDS, SECOND_CHECK_WORDS, VISION_WORDS } from '../words';
+import { SENSITIVE_TYPES, sensitiveTypeName, SENSITIVE_TYPES_HEADING, CATALOG_WORDS, SEARCHABLE_PAGES_WORDS, DOCUMENT_CONTEXT_WORDS, SECOND_CHECK_WORDS, VISION_WORDS } from '../words';
 import {
   MODE_WORDS, PRESETS, PREVIEW_WORDS, applyPreset, confirmWords, estimateQuery, estimateRunner, needsConfirm, presetOf, previewHeadline,
   previewTiles, reviewChanged, saveLabel, setKeepLastFour, setPack, tunedOff, type ConfirmWords, type EstimateRunner, type PolicyEstimate,
@@ -219,6 +219,8 @@ function SensitiveDataCard({ data, mutate, entityName }: { data: BusinessAdminCo
             <input id="cf-vision-threshold" type="range" min={50} max={99} step={1} value={Math.round((d.visionOcrThreshold ?? 0.85) * 100)} onChange={(e) => set({ ...d, visionOcrThreshold: Number(e.target.value) / 100 })} />
           </div>
           <Toggle label={SECOND_CHECK_WORDS.toggle} hint={SECOND_CHECK_WORDS.toggleHint} checked={d.secondCheckEnabled === true} onChange={(v) => set({ ...d, secondCheckEnabled: v })} />
+          <Toggle label={DOCUMENT_CONTEXT_WORDS.toggle} hint={[DOCUMENT_CONTEXT_WORDS.toggleHint, ...(catalog?.packs ?? []).filter((p) => p.suggestsDocumentContext && (d.enabledPacks ?? []).includes(p.key)).map((p) => DOCUMENT_CONTEXT_WORDS.suggested(p.name))].join(' ')} checked={d.documentContextEnabled === true} onChange={(v) => set({ ...d, documentContextEnabled: v })} />
+          {d.documentContextEnabled === true && !d.enabledEntityTypes.includes('PERSON_NAME') && <p className="cf-ad-warn">{DOCUMENT_CONTEXT_WORDS.needsNames}</p>}
           </div>
         </fieldset>
         );

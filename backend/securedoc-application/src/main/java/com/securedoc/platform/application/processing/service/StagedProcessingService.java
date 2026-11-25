@@ -454,6 +454,7 @@ public final class StagedProcessingService {
         CorrelationId correlationId = CorrelationId.generate();
         List<ArtifactStorageReference> stored = new ArrayList<>();
         List<ArtifactStorageReference> discarded = new ArrayList<>();
+        if (job.stage() == PipelineStage.FIND && job.isPageBatch()) prepareFind(job, correlationId);
         VisionPageResult visionPage = job.stage() == PipelineStage.VISION ? readVisionPage(job, correlationId) : null;
         try {
             transactions.inNewTransaction(() -> StagedStepScope.tracking(stored, discarded, () -> {
@@ -488,6 +489,23 @@ public final class StagedProcessingService {
         }
         gateSafely(job.tenantId(), job.packageId(), correlationId);
         return Outcome.DONE;
+    }
+
+    /** Task 0065: outside any transaction; the step does it itself, and records why, when this failed. */
+    private void prepareFind(PipelineJob job, CorrelationId correlationId) {
+        try {
+            if (!jobs.claimIsCurrent(job.id(), job.claimToken())) return;
+            boolean detecting = documentRepository.findByIdAndTenantId(job.documentId(), job.tenantId())
+                    .map(document -> document.status() == DocumentStatus.DETECTING).orElse(false);
+            boolean open = packageRepository.findByIdAndTenantId(job.packageId(), job.tenantId())
+                    .map(pkg -> OPEN.contains(pkg.status())).orElse(false);
+            if (detecting && open) detectSensitiveData.prepareBatch(wholeDocument(job, correlationId));
+        } catch (RuntimeException failure) {
+            // The server is stopping: the job's claim runs out and another worker takes it.
+            if (Thread.currentThread().isInterrupted()) throw failure;
+            log.warn("DOCUMENT_SUMMARY_NOT_PREPARED job={} package={} type={}", job.id(), job.packageId(),
+                    failure.getClass().getSimpleName());
+        }
     }
 
     /**

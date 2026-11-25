@@ -153,8 +153,11 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             return new AnalysisOutput(List.of());
         }
 
-        List<List<PageContent>> batches = request.policy().secondCheck()
-                ? nonBlankPages.stream().map(List::of).toList() : buildBatches(nonBlankPages);
+        List<List<PageContent>> batches = switch (request.policy().ask()) {
+            case SECOND_CHECK, SUMMARY -> nonBlankPages.stream().map(List::of).toList();
+            case KNOWN_NAMES -> inTens(nonBlankPages);
+            case KINDS -> buildBatches(nonBlankPages);
+        };
         int parallelism = Math.min(configuredParallelism, batches.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
         AtomicInteger providerCallCount = new AtomicInteger();
@@ -388,8 +391,11 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         requestBody.put("options", options);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", prompt.text()),
-                Map.of("role", "user", "content", prompt.secondCheck()
-                        ? SensitiveContentPromptBuilder.secondCheckPage(pages.getFirst().text()) : buildBatchUserPrompt(pages))
+                Map.of("role", "user", "content", switch (prompt.ask()) {
+                    case SECOND_CHECK, SUMMARY -> SensitiveContentPromptBuilder.secondCheckPage(pages.getFirst().text());
+                    case KNOWN_NAMES -> SensitiveContentResponseParser.knownNames(pages);
+                    case KINDS -> buildBatchUserPrompt(pages);
+                })
         ));
 
         final String body;
@@ -453,12 +459,12 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "Local AI provider reached the configured output limit", null);
             }
-            if (prompt.secondCheck()) {
-                return new BatchAnalysisResult(responseParser.parseSecondCheck(content, pages.getFirst(),
-                        "ollama:" + model), ProviderMetrics.from(envelope));
-            }
-            List<DiscoveredSensitiveContent> findings = responseParser.parse(
-                    content, pages, "ollama", model, "ollama:" + model, prompt.version());
+            List<DiscoveredSensitiveContent> findings = switch (prompt.ask()) {
+                case SECOND_CHECK -> responseParser.parseSecondCheck(content, pages.getFirst(), "ollama:" + model);
+                case SUMMARY -> responseParser.parseSummary(content, pages.getFirst(), "ollama:" + model);
+                case KNOWN_NAMES -> responseParser.parseKnownNames(content, pages, "ollama:" + model);
+                case KINDS -> responseParser.parse(content, pages, "ollama", model, "ollama:" + model, prompt.version());
+            };
             return new BatchAnalysisResult(findings, ProviderMetrics.from(envelope));
         } catch (TechnicalDependencyException e) {
             throw e;
@@ -479,29 +485,73 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     }
 
     /** What the model is told, the shape of its answer, and the version recorded with its findings. */
-    private record Prompt(String text, JsonNode schema, String version) {
-        boolean secondCheck() {
-            return SensitiveContentPromptBuilder.SECOND_CHECK_VERSION.equals(version);
-        }
-    }
+    private record Prompt(String text, JsonNode schema, String version, AnalysisPolicy.Ask ask) { }
 
     /** Task 0072: one request for the other kinds, exactly as before, and one for names where they are on. */
     private List<Prompt> prompts(AnalysisPolicy policy) {
-        if (policy.secondCheck()) {
-            return List.of(new Prompt(SensitiveContentPromptBuilder.secondCheck(),
-                    structuredOutput ? secondCheckSchema() : null, SensitiveContentPromptBuilder.SECOND_CHECK_VERSION));
+        if (policy.ask() != AnalysisPolicy.Ask.KINDS) {
+            String version = switch (policy.ask()) {
+                case SUMMARY -> SensitiveContentPromptBuilder.SUMMARY_VERSION;
+                case KNOWN_NAMES -> SensitiveContentPromptBuilder.KNOWN_NAMES_VERSION;
+                default -> SensitiveContentPromptBuilder.SECOND_CHECK_VERSION;
+            };
+            JsonNode schema = !structuredOutput ? null : switch (policy.ask()) {
+                case SUMMARY -> summarySchema();
+                case KNOWN_NAMES -> knownNamesSchema();
+                default -> secondCheckSchema();
+            };
+            return List.of(new Prompt(SensitiveContentPromptBuilder.text(version), schema, version, policy.ask()));
         }
         List<Prompt> prompts = new ArrayList<>();
         boolean names = SensitiveContentPromptBuilder.asksForNames(policy);
         AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(policy);
         if (!names || !others.enabledEntityTypes().isEmpty()) {
-            prompts.add(new Prompt(promptBuilder.buildCompact(others), structuredOutput ? buildResponseSchema() : null, VERSION));
+            prompts.add(new Prompt(promptBuilder.buildCompact(others), structuredOutput ? buildResponseSchema() : null, VERSION,
+                    AnalysisPolicy.Ask.KINDS));
         }
         if (names) {
             prompts.add(new Prompt(promptBuilder.buildNames(), structuredOutput ? namesSchema() : null,
-                    SensitiveContentPromptBuilder.NAMES_VERSION));
+                    SensitiveContentPromptBuilder.NAMES_VERSION, AnalysisPolicy.Ask.KINDS));
         }
         return prompts;
+    }
+
+    private static List<List<PageContent>> inTens(List<PageContent> sentences) {
+        List<List<PageContent>> out = new ArrayList<>();
+        for (int i = 0; i < sentences.size(); i += 10) {
+            out.add(List.copyOf(sentences.subList(i, Math.min(i + 10, sentences.size()))));
+        }
+        return out;
+    }
+
+    /** Task 0065. Ordered, as the second check's. */
+    private JsonNode summarySchema() {
+        Map<String, Object> text = Map.of("type", "string");
+        Map<String, Object> person = new LinkedHashMap<>();
+        person.put("name", text);
+        person.put("role", text);
+        person.put("alsoCalled", Map.of("type", "array", "items", text));
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("kind", text);
+        properties.put("matter", text);
+        properties.put("people", Map.of("type", "array", "items", object(person)));
+        return objectMapper.valueToTree(object(properties));
+    }
+
+    private JsonNode knownNamesSchema() {
+        Map<String, Object> answer = new LinkedHashMap<>();
+        answer.put("number", Map.of("type", "integer"));
+        answer.put("is", Map.of("type", "string", "enum", SensitiveContentResponseParser.NAME_USES));
+        return objectMapper.valueToTree(object(Map.of("answers", Map.of("type", "array", "items", object(answer)))));
+    }
+
+    private static Map<String, Object> object(Map<String, Object> properties) {
+        Map<String, Object> object = new LinkedHashMap<>();
+        object.put("type", "object");
+        object.put("additionalProperties", false);
+        object.put("properties", properties);
+        object.put("required", List.copyOf(properties.keySet()));
+        return object;
     }
 
     private JsonNode secondCheckSchema() {

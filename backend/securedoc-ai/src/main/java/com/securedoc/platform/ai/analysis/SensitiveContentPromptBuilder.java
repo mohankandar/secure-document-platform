@@ -35,17 +35,25 @@ public final class SensitiveContentPromptBuilder {
     /** Task 0083 (BL7): the second check's text prompt; any change of the file is a new version. */
     public static final String SECOND_CHECK_VERSION = "second-check-text-v1";
 
+    /** Task 0065 (BL7): a document's people, and what a known name is in a sentence; any change is a new version. */
+    public static final String SUMMARY_VERSION = "document-summary-v1";
+    public static final String KNOWN_NAMES_VERSION = "known-names-v1";
+
     static String secondCheck() {
+        return text(SECOND_CHECK_VERSION);
+    }
+
+    static String text(String version) {
         try (java.io.InputStream in = SensitiveContentPromptBuilder.class.getResourceAsStream(
-                "/" + SECOND_CHECK_VERSION + ".txt")) {
-            if (in == null) throw new IllegalStateException(SECOND_CHECK_VERSION + " is missing");
+                "/" + version + ".txt")) {
+            if (in == null) throw new IllegalStateException(version + " is missing");
             return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).replace("\r\n", "\n").trim();
         } catch (java.io.IOException e) {
-            throw new IllegalStateException(SECOND_CHECK_VERSION + " could not be read");
+            throw new IllegalStateException(version + " could not be read");
         }
     }
 
-    /** What the second check's model is sent for a page. */
+    /** What the model is sent for a page of the second check, or for the beginning of a document. */
     static String secondCheckPage(String text) {
         return "<PAGE>\n" + text + "\n</PAGE>";
     }

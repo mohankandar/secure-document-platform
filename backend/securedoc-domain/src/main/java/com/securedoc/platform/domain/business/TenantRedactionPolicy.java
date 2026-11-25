@@ -23,6 +23,9 @@ import java.util.Set;
  *
  * <p>Task 0083: {@code secondCheck} (off by default) has a second AI read the finished file before it is kept.
  *
+ * <p>Task 0065: {@code documentContext} (off by default) gives every page batch of the names search a short summary of
+ * its document and the case's instructions.
+ *
  * <p>Task 0064: {@code vision} says whether routed pages are read by the vision model, and the routing threshold.
  */
 public record TenantRedactionPolicy(
@@ -38,8 +41,19 @@ public record TenantRedactionPolicy(
         Set<EntityType> keepLastFour,
         boolean lockedItemsOn,
         VisionSettings vision,
-        boolean secondCheck
+        boolean secondCheck,
+        boolean documentContext
 ) {
+    /** The policy as it was before task 0065: no document context. */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages, PageBatchSettings pageBatches,
+                                 Set<RegulationPack> packs, Set<EntityType> keepLastFour, boolean lockedItemsOn,
+                                 VisionSettings vision, boolean secondCheck) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, pageBatches, packs, keepLastFour, lockedItemsOn, vision, secondCheck, false);
+    }
+
     /** The policy as it was before task 0083: no second check. */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
