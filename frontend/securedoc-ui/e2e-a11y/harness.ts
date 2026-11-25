@@ -448,6 +448,9 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
 
     // Admin › Integrations, Sign-in
     if (path === '/integrations' && method === 'GET') return json(CONNECTIONS);
+    if (path === '/integrations/destination-profiles') return json([{ file: 'archive.json', name: 'records-archive-v1', version: '1.0.0', description: 'A made-up archive', signInTypes: ['OAUTH2_CLIENT_CREDENTIALS'],
+      fields: ['caseNumber*'], takesFields: true, otherFields: true, carriesLevel: true, carriesCaseLevel: false, notes: ['Register one client for LexaVault.'], problems: [] },
+      { file: 'damaged.json', name: null, version: null, description: null, signInTypes: [], fields: [], takesFields: false, otherFields: false, carriesLevel: false, carriesCaseLevel: false, notes: [], problems: ['INT_PROFILE_SCHEMA /steps'] }]);
     if (path === '/derived-deliveries/attention') return json(ATTENTION);
     if (path === '/business-admin/routing-rules') {
       return json([{ ruleId: 'r1', destinationLabel: 'Title pages', markerType: 'BARCODE', markerValue: 'TITLE-001', scanRegion: 'TOP_RIGHT', destinationConnectionId: 'c-title', enabled: true }]);
