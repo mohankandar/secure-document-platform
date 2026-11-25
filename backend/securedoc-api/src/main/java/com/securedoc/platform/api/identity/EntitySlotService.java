@@ -18,6 +18,7 @@ import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.error.LvErrorCode;
+import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.infrastructure.identity.EntitySlotStore;
@@ -163,6 +164,46 @@ public class EntitySlotService {
                 : ", timeZone=" + outcome.zone().effective().map(Object::toString).orElse("none");
         record(principal, correlation, before, AuditAction.ENTITY_TIME_ZONE_CHANGED, outcome.result(), outcome.refused(), zone);
         return answer(outcome.result(), outcome.refused());
+    }
+
+    /** Who an installation's activation is recorded for (a fixed id: no person, no sign-in). */
+    static final ActorId INSTALL = ActorId.of(java.util.UUID.fromString("00000000-0000-0000-0000-000000000075"));
+
+    /**
+     * Task 0075: activates the customer's first entity at the installation, before anyone can sign in. Only while none was
+     * ever activated; again with the same slot and name it changes nothing. Everything later is done in Admin, Entities.
+     */
+    @Transactional
+    public Answer activateFirst(String slotId, String name, CorrelationId correlation) {
+        List<String> customers = slots.customers();
+        if (customers.size() != 1) {
+            return new Answer(false, "NOT_ONE_CUSTOMER", "This database holds " + customers.size() + " customers.",
+                    "Run setup first; it stores the customer and its entity slots.");
+        }
+        slots.lockCustomer(customers.get(0));
+        List<EntityRecord> all = slots.slots(customers.get(0));
+        Optional<EntityRecord> wanted = all.stream().filter(r -> r.slotId().equals(slotId)).findFirst();
+        if (wanted.isEmpty()) {
+            return new Answer(false, "NO_SUCH_SLOT", "The customer has no such entity slot.",
+                    "Use one of: " + all.stream().map(EntityRecord::slotId).sorted().collect(Collectors.joining(", ")) + ".");
+        }
+        EntityRecord slot = wanted.get();
+        if (all.stream().anyMatch(r -> r.activatedAt() != null)) {
+            boolean same = slot.status() == com.documentplatform.identity.store.EntityStatus.ACTIVE && name != null
+                    && slot.displayName().equals(name.strip()) && slots.hasEntityRow(slot.entityUuid());
+            if (same) return new Answer(true, "UNCHANGED", "This entity is already active under this name.", null);
+            return new Answer(false, "NOT_THE_FIRST", "An entity was activated before.",
+                    "Use Admin, Entities as a Business Admin.");
+        }
+        ActivationOutcome outcome = withActivation(a -> a.activate(slotId, name, INSTALL.value().toString()));
+        if (outcome.refused()) return answer(outcome.result(), true);
+        TenantId entity = TenantId.of(outcome.entity().entityUuid());
+        if (slots.mirror(outcome.entity(), clock.instant()) && policies.findByTenantId(entity).isEmpty()) {
+            policies.save(TenantRedactionPolicy.defaults(entity));
+        }
+        audit.recordSuccess(entity, INSTALL, AuditAction.ENTITY_ACTIVATED, "EntitySlot", slotId, correlation,
+                "code=" + outcome.result().code() + ", source=INSTALL");
+        return answer(outcome.result(), false);
     }
 
     private ActivationOutcome withActivation(java.util.function.Function<SlotActivation, ActivationOutcome> work) {

@@ -4,6 +4,7 @@ import com.documentplatform.identity.AuthenticatedIdentity;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.security.SecurityProperties;
+import com.securedoc.platform.api.security.MachineRoutes;
 import com.securedoc.platform.api.security.ProductRole;
 import com.securedoc.platform.api.security.oidc.OidcTenantMembershipResolver;
 import com.documentplatform.identity.admission.EntitySelection;
@@ -131,7 +132,7 @@ public class RequestContextResolver {
                 ? known
                 : securityProperties.getMode() == SecurityMode.LOCAL
                         ? resolveLocalIntegrationPrincipal(request)
-                        : resolveOidcIntegrationPrincipal();
+                        : resolveOidcIntegrationPrincipal(MachineRoutes.scanner(request));
         request.setAttribute(INTEGRATION_PRINCIPAL_ATTRIBUTE, principal);
         // A machine client is not a person: its audit records carry no display name.
         actorDisplayName.clear();
@@ -200,7 +201,7 @@ public class RequestContextResolver {
         return AuthenticatedPrincipal.of(ActorId.of(actorId), TenantId.of(tenantId), client.trim(), Set.of());
     }
 
-    private AuthenticatedPrincipal resolveOidcIntegrationPrincipal() {
+    private AuthenticatedPrincipal resolveOidcIntegrationPrincipal(boolean scanner) {
         JwtAuthenticationToken token = requireOidcToken();
         var jwt = token.getToken();
         AuthenticatedIdentity identity = normalizeIdentity(jwt);
@@ -209,10 +210,14 @@ public class RequestContextResolver {
                 || jwt.getIssuer() == null || securityProperties.getOidc().getAudience().isBlank()) {
             throw new SecurityContextException("Shared-issuer machine identity configuration is incomplete", "MACHINE_IDENTITY_CONFIGURATION_INCOMPLETE");
         }
-        // The entity is the one whose enabled push connection names this client; no header chooses it.
-        var candidates = machineTenantBindings.findEnabledPushTenants(
-                securityProperties.getOidc().getProviderId(), java.net.URI.create(jwt.getIssuer().toString()),
-                securityProperties.getOidc().getAudience(), identity.username());
+        // The entity is the one whose enabled push (scanner route: scanner) connection names this client; no header chooses
+        // it, and a client of the one kind is nobody on the other kind's routes.
+        String provider = securityProperties.getOidc().getProviderId();
+        java.net.URI issuer = java.net.URI.create(jwt.getIssuer().toString());
+        String audience = securityProperties.getOidc().getAudience();
+        var candidates = scanner
+                ? machineTenantBindings.findEnabledScannerTenants(provider, issuer, audience, identity.username())
+                : machineTenantBindings.findEnabledPushTenants(provider, issuer, audience, identity.username());
         TenantId tenantId = toTenant(refusingAsSecurityContext(() -> machineAdmission.requireUnique(toEntities(candidates))));
         ActorId actorId = trustedActorResolver.resolve(jwt);
         return AuthenticatedPrincipal.of(actorId, tenantId, identity.username(), Set.of());

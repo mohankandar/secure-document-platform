@@ -59,6 +59,11 @@ public class EntitySlotStore implements EntityTimeZonePort {
         return withStore(s -> s.entity(entity.value())).map(EntityRecord::tenantId);
     }
 
+    /** Every customer stored here; an installation has one. */
+    public List<String> customers() {
+        return jdbc.queryForList("select tenant_id from idn_customer order by tenant_id", String.class);
+    }
+
     public List<EntityRecord> slots(String customer) {
         return withStore(s -> s.entities(customer));
     }

@@ -16,10 +16,18 @@ public record ExternalDocumentReceiptResponse(
         int expectedDocuments,
         int receivedDocuments,
         List<String> missingExternalSourceDocumentIds,
-        Instant expiresAt) {
+        Instant expiresAt,
+        /** Task 0075: the entity that has the case, on the scanner routes; null elsewhere. */
+        String entityName) {
     public static ExternalDocumentReceiptResponse from(ExternalDocumentReceipt value) {
         return new ExternalDocumentReceiptResponse(value.packageId(), value.documentId(), value.externalSourceDocumentId(),
                 value.sha256(), value.duplicateAcknowledgement(), value.intakeStatus().name(), value.expectedDocuments(),
-                value.receivedDocuments(), value.missingExternalSourceDocumentIds(), value.expiresAt());
+                value.receivedDocuments(), value.missingExternalSourceDocumentIds(), value.expiresAt(), null);
+    }
+
+    ExternalDocumentReceiptResponse in(String entity) {
+        return new ExternalDocumentReceiptResponse(packageId, documentId, externalSourceDocumentId, sha256,
+                duplicateAcknowledgement, intakeStatus, expectedDocuments, receivedDocuments,
+                missingExternalSourceDocumentIds, expiresAt, entity);
     }
 }

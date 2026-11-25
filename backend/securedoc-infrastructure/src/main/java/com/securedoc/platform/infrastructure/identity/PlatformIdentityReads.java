@@ -40,7 +40,7 @@ import java.util.UUID;
  *       lookup (LV-AUT-007), as before;</li>
  *   <li>platform-wide grants ({@code idn_platform_grant}, task 0054) are passed on exactly as stored; the sign-in check
  *       (platform-identity's PlatformGroupAuthorization) takes only the platform role from them;</li>
- *   <li>a machine binds only through an enabled PUSH_API ingestion source whose authentication proves a bearer-token
+ *   <li>a machine binds only through an enabled PUSH_API (or, on the scanner routes, SCANNER) ingestion source whose authentication proves a bearer-token
  *       client (JWT or OAuth2 client credentials).</li>
  * </ul>
  * When a store cannot be read, the candidate, grant and machine lookups give null, so admission refuses (fails closed).
@@ -62,9 +62,13 @@ public class PlatformIdentityReads implements ActiveOidcTenantCandidates, Tenant
               and i.client_principal = ?
             """;
 
+    /** Task 0075: the same rule for a scanner source. */
+    static final String ENABLED_SCANNER_CLIENTS = ENABLED_PUSH_CLIENTS.replace("'PUSH_API'", "'SCANNER'");
+
     private final JdbcTemplate jdbc;
     private final PostgresIdentityLookup lookup;
     private final PostgresMachineEntityBindings machines;
+    private final PostgresMachineEntityBindings scanners;
 
     public PlatformIdentityReads(JdbcTemplate jdbc) {
         this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
@@ -72,6 +76,8 @@ public class PlatformIdentityReads implements ActiveOidcTenantCandidates, Tenant
                 LexaVaultProduct.CODE);
         this.machines = new PostgresMachineEntityBindings(jdbc.getDataSource(), LexaVaultProduct.CODE,
                 this::entitiesWithEnabledPushClient);
+        this.scanners = new PostgresMachineEntityBindings(jdbc.getDataSource(), LexaVaultProduct.CODE,
+                this::entitiesWithEnabledScannerClient);
     }
 
     @Override
@@ -120,17 +126,36 @@ public class PlatformIdentityReads implements ActiveOidcTenantCandidates, Tenant
 
     @Override
     public Set<TenantId> findEnabledPushTenants(String providerId, URI issuer, String audience, String clientPrincipal) {
+        return bound(machines, providerId, issuer, audience, clientPrincipal);
+    }
+
+    @Override
+    public Set<TenantId> findEnabledScannerTenants(String providerId, URI issuer, String audience, String clientPrincipal) {
+        return bound(scanners, providerId, issuer, audience, clientPrincipal);
+    }
+
+    private Set<TenantId> bound(PostgresMachineEntityBindings bindings, String providerId, URI issuer, String audience,
+                                String clientPrincipal) {
         ConnectionKey key = key(providerId, issuer, audience);
         if (key == null || clientPrincipal == null || clientPrincipal.isBlank()) return Set.of();
-        Set<EntityId> found = machines.find(key, clientPrincipal.trim());
+        Set<EntityId> found = bindings.find(key, clientPrincipal.trim());
         return found == null ? null : activeTenants(found);
     }
 
     /** The app's side of the machine binding: entities with an enabled bearer-token PUSH_API source for the client. */
     Set<UUID> entitiesWithEnabledPushClient(String clientPrincipal) {
+        return entitiesWithEnabledClient(ENABLED_PUSH_CLIENTS, clientPrincipal);
+    }
+
+    /** The same for a SCANNER source. */
+    Set<UUID> entitiesWithEnabledScannerClient(String clientPrincipal) {
+        return entitiesWithEnabledClient(ENABLED_SCANNER_CLIENTS, clientPrincipal);
+    }
+
+    private Set<UUID> entitiesWithEnabledClient(String sql, String clientPrincipal) {
         try {
             Set<UUID> out = new LinkedHashSet<>();
-            jdbc.query(ENABLED_PUSH_CLIENTS, (org.springframework.jdbc.core.RowCallbackHandler)
+            jdbc.query(sql, (org.springframework.jdbc.core.RowCallbackHandler)
                     rs -> out.add(rs.getObject("tenant_id", UUID.class)), clientPrincipal);
             return Set.copyOf(out);
         } catch (DataAccessException e) {

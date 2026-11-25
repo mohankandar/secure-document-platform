@@ -51,7 +51,7 @@ public class AccessDeniedAuditRecorder {
         if (request == null || isRecorded(request)) return;
         markRecorded(request);
         try {
-            AuthenticatedPrincipal principal = isIntegrationRoute(request)
+            AuthenticatedPrincipal principal = MachineRoutes.machine(request)
                     ? contextResolver.resolveIntegrationPrincipal(request)
                     : contextResolver.resolvePrincipal(request);
             String route = CapabilityAuthorizationInterceptor.routePattern(request);
@@ -69,10 +69,5 @@ public class AccessDeniedAuditRecorder {
         return com.securedoc.platform.application.error.LvErrorCodes.auditDetail(com.securedoc.platform.application.error.LvErrorCodes.of(ex), ex.errorCode(), null)
                 + ", capability=none, method=" + CapabilityAuthorizationInterceptor.method(request)
                 + ", route=" + CapabilityAuthorizationInterceptor.routePattern(request) + ", reason=" + reason;
-    }
-
-    private static boolean isIntegrationRoute(HttpServletRequest request) {
-        String path = request.getServletPath();
-        return path != null && (path.equals("/api/v1/external-intakes") || path.startsWith("/api/v1/external-intakes/"));
     }
 }

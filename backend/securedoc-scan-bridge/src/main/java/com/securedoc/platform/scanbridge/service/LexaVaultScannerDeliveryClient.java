@@ -36,6 +36,7 @@ public class LexaVaultScannerDeliveryClient {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final Clock clock;
+    private final BridgeSignIn signIn;
 
     @Autowired
     public LexaVaultScannerDeliveryClient(ScanBridgeProperties properties, ObjectMapper objectMapper) {
@@ -50,6 +51,7 @@ public class LexaVaultScannerDeliveryClient {
                 .connectTimeout(Duration.ofSeconds(15))
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
+        this.signIn = new BridgeSignIn(properties.getOidc(), objectMapper, httpClient, clock);
     }
 
     public IntakeStatus createIntake(ScanSession session, boolean retry) {
@@ -145,6 +147,11 @@ public class LexaVaultScannerDeliveryClient {
         try {
             HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() >= 200 && response.statusCode() < 300) return response;
+            // Task 0075: a token refused before its end is not used again; the next try signs in anew.
+            if (response.statusCode() == 401 && signIn.configured()) {
+                signIn.forget();
+                throw DeliveryException.retryable(BridgeLvCodes.LEXAVAULT_HTTP_PREFIX + 401, null, null, 401, null);
+            }
             throw toDeliveryException(response);
         } catch (DeliveryException ex) {
             throw ex;
@@ -219,7 +226,7 @@ public class LexaVaultScannerDeliveryClient {
                 .timeout(Duration.ofSeconds(Math.max(5, properties.getDelivery().getRequestTimeoutSeconds())))
                 .header("Accept", "application/json")
                 .header("X-Correlation-Id", UUID.randomUUID().toString());
-        String token = properties.getAuthorizationBearerToken();
+        String token = signIn.configured() ? signIn.token() : properties.getAuthorizationBearerToken();
         if (token != null && !token.isBlank()) {
             builder.header("Authorization", "Bearer " + token.trim());
         } else {
