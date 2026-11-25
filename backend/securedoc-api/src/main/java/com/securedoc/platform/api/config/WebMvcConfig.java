@@ -13,8 +13,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private final TenantBoundaryInterceptor tenantBoundaryInterceptor;
     private final CapabilityAuthorizationInterceptor capabilityAuthorizationInterceptor;
 
+    private final com.securedoc.platform.api.intake.IntakeSpaceInterceptor intakeSpaceInterceptor;
+
     public WebMvcConfig(TenantBoundaryInterceptor tenantBoundaryInterceptor,
-                        CapabilityAuthorizationInterceptor capabilityAuthorizationInterceptor) {
+                        CapabilityAuthorizationInterceptor capabilityAuthorizationInterceptor,
+                        com.securedoc.platform.api.intake.IntakeSpaceInterceptor intakeSpaceInterceptor) {
+        this.intakeSpaceInterceptor = intakeSpaceInterceptor;
         this.tenantBoundaryInterceptor = tenantBoundaryInterceptor;
         this.capabilityAuthorizationInterceptor = capabilityAuthorizationInterceptor;
     }
@@ -23,5 +27,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(tenantBoundaryInterceptor).addPathPatterns("/api/v1/**");
         registry.addInterceptor(capabilityAuthorizationInterceptor).addPathPatterns("/api/v1/**");
+        registry.addInterceptor(intakeSpaceInterceptor)
+                .addPathPatterns(com.securedoc.platform.api.intake.IntakeSpaceInterceptor.PATHS);
     }
 }

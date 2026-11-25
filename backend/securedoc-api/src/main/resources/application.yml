@@ -9,6 +9,12 @@ spring:
   config:
     # Task 0057: setup's platform-tenant.properties (platform.licensing.tenant-id), beside the app unless named.
     import: "${PLATFORM_TENANT_CONFIG:optional:file:./platform-tenant.properties}"
+  # Task 0067: the workers of all stages together stay below these connections (10 are kept for requests). With several
+  # servers, the database must allow this many for each.
+  datasource:
+    hikari:
+      maximum-pool-size: ${SECUREDOC_DB_CONNECTIONS:40}
+      minimum-idle: 10
   # Task 0056: Spring Boot 4 uses Jackson 3, whose defaults differ. These keep the JSON byte for byte as with Spring Boot 3
   # (property order, dates, enums, unknown and null values, characters outside the basic plane) and its text size limit.
   jackson:
@@ -69,6 +75,19 @@ platform:
     allow-internal-addresses: ${PLATFORM_OUTBOUND_ALLOW_INTERNAL_ADDRESSES:false}
 
 securedoc:
+  intake:
+    space:
+      # Task 0067: the safety stop. Below stop-below-percent free on a document storage disk, or of database-size-gb, intake
+      # answers busy (LV-INT-027, Retry-After) until everything is above resume-above-percent. PostgreSQL does not tell its
+      # free disk: set database-size-gb to the size the database may have (0: not checked).
+      stop-below-percent: ${SECUREDOC_INTAKE_SPACE_STOP_BELOW_PERCENT:10}
+      resume-above-percent: ${SECUREDOC_INTAKE_SPACE_RESUME_ABOVE_PERCENT:15}
+      retry-after-seconds: ${SECUREDOC_INTAKE_SPACE_RETRY_AFTER_SECONDS:300}
+      database-size-gb: ${SECUREDOC_INTAKE_SPACE_DATABASE_SIZE_GB:0}
+    pacing:
+      # From this many waiting jobs the watched folder and polling check half as often and take half as much; from twice as
+      # many a quarter, from four times as many an eighth.
+      long-queue: ${SECUREDOC_INTAKE_PACING_LONG_QUEUE:200}
   logging:
     environment: ${SECUREDOC_ENVIRONMENT:production}
     node-id: ${SECUREDOC_NODE_ID:unknown}
@@ -118,9 +137,13 @@ securedoc:
     # Page-level execution is bounded and configurable. Transient failures retry only the
     # affected page; successful pages are not replayed.
     parallelism: ${SECUREDOC_AI_PARALLELISM:2}
-    # Task 0049: requests at once per AI server, with pipeline-mode staged. Limits the Find workers of this server and
-    # the requests it sends to one AI server. The start scripts give Ollama the same number (OLLAMA_NUM_PARALLEL).
-    requests-at-once: ${SECUREDOC_AI_REQUESTS_AT_ONCE:2}
+    # Task 0049: IT's own maximum of requests at once per AI server, with pipeline-mode staged (1 to 64; empty: none). The
+    # start scripts give Ollama the same number (OLLAMA_NUM_PARALLEL). Task 0067: below it the number is learned: one more
+    # at a time while requests wait, one less when the server refuses or only queues; tried again after recheck-ms.
+    requests-at-once: ${SECUREDOC_AI_REQUESTS_AT_ONCE:}
+    learn:
+      up-every-ms: ${SECUREDOC_AI_LEARN_UP_EVERY_MS:120000}
+      recheck-ms: ${SECUREDOC_AI_LEARN_RECHECK_MS:3600000}
     page-max-attempts: ${SECUREDOC_AI_PAGE_MAX_ATTEMPTS:2}
     page-retry-backoff-ms: ${SECUREDOC_AI_PAGE_RETRY_BACKOFF_MS:500}
     # Requirement 5 Ollama inference tuning. These are deployment/profile settings; tenant profiles
@@ -224,13 +247,17 @@ securedoc:
       claim-lease-ms: ${SECUREDOC_STAGE_JOBS_CLAIM_LEASE_MS:120000}
       # Claims that may run out (a server stopping mid-job) before the case stops with LV-PRC-008.
       max-attempts: ${SECUREDOC_STAGE_JOBS_MAX_ATTEMPTS:3}
-      # Workers per stage on this server (fixed until P3).
-      text-workers: ${SECUREDOC_STAGE_JOBS_TEXT_WORKERS:2}
-      find-workers: ${SECUREDOC_STAGE_JOBS_FIND_WORKERS:2}
-      redact-workers: ${SECUREDOC_STAGE_JOBS_REDACT_WORKERS:2}
-      # Task 0064: pages read by the vision model at once (never more than securedoc.ai.requests-at-once).
-      vision-workers: ${SECUREDOC_STAGE_JOBS_VISION_WORKERS:2}
+      # Task 0067: the most workers per stage on this server (1 to 64). Empty: measured when the app starts.
+      text-workers: ${SECUREDOC_STAGE_JOBS_TEXT_WORKERS:}
+      find-workers: ${SECUREDOC_STAGE_JOBS_FIND_WORKERS:}
+      redact-workers: ${SECUREDOC_STAGE_JOBS_REDACT_WORKERS:}
+      # Task 0064: pages read by the vision model at once.
+      vision-workers: ${SECUREDOC_STAGE_JOBS_VISION_WORKERS:}
       poll-interval-ms: ${SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS:1000}
+    capacity:
+      # Task 0067: how often the number of workers is set from the queue, and the memory counted per Text or Redact worker.
+      scale-every-ms: ${SECUREDOC_CAPACITY_SCALE_EVERY_MS:5000}
+      memory-per-worker-mb: ${SECUREDOC_CAPACITY_MEMORY_PER_WORKER_MB:512}
     export-jobs:
       # Task 0028: retry-delay-ms and pause-after-failures are still read but no longer used (destinations are
       # paused by their own check; a single failing case follows retry-schedule).
@@ -252,7 +279,8 @@ securedoc:
       probe-interval-ms: ${SECUREDOC_EXPORT_JOBS_PROBE_INTERVAL_MS:300000}
       claim-lease-ms: ${SECUREDOC_EXPORT_JOBS_CLAIM_LEASE_MS:120000}
       workers-per-destination: ${SECUREDOC_EXPORT_JOBS_WORKERS_PER_DESTINATION:4}
-      workers-total: ${SECUREDOC_EXPORT_JOBS_WORKERS_TOTAL:8}
+      # Task 0067: the most export workers on this server. Empty: measured when the app starts.
+      workers-total: ${SECUREDOC_EXPORT_JOBS_WORKERS_TOTAL:}
       poll-interval-ms: ${SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS:2000}
       # Task 0034: DONE and STOPPED jobs (and cleared reachability alerts) are removed by the retention purge after
       # this many days (7 to 3650; outside that LexaVault stops at start with LV-SYS-005). Rows per delete batch.

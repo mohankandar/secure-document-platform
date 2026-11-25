@@ -33,6 +33,7 @@ public final class LexaVaultEvents {
     public static final EventTypeId DESTINATIONS_UNREACHABLE = EventTypeId.of("export.destinations-unreachable");
     public static final EventTypeId EXPORTS_NEED_IT = EventTypeId.of("export.cases-need-it");
     public static final EventTypeId STORAGE_STOPPED = EventTypeId.of("storage.processing-stopped");
+    public static final EventTypeId INTAKE_STOPPED = EventTypeId.of("storage.intake-stopped");
     public static final EventTypeId TEST_MESSAGE = EventTypeId.of("notifications.test-message");
     public static final EventTypeId DELIVERY_APPROVAL_WAITING = EventTypeId.of("approval.delivery-waiting");
     public static final EventTypeId DELIVERY_APPROVED = EventTypeId.of("approval.delivery-approved");
@@ -57,7 +58,7 @@ public final class LexaVaultEvents {
     /** What {@link OperationalNotices} raises and clears, each a condition with one Recovered message. */
     public static final List<EventTypeId> OPERATIONAL = List.of(DESTINATION_PAUSED, DESTINATION_NEEDS_IT, DESTINATION_BUSY,
             DESTINATIONS_UNREACHABLE, EXPORTS_NEED_IT, STORAGE_STOPPED, SOURCE_UNREACHABLE, REPEATED_FAILURES, OVER_TARGET,
-            AI_MODEL_DOWN, DISK_ALMOST_FULL);
+            AI_MODEL_DOWN, DISK_ALMOST_FULL, INTAKE_STOPPED);
 
     /** The technical messages an IT Admin sets per entity. */
     public static final List<EventTypeId> TECHNICAL = Stream.concat(OPERATIONAL.stream(), Stream.of(FILES_REJECTED)).toList();
@@ -87,6 +88,8 @@ public final class LexaVaultEvents {
         c.register(technical(DESTINATION_BUSY, "Destination busy for more than 30 minutes")
                 .schedule(Schedule.immediately()).continuous(AFTER_30_MINUTES).build());
         c.register(technical(STORAGE_STOPPED, "Processing stopped, storage not usable").critical().continuous(LASTING)
+                .build());
+        c.register(technical(INTAKE_STOPPED, "Intake stopped, too little free space").critical().continuous(LASTING)
                 .build());
         c.register(technical(SOURCE_UNREACHABLE, "Intake source can not be reached").schedule(Schedule.immediately())
                 .continuous(LASTING).build());

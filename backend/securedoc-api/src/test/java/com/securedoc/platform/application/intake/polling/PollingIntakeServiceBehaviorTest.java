@@ -107,6 +107,49 @@ class PollingIntakeServiceBehaviorTest {
         order.verify(sourcePort).acknowledgeReceived(source, pkg, 1);
     }
 
+    /* Task 0067: less often and less while the queue is long; nothing while space is short. */
+
+    private static com.securedoc.platform.application.intake.IntakeGate gate(int slowdown, boolean full) {
+        return new com.securedoc.platform.application.intake.IntakeGate() {
+            @Override public int slowdown() { return slowdown; }
+            @Override public boolean full() { return full; }
+            @Override public int retryAfterSeconds() { return 60; }
+        };
+    }
+
+    @Test
+    void whileTheQueueIsLongTheSourceIsAskedLessOftenAndForLess() {
+        when(connections.listEnabledPollingSources()).thenReturn(List.of(source));
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalSuccess(any())).thenReturn(source);
+        Duration usual = Duration.ofMinutes(source.pollingIntervalMinutes());
+        PollingRunRepository ran = mock(PollingRunRepository.class);
+        PollingRun latest = mock(PollingRun.class);
+        when(ran.findLatest(source.id())).thenReturn(Optional.of(latest));
+        when(latest.startedAt()).thenReturn(clock.instant().minus(usual.multipliedBy(2)));
+        var paced = new PollingIntakeService(connections, ran, sourcePort, external, audit, clock);
+        assertEquals(1, paced.dueSources().size());
+        assertEquals(1, paced.withGate(gate(2, false)).dueSources().size(), "twice its interval has passed");
+        assertEquals(0, paced.withGate(gate(4, false)).dueSources().size());
+        assertEquals(0, paced.withGate(gate(1, true)).dueSources().size());
+
+        when(audit.withMachineClientName(any(), any(), any(), any())).thenAnswer(call ->
+                ((java.util.function.Supplier<?>) call.getArgument(3)).get());
+        when(sourcePort.discoverAvailable(any(), anyInt())).thenReturn(List.of());
+        service.withGate(gate(4, false)).runScheduled(tenant, source.id()).orElseThrow();
+        verify(sourcePort).discoverAvailable(source, Math.max(1, source.pollingBatchLimit() / 4));
+    }
+
+    @Test
+    void whileSpaceIsShortTheSourceIsNotCalled() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        service.withGate(gate(1, true));
+        assertTrue(service.runScheduled(tenant, source.id()).isEmpty());
+        assertThrows(com.securedoc.platform.application.exception.IntakeBusyException.class,
+                () -> service.runNow(tenant, source.id(), ActorId.generate()));
+        verifyNoInteractions(sourcePort);
+    }
+
     /* Task 0018 A6: a scheduled run's records are named "Polling: <connection name>", and only during the run. */
 
     private final List<com.securedoc.platform.domain.audit.AuditRecord> records = new ArrayList<>();

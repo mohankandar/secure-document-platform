@@ -192,7 +192,12 @@ export function foundByText(foundBy: readonly string[] | null | undefined): stri
 /** Task 0064: what a person is asked about a page the vision model did not read. */
 export const UNREAD_PAGE_WORDS = {
   why: 'This page needs the vision model, and it could not be read that way. Nothing on it was passed unread: look over the whole page.',
-  hint: 'If it holds something to redact, drag one mark that covers all of it, then redact. If it holds nothing, keep it visible.',
+  label: 'Unreadable: check by hand',
+  hint: 'Drag across the page to mark each thing to redact, as many as needed. Then tick the box below. If the page holds nothing to redact, tick it without a mark.',
+  reviewed: 'I have reviewed this page',
+  remove: 'Remove mark',
+  done: (boxes: number) => (boxes === 0 ? 'Done, nothing to redact' : `Redact ${boxes} ${boxes === 1 ? 'mark' : 'marks'}`),
+  needsTick: 'Tick “I have reviewed this page” first.',
 } as const;
 
 /* ---------- Continue manually ---------- */

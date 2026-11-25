@@ -37,6 +37,7 @@ class WatchedFolderSchedulerFailureTest {
 
     @BeforeEach
     void setUp() {
+        when(intake.gate()).thenReturn(com.securedoc.platform.application.intake.IntakeGate.OPEN);
         folder.setEnabled(true);
         admin.setWatchedFolderSchedulingEnabled(true);
         admin.setWatchedFolderTenantId(UUID.randomUUID().toString());

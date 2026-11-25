@@ -10,6 +10,7 @@ import com.documentplatform.notifications.NotificationEvent;
 import com.documentplatform.notifications.NotificationSettings;
 import com.documentplatform.notifications.Notifier;
 import com.documentplatform.notifications.RecordIdentifier;
+import com.securedoc.platform.application.intake.IntakeGate;
 import com.securedoc.platform.domain.identity.TenantId;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,14 +37,16 @@ public class StoredNotices {
     private final JdbcTemplate jdbc;
     private final NotificationSettings settings;
     private final ObjectProvider<DependencyStatus> health;
+    private final ObjectProvider<IntakeGate> space;
     private final TransactionTemplate transaction;
     private final String node;
 
-    public StoredNotices(JdbcTemplate jdbc, NotificationSettings settings, ObjectProvider<DependencyStatus> health,
+    public StoredNotices(JdbcTemplate jdbc, NotificationSettings settings, ObjectProvider<DependencyStatus> health, ObjectProvider<IntakeGate> space,
                          PlatformTransactionManager transactions, @Value("${securedoc.logging.node-id:unknown}") String node) {
         this.jdbc = jdbc;
         this.settings = settings;
         this.health = health;
+        this.space = space;
         this.transaction = new TransactionTemplate(transactions);
         this.node = node != null && node.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,63}") ? node : "server";
     }
@@ -85,6 +88,10 @@ public class StoredNotices {
         }
 
         // This server's own checks: each server reports as itself.
+        IntakeGate gate = space.getIfAvailable();
+        if (gate != null && gate.full()) {
+            out.add(event(entity, LexaVaultEvents.INTAKE_STOPPED, "/support/status").identifier(RecordIdentifier.of(node)).build());
+        }
         DependencyStatus checks = health.getIfAvailable();
         for (CheckResult r : checks == null ? List.<CheckResult>of() : checks.results()) {
             if (r.name().equals("model-server") && r.state() == CheckState.DOWN) {
@@ -99,7 +106,8 @@ public class StoredNotices {
 
     /** Whether a condition of this server's checks is this server's to clear. */
     boolean mine(EventTypeId type, RecordIdentifier identifier) {
-        return type != null && !(type.equals(LexaVaultEvents.AI_MODEL_DOWN) || type.equals(LexaVaultEvents.DISK_ALMOST_FULL))
+        return type != null && !(type.equals(LexaVaultEvents.AI_MODEL_DOWN) || type.equals(LexaVaultEvents.DISK_ALMOST_FULL)
+                || type.equals(LexaVaultEvents.INTAKE_STOPPED))
                 || identifier != null && identifier.value().equals(node);
     }
 

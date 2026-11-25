@@ -1,5 +1,11 @@
 package com.securedoc.install;
 
+import com.documentplatform.notifications.NotificationSettings;
+import com.documentplatform.monitoring.DependencyStatus;
+import com.securedoc.platform.application.intake.IntakeGate;
+import com.securedoc.platform.api.notifications.StoredNotices;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
+import org.springframework.transaction.PlatformTransactionManager;
 import com.documentplatform.licensing.spring.notifications.LicensingEvents;
 import com.documentplatform.notifications.AppLink;
 import com.documentplatform.notifications.EntityId;
@@ -625,6 +631,43 @@ class NotificationsAppPostgresTest {
         assertEquals(200, it(A, "PUT", "/events/processing.over-target", "{\"enabled\":true,\"frequency\":\"ONCE_A_DAY\",\"dailyAt\":\"06:30\"}").statusCode());
         assertTrue(it(A, "GET", "", null).body().contains("\"dailyAt\":\"06:30\""));
         assertTrue(it(A, "GET", "", null).body().contains("\"alertAfterMinutes\":15,\"repeatMinutes\":240,\"alertAfterMax\":60"), "the agreed defaults");
+    }
+
+    @Test
+    @Order(9)
+    void theIntakeSafetyStopIsToldByTheServerThatHasIt() {
+        List<String> stopped = List.of("storage.intake-stopped|this-server");
+        assertEquals(stopped, intakeStops(gate(true)));
+        assertEquals(List.of(), intakeStops(gate(false)));
+        assertEquals(List.of(), intakeStops(IntakeGate.OPEN));
+        assertTrue(it(A, "GET", "", null).body().contains("\"id\":\"storage.intake-stopped\",\"name\":\"Intake stopped, too little free space\""));
+    }
+
+    private static List<String> intakeStops(IntakeGate gate) {
+        var beans = new StaticListableBeanFactory(Map.of("gate", gate));
+        return new StoredNotices(jdbc, app.getBean(NotificationSettings.class), beans.getBeanProvider(DependencyStatus.class),
+                beans.getBeanProvider(IntakeGate.class), app.getBean(PlatformTransactionManager.class), "this-server")
+                .goingOn(TenantId.of(A)).stream().map(e -> e.type().value() + "|" + (e.identifier() == null ? "-" : e.identifier().value()))
+                .filter(e -> e.startsWith("storage.intake")).toList();
+    }
+
+    private static IntakeGate gate(boolean full) {
+        return new IntakeGate() {
+            @Override
+            public int slowdown() {
+                return 1;
+            }
+
+            @Override
+            public boolean full() {
+                return full;
+            }
+
+            @Override
+            public int retryAfterSeconds() {
+                return 60;
+            }
+        };
     }
 
     @Test

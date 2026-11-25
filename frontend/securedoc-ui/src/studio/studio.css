@@ -856,3 +856,10 @@
 
 /* Task 0071: Reject case, above the queue. */
 .cf-review-reject { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+
+/* Task 0074: a page to check by hand. */
+.cf-page-unreadable { margin: 0; }
+.cf-page-marks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cf-page-marks li { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.cf-page-reviewed { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.cf-page-reviewed input { width: 20px; height: 20px; }

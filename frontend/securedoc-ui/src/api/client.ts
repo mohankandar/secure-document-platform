@@ -36,6 +36,7 @@ import type {
   OperationalReports,
   DashboardStage,
   PlatformAdminOverview,
+  ProcessingCapacity,
   ProductTelemetryStatus,
   CurrentUser,
   TechnicalExceptionDetail,
@@ -411,6 +412,14 @@ class ApiClient {
     return this.request('/platform-admin/health-check', { method: 'POST' });
   }
 
+  async getProcessingCapacity(): Promise<ProcessingCapacity> {
+    return this.request('/platform-admin/capacity');
+  }
+
+  async changeProcessingMaximums(maximums: Record<string, number | null>): Promise<ProcessingCapacity> {
+    return this.request('/platform-admin/capacity', { method: 'PUT', body: JSON.stringify({ maximums }) });
+  }
+
   async getProductTelemetryStatus(): Promise<ProductTelemetryStatus> {
     return this.request('/platform/product-telemetry/status');
   }
@@ -763,6 +772,11 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ reason, boundingBox: boundingBox || null }),
     });
+  }
+
+  /** Task 0074: an unreadable page was checked by hand; each box is redacted. */
+  async checkReviewPage(findingId: string, boxes: readonly ReviewBoundingBox[]): Promise<ReviewResolutionResult> {
+    return this.request(`/review-items/${findingId}/page-checked`, { method: 'POST', body: JSON.stringify({ reviewed: true, boxes }) });
   }
 
   async dismissReviewItem(

@@ -4,10 +4,8 @@ import com.documentplatform.monitoring.DependencyCheck;
 import com.documentplatform.monitoring.spring.AppVersions;
 import com.securedoc.platform.api.config.AiRuntimeProperties;
 import com.securedoc.platform.api.config.OllamaInferencePoolConfiguration;
+import com.securedoc.platform.api.intake.IntakeGateConfig;
 import com.securedoc.platform.application.port.out.ProcessingStorageConfigurationRepository;
-import com.securedoc.platform.domain.storage.ProcessingStorageAssignment;
-import com.securedoc.platform.domain.storage.ProcessingStorageProvider;
-import com.securedoc.platform.domain.storage.ProcessingStorageProviderStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
@@ -20,7 +18,6 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 /**
  * Task 0057: LexaVault's own checks beside platform-monitoring's (database, login system, licence): the model server and the
@@ -68,12 +65,7 @@ public class MonitoringConfig {
     @Bean
     DependencyCheck processingStorageCheck(ProcessingStorageConfigurationRepository repository,
                                            @Value("${securedoc.monitoring.storage-required:true}") boolean required) {
-        return new ProcessingStorageCheck(() -> Stream.concat(repository.findDeploymentDefault().stream(),
-                        repository.findTenantOverrides().stream())
-                .map(ProcessingStorageAssignment::providerId).distinct()
-                .flatMap(id -> repository.findProvider(id).stream())
-                .filter(p -> p.status() != ProcessingStorageProviderStatus.RETIRED)
-                .map(ProcessingStorageProvider::rootPath).toList(), required);
+        return new ProcessingStorageCheck(() -> IntakeGateConfig.folders(repository), required);
     }
 
     @Bean

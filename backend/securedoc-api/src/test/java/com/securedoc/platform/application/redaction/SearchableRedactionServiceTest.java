@@ -297,6 +297,37 @@ class SearchableRedactionServiceTest {
         assertEquals(pkg.id().toString(), removed.get(0).resourceId());
     }
 
+    /** Task 0074: the boxes a person drew on an unreadable page are covered in the output; the checked page itself is not a target. */
+    @Test
+    void boxesDrawnOnAPageToCheckAreRedactedInTheOutput() throws Exception {
+        policy = policy(true);
+        Finding checked = Finding.create(tenantId, document.id(), EntityType.UNREAD_PAGE, FindingLocation.unlocated(1),
+                Confidence.of(0.0), DetectorSource.of("vision-page-check"));
+        checked.dismiss(com.securedoc.platform.domain.identity.ActorId.generate(), "Page reviewed by hand");
+        List<Finding> all = new ArrayList<>(List.of(checked));
+        List<FindingLocation.BoundingBox> boxes = confirmedFindings().stream().map(f -> f.location().boundingBox()).toList();
+        for (FindingLocation.BoundingBox box : boxes) {
+            Finding drawn = Finding.create(tenantId, document.id(), EntityType.UNREAD_PAGE,
+                    FindingLocation.withBounds(1, 0, 0, box), Confidence.full(), DetectorSource.of("review-page-check"));
+            drawn.confirm(com.securedoc.platform.domain.identity.ActorId.generate(), "Drawn by a person on an unreadable page");
+            all.add(drawn);
+        }
+        when(findings.findByDocumentIdAndTenantId(document.id(), tenantId)).thenReturn(all);
+        service(new PdfBoxBurnFlatRedactionAdapter(ocr())).execute(command());
+
+        assertEquals(DocumentStatus.PROCESSED, document.status());
+        BufferedImage image = render(stored.get(0));
+        for (FindingLocation.BoundingBox box : boxes) {
+            Rectangle r = rectangle(box, image);
+            assertEquals(0, light(image, new Rectangle(r.x + 2, r.y + 2, r.width - 4, r.height - 4)));
+        }
+        try (PDDocument out = Loader.loadPDF(stored.get(0))) {
+            assertFalse(new PDFTextStripper().getText(out).replaceAll("[^0-9]", "").contains("412557531"));
+        }
+        assertEquals(3, all.stream().filter(f -> f.status() == FindingStatus.REDACTED).count());
+        assertNoValueAnywhere();
+    }
+
     /** Task 0069: a signed PDF is processed as any other; the record has no signer, and the copy has no signature. */
     @Test
     void aSignedPdfGoesThroughAndTheCopyIsNotSigned() throws Exception {
