@@ -9,7 +9,7 @@ dropped (`CASE_FIELDS.md`); the others follow in this order. Each keeps its own 
 | Run | What it creates | Source in the release | History table |
 |---|---|---|---|
 | App tables | LexaVault's own tables (cases, documents, audit, ...) | Liquibase changelog `db/changelog/db.changelog-master.xml` | `databasechangelog` |
-| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history, platform-wide grants (`idn_` tables; version 5, platform-core 1.0.0) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
+| Identity | Customer, entity slots, login connection, group grants, integration client bindings, grant history, platform-wide grants (`idn_` tables; version 5, unchanged in platform-core 1.1.0) | platform-core Flyway location `db/platform/identity` | `idn_schema_history` |
 | Licensing | The stored licence, usage ledger (`lic_` tables; version 2). Setup stores the licence here; the app checks it at start (`LICENSING.md`) | platform-core Flyway location `db/platform/licensing` | `lic_schema_history` |
 | Notifications | Event settings, outgoing messages, conditions and approval requests (`notif_` tables; version 1, task 0059). The app checks them at start (`NOTIFICATIONS.md`) | platform-core Flyway location `db/platform/notifications` | `notif_schema_history` |
 | Erase log | Where the database stands in the erase log (`erl_` tables; version 3, task 0060). The app checks them at start (`ERASE_LOG.md`) | platform-core Flyway location `db/platform/erase-log` | `erl_schema_history` |

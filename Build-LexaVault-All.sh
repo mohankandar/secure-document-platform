@@ -66,7 +66,7 @@ java -version
 printf '\nMaven:\n'
 mvn -version
 printf '\nNode: %s\nnpm:  %s\n' "$(node --version)" "$(npm --version)"
-printf '\nplatform-core: released com.documentplatform.platform:platform-bom 1.0.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml; docs/install/BUILD.md).\n'
+printf '\nplatform-core: released com.documentplatform.platform:platform-bom 1.1.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml; docs/install/BUILD.md).\n'
 
 profile_args=()
 if "$production"; then

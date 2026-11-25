@@ -1,7 +1,7 @@
 # Case fields: install guide for IT (LexaVault)
 
 Task 0061. An entity's case fields (contract number, borrower name, property address, ...) and their values are kept by
-platform-core's `platform-fields` 1.0.0, in `fld_` tables of LexaVault's own database. Platform-core's
+platform-core's `platform-fields` 1.1.0, in `fld_` tables of LexaVault's own database. Platform-core's
 `docs/install/fields.md` has the shared part.
 
 ## What IT does
