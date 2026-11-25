@@ -140,7 +140,9 @@ class VisionFindingsTest {
         for (VisionPageResult result : List.of(VisionPageResult.notRead(7, null, "VISION_OFF"),
                 VisionPageResult.notRead(7, "LV-AI-004", "MODEL_NOT_INSTALLED"),
                 VisionPageResult.read(7, VISION, List.of(new VisionPageResult.Item(Kind.SIGNATURE,
-                        box(0.1, 0.2, 0.3, 0.4))), true))) {
+                        box(0.1, 0.2, 0.3, 0.4))), true),
+                VisionPageResult.read(8, VISION, List.of(new VisionPageResult.Item(Kind.ROUTING_NUMBER,
+                        box(0.1, 0.2, 0.3, 0.4), true)), false))) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             VisionFindings.write(new DataOutputStream(out), result);
             assertEquals(result, VisionFindings.read(new DataInputStream(new ByteArrayInputStream(out.toByteArray()))));

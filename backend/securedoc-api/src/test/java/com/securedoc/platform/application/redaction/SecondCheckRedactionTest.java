@@ -175,6 +175,20 @@ class SecondCheckRedactionTest {
         assertEquals(List.of(1), pagesSeen, "the image of the redacted page only; page 2 has text of its own");
     }
 
+    /** Task 0092: the model says nothing about it. */
+    @Test
+    void aCheckLineStillToBeSeenSendsItsPageToAPerson() {
+        policy = policy(true, true, Set.of(EntityType.SSN, EntityType.BANK_ACCOUNT_NUMBER, EntityType.BANK_ROUTING_NUMBER));
+        lines = List.of(new com.securedoc.platform.application.port.out.PageImagePort.CheckLine(
+                com.securedoc.platform.domain.finding.FindingLocation.BoundingBox.of(0.2, 0.9, 0.1, 0.02),
+                com.securedoc.platform.domain.finding.FindingLocation.BoundingBox.of(0.4, 0.9, 0.1, 0.02)));
+        redact();
+        assertEquals(List.of("ACCOUNT", "ROUTING"), SecondCheck.kindsOf(onlyPageToCheck()));
+        assertEquals(1, onlyPageToCheck().location().pageNumber());
+    }
+
+    private List<com.securedoc.platform.application.port.out.PageImagePort.CheckLine> lines = List.of();
+
     @Test
     void afterAPersonCheckedThePageTheDocumentGoesOnWithoutAskingAgain() {
         textAnswer = List.of(hit("SSN", 2, MISSED));
@@ -319,7 +333,12 @@ class SecondCheckRedactionTest {
             }
         };
         return service().withSecondCheck(new SecondCheck(new PdfBoxTextExtractionAdapter(), text,
-                new PdfPageImageAdapter(), (image, page) -> {
+                new PdfPageImageAdapter() {
+                    @Override public List<CheckLine> checkLines(InputStream pdf, int page) throws java.io.IOException {
+                        assertTrue(super.checkLines(pdf, page).isEmpty(), "no line on these pages");
+                        return lines;
+                    }
+                }, (image, page) -> {
                     pagesSeen.add(page);
                     return visionAnswer;
                 })).execute(command());
