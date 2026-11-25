@@ -161,6 +161,11 @@ public final class ExportJobService {
         return jobs.claimNext(EXPORT_STAGES, owner, settings.claimLease(), settings.workersPerDestination());
     }
 
+    /** Task 0079: as above; a Bulk job only of these sources. */
+    public Optional<PipelineJob> claimNext(String owner, Set<String> openBulkSources) {
+        return jobs.claimNext(EXPORT_STAGES, owner, settings.claimLease(), settings.workersPerDestination(), openBulkSources);
+    }
+
     /** Renews a running job's claim. False when the claim is no longer this worker's. */
     public boolean renew(PipelineJob claimed) {
         return jobs.renew(claimed.id(), claimed.claimToken(), settings.claimLease());

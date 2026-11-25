@@ -27,7 +27,7 @@ class TenantRedactionKindsMigrationPostgresTest {
             try (Connection connection = db.connection()) {
                 Liquibase liquibase = PostgresTestDatabase.liquibase(connection);
                 liquibase.update(new Contexts());
-                PostgresTestDatabase.rollback(liquibase, connection, 16); // back to 046 (082, 081, 071, 080, 070, 065 twice, 064, 063, 062, 061, 060, 050, 049, 048, then 047): no tenant_redaction_kinds yet
+                PostgresTestDatabase.rollback(liquibase, connection, 17); // back to 046 (083, 082, 081, 071, 080, 070, 065 twice, 064, 063, 062, 061, 060, 050, 049, 048, then 047): no tenant_redaction_kinds yet
             }
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             assertEquals(0, tableCount(jdbc), "046: no table yet");

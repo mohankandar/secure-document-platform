@@ -435,6 +435,12 @@ public final class StagedProcessingService {
         return jobs.claimNext(EnumSet.of(stage), owner, settings.claimLease(), 1);
     }
 
+    /** Task 0079: as above; a Bulk job only of these sources. */
+    public Optional<PipelineJob> claimNext(PipelineStage stage, String owner, java.util.Set<String> openBulkSources) {
+        if (!STAGES.contains(stage)) throw new IllegalArgumentException("Not a staged processing stage: " + stage);
+        return jobs.claimNext(EnumSet.of(stage), owner, settings.claimLease(), 1, openBulkSources);
+    }
+
     /** Renews a running job's claim. False when the claim is no longer this worker's. */
     public boolean renew(PipelineJob job) {
         return jobs.renew(job.id(), job.claimToken(), settings.claimLease());

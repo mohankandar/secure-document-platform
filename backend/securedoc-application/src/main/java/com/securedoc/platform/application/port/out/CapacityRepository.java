@@ -19,7 +19,10 @@ public interface CapacityRepository {
     /** Null removes the maximum. */
     void setMaximum(String name, Integer maximum);
 
-    /** Due jobs per stage, counted up to {@code most} each (more makes no difference). A stage without any is absent. */
+    /** Task 0079: due BULK jobs per stage of these sources, counted up to {@code most} each. */
+    Map<PipelineStage, Integer> dueBulkJobs(int most, java.util.Set<String> openBulkSources);
+
+    /** Due jobs per stage but BULK ones, counted up to {@code most} each (more makes no difference). A stage without any is absent. */
     Map<PipelineStage, Integer> dueJobs(int most);
 
     /** Cases submitted and not started yet, counted up to {@code most}. */

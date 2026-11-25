@@ -70,6 +70,10 @@ public class WatchedFolderScheduler {
             last.set(new Snapshot(Instant.now(), "NOT_CONFIGURED", null));
             return;
         }
+        // Task 0079: a migration folder outside its window: the files wait there. A person can still check it.
+        if (!intakeService.gate().sourceOpen(principal.tenantId(), com.securedoc.platform.application.intake
+                .CasePriorityService.folder(com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService
+                        .INSTALLED_FOLDER))) return;
         // Task 0067: while the queue is long the folder is checked less often.
         long everyNanos = Math.max(1000L, platformAdmin.getWatchedFolderScanIntervalMs()) * 1_000_000L;
         int slowdown = intakeService.gate().slowdown();

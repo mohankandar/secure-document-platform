@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { bulkProgressText, bulkStateText, priorityName, priorityRank } from './words.ts';
 import { fileURLToPath } from 'node:url';
 import { SENSITIVITY_LEVELS, caseSensitivityLine, documentSensitivityNote, problemReason, sensitivityChoice, sensitivityName } from './words.ts';
 import { readdirSync } from 'node:fs';
@@ -292,4 +293,13 @@ test('0025: the screen words for codes come only from the registry (no second li
     assert.equal(problemReason(gone).known, false, gone);
     assert.equal(problemReason(gone).code, 'LV-SYS-001', gone);
   }
+});
+
+test('task 0079: Bulk is named, comes last, and a migration says how far it is', () => {
+  assert.deepEqual(['URGENT', 'NORMAL', 'LOW', 'BULK', undefined, 'x'].map(priorityName), ['Urgent', 'Normal', 'Low', 'Bulk', 'Normal', 'Normal']);
+  assert.deepEqual(['URGENT', 'NORMAL', 'LOW', 'BULK'].map(priorityRank), [0, 1, 2, 3]);
+  assert.equal(bulkProgressText({ open: true, done: 12400, waiting: 27597, failed: 3, perOpenHour: 119.6 }), '12,400 of 40,000 done · about 120 an hour while open · 3 stopped');
+  assert.equal(bulkProgressText({ open: false, done: 0, waiting: 5, failed: 0, perOpenHour: null }), '0 of 5 done');
+  assert.equal(bulkStateText({ open: false, waiting: 5 }), 'Its cases wait for the next time below.');
+  assert.equal(bulkStateText({ open: true, waiting: 5 }), 'Its cases may run now.');
 });

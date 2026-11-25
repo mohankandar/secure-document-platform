@@ -142,6 +142,8 @@ public enum AuditAction {
     /** Task 0073: names of priorities only ("priority=NORMAL->URGENT"). */
     CASE_PRIORITY_CHANGED,
     SOURCE_PRIORITY_CHANGED,
+    /** Task 0079: the window's times only. */
+    SOURCE_BULK_CHANGED,
     WATCHED_FOLDER_SCAN_TRIGGERED,
     INTEGRATION_CONNECTION_CREATED,
     INTEGRATION_CONNECTION_UPDATED,

@@ -407,13 +407,23 @@ public class ApplicationServiceConfig {
                 reportingConfigurationRepository, auditService);
     }
 
+    /** Task 0079. */
+    @Bean
+    public com.securedoc.platform.application.intake.BulkSourceService bulkSourceService(
+            com.securedoc.platform.application.port.out.BulkSourceRepository bulkSourceRepository,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones, AuditService auditService) {
+        return new com.securedoc.platform.application.intake.BulkSourceService(bulkSourceRepository, entityTimeZones,
+                auditService, java.time.Clock.systemUTC());
+    }
+
     /** Task 0073. */
     @Bean
     public com.securedoc.platform.application.intake.CasePriorityService casePriorityService(
             com.securedoc.platform.application.port.out.CasePriorityRepository casePriorityRepository,
-            PackageRepository packageRepository, AuditService auditService) {
+            PackageRepository packageRepository, AuditService auditService,
+            com.securedoc.platform.application.intake.BulkSourceService bulkSourceService) {
         return new com.securedoc.platform.application.intake.CasePriorityService(casePriorityRepository, packageRepository,
-                auditService);
+                auditService).withBulk(bulkSourceService);
     }
 
     @Bean

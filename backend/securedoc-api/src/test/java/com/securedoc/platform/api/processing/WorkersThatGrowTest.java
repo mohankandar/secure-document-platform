@@ -28,6 +28,7 @@ import static org.mockito.Mockito.mock;
 class WorkersThatGrowTest {
     private final Map<String, Integer> maximums = new HashMap<>();
     private final Map<PipelineStage, Integer> due = new HashMap<>();
+    private final Map<PipelineStage, Integer> dueBulk = new HashMap<>();
     private final Map<String, Integer> learned = new HashMap<>();
     private boolean databaseDown;
     private final CapacityRepository repository = new CapacityRepository() {
@@ -56,6 +57,11 @@ class WorkersThatGrowTest {
         @Override
         public Map<PipelineStage, Integer> dueJobs(int most) {
             return Map.copyOf(due);
+        }
+
+        @Override
+        public Map<PipelineStage, Integer> dueBulkJobs(int most, java.util.Set<String> open) {
+            return open.isEmpty() ? Map.of() : Map.copyOf(dueBulk);
         }
 
         @Override
