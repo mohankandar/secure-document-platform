@@ -390,8 +390,8 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         }
         requestBody.put("options", options);
         requestBody.put("messages", List.of(
-                Map.of("role", "system", "content", prompt.text()),
-                Map.of("role", "user", "content", switch (prompt.ask()) {
+                ordered("role", "system", "content", prompt.text()),
+                ordered("role", "user", "content", switch (prompt.ask()) {
                     case SECOND_CHECK, SUMMARY -> SensitiveContentPromptBuilder.secondCheckPage(pages.getFirst().text());
                     case KNOWN_NAMES -> SensitiveContentResponseParser.knownNames(pages);
                     case KINDS -> buildBatchUserPrompt(pages);
@@ -496,9 +496,9 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 default -> SensitiveContentPromptBuilder.SECOND_CHECK_VERSION;
             };
             JsonNode schema = !structuredOutput ? null : switch (policy.ask()) {
-                case SUMMARY -> summarySchema();
-                case KNOWN_NAMES -> knownNamesSchema();
-                default -> secondCheckSchema();
+                case SUMMARY -> objectMapper.valueToTree(SUMMARY_SCHEMA);
+                case KNOWN_NAMES -> objectMapper.valueToTree(KNOWN_NAMES_SCHEMA);
+                default -> objectMapper.valueToTree(SECOND_CHECK_SCHEMA);
             };
             return List.of(new Prompt(SensitiveContentPromptBuilder.text(version), schema, version, policy.ask()));
         }
@@ -506,11 +506,11 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         boolean names = SensitiveContentPromptBuilder.asksForNames(policy);
         AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(policy);
         if (!names || !others.enabledEntityTypes().isEmpty()) {
-            prompts.add(new Prompt(promptBuilder.buildCompact(others), structuredOutput ? buildResponseSchema() : null, VERSION,
+            prompts.add(new Prompt(promptBuilder.buildCompact(others), structuredOutput ? objectMapper.valueToTree(FIND_SCHEMA) : null, VERSION,
                     AnalysisPolicy.Ask.KINDS));
         }
         if (names) {
-            prompts.add(new Prompt(promptBuilder.buildNames(), structuredOutput ? namesSchema() : null,
+            prompts.add(new Prompt(promptBuilder.buildNames(), structuredOutput ? objectMapper.valueToTree(NAMES_SCHEMA) : null,
                     SensitiveContentPromptBuilder.NAMES_VERSION, AnalysisPolicy.Ask.KINDS));
         }
         return prompts;
@@ -524,78 +524,50 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         return out;
     }
 
-    /** Task 0065. Ordered, as the second check's. */
-    private JsonNode summarySchema() {
-        Map<String, Object> text = Map.of("type", "string");
-        Map<String, Object> person = new LinkedHashMap<>();
-        person.put("name", text);
-        person.put("role", text);
-        person.put("alsoCalled", Map.of("type", "array", "items", text));
-        Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("kind", text);
-        properties.put("matter", text);
-        properties.put("people", Map.of("type", "array", "items", object(person)));
-        return objectMapper.valueToTree(object(properties));
+    // Task 0091: every answer schema has one fixed order, all the way down. The model answers in the schema's order, and
+    // Map.of has another order at every start, so the same page got another request after a restart. Built once.
+    static final Map<String, Object> FIND_SCHEMA = findings("SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE");
+    static final Map<String, Object> NAMES_SCHEMA = findings("PERSON_NAME");
+    static final Map<String, Object> SECOND_CHECK_SCHEMA = object("found", array(object(
+            "kind", oneOf(SensitiveContentResponseParser.SECOND_CHECK_KINDS), "value", text())));
+    static final Map<String, Object> SUMMARY_SCHEMA = object("kind", text(), "matter", text(), "people", array(object(
+            "name", text(), "role", text(), "alsoCalled", array(text()))));
+    static final Map<String, Object> KNOWN_NAMES_SCHEMA = object("answers", array(object(
+            "number", ordered("type", "integer"), "is", oneOf(SensitiveContentResponseParser.NAME_USES))));
+
+    private static Map<String, Object> findings(String... kinds) {
+        Map<String, Object> page = ordered("type", "integer", "minimum", 1);
+        Map<String, Object> confidence = ordered("type", "number", "minimum", 0, "maximum", 1);
+        boolean names = kinds.length == 1;
+        return object("findings", array(names
+                ? object("pageNumber", page, "entityType", oneOf(List.of(kinds)), "matchedText", text(), "confidence", confidence)
+                : object("pageNumber", page, "entityType", oneOf(List.of(kinds)), "matchedText", text(), "contextText", text(),
+                        "confidence", confidence)));
     }
 
-    private JsonNode knownNamesSchema() {
-        Map<String, Object> answer = new LinkedHashMap<>();
-        answer.put("number", Map.of("type", "integer"));
-        answer.put("is", Map.of("type", "string", "enum", SensitiveContentResponseParser.NAME_USES));
-        return objectMapper.valueToTree(object(Map.of("answers", Map.of("type", "array", "items", object(answer)))));
+    private static Map<String, Object> text() {
+        return ordered("type", "string");
     }
 
-    private static Map<String, Object> object(Map<String, Object> properties) {
-        Map<String, Object> object = new LinkedHashMap<>();
-        object.put("type", "object");
-        object.put("additionalProperties", false);
-        object.put("properties", properties);
-        object.put("required", List.copyOf(properties.keySet()));
-        return object;
+    private static Map<String, Object> oneOf(List<String> values) {
+        return ordered("type", "string", "enum", values);
     }
 
-    private JsonNode secondCheckSchema() {
-        // In this order, as measured: the model answers in the schema's order, and Map.of has another at every start.
-        Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("kind", Map.of("type", "string", "enum", SensitiveContentResponseParser.SECOND_CHECK_KINDS));
-        properties.put("value", Map.of("type", "string"));
-        Map<String, Object> item = Map.of("type", "object", "additionalProperties", false,
-                "properties", properties, "required", List.of("kind", "value"));
-        return objectMapper.valueToTree(Map.of("type", "object", "additionalProperties", false,
-                "properties", Map.of("found", Map.of("type", "array", "items", item)), "required", List.of("found")));
+    private static Map<String, Object> array(Map<String, Object> items) {
+        return ordered("type", "array", "items", items);
     }
 
-    private JsonNode namesSchema() {
-        Map<String, Object> finding = Map.of("type", "object", "additionalProperties", false,
-                "properties", Map.of("pageNumber", Map.of("type", "integer", "minimum", 1),
-                        "entityType", Map.of("type", "string", "enum", List.of("PERSON_NAME")),
-                        "matchedText", Map.of("type", "string"),
-                        "confidence", Map.of("type", "number", "minimum", 0, "maximum", 1)),
-                "required", List.of("pageNumber", "entityType", "matchedText", "confidence"));
-        return objectMapper.valueToTree(Map.of("type", "object", "additionalProperties", false,
-                "properties", Map.of("findings", Map.of("type", "array", "items", finding)),
-                "required", List.of("findings")));
+    /** Every property is required, in this order. */
+    private static Map<String, Object> object(Object... namesAndTypes) {
+        Map<String, Object> properties = ordered(namesAndTypes);
+        return ordered("type", "object", "additionalProperties", false, "properties", properties, "required",
+                List.copyOf(properties.keySet()));
     }
 
-    private JsonNode buildResponseSchema() {
-        Map<String, Object> finding = new LinkedHashMap<>();
-        finding.put("type", "object");
-        finding.put("additionalProperties", false);
-        finding.put("properties", Map.of(
-                "pageNumber", Map.of("type", "integer", "minimum", 1),
-                "entityType", Map.of("type", "string", "enum", List.of("SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE")),
-                "matchedText", Map.of("type", "string"),
-                "contextText", Map.of("type", "string"),
-                "confidence", Map.of("type", "number", "minimum", 0, "maximum", 1)
-        ));
-        finding.put("required", List.of("pageNumber", "entityType", "matchedText", "contextText", "confidence"));
-
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("type", "object");
-        root.put("additionalProperties", false);
-        root.put("properties", Map.of("findings", Map.of("type", "array", "items", finding)));
-        root.put("required", List.of("findings"));
-        return objectMapper.valueToTree(root);
+    private static Map<String, Object> ordered(Object... keysAndValues) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < keysAndValues.length; i += 2) map.put((String) keysAndValues[i], keysAndValues[i + 1]);
+        return java.util.Collections.unmodifiableMap(map);
     }
 
     private String pageNumbers(List<PageContent> pages) {
