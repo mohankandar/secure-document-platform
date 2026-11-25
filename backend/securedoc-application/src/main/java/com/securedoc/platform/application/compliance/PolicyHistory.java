@@ -27,23 +27,30 @@ public final class PolicyHistory {
     /** Sensitive-data policy values; {@code types} is null when the record did not hold the names (before 0016). */
     public record SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
                                   Boolean maskSsnLastFour, String preset, Set<String> packs,
-                                  Set<String> keepLastFour, VisionSettings vision) {
+                                  Set<String> keepLastFour, VisionSettings vision, boolean secondCheck) {
 
         /** Without packs or styles (before task 0062: none). */
         public SensitivePolicy(Set<String> types, Integer enabledCount, Double threshold, String reviewMode,
                                Boolean maskSsnLastFour, String preset) {
-            this(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, Set.of(), Set.of(), VisionSettings.DEFAULTS);
+            this(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, Set.of(), Set.of(), VisionSettings.DEFAULTS,
+                    false);
         }
 
         public SensitivePolicy with(Set<String> packNames, Set<String> lastFour) {
             return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset,
-                    new TreeSet<>(packNames), new TreeSet<>(lastFour), vision);
+                    new TreeSet<>(packNames), new TreeSet<>(lastFour), vision, secondCheck);
         }
 
         /** Task 0064. */
         public SensitivePolicy withVision(VisionSettings settings) {
             return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
-                    keepLastFour, settings);
+                    keepLastFour, settings, secondCheck);
+        }
+
+        /** Task 0083. */
+        public SensitivePolicy withSecondCheck(boolean on) {
+            return new SensitivePolicy(types, enabledCount, threshold, reviewMode, maskSsnLastFour, preset, packs,
+                    keepLastFour, vision, on);
         }
 
         public static SensitivePolicy of(Set<String> types, double threshold, ReviewMode mode, boolean mask) {
@@ -201,6 +208,10 @@ public final class PolicyHistory {
             lines.add("Pages are hard below text-reading confidence: " + percent(before.vision().ocrThreshold()) + " → "
                     + percent(after.vision().ocrThreshold()));
         }
+        if (before.secondCheck() != after.secondCheck()) {
+            lines.add("Second check of the finished file: " + yesNo(before.secondCheck()) + " → "
+                    + yesNo(after.secondCheck()));
+        }
         if (lines.isEmpty()) lines.add("Saved with no change");
         return lines;
     }
@@ -266,7 +277,7 @@ public final class PolicyHistory {
         return new SensitivePolicy(types, parseInt(k.get("enabledCount")), parseDouble(k.get("threshold")),
                 enumWord(k.get("reviewMode")), k.containsKey("maskSsnLastFour") ? parseBoolean(k.get("maskSsnLastFour")) : null,
                 enumWord(k.get("preset"))).with(list(k.get("packs")), list(k.get("keepLastFour")))
-                .withVision(vision(k));
+                .withVision(vision(k)).withSecondCheck("true".equals(k.get("secondCheck")));
     }
 
     private static Set<String> list(String value) {

@@ -21,6 +21,8 @@ import java.util.Set;
  * are always enabled. It is off only for an entity from before the catalog whose policy was not saved since, which
  * keeps exactly the behaviour it had.
  *
+ * <p>Task 0083: {@code secondCheck} (off by default) has a second AI read the finished file before it is kept.
+ *
  * <p>Task 0064: {@code vision} says whether routed pages are read by the vision model, and the routing threshold.
  */
 public record TenantRedactionPolicy(
@@ -35,8 +37,19 @@ public record TenantRedactionPolicy(
         Set<RegulationPack> packs,
         Set<EntityType> keepLastFour,
         boolean lockedItemsOn,
-        VisionSettings vision
+        VisionSettings vision,
+        boolean secondCheck
 ) {
+    /** The policy as it was before task 0083: no second check. */
+    public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
+                                 ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,
+                                 boolean searchableRedactedPages, PageBatchSettings pageBatches,
+                                 Set<RegulationPack> packs, Set<EntityType> keepLastFour, boolean lockedItemsOn,
+                                 VisionSettings vision) {
+        this(tenantId, enabledEntityTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, updatedAt,
+                searchableRedactedPages, pageBatches, packs, keepLastFour, lockedItemsOn, vision, false);
+    }
+
     /** The policy as it was before task 0064, with the default vision settings. */
     public TenantRedactionPolicy(TenantId tenantId, Set<EntityType> enabledEntityTypes, double autoRedactThreshold,
                                  ReviewMode reviewMode, boolean maskSsnLastFour, Instant updatedAt,

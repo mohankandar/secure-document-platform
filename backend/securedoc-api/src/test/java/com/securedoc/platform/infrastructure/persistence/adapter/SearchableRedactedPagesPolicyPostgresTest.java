@@ -116,6 +116,18 @@ class SearchableRedactedPagesPolicyPostgresTest {
                 "the kinds are unchanged by the move");
     }
 
+    /** Task 0083. */
+    @Test
+    void theSecondCheckIsOffUntilItIsSavedOn() {
+        TenantId tenant = tenant();
+        save(policy(tenant, true, Instant.now()));
+        TenantRedactionPolicy off = policies.findByTenantId(tenant).orElseThrow();
+        assertFalse(off.secondCheck());
+        save(new TenantRedactionPolicy(tenant, off.enabledEntityTypes(), 0.8, ReviewMode.UNCERTAIN_ONLY, true,
+                Instant.now(), true, off.pageBatches(), off.packs(), off.keepLastFour(), true, off.vision(), true));
+        assertTrue(policies.findByTenantId(tenant).orElseThrow().secondCheck());
+    }
+
     @Test
     void aPolicySavedWithoutTheSettingIsSearchable() {
         TenantId tenant = tenant();

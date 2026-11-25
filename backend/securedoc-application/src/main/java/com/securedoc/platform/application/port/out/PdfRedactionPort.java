@@ -155,6 +155,11 @@ public interface PdfRedactionPort {
             return digits;
         }
 
+        /** Task 0083: the second check found exactly the digits that are kept on purpose. */
+        public boolean are(String found) {
+            return digits.equals(found);
+        }
+
         public double share() {
             return share;
         }

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Task 0083 (owner approved): an entity's second check of the finished file. Off for every entity. -->
+    <changeSet id="084-01-second-check" author="lexavault">
+        <addColumn tableName="tenant_redaction_policies">
+            <column name="second_check_enabled" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant_redaction_policies" columnName="second_check_enabled"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

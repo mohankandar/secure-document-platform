@@ -95,6 +95,22 @@ class OllamaVisionModelAdapterTest {
         assertFalse(OllamaVisionModelAdapter.prompt().contains("{COORDINATES}"));
     }
 
+    /** Task 0083 (BL7): any change of a prompt is a new version, with a new measurement. */
+    @Test
+    void theSecondChecksPromptsAreTheMeasuredOnes() throws Exception {
+        assertEquals("70e021bcffc6", sha(SensitiveContentPromptBuilder.secondCheck()));
+        assertEquals("4d5391968aba", sha(OllamaVisionModelAdapter.prompt(OllamaVisionModelAdapter.SECOND_CHECK_VERSION)));
+        OllamaVisionModelAdapter check = new OllamaVisionModelAdapter("http://127.0.0.1:" + server.getAddress().getPort(),
+                MODEL, DIGEST, Duration.ofSeconds(10), null, OllamaVisionModelAdapter.SECOND_CHECK_VERSION);
+        assertEquals(new AiModel(MODEL, "second-check-vision-v1", DIGEST), check.read(IMAGE, 1).model());
+        assertTrue(asked.get(0).contains("Locate personal and financial identifiers"));
+    }
+
+    private static String sha(String text) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(text.getBytes(StandardCharsets.UTF_8))).substring(0, 12);
+    }
+
     @Test
     void kindsAndBoxesAreKeptAndTheModelIsRecorded() {
         answer = "Here: {\"items\": [{\"type\": \"ssn\", \"box\": [100, 200, 300, 220], \"value\": \"123-45-6789\"}]} done";

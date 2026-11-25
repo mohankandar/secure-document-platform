@@ -945,13 +945,26 @@ public class ApplicationServiceConfig {
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             TextExtractionPort textExtractionPort,
             com.securedoc.platform.application.licensing.UsageMeter usageMeter,
-            com.securedoc.platform.api.licensing.PlatformLicence licence) {
+            com.securedoc.platform.api.licensing.PlatformLicence licence,
+            SensitiveContentAnalysisPort semanticAnalysisPort,
+            com.securedoc.platform.application.port.out.PageImagePort pageImagePort,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.base-url}") String visionUrl,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model}") String visionModel,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model-digest}") String visionDigest,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.timeout-seconds}") int visionTimeoutSeconds,
+            AiRuntimeProperties ai) {
         // Task 0044: the entity policy (searchable redacted pages) and the same text extraction as the detection.
         return new DocumentRedactionService(
                 documentRepository, packageRepository, artifactRepository,
                 findingRepository, storagePort, pdfRedactionPort, redactionVerificationPort, checksumPort,
                 eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort)
-                .withUsageMeter(usageMeter).withNonProductionMark(licence::testEnvironment);
+                .withUsageMeter(usageMeter).withNonProductionMark(licence::testEnvironment)
+                // Task 0083: the same models, each with the second check's own prompt. Not a bean: Find must never get it.
+                .withSecondCheck(new com.securedoc.platform.application.secondcheck.SecondCheck(textExtractionPort,
+                        semanticAnalysisPort, pageImagePort,
+                        new com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter(visionUrl, visionModel,
+                                visionDigest, Duration.ofSeconds(Math.max(1, visionTimeoutSeconds)), ai.getOllamaKeepAlive(),
+                                com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter.SECOND_CHECK_VERSION)));
     }
 
     @Bean

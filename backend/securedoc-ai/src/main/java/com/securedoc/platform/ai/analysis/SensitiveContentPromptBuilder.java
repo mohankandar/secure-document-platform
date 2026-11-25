@@ -32,6 +32,24 @@ public final class SensitiveContentPromptBuilder {
                 .collect(java.util.stream.Collectors.toSet()), policy.maskSsnLastFour());
     }
 
+    /** Task 0083 (BL7): the second check's text prompt; any change of the file is a new version. */
+    public static final String SECOND_CHECK_VERSION = "second-check-text-v1";
+
+    static String secondCheck() {
+        try (java.io.InputStream in = SensitiveContentPromptBuilder.class.getResourceAsStream(
+                "/" + SECOND_CHECK_VERSION + ".txt")) {
+            if (in == null) throw new IllegalStateException(SECOND_CHECK_VERSION + " is missing");
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).replace("\r\n", "\n").trim();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(SECOND_CHECK_VERSION + " could not be read");
+        }
+    }
+
+    /** What the second check's model is sent for a page. */
+    static String secondCheckPage(String text) {
+        return "<PAGE>\n" + text + "\n</PAGE>";
+    }
+
     public String buildNames() {
         return """
                 Find every person name. Read the page line by line. matchedText is the name exactly as written: a full name, a name in capitals, "Last, First", or a last name standing alone in a sentence. Give every different written form once. Never return companies, banks, courts, agencies, counties, streets, places, programs or roles (Borrower, Plaintiff, Loan Officer); if nobody is named, return no findings. Return JSON only: findings[] with pageNumber, entityType (always PERSON_NAME), matchedText, confidence.""";

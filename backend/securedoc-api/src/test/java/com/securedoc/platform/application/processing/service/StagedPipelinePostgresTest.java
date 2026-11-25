@@ -342,6 +342,12 @@ class StagedPipelinePostgresTest {
         };
         RedactDocumentUseCase redact = command -> {
             Document d = documents.findByIdAndTenantId(command.documentId(), command.tenantId()).orElseThrow();
+            if (secondCheckFinds.remove(d.id())) {
+                // As the real redaction when the second check finds something: a page for a person, nothing stored.
+                findings.save(Finding.create(d.tenantId(), d.id(), EntityType.UNREAD_PAGE, FindingLocation.unlocated(1),
+                        Confidence.of(0.0), DetectorSource.of("second-check", "SSN")));
+                return null;
+            }
             d.completeProcessing();
             documents.save(d);
             // As the real redaction: the final check is audited (ids only).
@@ -367,6 +373,9 @@ class StagedPipelinePostgresTest {
     }
 
     // ------------------------------------------------------------------------------------------------- tests
+
+    private final java.util.Set<com.securedoc.platform.domain.identity.DocumentId> secondCheckFinds =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     @Test
     void eachDocumentRunsTextFindRedactAndTheCaseWaitsAtEachGate() {
@@ -431,6 +440,28 @@ class StagedPipelinePostgresTest {
         tx.executeWithoutResult(s -> findings.save(reviewed));
         service.plan(trigger(pkg));
         assertEquals(2, count(pkg, PipelineStage.REDACT), "the reviewer's continue queues every document");
+        runAll(PipelineStage.REDACT);
+        verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any());
+    }
+
+    /** Task 0083. */
+    @Test
+    void aSecondCheckThatFindsSomethingSendsTheCaseToReviewAndRedactsAgainAfterIt() {
+        DocumentPackage pkg = submittedCase(2);
+        var documentIds = documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
+                .map(Document::id).toList();
+        secondCheckFinds.add(documentIds.get(0));
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+        assertEquals(PackageStatus.PENDING_REVIEW, status(pkg));
+        verify(exports, times(0)).queueCaseExport(any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
+
+        Finding page = findings.findByDocumentIdAndTenantId(documentIds.get(0), pkg.tenantId()).get(0);
+        page.dismiss(ActorId.generate(), "Page reviewed by hand");
+        tx.executeWithoutResult(s -> findings.save(page));
+        service.plan(trigger(pkg));
         runAll(PipelineStage.REDACT);
         verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any());
     }
