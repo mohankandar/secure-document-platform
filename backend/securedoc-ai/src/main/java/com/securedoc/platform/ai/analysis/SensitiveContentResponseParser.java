@@ -195,6 +195,7 @@ final class SensitiveContentResponseParser {
             case "DATE_OF_BIRTH", "DOB" -> "DATE_OF_BIRTH";
             case "CREDIT_CARD", "CREDIT_CARD_NUMBER" -> "CREDIT_CARD_NUMBER";
             case "CREDIT_SCORE", "FICO_SCORE" -> "CREDIT_SCORE";
+            case "PERSON_NAME", "PERSON" -> "PERSON_NAME";
             default -> "";
         };
     }

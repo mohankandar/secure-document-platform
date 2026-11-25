@@ -106,7 +106,7 @@ class SearchableRedactedPagesPolicyPostgresTest {
         assertEquals(Boolean.FALSE, jdbc.queryForObject(
                 "SELECT searchable_redacted_pages FROM tenant_redaction_policies WHERE tenant_id = ?", Boolean.class,
                 tenant.value()));
-        assertEquals(14, jdbc.queryForObject("SELECT count(*) FROM tenant_redaction_catalog WHERE tenant_id = ?",
+        assertEquals(15, jdbc.queryForObject("SELECT count(*) FROM tenant_redaction_catalog WHERE tenant_id = ?",
                 Integer.class, tenant.value()), "one row per catalog kind, nothing else");
 
         save(policy(tenant, true, at.plusSeconds(1)));

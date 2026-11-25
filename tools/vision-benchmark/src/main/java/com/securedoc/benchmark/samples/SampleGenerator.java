@@ -171,7 +171,52 @@ public final class SampleGenerator {
         // The 60-page package
         docs.add(new Doc(id(docs), "60-page loan package: typed pages (digital and clean scans, most initialled), "
                 + "signature pages, one hand-filled form, one ID copy, one check copy, one fax page", package60()));
+        // Task 0072: person names (only these documents have names in their answer files). Last, so the others stay as they were.
+        for (int i = 0; i < 4; i++) {
+            docs.add(new Doc(id(docs), "names: court caption and letter, and a page with no person's name (companies, streets, roles)",
+                    List.of(nameCaption(i, i % 2 == 0 ? Mode.DIGITAL : Mode.SCAN_CLEAN),
+                            nameDecoys(i % 2 == 0 ? Mode.DIGITAL : Mode.SCAN_CLEAN))));
+        }
         return docs;
+    }
+
+    /** Names in capitals, full, reversed and the last name alone; each on its own line start, so its box is known. */
+    PageSpec nameCaption(int variant, Mode mode) {
+        FakeData.Person a = fake.person();
+        FakeData.Person b = fake.person();
+        FakeData.Person c = fake.person();
+        PageSpec page = new PageSpec("TYPED", "FAST", mode);
+        header(page, "IN THE SAMPLE COURT OF TESTBURY", "Synthetic test document. Case SAMPLE-" + (100 + variant));
+        name(page, 120, a.name().toUpperCase(java.util.Locale.ROOT), "Plaintiff,");
+        page.add(new Text(54, 140, 10, "versus"));
+        name(page, 160, b.name().toUpperCase(java.util.Locale.ROOT), "Defendant.");
+        page.add(new Text(54, 200, 10, "The following people appeared before the court:"));
+        name(page, 220, a.name(), "asked for the records of the loan.");
+        name(page, 240, b.name(), "answered for Example Lending Company.");
+        name(page, 260, c.last() + ", " + c.first(), "was heard as a witness.");
+        name(page, 280, c.last(), "signed the statement on the same day.");
+        page.add(new Text(54, 320, 10, "The Borrower and the Lender agree to the terms of Sample Street Bank."));
+        pageFooter(page, "Synthetic filing");
+        return page;
+    }
+
+    PageSpec nameDecoys(Mode mode) {
+        PageSpec page = new PageSpec("TYPED", "FAST", mode);
+        header(page, "NOTICE TO ALL PARTIES", "Synthetic test document.");
+        double y = 120;
+        for (String line : List.of("Example Lending Company, 100 Fictional Lane, Sampleton", "Plaintiff and Defendant shall file by March 3.",
+                "Testbury County Recorder, Department of Records", "Specimen Way Title & Escrow, Loan Officer: not assigned",
+                "Borrower name: ____________________", "Washington Avenue branch, Lincoln Savings program")) {
+            page.add(new Text(54, y, 10, line));
+            y += 22;
+        }
+        pageFooter(page, "Notice");
+        return page;
+    }
+
+    private static void name(PageSpec page, double y, String name, String rest) {
+        page.add(new Text(54, y, 10, false, name, "PERSON_NAME"));
+        page.add(new Text(260, y, 10, rest));
     }
 
     private static String id(List<Doc> docs) {

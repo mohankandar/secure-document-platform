@@ -23,6 +23,8 @@ param(
     [string] $Model = 'qwen3.5:9b',
     [int] $VisionWorkers = 2,
     [switch] $VisionOff,
+    # Task 0072: Person name on too (the prompt then has its line).
+    [switch] $Names,
     [int] $TimeoutSeconds = 1800
 )
 
@@ -91,6 +93,10 @@ try {
     # Every configurable kind on, as in the benchmark.
     foreach ($kind in 'BANK_ROUTING_NUMBER', 'BANK_ACCOUNT_NUMBER', 'ITIN', 'EIN', 'DRIVERS_LICENSE_NUMBER', 'PASSPORT_NUMBER', 'SIGNATURE', 'FACE_PHOTO') {
         Invoke-Sql ("insert into tenant_redaction_catalog (tenant_id, kind_key, enabled, updated_at) values ('$tenantId', '$kind', true, now()) " +
+            'on conflict (tenant_id, kind_key) do update set enabled = true') | Out-Null
+    }
+    if ($Names) {
+        Invoke-Sql ("insert into tenant_redaction_catalog (tenant_id, kind_key, enabled, updated_at) values ('$tenantId', 'PERSON_NAME', true, now()) " +
             'on conflict (tenant_id, kind_key) do update set enabled = true') | Out-Null
     }
     if ($VisionOff) { Invoke-Sql 'update tenant_redaction_policies set vision_enabled = false' | Out-Null }

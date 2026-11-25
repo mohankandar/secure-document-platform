@@ -46,7 +46,8 @@ public enum RegulationPack {
             "Federal court filings: Social Security and taxpayer numbers (SSN, ITIN, EIN), dates of birth, bank "
                     + "account and card numbers. The rule allows the last four digits of these numbers; here never of a "
                     + "card number, which is a locked item.",
-            "Names of minors are not found. A date of birth is covered in full (the rule allows the year).",
+            "Names of minors are not found unless you also turn on Person name, which finds the names of all persons "
+                    + "for Review. A date of birth is covered in full (the rule allows the year).",
             SSN, ITIN, EIN, DATE_OF_BIRTH, BANK_ACCOUNT_NUMBER, CREDIT_CARD_NUMBER);
 
     private final String displayName;
@@ -75,5 +76,10 @@ public enum RegulationPack {
 
     public Set<EntityType> kinds() {
         return kinds;
+    }
+
+    /** Task 0072: kinds that fit the rule and stay off with the pack, until the entity turns them on itself. */
+    public Set<EntityType> suggested() {
+        return this == FRCP_5_2 ? Set.of(EntityType.PERSON_NAME) : Set.of();
     }
 }

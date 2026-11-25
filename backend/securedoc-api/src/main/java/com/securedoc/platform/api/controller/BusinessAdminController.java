@@ -258,7 +258,8 @@ public class BusinessAdminController {
                     Arrays.stream(RegulationPack.values()).map(p ->
                             new BusinessAdminConfigurationResponse.RegulationPackResponse(p.name(), p.displayName(),
                                     p.covers(), p.notCovered(),
-                                    RedactionCatalog.kinds().stream().filter(p.kinds()::contains).map(Enum::name).toList()))
+                                    RedactionCatalog.kinds().stream().filter(p.kinds()::contains).map(Enum::name).toList(),
+                                    RedactionCatalog.kinds().stream().filter(p.suggested()::contains).map(Enum::name).toList()))
                             .toList());
 
     private static Set<String> names(Set<? extends Enum<?>> values) {

@@ -139,6 +139,8 @@ final class VisionFindings {
 
     /** 0 when the two are not at one place. */
     private static double samePlace(Candidate a, Candidate b) {
+        // Task 0072: a person may dismiss a name; a value of another kind at its place stays a finding of its own.
+        if (a.type() != b.type() && (a.type() == EntityType.PERSON_NAME || b.type() == EntityType.PERSON_NAME)) return 0;
         BoundingBox x = a.location().boundingBox();
         BoundingBox y = b.location().boundingBox();
         if (a.location().pageNumber() != b.location().pageNumber() || x == null || y == null) return 0;

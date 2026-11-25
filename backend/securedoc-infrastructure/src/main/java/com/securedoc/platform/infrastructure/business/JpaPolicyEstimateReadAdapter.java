@@ -34,6 +34,7 @@ public class JpaPolicyEstimateReadAdapter implements PolicyEstimateReadPort {
                 select d.package_id,
                        case when fi.bbox_left is not null and fi.bbox_top is not null
                                  and fi.bbox_width is not null and fi.bbox_height is not null
+                                 and fi.entity_type not in (:reviewed)
                             then fi.confidence else -1.0 end as eff
                   from win
                   join documents d on d.package_id = win.id and d.tenant_id = :tenant
@@ -59,6 +60,9 @@ public class JpaPolicyEstimateReadAdapter implements PolicyEstimateReadPort {
                 .setParameter("since", since)
                 .setParameter("until", until)
                 .setParameter("manual", MANUAL_DETECTOR)
+                // Task 0072: always a person's decision, as a finding without a place.
+                .setParameter("reviewed", com.securedoc.platform.domain.business.RedactionCatalog.alwaysReviewed()
+                        .stream().map(Enum::name).toList())
                 .getResultList();
         long cases = 0;
         List<Bucket> findings = new ArrayList<>();
