@@ -1,7 +1,7 @@
 # Report 0093: back-up and restore guide, with one rehearsed restore
 
 Date: 2026-11-25
-Branch: `feature/0093-backup-restore` (from fd4f6811, PR #34)
+Branch: `feature/0093-backup-restore` (from fd4f6811, PR #33; f48e2605, PR #34, merged in: documents only)
 Outcome: **DONE**; what was not rehearsed is listed below.
 
 ## What was done
