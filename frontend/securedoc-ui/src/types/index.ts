@@ -213,6 +213,8 @@ export interface PackageSummary {
   updatedAt: string;
   /** Task 0029: the case's export state (GET /packages); absent from an older server and on the detail (= NONE). */
   exportState?: string;
+  /** Task 0073: URGENT, NORMAL or LOW. */
+  priority?: string;
   /** Task 0038: why the case stopped or waits, as an LV code (GET /packages); null or absent when it doesn't. */
   stopReasonCode?: string | null;
   /** Task 0038: the delivery destination's name once one is chosen (GET /packages). */
@@ -225,6 +227,8 @@ export interface PackageDetail extends PackageSummary {
   effectiveSensitivityLevel?: string;
   /** Task 0050: a digitally signed document of this case lost its signature by redaction. */
   signatureRemoved?: boolean;
+  /** Task 0073: URGENT, NORMAL or LOW. */
+  priority?: string;
   /** Task 0071: why a person rejected the case (LV code). */
   rejectionCode?: string | null;
   metadata?: Record<string, string>;
@@ -244,6 +248,8 @@ export interface DocumentSummary {
 }
 
 export interface CreatePackageRequest {
+  /** Task 0073: the New case "Priority" choice. */
+  priority?: string;
   packageType: string;
   businessIdentifiers: Record<string, string>;
   metadata?: Record<string, string>;
@@ -760,6 +766,8 @@ export interface WatchedFolderAdminStatus {
 }
 
 /** Task 0067: the workers of the server that answered, and IT's own maximums. */
+export interface SourcePriorities { sources: Record<string, string> }
+
 export interface ProcessingCapacity {
   staged: boolean;
   stages: { stage: string; current: number; busy: number; lowest: number; highest: number; measured: number; maximum?: number | null; waiting: number }[];

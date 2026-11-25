@@ -72,6 +72,8 @@ export interface ScanSession {
   businessIdentifiers: Record<string, string>;
   /** Task 0021: the New case "Sensitivity" choice the session was started with (null when none). */
   caseSensitivityLevel?: string | null;
+  /** Task 0073: the New case "Priority" choice the session was started with (null when none). */
+  casePriority?: string | null;
   createdAt: string;
   updatedAt: string;
   preparedScan?: PreparedScan | null;
@@ -206,9 +208,9 @@ export const scanBridgeClient = {
   getConfiguration: () => refreshConfigurationToken(),
   getScannerStatus: () => execute<ScannerStatus>('/scanner-status'),
   /** Task 0021: caseSensitivityLevel is the New case "Sensitivity" choice; the bridge carries it to LexaVault. */
-  startSession: (businessIdentifiers: Record<string, string>, caseSensitivityLevel?: string) => execute<ScanSession>('/scan-sessions', {
+  startSession: (businessIdentifiers: Record<string, string>, caseSensitivityLevel?: string, casePriority?: string) => execute<ScanSession>('/scan-sessions', {
     method: 'POST',
-    body: JSON.stringify({ businessIdentifiers, caseSensitivityLevel }),
+    body: JSON.stringify({ businessIdentifiers, caseSensitivityLevel, casePriority }),
   }),
   getCurrentSession: () => execute<ScanSession | undefined>('/scan-sessions/current'),
   getSession: (sessionId: string) => execute<ScanSession>(`/scan-sessions/${encodeURIComponent(sessionId)}`),

@@ -11,9 +11,15 @@ import java.util.Map;
  */
 public record StartScanSessionRequest(
         Map<String, String> businessIdentifiers,
-        String caseSensitivityLevel
+        String caseSensitivityLevel,
+        /** Task 0073: the optional priority chosen on New case; LexaVault reads it. */
+        String casePriority
 ) {
+    public StartScanSessionRequest(Map<String, String> businessIdentifiers, String caseSensitivityLevel) {
+        this(businessIdentifiers, caseSensitivityLevel, null);
+    }
+
     public StartScanSessionRequest(Map<String, String> businessIdentifiers) {
-        this(businessIdentifiers, null);
+        this(businessIdentifiers, null, null);
     }
 }

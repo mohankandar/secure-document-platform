@@ -277,6 +277,8 @@ const SENTENCES: Record<string, string> = {
   WATCHED_FOLDER_SETTINGS_CHANGED: 'Changed the watched folder’s sensitivity level',
   PLATFORM_HEALTH_CHECKED: 'Ran health checks',
   PROCESSING_MAXIMUMS_CHANGED: 'Changed the processing maximums',
+  CASE_PRIORITY_CHANGED: 'Changed the case’s priority',
+  SOURCE_PRIORITY_CHANGED: 'Changed a source’s default priority',
   PROCESSING_STORAGE_PROVIDER_CREATED: 'Added processing storage',
   PROCESSING_STORAGE_PROVIDER_TESTED: 'Tested processing storage',
   PROCESSING_STORAGE_PROVIDER_ACTIVATED: 'Made processing storage the default',

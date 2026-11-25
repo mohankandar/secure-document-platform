@@ -28,6 +28,7 @@ public final class CreatePackageService implements CreatePackageUseCase {
     private final BusinessIdentityService businessIdentityService;
     private final IntakeLicence intakeLicence;
     private final PackageRepository packageRepository;
+    private com.securedoc.platform.application.intake.CasePriorityService priorities;
     private final DomainEventPublisher eventPublisher;
     private final AuditService auditService;
 
@@ -45,6 +46,12 @@ public final class CreatePackageService implements CreatePackageUseCase {
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.auditService = Objects.requireNonNull(auditService);
+    }
+
+    /** Task 0073: the same service, keeping priorities. Without it (tests of creation itself) every case is Normal. */
+    public CreatePackageService withPriorities(com.securedoc.platform.application.intake.CasePriorityService priorities) {
+        this.priorities = Objects.requireNonNull(priorities);
+        return this;
     }
 
     @Override
@@ -68,6 +75,8 @@ public final class CreatePackageService implements CreatePackageUseCase {
                 command.intakeFingerprint(), command.sourceReference(), principal.actorId(),
                 PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
         packageRepository.save(documentPackage);
+        var priority = priorities == null ? com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL
+                : priorities.atIntake(principal.tenantId(), documentPackage.id(), command.priority(), command.sourceKey());
 
         CorrelationId correlationId = command.correlationId();
         eventPublisher.publish(PackageCreatedEvent.of(documentPackage.id(), principal.tenantId(),
@@ -75,6 +84,7 @@ public final class CreatePackageService implements CreatePackageUseCase {
         auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.PACKAGE_CREATED,
                 "IntakeBatch", documentPackage.id().toString(), correlationId,
                 "Intake batch created: channel=" + command.packageType()
+                        + ", priority=" + priority.name()
                         + ", sensitivityLevel=" + documentPackage.sensitivityLevel().name());
         if (command.caseSensitivity().unknown()) {
             auditService.recordUnknownSensitivityLevel(principal.tenantId(), principal.actorId(), documentPackage.id(),

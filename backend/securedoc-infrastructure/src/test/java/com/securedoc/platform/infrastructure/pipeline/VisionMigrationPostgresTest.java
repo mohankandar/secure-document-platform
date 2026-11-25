@@ -87,10 +87,12 @@ class VisionMigrationPostgresTest {
             jobs.enqueue(vision(tenant, pkg, doc, 1, 1));
             jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.TEXT, pkg, doc, null, null, 1, Instant.now()));
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 3); // 081, 071, then 080
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 4); // 082, 081, 071, then 080
             }
             assertEquals(List.of("TEXT"), jdbc.queryForList("SELECT stage FROM pipeline_jobs",
                     new MapSqlParameterSource(), String.class));
+            // Queuing reads it (task 0073, migration 082).
+            jdbc.getJdbcOperations().execute("CREATE TABLE case_priorities (package_id uuid, priority varchar(16))");
             assertThrows(DataIntegrityViolationException.class, () -> jobs.enqueue(vision(tenant, pkg, doc, 2, 2)));
             assertFalse(jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.TEXT, pkg, doc, null, null, 1,
                     Instant.now())), "the identity holds");

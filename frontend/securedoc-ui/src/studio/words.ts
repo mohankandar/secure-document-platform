@@ -478,6 +478,20 @@ export function documentSensitivityNote(documentLevel: string | null | undefined
   return doc === kase ? null : sensitivityName(doc);
 }
 
+/** Task 0073: a case's priority. */
+export const PRIORITIES = ['URGENT', 'NORMAL', 'LOW'] as const;
+export type PriorityCode = (typeof PRIORITIES)[number];
+export const PRIORITY_NAMES: Record<PriorityCode, string> = { URGENT: 'Urgent', NORMAL: 'Normal', LOW: 'Low' };
+/** Nothing sent, or a name this screen does not know, is Normal. */
+export const priorityChoice = (raw: string | null | undefined): PriorityCode => PRIORITIES.find((p) => p === raw) ?? 'NORMAL';
+export const priorityRank = (raw: string | null | undefined): number => PRIORITIES.indexOf(priorityChoice(raw));
+export const PRIORITY_FIELD = {
+  label: 'Priority',
+  hint: 'Urgent cases are worked on first.',
+  sourceLabel: 'Priority of cases from this source',
+  sourceHint: 'Used when the source sends none. Cases already here keep theirs.',
+} as const;
+
 export const SENSITIVITY_FIELD = {
   label: 'Sensitivity',
   hint: 'Passed on unchanged when the case is sent.',

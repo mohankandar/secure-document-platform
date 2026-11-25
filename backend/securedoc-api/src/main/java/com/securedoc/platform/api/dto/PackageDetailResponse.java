@@ -22,5 +22,7 @@ public record PackageDetailResponse(
         /* Task 0050: a digitally signed document of this case lost its signature by redaction. */
         boolean signatureRemoved,
         /** Task 0071: why a person rejected the case, as an LV code; null otherwise. */
-        String rejectionCode
+        String rejectionCode,
+        /** Task 0073: URGENT, NORMAL or LOW. */
+        String priority
 ) {}

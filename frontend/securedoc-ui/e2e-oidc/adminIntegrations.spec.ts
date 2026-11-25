@@ -196,6 +196,9 @@ test('0021: Tenant IT sets the level every file from the watched folder gets (de
     .toEqual({ sensitivityLevel: 'HIGHLY_CONFIDENTIAL' });
   await expect(page.getByText('Files from this folder will be Highly Confidential.')).toBeVisible();
   await expect(folder.getByRole('button', { name: 'Save' })).toHaveCount(0);
+  // Task 0073: every receiving source has a default priority.
+  await folder.getByLabel('Priority of cases from this source').selectOption({ label: 'Low' });
+  await expect.poll(() => calls.find((c) => c.method === 'PUT' && c.path.includes('/source-priorities/'))?.body).toEqual({ priority: 'LOW' });
   // The other connections get no level choice: it belongs to the folder only.
   const los = page.getByRole('region', { name: 'Receiving documents' }).getByRole('listitem').filter({ hasText: 'Loan origination system' });
   await expect(los.getByLabel('Sensitivity of files from this folder')).toHaveCount(0);
