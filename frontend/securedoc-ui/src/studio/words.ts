@@ -116,6 +116,8 @@ export const SENSITIVE_TYPES: readonly SensitiveType[] = [
   { key: 'EIN', name: 'EIN', plural: 'EINs', detects: 'A business’s Employer Identification Number (NN-NNNNNNN) next to an EIN or tax ID label. Off by default.' },
   { key: 'DRIVERS_LICENSE_NUMBER', name: 'Driver’s license number', plural: 'Driver’s license numbers', detects: 'A driver’s license number, only next to a driver’s license or DL label. Off by default.' },
   { key: 'PASSPORT_NUMBER', name: 'Passport number', plural: 'Passport numbers', detects: 'A passport number, only next to a passport label. Off by default.' },
+  // Task 0072: found by the AI; a person always decides.
+  { key: 'PERSON_NAME', name: 'Person name', plural: 'Person names', detects: 'A person’s name, found by the AI in the text. Every one is shown in Review; none is redacted without a person. Off by default.' },
   // Task 0064: found on the page image, not in its text.
   { key: 'SIGNATURE', name: 'Signature or initials', plural: 'Signatures and initials', detects: 'A handwritten signature or initials next to a signature or initials label, and any the vision model finds. Off by default.' },
   { key: 'FACE_PHOTO', name: 'Face photo', plural: 'Face photos', detects: 'A photo of a person’s face, for example on an ID copy. Found by the vision model only. Off by default.' },
@@ -345,6 +347,7 @@ export const CATALOG_WORDS = {
   packsHint: 'Turning a pack on turns on its sensitive types below; then turn single types on or off by hand. Turning a pack off leaves its types on until you turn them off. A pack helps with a rule; it does not make a document compliant by itself.',
   notCovered: 'Not covered:',
   tunedOff: 'Turned off by hand:',
+  suggested: 'Suggested with this pack, off until you turn it on below:',
   locked: 'always on',
   lockedSoon: 'on with your next save',
   lockedHint: 'Full card numbers, card security codes and PINs are locked: always on, and always removed in full.',

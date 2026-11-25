@@ -43,12 +43,12 @@ class OptInKindsPolicySaveTest {
     void theOptInKindsAreOptInAndSeparateFromTheV1Four() {
         assertEquals(EnumSet.of(EntityType.BANK_ROUTING_NUMBER, EntityType.BANK_ACCOUNT_NUMBER, EntityType.ITIN,
                 EntityType.EIN, EntityType.DRIVERS_LICENSE_NUMBER, EntityType.PASSPORT_NUMBER,
-                EntityType.SIGNATURE, EntityType.FACE_PHOTO),
+                EntityType.SIGNATURE, EntityType.FACE_PHOTO, EntityType.PERSON_NAME),
                 EnumSet.copyOf(RedactionCatalog.entries().stream().filter(e -> !e.onByDefault())
                         .map(RedactionCatalog.Entry::kind).toList()));
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
-                EntityType.CREDIT_SCORE), EnumSet.copyOf(RedactionCatalog.askedOfAi()));
-        assertEquals(14, RedactionCatalog.kinds().size());
+                EntityType.CREDIT_SCORE, EntityType.PERSON_NAME), EnumSet.copyOf(RedactionCatalog.askedOfAi()));
+        assertEquals(15, RedactionCatalog.kinds().size());
     }
 
     @Test
@@ -74,7 +74,7 @@ class OptInKindsPolicySaveTest {
 
     @Test
     void aKindOutsideTheCatalogIsRefused() {
-        for (EntityType unused : List.of(EntityType.PERSON_NAME, EntityType.CUSTOM)) {
+        for (EntityType unused : List.of(EntityType.ADDRESS, EntityType.CUSTOM)) {
             assertThrows(ValidationException.class, () -> service.updateSensitiveDataPolicy(tenant, ActorId.generate(),
                     CorrelationId.generate(), EnumSet.of(EntityType.SSN, unused), 0.80, ReviewMode.UNCERTAIN_ONLY, true));
         }
@@ -91,7 +91,7 @@ class OptInKindsPolicySaveTest {
                 ReviewMode.UNCERTAIN_ONLY, false, false, 101, 11, null, null, false, 0.71);
         assertTrue(lastDetail().contains("visionEnabled=false, visionOcrThreshold=0.71"), lastDetail());
         assertFalse(lastDetail().contains("[truncated]"));
-        assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=14, threshold=0.50"));
+        assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=15, threshold=0.50"));
     }
 
     /** Task 0062: the locked items are on whatever is chosen. */

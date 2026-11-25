@@ -9,6 +9,9 @@ const V1 = ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'];
 const ANSWER = { BANK_ROUTING_NUMBER: 'ROUTING_NUMBER', BANK_ACCOUNT_NUMBER: 'BANK_ACCOUNT', DRIVERS_LICENSE_NUMBER: 'GOVERNMENT_ID', PASSPORT_NUMBER: 'GOVERNMENT_ID' };
 const ALL = [...V1, 'BANK_ACCOUNT', 'ROUTING_NUMBER', 'GOVERNMENT_ID', 'SIGNATURE', 'FACE_PHOTO'];
 
+// Task 0072: names are scored only in the documents whose answer file has them (the older ones do not list names).
+const NAMES = ['PERSON_NAME'];
+
 const read = (f) => JSON.parse(readFileSync(f, 'utf8').replace(/^﻿/, ''));
 
 function overlap(a, b) {
@@ -125,5 +128,8 @@ const out = extra
   + line('ALL pages, the four V1 kinds', score(truths, preds, () => true, V1))
   + line('ROUTED pages, every path', score(truths, preds, isRouted, ALL))
   + line('ROUTED pages, vision findings only', score(truths, visionOnly, isRouted, ALL));
+const named = new Set(Object.entries(truths).filter(([, t]) => t.pages.some((p) => p.items.some((i) => NAMES.includes(i.type)))).map(([d]) => d));
+if (named.size) console.log(line('DOCUMENTS WITH NAMES, person names', score(truths, preds, (d) => named.has(d), NAMES)),
+  'names not waiting for a person:', preds.filter((p) => p.type === 'PERSON_NAME' && p.status !== 'DETECTED').length);
 console.log(out);
 if (!benchmark) writeFileSync(join(second, 'summary.txt'), out);

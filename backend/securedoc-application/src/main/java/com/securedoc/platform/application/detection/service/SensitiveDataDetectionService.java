@@ -523,7 +523,9 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     ? com.securedoc.platform.domain.business.RedactionStyle.REMOVE_FULLY
                     : tenantPolicy.styleOf(finding.entityType()));
             boolean autoConfirmAllowed = tenantPolicy.reviewMode() == ReviewMode.UNCERTAIN_ONLY;
+            // Task 0072: a name is always a person's decision.
             if (autoConfirmAllowed
+                    && !com.securedoc.platform.domain.business.RedactionCatalog.alwaysReviewed().contains(finding.entityType())
                     && finding.confidence().value() >= tenantPolicy.autoRedactThreshold()
                     && finding.location().hasBoundingBox()) {
                 finding.confirm(SYSTEM_ACTOR, "Auto-confirmed by tenant confidence policy");
@@ -677,6 +679,20 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             String analyzerVersion = discovery.analyzerVersion()
                     + ";validation=" + validation.outcome() + ";plausibility=PASS";
 
+            if (type == EntityType.PERSON_NAME) {
+                // Task 0072: the same written name on the page is the same person, so each place is found.
+                List<int[]> places = wholeWords(page.text(), matchedText);
+                if (places.isEmpty()) {
+                    unlocated.add(new UnlocatedSemanticFinding(type, discovery.pageNumber(), effectiveConfidence,
+                            discovery.analyzerName(), analyzerVersion));
+                }
+                for (int[] place : places) {
+                    located.add(new DetectedEntity(discovery.entityType(), discovery.pageNumber(), place[0], place[1],
+                            effectiveConfidence, discovery.analyzerName(), analyzerVersion));
+                }
+                continue;
+            }
+
             if (offsets == null) {
                 // A structurally/contextually plausible candidate may still be ambiguous to locate
                 // when the exact value occurs more than once. Preserve that uncertainty for review,
@@ -789,6 +805,21 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             return new int[]{matchStart, matchStart + matchedText.length()};
         }
         return null;
+    }
+
+    /** Every place of the words, in capitals or not; inside a longer word it is another word. */
+    private static List<int[]> wholeWords(String text, String words) {
+        List<int[]> places = new ArrayList<>();
+        var matcher = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(words),
+                java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE).matcher(text);
+        while (matcher.find()) {
+            int at = matcher.start();
+            int end = matcher.end();
+            boolean before = at == 0 || !Character.isLetterOrDigit(text.charAt(at - 1));
+            boolean after = end == text.length() || !Character.isLetterOrDigit(text.charAt(end));
+            if (before && after) places.add(new int[]{at, end});
+        }
+        return places;
     }
 
     /** Returns the index only when the needle occurs exactly once. */

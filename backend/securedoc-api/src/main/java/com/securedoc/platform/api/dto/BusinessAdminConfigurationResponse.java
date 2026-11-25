@@ -69,8 +69,9 @@ public record BusinessAdminConfigurationResponse(
     public record CatalogKindResponse(String key, String name, String detectionMethod, String defaultStyle,
                                       boolean locked, boolean lastFourAllowed) {}
 
+    /** @param suggestedKinds task 0072: kinds that fit the rule; they stay off until turned on by hand */
     public record RegulationPackResponse(String key, String name, String covers, String notCovered,
-                                         List<String> kinds) {}
+                                         List<String> kinds, List<String> suggestedKinds) {}
 
     public record LifecyclePolicyResponse(
             int originalRetentionHours,

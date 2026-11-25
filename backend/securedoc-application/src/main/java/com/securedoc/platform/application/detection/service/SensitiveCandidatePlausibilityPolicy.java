@@ -87,8 +87,16 @@ final class SensitiveCandidatePlausibilityPolicy {
             case SSN -> evaluateSsn(value, context, maskSsnLastFour, deterministicValidation);
             case CREDIT_CARD_NUMBER -> evaluateCreditCard(value, context, deterministicValidation);
             case CREDIT_SCORE -> evaluateCreditScore(value, context);
+            case PERSON_NAME -> evaluateName(value);
             default -> Evaluation.accept();
         };
+    }
+
+    /** Task 0072: a form of a name: letters, no digits, not a sentence. What it means is the AI's and the person's. */
+    private static Evaluation evaluateName(String value) {
+        boolean name = value.length() >= 2 && value.length() <= 80 && value.chars().noneMatch(Character::isDigit)
+                && value.chars().filter(Character::isLetter).count() >= 2 && value.split("\\s+").length <= 8;
+        return name ? Evaluation.accept() : Evaluation.reject("NAME_NOT_A_NAME");
     }
 
     private Evaluation evaluateDob(String value, String context) {

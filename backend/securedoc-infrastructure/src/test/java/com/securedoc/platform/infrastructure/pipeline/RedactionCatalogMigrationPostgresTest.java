@@ -75,7 +75,8 @@ class RedactionCatalogMigrationPostgresTest {
                             || '|' || locked_items_on FROM tenant_redaction_policies WHERE tenant_id = :t
                         """, new MapSqlParameterSource("t", tenants[mask].value()), String.class));
             }
-            assertEquals(RedactionCatalog.askedOfAi(), store.load(noPolicy).enabled(),
+            assertEquals(java.util.Set.of(EntityType.SSN, EntityType.DATE_OF_BIRTH,
+                    EntityType.CREDIT_CARD_NUMBER, EntityType.CREDIT_SCORE), store.load(noPolicy).enabled(),
                     "no policy row: the built-in defaults of before");
             assertEquals("0.8|UNCERTAIN_ONLY|true|true|20|2|false", jdbc.queryForObject("""
                     SELECT auto_redact_threshold || '|' || review_mode || '|' || mask_ssn_last_four || '|'

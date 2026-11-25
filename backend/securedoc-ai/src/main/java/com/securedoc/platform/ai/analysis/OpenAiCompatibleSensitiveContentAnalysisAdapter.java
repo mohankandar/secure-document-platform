@@ -105,7 +105,12 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
 
         int parallelism = Math.min(configuredParallelism, nonBlankPages.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
-        String systemPrompt = promptBuilder.build(request.policy());
+        // Task 0072: one request for the other kinds, exactly as before, and one for names where they are on.
+        boolean names = SensitiveContentPromptBuilder.asksForNames(request.policy());
+        AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(request.policy());
+        Map<String, String> prompts = new java.util.LinkedHashMap<>();
+        if (!names || !others.enabledEntityTypes().isEmpty()) prompts.put(VERSION, promptBuilder.build(others));
+        if (names) prompts.put(SensitiveContentPromptBuilder.NAMES_VERSION, promptBuilder.buildNames());
         long startedNanos = System.nanoTime();
         StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.of(
                 "provider", PROVIDER, "model", model, "pageCount", nonBlankPages.size(),
@@ -114,9 +119,11 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         ExecutorService executor = Executors.newFixedThreadPool(parallelism);
         try {
             List<Future<List<DiscoveredSensitiveContent>>> futures = new ArrayList<>(nonBlankPages.size());
-            for (PageContent page : nonBlankPages) {
-                futures.add(executor.submit(StructuredLogContext.wrap(() -> analyzePageWithRetry(page, pageRetryCount, systemPrompt))));
-            }
+            prompts.forEach((version, systemPrompt) -> {
+                for (PageContent page : nonBlankPages) {
+                    futures.add(executor.submit(StructuredLogContext.wrap(() -> analyzePageWithRetry(page, pageRetryCount, systemPrompt, version))));
+                }
+            });
 
             List<DiscoveredSensitiveContent> discoveries = new ArrayList<>();
             for (Future<List<DiscoveredSensitiveContent>> future : futures) {
@@ -137,8 +144,8 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                     "provider", PROVIDER, "model", model, "pageCount", nonBlankPages.size(),
                     "findingCount", discoveries.size(), "pageRetries", pageRetryCount.get(),
                     "durationMs", elapsedMillis(startedNanos)), "AI analysis completed");
-            return new AnalysisOutput(discoveries, List.of(com.securedoc.platform.domain.finding.AiModel.of(
-                    model, "text-" + VERSION, null)));
+            return new AnalysisOutput(discoveries, prompts.keySet().stream().map(version ->
+                    com.securedoc.platform.domain.finding.AiModel.of(model, "text-" + version, null)).toList());
         } catch (RuntimeException e) {
             String reason = e instanceof TechnicalDependencyException technical
                     ? technical.failureCode().name()
@@ -158,14 +165,14 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
 
     private List<DiscoveredSensitiveContent> analyzePageWithRetry(PageContent page,
                                                                    AtomicInteger pageRetryCount,
-                                                                   String systemPrompt) {
+                                                                   String systemPrompt, String version) {
         int attempt = 0;
         long pageStartedNanos = System.nanoTime();
         while (true) {
             attempt++;
             long attemptStartedNanos = System.nanoTime();
             try {
-                List<DiscoveredSensitiveContent> result = analyzePage(page, systemPrompt);
+                List<DiscoveredSensitiveContent> result = analyzePage(page, systemPrompt, version);
                 if (attempt > 1) {
                     log.info("AI_PAGE_RECOVERED provider={} model={} page={} attempts={} durationMs={}",
                             PROVIDER, model, page.pageNumber(), attempt, elapsedMillis(pageStartedNanos));
@@ -188,7 +195,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         }
     }
 
-    private List<DiscoveredSensitiveContent> analyzePage(PageContent page, String systemPrompt) {
+    private List<DiscoveredSensitiveContent> analyzePage(PageContent page, String systemPrompt, String version) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", model);
         requestBody.put("temperature", 0);
@@ -251,7 +258,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                         "AI provider returned no analysis content", null);
             }
             return responseParser.parse(content, page, PROVIDER, model,
-                    PROVIDER + ":" + model, VERSION);
+                    PROVIDER + ":" + model, version);
         } catch (TechnicalDependencyException e) {
             throw e;
         } catch (IOException e) {

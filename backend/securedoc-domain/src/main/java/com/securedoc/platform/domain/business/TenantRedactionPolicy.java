@@ -100,9 +100,11 @@ public record TenantRedactionPolicy(
                 true, Instant.now(), true, PageBatchSettings.DEFAULTS, Set.of(), Set.of(), true);
     }
 
-    /** The default policy as it was before the catalog: the four kinds the AI is asked for, nothing locked. */
+    /** The default policy as it was before the catalog: the four kinds the AI was asked for, nothing locked. */
     public static TenantRedactionPolicy defaultsBeforeCatalog(TenantId tenantId) {
-        return new TenantRedactionPolicy(tenantId, RedactionCatalog.askedOfAi(), 0.80, ReviewMode.UNCERTAIN_ONLY,
+        EnumSet<EntityType> four = EnumSet.copyOf(RedactionCatalog.onByDefault());
+        four.retainAll(RedactionCatalog.askedOfAi());
+        return new TenantRedactionPolicy(tenantId, four, 0.80, ReviewMode.UNCERTAIN_ONLY,
                 true, Instant.now());
     }
 

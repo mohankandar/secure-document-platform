@@ -23,7 +23,7 @@ public record Truth(int version, List<PageTruth> pages) {
     /** Item types a sample can hold. The first four are the text path's types today (V1). */
     public static final List<String> ITEM_TYPES = List.of(
             "SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE",
-            "BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID", "SIGNATURE", "FACE_PHOTO");
+            "BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID", "SIGNATURE", "FACE_PHOTO", "PERSON_NAME");
 
     /** The types the product's text path can find today (TenantRedactionPolicy V1 set). */
     public static final Set<String> TEXT_PATH_TYPES = Set.of(
