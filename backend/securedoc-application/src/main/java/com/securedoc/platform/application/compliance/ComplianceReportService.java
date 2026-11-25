@@ -438,7 +438,7 @@ public final class ComplianceReportService {
                 p.autoRedactThreshold(), p.reviewMode(), p.maskSsnLastFour())
                 .with(p.packs().stream().map(Enum::name).collect(Collectors.toSet()),
                         p.keepLastFour().stream().map(Enum::name).collect(Collectors.toSet()))
-                .withVision(p.vision());
+                .withVision(p.vision()).withSecondCheck(p.secondCheck());
     }
 
     private LifecyclePolicy lifecyclePolicyAt(TenantId tenantId, Instant at) {

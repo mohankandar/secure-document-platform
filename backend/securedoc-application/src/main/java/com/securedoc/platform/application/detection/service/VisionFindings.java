@@ -24,7 +24,7 @@ import java.util.Set;
  * Task 0064: the findings of the vision model and the signature detector, and their merging with the text path's by
  * place on the page (one finding per box). Kinds, places and confidence only; never a value.
  */
-final class VisionFindings {
+public final class VisionFindings {
 
     /**
      * The model states no confidence. A finding only it made gets this one, below the default auto-redact threshold
@@ -81,7 +81,7 @@ final class VisionFindings {
     }
 
     /** The entity's kind for what the model named; null when the entity does not redact it. */
-    static EntityType type(VisionPageResult.Kind kind, Set<EntityType> enabled) {
+    public static EntityType type(VisionPageResult.Kind kind, Set<EntityType> enabled) {
         return switch (kind) {
             // The model does not tell an ITIN from an SSN.
             case SSN -> first(enabled, EntityType.SSN, EntityType.ITIN);

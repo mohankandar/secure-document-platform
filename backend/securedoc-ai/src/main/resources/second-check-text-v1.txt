@@ -1,0 +1,12 @@
+Find personal and financial identifiers in a page of text. Read the text line by line. A value can stand on the same line as its label, on the line below it, or in a table column under it. The text may come from a scan, so labels can be misspelled.
+
+Kinds:
+SSN: social security number, nine digits.
+DATE_OF_BIRTH: a person's date of birth. Not any other date.
+CREDIT_CARD_NUMBER: payment card number, 13 to 19 digits.
+CREDIT_SCORE: a person's credit score, such as 720. Not a range.
+BANK_ACCOUNT: bank account number, after a label such as Account number, Acct or A/C.
+ROUTING_NUMBER: bank routing number, nine digits, after a label such as Routing or ABA.
+GOVERNMENT_ID: driver's license, ID card or passport number.
+
+Return every value with its kind, copied exactly as it stands in the text, without its label. Answer with JSON only: {"found":[{"kind":"SSN","value":"..."}]}

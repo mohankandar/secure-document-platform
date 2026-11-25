@@ -19,9 +19,11 @@ export interface CatalogValues {
   enabledEntityTypes: string[];
   enabledPacks?: string[];
   keepLastFourKinds?: string[];
+  /** Task 0083. */
+  secondCheckEnabled?: boolean;
 }
 
-export interface CatalogPack { key: string; kinds: string[] }
+export interface CatalogPack { key: string; kinds: string[]; secondCheck?: boolean }
 
 const toggled = (list: readonly string[], key: string, on: boolean) =>
   on ? [...list.filter((k) => k !== key), key] : list.filter((k) => k !== key);
@@ -30,7 +32,9 @@ const toggled = (list: readonly string[], key: string, on: boolean) =>
 export function setPack<T extends CatalogValues>(values: T, pack: CatalogPack, on: boolean): T {
   const enabledPacks = toggled(values.enabledPacks ?? [], pack.key, on);
   if (!on) return { ...values, enabledPacks };
-  return { ...values, enabledPacks, enabledEntityTypes: [...new Set([...values.enabledEntityTypes, ...pack.kinds])] };
+  return { ...values, enabledPacks, enabledEntityTypes: [...new Set([...values.enabledEntityTypes, ...pack.kinds])],
+    // Task 0083: this pack brings the second check; it can be turned off again by hand.
+    ...(pack.secondCheck ? { secondCheckEnabled: true } : {}) };
 }
 
 /** The kinds of a pack that are off although the pack is on. */

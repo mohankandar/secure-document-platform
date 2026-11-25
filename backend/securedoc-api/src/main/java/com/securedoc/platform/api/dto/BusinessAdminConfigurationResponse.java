@@ -60,7 +60,9 @@ public record BusinessAdminConfigurationResponse(
             boolean lockedItemsOn,
             /* Task 0064: routed pages are read by the vision model (on by default), and the routing threshold. */
             boolean visionEnabled,
-            double visionOcrThreshold
+            double visionOcrThreshold,
+            /* Task 0083: a second AI reads the finished file (off by default). */
+            boolean secondCheckEnabled
     ) {}
 
     /** Task 0062: the redaction catalog and the regulation packs; the same for every entity. */
@@ -71,7 +73,7 @@ public record BusinessAdminConfigurationResponse(
 
     /** @param suggestedKinds task 0072: kinds that fit the rule; they stay off until turned on by hand */
     public record RegulationPackResponse(String key, String name, String covers, String notCovered,
-                                         List<String> kinds, List<String> suggestedKinds) {}
+                                         List<String> kinds, List<String> suggestedKinds, boolean secondCheck) {}
 
     public record LifecyclePolicyResponse(
             int originalRetentionHours,

@@ -323,6 +323,24 @@ test('a vision finding says what found it; a page that was not read asks for the
   await expect(panel(page)).not.toContainText('SOMETHING_NEW');
 });
 
+test('task 0083: a page the second check sent says so, with kinds only', async ({ page }) => {
+  const check = (id: string, pageNumber: number, secondCheck: string[]) =>
+    ({ ...finding(id, CASE_A.packageId, 'UNREAD_PAGE', null, false), confidence: 0, pageNumber, foundBy: ['PAGE_CHECK'], secondCheck });
+  await openReview(page, [], [], [check('s1', 3, ['SSN', 'ROUTING']), check('s2', 4, ['UNREAD']), check('s3', 5, ['A_NEW_KIND'])]);
+  await queue(page).locator('#cf-q-s1').click();
+  await expect(panel(page).getByText('Second check found something on page 3: SSN, bank routing number')).toBeVisible();
+  await expect(panel(page)).not.toContainText('Unreadable: check by hand');
+  await expect(panel(page).locator('.cf-facts div').filter({ hasText: 'Found by' }).locator('dd')).toHaveText('Second check');
+  await expect(panel(page).getByRole('button', { name: /^Done, nothing to redact/ })).toBeDisabled();
+  await expect(panel(page).getByRole('button', { name: /^Keep visible/ })).toHaveCount(0);
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/second-check.png` });
+  await queue(page).locator('#cf-q-s2').click();
+  await expect(panel(page).getByText('Second check could not read page 4')).toBeVisible();
+  await queue(page).locator('#cf-q-s3').click();
+  await expect(panel(page).getByText('Second check found something on page 5', { exact: true })).toBeVisible();
+  await expect(panel(page)).not.toContainText('A_NEW_KIND');
+});
+
 test('task 0074: a page to check takes several marks, needs the confirmation, and sends the boxes', async ({ page }) => {
   const sent: { id: string; body: { reviewed: boolean; boxes: { left: number; top: number; width: number; height: number }[] } }[] = [];
   const confirmed: string[] = [];

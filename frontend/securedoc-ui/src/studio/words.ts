@@ -202,6 +202,34 @@ export const UNREAD_PAGE_WORDS = {
   needsTick: 'Tick “I have reviewed this page” first.',
 } as const;
 
+/** Task 0083: the kinds the second check names. Kinds only: it never sends a value. */
+const SECOND_CHECK_KINDS: Record<string, string> = {
+  SSN: 'SSN',
+  DOB: 'date of birth',
+  CARD: 'card number',
+  SCORE: 'credit score',
+  ACCOUNT: 'bank account number',
+  ROUTING: 'bank routing number',
+  ID: 'ID number',
+  FACE: 'face photo',
+};
+export const SECOND_CHECK_WORDS = {
+  foundBy: 'Second check',
+  toggle: 'Check the finished file a second time',
+  toggleHint: 'After redaction, the AI reads the finished file again with other instructions and looks for anything that was missed. It never redacts: a page with something on it goes to Review. It adds a few seconds a page and can be wrong. With the vision model off, only text is checked.',
+  label: (page: number) => `Second check found something on page ${page}`,
+  unread: (page: number) => `Second check could not read page ${page}`,
+  why: 'The finished file was read a second time. Look over the whole page for anything that is still to be redacted. What was already redacted stays redacted.',
+} as const;
+
+/** The banner of a page the second check sent, or null for any other item. */
+export function secondCheckBanner(kinds: readonly string[] | null | undefined, page: number): string | null {
+  if (!Array.isArray(kinds)) return null;
+  const names = kinds.map((k) => SECOND_CHECK_KINDS[k]).filter((name): name is string => Boolean(name));
+  if (names.length === 0) return kinds.includes('UNREAD') ? SECOND_CHECK_WORDS.unread(page) : SECOND_CHECK_WORDS.label(page);
+  return `${SECOND_CHECK_WORDS.label(page)}: ${names.join(', ')}`;
+}
+
 /* ---------- Continue manually ---------- */
 
 /** The owner's U021 wording: on a tablet, marking by hand is possible but not the aim. Shown only on a touch device. */

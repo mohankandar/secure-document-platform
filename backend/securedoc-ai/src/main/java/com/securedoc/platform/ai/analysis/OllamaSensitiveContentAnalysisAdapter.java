@@ -153,7 +153,8 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
             return new AnalysisOutput(List.of());
         }
 
-        List<List<PageContent>> batches = buildBatches(nonBlankPages);
+        List<List<PageContent>> batches = request.policy().secondCheck()
+                ? nonBlankPages.stream().map(List::of).toList() : buildBatches(nonBlankPages);
         int parallelism = Math.min(configuredParallelism, batches.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
         AtomicInteger providerCallCount = new AtomicInteger();
@@ -387,7 +388,8 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
         requestBody.put("options", options);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", prompt.text()),
-                Map.of("role", "user", "content", buildBatchUserPrompt(pages))
+                Map.of("role", "user", "content", prompt.secondCheck()
+                        ? SensitiveContentPromptBuilder.secondCheckPage(pages.getFirst().text()) : buildBatchUserPrompt(pages))
         ));
 
         final String body;
@@ -451,6 +453,10 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "Local AI provider reached the configured output limit", null);
             }
+            if (prompt.secondCheck()) {
+                return new BatchAnalysisResult(responseParser.parseSecondCheck(content, pages.getFirst(),
+                        "ollama:" + model), ProviderMetrics.from(envelope));
+            }
             List<DiscoveredSensitiveContent> findings = responseParser.parse(
                     content, pages, "ollama", model, "ollama:" + model, prompt.version());
             return new BatchAnalysisResult(findings, ProviderMetrics.from(envelope));
@@ -473,10 +479,18 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
     }
 
     /** What the model is told, the shape of its answer, and the version recorded with its findings. */
-    private record Prompt(String text, JsonNode schema, String version) { }
+    private record Prompt(String text, JsonNode schema, String version) {
+        boolean secondCheck() {
+            return SensitiveContentPromptBuilder.SECOND_CHECK_VERSION.equals(version);
+        }
+    }
 
     /** Task 0072: one request for the other kinds, exactly as before, and one for names where they are on. */
     private List<Prompt> prompts(AnalysisPolicy policy) {
+        if (policy.secondCheck()) {
+            return List.of(new Prompt(SensitiveContentPromptBuilder.secondCheck(),
+                    structuredOutput ? secondCheckSchema() : null, SensitiveContentPromptBuilder.SECOND_CHECK_VERSION));
+        }
         List<Prompt> prompts = new ArrayList<>();
         boolean names = SensitiveContentPromptBuilder.asksForNames(policy);
         AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(policy);
@@ -488,6 +502,17 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
                     SensitiveContentPromptBuilder.NAMES_VERSION));
         }
         return prompts;
+    }
+
+    private JsonNode secondCheckSchema() {
+        // In this order, as measured: the model answers in the schema's order, and Map.of has another at every start.
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("kind", Map.of("type", "string", "enum", SensitiveContentResponseParser.SECOND_CHECK_KINDS));
+        properties.put("value", Map.of("type", "string"));
+        Map<String, Object> item = Map.of("type", "object", "additionalProperties", false,
+                "properties", properties, "required", List.of("kind", "value"));
+        return objectMapper.valueToTree(Map.of("type", "object", "additionalProperties", false,
+                "properties", Map.of("found", Map.of("type", "array", "items", item)), "required", List.of("found")));
     }
 
     private JsonNode namesSchema() {

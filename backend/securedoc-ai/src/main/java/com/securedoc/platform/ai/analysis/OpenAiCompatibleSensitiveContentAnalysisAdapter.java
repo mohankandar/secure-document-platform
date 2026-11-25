@@ -106,10 +106,13 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
         int parallelism = Math.min(configuredParallelism, nonBlankPages.size());
         AtomicInteger pageRetryCount = new AtomicInteger();
         // Task 0072: one request for the other kinds, exactly as before, and one for names where they are on.
-        boolean names = SensitiveContentPromptBuilder.asksForNames(request.policy());
+        boolean secondCheck = request.policy().secondCheck();
+        boolean names = !secondCheck && SensitiveContentPromptBuilder.asksForNames(request.policy());
         AnalysisPolicy others = SensitiveContentPromptBuilder.withoutNames(request.policy());
         Map<String, String> prompts = new java.util.LinkedHashMap<>();
-        if (!names || !others.enabledEntityTypes().isEmpty()) prompts.put(VERSION, promptBuilder.build(others));
+        if (secondCheck) {
+            prompts.put(SensitiveContentPromptBuilder.SECOND_CHECK_VERSION, SensitiveContentPromptBuilder.secondCheck());
+        } else if (!names || !others.enabledEntityTypes().isEmpty()) prompts.put(VERSION, promptBuilder.build(others));
         if (names) prompts.put(SensitiveContentPromptBuilder.NAMES_VERSION, promptBuilder.buildNames());
         long startedNanos = System.nanoTime();
         StructuredLogContext.info(log, "AI_ANALYSIS_STARTED", Map.of(
@@ -196,12 +199,15 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
     }
 
     private List<DiscoveredSensitiveContent> analyzePage(PageContent page, String systemPrompt, String version) {
+        boolean secondCheck = SensitiveContentPromptBuilder.SECOND_CHECK_VERSION.equals(version);
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("model", model);
         requestBody.put("temperature", 0);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", systemPrompt),
-                Map.of("role", "user", "content", "Page " + page.pageNumber() + " text:\n" + page.text())
+                Map.of("role", "user", "content", secondCheck
+                        ? SensitiveContentPromptBuilder.secondCheckPage(page.text())
+                        : "Page " + page.pageNumber() + " text:\n" + page.text())
         ));
 
         final String body;
@@ -257,6 +263,7 @@ public final class OpenAiCompatibleSensitiveContentAnalysisAdapter implements Se
                 throw technical(TechnicalFailureCode.AI_INVALID_RESPONSE, true,
                         "AI provider returned no analysis content", null);
             }
+            if (secondCheck) return responseParser.parseSecondCheck(content, page, PROVIDER + ":" + model);
             return responseParser.parse(content, page, PROVIDER, model,
                     PROVIDER + ":" + model, version);
         } catch (TechnicalDependencyException e) {

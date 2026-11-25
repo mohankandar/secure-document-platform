@@ -56,8 +56,21 @@ public interface SensitiveContentAnalysisPort {
         }
     }
 
-    /** Tenant-controlled semantic categories/options; independent of AI provider/model. */
-    record AnalysisPolicy(Set<EntityType> enabledEntityTypes, boolean maskSsnLastFour) {
+    /**
+     * Tenant-controlled semantic categories/options; independent of AI provider/model.
+     *
+     * @param secondCheck task 0083: the page is of a finished file. The second check's own prompt is asked, one page at a
+     *                    time, and the kinds are the names of {@code VisionPageResult.Kind}.
+     */
+    record AnalysisPolicy(Set<EntityType> enabledEntityTypes, boolean maskSsnLastFour, boolean secondCheck) {
+        public AnalysisPolicy(Set<EntityType> enabledEntityTypes, boolean maskSsnLastFour) {
+            this(enabledEntityTypes, maskSsnLastFour, false);
+        }
+
+        public static AnalysisPolicy ofSecondCheck() {
+            return new AnalysisPolicy(V1_TYPES, true, true);
+        }
+
         private static final Set<EntityType> V1_TYPES = Set.of(
                 EntityType.SSN,
                 EntityType.DATE_OF_BIRTH,

@@ -80,6 +80,33 @@ class OptInKindsPolicySaveTest {
         }
     }
 
+    /** Task 0083: off by default; a pack that asks for it turns it on once; a hand-made choice stands. */
+    @Test
+    void theFrcpPackTurnsTheSecondCheckOnAndItCanBeTurnedOffAgain() {
+        Set<com.securedoc.platform.domain.business.RegulationPack> frcp =
+                Set.of(com.securedoc.platform.domain.business.RegulationPack.FRCP_5_2);
+        assertFalse(TenantRedactionPolicy.defaults(tenant).secondCheck());
+        save(Set.of(), null);
+        assertFalse(policies.saved.secondCheck());
+        save(frcp, null);
+        assertTrue(policies.saved.secondCheck());
+        assertTrue(lastDetail().contains("secondCheck=true"), lastDetail());
+        save(frcp, false);
+        assertFalse(policies.saved.secondCheck());
+        save(frcp, null);
+        assertFalse(policies.saved.secondCheck(), "already on: the choice made by hand stands");
+        save(frcp, true);
+        assertTrue(com.securedoc.platform.application.compliance.PolicyHistory.changeLines(com.securedoc.platform
+                .application.compliance.PolicyHistory.parseSensitive(lastDetail()))
+                .contains("Second check of the finished file: No → Yes"));
+    }
+
+    private void save(Set<com.securedoc.platform.domain.business.RegulationPack> packs, Boolean check) {
+        service.updateSensitiveDataPolicy(tenant, ActorId.generate(), CorrelationId.generate(),
+                EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY, true, true, null, null, packs, null, null,
+                null, check);
+    }
+
     @Test
     void everyKindOnStillFitsTheAuditDetail() {
         Set<EntityType> all = RedactionCatalog.kinds();

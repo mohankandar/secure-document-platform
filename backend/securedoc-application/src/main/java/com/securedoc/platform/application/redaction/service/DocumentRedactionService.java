@@ -153,6 +153,14 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         return this;
     }
 
+    private com.securedoc.platform.application.secondcheck.SecondCheck secondCheck;
+
+    /** Task 0083: the same service with the second check, for entities that switched it on. */
+    public DocumentRedactionService withSecondCheck(com.securedoc.platform.application.secondcheck.SecondCheck check) {
+        this.secondCheck = Objects.requireNonNull(check);
+        return this;
+    }
+
     @Override
     public RedactDocumentResult execute(RedactDocumentCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
@@ -317,6 +325,11 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                                     : ", redactedPagesExtractableText=false"
                                             + (redactedValues.isEmpty() ? "" : ", valuesChecked=" + redactedValues.size())));
 
+            if (secondCheckAsksForAPerson(command, originalArtifact, allFindings, targets, redactedContent::openStream)) {
+                // Nothing is stored: the document stays REDACTING and the pages go to Review.
+                return RedactDocumentResult.of(command.documentId(), null, document.status(), 0);
+            }
+
             if (redactionOutput.signatureRemoved()) {
                 // Task 0050: no signer name. The case is the record's resource, so the case panel can ask for it.
                 auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SIGNATURE_REMOVED,
@@ -407,6 +420,31 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     command.documentId(), redactedArtifact.id(),
                     document.status(), redactionOutput.redactionsApplied());
         }
+    }
+
+    /**
+     * Task 0083: where the entity asks for it, a second AI reads the finished file. What it finds is never redacted by
+     * itself: each page becomes a page to check by a person, with its kinds only. True when there is one.
+     */
+    private boolean secondCheckAsksForAPerson(RedactDocumentCommand command, Artifact original, List<Finding> findings,
+                                              List<RedactionTarget> targets,
+                                              com.securedoc.platform.application.secondcheck.SecondCheck.Finished finished) {
+        TenantRedactionPolicy policy = policyRepository == null ? null
+                : policyRepository.findByTenantId(command.tenantId()).orElse(null);
+        if (policy == null || !policy.secondCheck()) return false;
+        // Switched on but not wired: never passed as checked.
+        if (secondCheck == null) throw new IllegalStateException("The second check is not available");
+        List<Finding> dismissed = findings.stream().filter(f -> f.status() == FindingStatus.DISMISSED).toList();
+        List<String> keptByAPerson = readFoundValues(original, dismissed.stream()
+                .filter(f -> f.location().endOffset() > f.location().startOffset()).toList())
+                .values().stream().map(FoundValue::raw).toList();
+        var result = secondCheck.run(command.tenantId(), command.documentId(), policy, finished, targets, dismissed,
+                keptByAPerson);
+        auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SECOND_CHECK, "Document",
+                command.documentId().toString(), command.packageId(), command.correlationId(), result.auditDetail());
+        if (result.pagesToCheck().isEmpty()) return false;
+        findingRepository.saveAll(result.pagesToCheck());
+        return true;
     }
 
     /**

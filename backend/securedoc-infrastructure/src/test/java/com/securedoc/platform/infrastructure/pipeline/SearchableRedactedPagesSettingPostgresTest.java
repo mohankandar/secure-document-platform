@@ -27,7 +27,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void upgradingFrom047CopiesEveryValueRemovesTheRowsAndLeavesTheKindsAlone() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.empty("m048up")) {
-            migrateThenRollBack(db, 14); // back to 047 (083, 082, 081, 071, 080, 070, 064, 063, 062, 061, 060, 050, 049, then 048): the 0044 storage
+            migrateThenRollBack(db, 15); // back to 047 (084, 083, 082, 081, 071, 080, 070, 064, 063, 062, 061, 060, 050, 049, then 048): the 0044 storage
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId turnedOff = tenantWithPolicy(jdbc);
             TenantId savedOn = tenantWithPolicy(jdbc);
@@ -54,7 +54,7 @@ class SearchableRedactedPagesSettingPostgresTest {
     @Test
     void aSwitchRowWithNoPolicyToCopyItToHaltsTheMigration() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.empty("m048halt")) {
-            migrateThenRollBack(db, 14); // 083, 082, 081, 071, 080, 070, 064, 063, 062, 061, 060, 050, 049, then 048
+            migrateThenRollBack(db, 15); // 084, 083, 082, 081, 071, 080, 070, 064, 063, 062, 061, 060, 050, 049, then 048
             NamedParameterJdbcTemplate jdbc = db.jdbc();
             TenantId tenant = TenantId.generate();
             TestRows.tenant(jdbc, tenant);

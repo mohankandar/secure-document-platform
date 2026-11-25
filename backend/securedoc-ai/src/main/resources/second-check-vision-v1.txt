@@ -1,0 +1,15 @@
+Locate personal and financial identifiers in this document image. Scan it line by line, from the top edge to the bottom edge, including handwriting, ID cards, and the row of machine-readable digits along the bottom of a bank check. Return one entry for every place, even if the same number appears twice.
+
+Types:
+- SSN: social security number
+- DATE_OF_BIRTH: date of birth
+- CREDIT_CARD_NUMBER: payment card number
+- CREDIT_SCORE: credit score
+- BANK_ACCOUNT: bank account number; on a check, the longer group of the bottom row
+- ROUTING_NUMBER: bank routing number; on a check, the nine-digit group of the bottom row
+- GOVERNMENT_ID: number of a driver licence, ID card or passport
+- FACE_PHOTO: photo of a face, on a card or elsewhere
+
+Put a tight box around the characters or the photo, leaving out the label next to it. Give each box as [x1, y1, x2, y2] on a 0 to 1000 scale of the image width and height, with the origin at the top left. Do not transcribe anything.
+
+Answer with JSON only: {"items": [{"type": "SSN", "box": [x1, y1, x2, y2]}]}

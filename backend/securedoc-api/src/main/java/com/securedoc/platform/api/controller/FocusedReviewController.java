@@ -173,7 +173,9 @@ public class FocusedReviewController {
             String reason,
             FoundTextResponse foundText,
             /* Task 0064: TEXT, SIGNATURE, VISION, PAGE_CHECK; empty for findings saved before. */
-            java.util.List<String> foundBy
+            java.util.List<String> foundBy,
+            /* Task 0083: kinds only, never a value; null unless the second check asks for this page. */
+            java.util.List<String> secondCheck
     ) {
         /** Redacted so the sensitive text cannot reach a log line through this DTO. */
         @Override
@@ -196,7 +198,7 @@ public class FocusedReviewController {
                     item.reason().name(),
                     item.foundText() == null ? null : new FoundTextResponse(
                             item.foundText().text(), item.foundText().before(), item.foundText().after()),
-                    item.foundBy());
+                    item.foundBy(), item.secondCheck());
         }
     }
 

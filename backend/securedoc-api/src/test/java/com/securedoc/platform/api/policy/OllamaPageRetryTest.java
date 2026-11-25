@@ -65,6 +65,29 @@ class OllamaPageRetryTest {
     }
 
 
+    /** Task 0083: the second check's own prompt and answer, one page a request; only what stands on the page counts. */
+    @Test
+    void theSecondCheckAsksItsOwnPromptPageByPage() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        java.util.List<String> bodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        startServer(exchange -> {
+            requests.incrementAndGet();
+            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            send(exchange, 200, envelope("{\"found\":[{\"kind\":\"ROUTING_NUMBER\",\"value\":\"021000021\"},"
+                    + "{\"kind\":\"SSN\",\"value\":\"not there\"},{\"kind\":\"FACE_PHOTO\",\"value\":\"021000021\"}]}"));
+        });
+        var output = batchedAdapter(1, 2).analyze(new com.securedoc.platform.application.port.out
+                .SensitiveContentAnalysisPort.AnalysisRequest(null, List.of(new PageContent(1, "Routing 021000021"),
+                new PageContent(2, "Nothing here")), com.securedoc.platform.application.port.out
+                .SensitiveContentAnalysisPort.AnalysisPolicy.ofSecondCheck()));
+        assertEquals(2, requests.get());
+        assertEquals(List.of("ROUTING_NUMBER"), output.findings().stream().map(f -> f.entityType()).toList());
+        assertEquals(1, output.findings().get(0).pageNumber());
+        assertEquals("text-second-check-text-v1", output.models().get(0).version());
+        assertEquals(0, bodies.stream().filter(b -> !b.contains("Find personal and financial identifiers")).count());
+        assertEquals(0, bodies.stream().filter(b -> !b.contains("\"properties\":{\"kind\":")).count(), "kind first");
+    }
+
     @Test
     void retriesInvalidStructuredResponseAndRecoversTheSameBatch() throws Exception {
         AtomicInteger requests = new AtomicInteger();

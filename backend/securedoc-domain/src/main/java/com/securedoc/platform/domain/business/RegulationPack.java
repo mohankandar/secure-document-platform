@@ -62,6 +62,11 @@ public enum RegulationPack {
         this.kinds = Set.copyOf(EnumSet.of(first, more));
     }
 
+    /** Task 0083: turning this pack on also turns the second check on (it can be turned off again by hand). */
+    public boolean secondCheck() {
+        return this == FRCP_5_2;
+    }
+
     public String displayName() {
         return displayName;
     }

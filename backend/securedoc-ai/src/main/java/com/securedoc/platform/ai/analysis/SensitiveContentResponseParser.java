@@ -111,6 +111,26 @@ final class SensitiveContentResponseParser {
         return result;
     }
 
+    /** Task 0083: the kinds the second check's text prompt asks for; a face is never in text. */
+    static final List<String> SECOND_CHECK_KINDS = List.of("SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE",
+            "BANK_ACCOUNT", "ROUTING_NUMBER", "GOVERNMENT_ID");
+
+    /** Task 0083: the second check's answer for one page; only text that stands on the page counts. */
+    List<DiscoveredSensitiveContent> parseSecondCheck(String content, PageContent page, String analyzerName)
+            throws IOException {
+        JsonNode found = readTreeWithoutEcho(objectMapper, content, "Invalid second check payload").path("found");
+        if (!found.isArray()) throw new IOException("Invalid second check payload");
+        List<DiscoveredSensitiveContent> result = new ArrayList<>();
+        for (JsonNode item : found) {
+            String kind = JsonNodeValues.asText(item.path("kind"), "");
+            String value = JsonNodeValues.asText(item.path("value"), "");
+            if (!SECOND_CHECK_KINDS.contains(kind) || value.isBlank() || !page.text().contains(value)) continue;
+            result.add(new DiscoveredSensitiveContent(kind, page.pageNumber(), value, "", 0.0, analyzerName,
+                    SensitiveContentPromptBuilder.SECOND_CHECK_VERSION));
+        }
+        return result;
+    }
+
     /**
      * Parses AI provider JSON without letting the answer's text travel on in an exception.
      *
