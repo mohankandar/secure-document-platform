@@ -10,7 +10,7 @@
  * "Include full audit trail"); COMPLIANCE_REPORT_SUMMARY creates the summary only. The server checks this in
  * ComplianceReportController, not by granting the IT Administrator a second capability.
  */
-const PROCESSOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'MANUAL_REVIEW', 'FINDING_DECISION', 'REDACTION_ADJUST', 'REVIEW_SUBMIT',
+const PROCESSOR = ['DASHBOARD_ACCESS', 'DOCUMENT_INTAKE', 'CASE_FIELD_SENSITIVE_VIEW', 'MANUAL_REVIEW', 'FINDING_DECISION', 'REDACTION_ADJUST', 'REVIEW_SUBMIT',
   'EXPORT_RESEND'];
 const REPORT_READ = ['REPORT_EXECUTIVE_VIEW', 'REPORT_OPERATIONAL_VIEW'];
 
