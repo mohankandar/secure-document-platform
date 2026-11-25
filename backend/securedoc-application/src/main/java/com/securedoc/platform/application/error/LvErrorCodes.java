@@ -291,8 +291,8 @@ public final class LvErrorCodes {
                 case CAPABILITY_DISABLED -> AUT_010;
                 case TENANT_INACTIVE -> AUT_005;
                 case STORAGE_UNAVAILABLE -> SYS_002;
-                case KEY_SERVICE_UNAVAILABLE -> SYS_010;
-                case KEY_SERVICE_REFUSED -> SYS_011;
+                case DOCUMENT_KEY_UNAVAILABLE -> SYS_010;
+                case DOCUMENT_KEY_REFUSED -> SYS_011;
                 case INVALID_FILE -> INT_007;
                 case ACCESS_DENIED -> CFG_007;
                 // Task 0026: a resumed drop that no longer matches its case.

@@ -378,10 +378,11 @@ class PackageLifecycleDashboardRetentionTest {
         MutableLifecycleRepository lifecycles = new MutableLifecycleRepository();
         CapturingStorage storage = new CapturingStorage();
         CapturingAudit audit = new CapturingAudit();
+        var erasure = new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage);
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 72), lifecycles, new CapturingExportRepository(),
                 new MutablePackageRepository(pkg), new CapturingVisibility(), new MutableDocumentRepository(document),
-                artifacts, new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audit));
+                artifacts, erasure, new AuditService(audit));
 
         service.recordSuccessfulExport(pkg.id(), tenantId, 1, "LOCAL_FOLDER",
                 List.of(new PackageExportRecord.ExportedDocument(
@@ -396,9 +397,22 @@ class PackageLifecycleDashboardRetentionTest {
         assertFalse(storage.deleted.contains(ArtifactStorageReference.local("a5/extracted.txt")));
         assertFalse(storage.deleted.contains(ArtifactStorageReference.local("a5/ocr.txt")));
 
+        // Task 0060: the erase log can't be written: nothing is erased or marked, the failure has its code; done at the next run.
+        erasure.refuse = new com.securedoc.platform.application.exception.TechnicalDependencyException(
+                com.securedoc.platform.application.exception.TechnicalDependency.ERASE_LOG,
+                com.securedoc.platform.application.exception.TechnicalFailureCode.ERASE_LOG_UNAVAILABLE, true, "synthetic");
+        assertEquals(0, service.execute(new PurgeDueRetentionCommand(dueAt, 100, actorId, CorrelationId.generate())).packagesFullyPurged());
+        assertEquals(ArtifactStatus.AVAILABLE, original.status());
+        assertFalse(storage.deleted.contains(ArtifactStorageReference.local("a5/original.pdf")));
+        assertTrue(lifecycles.lifecycle.orElseThrow().purgedAt().isEmpty());
+        assertTrue(audit.records.stream().anyMatch(r -> r.action() == com.securedoc.platform.domain.audit.AuditAction.PACKAGE_PURGED
+                && r.outcome() == com.securedoc.platform.domain.audit.AuditOutcome.FAILURE && r.detail().contains("code=LV-SYS-014")));
+        erasure.refuse = null;
+
         var result = service.execute(new PurgeDueRetentionCommand(dueAt, 100, actorId, CorrelationId.generate()));
 
         assertEquals(1, result.packagesFullyPurged());
+        assertTrue(erasure.asked.contains("CASE retention-case"), "the whole case as one entry: " + erasure.asked);
         assertEquals(ArtifactStatus.DELETED, original.status());
         assertEquals(ArtifactStatus.DELETED, extracted.status());
         assertEquals(ArtifactStatus.DELETED, ocr.status());

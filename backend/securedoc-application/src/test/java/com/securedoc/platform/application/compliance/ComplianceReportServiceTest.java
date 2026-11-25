@@ -117,6 +117,19 @@ class ComplianceReportServiceTest {
         names.clear();
     }
 
+    /** Task 0060: the installation's backup retention in force. */
+    @Test
+    void theBackupRetentionIsPrintedAndPartOfTheFingerprint() {
+        String without = create(ComplianceEdition.SUMMARY).fingerprint();
+        service(nov19()).withBackupRetention(45).create(principal, CorrelationId.generate(),
+                new ComplianceReportService.Request("LAST_QUARTER", null, null, "America/New_York"), ComplianceEdition.SUMMARY,
+                "Business Administrator");
+        var settings = rendered.get().retention().settings();
+        assertEquals("Backups kept for", settings.get(settings.size() - 1).label());
+        assertEquals("45 days", settings.get(settings.size() - 1).value());
+        assertFalse(without.equals(rendered.get().fingerprint()));
+    }
+
     @Test
     void anEntityWithNoActivityGivesAValidReportWithZerosAndUnchangedWording() {
         ComplianceReportService.CreatedReport report = create(ComplianceEdition.SUMMARY);

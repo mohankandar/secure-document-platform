@@ -66,7 +66,7 @@ public record IntakeFailure(String code, String exceptionType,
         if (failure instanceof TechnicalDependencyException technical) {
             if (technical.dependency() == TechnicalDependency.KEY_SERVICE) {
                 return technical.failureCode() == com.securedoc.platform.application.exception.TechnicalFailureCode.KEY_SERVICE_REFUSED
-                        ? IntakeRejectionCode.KEY_SERVICE_REFUSED : IntakeRejectionCode.KEY_SERVICE_UNAVAILABLE;
+                        ? IntakeRejectionCode.DOCUMENT_KEY_REFUSED : IntakeRejectionCode.DOCUMENT_KEY_UNAVAILABLE;
             }
             return technical.dependency() == TechnicalDependency.STORAGE
                     ? IntakeRejectionCode.STORAGE_UNAVAILABLE : IntakeRejectionCode.INTERNAL_ERROR;

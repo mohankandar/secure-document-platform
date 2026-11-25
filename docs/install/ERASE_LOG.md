@@ -58,7 +58,8 @@ Restore the database **and** the document storage from backups of the same time.
 
    It erases again everything erased after the backup, checks that nothing in the log can be read, prints a report and exits
    0 (done) or 1 (not complete: the first line names the code; fix the cause and run it again; running it again is safe).
-5. Start LexaVault. Support, Status shows `Erase log` working. Split copies, originals and cases whose retention ended
+5. Start LexaVault (with a single server on local storage, 30 seconds after the replay: until then the replay still counts as
+   a second server, and nothing is stored). Support, Status shows `Erase log` working. Split copies, originals and cases whose retention ended
    meanwhile are closed by the next retention run.
 
 Until then every server refuses work: changes through the app and the API answer 503 **LV-SYS-013**, no document is taken in,
