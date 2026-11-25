@@ -49,7 +49,7 @@ public final class FinalDeliveryApprovalService implements ApproveFinalDeliveryU
         }
         auditService.recordSuccess(command.tenantId(), command.actorId(), AuditAction.PACKAGE_FINAL_APPROVED,
                 "DocumentPackage", command.packageId().toString(), command.correlationId(),
-                "Final delivery approved");
+                "Final delivery approved" + (command.bulkAction() == null ? "" : ": bulkAction=" + command.bulkAction()));
         packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
                 command.packageId(), command.tenantId(), command.actorId(), command.correlationId()));
     }

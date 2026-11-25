@@ -124,7 +124,7 @@
 .cf-acct-section { display: flex; flex-direction: column; padding: 6px 0; border-bottom: 1px solid var(--cf-line); }
 .cf-acct-label { padding: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cf-muted); }
 .cf-acct-plain { margin: 0; padding: 6px 8px 6px 32px; font-size: 13px; color: var(--cf-ink); }
-.cf-acct-note { margin: 0; padding: 6px 8px; font-size: 12px; color: var(--cf-muted); }
+.cf-acct-note { margin: 0; padding: 6px 8px; grid-column: 1 / -1; padding: 0 12px 10px 64px; font-size: 12px; color: var(--cf-muted); }
 .cf-acct-row { display: flex; gap: 2px; }
 .cf-acct-item {
   width: 100%; display: flex; align-items: center; gap: 8px; min-height: 34px;
@@ -863,3 +863,12 @@
 .cf-page-marks li { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
 .cf-page-reviewed { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
 .cf-page-reviewed input { width: 20px; height: 20px; }
+
+/* Task 0076: bulk approval on Cases, Approval. */
+.cf-bulk-approve { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 8px 0; }
+.cf-bulk-approve ul { margin: 4px 0 0; padding-left: 18px; }
+.cf-case-row[data-bulk] { grid-template-columns: 52px minmax(0, 1fr) 150px; }
+@media (max-width: 768px) { .cf-case-row[data-bulk] { grid-template-columns: 52px minmax(0, 1fr) auto; } }
+.cf-case-tick { display: flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; padding-left: 14px; cursor: pointer; }
+.cf-case-tick input { width: 20px; height: 20px; }
+.cf-tick-why { grid-column: 1 / -1; padding: 0 12px 10px 72px; font-size: 12px; color: var(--cf-muted); }

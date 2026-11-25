@@ -149,6 +149,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-REV-012 | Rejected: out of scope | A person rejected the case: it is out of scope. | Stopped | Source system | — | 0071 |
 | LV-REV-013 | Rejected: duplicate | A person rejected the case: it is a duplicate. | Stopped | Source system | — | 0071 |
 | LV-REV-014 | Rejected: other (see ticket) | A person rejected the case for another reason, written in a ticket. | Stopped | Source system | — | 0071 |
+| LV-REV-015 | You reviewed this case yourself | In a bulk approval, nobody approves a case they reviewed themselves. | Refused | Another supervisor | 400 | 0076 |
 
 ### DLV: export (001–029)
 

@@ -10,6 +10,7 @@ import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits } 
 import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
 import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
 import CaseDrawer from './CaseDrawer';
+import { BulkApproveBar, useBulkApprove, type BulkSelection } from './BulkApprove';
 import { LoadErrorCard } from './failure';
 import { apiClient } from '../api/client';
 import { nextStepText, rowAction, rowDestination, rowReason, type RowAction } from './caseRules';
@@ -94,6 +95,10 @@ export default function Desk({ caps }: { caps: string[] }) {
       { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => tileOf(p) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
   }, [all, caps, filter, query]);
+
+  // Task 0076: bulk approval, only in the Approval stage.
+  const waiting = useMemo(() => (filter === 'approval' ? groups.flatMap((g) => g.cases) : []).filter((p) => p.status === 'PENDING_FINAL_APPROVAL' && !isExporting(exportStateOf(p.exportState))), [filter, groups]);
+  const bulk = useBulkApprove(filter === 'approval' && caps.includes(CAP.approve), waiting);
 
   const flat = useMemo(() => groups.flatMap((g) => g.cases), [groups]);
 
@@ -181,6 +186,8 @@ export default function Desk({ caps }: { caps: string[] }) {
           </div>
         )}
 
+        {bulk.selection && <BulkApproveBar selection={bulk.selection} waiting={waiting} onDone={bulk.clear} />}
+
         {groups.map((group) => (
           <section key={group.key} className="cf-group" aria-labelledby={`cf-group-${group.key}`} data-group={group.key}>
             <header className="cf-group-head">
@@ -190,7 +197,8 @@ export default function Desk({ caps }: { caps: string[] }) {
             </header>
             <ul className="cf-cases">
               {group.cases.map((pkg) => (
-                <CaseRow key={pkg.packageId} pkg={pkg} caps={caps} open={findings.get(pkg.packageId)?.length ?? 0} selected={pkg.packageId === caseId} />
+                <CaseRow key={pkg.packageId} pkg={pkg} caps={caps} open={findings.get(pkg.packageId)?.length ?? 0} selected={pkg.packageId === caseId}
+                  bulk={bulk.selection && waiting.includes(pkg) ? bulk.selection : null} />
               ))}
             </ul>
           </section>
@@ -238,7 +246,7 @@ function LifecycleBand({ counts, active, onSelect }: {
  * One case: the row opens the case panel; the action button at the end (only when this person can act) runs the
  * action with the same confirmation as the case panel and never also opens the panel (UI spec findings 2, 3).
  */
-function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: string[]; open: number; selected: boolean }) {
+function CaseRow({ pkg, caps, open, selected, bulk }: { pkg: PackageSummary; caps: string[]; open: number; selected: boolean; bulk: BulkSelection | null }) {
   const title = caseTitle(pkg.businessIdentifiers);
   const stage = stageOf(pkg.status);
   const you = needsYou(pkg, caps);
@@ -252,7 +260,14 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
   const reason = rowReason(pkg);
   const destination = rowDestination(pkg);
   return (
-    <li id={`cf-row-${pkg.packageId}`} className="cf-case-row" data-selected={selected || undefined} data-you={you || undefined}>
+    <li id={`cf-row-${pkg.packageId}`} className="cf-case-row" data-selected={selected || undefined} data-you={you || undefined} data-bulk={bulk ? '' : undefined}>
+      {bulk && (
+        <label className="cf-case-tick" title={bulk.blocked(pkg.packageId) ?? undefined}>
+          <input type="checkbox" aria-label={`Select ${title.primary}`} checked={bulk.selected.includes(pkg.packageId)}
+            disabled={bulk.blocked(pkg.packageId) !== null} aria-describedby={bulk.blocked(pkg.packageId) ? `cf-tick-${pkg.packageId}` : undefined}
+            onChange={() => bulk.toggle(pkg.packageId)} />
+        </label>
+      )}
       <Link to={`/case/${pkg.packageId}`} className="cf-case" aria-current={selected ? 'true' : undefined} data-you={you || undefined}>
         <span className="cf-case-flag" aria-hidden="true" />
         <span className="cf-case-id">
@@ -273,6 +288,7 @@ function CaseRow({ pkg, caps, open, selected }: { pkg: PackageSummary; caps: str
         <time className="cf-case-time" dateTime={pkg.updatedAt}>{relativeTime(pkg.updatedAt)}</time>
       </Link>
       <span className="cf-case-act">{action && <RowActionButton pkg={pkg} action={action} caseLabel={title.primary} />}</span>
+      {bulk?.blocked(pkg.packageId) && <span id={`cf-tick-${pkg.packageId}`} className="cf-tick-why">{bulk.blocked(pkg.packageId)}</span>}
     </li>
   );
 }

@@ -628,6 +628,16 @@ class ApiClient {
     return this.request(`/packages/${packageId}/reprocess`, { method: 'POST' });
   }
 
+  /** Task 0076: whether bulk approval is on, and which of these cases this person reviewed (they can't be selected). */
+  async bulkApprovalOffer(packageIds: readonly string[]): Promise<{ enabled: boolean; maximum: number; reviewedByYou: string[] }> {
+    return this.request('/bulk-approval/offer', { method: 'POST', body: JSON.stringify({ packageIds }) });
+  }
+
+  /** Task 0076: each case is approved as its own action; one that fails has its reason. */
+  async bulkApprove(packageIds: readonly string[]): Promise<{ packageId: string; approved: boolean; reasonCode?: string | null }[]> {
+    return this.request('/bulk-approval', { method: 'POST', body: JSON.stringify({ packageIds }) });
+  }
+
   /** Task 0071: ends the case as Rejected. The reason is an LV code of the fixed list. */
   async rejectCase(packageId: string, step: 'review' | 'approval', reasonCode: string): Promise<{ packageId: string; status: string; reasonCode: string }> {
     return this.request(`/packages/${packageId}/${step}/reject`, { method: 'POST', body: JSON.stringify({ reasonCode }) });
