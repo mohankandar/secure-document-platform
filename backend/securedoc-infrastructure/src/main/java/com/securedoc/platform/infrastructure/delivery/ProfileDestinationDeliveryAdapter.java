@@ -56,7 +56,7 @@ import java.util.TreeSet;
  * fixed order, and after every call that worked the progress is saved, so the next attempt (on any server) goes on from
  * there. A call whose answer was lost is made again with the same ids; the destination's "already received" counts as
  * exported (LV-DLV-009). Progress that does not belong to this connection, address and profile, and a delivery an older
- * release left half done, are not sent on: LV-DLV-010.
+ * release left half done, are not sent on: LV-DLV-016.
  *
  * <p>The profile decides what can be said: a sensitivity level it has no place for is never dropped silently
  * (LV-DLV-003). Documents are streamed from their stored copy; nothing is written to disk and no value is logged.

@@ -449,6 +449,19 @@ class ApiClient {
     return this.request('/platform-admin/queue');
   }
 
+  // Task 0065: document text.
+  async caseInstructionsSetting(): Promise<{ enabled: boolean; maxCharacters: number }> {
+    return this.request('/intake/case-instructions');
+  }
+
+  async caseInstructions(packageId: string): Promise<{ enabled: boolean; text: string }> {
+    return this.request(`/packages/${packageId}/instructions`);
+  }
+
+  async changeCaseInstructions(packageId: string, text: string): Promise<{ enabled: boolean; text: string }> {
+    return this.request(`/packages/${packageId}/instructions`, { method: 'PUT', body: JSON.stringify({ enabled: true, text }) });
+  }
+
   async changeCasePriority(packageId: string, priority: string): Promise<{ priority: string }> {
     return this.request(`/packages/${packageId}/priority`, { method: 'PUT', body: JSON.stringify({ priority }) });
   }

@@ -194,6 +194,27 @@ public final class BusinessAdminConfigurationService {
                                                             Boolean visionEnabled,
                                                             Double visionOcrThreshold,
                                                             Boolean secondCheckEnabled) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, packs,
+                keepLastFour, visionEnabled, visionOcrThreshold, secondCheckEnabled, null);
+    }
+
+    /** Task 0065: as above, with the document context; null keeps the stored value (off). No pack turns it on. */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap,
+                                                            Set<RegulationPack> packs,
+                                                            Set<EntityType> keepLastFour,
+                                                            Boolean visionEnabled,
+                                                            Double visionOcrThreshold,
+                                                            Boolean secondCheckEnabled,
+                                                            Boolean documentContextEnabled) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -236,15 +257,18 @@ public final class BusinessAdminConfigurationService {
         boolean storedCheck = previous.map(TenantRedactionPolicy::secondCheck).orElse(false);
         boolean secondCheck = secondCheckEnabled != null ? secondCheckEnabled : storedCheck
                 || newPacks.stream().anyMatch(pack -> pack.secondCheck() && !storedPacks.contains(pack));
+        boolean storedContext = previous.map(TenantRedactionPolicy::documentContext).orElse(false);
+        boolean documentContext = documentContextEnabled != null ? documentContextEnabled : storedContext;
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
-                searchableRedactedPages, batches, newPacks, lastFour, true, vision, secondCheck);
+                searchableRedactedPages, batches, newPacks, lastFour, true, vision, secondCheck, documentContext);
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), policy.enabledEntityTypes(),
                 autoRedactThreshold, reviewMode, maskSsnLastFour)
                 && previous.get().searchableRedactedPages() == searchableRedactedPages
                 && storedBatches.equals(batches)
                 && storedVision.equals(vision)
                 && storedCheck == secondCheck
+                && storedContext == documentContext
                 && previous.get().packs().equals(policy.packs())
                 && previous.get().keepLastFour().equals(policy.keepLastFour())
                 && previous.get().lockedItemsOn()) {
@@ -290,6 +314,8 @@ public final class BusinessAdminConfigurationService {
                         : ", visionOcrThreshold=" + String.format(Locale.ROOT, "%.2f", policy.vision().ocrThreshold()))
                 // Task 0083: written only when on.
                 + (policy.secondCheck() ? ", secondCheck=true" : "")
+                // Task 0065: written only when on.
+                + (policy.documentContext() ? ", documentContext=true" : "")
                 // Task 0062: packs and styles, written only when there are any (no key = none).
                 + (policy.packs().isEmpty() ? "" : ", packs=" + sortedNames(policy.packs()))
                 + (policy.keepLastFour().isEmpty() ? "" : ", keepLastFour=" + sortedNames(policy.keepLastFour()));

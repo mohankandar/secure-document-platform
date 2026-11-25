@@ -158,6 +158,14 @@ class EraseReplayDrillPostgresTest {
         return id;
     }
 
+    private ArtifactStorageReference instructions;
+
+    private void assertInstructions(boolean there) throws SQLException {
+        assertEquals(there ? "1" : "0", one("select count(*) from case_instructions"));
+        assertEquals(there ? "1" : "0", one("select count(*) from stored_files where storage_key = '" + instructions.key() + "'"));
+        assertEquals(there, Files.exists(storage().resolve(instructions.key())));
+    }
+
     private static void assertValues(String record, boolean there) throws SQLException {
         assertEquals(there ? "3" : "0", one("select count(*) from fld_value v join fld_record r on r.record_uuid = v.record_uuid"
                 + " where r.record_id = '" + record + "'"));
@@ -185,6 +193,12 @@ class EraseReplayDrillPostgresTest {
                     Files.setLastModifiedTime(unrecorded, FileTime.from(Instant.now().minus(Duration.ofDays(2))));
                 }
             }
+            // Task 0065: the case's instructions are a file of the case.
+            byte[] instructed = (MARKER + " instructions").getBytes(StandardCharsets.UTF_8);
+            instructions = app.getBean(StoragePort.class).storeForPackage(ENTITY, finalDue, ENTITY + "/" + finalDue
+                    + "/CASE_INSTRUCTIONS/" + UUID.randomUUID(), new ByteArrayInputStream(instructed), instructed.length, "text/plain");
+            app.getBean(com.securedoc.platform.application.port.out.CaseInstructionsRepository.class).save(ENTITY, finalDue,
+                    new com.securedoc.platform.application.port.out.CaseInstructionsRepository.Stored(UUID.randomUUID(), instructions));
             // Nothing of the documents can be found on the disk.
             try (Stream<Path> all = Files.walk(storage())) {
                 for (Path file : all.filter(Files::isRegularFile).toList()) {
@@ -226,6 +240,7 @@ class EraseReplayDrillPostgresTest {
         }
         assertValues(ownRecord, false);
         assertValues(sharedRecord, true); // a live case still needs it
+        assertInstructions(false);
         assertEquals("7", one("select count(*) from audit_records where action = 'FILES_ERASED'"));
         assertEquals("1", one("select count(*) from audit_records where action = 'CASE_FIELDS_ERASED' and resource_id = '" + ownRecord + "'"));
         assertEquals("8", one("select applied_seq from erl_position"));
@@ -243,6 +258,7 @@ class EraseReplayDrillPostgresTest {
             assertFalse(gate.mayTakeWork(), "blocked");
             for (String file : erased) assertReadable(app, file); // the restore brought them back
             assertValues(ownRecord, true);
+            assertInstructions(true);
             int port = ((WebServerApplicationContext) app).getWebServer().getPort();
             HttpResponse<String> refused = call(port, "POST", "/api/v1/packages", newCaseBody());
             assertEquals(503, refused.statusCode(), refused.body());
@@ -269,6 +285,7 @@ class EraseReplayDrillPostgresTest {
         var report = replay();
         assertTrue(report.passed(), report.describe());
         assertEquals(8, report.appliedCount(), report.describe());
+        assertInstructions(false);
         assertValues(ownRecord, false);
         assertValues(sharedRecord, true);
         try (ConfigurableApplicationContext app = start()) {
@@ -306,6 +323,7 @@ class EraseReplayDrillPostgresTest {
         }
         var storageOnly = replay();
         assertTrue(storageOnly.passed(), storageOnly.describe());
+        assertInstructions(false);
         try (ConfigurableApplicationContext app = start()) {
             assertGone(app, erased);
             for (String file : kept) assertReadable(app, file);

@@ -23,7 +23,9 @@ public record CreatePackageCommand(
         SensitivityLevel.Received caseSensitivity,
         /* Task 0073: as sent; null when none was, then the source's default (sourceKey), else Normal. */
         com.securedoc.platform.domain.pipeline.PipelinePriority priority,
-        String sourceKey
+        String sourceKey,
+        /* Task 0065: as sent, or null. Document text. */
+        String instructions
 ) {
     /** Task 0061: case field values are in no text form of this. */
     @Override
@@ -39,6 +41,15 @@ public record CreatePackageCommand(
         intakeFingerprint = normalizeOptional(intakeFingerprint);
         sourceReference = normalizeOptional(sourceReference);
         caseSensitivity = caseSensitivity == null ? SensitivityLevel.Received.standard() : caseSensitivity;
+    }
+
+    /** A command without case instructions. */
+    public CreatePackageCommand(PackageType packageType, Map<String, String> businessIdentifiers,
+                                Map<String, String> metadata, String intakeFingerprint, String sourceReference,
+                                CorrelationId correlationId, SensitivityLevel.Received caseSensitivity,
+                                com.securedoc.platform.domain.pipeline.PipelinePriority priority, String sourceKey) {
+        this(packageType, businessIdentifiers, metadata, intakeFingerprint, sourceReference, correlationId,
+                caseSensitivity, priority, sourceKey, null);
     }
 
     /** A command without a priority or a source default. */
@@ -87,13 +98,19 @@ public record CreatePackageCommand(
     /** The same command with the case level the source sent. */
     public CreatePackageCommand withCaseSensitivity(SensitivityLevel.Received received) {
         return new CreatePackageCommand(packageType, businessIdentifiers, metadata, intakeFingerprint,
-                sourceReference, correlationId, received, priority, sourceKey);
+                sourceReference, correlationId, received, priority, sourceKey, instructions);
     }
 
     /** The same command with the priority sent (null when none) and the source whose default holds otherwise. */
     public CreatePackageCommand withPriority(com.securedoc.platform.domain.pipeline.PipelinePriority sent, String source) {
         return new CreatePackageCommand(packageType, businessIdentifiers, metadata, intakeFingerprint,
-                sourceReference, correlationId, caseSensitivity, sent, source);
+                sourceReference, correlationId, caseSensitivity, sent, source, instructions);
+    }
+
+    /** Task 0065: the same command with the case's instructions (null when none). */
+    public CreatePackageCommand withInstructions(String sent) {
+        return new CreatePackageCommand(packageType, businessIdentifiers, metadata, intakeFingerprint,
+                sourceReference, correlationId, caseSensitivity, priority, sourceKey, sent);
     }
 
     private static String normalizeOptional(String value) {

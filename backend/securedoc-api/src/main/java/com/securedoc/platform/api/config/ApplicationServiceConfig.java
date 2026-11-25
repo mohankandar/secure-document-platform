@@ -331,6 +331,7 @@ public class ApplicationServiceConfig {
 
     @Bean
     public ExternalIntakeService externalIntakeService(
+            com.securedoc.platform.application.intake.CaseInstructionsService caseInstructionsService,
             com.securedoc.platform.application.port.out.IntakeRefusalPort intakeRefusals,
             IntegrationConnectionService integrationConnectionService,
             ExternalIntakeRepository externalIntakeRepository,
@@ -351,7 +352,7 @@ public class ApplicationServiceConfig {
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
                 checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName)
                 .withPdfDecryption(pdfDecryptionPort).withRejections(packageRejectionRepository)
-                .withCaseFields(caseFields).withRefusals(intakeRefusals);
+                .withCaseFields(caseFields).withRefusals(intakeRefusals).withInstructions(caseInstructionsService);
     }
 
     @Bean
@@ -422,8 +423,21 @@ public class ApplicationServiceConfig {
                 auditService).withBulk(bulkSourceService);
     }
 
+    /** Task 0065. */
+    @Bean
+    public com.securedoc.platform.application.intake.CaseInstructionsService caseInstructionsService(
+            com.securedoc.platform.application.port.out.CaseInstructionsRepository caseInstructionsRepository,
+            StoragePort storagePort, PackageRepository packageRepository,
+            TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
+            com.securedoc.platform.application.port.out.PackageLifecycleRepository packageLifecycleRepository,
+            com.securedoc.platform.application.port.out.TransactionPort transactionPort, AuditService auditService) {
+        return new com.securedoc.platform.application.intake.CaseInstructionsService(caseInstructionsRepository, storagePort,
+                packageRepository, tenantRedactionPolicyRepository, packageLifecycleRepository, transactionPort, auditService);
+    }
+
     @Bean
     public CreatePackageUseCase createPackageUseCase(
+            com.securedoc.platform.application.intake.CaseInstructionsService caseInstructionsService,
             org.springframework.transaction.PlatformTransactionManager transactionManager,
             com.securedoc.platform.application.intake.CasePriorityService casePriorityService,
             TenantContextService tenantContextService,
@@ -436,6 +450,7 @@ public class ApplicationServiceConfig {
         return new CreatePackageService(
                 tenantContextService, capabilityEnforcementService, caseFields, intakeLicence,
                 packageRepository, eventPublisher, auditService).withPriorities(casePriorityService)
+                .withInstructions(caseInstructionsService)
                 // Task 0061: the case's values and the case are stored together or not at all.
                 .withUnit(new CreatePackageService.Unit() {
                     private final org.springframework.transaction.support.TransactionTemplate template =
@@ -926,7 +941,10 @@ public class ApplicationServiceConfig {
             ChecksumPort checksumPort,
             com.securedoc.platform.application.port.out.PageRouteRepository pageRouteRepository,
             com.securedoc.platform.application.port.out.PageImagePort pageImagePort,
-            com.securedoc.platform.application.port.out.VisionModelPort visionModelPort) {
+            com.securedoc.platform.application.port.out.VisionModelPort visionModelPort,
+            com.securedoc.platform.application.intake.CaseInstructionsService caseInstructionsService,
+            ProcessingLockPort processingLockPort,
+            com.securedoc.platform.application.port.out.TransactionPort transactionPort) {
         // Task 0049: the checksum port is the page batch results'. Task 0064: routed pages are read by vision.
         return new SensitiveDataDetectionService(
                 documentRepository, packageRepository, artifactRepository,
@@ -934,7 +952,11 @@ public class ApplicationServiceConfig {
                 eventPublisher, auditService, checksumPort,
                 new SensitiveDataDetectionService.Vision(pageRouteRepository,
                         new com.securedoc.platform.application.vision.VisionPageReader(artifactRepository, storagePort,
-                                pageImagePort, visionModelPort)));
+                                pageImagePort, visionModelPort)))
+                // Task 0065.
+                .withContext(new com.securedoc.platform.application.detection.service.DocumentContext(semanticAnalysisPort,
+                        artifactRepository, storagePort, checksumPort, caseInstructionsService, processingLockPort,
+                        transactionPort));
     }
 
     /**

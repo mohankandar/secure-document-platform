@@ -143,6 +143,8 @@ public enum AuditAction {
     PROCESSING_MAXIMUMS_CHANGED,
     /** Task 0073: names of priorities only ("priority=NORMAL->URGENT"). */
     CASE_PRIORITY_CHANGED,
+    /** Task 0065: the number of characters only, never the text. */
+    CASE_INSTRUCTIONS_CHANGED,
     SOURCE_PRIORITY_CHANGED,
     /** Task 0079: the window's times only. */
     SOURCE_BULK_CHANGED,

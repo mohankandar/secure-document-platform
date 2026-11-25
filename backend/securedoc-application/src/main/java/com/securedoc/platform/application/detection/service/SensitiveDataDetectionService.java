@@ -190,6 +190,21 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 : new PageBatchFiles(artifactRepository, storagePort, checksumPort);
     }
 
+    /** Task 0065: null where it is not wired (then no document has a context). */
+    private DocumentContext context;
+
+    public SensitiveDataDetectionService withContext(DocumentContext documentContext) {
+        this.context = Objects.requireNonNull(documentContext);
+        return this;
+    }
+
+    @Override
+    public void prepareBatch(DetectSensitiveDataCommand command) {
+        if (context == null) return;
+        TenantRedactionPolicy policy = policyOf(command.tenantId());
+        if (DocumentContext.wanted(policy)) context.prepare(loadDetecting(command), policy);
+    }
+
     @Override
     public DetectSensitiveDataResult execute(DetectSensitiveDataCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
@@ -218,9 +233,10 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             Document document = loadDetecting(whole);
             TenantRedactionPolicy policy = policyOf(command.tenantId());
             Map<Integer, PageText> pages = extractPagePositions(document, command.tenantId(), command.batch().pages());
-            PageFindings found = findOnPages(whole, document, policy, pages);
+            PageFindings found = findOnPages(whole, document, policy, pages,
+                    context == null ? KnownNames.NONE : context.ofBatch(document, policy));
             batchFiles().save(com.securedoc.platform.domain.artifact.ArtifactType.FINDINGS_BATCH, command, out ->
-                    PageBatchFindings.write(out, new PageBatchFindings.Result(policyStamp(policy),
+                    PageBatchFindings.write(out, new PageBatchFindings.Result(stamp(document, policy),
                             found.unlocatedSemantic(),
                             found.findings().stream().map(PageBatchFindings.Candidate::of).toList(),
                             found.models())));
@@ -286,7 +302,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 }
             }
             DetectSensitiveDataResult result;
-            if (results.stream().anyMatch(r -> !r.policyStamp().equals(policyStamp(policy)))) {
+            String stamp = stamp(document, policy);
+            if (results.stream().anyMatch(r -> !r.policyStamp().equals(stamp))) {
                 // The entity's policy changed between the batches: one policy must decide for the whole document.
                 log.info("DETECTION_BATCHES_SEARCHED_AGAIN document={} reasonCode=POLICY_CHANGED",
                         command.documentId());
@@ -298,6 +315,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                         textModels);
                 result = complete(command, document, policy, all, unlocated, startedNanos, correlationId);
             }
+            if (context != null) context.discard(document);
             if (!visionPages.isEmpty()) {
                 batchFiles().discard(ArtifactType.VISION_PAGE, command.documentId(), command.tenantId());
             }
@@ -326,6 +344,11 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         return batchFiles;
     }
 
+    /** Task 0065: with the setting and the case's instructions, when the setting is on. */
+    private String stamp(Document document, TenantRedactionPolicy policy) {
+        return policyStamp(policy) + (context == null ? "" : context.stamp(document, policy));
+    }
+
     /** What a batch searched for: a policy change between batches is noticed. Names of kinds only. */
     private static String policyStamp(TenantRedactionPolicy policy) {
         return policy.enabledEntityTypes().stream().map(Enum::name).sorted()
@@ -346,7 +369,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Trusted positional text is the common normalization layer for both semantic discovery
         // and deterministic recognition. Unit 17 will feed OCR text/coordinates into the same shape.
         Map<Integer, PageText> pagesByNumber = extractPagePositions(document, command.tenantId(), null);
-        PageFindings found = findOnPages(command, document, tenantPolicy, pagesByNumber);
+        PageFindings found = findOnPages(command, document, tenantPolicy, pagesByNumber,
+                context == null ? KnownNames.NONE : context.of(document, tenantPolicy));
         AllFindings all = vision == null
                 ? new AllFindings(found.findings(), List.of(), Map.of(), found.models())
                 : withVision(document, tenantPolicy,
@@ -453,7 +477,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     }
 
     private PageFindings findOnPages(DetectSensitiveDataCommand command, Document document,
-                                     TenantRedactionPolicy tenantPolicy, Map<Integer, PageText> pagesByNumber) {
+                                     TenantRedactionPolicy tenantPolicy, Map<Integer, PageText> pagesByNumber,
+                                     KnownNames known) {
         Set<EntityType> enabledTypes = tenantPolicy.enabledEntityTypes();
         List<PageInput> deterministicInputs = buildDeterministicInputs(pagesByNumber);
         List<SensitiveContentAnalysisPort.PageContent> semanticInputs = buildSemanticInputs(pagesByNumber);
@@ -486,14 +511,20 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         OcrSensitiveFieldSafetyPolicy.Evaluation ocrSafety = ocrSensitiveFieldSafetyPolicy.evaluate(
                 pagesByNumber, mergedEntities, enabledTypes);
         mergedEntities = mergeEvidence(mergedEntities, ocrSafety.locatedEntities(), enabledTypes);
-        mergedEntities = itinWinsOverSsn(mergedEntities);
+        mergedEntities = new ArrayList<>(itinWinsOverSsn(mergedEntities));
 
         Set<String> aiNames = semanticOutput.findings().stream().map(DiscoveredSensitiveContent::analyzerName)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
+        List<AiModel> models = new ArrayList<>(semanticOutput.models());
+        if (!known.forms().isEmpty()) {
+            SensitiveContentAnalysisPort.AnalysisOutput answered = knownNames(command, pagesByNumber, known, mergedEntities);
+            answered.findings().forEach(f -> aiNames.add(f.analyzerName()));
+            models.addAll(known.models());
+            models.addAll(answered.models());
+        }
         List<Finding> findings = createFindings(new DetectionOutput(mergedEntities), document, pagesByNumber,
-                enabledTypes, aiNames, semanticOutput.models());
-        findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document,
-                semanticOutput.models()));
+                enabledTypes, aiNames, models);
+        findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document, models));
         findings.addAll(createOcrSafetyReviewFindings(ocrSafety.reviewSignals(), document));
 
         log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} ocrGuardStrongLabels={} ocrGuardSpatialScoreCandidates={} merged={} semanticByType={} deterministicByType={} semanticLocatedByPageType={} deterministicByPageType={}",
@@ -504,7 +535,48 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 buildDiscoveryCounts(semanticOutput.findings()), buildDetectedEntityCounts(deterministicOutput.entities()),
                 buildDetectedEntityPageTypeCounts(semanticResolution.located(), enabledTypes),
                 buildDetectedEntityPageTypeCounts(deterministicOutput.entities(), enabledTypes));
-        return new PageFindings(findings, semanticResolution.unlocated().size(), semanticOutput.models());
+        return new PageFindings(findings, semanticResolution.unlocated().size(), models);
+    }
+
+    /**
+     * Task 0065: the places where a name the document is known to use stands and the names search found none: the model is
+     * asked what it is in each sentence, and a person is added to {@code entities}. Each place is decided by itself.
+     */
+    private SensitiveContentAnalysisPort.AnalysisOutput knownNames(DetectSensitiveDataCommand command,
+                                                                   Map<Integer, PageText> pages, KnownNames known,
+                                                                   List<DetectedEntity> entities) {
+        List<Integer> pageOf = new ArrayList<>();
+        List<KnownNames.Place> places = new ArrayList<>();
+        pages.forEach((number, page) -> {
+            List<int[]> taken = entities.stream().filter(e -> e.pageNumber() == number
+                    && parseEntityType(e.entityType()) == EntityType.PERSON_NAME)
+                    .map(e -> new int[]{e.startOffset(), e.endOffset()}).toList();
+            for (KnownNames.Place place : known.places(page.text(), taken)) {
+                pageOf.add(number);
+                places.add(place);
+            }
+        });
+        if (places.isEmpty()) return new SensitiveContentAnalysisPort.AnalysisOutput(List.of());
+        List<SensitiveContentAnalysisPort.PageContent> sentences = new ArrayList<>();
+        for (int i = 0; i < places.size(); i++) {
+            sentences.add(new SensitiveContentAnalysisPort.PageContent(i + 1, places.get(i).sentence()));
+        }
+        SensitiveContentAnalysisPort.AnalysisOutput output = semanticAnalysisPort.analyze(
+                new SensitiveContentAnalysisPort.AnalysisRequest(command.tenantId(), sentences,
+                        SensitiveContentAnalysisPort.AnalysisPolicy.of(
+                                SensitiveContentAnalysisPort.AnalysisPolicy.Ask.KNOWN_NAMES)));
+        int persons = 0;
+        for (DiscoveredSensitiveContent answer : output.findings()) {
+            if (answer.pageNumber() > places.size()) continue;
+            KnownNames.Place place = places.get(answer.pageNumber() - 1);
+            entities.add(new DetectedEntity(EntityType.PERSON_NAME.name(), pageOf.get(answer.pageNumber() - 1),
+                    place.start(), place.end(), answer.confidence(), answer.analyzerName(), answer.analyzerVersion()));
+            persons++;
+        }
+        // Counts only.
+        log.info("KNOWN_NAMES_ASKED document={} forms={} places={} persons={}", command.documentId(), known.forms().size(),
+                places.size(), persons);
+        return output;
     }
 
     /** Policy, findings, state, events and audit of the document (whole document or gathered batches). */

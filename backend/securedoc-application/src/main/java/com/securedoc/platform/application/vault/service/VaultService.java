@@ -156,6 +156,7 @@ public final class VaultService implements RegisterVaultEntryUseCase, DownloadAr
         if (command.artifactType() == ArtifactType.EXTRACTED_TEXT
                 || command.artifactType() == ArtifactType.EXTRACTED_TEXT_BATCH
                 || command.artifactType() == ArtifactType.FINDINGS_BATCH
+                || command.artifactType() == ArtifactType.DOCUMENT_SUMMARY
                 || command.artifactType() == ArtifactType.VISION_PAGE) {
             auditService.recordDenied(command.tenantId(), command.actorId(),
                     AuditAction.DOCUMENT_DOWNLOADED, "Artifact", command.documentId().toString(),

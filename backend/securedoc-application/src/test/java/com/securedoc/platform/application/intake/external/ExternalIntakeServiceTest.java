@@ -621,6 +621,61 @@ class ExternalIntakeServiceTest {
         assertEquals(List.of("LV-INT-017"), counted);
     }
 
+    /** Task 0065: until every document is there, the same case must come with the same instructions. */
+    @Test
+    void otherCaseInstructionsOnTheSameRevisionAreAChangedRequest() {
+        LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);
+        Map<PackageId, com.securedoc.platform.application.port.out.CaseInstructionsRepository.Stored> rows = new HashMap<>();
+        byte[][] file = {null};
+        var storage = new com.securedoc.platform.application.port.out.StoragePort() {
+            @Override public com.securedoc.platform.domain.artifact.ArtifactStorageReference store(TenantId t, String path,
+                    java.io.InputStream content, long size, String mime) {
+                throw new AssertionError("not stored here");
+            }
+            @Override public java.io.InputStream retrieve(com.securedoc.platform.domain.artifact.ArtifactStorageReference r) {
+                return new java.io.ByteArrayInputStream(file[0]);
+            }
+            @Override public void delete(com.securedoc.platform.domain.artifact.ArtifactStorageReference r) { }
+        };
+        var repository = new com.securedoc.platform.application.port.out.CaseInstructionsRepository() {
+            @Override public Optional<Stored> find(TenantId t, PackageId p) { return Optional.ofNullable(rows.get(p)); }
+            @Override public void save(TenantId t, PackageId p, Stored s) { rows.put(p, s); }
+            @Override public void remove(TenantId t, PackageId p) { rows.remove(p); }
+        };
+        var none = new com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository() {
+            @Override public Optional<com.securedoc.platform.domain.business.TenantRedactionPolicy> findByTenantId(TenantId t) {
+                return Optional.empty();
+            }
+            @Override public void save(com.securedoc.platform.domain.business.TenantRedactionPolicy p) { }
+        };
+        var lifecycles = new com.securedoc.platform.application.port.out.PackageLifecycleRepository() {
+            @Override public Optional<com.securedoc.platform.domain.lifecycle.PackageLifecycle> findByPackageIdAndTenantId(PackageId p, TenantId t) { return Optional.empty(); }
+            @Override public void save(com.securedoc.platform.domain.lifecycle.PackageLifecycle l) { }
+            @Override public List<com.securedoc.platform.domain.lifecycle.PackageLifecycle> findDueRedactedPurge(Instant n, int l) { return List.of(); }
+            @Override public List<com.securedoc.platform.domain.lifecycle.PackageLifecycle> findDueFinalPurge(Instant n, int l) { return List.of(); }
+        };
+        h.service.withInstructions(new com.securedoc.platform.application.intake.CaseInstructionsService(repository, storage,
+                h.packages, none, lifecycles, com.securedoc.platform.application.port.out.TransactionPort.DIRECT,
+                new AuditService(a -> { })));
+        ExternalIntakeSnapshot created = h.service.createPushIntake(instructed(null), h.principal, CorrelationId.generate());
+        assertEquals(created.packageId(), h.service.createPushIntake(instructed(" "), h.principal, CorrelationId.generate()).packageId());
+        assertEquals("SOURCE_REVISION_REUSED", assertThrows(IntakeConflictException.class, () -> h.service.createPushIntake(
+                instructed("Protect Wren"), h.principal, CorrelationId.generate())).errorCode());
+        file[0] = "Protect Wren".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        rows.put(PackageId.of(created.packageId()), new com.securedoc.platform.application.port.out.CaseInstructionsRepository.Stored(
+                UUID.randomUUID(), com.securedoc.platform.domain.artifact.ArtifactStorageReference.local("x")));
+        h.service.createPushIntake(instructed("Protect Wren"), h.principal, CorrelationId.generate());
+        assertThrows(IntakeConflictException.class, () -> h.service.createPushIntake(instructed(null), h.principal,
+                CorrelationId.generate()));
+        h.receive(created.packageId(), "DOC-1");
+        h.service.createPushIntake(instructed("Protect Robin"), h.principal, CorrelationId.generate());
+    }
+
+    private static PushIntakeCreateInput instructed(String text) {
+        return new PushIntakeCreateInput("SRC-INSTR", "1", Map.of("contractNumber", "C-1"), Map.of(),
+                List.of(doc("DOC-1", null)), false, null, null, text);
+    }
+
     @Test
     void aDifferentLevelOnTheSameRevisionIsAChangedRequest() {
         LevelHarness h = new LevelHarness(IntegrationProviderType.PUSH_API);

@@ -46,6 +46,10 @@ public class TenantRedactionPolicyEntity {
     @Column(name = "second_check_enabled", nullable = false)
     private boolean secondCheckEnabled;
 
+    /** Migration 085 (task 0065): a document summary and case instructions for the names search. */
+    @Column(name = "document_context_enabled", nullable = false)
+    private boolean documentContextEnabled;
+
     /** Migration 070 (task 0062): off only for an entity from before the catalog, until its policy is saved. */
     @Column(name = "locked_items_on", nullable = false)
     private boolean lockedItemsOn = true;
@@ -59,6 +63,8 @@ public class TenantRedactionPolicyEntity {
     public void setVisionOcrThreshold(double visionOcrThreshold) { this.visionOcrThreshold = visionOcrThreshold; }
     public boolean isSecondCheckEnabled() { return secondCheckEnabled; }
     public void setSecondCheckEnabled(boolean secondCheckEnabled) { this.secondCheckEnabled = secondCheckEnabled; }
+    public boolean isDocumentContextEnabled() { return documentContextEnabled; }
+    public void setDocumentContextEnabled(boolean enabled) { this.documentContextEnabled = enabled; }
     public boolean isLockedItemsOn() { return lockedItemsOn; }
     public void setLockedItemsOn(boolean lockedItemsOn) { this.lockedItemsOn = lockedItemsOn; }
     public int getPageBatchSize() { return pageBatchSize; }

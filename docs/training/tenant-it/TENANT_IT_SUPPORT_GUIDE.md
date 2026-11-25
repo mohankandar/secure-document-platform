@@ -1,234 +1,113 @@
-# LexaVault Tenant IT Support Guide
+# LexaVault guide for the IT Administrator
 
-**Audience:** Tenant IT Admin  
-**Purpose:** Tenant-side operational support without exposing protected document content.
+**For:** IT Administrator ("IT Admin").
+**Checked:** 2026-11-25 against the screens of commit `466906b1` (task 0095). Names in **bold** are the words on the screen. Installing and settings are in `../../install/`.
 
----
+The pictures hold made-up data only.
 
-## 1. Tenant IT responsibilities
+## 1. What you can and can't do
 
-Tenant IT supports:
-- tenant connectivity/integrations
-- technical configuration and enablement
-- technical incident triage
-- safe retry/reprocessing where authorized
-- environment/connectivity diagnosis
-- escalation to Platform Support
+| You can | You can't |
+|---|---|
+| **Admin › Integrations**: sources and destinations | Open **Cases**, **New case** or **Review**, or see a document |
+| **Admin › Sign-in** | Approve, reject or review a case, or use **Continue manually** |
+| **Admin › Notifications**: the mail account and technical messages | See **Reports** |
+| **Admin › Platform operations**: overview and queue (read-only) | Change the redaction policy, case fields, entities or business messages (Business Admin) |
+| **Admin › Audit trail**, its export, and the **Compliance report** with the full audit trail | Change storage, workers, branding or health checks (Platform Operations) |
+| **Support**: Problems, Export, Status; retry; keep the original longer | See Admin › Licensing (Business Admin); a licence problem shows under Support, Status |
 
-Tenant IT does **not** own the business decision to manually redact a document. A Standard Business User may continue through Business Continuity when the PDF remains safely processable.
+You see one entity at a time. The entity is at the top, left of your name; with more than one you switch there.
 
----
+## 2. Integrations
 
-## 2. Technical Attention vs business status
+Views: **Receiving**, **Sending to the document store**, **Sending by barcode**, **All**.
 
-Do not assume:
+**Add a connection** has three steps: what it does, its details, **Test connection** and **Save**. How documents arrive: "A system sends them to LexaVault", "LexaVault collects them on a schedule", "From a watched folder", "From a scanner". A test never sends a customer document. A key is named, never typed and never shown. **Switch off** stops new documents; cases already here go on.
 
-`Technical incident open = Business blocked`
+- **Check now** (watched folder) and **Collect now** (a source LexaVault collects from).
+- **Priority of cases from this source:** Urgent, Normal or Low, used when the source sends none. Cases already here keep theirs.
+- **Sending by barcode** › **Rules**: pages with a barcode or text marker go to another place as well. Files that couldn't be sent have **Retry**.
 
-Business Continuity intentionally separates the two.
+### Migration (Bulk)
 
-Example:
+For a large backlog. Switch on **Migration (Bulk)** at the source.
 
-- Technical incident: `BUSINESS_CONTINUED`
-- Business outcome: `COMPLETED`
-- `resolved_at`: empty
+![A migration source](../assets/bulk-source.png)
 
-Meaning:
-- business safely completed the document manually
-- the underlying technical issue still requires IT/platform investigation
+- Its new cases are Bulk: after all other work, on at most half of the workers, only in the times set (weeknights 7 PM to 6 AM and all weekend unless changed), in the **entity's** time zone. Without a time zone it can't be switched on; the Business Admin sets one in Admin › Entities.
+- Outside the times files stay at the source, and nothing of it starts. **Check now** and **Collect now** still work.
+- You see how many are done, waiting and stopped, the pace and the expected finish.
+- Switching it off asks first (**End migration**): its waiting cases become Low.
+- The times and the half hold only where documents are processed in steps (`SECUREDOC_PROCESSING_PIPELINE_MODE=staged`). A step with one worker does no Bulk work.
 
----
+## 3. Sign-in
 
-## 3. Technical Issue Details
+**Test sign-in** checks that the login system answers; it changes nothing. **Prepare a change** makes a draft: **Save draft**, **Test the draft** (a pasted token is checked once and never kept), **Switch to it**. **Go back to the previous sign-in** undoes a switch. A draft with another login system, provider ID or audience can be tested but not switched to here; see `../../install/SETUP.md`. Which group gives which role is loaded by setup, not here; the changes are listed under **Audit trail** › **Sign-in access changes**.
 
-Current structured incident view may show:
+## 4. Notifications
 
-- Incident ID
-- Incident status
-- Failure category
-- Failed processing stage
-- Reason code
-- retryable yes/no
-- failure time
-- original retained-until time
-- correlation ID
-- Business Continuity status
-- processing fingerprint
-- incident history
+![Notifications](../assets/notifications-it.png)
 
-![Technical Issue Details](../assets/technical-issue-details-structured-incident.png)
+- **E-mail:** Microsoft 365, or your own Exchange server or relay. You give the name of a stored secret, never the secret. **Send me a test message** goes to your own address.
+- **Who gets messages:** people of the role in this entity who signed in lately.
+- **Technical messages:** on or off, how often, after how long. Some are **Always on**.
+- **Last messages:** the last 10 and why one was not sent.
 
----
+A message never holds document content, a case number or a redacted value. Setting up and approval links: `../../install/NOTIFICATIONS.md`.
 
-## 4. What to capture before escalating
+## 5. Platform operations
 
-Preferred identifiers:
-1. Incident ID
-2. Contract Number / tenant primary business identifier
-3. Correlation ID
-4. Approximate failure time
-5. Processing stage
-6. Reason code
-7. Whether Business Continuity was used
-8. Whether the business outcome is blocked or completed
+The services, the watched folder, recorded technical incidents, and the **Queue** of your entity.
 
-Do not send raw document content unless an approved secure diagnostic procedure explicitly authorizes it.
+![The queue](../assets/queue.png)
 
----
+**Time left** is worked out from the pace of the last minutes (**How is this worked out?**). It leaves out what is on hold and cases that wait for a person. On long loads it was within 7%; on loads of about 2 minutes up to 54% too long. It shows only where documents are processed in steps.
 
-## 5. Reading the current AI failure example
+## 6. Support
 
-Example structured classification:
+### Problems
 
-- stage: `AI_ANALYSIS`
-- component: `AI`
-- failure category: `DEPENDENCY_RESPONSE_ERROR`
-- reason code: `AI_INVALID_RESPONSE`
-- attempt count: `2`
-- retryable: `false` after bounded automatic recovery is exhausted
+One row per problem: **Open**, **Resolved**, **All**; one search box (Main ID or incident number); **More filters** for stage, reason, retry, times and ids. A problem shows its code, what happened, what it means for the case, what you can do, and a timeline.
 
-This does **not** mean LexaVault immediately gave up.
+![A problem](../assets/technical-issue-details-structured-incident.png)
 
-The AI Processing Resilience flow is:
+| Action | Does |
+|---|---|
+| **Retry processing** | Runs the stopped step again on the kept original |
+| **Keep the original 7 more days** | So there is time to look into it |
+| **More actions** | Keep 14 or 30 more days, stop keeping it longer, close without processing again, close as replaced or duplicate |
 
-`same-batch retry -> split multi-page batch -> page-level retry -> Technical Attention only after exhaustion`
+The case's chip says **Case stopped**, **Continued manually** or **Case finished**. A problem stays open when people finish the case by hand: the case is done, the cause is not fixed. The line about "Continue manually" is shown on every blocked problem, but LexaVault allows it only when the AI analysis stopped.
 
----
+All ids and internal codes are under **Technical details**. Support never shows document text or sensitive values.
 
-## 6. Incident lifecycle
+### Export
 
-Expected current lifecycle for a business workaround:
+**Needs IT:** exports that wait for you, by destination and code, with **Retry all N**, or **Set back to working** after a sign-in failure. **Destinations:** Working, Paused (checked by itself; **Check now**), Needs IT. This fills only where exports run as jobs (`SECUREDOC_PROCESSING_EXPORT_MODE=job`).
 
-`FAILURE_RECORDED`
-`-> BUSINESS_CONTINUITY_STARTED`
-`-> BUSINESS_CONTINUITY_SUBMITTED`
-`-> BUSINESS_COMPLETED`
+### Status
 
-Parent incident:
+![Status](../assets/support-status.png)
 
-- status: `BUSINESS_CONTINUED`
-- business continuity used: `true`
-- business outcome: `COMPLETED`
-- resolved at: `NULL`
+What LexaVault depends on: Working, Having problems or Down, with the code, the cause and what to do. **Last failures** is found by the reference (`R-...`) a person was shown. **Download diagnostic bundle** holds versions, settings without secrets, the checks and the last failures; never documents, case values or passwords. What each check looks at: `../../install/MONITORING.md`.
 
-This is correct. Do not manually mark it resolved merely because Business completed.
+## 7. Error codes
 
----
+Account menu › **Help: error codes**, or choose any LV code on a screen. Each entry has "Support tells the customer". A link opens in a new tab and can be read there without signing in.
 
-## 7. Processing fingerprint
+![The error code guide](../assets/error-code-guide.png)
 
-The fingerprint records safe version/configuration identifiers used when the failure occurred.
+## 8. Audit trail and compliance report
 
-Current fields may include:
-- application version
-- profile
-- AI provider
-- AI model
+Filter by type, person, period or case. **Export** gives CSV or JSON. **Compliance report** makes the PDF, with **Include full audit trail** (you only; the Business Admin makes the summary on Reports). It holds no borrower names, file names, loan numbers or redacted values.
 
-Future fields may include:
-- model version
-- prompt version
-- detector version
-- OCR version
-- document-profile version
-- policy version
-- configuration/intelligence bundle version
+## 9. A safe ticket
 
-Use fingerprints to identify whether multiple incidents share the same processing configuration.
+Send: incident number or reference, LV code, Main ID if your rules allow, times, whether the case is stopped or finished, the diagnostic bundle.
+Never: document text, found values, prompts or AI answers, pictures of documents.
 
----
+Raise it higher when the case is stopped and can't be retried or continued by hand, delivery is blocked, storage or the key service is down, or many cases stop with the same code.
 
-## 8. Retained original
+## 10. Logs
 
-LexaVault uses the unified original-document retention policy.
-
-The Technical Issue Details screen may show **Original retained until**.
-
-Use the retained original only through authorized LexaVault/platform procedures. Do not make uncontrolled copies for troubleshooting.
-
-If the reproduction window expires, use the Contract Number / primary business identifier to reacquire the document from the source when permitted. A future support capability should compare document hashes to determine whether a reacquired document is the exact same input.
-
----
-
-## 9. Safe support ticket content
-
-Safe:
-- Incident ID
-- Contract Number / business reference
-- package/document IDs
-- correlation ID
-- reason code
-- stage/component
-- timestamps
-- provider/model/version identifiers
-- retry counts
-- business outcome
-
-Do not paste:
-- raw prompt
-- raw AI response
-- OCR body text
-- SSN
-- PAN/card value
-- DOB
-- credit-score value
-- customer document body
-- screenshots exposing protected content
-
----
-
-## 10. Escalation guidance
-
-### Customer still blocked
-Escalate with higher urgency when:
-- manual fallback is not available
-- PDF cannot safely render/redact/verify
-- storage/integrity failure prevents safe processing
-- delivery remains blocked
-- widespread tenant impact is suspected
-
-### Business completed
-The ticket may be lower business urgency, but the technical incident should remain open if the automation defect is unresolved.
-
-Provide Platform Support the Incident ID and processing fingerprint so they can correlate across logs/metrics and other tenants.
-
----
-
-## 11. Structured JSON logging
-
-**Status:** IN VALIDATION — final hardening follow-up.
-
-Production/SaaS logging is designed for centralized ingestion. Each console event is emitted as one JSON object. JSON is also the Local/demo default; developers can explicitly request readable output with `-LoggingFormat Readable`.
-
-### Correlation ID
-
-A valid incoming `X-Correlation-Id` UUID is preserved for the request and returned in the response. If the header is missing or invalid, LexaVault creates a new UUID. The same safe correlation context is propagated to Spring-managed background processing and AI worker tasks.
-
-### Safe fields
-
-Tenant IT may use operational fields such as Incident ID, Correlation ID, package/document IDs, stage, reason code, provider/model, retry counts, status, and timestamps.
-
-Do not ask users to paste raw prompts, raw AI responses, OCR/document text, or protected document values into tickets merely because logs are now JSON. JSON formatting changes the transport/structure of logs; it does not change the privacy boundary.
-
-### Log level and local/on-prem rotation
-
-Local support can change the application level with `-LogLevel TRACE|DEBUG|INFO|WARN|ERROR`; production should normally remain at INFO.
-
-For local/on-prem deployments that need application-managed files, `-EnableRollingFileLog` enables JSON console plus bounded rotating JSON files. The default is daily/100MB rollover, 14 history periods, and a 2GB total history cap. SaaS/container deployments should normally leave file rotation to the centralized logging platform.
-
-Operational log retention is separate from document/original retention.
-
-## 11. Support Console — Incident Search & Triage
-
-**Status:** IN VALIDATION
-
-Use **Support Incidents** to search durable incidents by the tenant's Primary Business Identifier, Incident ID, Correlation ID, stage, reason code, status, and business outcome.
-
-The result grid highlights **Business Impact**:
-- BLOCKED — business is still blocked
-- CONTINUED — Business Continuity is being used
-- COMPLETED — business completed, even if the technical incident remains unresolved
-
-Open a case to review the safe failure classification, processing fingerprint, durable incident timeline, and correlation IDs.
-
-Do not paste document text, OCR output, protected values, raw prompts or provider responses into tickets.
+One JSON event per line. A valid `X-Correlation-Id` is kept for the request; every answer has `X-Request-Id`, and an error the same value as `reference`. Local starts: `-LogLevel TRACE|DEBUG|INFO|WARN|ERROR`, `-LoggingFormat Readable`, `-EnableRollingFileLog` (daily and 100 MB files, 14 periods, 2 GB). Log keeping has nothing to do with document keeping.

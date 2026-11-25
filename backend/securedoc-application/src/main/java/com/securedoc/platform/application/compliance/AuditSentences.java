@@ -129,6 +129,7 @@ public final class AuditSentences {
             entry("PLATFORM_HEALTH_CHECKED", "Ran health checks"),
             entry("PROCESSING_MAXIMUMS_CHANGED", "Changed the processing maximums"),
             entry("CASE_PRIORITY_CHANGED", "Changed the case’s priority"),
+            entry("CASE_INSTRUCTIONS_CHANGED", "Changed the case’s instructions for the AI"),
             entry("SOURCE_PRIORITY_CHANGED", "Changed a source’s default priority"),
             entry("SOURCE_BULK_CHANGED", "Changed a source’s migration setting"),
             entry("PROCESSING_STORAGE_PROVIDER_CREATED", "Added processing storage"),

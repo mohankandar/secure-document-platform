@@ -59,16 +59,43 @@ public interface SensitiveContentAnalysisPort {
     /**
      * Tenant-controlled semantic categories/options; independent of AI provider/model.
      *
-     * @param secondCheck task 0083: the page is of a finished file. The second check's own prompt is asked, one page at a
-     *                    time, and the kinds are the names of {@code VisionPageResult.Kind}.
+     * @param ask what is asked: the kinds (Find), or one of the other questions, each with its own prompt
      */
-    record AnalysisPolicy(Set<EntityType> enabledEntityTypes, boolean maskSsnLastFour, boolean secondCheck) {
+    record AnalysisPolicy(Set<EntityType> enabledEntityTypes, boolean maskSsnLastFour, Ask ask) {
+        public enum Ask {
+            KINDS,
+            /**
+             * Task 0083: the page is of a finished file; one page at a time, and the kinds are the names of
+             * {@code VisionPageResult.Kind}.
+             */
+            SECOND_CHECK,
+            /** Task 0065: the one page is the beginning of a document; its people and their other names are asked for. */
+            SUMMARY,
+            /**
+             * Task 0065: each "page" is one sentence with the word asked about; a finding (kind PERSON_NAME, the page's
+             * number) means it names a person there, or was not answered.
+             */
+            KNOWN_NAMES
+        }
+
+        /** Task 0065: a person of the summary, and another name of the person before it. */
+        public static final String SUMMARY_PERSON = "SUMMARY_PERSON";
+        public static final String SUMMARY_ALSO_CALLED = "SUMMARY_ALSO_CALLED";
+
+        public boolean secondCheck() {
+            return ask == Ask.SECOND_CHECK;
+        }
+
+        public static AnalysisPolicy of(Ask ask) {
+            return new AnalysisPolicy(Set.of(), false, ask);
+        }
+
         public AnalysisPolicy(Set<EntityType> enabledEntityTypes, boolean maskSsnLastFour) {
-            this(enabledEntityTypes, maskSsnLastFour, false);
+            this(enabledEntityTypes, maskSsnLastFour, Ask.KINDS);
         }
 
         public static AnalysisPolicy ofSecondCheck() {
-            return new AnalysisPolicy(V1_TYPES, true, true);
+            return new AnalysisPolicy(V1_TYPES, true, Ask.SECOND_CHECK);
         }
 
         private static final Set<EntityType> V1_TYPES = Set.of(
@@ -86,6 +113,7 @@ public interface SensitiveContentAnalysisPort {
             if (!KNOWN.containsAll(enabledEntityTypes)) {
                 throw new IllegalArgumentException("Analysis policy contains an unsupported entity type");
             }
+            Objects.requireNonNull(ask, "ask must not be null");
             enabledEntityTypes = Set.copyOf(enabledEntityTypes);
         }
 

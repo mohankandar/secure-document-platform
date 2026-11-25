@@ -2,6 +2,22 @@
 
 This file records training impact whenever an accepted feature changes how Business, Tenant IT, or Platform Support work.
 
+
+**Entries before 2026-11-25 are kept as they were written.** Screen and role names in them may no longer exist.
+
+---
+
+## 2026-11-25 — Guides checked against the shipped screens (task 0095)
+
+- Business guide: rewritten for Processor, Supervisor, Business Admin and Report Viewer with the real names. "Elevated User", "Submit Manual Processing", "Technical Attention" and reprocessing or removal by an elevated user are gone. Business Admin no longer "includes the business workflow".
+- IT guide: rewritten; "Support Incidents" is **Support › Problems, Export, Status**. Says what IT can't do.
+- Platform Operations guide: rewritten; says that Platform Operations reads problems and can't act on them.
+- Added: entities and switcher (0058), notifications and approval links (0059), case fields (0061), catalog and packs (0062), reject (0071), person name (0072), priority (0073), page to check (0074), first entity (0075), bulk approve and four eyes (0076), queue and time left (0078), Bulk sources (0079), Reports tabs (0081), error-code guide (0082), second check (0083).
+- New: `WHATS_NEW.md`.
+- Pictures: 21, all new, made-up data. The two old ones were replaced under the same names; the old manual processing picture showed (made-up) values that LexaVault redacts.
+- In-app help: kinds on by default, keeping times counted from the export, stopped and rejected cases, report breakdown fields, licence.
+- Install guides: OFFBOARDING, MONITORING, SETUP, CASE_FIELDS, NOTIFICATIONS, LICENSING, backup-and-restore. Product pages: AUTHORIZATION, REPORTING, WORKFLOW_AND_LIFECYCLE, V1_SCOPE, INTEGRATIONS (two lines).
+
 ---
 
 ## 2026-09-06 — Training governance introduced

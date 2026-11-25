@@ -26,7 +26,7 @@ Common concerns include:
 - configuration version for historical audit;
 - intake limits where applicable.
 
-`TENANT_IT_ADMIN` / `PLATFORM_OPERATIONS_ADMIN` own technical connection configuration. Business administrators may reference named destinations from business routing rules but do not manage credentials or transport details.
+`TENANT_IT_ADMIN` owns connections and the rules of "Sending by barcode" (Admin › Integrations). Business Admin and Platform Operations have neither (checked 2026-11-25, task 0095).
 
 Environment-specific endpoint/credential bindings must not silently fall back across profiles. Disabling a connection must preserve queued/pending work. Connectivity tests must not send real customer documents.
 
@@ -134,7 +134,7 @@ LexaVault must not scan the entire page for routing markers and must not use AI 
 
 A source document may produce multiple derived PDFs for different marker groups/destinations. The full master SDV export is independent (Option A): master may be `EXPORTED` after SDV acknowledgement while a derived delivery is still pending/retrying/attention-required.
 
-Business Admin maps marker values to named destinations. Tenant IT Admin configures the destination's technical connection/authentication/health. Initial derived-delivery providers are typed `HTTP_API` and secure `FILE_SHARE`; the provider architecture remains extensible.
+The IT Admin maps marker values to named destinations (Admin › Integrations › Sending by barcode › Rules) and configures the destination's technical connection/authentication/health. Initial derived-delivery providers are typed `HTTP_API` and secure `FILE_SHARE`; the provider architecture remains extensible.
 
 Normal document-workflow users may perform approved normal send/resend actions. Authentication/connection/protocol failures are Technical Attention items handled by technical administrators. Delivery retries resend the already-created redacted derived artifact and never rerun redaction.
 

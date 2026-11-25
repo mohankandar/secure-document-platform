@@ -56,8 +56,9 @@ in a development build; production keys never are. The local OIDC start uses thi
 **Grant history.** Every grant setup adds or removes is recorded in `idn_grant_history` with setup's run ID (identity
 schema version 3). LexaVault's Audit page lists them under "Sign-in access changes" (read-only).
 
-**Sign-in connections are set through setup and changed in Admin › Sign-in** (IT Admin, task 0058). A change is a draft:
-it is tested (optionally with a pasted token, which is checked and forgotten), switched to, and can be gone back from; the
+**Sign-in connections are set through setup and changed in Admin › Sign-in** (IT Admin, task 0058). A change is a draft
+(**Prepare a change**): it is tested (**Test the draft**, optionally with a pasted token, which is checked and forgotten),
+switched to (**Switch to it**), and can be gone back from (**Go back to the previous sign-in**); the
 connection in use keeps working until the switch, and setup never touches a draft. The app takes tokens of the login
 system in its settings only, so a draft with another **issuer, provider ID or audience** is tested there but not switched
 to (`SIGN_IN_SETTINGS_DIFFER`; everybody would be refused): change `securedoc.security.oidc.*` and the web app's settings,
@@ -121,7 +122,7 @@ counts pages. Give the app `platform-tenant.properties` (`-ConfigOut`): see `LIC
 
 There is one way to sign in: the login system's groups and the **grants setup loads** (`idn_group_grant`, the role mapping
 file) decide the entities a person may enter and their roles in each. One entity: straight in. More than one: the entity used
-last, else a chooser. A sending system's entity is the one whose enabled push connection names its client.
+last, else a chooser. A source system's entity is the one whose enabled push connection names its client.
 
 These settings are gone and are **ignored** when still set, whatever their value:
 `securedoc.security.oidc.shared-issuer-tenant-selection-enabled`, `.tenant-id`, `.tenant-claim`, `.role-mappings.*`
@@ -155,8 +156,8 @@ holds the slot, works only while no entity was ever activated, and changes nothi
 is recorded in the entity's audit log as an install action (`source=INSTALL`). Exit codes: 0 done, 1 failed, 2 refused.
 
 **A scanner with sign-in (task 0075).** Create a client in your login system that may use client credentials, with LexaVault's
-API as its audience. In Admin, Integrations, make a SCANNER source in the entity (authentication OAuth2 client credentials) whose
-client principal is that client's user name in its tokens. Give the Scanner Bridge `SECUREDOC_SCAN_BRIDGE_OIDC_TOKEN_URI`,
+API as its audience. In **Admin › Integrations**, **Add a connection**, Receive documents, choose **From a scanner**; **How the system proves who it is**:
+**OAuth client credentials**; **Account it signs in with**: that client's user name in its tokens. Give the Scanner Bridge `SECUREDOC_SCAN_BRIDGE_OIDC_TOKEN_URI`,
 `_CLIENT_ID` and `_CLIENT_SECRET` (environment only; optional `_SCOPE`). A client that is a scanner in two entities is refused.
 
 On a

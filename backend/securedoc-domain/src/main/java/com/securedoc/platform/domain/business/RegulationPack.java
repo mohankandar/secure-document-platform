@@ -67,6 +67,11 @@ public enum RegulationPack {
         return this == FRCP_5_2;
     }
 
+    /** Task 0065: this pack suggests the document context; it stays off until the entity turns it on itself. */
+    public boolean suggestsDocumentContext() {
+        return this == FRCP_5_2;
+    }
+
     public String displayName() {
         return displayName;
     }

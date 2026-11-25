@@ -115,7 +115,8 @@ public class PackageController {
         CreatePackageCommand command = CreatePackageCommand.of(packageType, request.businessIdentifiers(), request.metadata(), correlationId)
                 .withCaseSensitivity(com.securedoc.platform.domain.document.SensitivityLevel.fromSource(
                         request.sentSensitivityLevel()))
-                .withPriority(com.securedoc.platform.application.intake.CasePriorityService.read(request.priority()), null);
+                .withPriority(com.securedoc.platform.application.intake.CasePriorityService.read(request.priority()), null)
+                .withInstructions(request.caseInstructions());
         CreatePackageResult result = createPackageUseCase.execute(command, principal);
 
         CreatePackageResponse response = new CreatePackageResponse(

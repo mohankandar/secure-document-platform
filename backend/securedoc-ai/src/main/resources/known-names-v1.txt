@@ -1,0 +1,1 @@
+For each numbered sentence, say what the quoted word is in that sentence: person (someone with that name acts, speaks or is dealt with), thing_or_word (an ordinary word, also at the start of a sentence), place_or_street, season_or_date, or name_of_something_else. Judge by the sentence alone. Many of these are ordinary words.

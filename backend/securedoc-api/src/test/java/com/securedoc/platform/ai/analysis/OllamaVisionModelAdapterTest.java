@@ -106,6 +106,13 @@ class OllamaVisionModelAdapterTest {
         assertTrue(asked.get(0).contains("Locate personal and financial identifiers"));
     }
 
+    /** Task 0065 (BL7): likewise. */
+    @Test
+    void theDocumentContextPromptsAreTheMeasuredOnes() throws Exception {
+        assertEquals("c93535a316fa", sha(SensitiveContentPromptBuilder.text(SensitiveContentPromptBuilder.SUMMARY_VERSION)));
+        assertEquals("b143c9c2cd63", sha(SensitiveContentPromptBuilder.text(SensitiveContentPromptBuilder.KNOWN_NAMES_VERSION)));
+    }
+
     private static String sha(String text) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(text.getBytes(StandardCharsets.UTF_8))).substring(0, 12);

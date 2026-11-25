@@ -3,6 +3,7 @@ package com.securedoc.platform.ai.analysis;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.AnalysisPolicy;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.DiscoveredSensitiveContent;
 import com.securedoc.platform.application.port.out.SensitiveContentAnalysisPort.PageContent;
 
@@ -129,6 +130,70 @@ final class SensitiveContentResponseParser {
                     SensitiveContentPromptBuilder.SECOND_CHECK_VERSION));
         }
         return result;
+    }
+
+    private static final int SUMMARY_PEOPLE = 60;
+    static final List<String> NAME_USES = List.of("person", "thing_or_word", "place_or_street", "season_or_date",
+            "name_of_something_else");
+
+    /** Task 0065: a document's people. A person or other name that does not stand in the text is dropped. */
+    List<DiscoveredSensitiveContent> parseSummary(String content, PageContent page, String analyzerName) throws IOException {
+        JsonNode people = readTreeWithoutEcho(objectMapper, content, "Invalid summary payload").path("people");
+        if (!people.isArray()) throw new IOException("Invalid summary payload");
+        String text = comparable(page.text());
+        List<DiscoveredSensitiveContent> result = new ArrayList<>();
+        int taken = 0;
+        for (JsonNode person : people) {
+            if (taken == SUMMARY_PEOPLE) break;
+            taken++;
+            summaryItem(result, page, text, AnalysisPolicy.SUMMARY_PERSON,
+                    JsonNodeValues.asText(person.path("name"), ""), analyzerName);
+            for (JsonNode other : person.path("alsoCalled")) {
+                summaryItem(result, page, text, AnalysisPolicy.SUMMARY_ALSO_CALLED, JsonNodeValues.asText(other, ""),
+                        analyzerName);
+            }
+        }
+        return result;
+    }
+
+    private static void summaryItem(List<DiscoveredSensitiveContent> into, PageContent page, String text, String kind,
+                                    String value, String analyzerName) {
+        if (value.isBlank() || !text.contains(comparable(value))) return;
+        into.add(new DiscoveredSensitiveContent(kind, page.pageNumber(), value, "", 0.0, analyzerName,
+                SensitiveContentPromptBuilder.SUMMARY_VERSION));
+    }
+
+    private static String comparable(String text) {
+        return text.replaceAll("\\s+", " ").strip().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** Task 0065: the sentences in which the word names a person. One without a usable answer is taken as a person. */
+    List<DiscoveredSensitiveContent> parseKnownNames(String content, List<PageContent> sentences, String analyzerName)
+            throws IOException {
+        JsonNode answers = readTreeWithoutEcho(objectMapper, content, "Invalid known names payload").path("answers");
+        if (!answers.isArray()) throw new IOException("Invalid known names payload");
+        java.util.Set<Integer> other = new java.util.HashSet<>();
+        java.util.Set<Integer> person = new java.util.HashSet<>();
+        for (JsonNode answer : answers) {
+            String use = JsonNodeValues.asText(answer.path("is"), "");
+            int number = JsonNodeValues.asInt(answer.path("number"), -1);
+            if (!NAME_USES.contains(use)) continue;
+            ("person".equals(use) ? person : other).add(number);
+        }
+        List<DiscoveredSensitiveContent> result = new ArrayList<>();
+        for (int i = 0; i < sentences.size(); i++) {
+            if (other.contains(i + 1) && !person.contains(i + 1)) continue;
+            result.add(new DiscoveredSensitiveContent("PERSON_NAME", sentences.get(i).pageNumber(), "person", "", 0.7,
+                    analyzerName, SensitiveContentPromptBuilder.KNOWN_NAMES_VERSION));
+        }
+        return result;
+    }
+
+    /** What the model is sent: the sentences, numbered from 1. */
+    static String knownNames(List<PageContent> sentences) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < sentences.size(); i++) out.append(i + 1).append(". ").append(sentences.get(i).text()).append('\n');
+        return out.toString();
     }
 
     /**

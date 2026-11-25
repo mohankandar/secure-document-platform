@@ -20,5 +20,7 @@ public record UpdateSensitiveDataPolicyRequest(
         Boolean visionEnabled,
         Double visionOcrThreshold,
         /* Task 0083: null keeps the stored value (a pack newly turned on can turn it on). */
-        Boolean secondCheckEnabled
+        Boolean secondCheckEnabled,
+        /* Task 0065: null keeps the stored value. */
+        Boolean documentContextEnabled
 ) {}

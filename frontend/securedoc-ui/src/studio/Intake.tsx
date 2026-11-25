@@ -13,7 +13,7 @@ import { useUnsavedWork } from './unsavedWork';
 import { prefillIdentifier, scannedWords, uploadedWords } from './intakeRules';
 import useSWR from 'swr';
 import { apiClient } from '../api/client';
-import { PRIORITIES, PRIORITY_FIELD, PRIORITY_NAMES, priorityChoice, type PriorityCode, SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, type SensitivityLevelCode } from './words';
+import { CASE_INSTRUCTIONS, PRIORITIES, PRIORITY_FIELD, PRIORITY_NAMES, priorityChoice, type PriorityCode, SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, type SensitivityLevelCode } from './words';
 
 type Method = 'upload' | 'scan';
 
@@ -25,6 +25,8 @@ export interface IdentityGate {
   sensitivity: SensitivityLevelCode;
   /** Task 0073: the "Priority" choice. Nothing is sent for Normal. */
   priority?: PriorityCode;
+  /** Task 0065: for an upload, and only where the entity switched them on. */
+  instructions?: string;
   /** Task 0061: the fields whose values the Scan Bridge keeps in memory only. */
   sensitiveFields: string[];
 }
@@ -40,6 +42,9 @@ export default function Intake({ entityName }: { entityName: string }) {
   const [lockedBy, setLockedBy] = useState<string | null>(null);
   const [sensitivity, setSensitivity] = useState<SensitivityLevelCode>('STANDARD');
   const [priority, setPriority] = useState<PriorityCode>('NORMAL');
+  const [instructions, setInstructions] = useState('');
+  const { data: instructionsSetting } = useSWR('case-instructions-setting', () => apiClient.caseInstructionsSetting(), { revalidateOnFocus: false });
+  const instructable = method === 'upload' && instructionsSetting?.enabled === true;
   const [created, setCreated] = useState<{ packageId: string | null; label: string; method: Method; files: number } | null>(null);
   useUnsavedWork(!created && Object.values(values).some((v) => v.trim() !== ''));
 
@@ -59,6 +64,7 @@ export default function Intake({ entityName }: { entityName: string }) {
     valid,
     sensitivity,
     priority: priority === 'NORMAL' ? undefined : priority,
+    instructions: instructable && instructions.trim() ? instructions : undefined,
     sensitiveFields: sensitiveKeys(definitions),
     require: () => {
       setTouched(new Set(definitions.map((d) => d.key)));
@@ -90,6 +96,7 @@ export default function Intake({ entityName }: { entityName: string }) {
     setLockedBy(null);
     setSensitivity('STANDARD');
     setPriority('NORMAL');
+    setInstructions('');
     setCreated(null);
   };
 
@@ -135,6 +142,13 @@ export default function Intake({ entityName }: { entityName: string }) {
             {definitions.length > 0 && (<>
               <SensitivityField value={sensitivity} locked={!!lockedBy} onChange={setSensitivity} />
               <PriorityField value={priority} locked={!!lockedBy} onChange={setPriority} />
+              {instructable && (
+                <div className="cf-field">
+                  <label htmlFor="cf-id-instructions">{CASE_INSTRUCTIONS.label}<span className="cf-field-opt">Optional</span></label>
+                  <textarea id="cf-id-instructions" rows={3} maxLength={CASE_INSTRUCTIONS.max} value={instructions} disabled={!!lockedBy} onChange={(e) => setInstructions(e.target.value)} aria-describedby="cf-id-instructions-hint" />
+                  <span id="cf-id-instructions-hint" className="cf-field-hint">{CASE_INSTRUCTIONS.hint}</span>
+                </div>
+              )}
             </>)}
           </div>
         </section>

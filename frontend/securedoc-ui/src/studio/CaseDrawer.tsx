@@ -21,6 +21,7 @@ import { useEntityZone } from './EntityZoneContext';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import CasePriority from './CasePriority';
+import CaseInstructions from './CaseInstructions';
 import { PRIORITY_FIELD, priorityName, CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 import { deliveryLabel, processingStepOf } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
@@ -134,6 +135,8 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
           {caps.includes(CAP.review)
             ? <CasePriority packageId={packageId} priority={pkg.priority} onChanged={() => mutate()} />
             : <p className="cf-muted cf-small" data-testid="case-priority">{PRIORITY_FIELD.label}: {priorityName(pkg.priority)}</p>}
+
+          {caps.includes(CAP.review) && <CaseInstructions key={packageId} packageId={packageId} />}
 
           <DocumentsSection pkg={pkg} openFindings={openFindings} />
 

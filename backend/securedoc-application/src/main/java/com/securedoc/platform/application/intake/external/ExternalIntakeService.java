@@ -144,6 +144,14 @@ public final class ExternalIntakeService {
         return this;
     }
 
+    private com.securedoc.platform.application.intake.CaseInstructionsService caseInstructions;
+
+    /** Task 0065: a case sent again with other instructions is a conflict. */
+    public ExternalIntakeService withInstructions(com.securedoc.platform.application.intake.CaseInstructionsService service) {
+        this.caseInstructions = Objects.requireNonNull(service);
+        return this;
+    }
+
     /** The caller's enabled push source; its configured name becomes the display name of this request's records. */
     private IntegrationConnection pushSource(AuthenticatedPrincipal principal) {
         IntegrationConnection source = integrationConnectionService.resolveEnabledPushSource(
@@ -193,7 +201,8 @@ public final class ExternalIntakeService {
         validateScannerProvenance(metadata);
         PushIntakeCreateInput scannerInput = new PushIntakeCreateInput(
                 input.externalSourcePackageId(), input.sourceRevision(), input.businessIdentifiers(), metadata,
-                input.documents(), input.retry(), input.caseSensitivityLevel(), input.priority());
+                input.documents(), input.retry(), input.caseSensitivityLevel(), input.priority(),
+                input.instructions());
         return createMachineIntake(scannerInput, source, ExternalIntakeChannel.SCANNER, principal, correlationId);
     }
 
@@ -317,6 +326,13 @@ public final class ExternalIntakeService {
                 throw new IntakeConflictException("SOURCE_REVISION_REUSED",
                         "The source package/revision already exists with a different manifest or business payload; use a new revision for resubmission");
             }
+            // Task 0065: not part of the fingerprint (a person's name in it could be guessed), so compared with what is kept.
+            // Only while documents are awaited: once accepted, a reviewer may have changed them and a retry changes nothing.
+            if (caseInstructions != null && latest.status() == ExternalIntakeStatus.AWAITING_DOCUMENTS
+                    && caseInstructions.differs(principal.tenantId(), latest.packageId(), input.instructions())) {
+                throw new IntakeConflictException("SOURCE_REVISION_REUSED",
+                        "The source package/revision already exists with different case instructions; use a new revision");
+            }
             if (latest.status() == ExternalIntakeStatus.INCOMPLETE_EXPIRED && input.retry()) {
                 attemptNumber = latest.attemptNumber() + 1;
             } else {
@@ -339,7 +355,7 @@ public final class ExternalIntakeService {
                 ? PackageType.SCANNER_INTAKE : PackageType.API_SUBMISSION;
         var createResult = createPackageUseCase.execute(new CreatePackageCommand(packageType,
                 input.businessIdentifiers(), input.metadata(), intakeFingerprint, sourcePackageId, correlationId,
-                caseSensitivity).withPriority(priority, source.id().value().toString()), principal);
+                caseSensitivity).withPriority(priority, source.id().value().toString()).withInstructions(input.instructions()), principal);
 
         Instant createdAt = Instant.now(clock);
         ExternalIntake intake;

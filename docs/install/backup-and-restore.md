@@ -9,7 +9,7 @@ More detail: `ERASE_LOG.md`, `KEY_SERVICE.md`, `OFFBOARDING.md`.
 | What | Where | How long to keep | If it is lost without a back-up |
 |---|---|---|---|
 | **Database** | PostgreSQL, the whole database and its roles | Back-up retention | Cases, settings and audit are gone |
-| **Document storage** | Every folder under Admin, document storage (or `securedoc.storage.local.root-path`) | Back-up retention, from the **same time** as the database's back-up | Stored documents are gone |
+| **Document storage** | Every folder under Admin › Platform operations › Processing storage (Platform Operations sees it; or `securedoc.storage.local.root-path`) | Back-up retention, from the **same time** as the database's back-up | Stored documents are gone |
 | **Erase log** | The folder `PLATFORM_ERASELOG_LOCATION` | Its own back-up, on **separate storage**, at least retention + 30 days (65 by default) | LexaVault takes no work until it is back; a restore can't be completed safely |
 | **Key service (Vault)** | A Vault snapshot, **and the unseal or recovery keys, kept apart from it** | **At most** the back-up retention | **Every stored document and sensitive case field value can never be read again** |
 | **Configuration** | Environment settings, `platform-tenant.properties`, the sign-in file, the group-to-role mapping, certificates | While in use | Set up again |

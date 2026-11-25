@@ -31,6 +31,7 @@ undone.** It is one step of the exit; its result file is the data for the offboa
    Keep the erase log until then.
 9. **Issue the certificate** from the result file, with the date the database was removed.
 
-Afterwards LexaVault answers LV-SYS-011 for every stored file. Do not run setup again for this customer: new keys open nothing.
+Afterwards LexaVault refuses every change with **LV-SYS-014**: without the keys it can't use its erase log (rehearsed, task 0093).
+The stored files can't be opened either; the rehearsal did not reach that through the app, because the work is refused first. Do not run setup again for this customer: new keys open nothing.
 
 Destinations' copies, the scanner workstation's folder and anything the customer exported are outside LexaVault.

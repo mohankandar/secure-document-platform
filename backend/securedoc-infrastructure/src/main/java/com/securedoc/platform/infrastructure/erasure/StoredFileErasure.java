@@ -91,8 +91,11 @@ public class StoredFileErasure {
 
     EraseHandler.Applied eraseCase(EraseEntry entry, EraseHandler.Context context) {
         UUID packageId = EraseRecord.caseId(entry.request());
-        return inTransaction(context, c -> erase(c, entry, ofCase(c, entry.request()), newerFiles(c, entry.request())
-                ? Set.of() : caseFolderFiles(entry.request().entity(), packageId), packageId));
+        return inTransaction(context, c -> {
+            eraseInstructions(c, entry.request());
+            return erase(c, entry, ofCase(c, entry.request()), newerFiles(c, entry.request())
+                    ? Set.of() : caseFolderFiles(entry.request().entity(), packageId), packageId);
+        });
     }
 
     private EraseHandler.Applied erase(Connection c, EraseEntry entry, List<Stored> records, Set<Path> places, UUID packageId)
@@ -128,6 +131,47 @@ public class StoredFileErasure {
         }
         audit(c, entry, packageId);
         return any ? EraseHandler.Applied.ERASED : EraseHandler.Applied.ALREADY_GONE;
+    }
+
+    /** Task 0065: the case's instructions, also when newer files keep the case's folder from being emptied. */
+    private void eraseInstructions(Connection c, EraseRequest request) throws SQLException, IOException {
+        try (PreparedStatement select = c.prepareStatement("select file_id, storage_provider, storage_key from case_instructions"
+                + " where package_id = ? and tenant_id = ? and changed_at <= ?")) {
+            caseKey(select, request);
+            select.setTimestamp(3, Timestamp.from(request.erasedAt()));
+            try (ResultSet rs = select.executeQuery()) {
+                while (rs.next()) {
+                    Stored stored = new Stored(rs.getObject(1, UUID.class), "AVAILABLE", rs.getString(2), rs.getString(3));
+                    Files.deleteIfExists(within(root(stored), stored.key()));
+                    try (PreparedStatement drop = c.prepareStatement("delete from stored_files where storage_key = ?")) {
+                        drop.setString(1, stored.key());
+                        drop.executeUpdate();
+                    }
+                }
+            }
+        }
+        try (PreparedStatement drop = c.prepareStatement("delete from case_instructions where package_id = ? and tenant_id = ?"
+                + " and changed_at <= ?")) {
+            caseKey(drop, request);
+            drop.setTimestamp(3, Timestamp.from(request.erasedAt()));
+            drop.executeUpdate();
+        }
+    }
+
+    private static boolean instructionsLeft(Connection c, EraseRequest request) throws SQLException {
+        try (PreparedStatement select = c.prepareStatement("select 1 from case_instructions where package_id = ? and tenant_id = ?"
+                + " and changed_at <= ?")) {
+            caseKey(select, request);
+            select.setTimestamp(3, Timestamp.from(request.erasedAt()));
+            try (ResultSet rs = select.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private static void caseKey(PreparedStatement statement, EraseRequest request) throws SQLException {
+        statement.setObject(1, EraseRecord.caseId(request));
+        statement.setObject(2, request.entity());
     }
 
     /** One audit record per erasure, under the id in the entry; written again when a replay follows a restore. */
@@ -166,7 +210,8 @@ public class StoredFileErasure {
 
     EraseHandler.Verified verifyCase(EraseEntry entry) {
         UUID packageId = EraseRecord.caseId(entry.request());
-        return read(c -> gone(ofCase(c, entry.request()), newerFiles(c, entry.request()) ? Set.of()
+        return read(c -> instructionsLeft(c, entry.request()) ? EraseHandler.Verified.READABLE
+                : gone(ofCase(c, entry.request()), newerFiles(c, entry.request()) ? Set.of()
                 : caseFolderFiles(entry.request().entity(), packageId)));
     }
 

@@ -12,7 +12,7 @@ export const HELP = {
   // Admin › Redaction & retention
   sensitiveData: {
     name: 'Sensitive data',
-    text: 'Chooses which kinds of personal data LexaVault finds and blacks out, and when a person checks a finding first. All four kinds are on by default. A change applies to new cases only; cases already processed keep the result they had.',
+    text: 'Chooses which kinds of personal data LexaVault finds and blacks out, and when a person checks a finding first. Social Security Number, date of birth and credit score are on for a new entity, card numbers, card security codes and PINs are always on, and the other kinds are off until you turn them on. A change applies to new cases only; cases already processed keep the result they had.',
   },
   presets: {
     name: 'How much a person checks',
@@ -32,15 +32,15 @@ export const HELP = {
   },
   keepOriginals: {
     name: 'Keep originals for',
-    text: 'How long the documents as received are kept, unredacted. The default is 24 hours. After this time a case can no longer be processed again, because there is nothing left to process.',
+    text: 'How long the documents as received are kept, unredacted, after the case is exported. The default is 24 hours. After this time a case can no longer be processed again, because there is nothing left to process.',
   },
   keepRedacted: {
     name: 'Keep redacted copies for',
-    text: 'How long the redacted copy is kept after it is made, so it can be sent again if needed. The default is 24 hours, and the most allowed is shown under the field.',
+    text: 'How long the redacted copy is kept after the case is exported, so it can be sent again if needed. The default is 24 hours, and the most allowed is shown under the field.',
   },
   keepStopped: {
     name: 'Keep stopped cases for',
-    text: 'How long a case that stopped before delivery is kept, so someone can fix and finish it. The default is 7 days. After that it is deleted.',
+    text: 'How long a case that stopped or was rejected before delivery is kept; a stopped one can be fixed and finished meanwhile. The default is 7 days, and 3 to 30 days can be set. After that its files are deleted.',
   },
   requireApproval: {
     name: "Require a supervisor's approval",
@@ -56,7 +56,7 @@ export const HELP = {
   },
   reportBreakdown: {
     name: 'Break reports down by',
-    text: 'Lets Reports split its numbers by a case field, such as the property state. Only fields with a short list of allowed values can be used. It is off for every field by default.',
+    text: 'Lets Reports split its numbers by a case field, such as the property state. Only fields with a short list of allowed values that are not sensitive and take one value can be used. It is off for every field by default.',
   },
 
   // Admin › Case fields
@@ -133,7 +133,7 @@ export const HELP = {
   },
   licensing: {
     name: 'Licensing',
-    text: 'Your organisation\'s licence: what it covers, when it ends, and how many pages this entity used this month. It is stored by IT with the licence command and cannot be changed here. When it has ended and the grace period is over, new cases are not taken in; everything else keeps working.',
+    text: 'Your organisation\'s licence: what it covers, when it ends, and how many pages this entity used this month. It is stored by IT, with setup or the licence command, and cannot be changed here. When it has ended and the grace period is over, new cases are not taken in; everything else keeps working.',
   },
 } as const satisfies Record<string, HelpText>;
 
