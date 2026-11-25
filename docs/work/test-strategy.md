@@ -55,6 +55,7 @@
 - **The AI server's own version counts**: an update of it is a model change, also with the same model digest. Record it with the result. (0064: 122 of 130 on Ollama 0.40.17; the same commit and digests: 119 of 130, three times, on 0.40.18.)
 - Baseline since 2026-11-24 (Ollama 0.40.18, `qwen3.5:9b`, `qwen3-vl:8b-instruct`, names off): **119 of 130** on routed pages, **262 of 274** overall, at most 2 V1 misses, at most 8 false flags, no unread page.
 - Since task 0091 (2026-11-25, fixed order of the answer schemas; proposed in its report): **263 of 274** overall and at most 1 V1 miss, the same in three runs; the rest as above.
+- Since task 0092 (2026-11-25, check lines; proposed in its report): **127 of 130** on routed pages, **271 of 274** overall, at most 1 V1 miss, at most 4 false flags, no unread page.
 - Person names (task 0072): at least **85%** found and at most **1 false name per 10 pages**, on documents the prompt was not tuned on.
 
 ## 6. Where the work goes in the order

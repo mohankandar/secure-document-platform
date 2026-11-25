@@ -215,10 +215,23 @@ public final class SecondCheck {
                     "The second check's vision model could not be asked");
         }
         models.add(result.model());
+        // Task 0092: a check's line that is still to be seen, whatever the model says.
+        List<VisionPageResult.Item> items = new ArrayList<>(result.items());
+        try (InputStream in = finished.open()) {
+            for (PageImagePort.CheckLine line : images.checkLines(in, number)) {
+                items.add(new VisionPageResult.Item(Kind.ROUTING_NUMBER, line.routing(), true));
+                items.add(new VisionPageResult.Item(Kind.BANK_ACCOUNT, line.account(), true));
+            }
+        } catch (IOException | RuntimeException notSearched) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new IllegalStateException("The second check was interrupted");
+            }
+            return Set.of(UNREAD);
+        }
         Set<String> found = new LinkedHashSet<>();
         if (result.incomplete()) found.add(UNREAD);
         BufferedImage pixels = null;
-        for (VisionPageResult.Item item : result.items()) {
+        for (VisionPageResult.Item item : items) {
             EntityType type = CODES.containsKey(item.kind())
                     ? VisionFindings.type(item.kind(), policy.enabledEntityTypes()) : null;
             if (type == null || (item.kind() == Kind.CREDIT_SCORE && !scoreIn(page.text()))) continue;
