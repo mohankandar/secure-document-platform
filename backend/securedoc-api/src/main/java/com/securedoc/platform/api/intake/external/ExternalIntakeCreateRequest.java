@@ -16,6 +16,7 @@ import java.util.Map;
 public record ExternalIntakeCreateRequest(
         String externalSourcePackageId,
         String sourceRevision,
+        @tools.jackson.databind.annotation.JsonDeserialize(contentUsing = com.securedoc.platform.infrastructure.casefields.CaseFieldJson.class)
         Map<String, String> businessIdentifiers,
         Map<String, String> metadata,
         List<ManifestDocument> documents,
@@ -29,6 +30,12 @@ public record ExternalIntakeCreateRequest(
         com.securedoc.platform.api.dto.RequestValues.requireNoNullValues(businessIdentifiers, "businessIdentifiers");
         com.securedoc.platform.api.dto.RequestValues.requireNoNullValues(metadata, "metadata");
         com.securedoc.platform.api.dto.RequestValues.requireNoNullEntries(documents, "documents");
+    }
+
+    /** Task 0061: case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "ExternalIntakeCreateRequest[fields=" + (businessIdentifiers == null ? 0 : businessIdentifiers.size()) + "]";
     }
 
     public record ManifestDocument(String externalSourceDocumentId, String fileName, String sha256,

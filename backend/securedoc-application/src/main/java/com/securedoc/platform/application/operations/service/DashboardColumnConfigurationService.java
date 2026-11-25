@@ -1,13 +1,12 @@
 package com.securedoc.platform.application.operations.service;
 
 import com.securedoc.platform.domain.error.LvErrorCode;
+import com.securedoc.platform.application.casefields.CaseFieldSettings;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.operations.model.DashboardColumnSetting;
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.DashboardColumnSettingsRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.TenantId;
@@ -34,14 +33,14 @@ public final class DashboardColumnConfigurationService {
             new CatalogColumn("exportCycles", "Export Cycles", "SYSTEM", false, false)
     );
 
-    private final BusinessIdentifierDefinitionRepository identifierRepository;
+    private final CaseFieldSettings caseFields;
     private final DashboardColumnSettingsRepository settingsRepository;
     private final AuditService auditService;
 
-    public DashboardColumnConfigurationService(BusinessIdentifierDefinitionRepository identifierRepository,
+    public DashboardColumnConfigurationService(CaseFieldSettings caseFields,
                                                DashboardColumnSettingsRepository settingsRepository,
                                                AuditService auditService) {
-        this.identifierRepository = Objects.requireNonNull(identifierRepository);
+        this.caseFields = Objects.requireNonNull(caseFields);
         this.settingsRepository = Objects.requireNonNull(settingsRepository);
         this.auditService = Objects.requireNonNull(auditService);
     }
@@ -106,10 +105,10 @@ public final class DashboardColumnConfigurationService {
 
     private List<CatalogColumn> catalog(TenantId tenantId) {
         List<CatalogColumn> result = new ArrayList<>();
-        for (BusinessIdentifierDefinition definition : identifierRepository.findActiveByTenantId(tenantId)) {
-            if (definition.displayable()) {
-                result.add(new CatalogColumn("identifier:" + definition.key(), definition.label(), "IDENTIFIER",
-                        definition.primary(), true));
+        for (var definition : caseFields.active(tenantId)) {
+            if (definition.spec().displayable()) {
+                result.add(new CatalogColumn("identifier:" + definition.key().value(), definition.spec().label(),
+                        "IDENTIFIER", definition.spec().primary(), true));
             }
         }
         result.addAll(SYSTEM_COLUMNS);

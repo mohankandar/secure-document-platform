@@ -20,6 +20,13 @@ public record UpdateBusinessIdentifiersRequest(List<Item> identifiers) {
             String caseNormalization,
             Boolean stripSeparators,
             Set<String> allowedValues,
-            String customPattern
+            String customPattern,
+            /* Task 0061. Null keeps the stored setting (a new field: what its name suggests). */
+            String searchMode,
+            Boolean sensitive,
+            Boolean multiValue,
+            String currency,
+            String minValue,
+            String maxValue
     ) {}
 }

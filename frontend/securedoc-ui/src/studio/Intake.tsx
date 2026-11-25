@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Lock } from 'lucide-react';
 import type { IdentifierDefinition } from '../types';
 import { useIdentifierDefinitions } from './data';
-import { canonicalIdentity, identityErrors, sortDefinitions } from './identity';
+import CaseFieldInput from '../components/CaseFieldInput';
+import { canonicalIdentity, identityErrors, sensitiveKeys, sortDefinitions } from './identity';
 import { Notice, Spinner } from './atoms';
 import UploadCapture from './UploadCapture';
 import ScanCapture from './ScanCapture';
@@ -23,6 +24,8 @@ export interface IdentityGate {
   sensitivity: SensitivityLevelCode;
   /** Task 0073: the "Priority" choice. Nothing is sent for Normal. */
   priority?: PriorityCode;
+  /** Task 0061: the fields whose values the Scan Bridge keeps in memory only. */
+  sensitiveFields: string[];
 }
 
 export default function Intake({ entityName }: { entityName: string }) {
@@ -55,6 +58,7 @@ export default function Intake({ entityName }: { entityName: string }) {
     valid,
     sensitivity,
     priority: priority === 'NORMAL' ? undefined : priority,
+    sensitiveFields: sensitiveKeys(definitions),
     require: () => {
       setTouched(new Set(definitions.map((d) => d.key)));
       return valid ? canonicalIdentity(definitions, values) : null;
@@ -181,27 +185,10 @@ function IdentityField({ definition, value, error, locked, onChange, onBlur }: {
     <div className="cf-field" data-primary={definition.primary || undefined} data-invalid={error ? true : undefined}>
       <label htmlFor={id}>
         {definition.label}
+        {definition.sensitive && <span className="cf-field-opt">Sensitive</span>}
         {definition.required ? <span className="cf-field-req">Required</span> : <span className="cf-field-opt">Optional</span>}
       </label>
-      {definition.allowedValues.length > 0 ? (
-        <select id={id} value={value} disabled={locked} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} aria-invalid={!!error} aria-describedby={hintId}>
-          <option value="">Choose…</option>
-          {definition.allowedValues.map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
-      ) : (
-        <input
-          id={id}
-          value={value}
-          readOnly={locked}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          autoComplete="off"
-          spellCheck={false}
-          inputMode={definition.validationType === 'NUMERIC' ? 'numeric' : undefined}
-          aria-invalid={!!error}
-          aria-describedby={hintId}
-        />
-      )}
+      <CaseFieldInput id={id} definition={definition} value={value} locked={locked} invalid={!!error} describedBy={hintId} onChange={onChange} onBlur={onBlur} />
       <span id={hintId} className="cf-field-hint">{error ?? hint ?? ''}</span>
     </div>
   );

@@ -39,4 +39,10 @@ public interface ErasurePort {
 
     /** Erases every stored file of a case except its split copies, which have their own time. */
     void eraseCaseFiles(TenantId tenantId, PackageId packageId, Reason reason);
+
+    /**
+     * Task 0061: erases the case field values of business records no case needs any more (every case of the record purged).
+     * Returns how many records.
+     */
+    int eraseUnusedCaseFields(int limit, Reason reason);
 }

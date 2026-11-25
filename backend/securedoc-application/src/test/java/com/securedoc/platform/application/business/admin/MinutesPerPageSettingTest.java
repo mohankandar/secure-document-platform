@@ -1,14 +1,13 @@
 package com.securedoc.platform.application.business.admin;
 
+import com.securedoc.platform.application.casefields.TestCaseFields;
 import com.securedoc.platform.application.exception.ValidationException;
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
 import com.securedoc.platform.application.port.out.ReportingConfigurationRepository;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.audit.AuditRecord;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.identity.ActorId;
 import com.securedoc.platform.domain.identity.CorrelationId;
@@ -33,7 +32,7 @@ class MinutesPerPageSettingTest {
     private final List<AuditRecord> audits = new ArrayList<>();
     private final InMemoryReporting reporting = new InMemoryReporting();
     private final BusinessAdminConfigurationService service = new BusinessAdminConfigurationService(
-            new NoDefinitions(), new NoPolicies(), new NoLifecycle(), reporting, new AuditService(audits::add));
+            new TestCaseFields().settings(), new NoPolicies(), new NoLifecycle(), reporting, new AuditService(audits::add));
 
     @Test
     void defaultIsOneMinuteDeliberatelyLow() {
@@ -127,10 +126,4 @@ class MinutesPerPageSettingTest {
         public void save(TenantLifecyclePolicy policy) { }
     }
 
-    private static final class NoDefinitions implements BusinessIdentifierDefinitionRepository {
-        public List<BusinessIdentifierDefinition> findActiveByTenantId(TenantId tenantId) { return List.of(); }
-        public List<BusinessIdentifierDefinition> findAllByTenantId(TenantId tenantId) { return List.of(); }
-        public void save(BusinessIdentifierDefinition definition) { }
-        public void saveAll(List<BusinessIdentifierDefinition> definitions) { }
-    }
 }

@@ -1,6 +1,6 @@
 package com.securedoc.platform.application.service;
 
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.ProcessingIncidentRepository;
@@ -30,7 +30,7 @@ class ListPackagesStopReasonTest {
     private final PackageRepository packages = mock(PackageRepository.class);
     private final ProcessingIncidentRepository incidents = mock(ProcessingIncidentRepository.class);
     private final ListPackagesQueryService service = new ListPackagesQueryService(packages,
-            mock(BusinessIdentityService.class), incidents);
+            mock(CaseFieldService.class), incidents);
 
     @Test
     void aStoppedCaseCarriesItsIncidentsCodeAndOtherCasesNone() {

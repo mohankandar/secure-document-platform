@@ -47,7 +47,7 @@ async function mockIdentityProvider(page: Page) {
 
 const LOAN = {
   key: 'loan_number', label: 'Loan number', required: true, primary: true, searchable: true, extractable: false, displayable: true, displayOrder: 1,
-  validationType: 'ALPHANUMERIC', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: [],
+  validationType: 'TEXT', customPattern: '[A-Za-z0-9]+', caseNormalization: 'UPPER', stripSeparators: false, allowedValues: [],
 };
 
 /** Task 0038: `refuseUpload` answers every file upload with this server refusal. */

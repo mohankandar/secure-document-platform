@@ -229,5 +229,7 @@ public enum AuditAction {
     UNRECORDED_FILES_CLEANED,
 
     /** Task 0060: stored files were erased, written to the erase log first. Ids, kind, rule and entry number only. */
+    /** Task 0061: the case field values of a business record erased, through the erase log. */
+    CASE_FIELDS_ERASED,
     FILES_ERASED
 }

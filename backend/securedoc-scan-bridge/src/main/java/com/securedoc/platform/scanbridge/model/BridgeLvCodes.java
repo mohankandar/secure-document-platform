@@ -59,6 +59,7 @@ public final class BridgeLvCodes {
         m.put("LEXAVAULT_INVALID_RESPONSE", BridgeLvCode.LV_SCN_015);
         m.put("LEXAVAULT_REQUEST_SERIALIZATION_FAILED", BridgeLvCode.LV_SCN_015);
         // Task 0026: sent, LexaVault has not confirmed it yet (still within the wait limit).
+        m.put("SENSITIVE_FIELDS_LOST", BridgeLvCode.LV_SCN_022);
         m.put("LEXAVAULT_ACCEPTANCE_PENDING", BridgeLvCode.LV_SCN_021);
         // Task 0024: LexaVault did not accept within the wait limit.
         m.put("LEXAVAULT_ACCEPTANCE_WAIT_EXPIRED", BridgeLvCode.LV_SCN_017);

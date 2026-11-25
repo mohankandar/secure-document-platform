@@ -10,6 +10,7 @@ import java.util.Map;
  */
 public record CreatePackageRequest(
         @NotBlank(message = "packageType is required") String packageType,
+        @tools.jackson.databind.annotation.JsonDeserialize(contentUsing = com.securedoc.platform.infrastructure.casefields.CaseFieldJson.class)
         Map<String,String> businessIdentifiers,
         Map<String,String> metadata,
         JsonNode sensitivityLevel,
@@ -21,6 +22,12 @@ public record CreatePackageRequest(
         RequestValues.requireNoNullValues(metadata, "metadata");
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+    }
+
+    /** Task 0061: case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "CreatePackageRequest[fields=" + businessIdentifiers.size() + "]";
     }
 
     public CreatePackageRequest(String packageType, Map<String,String> businessIdentifiers, Map<String,String> metadata) {

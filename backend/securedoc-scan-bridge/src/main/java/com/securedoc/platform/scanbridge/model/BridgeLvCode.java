@@ -31,6 +31,7 @@ public enum BridgeLvCode {
     LV_SCN_019("LV-SCN-019", "Scan can't be cancelled now"),
     LV_SCN_020("LV-SCN-020", "Scan resumed after a restart"),
     LV_SCN_021("LV-SCN-021", "Waiting for LexaVault to accept the scan"),
+    LV_SCN_022("LV-SCN-022", "Scan needs its sensitive fields again"),
     LV_INT_015("LV-INT-015", "Case field value not valid"),
     LV_CFG_009("LV-CFG-009", "Scanner settings not valid"),
     LV_SYS_001("LV-SYS-001", "Something went wrong"),

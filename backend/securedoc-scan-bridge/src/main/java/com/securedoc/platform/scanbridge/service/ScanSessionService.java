@@ -91,7 +91,18 @@ public class ScanSessionService {
         if (actionableSessionId.get() != null) {
             throw new ScanBridgeException("SCANNER_BUSY", "A scan package is already waiting for operator action on this scanner.", HttpStatus.CONFLICT);
         }
-        Map<String, String> identifiers = sanitizeBusinessIdentifiers(request == null ? null : request.businessIdentifiers());
+        Map<String, String> sent = sanitizeBusinessIdentifiers(request == null ? null : request.businessIdentifiers());
+        // Task 0061: a sensitive value is kept in memory only; the state on the disk shows that there is one.
+        Map<String, String> identifiers = new LinkedHashMap<>(sent);
+        Map<String, String> sensitive = new LinkedHashMap<>();
+        if (request != null && request.sensitiveFields() != null) {
+            for (String key : request.sensitiveFields()) {
+                String value = key == null ? null : identifiers.get(key.trim());
+                if (value == null) continue;
+                sensitive.put(key.trim(), value);
+                identifiers.put(key.trim(), ScanSession.HIDDEN);
+            }
+        }
         Instant now = clock.instant();
         ScanSession session = new ScanSession(
                 UUID.randomUUID(), UUID.randomUUID(), properties.getTenantId(), properties.getBridgeId(), properties.getSiteId(),
@@ -100,9 +111,34 @@ public class ScanSessionService {
                 carriedSensitivityLevel(request == null ? null : request.caseSensitivityLevel()), null, null, null,
                 carriedSensitivityLevel(request == null ? null : request.casePriority()));
         store.save(session);
+        if (!sensitive.isEmpty()) sensitiveValues.put(session.sessionId(), Map.copyOf(sensitive));
         sessions.put(session.sessionId(), session);
         actionableSessionId.set(session.sessionId());
         return session;
+    }
+
+    private final Map<UUID, Map<String, String>> sensitiveValues = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Task 0061: the session with its sensitive values, for sending only. They are gone after a restart of the bridge. */
+    ScanSession withSensitiveValues(ScanSession session) {
+        if (!session.businessIdentifiers().containsValue(ScanSession.HIDDEN)) return session;
+        Map<String, String> kept = sensitiveValues.getOrDefault(session.sessionId(), Map.of());
+        Map<String, String> full = new LinkedHashMap<>(session.businessIdentifiers());
+        full.replaceAll((key, value) -> ScanSession.HIDDEN.equals(value) ? kept.getOrDefault(key, value) : value);
+        if (full.containsValue(ScanSession.HIDDEN)) {
+            throw LexaVaultScannerDeliveryClient.DeliveryException.terminal("SENSITIVE_FIELDS_LOST", null);
+        }
+        return copy(session, session.status(), full, session.preparedScan(), session.lexavaultPackageId(),
+                session.deliveryAttemptCount(), session.queuedAt(), session.nextDeliveryAttemptAt(),
+                session.lastDeliveryErrorCode(), session.lastDeliveryErrorAt(), session.submittedAt());
+    }
+
+    private void forgetSensitiveValues() {
+        sensitiveValues.keySet().removeIf(id -> {
+            ScanSession session = sessions.get(id);
+            return session == null || session.status() == ScanSessionStatus.SUBMITTED
+                    || session.status() == ScanSessionStatus.CANCELLED;
+        });
     }
 
     public Optional<ScanSession> activeWaitingSession() {
@@ -448,6 +484,7 @@ public class ScanSessionService {
     }
 
     private void cleanupTerminalArtifacts() {
+        forgetSensitiveValues();
         for (ScanSession session : List.copyOf(sessions.values())) {
             boolean cleanup = session.status() == ScanSessionStatus.CANCELLED
                     || (properties.getDelivery().isCleanupAcceptedPdf() && session.status() == ScanSessionStatus.SUBMITTED);
@@ -533,6 +570,9 @@ public class ScanSessionService {
         return raw.length() > 64 ? raw.substring(0, 64) : raw;
     }
 
+    /** Task 0061: 50 values of 512 characters with their separators. */
+    private static final int MAX_IDENTIFIER_LENGTH = 32_768;
+
     private Map<String, String> sanitizeBusinessIdentifiers(Map<String, String> raw) {
         if (raw == null || raw.isEmpty()) return Map.of();
         Map<String, String> result = new LinkedHashMap<>();
@@ -541,7 +581,7 @@ public class ScanSessionService {
             String value = entry.getValue() == null ? "" : entry.getValue().trim();
             if (key.isEmpty() || value.isEmpty()) continue;
             // Transport safety only. LexaVault owns identifier semantics, normalization and validation.
-            if (key.length() > 100 || value.length() > 512) {
+            if (key.length() > 100 || value.length() > MAX_IDENTIFIER_LENGTH) {
                 throw new ScanBridgeException("INVALID_BUSINESS_IDENTIFIER_INPUT",
                         "Business identifier key or value exceeds the supported transport size.", HttpStatus.BAD_REQUEST);
             }

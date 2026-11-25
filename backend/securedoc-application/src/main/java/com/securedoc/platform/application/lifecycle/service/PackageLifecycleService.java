@@ -345,6 +345,14 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                     .warn("SPLIT_COPY_PURGE_SWEEP_FAILED type={}", e.getClass().getSimpleName());
         }
 
+        // Task 0061: the case field values of records whose every case has been purged. Retried next time.
+        try {
+            erasure.eraseUnusedCaseFields(command.limit(), ErasurePort.Reason.rule("retention-case-fields"));
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(PackageLifecycleService.class)
+                    .warn("CASE_FIELDS_PURGE_FAILED type={}", e.getClass().getSimpleName());
+        }
+
         // Upgrade reconciliation: older packages may have completed final retention purge before
         // Dashboard visibility followed retention. Reconcile both exported COMPLETED packages and
         // never-exported FAILED/Technical-Attention packages without touching durable history.

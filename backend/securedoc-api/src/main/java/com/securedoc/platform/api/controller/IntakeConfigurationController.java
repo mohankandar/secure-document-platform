@@ -5,7 +5,8 @@ import com.securedoc.platform.api.security.UserCapability;
 
 import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.dto.IdentifierDefinitionResponse;
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
+import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.casefields.CaseFieldSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,19 +15,18 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/intake")
 public class IntakeConfigurationController {
-    private final BusinessIdentityService businessIdentityService;
+    private final CaseFieldService caseFields;
+    private final CaseFieldSettings settings;
     private final RequestContextResolver contextResolver;
-    public IntakeConfigurationController(BusinessIdentityService businessIdentityService, RequestContextResolver contextResolver){
-        this.businessIdentityService=businessIdentityService; this.contextResolver=contextResolver;
+    public IntakeConfigurationController(CaseFieldService caseFields, CaseFieldSettings settings, RequestContextResolver contextResolver){
+        this.caseFields=caseFields; this.settings=settings; this.contextResolver=contextResolver;
     }
     @GetMapping("/identifier-definitions")
     @RequireCapability(UserCapability.DOCUMENT_INTAKE)
     public ResponseEntity<List<IdentifierDefinitionResponse>> definitions(HttpServletRequest request){
         var principal=contextResolver.resolvePrincipal(request);
-        var result=businessIdentityService.definitions(principal.tenantId()).stream()
-                .map(d->new IdentifierDefinitionResponse(d.key(),d.label(),d.required(),d.primary(),d.searchable(),d.extractable(),d.displayable(),d.displayOrder(),
-                        d.validationType().name(), d.exactLength(), d.minLength(), d.maxLength(), d.caseNormalization().name(),
-                        d.stripSeparators(), d.allowedValues(), d.customPattern()))
+        var result=caseFields.definitions(principal.tenantId()).stream()
+                .map(d->IdentifierDefinitionResponse.of(d, settings.extractable(principal.tenantId(), d)))
                 .toList();
         return ResponseEntity.ok(result);
     }

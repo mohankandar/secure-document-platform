@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import CaseFieldInput from '../components/CaseFieldInput';
+import { canonicalValue, validateValue } from '../studio/identity';
 import type { ApiError, IdentifierDefinition } from '../types';
 import './CreatePackagePage.css';
 import PageScaffold from '../components/ui/PageScaffold';
@@ -28,32 +30,11 @@ const isPdf = (file: File) => {
 
 const fileIdentity = (file: File) => `${file.name.toLowerCase()}::${file.size}::${file.lastModified}`;
 
-const canonicalIdentifierValue = (definition: IdentifierDefinition, raw: string) => {
-  let value = raw.trim().replace(/\s+/g, ' ');
-  if (definition.stripSeparators) value = value.replace(/[ -]/g, '');
-  if (definition.caseNormalization === 'UPPER') value = value.toUpperCase();
-  if (definition.caseNormalization === 'LOWER') value = value.toLowerCase();
-  return value;
-};
+const canonicalIdentifierValue = canonicalValue;
 
 const validateIdentifierValue = (definition: IdentifierDefinition, raw: string): string | null => {
-  if (!raw.trim()) return definition.required ? `${definition.label} is required.` : null;
-  const value = canonicalIdentifierValue(definition, raw);
-  if (definition.validationType === 'NUMERIC' && !/^[0-9]+$/.test(value)) return `${definition.label} must contain digits only.`;
-  if (definition.validationType === 'ALPHANUMERIC' && !/^[A-Za-z0-9]+$/.test(value)) return `${definition.label} must contain letters and digits only.`;
-  if (definition.validationType === 'EMAIL' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `${definition.label} must be a valid email address.`;
-  if (definition.validationType === 'UUID' && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)) return `${definition.label} must be a valid UUID.`;
-  // CUSTOM_PATTERN uses the backend's Java regex engine. Do not duplicate that rule in
-  // JavaScript because the two regex dialects are not guaranteed to be equivalent. The backend
-  // remains authoritative for custom patterns while the UI still validates portable constraints.
-  if (definition.exactLength != null && value.length !== definition.exactLength) return `${definition.label} must contain exactly ${definition.exactLength} characters.`;
-  if (definition.minLength != null && value.length < definition.minLength) return `${definition.label} must contain at least ${definition.minLength} characters.`;
-  if (definition.maxLength != null && value.length > definition.maxLength) return `${definition.label} must contain no more than ${definition.maxLength} characters.`;
-  if (definition.allowedValues.length > 0) {
-    const allowed = definition.allowedValues.map((item) => canonicalIdentifierValue(definition, item));
-    if (!allowed.includes(value)) return `${definition.label} must be one of: ${definition.allowedValues.join(', ')}.`;
-  }
-  return null;
+  const problem = validateValue(definition, raw);
+  return problem === null ? null : problem === 'Required' ? `${definition.label} is required.` : `${definition.label}: ${problem}`;
 };
 
 export default function CreatePackagePage() {
@@ -184,7 +165,7 @@ export default function CreatePackagePage() {
       if (!packageId) {
         const businessIdentifiers = Object.fromEntries(
           definitions
-            .map((definition) => [definition.key, (values[definition.key] || '').trim()] as const)
+            .map((definition) => [definition.key, canonicalIdentifierValue(definition, values[definition.key] || '')] as const)
             .filter(([, value]) => value.length > 0)
         );
         const created = await apiClient.createPackage({
@@ -267,25 +248,15 @@ export default function CreatePackagePage() {
                     {definition.required && <span aria-label="required"> *</span>}
                     {definition.primary && <span className="intake-primary-label">Primary</span>}
                   </label>
-                  <input
+                  <CaseFieldInput
                     id={`identifier-${definition.key}`}
+                    definition={definition}
                     value={values[definition.key] || ''}
-                    onChange={(event) => setValues((current) => ({
-                      ...current,
-                      [definition.key]: event.target.value,
-                    }))}
-                    onBlur={() => setTouchedIdentifiers((current) => {
-                      const next = new Set(current);
-                      next.add(definition.key);
-                      return next;
-                    })}
-                    required={definition.required}
-                    disabled={fieldsLocked}
-                    autoComplete="off"
-                    inputMode={definition.validationType === 'NUMERIC' ? 'numeric' : undefined}
-                    maxLength={definition.stripSeparators ? 512 : (definition.exactLength ?? definition.maxLength ?? 512)}
-                    aria-invalid={!!visibleError}
-                    aria-describedby={visibleError ? `identifier-${definition.key}-error` : undefined}
+                    locked={fieldsLocked}
+                    invalid={!!visibleError}
+                    describedBy={visibleError ? `identifier-${definition.key}-error` : undefined}
+                    onChange={(next) => setValues((current) => ({ ...current, [definition.key]: next }))}
+                    onBlur={() => setTouchedIdentifiers((current) => new Set(current).add(definition.key))}
                   />
                   {visibleError && (
                     <small id={`identifier-${definition.key}-error`} className="field-error">{visibleError}</small>

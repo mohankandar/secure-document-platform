@@ -179,6 +179,9 @@ public final class LvErrorCodes {
 
     private static final java.util.Set<String> DATABASE_TYPES = java.util.Set.of(
             "java.sql.SQLException",
+            // Task 0061: the case field tables.
+            "com.documentplatform.fields.jdbc.FieldStoreException",
+            "com.documentplatform.fields.values.FieldValuesException",
             "org.springframework.dao.DataAccessException",
             "org.springframework.transaction.TransactionException",
             "jakarta.persistence.PersistenceException",

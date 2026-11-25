@@ -31,8 +31,9 @@ record's id. Never a name, a file name or a value.
 | `document` | the originals of an intake that was never completed |
 | `working-file` | text of a case that is processed again |
 | `unrecorded-file` | a stored file no record points to |
+| `case-fields` | every case of a business record has been purged: the record's case field values (task 0061, `CASE_FIELDS.md`) |
 
-Each erasure also gives an audit record `FILES_ERASED`. If the log can't be written, **nothing is erased** (LV-SYS-014); it
+Each erasure also gives an audit record `FILES_ERASED` (`CASE_FIELDS_ERASED` for case fields). If the log can't be written, **nothing is erased** (LV-SYS-014); it
 is tried again at the next run.
 
 ## Backup retention

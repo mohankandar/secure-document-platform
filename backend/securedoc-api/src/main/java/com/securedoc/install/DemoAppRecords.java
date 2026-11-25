@@ -1,12 +1,15 @@
 package com.securedoc.install;
 
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
+import com.documentplatform.fields.FieldDefinitions;
+import com.documentplatform.fields.FieldScope;
+import com.documentplatform.fields.FieldSpec;
+import com.documentplatform.fields.FieldType;
+import com.documentplatform.fields.SearchMode;
+import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.casefields.CaseFieldSettings;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.domain.document.CaseLimits;
-import com.securedoc.platform.domain.business.BusinessIdentifierCaseNormalization;
-import com.securedoc.platform.domain.business.BusinessIdentifierDefinition;
-import com.securedoc.platform.domain.business.BusinessIdentifierValidationType;
 import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.integration.IntegrationAcknowledgementMode;
@@ -26,7 +29,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.io.PrintStream;
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -53,14 +55,14 @@ final class DemoAppRecords {
 
     private final SpringDataTenantRepository tenants;
     private final SpringDataTenantCapabilityRepository capabilities;
-    private final BusinessIdentifierDefinitionRepository identifiers;
+    private final FieldDefinitions identifiers;
     private final TenantRedactionPolicyRepository policies;
     private final IntegrationConnectionRepository integrations;
     private final TransactionTemplate tx;
     private final PrintStream out;
 
     DemoAppRecords(SpringDataTenantRepository tenants, SpringDataTenantCapabilityRepository capabilities,
-                   BusinessIdentifierDefinitionRepository identifiers, TenantRedactionPolicyRepository policies,
+                   FieldDefinitions identifiers, TenantRedactionPolicyRepository policies,
                    IntegrationConnectionRepository integrations, TransactionTemplate tx, PrintStream out) {
         this.tenants = tenants;
         this.capabilities = capabilities;
@@ -84,7 +86,8 @@ final class DemoAppRecords {
                 tenant.setStatus("ACTIVE");
                 tenant.setCreatedAt(now);
                 tenant.setUpdatedAt(now);
-                tenants.save(tenant);
+                // Flushed: what follows is partly written over JDBC and points to it.
+                tenants.saveAndFlush(tenant);
                 for (Capability cap : CAPABILITIES) {
                     TenantCapabilityEntity row = new TenantCapabilityEntity();
                     row.setId(UUID.randomUUID());
@@ -100,8 +103,12 @@ final class DemoAppRecords {
                 line("unchanged", "entity row " + entity);
             }
 
-            if (identifiers.findActiveByTenantId(tenantId).isEmpty()) {
-                identifiers.saveAll(referenceIdentifiers(tenantId));
+            FieldScope scope = CaseFieldService.scope(tenantId);
+            if (identifiers.list(scope).isEmpty()) {
+                for (FieldSpec field : referenceFields()) {
+                    identifiers.create(scope, field, "demo-step");
+                    identifiers.putExtension(scope, field.key(), CaseFieldSettings.EXTRACTABLE, "true");
+                }
                 line("create", "identifier rules: Contract Number (primary), Member Number, Service Entity");
             } else {
                 line("unchanged", "identifier rules");
@@ -133,18 +140,16 @@ final class DemoAppRecords {
         });
     }
 
-    static List<BusinessIdentifierDefinition> referenceIdentifiers(TenantId tenantId) {
+    /** Digits with their leading zeros; a part of a number finds its cases. */
+    static List<FieldSpec> referenceFields() {
         return List.of(
-                BusinessIdentifierDefinition.create(tenantId, "contract_number", "Contract Number",
-                        true, true, true, true, true, 1, BusinessIdentifierValidationType.NUMERIC,
-                        12, null, null, BusinessIdentifierCaseNormalization.PRESERVE, false, Set.of(), null),
-                BusinessIdentifierDefinition.create(tenantId, "member_number", "Member Number",
-                        true, false, true, true, true, 2, BusinessIdentifierValidationType.NUMERIC,
-                        11, null, null, BusinessIdentifierCaseNormalization.PRESERVE, false, Set.of(), null),
-                BusinessIdentifierDefinition.create(tenantId, "service_entity", "Service Entity",
-                        true, false, true, true, true, 3, BusinessIdentifierValidationType.NUMERIC,
-                        3, null, null, BusinessIdentifierCaseNormalization.PRESERVE, false,
-                        Set.of("000", "001", "002", "003", "004", "005"), null));
+                FieldSpec.builder("contract_number", "Contract Number", FieldType.NUMBER).pattern("[0-9]+").exactLength(12)
+                        .required(true).primary(true).searchable(SearchMode.PARTIAL).displayable(true).displayOrder(1).build(),
+                FieldSpec.builder("member_number", "Member Number", FieldType.NUMBER).pattern("[0-9]+").exactLength(11)
+                        .required(true).searchable(SearchMode.PARTIAL).displayable(true).displayOrder(2).build(),
+                FieldSpec.builder("service_entity", "Service Entity", FieldType.DROPDOWN)
+                        .options("000", "001", "002", "003", "004", "005")
+                        .required(true).searchable(SearchMode.EXACT).displayable(true).displayOrder(3).build());
     }
 
     private void line(String action, String what) {

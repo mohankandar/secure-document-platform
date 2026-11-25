@@ -1,62 +1,30 @@
-# LexaVault V1 — Configurable Business Identifier Validation
+# LexaVault V1: case field validation
 
-## Scope
+Since task 0061 case fields (definitions, rules, values) are platform-core's `platform-fields`; LexaVault's own model is gone.
+IT guide: `docs/install/CASE_FIELDS.md`. Platform design: `Case-Fields-Design.md` (copy of 2026-11-21).
 
-Business identifier validation is tenant configuration owned by Business Admin. Validation is enforced centrally by `BusinessIdentityService`, so every intake path that creates a package uses the same rules: manual upload/scanner UI, direct package API, watched-folder/manifest intake, push/API integration, and scheduled polling.
+Every intake path (New case, scan, watched folder trigger file, push API, polling) is validated in one place,
+`CaseFieldService`.
 
-Validation is not hardcoded to Contract Number, Member Number, or Service Entity. Those names/rules are the LOCAL/demo reference configuration only.
+## Types
 
-## Supported validation
+TEXT, NUMBER (whole), DECIMAL, MONEY (one currency per field), DATE, DATE_TIME (with offset), EMAIL, UUID, DROPDOWN (up to 100
+values), ADDRESS (US), CUSTOM_PATTERN. "Numbers only" is NUMBER with the pattern `[0-9]+` (leading zeros are kept), "Letters
+and numbers" is TEXT with `[A-Za-z0-9]+`. Rules: required, exact/min/max length, pattern, lowest/highest value, capitals,
+removal of spaces and dashes. A field can take several values (up to 50) and can be sensitive.
 
-- `TEXT`
-- `NUMERIC` — ASCII digits 0–9 only
-- `ALPHANUMERIC` — ASCII letters/digits only
-- `EMAIL`
-- `UUID`
-- `ALLOW_LIST` / enum
-- `CUSTOM_PATTERN` / regular expression (advanced escape hatch)
+Capitals and the removal of spaces and dashes can't be changed after a field is created; type, Sensitive, Primary and
+"several values" can't once values exist.
 
-Optional constraints:
+## LOCAL/demo fields
 
-- exact length, or min/max length
-- canonical case: PRESERVE / UPPER / LOWER
-- canonical separator removal for spaces/hyphens
-- optional allowed-values constraint (can be combined with another validator such as NUMERIC)
-- custom regex for `CUSTOM_PATTERN` (validated authoritatively by the backend Java regex engine; the browser does not attempt to reinterpret Java regex syntax)
-
-All values are strings. Leading zeroes are never converted to numbers.
-
-V1 identity-safety rule: canonicalization settings (`caseNormalization` and separator removal) are immutable after an identifier definition is created. Changing canonicalization on an identifier that already participates in business-record identity could create a second canonical value for the same displayed identifier. Validation shape/length/allow-list rules may be tightened or relaxed for future intakes, but canonicalization changes require an explicit data-migration workstream rather than an in-place admin edit.
-
-## Display vs canonical value
-
-`business_record_identifiers.identifier_value` retains the submitted display value (trimmed).
-`business_record_identifiers.normalized_value` stores the canonical value used for identity resolution/search.
-
-For example, a tenant could permit a displayed value such as `AB-12 34` with separator removal and store/search the canonical value as `AB1234`.
-
-## LOCAL/demo reference configuration
-
-| Identifier | Required | Primary | Rule | Allowed values |
+| Field | Required | Primary | Rule | Found by |
 |---|---:|---:|---|---|
-| Contract Number | Yes | Yes | NUMERIC, exact length 12 | — |
-| Member Number | Yes | No | NUMERIC, exact length 11 | — |
-| Service Entity | Yes | No | NUMERIC, exact length 3 | `000`, `001`, `002`, `003`, `004`, `005` |
+| Contract Number | Yes | Yes | digits, exactly 12 | any part |
+| Member Number | Yes | No | digits, exactly 11 | any part |
+| Service Entity | Yes | No | one of `000` to `005` | the whole value |
 
-Examples:
+## Refusals
 
-- Contract Number: `000642500012`
-- Member Number: `00202123456`
-- Service Entity: `000` through `005`
-
-The LOCAL bootstrap creates this configuration on a fresh database and upgrades only the exact legacy LOCAL/demo identifier configuration. It does not overwrite a tenant-admin-customized configuration.
-
-## Failure behavior
-
-Invalid intake values are rejected before a BusinessRecord/package is created with `INTAKE_INVALID_IDENTIFIER_VALUE` and a field-specific safe message. Rejected values themselves are not echoed into normal logs/audit messages.
-
-## Database
-
-Liquibase `022-01-business-identifier-validation` adds validation configuration fields to `business_identifier_definitions`.
-
-Expected Liquibase count after this unit: **53 changeSets**.
+Nothing is stored when a value is refused (`INTAKE_INVALID_IDENTIFIER_VALUE` and the other `INTAKE_` codes); the value is not
+echoed into answers, logs or audit.

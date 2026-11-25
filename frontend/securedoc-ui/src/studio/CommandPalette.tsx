@@ -46,7 +46,7 @@ export default function CommandPalette({ open, onClose, caps }: { open: boolean;
     const matchedActions = q ? actions.filter((a) => `${a.label} ${a.hint ?? ''}`.toLowerCase().includes(q)) : actions;
 
     const cases: Command[] = (packages ?? [])
-      .filter((p) => !q || p.businessIdentifiers.some((i) => i.value.toLowerCase().includes(q)))
+      .filter((p) => !q || p.businessIdentifiers.some((i) => !i.sensitive && i.value.toLowerCase().includes(q)))
       .slice(0, q ? 8 : 5)
       .map((p) => {
         const title = caseTitle(p.businessIdentifiers);

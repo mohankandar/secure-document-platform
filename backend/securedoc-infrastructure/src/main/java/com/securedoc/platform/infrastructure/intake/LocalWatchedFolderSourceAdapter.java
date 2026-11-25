@@ -170,7 +170,7 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
         }
         try {
             Map<String,Object> manifest = objectMapper.readValue(Files.readAllBytes(trigger), new TypeReference<>(){});
-            Map<String,String> identifiers = stringMap(manifest.get("businessIdentifiers"));
+            Map<String,String> identifiers = caseFields(manifest.get("businessIdentifiers"));
             Map<String,String> metadata = stringMap(manifest.get("metadata"));
             Object sentPriority = manifest.get("priority");
             com.securedoc.platform.domain.pipeline.PipelinePriority priority;
@@ -299,6 +299,18 @@ public class LocalWatchedFolderSourceAdapter implements WatchedFolderSourcePort 
 
     private WatchedFolderCandidate rejected(String sourceReference, IntakeRejectionCode code) {
         return new WatchedFolderCandidate(sourceReference, true, false, code, Map.of(), Map.of(), List.of());
+    }
+
+    /** Task 0061: a field's value is a text, an address or a list of them. */
+    private Map<String,String> caseFields(Object value) {
+        if (!(value instanceof Map<?,?> map)) return Map.of();
+        Map<String,String> result = new LinkedHashMap<>();
+        map.forEach((k,v) -> {
+            String text = v == null ? null : com.securedoc.platform.infrastructure.casefields.CaseFieldJson.text(
+                    objectMapper.valueToTree(v));
+            if (k != null && text != null) result.put(k.toString(), text);
+        });
+        return result;
     }
 
     private Map<String,String> stringMap(Object value) {

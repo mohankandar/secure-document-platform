@@ -1,7 +1,7 @@
 package com.securedoc.platform.application.service;
 
-import com.securedoc.platform.application.business.model.BusinessIdentitySnapshot;
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
+import com.securedoc.platform.application.casefields.CaseFieldSnapshot;
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.exception.IntakeValidationException;
 import com.securedoc.platform.application.intake.command.CreatePackageCommand;
@@ -21,11 +21,11 @@ import com.securedoc.platform.domain.tenant.Tenant;
 
 import java.util.Objects;
 
-/** Creates one intake batch and links it to the long-lived BusinessRecord resolved from configured identifiers. */
+/** Creates one intake batch and links it to the long-lived business record its case fields resolve to. */
 public final class CreatePackageService implements CreatePackageUseCase {
     private final TenantContextService tenantContextService;
     private final CapabilityEnforcementService capabilityEnforcement;
-    private final BusinessIdentityService businessIdentityService;
+    private final CaseFieldService caseFields;
     private final IntakeLicence intakeLicence;
     private final PackageRepository packageRepository;
     private com.securedoc.platform.application.intake.CasePriorityService priorities;
@@ -34,14 +34,14 @@ public final class CreatePackageService implements CreatePackageUseCase {
 
     public CreatePackageService(TenantContextService tenantContextService,
                                 CapabilityEnforcementService capabilityEnforcement,
-                                BusinessIdentityService businessIdentityService,
+                                CaseFieldService caseFields,
                                 IntakeLicence intakeLicence,
                                 PackageRepository packageRepository,
                                 DomainEventPublisher eventPublisher,
                                 AuditService auditService) {
         this.tenantContextService = Objects.requireNonNull(tenantContextService);
         this.capabilityEnforcement = Objects.requireNonNull(capabilityEnforcement);
-        this.businessIdentityService = Objects.requireNonNull(businessIdentityService);
+        this.caseFields = Objects.requireNonNull(caseFields);
         this.intakeLicence = Objects.requireNonNull(intakeLicence);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
@@ -52,6 +52,28 @@ public final class CreatePackageService implements CreatePackageUseCase {
     public CreatePackageService withPriorities(com.securedoc.platform.application.intake.CasePriorityService priorities) {
         this.priorities = Objects.requireNonNull(priorities);
         return this;
+    }
+
+    /** One transaction, the caller's when there is one. */
+    public interface Unit {
+        <T> T run(java.util.function.Supplier<T> work);
+    }
+
+    private Unit unit = new Unit() {
+        @Override
+        public <T> T run(java.util.function.Supplier<T> work) {
+            return work.get();
+        }
+    };
+
+    /** Task 0061: the business record's values and the case that points to it are stored in one transaction. */
+    public CreatePackageService withUnit(Unit unit) {
+        this.unit = Objects.requireNonNull(unit);
+        return this;
+    }
+
+    private record Created(CaseFieldSnapshot identity, DocumentPackage documentPackage,
+                           com.securedoc.platform.domain.pipeline.PipelinePriority priority) {
     }
 
     @Override
@@ -67,16 +89,19 @@ public final class CreatePackageService implements CreatePackageUseCase {
                     "This intake batch has already been accepted");
         }
 
-        BusinessIdentitySnapshot identity = businessIdentityService.resolveOrCreate(
-                principal.tenantId(), command.businessIdentifiers());
-
-        DocumentPackage documentPackage = DocumentPackage.createIntake(
-                principal.tenantId(), command.packageType(), identity.businessRecordId(),
-                command.intakeFingerprint(), command.sourceReference(), principal.actorId(),
-                PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
-        packageRepository.save(documentPackage);
-        var priority = priorities == null ? com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL
-                : priorities.atIntake(principal.tenantId(), documentPackage.id(), command.priority(), command.sourceKey());
+        Created created = unit.run(() -> {
+            CaseFieldSnapshot record = caseFields.resolveOrCreate(principal.tenantId(), command.businessIdentifiers());
+            DocumentPackage made = DocumentPackage.createIntake(
+                    principal.tenantId(), command.packageType(), record.businessRecordId(),
+                    command.intakeFingerprint(), command.sourceReference(), principal.actorId(),
+                    PackageMetadata.of(command.metadata()), command.caseSensitivity().level());
+            packageRepository.save(made);
+            return new Created(record, made, priorities == null ? com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL
+                    : priorities.atIntake(principal.tenantId(), made.id(), command.priority(), command.sourceKey()));
+        });
+        CaseFieldSnapshot identity = created.identity();
+        DocumentPackage documentPackage = created.documentPackage();
+        var priority = created.priority();
 
         CorrelationId correlationId = command.correlationId();
         eventPublisher.publish(PackageCreatedEvent.of(documentPackage.id(), principal.tenantId(),

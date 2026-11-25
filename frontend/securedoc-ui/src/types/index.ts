@@ -1,4 +1,6 @@
-export type BusinessIdentifierValidationType = 'TEXT' | 'NUMERIC' | 'ALPHANUMERIC' | 'EMAIL' | 'UUID' | 'ALLOW_LIST' | 'CUSTOM_PATTERN';
+/** Task 0061: platform-fields' types. "Numbers only" is NUMBER with a pattern, "Letters and numbers" TEXT with one. */
+export type BusinessIdentifierValidationType = 'TEXT' | 'NUMBER' | 'DECIMAL' | 'MONEY' | 'DATE' | 'DATE_TIME' | 'EMAIL' | 'UUID' | 'DROPDOWN' | 'ADDRESS' | 'CUSTOM_PATTERN';
+export type CaseFieldSearchMode = 'EXACT' | 'PREFIX' | 'PARTIAL';
 export type BusinessIdentifierCaseNormalization = 'PRESERVE' | 'UPPER' | 'LOWER';
 
 export interface BusinessIdentifierValidationConfiguration {
@@ -10,6 +12,14 @@ export interface BusinessIdentifierValidationConfiguration {
   stripSeparators: boolean;
   allowedValues: string[];
   customPattern?: string | null;
+  /** How Cases finds a value; a sensitive field only exactly. */
+  searchMode?: CaseFieldSearchMode;
+  /** Kept encrypted; shown only to the roles that see the documents. */
+  sensitive?: boolean;
+  multiValue?: boolean;
+  currency?: string | null;
+  minValue?: string | null;
+  maxValue?: string | null;
 }
 
 export interface BusinessIdentifier {
@@ -20,6 +30,8 @@ export interface BusinessIdentifier {
   searchable: boolean;
   displayable: boolean;
   displayOrder: number;
+  /** Task 0061: the value is hidden unless the role may see it. */
+  sensitive?: boolean;
 }
 
 export interface IdentifierDefinition extends BusinessIdentifierValidationConfiguration {
@@ -36,6 +48,8 @@ export interface IdentifierDefinition extends BusinessIdentifierValidationConfig
 
 export interface BusinessAdminIdentifierDefinition extends IdentifierDefinition {
   id: string;
+  /** Task 0061: values exist, so type, sensitive, main ID and several-values stay. */
+  locked?: boolean;
 }
 
 export type DocumentIntelligenceMode = 'DISABLED' | 'OBSERVE' | 'ENABLED';
@@ -139,10 +153,15 @@ export interface BusinessAdminConfiguration {
   documentIntelligence: DocumentIntelligenceConfiguration;
   reportingConfiguration: ReportingConfiguration;
   redactionCatalog?: RedactionCatalog;
+  /** Task 0061: fields switched off; never deleted. */
+  switchedOffIdentifiers?: BusinessAdminIdentifierDefinition[];
+  /** Task 0061: a key service is set up, so a field can be sensitive. */
+  sensitiveFieldsAvailable?: boolean;
 }
 
 export interface BusinessAdminIdentifierDraft extends BusinessIdentifierValidationConfiguration {
   id?: string;
+  locked?: boolean;
   label: string;
   required: boolean;
   primary: boolean;

@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.export.service;
 
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.export.command.ExportPackageDocumentsCommand;
 import com.securedoc.platform.application.export.command.ExportRedactedDocumentCommand;
 import com.securedoc.platform.application.lifecycle.service.PackageLifecycleService;
@@ -59,7 +60,7 @@ class ExportAuditNoFileNameTest {
                     item.documentId(), item.sourceDocumentId(), "local-folder", null, "local-folder:cycle-1/" + item.documentId())));
         });
 
-        new PackageDocumentExportService(documents, packages, mock(BusinessRecordRepository.class), artifacts,
+        new PackageDocumentExportService(documents, packages, mock(CaseFieldService.class), artifacts,
                 mock(StoragePort.class), delivery, submissions, lifecycle, audit)
                 .execute(ExportPackageDocumentsCommand.of(pkg.id(), tenant, CorrelationId.generate()));
 

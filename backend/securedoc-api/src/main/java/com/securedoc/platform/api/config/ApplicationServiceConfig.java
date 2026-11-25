@@ -1,15 +1,12 @@
 package com.securedoc.platform.api.config;
 
 import com.securedoc.platform.application.audit.RequestActorDisplayName;
-import com.securedoc.platform.application.business.service.BusinessIdentityService;
 import com.securedoc.platform.application.storage.ProcessingStorageConfigurationService;
 import com.securedoc.platform.application.business.admin.BusinessAdminConfigurationService;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceConfigurationService;
 import com.securedoc.platform.application.intelligence.service.DocumentIntelligenceExecutionService;
 import com.securedoc.platform.application.port.out.ReportingConfigurationRepository;
 import com.securedoc.platform.application.port.out.ProcessingStorageConfigurationRepository;
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
-import com.securedoc.platform.application.port.out.BusinessRecordRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
@@ -342,6 +339,7 @@ public class ApplicationServiceConfig {
             ChecksumPort checksumPort,
             PdfIntakeValidationPort pdfIntakeValidationPort,
             com.securedoc.platform.application.port.out.PdfDecryptionPort pdfDecryptionPort,
+            com.securedoc.platform.application.casefields.CaseFieldService caseFields,
             com.securedoc.platform.application.port.out.PackageRejectionRepository packageRejectionRepository,
             AuditService auditService,
             ExternalIntakeMaintenanceService maintenanceService,
@@ -349,7 +347,8 @@ public class ApplicationServiceConfig {
         return new ExternalIntakeService(integrationConnectionService, externalIntakeRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
                 checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName)
-                .withPdfDecryption(pdfDecryptionPort).withRejections(packageRejectionRepository);
+                .withPdfDecryption(pdfDecryptionPort).withRejections(packageRejectionRepository)
+                .withCaseFields(caseFields);
     }
 
     @Bean
@@ -389,21 +388,14 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public BusinessIdentityService businessIdentityService(
-            BusinessIdentifierDefinitionRepository definitionRepository,
-            BusinessRecordRepository businessRecordRepository) {
-        return new BusinessIdentityService(definitionRepository, businessRecordRepository);
-    }
-
-    @Bean
     public BusinessAdminConfigurationService businessAdminConfigurationService(
-            BusinessIdentifierDefinitionRepository definitionRepository,
+            com.securedoc.platform.application.casefields.CaseFieldSettings caseFieldSettings,
             TenantRedactionPolicyRepository tenantRedactionPolicyRepository,
             TenantLifecyclePolicyRepository tenantLifecyclePolicyRepository,
             ReportingConfigurationRepository reportingConfigurationRepository,
             AuditService auditService) {
         return new BusinessAdminConfigurationService(
-                definitionRepository, tenantRedactionPolicyRepository, tenantLifecyclePolicyRepository,
+                caseFieldSettings, tenantRedactionPolicyRepository, tenantLifecyclePolicyRepository,
                 reportingConfigurationRepository, auditService);
     }
 
@@ -428,17 +420,27 @@ public class ApplicationServiceConfig {
 
     @Bean
     public CreatePackageUseCase createPackageUseCase(
+            org.springframework.transaction.PlatformTransactionManager transactionManager,
             com.securedoc.platform.application.intake.CasePriorityService casePriorityService,
             TenantContextService tenantContextService,
             CapabilityEnforcementService capabilityEnforcementService,
-            BusinessIdentityService businessIdentityService,
+            com.securedoc.platform.application.casefields.CaseFieldService caseFields,
             IntakeLicence intakeLicence,
             PackageRepository packageRepository,
             DomainEventPublisher eventPublisher,
             AuditService auditService) {
         return new CreatePackageService(
-                tenantContextService, capabilityEnforcementService, businessIdentityService, intakeLicence,
-                packageRepository, eventPublisher, auditService).withPriorities(casePriorityService);
+                tenantContextService, capabilityEnforcementService, caseFields, intakeLicence,
+                packageRepository, eventPublisher, auditService).withPriorities(casePriorityService)
+                // Task 0061: the case's values and the case are stored together or not at all.
+                .withUnit(new CreatePackageService.Unit() {
+                    private final org.springframework.transaction.support.TransactionTemplate template =
+                            new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+                    @Override
+                    public <T> T run(java.util.function.Supplier<T> work) {
+                        return template.execute(status -> work.get());
+                    }
+                });
     }
 
     @Bean
@@ -453,6 +455,7 @@ public class ApplicationServiceConfig {
             PackageProcessingDispatcher packageProcessingDispatcher,
             AuditService auditService,
             WatchedFolderProperties properties,
+            com.securedoc.platform.application.casefields.CaseFieldService caseFields,
             IntakeLicence intakeLicence,
             com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings,
             com.securedoc.platform.application.intake.IntakeGate intakeGate) {
@@ -463,7 +466,7 @@ public class ApplicationServiceConfig {
                 Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())),
                 tenant -> watchedFolderSettings.sensitivityLevel(tenant,
                         com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER)).withLicence(intakeLicence)
-                .withGate(intakeGate);
+                .withGate(intakeGate).withCaseFields(caseFields);
     }
 
     /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */
@@ -508,15 +511,18 @@ public class ApplicationServiceConfig {
     }
 
     @Bean
-    public GetPackageQuery getPackageQuery(PackageRepository packageRepository, BusinessIdentityService businessIdentityService) {
-        return new GetPackageQueryService(packageRepository, businessIdentityService);
+    public GetPackageQuery getPackageQuery(PackageRepository packageRepository,
+                                           com.securedoc.platform.application.casefields.CaseFieldService caseFields,
+                                           com.securedoc.platform.api.security.ProductAuthorizationPolicy authorization) {
+        return new GetPackageQueryService(packageRepository, caseFields).withSensitiveFor(principal -> authorization.has(
+                principal, com.securedoc.platform.api.security.UserCapability.CASE_FIELD_SENSITIVE_VIEW));
     }
 
     @Bean
-    public ListPackagesQuery listPackagesQuery(PackageRepository packageRepository, BusinessIdentityService businessIdentityService,
+    public ListPackagesQuery listPackagesQuery(PackageRepository packageRepository, com.securedoc.platform.application.casefields.CaseFieldService caseFields,
                                                ProcessingIncidentRepository processingIncidentRepository,
             com.securedoc.platform.application.port.out.PackageRejectionRepository packageRejectionRepository) {
-        return new ListPackagesQueryService(packageRepository, businessIdentityService, processingIncidentRepository)
+        return new ListPackagesQueryService(packageRepository, caseFields, processingIncidentRepository)
                 .withRejections(packageRejectionRepository);
     }
 
@@ -558,11 +564,11 @@ public class ApplicationServiceConfig {
 
     @Bean
     public DashboardColumnConfigurationService dashboardColumnConfigurationService(
-            BusinessIdentifierDefinitionRepository definitionRepository,
+            com.securedoc.platform.application.casefields.CaseFieldSettings caseFieldSettings,
             DashboardColumnSettingsRepository dashboardColumnSettingsRepository,
             AuditService auditService) {
         return new DashboardColumnConfigurationService(
-                definitionRepository, dashboardColumnSettingsRepository, auditService);
+                caseFieldSettings, dashboardColumnSettingsRepository, auditService);
     }
 
 
@@ -1473,14 +1479,14 @@ public class ApplicationServiceConfig {
     public ExportPackageDocumentsUseCase exportPackageDocumentsUseCase(
             DocumentRepository documentRepository,
             PackageRepository packageRepository,
-            BusinessRecordRepository businessRecordRepository,
+            com.securedoc.platform.application.casefields.CaseFieldService caseFields,
             ArtifactRepository artifactRepository,
             StoragePort storagePort,
             DeliveryPort deliveryPort,
             DeliverySubmissionRepository deliverySubmissionRepository,
             PackageLifecycleService packageLifecycleService,
             AuditService auditService) {
-        return new PackageDocumentExportService(documentRepository, packageRepository, businessRecordRepository,
+        return new PackageDocumentExportService(documentRepository, packageRepository, caseFields,
                 artifactRepository, storagePort, deliveryPort, deliverySubmissionRepository, packageLifecycleService, auditService);
     }
 
