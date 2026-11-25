@@ -41,6 +41,7 @@ final class ArchiveServer implements AutoCloseable {
     final Map<String, String> levels = new ConcurrentHashMap<>();
     final Deque<Fault> faults = new ArrayDeque<>();
     volatile String refuseToken;
+    volatile String finishState = "WORKING";
     volatile int health = 200;
     volatile String healthCode;
     volatile String wrongChecksum;
@@ -119,6 +120,12 @@ final class ArchiveServer implements AutoCloseable {
             status = replay ? 200 : 201;
             json = "{\"fileId\":\"file-" + item + "\",\"sha256\":\"" + (wrongChecksum == null ? sha : wrongChecksum)
                     + "\",\"size\":" + body.length + ",\"replay\":" + replay + "}";
+        } else if (path.endsWith("/finish")) {
+            status = 202;
+            json = "{\"statusId\":\"st-1\"}";
+        } else if (path.equals("/v1/status/st-1")) {
+            status = 200;
+            json = "{\"state\":\"" + finishState + "\"}";
         } else {
             status = 404;
             json = "{}";

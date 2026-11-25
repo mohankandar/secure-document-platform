@@ -315,6 +315,32 @@ class ProfileDestinationDeliveryTest {
                 batch(List.of(item("doc-a", SensitivityLevel.STANDARD)), SensitivityLevel.STANDARD, "{broken", Map.of())));
     }
 
+    @Test
+    void acceptedForLaterWaitsWithoutAnAttemptAsksAgainAndIsThenDelivered() throws Exception {
+        Path file = folder.resolve("archive.json");
+        Files.writeString(file, Files.readString(file).replace("\"integrity\": {\"sha256Value\": \"checksum\", \"sizeValue\": \"bytes\"}\n    }",
+                "\"integrity\": {\"sha256Value\": \"checksum\", \"sizeValue\": \"bytes\"}\n    },\n    {\"name\": \"finish\", \"method\": \"POST\","
+                        + " \"path\": \"/v1/deliveries/{step.open.deliveryId}/finish\", \"body\": \"JSON\", \"bodyTemplate\": \"{\\\"count\\\":{package.documentCount}}\","
+                        + " \"repeat\": \"ONCE\", \"accepted\": {\"referencePointer\": \"/statusId\", \"statusMethod\": \"GET\", \"statusPath\": \"/v1/status/{status.reference}\","
+                        + " \"statePointer\": \"/state\", \"done\": [\"DONE\"], \"failed\": [\"FAILED\"], \"working\": [\"WORKING\"], \"defaultWaitSeconds\": 9}}"));
+        var a = item("doc-a", SensitivityLevel.STANDARD);
+        var e = fails(adapter(true), one(), LvErrorCode.DLV_008);
+        assertTrue(e.rateLimited(), "no attempt used");
+        assertTrue(e.retryAfter().toSeconds() >= 7 && e.retryAfter().toSeconds() <= 9, e.retryAfter().toString());
+        String progress = noted.get(noted.size() - 1);
+        var again = new DeliveryPort.DeliveryBatch(tenant, PackageId.generate(), 1, "sub-1", "dlv-1", Map.of(), Map.of(), List.of(), listener(),
+                SensitivityLevel.STANDARD, null, new DeliveryPort.DeliveryContext(progress, fieldSet, List.of(a)));
+        assertTrue(fails(adapter(true), again, LvErrorCode.DLV_008).rateLimited(), "still working");
+        archive.finishState = "DONE";
+        var done = adapter(true).deliverBatch(again);
+        assertEquals("dlv-1", done.destinationSubmissionReference());
+        assertEquals(1, archive.of("/v1/deliveries/.*/finish").size(), "finished once");
+        assertEquals(1, archive.of("/v1/deliveries").size());
+        assertEquals(1, archive.files.size());
+        archive.finishState = "FAILED";
+        assertEquals("INT_STATUS_FAILED", fails(adapter(true), again, LvErrorCode.DLV_004).destinationCode());
+    }
+
     // ---- tries
 
     @Test
