@@ -2077,3 +2077,15 @@ Reserved: not used yet.
 
 1. Check that the erase log location is mounted and can be written by LexaVault. The Support status page names the erase log's own code (docs/install/ERASE_LOG.md).
 2. Erasures that were waiting are done by themselves once it is back.
+
+### LV-SYS-015 Request too large
+
+- **Means:** The request's data (not a file) is larger than LexaVault takes, so it was not read.
+- **Kind:** Refused
+- **Who acts:** Source system, IT Admin
+- **HTTP status:** 413
+
+**What to do:**
+
+1. Send less in one request, for example fewer values or a smaller logo.
+2. If the request is right, ask IT to raise securedoc.api.max-request-body.

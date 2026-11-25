@@ -131,7 +131,7 @@ if "$FRONT"; then
   for tool in node npm python3 setsid; do require "$tool"; done
   [[ -d "$FRONTEND/node_modules" ]] || { echo "Frontend dependencies missing. Run npm ci in frontend/securedoc-ui." >&2; exit 1; }
   export VITE_SECURITY_MODE=LOCAL
-  launch frontend 5173 "$FRONTEND" python3 "$ROOT/scripts/lexavault-rolling-runner.py" "$FRONTEND_LOG_DIR/frontend.log" npm run dev -- --host 0.0.0.0 --port 5173 --strictPort
+  launch frontend 5173 "$FRONTEND" python3 "$ROOT/scripts/lexavault-rolling-runner.py" "$FRONTEND_LOG_DIR/frontend.log" npm run dev -- --host "${LEXAVAULT_UI_ADDRESS:-127.0.0.1}" --port 5173 --strictPort
 fi
 echo "Startup checks complete. Logs: $LOG_ROOT; process records: $RUN"
 echo "UI: http://localhost:5173  API: http://localhost:8080"

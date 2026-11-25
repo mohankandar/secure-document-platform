@@ -130,12 +130,36 @@ These settings are gone and are **ignored** when still set, whatever their value
 that came only from the setting is gone. `securedoc.security.oidc.persistent-connection-enabled=false` refuses everybody.
 A web app on another origin now sends `X-Selected-Tenant-Id`, which the API allows.
 
+## Which address LexaVault serves
+
+LexaVault listens on `127.0.0.1` only (task 0055). Set `SECUREDOC_SERVER_ADDRESS` to the address it should serve, for example
+the server's internal address behind your TLS proxy (`0.0.0.0` for every address, as in a container). With the proxy on the
+same machine nothing needs setting. Two servers that talk to one database each need it when the proxy is elsewhere.
+
+A request body that is not a file is limited to 2 MB (`securedoc.api.max-request-body`, LV-SYS-015).
+
 ## After setup
 
 Your entity slots are stored as `NOT_ACTIVATED`. A Business Admin activates, names,
 suspends and resumes them in Admin › Entities (task 0058): the entity they are in, and every other slot whose mapping rows
-give one of their groups BUSINESS_ADMIN, also before it is activated. The **first** entity of a new customer still needs a
-command (nobody can sign in while none is active). On a
+give one of their groups BUSINESS_ADMIN, also before it is activated. The **first** entity of a new customer is activated with
+a command, because nobody can sign in while none is active (task 0075):
+
+```
+scripts/Invoke-LexaVault-FirstEntity.sh ENT-... "Entity name"
+scripts\Invoke-LexaVault-FirstEntity.ps1 -SlotId ENT-... -Name "Entity name"
+```
+
+Run it after the schema step and setup, with the app's normal settings in the environment. It needs a licence in force that
+holds the slot, works only while no entity was ever activated, and changes nothing when run again with the same values. It
+is recorded in the entity's audit log as an install action (`source=INSTALL`). Exit codes: 0 done, 1 failed, 2 refused.
+
+**A scanner with sign-in (task 0075).** Create a client in your login system that may use client credentials, with LexaVault's
+API as its audience. In Admin, Integrations, make a SCANNER source in the entity (authentication OAuth2 client credentials) whose
+client principal is that client's user name in its tokens. Give the Scanner Bridge `SECUREDOC_SCAN_BRIDGE_OIDC_TOKEN_URI`,
+`_CLIENT_ID` and `_CLIENT_SECRET` (environment only; optional `_SCOPE`). A client that is a scanner in two entities is refused.
+
+On a
 development or demo machine, the LexaVault demo step activates the demo entity (`install/demo/README.md`).
 
 An install that existed before task 0037 copies its login connection and grants once with the identity migration

@@ -219,7 +219,8 @@ else {
     }
 
     Write-Host "Starting PostgreSQL with Docker Compose..."
-    & docker compose -f $ComposeFile up -d
+    # Task 0055: an existing container is started as it is, never made again for a changed setting.
+    & docker compose -f $ComposeFile up -d --no-recreate
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed to start PostgreSQL." }
 
     Set-Content -Path (Join-Path $RunDir "postgres-started-by-script") -Value "true"

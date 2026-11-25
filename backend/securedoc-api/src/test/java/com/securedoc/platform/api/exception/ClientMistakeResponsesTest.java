@@ -57,7 +57,8 @@ class ClientMistakeResponsesTest {
                 mock(PackageProcessingDispatcher.class), mock(GetPackageQuery.class), mock(ListPackagesQuery.class),
                 context);
         mvc = MockMvcBuilders.standaloneSetup(new ExternalIntakeController(intake, context),
-                        new ScannerIntakeController(mock(ScannerIntakeTransactionBoundary.class), context), packages)
+                        new ScannerIntakeController(mock(ScannerIntakeTransactionBoundary.class), context,
+                                mock(com.securedoc.platform.application.port.out.TenantRepository.class)), packages)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

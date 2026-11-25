@@ -178,6 +178,7 @@ export const LV_CODES: Record<string, LvCodeEntry> = {
   'LV-SYS-012': { code: 'LV-SYS-012', area: 'SYS', title: 'Stored file not opened', description: 'A stored file has no record of how it is protected, or it was changed, so it was not opened.', kind: 'SYSTEM', whoActs: 'IT Admin', whatToDo: 'Don\'t retry. Find out who or what changed the document storage or its records, for example a partial restore. Restore the file from a backup that belongs to the same database, or ask the source to send the document again.', httpStatus: 502, reserved: false },
   'LV-SYS-013': { code: 'LV-SYS-013', area: 'SYS', title: 'Waiting for the erase replay', description: 'The database was restored from a backup: no work is taken until the erase replay has run.', kind: 'SYSTEM', whoActs: 'IT Admin', whatToDo: 'Check that the erase log location is mounted. Run the erase replay once (docs/install/ERASE_LOG.md), then start LexaVault again.', httpStatus: 503, reserved: false },
   'LV-SYS-014': { code: 'LV-SYS-014', area: 'SYS', title: 'Erase log not available', description: 'LexaVault can\'t use its erase log, so nothing is erased and no work is taken.', kind: 'SYSTEM', whoActs: 'IT Admin', whatToDo: 'Check that the erase log location is mounted and can be written by LexaVault. The Support status page names the erase log\'s own code (docs/install/ERASE_LOG.md). Erasures that were waiting are done by themselves once it is back.', httpStatus: 503, reserved: false },
+  'LV-SYS-015': { code: 'LV-SYS-015', area: 'SYS', title: 'Request too large', description: 'The request\'s data (not a file) is larger than LexaVault takes, so it was not read.', kind: 'REFUSED', whoActs: 'Source system, IT Admin', whatToDo: 'Send less in one request, for example fewer values or a smaller logo. If the request is right, ask IT to raise securedoc.api.max-request-body.', httpStatus: 413, reserved: false },
 };
 
 /** The code a failure gets when it has none of its own. */
@@ -264,6 +265,7 @@ export const LV_BY_DETAIL: Record<string, string> = {
   MISSING_PARAMETER: 'LV-INT-003',
   INVALID_REQUEST: 'LV-INT-003',
   FILE_TOO_LARGE: 'LV-INT-004',
+  REQUEST_TOO_LARGE: 'LV-SYS-015',
   INVALID_ARGUMENT: 'LV-CFG-001',
   AUTHENTICATION_REQUIRED: 'LV-AUT-001',
   ACCESS_DENIED: 'LV-AUT-006',

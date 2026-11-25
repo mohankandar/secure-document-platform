@@ -43,6 +43,34 @@ class BridgeRequestSecurityFilterTest {
         assertNull(chain.getRequest());
     }
 
+    /** Task 0055: a JSON body has a limit, and must announce its length; a test PDF keeps its own limit. */
+    @Test
+    void aTooLargeJsonBodyIsRefused() throws Exception {
+        long most = BridgeRequestSecurityFilter.MAX_JSON_BYTES;
+        assertEquals(200, send("application/json", most, false).getStatus());
+        MockHttpServletResponse refused = send("application/json", most + 1, false);
+        assertEquals(413, refused.getStatus());
+        assertTrue(refused.getContentAsString().contains("LV-INT-015"));
+        assertEquals(413, send("application/json", -1, true).getStatus());
+        assertEquals(200, send("multipart/form-data; boundary=x", most * 100, false).getStatus());
+    }
+
+    private MockHttpServletResponse send(String type, long length, boolean chunked) throws Exception {
+        Fixture fixture = fixture();
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/scan-sessions") {
+            @Override
+            public long getContentLengthLong() {
+                return length;
+            }
+        };
+        request.setContentType(type);
+        request.addHeader(BridgeRequestSecurityFilter.REQUEST_TOKEN_HEADER, fixture.runtimeIdentity.browserRequestToken());
+        if (chunked) request.addHeader("Transfer-Encoding", "chunked");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        fixture.filter.doFilter(request, response, new MockFilterChain());
+        return response;
+    }
+
     /** Task 0025: both refusals carry errorCode as before, the LV code and its title as message. */
     @Test
     void refusalBodiesCarryTheLvCodeAndTitle() throws Exception {

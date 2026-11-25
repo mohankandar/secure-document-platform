@@ -25,6 +25,7 @@ public class ScanBridgeProperties {
     private Physical physical = new Physical();
     private Storage storage = new Storage();
     private Delivery delivery = new Delivery();
+    private Oidc oidc = new Oidc();
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -60,6 +61,26 @@ public class ScanBridgeProperties {
     public void setStorage(Storage storage) { this.storage = storage == null ? new Storage() : storage; }
     public Delivery getDelivery() { return delivery; }
     public void setDelivery(Delivery delivery) { this.delivery = delivery == null ? new Delivery() : delivery; }
+
+    public Oidc getOidc() { return oidc; }
+    public void setOidc(Oidc oidc) { this.oidc = oidc == null ? new Oidc() : oidc; }
+
+    /** Task 0075: the bridge's own sign-in (client credentials) for a LexaVault that runs with sign-in. */
+    public static class Oidc {
+        private String tokenUri;
+        private String clientId;
+        private String clientSecret;
+        private String scope;
+
+        public String getTokenUri() { return tokenUri; }
+        public void setTokenUri(String tokenUri) { this.tokenUri = tokenUri; }
+        public String getClientId() { return clientId; }
+        public void setClientId(String clientId) { this.clientId = clientId; }
+        public String getClientSecret() { return clientSecret; }
+        public void setClientSecret(String clientSecret) { this.clientSecret = clientSecret; }
+        public String getScope() { return scope; }
+        public void setScope(String scope) { this.scope = scope; }
+    }
 
     public static class Simulator {
         private String inboxPath = "./scanner-bridge/inbox";

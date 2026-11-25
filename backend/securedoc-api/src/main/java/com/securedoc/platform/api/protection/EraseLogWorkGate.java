@@ -29,7 +29,9 @@ public class EraseLogWorkGate implements WorkGate, SmartInitializingSingleton {
     public EraseLogWorkGate(EraseGuard guard, EraseLog eraseLog, ApplicationArguments arguments) {
         this.guard = guard;
         this.eraseLog = eraseLog;
-        this.commandRun = arguments.containsOption("erase-replay") || arguments.containsOption("erase-log-seal");
+        this.commandRun = arguments.containsOption("erase-replay") || arguments.containsOption("erase-log-seal")
+                // Task 0075: a process started only to activate the first entity takes no work either.
+                || arguments.containsOption(com.securedoc.platform.api.identity.FirstEntityCommand.OPTION);
     }
 
     @Override

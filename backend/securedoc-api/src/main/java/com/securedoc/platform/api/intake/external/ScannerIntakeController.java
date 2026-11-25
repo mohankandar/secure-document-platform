@@ -4,9 +4,11 @@ import com.securedoc.platform.api.context.RequestContextResolver;
 import com.securedoc.platform.api.upload.RequestBodyUploadContent;
 import com.securedoc.platform.application.context.AuthenticatedPrincipal;
 import com.securedoc.platform.application.intake.external.PushIntakeCreateInput;
+import com.securedoc.platform.application.port.out.TenantRepository;
 import com.securedoc.platform.domain.identity.CorrelationId;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.integration.IntegrationConnection;
+import com.securedoc.platform.domain.tenant.Tenant;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,10 +28,13 @@ import java.util.UUID;
 public class ScannerIntakeController {
     private final ScannerIntakeTransactionBoundary transactions;
     private final RequestContextResolver contextResolver;
+    private final TenantRepository tenants;
 
-    public ScannerIntakeController(ScannerIntakeTransactionBoundary transactions, RequestContextResolver contextResolver) {
+    public ScannerIntakeController(ScannerIntakeTransactionBoundary transactions, RequestContextResolver contextResolver,
+                                   TenantRepository tenants) {
         this.transactions = transactions;
         this.contextResolver = contextResolver;
+        this.tenants = tenants;
     }
 
     @PostMapping
@@ -39,7 +44,7 @@ public class ScannerIntakeController {
         CorrelationId correlationId = contextResolver.resolveCorrelationId(httpRequest);
         PushIntakeCreateInput input = request.toInput();
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ExternalIntakeResponse.from(transactions.create(input, principal, correlationId)));
+                .body(ExternalIntakeResponse.from(transactions.create(input, principal, correlationId)).in(entity(principal)));
     }
 
     @PostMapping(value = "/{packageId}/documents/{externalSourceDocumentId}", consumes = MediaType.APPLICATION_PDF_VALUE)
@@ -56,7 +61,7 @@ public class ScannerIntakeController {
             var receipt = transactions.receive(PackageId.of(packageId), externalSourceDocumentId,
                     idempotencyKey, sourceSha256, MediaType.APPLICATION_PDF_VALUE, content, principal, correlationId);
             return ResponseEntity.status(receipt.duplicateAcknowledgement() ? HttpStatus.OK : HttpStatus.CREATED)
-                    .body(ExternalDocumentReceiptResponse.from(receipt));
+                    .body(ExternalDocumentReceiptResponse.from(receipt).in(entity(principal)));
         } catch (java.io.IOException ex) {
             throw new java.io.UncheckedIOException("Unable to read scanner upload", ex);
         }
@@ -68,6 +73,10 @@ public class ScannerIntakeController {
         AuthenticatedPrincipal principal = contextResolver.resolveIntegrationPrincipal(httpRequest);
         CorrelationId correlationId = contextResolver.resolveCorrelationId(httpRequest);
         return ResponseEntity.ok(ExternalIntakeResponse.from(
-                transactions.status(PackageId.of(packageId), principal, correlationId)));
+                transactions.status(PackageId.of(packageId), principal, correlationId)).in(entity(principal)));
+    }
+
+    private String entity(AuthenticatedPrincipal principal) {
+        return tenants.findById(principal.tenantId()).map(Tenant::name).orElse(null);
     }
 }

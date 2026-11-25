@@ -27,6 +27,8 @@ import java.util.Set;
 @Component
 public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
     public static final String REQUEST_TOKEN_HEADER = "X-LexaVault-Bridge-Token";
+    /** Task 0055: a JSON body holds the case's few values; a test PDF (multipart) has its own limit. */
+    static final long MAX_JSON_BYTES = 64 * 1024;
     private static final Set<String> MUTATING_METHODS = Set.of("POST", "PUT", "PATCH", "DELETE");
 
     private final ScanBridgeProperties properties;
@@ -77,6 +79,13 @@ public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
                 reject(response, "BRIDGE_REQUEST_TOKEN_INVALID");
                 return;
             }
+            String type = request.getContentType();
+            boolean file = type != null && type.strip().toLowerCase(java.util.Locale.ROOT).startsWith("multipart/");
+            // The trusted screen always announces the length; a body that does not is refused too.
+            if (!file && (request.getContentLengthLong() > MAX_JSON_BYTES || request.getHeader("Transfer-Encoding") != null)) {
+                reject(response, "INVALID_BUSINESS_IDENTIFIER_INPUT", HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+                return;
+            }
         }
         filterChain.doFilter(request, response);
     }
@@ -107,7 +116,11 @@ public final class BridgeRequestSecurityFilter extends OncePerRequestFilter {
 
     /** Task 0025: the same body as every other bridge error: errorCode, the LV code, and its title as message. */
     private void reject(HttpServletResponse response, String errorCode) throws IOException {
-        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        reject(response, errorCode, HttpServletResponse.SC_FORBIDDEN);
+    }
+
+    private void reject(HttpServletResponse response, String errorCode, int status) throws IOException {
+        response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         try {
