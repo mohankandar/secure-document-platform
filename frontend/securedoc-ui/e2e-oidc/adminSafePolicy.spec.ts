@@ -46,10 +46,10 @@ type Policy = { enabledEntityTypes: string[]; autoRedactThreshold: number; revie
 /** Task 0062: as the server sends it, shortened. Tests without it run the screen against an older server. */
 const KIND = (key: string, locked = false, lastFourAllowed = false) => ({ key, name: key, detectionMethod: 'PATTERN', defaultStyle: 'REMOVE_FULLY', locked, lastFourAllowed });
 const CATALOG = {
-  kinds: [KIND('SSN', false, true), KIND('DATE_OF_BIRTH'), KIND('CREDIT_CARD_NUMBER', true), KIND('CREDIT_SCORE'), KIND('ITIN', false, true), KIND('EIN', false, true), KIND('CVV', true), KIND('PIN', true)],
+  kinds: [KIND('SSN', false, true), KIND('DATE_OF_BIRTH'), KIND('CREDIT_CARD_NUMBER', true), KIND('CREDIT_SCORE'), KIND('ITIN', false, true), KIND('EIN', false, true), KIND('PERSON_NAME'), KIND('CVV', true), KIND('PIN', true)],
   packs: [
     { key: 'PCI_DSS', name: 'PCI DSS', covers: 'Payment card data.', notCovered: 'Cardholder names are not found.', kinds: ['CREDIT_CARD_NUMBER', 'CVV', 'PIN'] },
-    { key: 'FRCP_5_2', name: 'FRCP 5.2 (court filings)', covers: 'Social Security and taxpayer numbers.', notCovered: 'Names of minors are not found.', kinds: ['SSN', 'ITIN', 'EIN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER'] },
+    { key: 'FRCP_5_2', name: 'FRCP 5.2 (court filings)', covers: 'Social Security and taxpayer numbers.', notCovered: 'Names of minors are not found.', kinds: ['SSN', 'ITIN', 'EIN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER'], suggestedKinds: ['PERSON_NAME'] },
   ],
 };
 const BALANCED: Policy = { enabledEntityTypes: ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true };
@@ -490,12 +490,16 @@ test('task 0062: packs, locked items and styles; what is saved', async ({ page }
   await expect(c.getByRole('button', { name: 'EIN', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await c.getByRole('button', { name: 'EIN', exact: true }).click();
   await expect(c.getByText('Turned off by hand: EIN')).toBeVisible();
+  // Task 0072: suggested, not switched on.
+  await expect(c.getByText('Suggested with this pack, off until you turn it on below: Person name')).toBeVisible();
+  await expect(c.getByRole('button', { name: 'Person name', exact: true })).toHaveAttribute('aria-pressed', 'false');
   // A style only for kinds that are on and allow it: never a locked item, a date of birth or a credit score.
   await expect(c.getByRole('group', { name: 'What stays visible' }).getByRole('combobox')).toHaveCount(2);
   await c.getByLabel('Social Security Number', { exact: true }).selectOption('KEEP_LAST_FOUR');
   await saveButton(page).click();
   await expect.poll(() => h.writes.length).toBe(1);
   expect(h.writes[0].enabledPacks).toEqual(['FRCP_5_2']);
+  expect(h.writes[0].enabledEntityTypes).not.toContain('PERSON_NAME');
   expect(h.writes[0].keepLastFourKinds).toEqual(['SSN']);
   expect(h.writes[0].enabledEntityTypes).toContain('ITIN');
   expect(h.writes[0].enabledEntityTypes).not.toContain('EIN');
