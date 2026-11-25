@@ -52,6 +52,19 @@ public interface PipelineJobRepository {
      */
     Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease, int perDestinationLimit);
 
+    /** In {@code openBulkSources}: no source is marked Bulk, so nothing is held back for a window. */
+    String EVERY_BULK_SOURCE = "*";
+
+    /**
+     * Task 0079: as {@link #claimNext(Set, String, Duration, int)}, where a BULK job is taken only if its source is in
+     * {@code openBulkSources} (and, being last in order, only when no other job of the stages is due). Without them (the
+     * other form) BULK jobs are taken whatever their source.
+     */
+    default Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease,
+                                            int perDestinationLimit, Set<String> openBulkSources) {
+        return claimNext(stages, owner, lease, perDestinationLimit);
+    }
+
     /** Claims one given job if it is in one of the statuses (a resend or an IT action). The claim gets a new token. */
     Optional<PipelineJob> claim(TenantId tenantId, UUID id, Set<PipelineJobStatus> from, String owner, Duration lease);
 

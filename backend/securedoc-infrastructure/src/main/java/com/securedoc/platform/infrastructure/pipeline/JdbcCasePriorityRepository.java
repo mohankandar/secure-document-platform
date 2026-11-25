@@ -29,8 +29,8 @@ public class JdbcCasePriorityRepository implements CasePriorityRepository {
     }
 
     private static final String SAVE_SQL = """
-            INSERT INTO case_priorities (package_id, tenant_id, priority, changed_at)
-            VALUES (:packageId, :tenantId, :priority, clock_timestamp())
+            INSERT INTO case_priorities (package_id, tenant_id, priority, changed_at, source_key)
+            VALUES (:packageId, :tenantId, :priority, clock_timestamp(), :sourceKey)
             ON CONFLICT (package_id) DO UPDATE SET priority = excluded.priority, changed_at = excluded.changed_at
             """;
 
@@ -41,9 +41,11 @@ public class JdbcCasePriorityRepository implements CasePriorityRepository {
     }
 
     @Override
-    public void saveNew(TenantId tenantId, PackageId packageId, PipelinePriority priority) {
+    public void saveNew(TenantId tenantId, PackageId packageId, PipelinePriority priority, String sourceKey) {
         if (priority == PipelinePriority.NORMAL) return;
-        jdbc.update(SAVE_SQL, params(tenantId, packageId).addValue("priority", priority.name()));
+        if (priority == PipelinePriority.BULK && sourceKey == null) throw new IllegalArgumentException("Bulk has a source");
+        jdbc.update(SAVE_SQL, params(tenantId, packageId).addValue("priority", priority.name())
+                .addValue("sourceKey", priority == PipelinePriority.BULK ? sourceKey : null));
     }
 
     @Override
@@ -53,7 +55,7 @@ public class JdbcCasePriorityRepository implements CasePriorityRepository {
         }
         jdbc.query(lockSql(false), new MapSqlParameterSource("packageId", packageId.value().toString()), rs -> { });
         PipelinePriority before = find(tenantId, java.util.List.of(packageId)).get(packageId);
-        var params = params(tenantId, packageId).addValue("priority", priority.name());
+        var params = params(tenantId, packageId).addValue("priority", priority.name()).addValue("sourceKey", null);
         jdbc.update(SAVE_SQL, params);
         jdbc.update("UPDATE pipeline_jobs SET priority = :priority, updated_at = clock_timestamp()"
                 + " WHERE tenant_id = :tenantId AND package_id = :packageId AND priority <> :priority"

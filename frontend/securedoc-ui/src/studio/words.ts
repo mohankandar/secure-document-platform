@@ -484,7 +484,38 @@ export type PriorityCode = (typeof PRIORITIES)[number];
 export const PRIORITY_NAMES: Record<PriorityCode, string> = { URGENT: 'Urgent', NORMAL: 'Normal', LOW: 'Low' };
 /** Nothing sent, or a name this screen does not know, is Normal. */
 export const priorityChoice = (raw: string | null | undefined): PriorityCode => PRIORITIES.find((p) => p === raw) ?? 'NORMAL';
-export const priorityRank = (raw: string | null | undefined): number => PRIORITIES.indexOf(priorityChoice(raw));
+export const priorityRank = (raw: string | null | undefined): number => (raw === 'BULK' ? PRIORITIES.length : PRIORITIES.indexOf(priorityChoice(raw)));
+/** Task 0079: the name of any priority, Bulk too (a case of a migration source). */
+export const priorityName = (raw: string | null | undefined): string => (raw === 'BULK' ? 'Bulk' : PRIORITY_NAMES[priorityChoice(raw)]);
+
+export const BULK_WORDS = {
+  toggle: 'Migration (Bulk)',
+  hint: 'For a large backlog. Its cases run after all other work, only in the times below, on at most half of the workers.',
+  on: 'This source is a migration now. Cases it sends from now on are Bulk.',
+  off: 'This source is no longer a migration. Its waiting cases are Low now.',
+  saved: 'The migration times are saved.',
+  save: 'Save times',
+  from: 'Weeknights from',
+  to: 'to',
+  weekends: 'All of Saturday and Sunday',
+  expected: 'expected to finish',
+  endTitle: 'End the migration of',
+  endConfirm: 'End migration',
+  endBody: 'New cases from this source are worked on like any other. Its cases still waiting become Low and no longer wait for the night.',
+} as const;
+
+type BulkProgress = { open: boolean; done: number; waiting: number; failed: number; perOpenHour?: number | null };
+export const bulkStateText = (b: Pick<BulkProgress, 'open' | 'waiting'>): string =>
+  b.open ? 'Its cases may run now.' : b.waiting > 0 ? 'Its cases wait for the next time below.' : 'Outside the times below.';
+/** "12,400 of 40,000 done · 120 an hour · 3 stopped". */
+export function bulkProgressText(b: BulkProgress): string {
+  const n = (v: number) => v.toLocaleString('en-US');
+  const parts = [`${n(b.done)} of ${n(b.done + b.waiting + b.failed)} done`];
+  if (b.perOpenHour) parts.push(`about ${n(Math.max(1, Math.round(b.perOpenHour)))} an hour while open`);
+  if (b.failed > 0) parts.push(`${n(b.failed)} stopped`);
+  return parts.join(' · ');
+}
+
 export const PRIORITY_FIELD = {
   label: 'Priority',
   hint: 'Urgent cases are worked on first.',

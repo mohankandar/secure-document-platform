@@ -278,6 +278,7 @@ const SENTENCES: Record<string, string> = {
   PROCESSING_MAXIMUMS_CHANGED: 'Changed the processing maximums',
   CASE_PRIORITY_CHANGED: 'Changed the case’s priority',
   SOURCE_PRIORITY_CHANGED: 'Changed a source’s default priority',
+  SOURCE_BULK_CHANGED: 'Changed a source’s migration setting',
   PROCESSING_STORAGE_PROVIDER_CREATED: 'Added processing storage',
   PROCESSING_STORAGE_PROVIDER_TESTED: 'Tested processing storage',
   PROCESSING_STORAGE_PROVIDER_ACTIVATED: 'Made processing storage the default',

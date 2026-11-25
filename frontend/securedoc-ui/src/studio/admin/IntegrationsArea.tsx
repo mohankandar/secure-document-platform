@@ -13,6 +13,7 @@ import type {
   WatchedFolderSettings,
 } from '../../types';
 import { errorMessage } from '../data';
+import SourceBulk from './SourceBulk';
 import { PRIORITIES, PRIORITY_FIELD, PRIORITY_NAMES, priorityChoice, type PriorityCode, SENSITIVITY_FIELD, SENSITIVITY_LEVELS, SENSITIVITY_NAMES, sensitivityChoice, sensitivityName, type SensitivityLevelCode } from '../words';
 import { Notice, Spinner } from '../atoms';
 import { useToast } from '../toast';
@@ -265,7 +266,8 @@ function Connection({ c, showGroup, folder, onChanged, onEdit, onToggle }: {
         <StatusText s={status} />
         {address && <div className="cf-ad-conn-endpoint cf-mono">{address}</div>}
         {folder && <FolderSensitivity />}
-        {folder ? <SourcePriority source="folder:installed" /> : c.purpose === 'INGESTION_SOURCE' && <SourcePriority source={c.connectionId} />}
+        {folder ? <><SourcePriority source="folder:installed" /><SourceBulk source="folder:installed" name={c.name} /></>
+          : c.purpose === 'INGESTION_SOURCE' && <><SourcePriority source={c.connectionId} /><SourceBulk source={c.connectionId} name={c.name} /></>}
         <details className="cf-disclosure">
           <summary>Technical details</summary>
           <dl className="cf-ad-facts cf-ad-facts-compact">
@@ -395,6 +397,7 @@ function FolderRow({ folder, onChanged }: { folder: WatchedFolderAdminStatus; on
         <div className="cf-ad-conn-endpoint cf-mono">{folder.rootPath}</div>
         <FolderSensitivity />
         <SourcePriority source="folder:installed" />
+        <SourceBulk source="folder:installed" name="the watched folder" />
         <details className="cf-disclosure">
           <summary>Technical details</summary>
           <dl className="cf-ad-facts cf-ad-facts-compact">

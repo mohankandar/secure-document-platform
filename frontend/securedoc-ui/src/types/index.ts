@@ -766,6 +766,13 @@ export interface WatchedFolderAdminStatus {
 }
 
 /** Task 0067: the workers of the server that answered, and IT's own maximums. */
+/** Task 0079: a migration source; the times are the entity's local times. */
+export interface BulkSource {
+  source: string; from: string; to: string; weekends: boolean; open: boolean;
+  done: number; waiting: number; failed: number; perOpenHour?: number | null; expectedFinish?: string | null;
+}
+export interface BulkSources { sources: BulkSource[] }
+
 export interface SourcePriorities { sources: Record<string, string> }
 
 export interface ProcessingCapacity {

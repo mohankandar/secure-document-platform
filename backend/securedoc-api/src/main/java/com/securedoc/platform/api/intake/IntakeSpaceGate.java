@@ -46,6 +46,7 @@ public final class IntakeSpaceGate implements IntakeGate {
     private final IntSupplier queueLength;
     private final FreeDisk freeDisk;
     private final LongSupplier clock;
+    private com.securedoc.platform.application.intake.BulkSourceService bulk;
     private Long measuredAt;
     private boolean full;
 
@@ -86,6 +87,17 @@ public final class IntakeSpaceGate implements IntakeGate {
                     free.stream().mapToDouble(Double::doubleValue).min().orElse(0));
         }
         return full;
+    }
+
+    /** Task 0079. */
+    IntakeSpaceGate withBulk(com.securedoc.platform.application.intake.BulkSourceService bulk) {
+        this.bulk = bulk;
+        return this;
+    }
+
+    @Override
+    public boolean sourceOpen(com.securedoc.platform.domain.identity.TenantId tenantId, String sourceKey) {
+        return bulk == null || bulk.mayTakeIn(tenantId, sourceKey);
     }
 
     @Override

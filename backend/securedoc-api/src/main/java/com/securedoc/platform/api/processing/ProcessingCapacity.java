@@ -12,6 +12,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -63,6 +65,18 @@ public class ProcessingCapacity {
     private volatile Map<String, Integer> maximums = Map.of();
     private volatile Map<PipelineStage, Integer> due = Map.of();
     private volatile int waitingCases;
+    /** Task 0079. */
+    private volatile Set<String> openBulk = Set.of();
+    private volatile Map<PipelineStage, Integer> dueBulk = Map.of();
+    /** Places given out, also to workers still looking; and the Bulk jobs that run. */
+    private final Map<PipelineStage, Integer> bulkBusy = new EnumMap<>(PipelineStage.class);
+    private final Map<PipelineStage, Integer> bulkRunning = new EnumMap<>(PipelineStage.class);
+    private com.securedoc.platform.application.intake.BulkSourceService bulkSources;
+
+    @Autowired(required = false)
+    public void setBulkSources(com.securedoc.platform.application.intake.BulkSourceService bulkSources) {
+        this.bulkSources = bulkSources;
+    }
     private ScheduledExecutorService timer;
 
     public ProcessingCapacity(CapacityRepository repository, DataSource dataSource, StagedProcessingSettings staged,
@@ -144,8 +158,12 @@ public class ProcessingCapacity {
             maximums = repository.maximums();
             due = repository.dueJobs(MOST_COUNTED);
             waitingCases = repository.waitingCases(MOST_COUNTED);
+            openBulk = bulkSources == null ? Set.of() : bulkSources.openSources();
+            dueBulk = repository.dueBulkJobs(MOST_COUNTED, openBulk);
         } catch (RuntimeException failure) {
             // The numbers stay as they are.
+            // Except Bulk: whether a window is still open is not known, so nothing of it is started.
+            openBulk = Set.of();
             log.warn("PROCESSING_CAPACITY_CHECK_FAILED type={} code={}", failure.getClass().getSimpleName(),
                     LvErrorCodes.forPlatformFailure(failure).code());
             return;
@@ -153,12 +171,63 @@ public class ProcessingCapacity {
         if (staged) AiServerRequestLimit.maximum(aiMaximum());
         pools.forEach((stage, workers) -> {
             int before = workers.number();
-            int now = WorkerLimits.next(before, waiting(stage), workers.busy(), LOWEST, Math.min(highest(stage), places(stage)));
+            int now = WorkerLimits.next(before, waiting(stage) + bulkWanted(stage), workers.busy(), LOWEST, Math.min(highest(stage), places(stage)));
             if (now == before) return;
             workers.set(now);
             log.info("PROCESSING_WORKERS_CHANGED stage={} from={} to={} highest={} waiting={}", stage, before, now,
                     highest(stage), waiting(stage));
         });
+    }
+
+    /** Bulk jobs that may be started beyond those running. */
+    private int bulkWanted(PipelineStage stage) {
+        synchronized (bulkBusy) {
+            return Math.min(dueBulk.getOrDefault(stage, 0)
+                            + (stage == PipelineStage.EXPORT ? dueBulk.getOrDefault(PipelineStage.SPLIT_EXPORT, 0) : 0),
+                    Math.max(0, bulkPlaces(stage) - bulkRunning.getOrDefault(stage, 0)));
+        }
+    }
+
+    /** At most half of the stage's workers; half of the AI workers always leaves one. */
+    int bulkPlaces(PipelineStage stage) {
+        return Math.min(highest(stage), places(stage)) / 2;
+    }
+
+    /**
+     * Task 0079: asked before a worker looks for a job. The sources whose Bulk jobs it may take, none when Bulk has its
+     * share of the stage's workers already; then a place is kept for it until {@link #bulkDone}.
+     */
+    Set<String> bulkTurn(PipelineStage stage) {
+        Set<String> open = openBulk;
+        if (open.isEmpty()) return open;
+        synchronized (bulkBusy) {
+            int busy = bulkBusy.getOrDefault(stage, 0);
+            if (busy >= bulkPlaces(stage)) return Set.of();
+            bulkBusy.put(stage, busy + 1);
+            return open;
+        }
+    }
+
+    /** A Bulk job was claimed and runs now. */
+    void bulkStarted(PipelineStage stage) {
+        synchronized (bulkBusy) {
+            bulkRunning.merge(stage, 1, Integer::sum);
+        }
+    }
+
+    /** A Bulk job that ran has ended; its place is given back with {@link #bulkDone}. */
+    void bulkEnded(PipelineStage stage) {
+        synchronized (bulkBusy) {
+            bulkRunning.merge(stage, -1, Integer::sum);
+        }
+    }
+
+    /** @param turn what {@link #bulkTurn} gave */
+    void bulkDone(PipelineStage stage, Set<String> turn) {
+        if (turn.isEmpty()) return;
+        synchronized (bulkBusy) {
+            bulkBusy.merge(stage, -1, Integer::sum);
+        }
     }
 
     /** IT's own number (Admin, else this server's settings), else the measured one. */

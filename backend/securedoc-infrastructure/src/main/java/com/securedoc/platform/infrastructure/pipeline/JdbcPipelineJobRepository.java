@@ -64,6 +64,16 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     static final String DUE = """
             (j.status = 'READY' OR (j.status = 'WAITING_RETRY' AND j.next_attempt_at <= clock_timestamp()))""";
 
+    /**
+     * Task 0079: a BULK job only while its source's window is open and a worker may take one. One whose case is not Bulk
+     * any more (its source was unmarked as the job was queued) is taken with them. With no window open the sub-query is
+     * never run, so a long Bulk queue costs an idle worker nothing more.
+     */
+    private static final String BULK_ALLOWED = """
+            (j.priority <> 'BULK' OR :everyBulk OR :someBulk AND NOT EXISTS (
+                    SELECT 1 FROM case_priorities c WHERE c.package_id = j.package_id AND c.priority = 'BULK'
+                       AND (c.tenant_id || '/' || c.source_key) NOT IN (:openBulk)))""";
+
     /** A destination that takes jobs now: WORKING (or no state yet) and not waiting for a 429's Retry-After. */
     private static final String DESTINATION_OPEN = """
             (d.state IS NULL OR d.state = 'WORKING')
@@ -110,7 +120,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
                     < GREATEST(1, :perDestination - COALESCE(d.worker_reduction, 0)))
              ORDER BY %s
              LIMIT 1
-            """.formatted(DUE, DESTINATION_OPEN, FAIR_ORDER);
+            """.formatted(DUE + " AND " + BULK_ALLOWED, DESTINATION_OPEN, FAIR_ORDER);
 
     /**
      * Task 0038: under the destination's lock, its first due job in queue order. {@code FOR UPDATE} without
@@ -130,7 +140,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
              ORDER BY %s
              LIMIT 1
              FOR UPDATE OF j
-            """.formatted(DUE, DESTINATION_OPEN, ORDER);
+            """.formatted(DUE + " AND " + BULK_ALLOWED, DESTINATION_OPEN, ORDER);
 
     /** A job without a destination has no limit: the first due one no other worker is taking. */
     static final String FIRST_WITHOUT_DESTINATION_SQL = """
@@ -143,7 +153,7 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
              ORDER BY %s
              LIMIT 1
              FOR UPDATE OF j SKIP LOCKED
-            """.formatted(DUE, FAIR_ORDER);
+            """.formatted(DUE + " AND " + BULK_ALLOWED, FAIR_ORDER);
 
     /**
      * One lock per (entity, destination), held until the claim's transaction ends: a 64-bit hash of a text that names
@@ -338,12 +348,21 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     @Override
     public Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease,
                                            int perDestinationLimit) {
+        return claimNext(stages, owner, lease, perDestinationLimit, null);
+    }
+
+    @Override
+    public Optional<PipelineJob> claimNext(Set<PipelineStage> stages, String owner, Duration lease,
+                                           int perDestinationLimit, Set<String> openBulkSources) {
         if (stages == null || stages.isEmpty()) return Optional.empty();
         var params = new MapSqlParameterSource()
                 .addValue("stages", stages.stream().map(Enum::name).toList())
                 .addValue("owner", owner)
                 .addValue("leaseMillis", leaseMillis(lease))
-                .addValue("perDestination", Math.max(1, perDestinationLimit));
+                .addValue("perDestination", Math.max(1, perDestinationLimit))
+                .addValue("everyBulk", openBulkSources == null || openBulkSources.contains(EVERY_BULK_SOURCE))
+                .addValue("someBulk", openBulkSources != null && !openBulkSources.isEmpty())
+                .addValue("openBulk", openBulkSources == null || openBulkSources.isEmpty() ? List.of("-") : openBulkSources);
         String turn = stages.stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(","));
         PriorityTurns priorityTurns = this.turns.computeIfAbsent(turn, t -> new PriorityTurns());
         PriorityTurns.Turn ranks = priorityTurns.next();

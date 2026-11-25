@@ -31,6 +31,11 @@ public interface IntakeGate {
 
     int retryAfterSeconds();
 
+    /** Task 0079: false only for a Bulk source whose window is closed: its files wait at the source. */
+    default boolean sourceOpen(com.securedoc.platform.domain.identity.TenantId tenantId, String sourceKey) {
+        return true;
+    }
+
     default void requireSpace() {
         if (full()) throw new IntakeBusyException(retryAfterSeconds());
     }
