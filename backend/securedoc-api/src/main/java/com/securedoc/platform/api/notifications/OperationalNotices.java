@@ -13,6 +13,7 @@ import com.securedoc.platform.application.port.out.ExportDestinationStateReposit
 import com.securedoc.platform.application.port.out.ExportReachabilityAlertRepository;
 import com.securedoc.platform.application.port.out.ProcessingStorageConfigurationRepository;
 import com.securedoc.platform.application.storage.ProcessingStorageConfigurationService;
+import com.securedoc.platform.application.port.out.WorkGate;
 import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.pipeline.ExportDestinationStatus;
 import com.securedoc.platform.domain.storage.ProcessingStorageValidationStatus;
@@ -63,6 +64,13 @@ public class OperationalNotices {
     private final Sources sources;
     private final StoredNotices stored;
     private final Clock clock;
+
+    private WorkGate workGate = WorkGate.open();
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void workGate(WorkGate gate) {
+        this.workGate = gate;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public OperationalNotices(Notifier notifier, ConditionStore conditions, MailSettingsStore mail,
@@ -124,6 +132,11 @@ public class OperationalNotices {
     }
 
     private void check(TenantId entity, List<ConditionState> active) {
+        if (!workGate.mayTakeWork()) {
+            // Task 0060: after a restore the stored states are from the backup. Only this server's own checks are told.
+            stored.ownChecks(entity).forEach(notifier::conditionFailing);
+            return;
+        }
         List<NotificationEvent> failing = new ArrayList<>();
         BiFunction<EventTypeId, AppLink, NotificationEvent.Builder> event = (type, link) -> NotificationEvent
                 .builder(type, EntityNotifications.tenant(entity)).entity(EntityNotifications.entity(entity)).link(link);

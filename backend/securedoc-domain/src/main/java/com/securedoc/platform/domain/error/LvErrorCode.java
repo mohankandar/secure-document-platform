@@ -470,7 +470,22 @@ public enum LvErrorCode {
             Kind.REFUSED, "Person, IT Admin", 404, false),
     SYS_009("LV-SYS-009", Area.SYS, "Unknown request",
             "The address or method isn't one LexaVault offers.",
-            Kind.REFUSED, "Source system", false, 404, 405);
+            Kind.REFUSED, "Source system", false, 404, 405),
+    SYS_010("LV-SYS-010", Area.SYS, "Key service not available",
+            "LexaVault can't reach its key service, so it can't open or store documents.",
+            Kind.SYSTEM, "IT Admin", 503, false),
+    SYS_011("LV-SYS-011", Area.SYS, "Key service refused",
+            "The key service refused LexaVault, or the customer's keys are missing or switched off.",
+            Kind.SYSTEM, "IT Admin", 503, false),
+    SYS_012("LV-SYS-012", Area.SYS, "Stored file not opened",
+            "A stored file has no record of how it is protected, or it was changed, so it was not opened.",
+            Kind.SYSTEM, "IT Admin", 502, false),
+    SYS_013("LV-SYS-013", Area.SYS, "Waiting for the erase replay",
+            "The database was restored from a backup: no work is taken until the erase replay has run.",
+            Kind.SYSTEM, "IT Admin", 503, false),
+    SYS_014("LV-SYS-014", Area.SYS, "Erase log not available",
+            "LexaVault can't use its erase log, so nothing is erased and no work is taken.",
+            Kind.SYSTEM, "IT Admin", 503, false);
 
     /** The area a code belongs to, in the order the customer guide lists them. */
     public enum Area { INT, SCN, PRC, AI, RED, REV, DLV, AUT, LIC, CFG, SYS }

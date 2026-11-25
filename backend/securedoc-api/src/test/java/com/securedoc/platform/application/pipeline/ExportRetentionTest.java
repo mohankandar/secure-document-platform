@@ -14,7 +14,6 @@ import com.securedoc.platform.application.port.out.PackageExportRecordRepository
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.SplitCopyRetentionPort;
-import com.securedoc.platform.application.port.out.StoragePort;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.application.technical.service.ProcessingIncidentService;
@@ -315,8 +314,14 @@ class ExportRetentionTest {
             retention = new ExportRetentionService(store, jobs, deliveryRepository, artifacts, due, connections,
                     policies, audit);
             self[0] = retention;
+            // Task 0060: erased as the erase handlers do it.
+            com.securedoc.platform.application.port.out.ErasurePort erasure = mock(com.securedoc.platform.application.port.out.ErasurePort.class);
+            org.mockito.Mockito.doAnswer(call -> {
+                ((Artifact) call.getArgument(0)).delete();
+                return null;
+            }).when(erasure).eraseArtifact(any(), any());
             service = new PackageLifecycleService(policies, lifecycleRepository, mock(PackageExportRecordRepository.class),
-                    packages, mock(PackageDashboardVisibilityPort.class), documents, artifacts, mock(StoragePort.class),
+                    packages, mock(PackageDashboardVisibilityPort.class), documents, artifacts, erasure,
                     audit, ProcessingIncidentService.noop(), ProductTelemetryService.noop(), retention);
         }
 

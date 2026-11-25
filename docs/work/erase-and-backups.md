@@ -1,5 +1,7 @@
 # Erase and backups (LexaVault deletion design)
 
+Built with task 0060: `docs/install/ERASE_LOG.md`, `KEY_SERVICE.md`, `OFFBOARDING.md`.
+
 Decided 2026-11-22 by the owner, confirmed by the LexaVault design chat. Same rule as platform-core `docs/design/case-fields.md` ("Erase and backups") and Vero's retention design.
 
 ## The rule

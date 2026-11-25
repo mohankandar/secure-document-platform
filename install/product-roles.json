@@ -14,5 +14,5 @@
     "APPROVER": "DOCUMENT_SUPERVISOR"
   },
   "platformRoles": ["PLATFORM_OPERATIONS_ADMIN"],
-  "customerKeys": "optional"
+  "customerKeys": "required"
 }

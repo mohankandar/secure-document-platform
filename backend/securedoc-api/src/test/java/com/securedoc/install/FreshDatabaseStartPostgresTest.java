@@ -93,7 +93,7 @@ class FreshDatabaseStartPostgresTest {
                 "--licence", DEMO.resolve("licence-demo.json").toString(),
                 "--signin", signin.toString(),
                 "--product", "LEXAVAULT",
-                "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
+                "--product-roles", DemoStepTest.REPO.resolve("install/demo/product-roles-development.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(),
                 "--no-customer-keys"));
@@ -222,6 +222,7 @@ class FreshDatabaseStartPostgresTest {
                 "--spring.datasource.password=" + db.password, "--server.port=0",
                 "--securedoc.ai.provider=heuristic", "--securedoc.watched-folder.enabled=false",
                 "--securedoc.watched-folder.scheduling-enabled=false",
+                "--platform.erase-log.location=" + work.resolve("erase-log"),
                 "--securedoc.storage.local.root-path=" + storage));
         args.addAll(List.of(more));
         return new SpringApplicationBuilder(SecureDocumentPlatformApplication.class, build).profiles("local")
@@ -467,7 +468,7 @@ class FreshDatabaseStartPostgresTest {
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
         int setup = new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC(), TestBuild.production()).run(List.of("apply",
                 "--licence", DEMO.resolve("licence-demo.json").toString(), "--signin", DEMO.resolve("signin-demo.json").toString(),
-                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
+                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/demo/product-roles-development.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(), "--no-customer-keys"), print, print);
         Run refused = checked(setup, out);

@@ -12,8 +12,8 @@
 # Optional: LEXAVAULT_PRODUCT_ROLES (default install/product-roles.json),
 #   LEXAVAULT_SETUP_JAR (default backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar: setup runs from its own
 #   jar, task 0041, because it brings platform-crypto and platform-integration, which the app's classpath may not carry).
-# Customer keys: --no-customer-keys is passed; LexaVault encrypts nothing with platform-core yet, and product-roles.json
-#   says "customerKeys": "optional" (task 0041). Not wired yet: notifications, integration client bindings.
+# Customer keys (task 0060): setup creates them in your key service; product-roles.json says "customerKeys": "required".
+#   Its login, in the environment only: PLATFORM_SETUP_VAULT_* (docs/install/KEY_SERVICE.md).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,4 +24,4 @@ roles="${LEXAVAULT_PRODUCT_ROLES:-$repo_root/install/product-roles.json}"
 command="$1"; shift
 exec java -cp "$jar" -Dloader.main=com.documentplatform.setup.SetupCommand \
   org.springframework.boot.loader.launch.PropertiesLauncher "$command" "$@" \
-  --product LEXAVAULT --product-roles "$roles" --no-customer-keys
+  --product LEXAVAULT --product-roles "$roles"

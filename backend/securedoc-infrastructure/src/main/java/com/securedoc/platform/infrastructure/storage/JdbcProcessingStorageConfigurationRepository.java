@@ -185,6 +185,16 @@ public class JdbcProcessingStorageConfigurationRepository implements ProcessingS
 
     @Override
     public int claimLegacyLocalArtifacts(UUID providerId, String absoluteRootPath) {
+        // Task 0060: the records of these files follow them, before the artifacts name their new provider.
+        jdbc.update("""
+                insert into stored_files (storage_provider, storage_key, tenant_id, protection, created_at)
+                select ?, s.storage_key, s.tenant_id, s.protection, s.created_at
+                  from stored_files s
+                 where s.storage_provider='local' and s.protection='PLAIN'
+                   and exists (select 1 from artifacts a where a.storage_provider='local' and a.storage_bucket=?
+                                                         and a.storage_key=s.storage_key)
+                on conflict (storage_provider, storage_key) do nothing
+                """, providerId.toString(), absoluteRootPath);
         return jdbc.update("""
                 update artifacts set storage_provider=?
                 where storage_provider='local' and storage_bucket=?

@@ -84,7 +84,7 @@ class DemoStepTest {
     @Test
     void productRolesHoldTheRolesTheAliasesAndThePlatformRole() throws Exception {
         // Task 0041 (platform-core 0.2.0): USER and REVIEWER stand for Document Processor, APPROVER keeps Document
-        // Supervisor; they are aliases, no longer roles of their own. Customer keys are optional for LexaVault.
+        // Supervisor; they are aliases, no longer roles of their own. Customer keys are required (task 0060).
         // Task 0054: platform-setup's ProductRoles is internal since 0.6.0, so the file is read here; setup itself reads
         // it in FreshDatabaseStartPostgresTest and LicenceBuildTest.
         ObjectMapper json = JsonMapper.builderWithJackson2Defaults().build();
@@ -96,7 +96,10 @@ class DemoStepTest {
         assertEquals(Map.of("USER", "DOCUMENT_PROCESSOR", "REVIEWER", "DOCUMENT_PROCESSOR", "APPROVER", "DOCUMENT_SUPERVISOR"),
                 aliases);
         assertEquals(Set.of("PLATFORM_OPERATIONS_ADMIN"), Set.of(json.convertValue(file.get("platformRoles"), String[].class)));
-        assertEquals("optional", file.get("customerKeys").asString());
+        assertEquals("required", file.get("customerKeys").asString());
+        // Task 0060: the local development start without a key service; the same file otherwise.
+        assertEquals(Files.readString(REPO.resolve("install/product-roles.json")).replace("\"required\"", "\"optional\""),
+                Files.readString(REPO.resolve("install/demo/product-roles-development.json")));
         // The same names LexaVault accepts when it reads a stored grant.
         assertEquals(LexaVaultProduct.ENTITY_ROLES, roles);
         assertEquals(LexaVaultProduct.ROLE_ALIASES, aliases);

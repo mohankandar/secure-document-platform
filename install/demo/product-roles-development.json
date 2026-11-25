@@ -1,0 +1,18 @@
+{
+  "format": "platform-product-roles/1",
+  "productCode": "LEXAVAULT",
+  "roles": [
+    "DOCUMENT_PROCESSOR",
+    "DOCUMENT_SUPERVISOR",
+    "BUSINESS_ADMIN",
+    "REPORT_VIEWER",
+    "TENANT_IT_ADMIN"
+  ],
+  "aliases": {
+    "USER": "DOCUMENT_PROCESSOR",
+    "REVIEWER": "DOCUMENT_PROCESSOR",
+    "APPROVER": "DOCUMENT_SUPERVISOR"
+  },
+  "platformRoles": ["PLATFORM_OPERATIONS_ADMIN"],
+  "customerKeys": "optional"
+}

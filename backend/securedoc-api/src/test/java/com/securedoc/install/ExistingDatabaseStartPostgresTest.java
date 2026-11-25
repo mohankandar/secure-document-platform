@@ -98,7 +98,7 @@ class ExistingDatabaseStartPostgresTest {
                 "--licence", DEMO.resolve("licence-demo.json").toString(),
                 "--signin", signin.toString(),
                 "--product", "LEXAVAULT",
-                "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
+                "--product-roles", DemoStepTest.REPO.resolve("install/demo/product-roles-development.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(),
                 "--no-customer-keys"));

@@ -15,6 +15,16 @@ public enum TechnicalFailureCode {
     /** Task 0021: the destination refused the sensitivity level sent with the export. Never retried. LV-DLV-003. */
     DELIVERY_SENSITIVITY_REFUSED,
     STORAGE_IO,
+    /** Task 0060: the key service can't be reached, is sealed or gave no usable answer. Retryable. LV-SYS-010. */
+    KEY_SERVICE_UNAVAILABLE,
+    /** Task 0060: the key service refused the app, or the customer's keys are missing or off. Retryable. LV-SYS-011. */
+    KEY_SERVICE_REFUSED,
+    /** Task 0060: a stored file without a record of its protection, or changed. Never retried. LV-SYS-012. */
+    STORED_FILE_REFUSED,
+    /** Task 0060: the database was restored and the erase replay has not run. LV-SYS-013. */
+    ERASE_REPLAY_REQUIRED,
+    /** Task 0060: the erase log can't be used, so nothing is erased. Retryable. LV-SYS-014. */
+    ERASE_LOG_UNAVAILABLE,
     /** Task 0023 C1: the case failed to start processing 3 times in a row. Stopped, not retried automatically. */
     PROCESSING_DISPATCH_EXHAUSTED,
     /** Task 0023 C1: the tenant licence does not allow document processing. Stopped at once, not retried. */

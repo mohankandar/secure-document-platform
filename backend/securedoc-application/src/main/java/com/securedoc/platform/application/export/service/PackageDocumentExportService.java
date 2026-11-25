@@ -135,6 +135,8 @@ public final class PackageDocumentExportService implements ExportPackageDocument
         // Task 0021: the levels are read from the stored case on every attempt, so a retry carries the same levels.
         Map<String, com.securedoc.platform.domain.document.SensitivityLevel> levelByDocumentId = new HashMap<>();
         documents.forEach(d -> levelByDocumentId.put(d.id().toString(), d.sensitivityLevel()));
+        // Task 0060: a stored copy that can't be opened is not the destination's failure, however the adapter reports it.
+        DeliverySource source = new DeliverySource(storagePort);
         List<DeliveryItem> pendingItems = new ArrayList<>();
         for (DeliverySubmission.DocumentState state : submission.pendingDocuments()) {
             Artifact artifact = artifactByDocumentId.get(state.documentId().toString());
@@ -142,7 +144,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
             var documentLevel = levelByDocumentId.get(state.documentId().toString());
             if (documentLevel == null) throw new IllegalStateException("Delivery submission refers to a document outside the package");
             pendingItems.add(new DeliveryItem(state.documentId(), state.sourceDocumentId(), state.fileName(),
-                    () -> storagePort.retrieve(artifact.storageReference()), artifact.sizeBytes(), PDF_MIME_TYPE,
+                    () -> source.open(artifact.storageReference()), artifact.sizeBytes(), PDF_MIME_TYPE,
                     artifact.checksum().algorithm(), artifact.checksum().value(), documentLevel));
         }
 
@@ -164,7 +166,8 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 submission.markDelivered(batchReference.destinationSubmissionReference(), Instant.now());
                 deliverySubmissionRepository.save(submission);
                 deliverySubmissionRepository.saveAttempt(activeAttempt.completeSuccess(Instant.now()));
-            } catch (TechnicalDependencyException e) {
+            } catch (TechnicalDependencyException reported) {
+                TechnicalDependencyException e = source.failureOr(reported);
                 submission.markFailure(e.failureCode().name(), e.retryable(), Instant.now());
                 deliverySubmissionRepository.save(submission);
                 deliverySubmissionRepository.saveAttempt(activeAttempt.completeFailure(e.failureCode().name(), e.retryable(), Instant.now()));
@@ -265,6 +268,9 @@ public final class PackageDocumentExportService implements ExportPackageDocument
         try (java.io.InputStream in = storagePort.retrieve(artifact.storageReference())) {
             byte[] buffer = new byte[8192];
             for (int read; (read = in.read(buffer)) != -1; ) digest.update(buffer, 0, read);
+        } catch (TechnicalDependencyException exact) {
+            // Task 0060: the key service's or the file's own code.
+            throw exact;
         } catch (java.io.IOException | RuntimeException unreadable) {
             throw new TechnicalDependencyException(com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
                     com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO, true,

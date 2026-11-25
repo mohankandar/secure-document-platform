@@ -226,8 +226,13 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-007 | Temporary file left behind | A temporary file couldn't be deleted after a failure; IT should remove it. | System | IT Admin | — | 91, 356, 370, 372, 373 |
 | LV-SYS-008 | Item not found | The item asked for (a rule, a connection, a file) doesn't exist in this entity. | Refused | Person, IT Admin | 404 | 0025 (not-found other than a case) |
 | LV-SYS-009 | Unknown request | The address or method isn't one LexaVault offers. | Refused | Source system | 404 / 405 | 0025 (unknown endpoint, wrong method) |
+| LV-SYS-010 | Key service not available | LexaVault can't reach its key service, so it can't open or store documents. | System | IT Admin | 503 | 0060 |
+| LV-SYS-011 | Key service refused | The key service refused LexaVault, or the customer's keys are missing or switched off. | System | IT Admin | 503 | 0060 |
+| LV-SYS-012 | Stored file not opened | A stored file has no record of how it is protected, or it was changed, so it was not opened. | System | IT Admin | 502 | 0060 |
+| LV-SYS-013 | Waiting for the erase replay | The database was restored from a backup: no work is taken until the erase replay has run. | System | IT Admin | 503 | 0060 |
+| LV-SYS-014 | Erase log not available | LexaVault can't use its erase log, so nothing is erased and no work is taken. | System | IT Admin | 503 | 0060 |
 
-**Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064.)*
+**Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064; LV-SYS-010 to 014 by task 0060.)*
 
 ## 3. Rows with no code on purpose
 

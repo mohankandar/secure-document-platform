@@ -22,15 +22,20 @@ scripts/Setup-LexaVault.ps1 apply -Licence licence.json -Signin signin.json
 (`scripts/Setup-LexaVault.sh plan|apply --licence ... --signin ...` on Linux.)
 
 Setup runs from its own jar, `backend/securedoc-setup/target/securedoc-setup-0.1.0-SNAPSHOT.jar` (task 0041), not from
-the app jar: setup brings platform-crypto and platform-integration (customer keys, integration profile checks), and
-the app's classpath does not carry them. The wrapper finds it (`-JarPath` names another one). It passes what LexaVault
+the app jar: setup brings platform-integration (integration profile checks), and the app's classpath does not carry it. The wrapper finds it (`-JarPath` names another one). It passes what LexaVault
 ships:
 
 | Option | File | Note |
 |---|---|---|
 | `--product` | `LEXAVAULT` | |
-| `--product-roles` | `install/product-roles.json` | LexaVault's roles and aliases (below); `"customerKeys": "optional"` |
-| `--no-customer-keys` | | LexaVault encrypts nothing with platform-core yet. platform-core 0.2.0 refuses this flag only for a product whose `product-roles.json` says `"customerKeys": "required"`; LexaVault's says `optional` |
+| `--product-roles` | `install/product-roles.json` | LexaVault's roles and aliases (below); `"customerKeys": "required"` |
+
+**Customer keys (task 0060).** Setup creates your customer's two keys in the key service, with a login that has only the
+policy `platform-crypto-setup`, in the environment for this run only (`PLATFORM_SETUP_VAULT_ADDR` and `_TOKEN`, `_TOKEN_FILE`
+or `_ROLE_ID` with `_SECRET_ID`). Without it setup is refused (`SETUP_KEY_SERVICE_SETTINGS_MISSING`); `--no-customer-keys` is
+refused (`SETUP_CUSTOMER_KEYS_REQUIRED`). A customer set up earlier without keys gets them from the next run. See
+`KEY_SERVICE.md`. Only the local development start uses `install/demo/product-roles-development.json`, where keys are
+optional, when no key service is set in the environment.
 
 **Licence keys (platform-core 0.7.0, task 0054).** There is no `--keys`: the keys that a licence is checked with are inside
 the setup jar (`docs/install/BUILD.md`). Only a development build takes the demo licence; a production build refuses it
@@ -102,7 +107,7 @@ These setup inputs come with their own tasks; nothing is needed for them now:
 - the release's production licence keys (`docs/install/BUILD.md`);
 - notifications settings;
 - integration client bindings (client ID -> entity -> source): a later task;
-- customer keys for sensitive case fields: when LexaVault encrypts with platform-core (`--no-customer-keys` until then);
+- customer keys for sensitive case fields: when LexaVault uses platform-fields (stored documents are encrypted, task 0060);
 - entity time zones: the sign-in file's optional `timeZone` and `entityTimeZones` are stored by setup today; the app
   uses them (task 0058) for daily schedules, reports and the times it shows, and the Business Admin changes an entity's own
   in Admin › Entities. Without any, everything works as before. Retention timers are hours from a fixed moment in every zone.
