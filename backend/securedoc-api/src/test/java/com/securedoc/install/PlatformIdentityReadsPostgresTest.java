@@ -131,6 +131,22 @@ class PlatformIdentityReadsPostgresTest {
         assertEquals(Set.of(TenantId.of(a)), reads.findEnabledPushTenants(PROVIDER, ISSUER, AUDIENCE, "svc-a"));
         assertEquals(Set.of(), reads.findEnabledPushTenants(PROVIDER, ISSUER, AUDIENCE, "svc-none"));
         assertEquals(Set.of(), reads.findEnabledPushTenants(PROVIDER, ISSUER, "api://other", "svc-a"));
+        // Task 0075: a scanner source binds on the scanner routes only, and a push source never there.
+        for (String[] scanner : new String[][] {{"OAUTH2_CLIENT_CREDENTIALS", "scan-a", "true"}, {"NONE", "scan-none", "true"},
+                {"JWT", "scan-off", "false"}}) {
+            rows.exec("""
+                    insert into integration_connections (id, tenant_id, name, purpose, direction, provider_type,
+                        authentication_type, client_principal, timeout_seconds, retry_max_attempts, acknowledgement_mode,
+                        enabled, configuration_version, health_status, created_at, updated_at)
+                    values (?, ?, ?, 'INGESTION_SOURCE', 'INBOUND', 'SCANNER', ?, ?, 5, 0, 'NONE',
+                        ?, 1, 'UNKNOWN', now(), now())
+                    """, UUID.randomUUID(), a, scanner[1], scanner[0], scanner[1], Boolean.valueOf(scanner[2]));
+        }
+        assertEquals(Set.of(TenantId.of(a)), reads.findEnabledScannerTenants(PROVIDER, ISSUER, AUDIENCE, "scan-a"));
+        assertEquals(Set.of(), reads.findEnabledScannerTenants(PROVIDER, ISSUER, AUDIENCE, "scan-none"));
+        assertEquals(Set.of(), reads.findEnabledScannerTenants(PROVIDER, ISSUER, AUDIENCE, "scan-off"));
+        assertEquals(Set.of(), reads.findEnabledScannerTenants(PROVIDER, ISSUER, AUDIENCE, "svc-a"));
+        assertEquals(Set.of(), reads.findEnabledPushTenants(PROVIDER, ISSUER, AUDIENCE, "scan-a"));
     }
 
     @Test

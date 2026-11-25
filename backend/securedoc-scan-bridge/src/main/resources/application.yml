@@ -48,6 +48,13 @@ securedoc:
     client-principal: ${SECUREDOC_SCAN_BRIDGE_CLIENT_PRINCIPAL:scanner-bridge-local}
     local-actor-id: ${SECUREDOC_SCAN_BRIDGE_LOCAL_ACTOR_ID:00000000-0000-0000-0000-000000000099}
     authorization-bearer-token: ${SECUREDOC_SCAN_BRIDGE_AUTH_BEARER_TOKEN:}
+    # Task 0075: with sign-in, the bridge gets its own token (client credentials). All three, and the secret from the
+    # environment only; https, or http on this machine. Wins over the fixed token above.
+    oidc:
+      token-uri: ${SECUREDOC_SCAN_BRIDGE_OIDC_TOKEN_URI:}
+      client-id: ${SECUREDOC_SCAN_BRIDGE_OIDC_CLIENT_ID:}
+      client-secret: ${SECUREDOC_SCAN_BRIDGE_OIDC_CLIENT_SECRET:}
+      scope: ${SECUREDOC_SCAN_BRIDGE_OIDC_SCOPE:}
     # Durable ownership/error roots are acquisition-mode independent.
     work-path: ${SECUREDOC_SCAN_BRIDGE_WORK_PATH:C:/LexaVaultTest/scanner-bridge-work}
     problem-path: ${SECUREDOC_SCAN_BRIDGE_PROBLEM_PATH:C:/LexaVaultTest/scanner-bridge-problem}

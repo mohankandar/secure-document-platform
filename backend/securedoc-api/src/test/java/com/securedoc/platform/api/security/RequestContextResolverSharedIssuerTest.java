@@ -75,8 +75,17 @@ class RequestContextResolverSharedIssuerTest {
         SecurityProperties properties = sharedIssuerProperties();
         TenantOidcGroupGrantRepository grantStore = (p, i, a) -> expected(p, i, a) ? grants : Map.of();
         ActiveOidcTenantCandidates candidateStore = (p, i, a) -> expected(p, i, a) ? activeCandidates : Set.of();
-        ActiveOidcMachineTenantBindings machineStore = (p, i, a, client) ->
-                expected(p, i, a) ? machineBindings.getOrDefault(client, Set.of()) : Set.of();
+        ActiveOidcMachineTenantBindings machineStore = new ActiveOidcMachineTenantBindings() {
+            @Override
+            public Set<TenantId> findEnabledPushTenants(String p, URI i, String a, String client) {
+                return expected(p, i, a) ? machineBindings.getOrDefault(client, Set.of()) : Set.of();
+            }
+
+            @Override
+            public Set<TenantId> findEnabledScannerTenants(String p, URI i, String a, String client) {
+                return expected(p, i, a) ? machineBindings.getOrDefault("scanner:" + client, Set.of()) : Set.of();
+            }
+        };
         return new RequestContextResolver(
                 "00000000-0000-0000-0000-000000000001",
                 "00000000-0000-0000-0000-000000000099",
@@ -298,6 +307,30 @@ class RequestContextResolverSharedIssuerTest {
         }
         signedIn("service-account-intake", List.of(), Map.of("azp", "intake", "client_id", "intake", "name", " "));
         assertEquals(A, resolver.resolveIntegrationPrincipal(choosing(null)).tenantId());
+    }
+
+    private static HttpServletRequest scanning() {
+        HttpServletRequest request = choosing(B.value().toString());
+        when(request.getServletPath()).thenReturn("/api/v1/scanner-intakes/x");
+        return request;
+    }
+
+    /** Task 0075: the scanner routes take a scanner source's client only, the push routes a push source's only. */
+    @Test
+    void aScannerClientIsAMachineOnTheScannerRoutesOnlyAndAPushClientNever() {
+        RequestContextResolver resolver = resolver(GRANTS, Set.of(A, B), Map.of("scanner:bridge", Set.of(A),
+                "intake", Set.of(B), "scanner:two", Set.of(A, B)));
+        String refused = "Machine identity has no unique ACTIVE tenant integration binding";
+        signedIn("bridge", List.of());
+        assertEquals(A, resolver.resolveIntegrationPrincipal(scanning()).tenantId(), "no header chooses the entity");
+        assertRefused(refused, () -> resolver.resolveIntegrationPrincipal(choosing(null)));
+        signedIn("intake", List.of());
+        assertRefused(refused, () -> resolver.resolveIntegrationPrincipal(scanning()));
+        signedIn("two", List.of());
+        assertRefused(refused, () -> resolver.resolveIntegrationPrincipal(scanning()));
+        signedIn("bridge", List.of("lv-a-staff"));
+        assertRefused("A person's sign-in cannot be used as an integration client",
+                () -> resolver.resolveIntegrationPrincipal(scanning()));
     }
 
     @Test
