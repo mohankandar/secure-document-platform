@@ -30,6 +30,39 @@ public final class VisionPageReader {
     private final PageImagePort images;
     private final VisionModelPort model;
 
+    /**
+     * Task 0092: the model often takes the numbers of a check's line for one another. Where the line's shape is found, its
+     * two numbers stand for what the model said at those places; everything else the model said stays.
+     */
+    private VisionPageResult withCheckLines(VisionPageResult result,
+                                            com.securedoc.platform.domain.artifact.ArtifactStorageReference original) throws IOException {
+        java.util.List<PageImagePort.CheckLine> lines;
+        try (InputStream content = storage.retrieve(original)) {
+            lines = images.checkLines(content, result.page());
+        }
+        return lines.isEmpty() ? result : withCheckLines(result, lines);
+    }
+
+    static VisionPageResult withCheckLines(VisionPageResult result, java.util.List<PageImagePort.CheckLine> lines) {
+        java.util.List<VisionPageResult.Item> items = new java.util.ArrayList<>();
+        for (VisionPageResult.Item item : result.items()) {
+            boolean bank = item.kind() == VisionPageResult.Kind.BANK_ACCOUNT || item.kind() == VisionPageResult.Kind.ROUTING_NUMBER;
+            if (!bank || lines.stream().noneMatch(l -> inside(item.box(), l.routing()) || inside(item.box(), l.account()))) items.add(item);
+        }
+        for (PageImagePort.CheckLine line : lines) {
+            items.add(new VisionPageResult.Item(VisionPageResult.Kind.ROUTING_NUMBER, line.routing(), true));
+            items.add(new VisionPageResult.Item(VisionPageResult.Kind.BANK_ACCOUNT, line.account(), true));
+        }
+        return VisionPageResult.read(result.page(), result.model(), items, result.incomplete());
+    }
+
+    /** Nearly all of the first lies in the second, so dropping the first uncovers nothing. */
+    private static boolean inside(com.securedoc.platform.domain.finding.FindingLocation.BoundingBox item, com.securedoc.platform.domain.finding.FindingLocation.BoundingBox place) {
+        double w = Math.min(item.left() + item.width(), place.left() + place.width()) - Math.max(item.left(), place.left());
+        double h = Math.min(item.top() + item.height(), place.top() + place.height()) - Math.max(item.top(), place.top());
+        return w > 0 && h > 0 && w >= 0.85 * item.width() && h >= 0.5 * item.height();
+    }
+
     public VisionPageReader(ArtifactRepository artifacts, StoragePort storage, PageImagePort images,
                             VisionModelPort model) {
         this.artifacts = Objects.requireNonNull(artifacts);
@@ -51,6 +84,7 @@ public final class VisionPageReader {
         try (content) {
             PageImagePort.PageImage image = images.render(content, page, VisionModelPort.IMAGE_LONG_SIDE);
             result = model.read(image, page);
+            if (result.read()) result = withCheckLines(result, original.storageReference());
         } catch (IOException | RuntimeException notRendered) {
             if (Thread.currentThread().isInterrupted()) {
                 // The server is stopping: nothing is known about the page, so nothing is recorded about it.

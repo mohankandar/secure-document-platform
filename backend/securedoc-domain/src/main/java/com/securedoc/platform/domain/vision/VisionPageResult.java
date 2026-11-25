@@ -23,7 +23,12 @@ public record VisionPageResult(int page, boolean read, String code, String reaso
         FACE_PHOTO
     }
 
-    public record Item(Kind kind, BoundingBox box) {
+    /** @param checkLine task 0092: the shape of a check's line said where it is, not the model */
+    public record Item(Kind kind, BoundingBox box, boolean checkLine) {
+        public Item(Kind kind, BoundingBox box) {
+            this(kind, box, false);
+        }
+
         public Item {
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(box, "box");

@@ -33,6 +33,8 @@ public final class VisionFindings {
     static final double VISION_CONFIDENCE = 0.75;
     /** The signature detector: 74 of 74 found with no false flag in the benchmark (report 0033). */
     static final double SIGNATURE_CONFIDENCE = 0.95;
+    /** Task 0092: after the kind's name in the file of a vision job. */
+    private static final String CHECK_LINE = "+LINE";
     private static final double AGREEMENT_BOOST = 0.05;
     /** Every side of a vision box, as a share of the page: the box must cover the whole value. */
     private static final double MARGIN = 0.004;
@@ -63,8 +65,9 @@ public final class VisionFindings {
             EntityType type = type(item.kind(), policy.enabledEntityTypes());
             if (type == null) continue;
             found.add(new Candidate(type, FindingLocation.withBounds(result.page(), 0, 0, widened(item.box())),
-                    VISION_CONFIDENCE, new DetectorSource("vision", result.model().version()),
-                    FindingOrigin.of(DetectionPath.VISION, List.of(result.model()))));
+                    VISION_CONFIDENCE, item.checkLine() ? new DetectorSource("check-line", "1")
+                    : new DetectorSource("vision", result.model().version()),
+                    FindingOrigin.of(DetectionPath.VISION, item.checkLine() ? List.of() : List.of(result.model()))));
         }
         if (!result.read()) {
             found.add(unread(result.page(), result.code() == null ? result.reason() : result.code(), List.of()));
@@ -201,7 +204,7 @@ public final class VisionFindings {
         out.writeBoolean(result.incomplete());
         out.writeInt(result.items().size());
         for (VisionPageResult.Item item : result.items()) {
-            PageBatchFiles.writeText(out, item.kind().name());
+            PageBatchFiles.writeText(out, item.kind().name() + (item.checkLine() ? CHECK_LINE : ""));
             out.writeDouble(item.box().left());
             out.writeDouble(item.box().top());
             out.writeDouble(item.box().width());
@@ -219,9 +222,11 @@ public final class VisionFindings {
         int count = in.readInt();
         List<VisionPageResult.Item> items = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            VisionPageResult.Kind kind = VisionPageResult.Kind.valueOf(PageBatchFiles.readText(in));
-            items.add(new VisionPageResult.Item(kind, BoundingBox.of(in.readDouble(), in.readDouble(),
-                    in.readDouble(), in.readDouble())));
+            String kind = PageBatchFiles.readText(in);
+            boolean checkLine = kind.endsWith(CHECK_LINE);
+            items.add(new VisionPageResult.Item(VisionPageResult.Kind.valueOf(checkLine
+                    ? kind.substring(0, kind.length() - CHECK_LINE.length()) : kind), BoundingBox.of(in.readDouble(),
+                    in.readDouble(), in.readDouble(), in.readDouble()), checkLine));
         }
         return new VisionPageResult(page, read, code, reason, model == null ? null : AiModel.decode(model), items,
                 incomplete);
