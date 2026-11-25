@@ -32,6 +32,10 @@
        and its clean-up sweep removes that file and no file a record points to.
    12. Stops B and the mock and removes only the throwaway container.
 
+    Task 0086: with -Encrypted a throwaway Vault (lexavault-0048-2s-vault, dev mode, in memory) is the key service of both
+    servers, so every stored file is encrypted (task 0060). The same checks run, and: every stored file is recorded as
+    encrypted, and none holds a PDF header or a fake value.
+
     The container password is generated per run and never printed. The run folder holds fake test values only.
 
 .PARAMETER JarPath
@@ -47,11 +51,13 @@ param(
     [int] $OllamaPort = 11548,
     [string] $Model = 'qwen3.5:9b',
     [int] $Cases = 20,
-    [int] $AiDelayMs = 2500,
-    [int] $VisionDelayMs = 2000,
+    [int] $AiDelayMs = 800,
+    [int] $VisionDelayMs = 600,
     [int] $ClaimLeaseMs = 15000,
     [int] $BigPages = 200,
-    [int] $FinishTimeoutSeconds = 1800
+    [int] $FinishTimeoutSeconds = 1800,
+    [switch] $Encrypted,
+    [int] $VaultPort = 28248
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +69,7 @@ if (-not $JarPath) { $JarPath = Join-Path $repoRoot 'backend\securedoc-api\targe
 if (-not (Test-Path -LiteralPath $JarPath)) { throw "Backend jar not found: $JarPath (build it first)." }
 
 $Container = 'lexavault-0048-2s-pg'
+$VaultContainer = 'lexavault-0048-2s-vault'
 $Protected = @('securedoc-postgres', 'sdv-postgres', 'sdv-vault', 'lexa-keycloak', 'lexa-keycloak-db')
 if ($Protected -contains $Container) { throw "Refusing to use a protected container name." }
 
@@ -108,6 +115,48 @@ function Send-Document([string] $Backend, [string] $PackageId, [string] $Pdf, [s
     } finally { $client.Dispose() }
 }
 
+$vaultAppEnv = @{}
+function Invoke-Vault([string] $Method, [string] $Path, $Body = $null, [string] $Token = $vaultRoot) {
+    $req = @{ Method = $Method; Uri = "http://127.0.0.1:$VaultPort/v1/$Path"; Headers = @{ 'X-Vault-Token' = $Token }; TimeoutSec = 10 }
+    if ($null -ne $Body) { $req.Body = ($Body | ConvertTo-Json -Depth 5); $req.ContentType = 'application/json' }
+    return Invoke-RestMethod @req
+}
+# The three policies of the key service guide (docs/install/KEY_SERVICE.md); the app gets platform-crypto-app only.
+function Start-Vault {
+    docker run -d --name $VaultContainer --cap-add IPC_LOCK -p "127.0.0.1:${VaultPort}:8200" -e "VAULT_DEV_ROOT_TOKEN_ID=$vaultRoot" `
+        -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' hashicorp/vault:1.17.6 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "docker run failed (vault)" }
+    $script:vaultStarted = $true
+    $up = $false
+    for ($i = 0; $i -lt 30 -and -not $up; $i++) {
+        Start-Sleep -Seconds 1
+        try { Invoke-Vault GET 'sys/health' | Out-Null; $up = $true } catch { }
+    }
+    if (-not $up) { throw "the throwaway Vault did not start" }
+    Invoke-Vault POST 'sys/mounts/transit' @{ type = 'transit' } | Out-Null
+    Invoke-Vault POST 'sys/auth/approle' @{ type = 'approle' } | Out-Null
+    Invoke-Vault PUT 'sys/policies/acl/platform-crypto-app' @{ policy = @'
+path "transit/datakey/plaintext/customer-*" { capabilities = ["update"] }
+path "transit/decrypt/customer-*" { capabilities = ["update"] }
+path "transit/rewrap/customer-*" { capabilities = ["update"] }
+path "transit/hmac/customer-*" { capabilities = ["update"] }
+path "transit/keys/customer-*" { capabilities = ["read"] }
+path "secret/data/platform/*" { capabilities = ["read"] }
+'@ } | Out-Null
+    Invoke-Vault PUT 'sys/policies/acl/platform-crypto-setup' @{ policy = @'
+path "transit/keys/+" { capabilities = ["create", "update", "read"] }
+path "transit/keys/+/rotate" { capabilities = ["update"] }
+'@ } | Out-Null
+    Invoke-Vault POST 'auth/approle/role/app' @{ token_policies = @('platform-crypto-app') } | Out-Null
+    $script:vaultAppEnv = @{
+        PLATFORM_CRYPTO_VAULT_ADDRESS = "http://127.0.0.1:$VaultPort"
+        PLATFORM_CRYPTO_VAULT_ROLEID = (Invoke-Vault GET 'auth/approle/role/app/role-id').data.role_id
+        PLATFORM_CRYPTO_VAULT_SECRETID = (Invoke-Vault POST 'auth/approle/role/app/secret-id').data.secret_id
+    }
+    $env:PLATFORM_SETUP_VAULT_ADDR = "http://127.0.0.1:$VaultPort"
+    $env:PLATFORM_SETUP_VAULT_TOKEN = (Invoke-Vault POST 'auth/token/create' @{ policies = @('platform-crypto-setup'); ttl = '1h' }).auth.client_token
+}
+
 function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $PurgeIntervalMs = 900000) {
     $logDir = Join-Path $runDir "logs-$Name"
     New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -121,6 +170,11 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
     $env:SECUREDOC_AI_MODEL = $Model
     # Find and Vision share the limit per AI server; with enough places Redact starts while Text still runs (the kill needs all four).
     $env:SECUREDOC_AI_REQUESTS_AT_ONCE = '6'
+    # Task 0067 sets the workers from the queue: up to 11 Text workers finish every document's text before the first case
+    # reaches Redact, so no server ever held all four claims. One Text worker, and an AI limit learned quickly, keep the
+    # four stages going at the same time.
+    $env:SECUREDOC_STAGE_JOBS_TEXT_WORKERS = '1'
+    $env:SECUREDOC_AI_LEARN_UP_EVERY_MS = '2000'
     $env:SECUREDOC_AI_VISION_BASE_URL = "http://localhost:$OllamaPort"
     $env:SECUREDOC_AI_VISION_MODEL = $visionModel
     $env:SECUREDOC_AI_VISION_MODEL_DIGEST = $visionDigest
@@ -137,6 +191,7 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
     $env:SECUREDOC_STAGE_JOBS_POLL_INTERVAL_MS = '500'
     $env:SECUREDOC_LIFECYCLE_PURGE_INTERVAL_MS = "$PurgeIntervalMs"
     $env:SECUREDOC_EXPORT_JOBS_POLL_INTERVAL_MS = '1000'
+    foreach ($name in $vaultAppEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $vaultAppEnv[$name], 'Process') }
     try {
         return Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
             -ArgumentList @('-jar', $JarPath, '--spring.profiles.active=local',
@@ -144,6 +199,7 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
             -RedirectStandardOutput (Join-Path $logDir 'backend.out.log') -RedirectStandardError (Join-Path $logDir 'backend.err.log')
     } finally {
         Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue
+        foreach ($name in $vaultAppEnv.Keys) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue }
     }
 }
 
@@ -161,6 +217,8 @@ $serverA = $null
 $serverB = $null
 $ollama = $null
 $containerStarted = $false
+$vaultStarted = $false
+$vaultRoot = [guid]::NewGuid().ToString('N')
 $exitCode = 1
 $checks = New-Object System.Collections.ArrayList
 function Add-Check([string] $name, [bool] $ok, [string] $detail) {
@@ -182,6 +240,10 @@ try {
     while ($LASTEXITCODE -ne 0 -and (Get-Date) -lt $deadline)
     Start-Sleep -Seconds 2
     . (Join-Path $repoRoot 'scripts\lib\LexaVaultTools.ps1')
+    if ($Encrypted) {
+        if (@(docker ps -a --filter "name=^/$VaultContainer$" --format '{{.Names}}').Count -gt 0) { throw "Container $VaultContainer already exists; remove it first." }
+        Start-Vault
+    }
     Initialize-LexaVaultDatabase -Jar $JarPath -DbUrl "jdbc:postgresql://localhost:${DbPort}/securedoc" -DbUser 'securedoc' `
         -DbPassword $dbPassword -StateDir (Join-Path $runDir 'install')
 
@@ -367,6 +429,21 @@ try {
     }
     Add-Check 'no redacted value saved (database dump)' ($valueHits -eq 0) "$valueHits matches"
 
+    # Task 0086: how the stored files are protected, and by which server they were written.
+    $protections = Invoke-Sql "select string_agg(distinct protection, ',') from stored_files"
+    $unrecorded = Invoke-Sql "select count(*) from artifacts a where a.status <> 'DELETED' and a.storage_key is not null and not exists (select 1 from stored_files s where s.storage_key = a.storage_key)"
+    Add-Check 'every stored file has its record' ($unrecorded -eq '0') "$unrecorded without"
+    if ($Encrypted) {
+        $readable = 0
+        $storedFiles = @(Get-ChildItem -LiteralPath $shared -Recurse -File)
+        foreach ($file in $storedFiles) {
+            $text = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes($file.FullName))
+            foreach ($needle in '%PDF-', '412-55-7531', '4000 0566 5566 5556') { if ($text.Contains($needle)) { $readable++; break } }
+        }
+        Add-Check 'every stored file is encrypted' ($protections -eq 'ENCRYPTED' -and $readable -eq 0 -and $storedFiles.Count -gt 0) "$protections; $readable of $($storedFiles.Count) files readable"
+    }
+    else { Add-Check 'the stored files are plain, as recorded' ($protections -eq 'PLAIN') "$protections" }
+
     # --- 11. a file left by a killed worker, and the clean-up sweep ------------------------------------------
     function Get-StoredKeys {
         @(Get-ChildItem -LiteralPath $shared -Recurse -File | ForEach-Object { $_.FullName.Substring($shared.Length + 1).Replace('\', '/') })
@@ -421,8 +498,12 @@ finally {
         docker rm -f $Container | Out-Null
         Write-Host "Removed throwaway container $Container"
     }
-    foreach ($name in 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_NODE_ID',
-            'SECUREDOC_AI_REQUESTS_AT_ONCE', 'SECUREDOC_AI_VISION_BASE_URL', 'SECUREDOC_AI_VISION_MODEL', 'SECUREDOC_AI_VISION_MODEL_DIGEST',
+    if ($vaultStarted) {
+        docker rm -f $VaultContainer | Out-Null
+        Write-Host "Removed throwaway container $VaultContainer"
+    }
+    foreach ($name in 'PLATFORM_SETUP_VAULT_ADDR', 'PLATFORM_SETUP_VAULT_TOKEN', 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SERVER_PORT', 'SECUREDOC_NODE_ID',
+            'SECUREDOC_AI_REQUESTS_AT_ONCE', 'SECUREDOC_STAGE_JOBS_TEXT_WORKERS', 'SECUREDOC_AI_LEARN_UP_EVERY_MS', 'SECUREDOC_AI_VISION_BASE_URL', 'SECUREDOC_AI_VISION_MODEL', 'SECUREDOC_AI_VISION_MODEL_DIGEST',
             'SECUREDOC_AI_PROVIDER', 'SECUREDOC_AI_OLLAMA_BASE_URL', 'SECUREDOC_AI_MODEL', 'SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED',
             'SECUREDOC_WATCHED_FOLDER_ENABLED', 'SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED', 'SECUREDOC_LOGGING_CONFIG',
             'SECUREDOC_LOG_DIR', 'SECUREDOC_PRODUCT_TELEMETRY_OUTPUT_PATH', 'SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH',
