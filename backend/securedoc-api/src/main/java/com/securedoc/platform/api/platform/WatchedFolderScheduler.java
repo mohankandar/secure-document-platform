@@ -157,8 +157,9 @@ public class WatchedFolderScheduler {
         if (stopped.isPresent()) {
             Snapshot before = last.get();
             if (before == null || !LICENCE_STOPPED.equals(before.outcome())) {
-                log.warn("WATCHED_FOLDER_SCAN_STOPPED_BY_LICENCE mode={} nodeId={} reasonCode={}", mode, logicalNodeId(),
-                        stopped.get().errorCode());
+                log.warn("WATCHED_FOLDER_SCAN_STOPPED_BY_LICENCE mode={} nodeId={} reasonCode={} code={}", mode, logicalNodeId(),
+                        stopped.get().errorCode(),
+                        com.securedoc.platform.application.error.LvErrorCodes.of(stopped.get()).code());
             }
             WatchedFolderScanResponse response = emptyResponse(LICENCE_STOPPED);
             last.set(new Snapshot(Instant.now(), LICENCE_STOPPED, response));

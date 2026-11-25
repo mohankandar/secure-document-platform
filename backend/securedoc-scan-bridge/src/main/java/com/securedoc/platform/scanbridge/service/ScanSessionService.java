@@ -171,7 +171,7 @@ public class ScanSessionService {
                 existing.lexavaultPackageId(), existing.deliveryAttemptCount(), now, now, null, null, null);
         store.save(queued);
         sessions.put(sessionId, queued);
-        actionableSessionId.compareAndSet(sessionId, null);
+        release(sessionId);
         log.info("SCAN_BRIDGE_SUBMISSION_QUEUED bridgeId={} siteId={} scannerId={} sessionId={} submissionId={} sourceDocumentId={} sizeBytes={}",
                 existing.bridgeId(), existing.siteId(), existing.scannerId(), existing.sessionId(), existing.submissionId(),
                 existing.preparedScan().sourceDocumentId(), existing.preparedScan().sizeBytes());
@@ -274,7 +274,7 @@ public class ScanSessionService {
                 httpStatus, lexaVaultLvCode);
         store.save(attention);
         sessions.put(sessionId, attention);
-        actionableSessionId.compareAndSet(sessionId, null);
+        release(sessionId);
         log.warn("SCAN_BRIDGE_DELIVERY_ATTENTION_REQUIRED bridgeId={} siteId={} scannerId={} sessionId={} submissionId={} reasonCode={} code={} lexaVaultCode={}",
                 existing.bridgeId(), existing.siteId(), existing.scannerId(), existing.sessionId(), existing.submissionId(), safeErrorCode,
                 attention.lastDeliveryLvCode(), attention.lastDeliveryLexaVaultCode());
@@ -293,7 +293,7 @@ public class ScanSessionService {
                 existing.deliveryAttemptCount(), existing.queuedAt(), null, null, null, now, null);
         store.save(submitted);
         sessions.put(sessionId, submitted);
-        actionableSessionId.compareAndSet(sessionId, null);
+        release(sessionId);
         if (properties.getDelivery().isCleanupAcceptedPdf()) {
             try {
                 artifacts.deletePdfIfPresent(submitted.preparedScan());
@@ -326,7 +326,7 @@ public class ScanSessionService {
                 existing.lastDeliveryErrorCode(), existing.lastDeliveryErrorAt(), existing.submittedAt());
         store.save(cancelled);
         sessions.put(sessionId, cancelled);
-        actionableSessionId.compareAndSet(sessionId, null);
+        release(sessionId);
         try {
             artifacts.deletePdfIfPresent(cancelled.preparedScan());
             cancelled = persistSanitizedTerminalArtifact(cancelled);
@@ -399,6 +399,11 @@ public class ScanSessionService {
         return sessions.values().stream().filter(session -> session.status() == status).count();
     }
 
+    /** Task 0077: by value. compareAndSet compares the object, and an id from a request is never the object held here. */
+    private void release(UUID sessionId) {
+        actionableSessionId.updateAndGet(held -> sessionId.equals(held) ? null : held);
+    }
+
     public UUID activeSessionId() { return actionableSessionId.get(); }
 
     private ScannerDeliveryItemResponse deliveryDiagnostic(ScanSession session) {
@@ -436,7 +441,7 @@ public class ScanSessionService {
             }
             cleanupFailureReported.remove(session.sessionId());
             sessions.remove(session.sessionId());
-            actionableSessionId.compareAndSet(session.sessionId(), null);
+            release(session.sessionId());
             log.info("SCAN_BRIDGE_TERMINAL_STATE_PURGED sessionId={} status={}", session.sessionId(), session.status());
         }
     }
