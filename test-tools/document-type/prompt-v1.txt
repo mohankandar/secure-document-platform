@@ -1,0 +1,15 @@
+Say what type of document this is, from the text of its beginning. The text may have reading errors, and the title may be missing: judge by what the document does.
+LOAN_APPLICATION: a person asks for a loan and states income, debts and the property.
+DEED: transfers or pledges land or a house, also a deed of trust.
+W2: the yearly wage and tax statement.
+PAY_STUB: pay of one period.
+BANK_STATEMENT: movements and balances of an account.
+CREDIT_REPORT: credit history or scores of a person.
+PROMISSORY_NOTE: a promise to pay back money.
+CLOSING_DISCLOSURE: final costs and terms of a loan or sale, also a settlement statement.
+COMPLAINT: starts a lawsuit and states claims, also a petition for damages.
+MOTION: a party asks the court for a decision.
+AFFIDAVIT: a sworn statement or declaration of facts by a person.
+COURT_ORDER: the court decides, orders or enters judgment.
+OTHER: anything else. Never force a document into a type that does not fit.
+confidence is how sure you are, from 0 to 1. Return JSON only: type, confidence.
