@@ -2,6 +2,7 @@ import { expect, type Page, type Route } from '@playwright/test';
 import { crc32, deflateSync } from 'node:zlib';
 import { capabilitiesFor } from '../e2e-oidc/policyCapabilities';
 import { INLINE_EXPORT, exportApi, exportCases, retentionSettings } from '../e2e-oidc/exportFixtures';
+import { reportTabsAnswer } from '../e2e-oidc/dailyReportFixture';
 
 /**
  * UI task U026: one mocked identity provider and one mocked API that answers every Case File screen, so the
@@ -135,7 +136,7 @@ function reports() {
       straightThroughTargetPercent: 70, straightThroughActualPercent: 68,
       reviewWaitTargetMinutes: 60, reviewWaitTargetPercent: 80, reviewWithinTargetRate: 83, reviewEligible: 148, reviewBreaches: 25,
     },
-    dimensions: [{ key: 'property_state', label: 'Property state', values: [{ value: 'CA', batches: 300, delivered: 280, reviewRate: 0.3 }, { value: 'NV', batches: 212, delivered: 183, reviewRate: 0.25 }] }],
+    dimensions: [{ key: 'property_state', label: 'Property state', values: [{ value: 'CA', packages: 300, delivered: 280, deliveryRate: 93.3, medianTurnaroundHours: 2.1 }, { value: 'NV', packages: 212, delivered: 183, deliveryRate: 86.3, medianTurnaroundHours: 2.9 }] }],
     timeSaved: { casesDelivered: 512, casesNoPerson: 348, percentNoPerson: 67, pagesChecked: 14220, documentsChecked: 1873, itemsRedacted: 3912,
       itemTypes: ['Social Security Number', 'Date of birth', 'Credit card number', 'Credit score'], pagesNoPerson: 9690, minutesPerPage: 1, minutesSaved: 9690 },
   };
@@ -439,6 +440,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
 
     // Reports
     if (path === '/operations/reports') return json(reports());
+    if (path.startsWith('/operations/reports/')) { const answer = reportTabsAnswer(path); if (answer) return json(answer); }
 
     // Admin › Redaction & retention, Case fields
     if (path === '/business-admin/configuration') return json(configuration());

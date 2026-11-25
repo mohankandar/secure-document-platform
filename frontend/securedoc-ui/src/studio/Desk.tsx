@@ -8,6 +8,7 @@ import {
 } from './data';
 import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits, priorityName, priorityRank } from './words';
 import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
+import { isLvCode, lvLabel } from './lvCodes';
 import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
 import CaseDrawer from './CaseDrawer';
 import { BulkApproveBar, useBulkApprove, type BulkSelection } from './BulkApprove';
@@ -61,6 +62,8 @@ export default function Desk({ caps }: { caps: string[] }) {
     const requested = searchParams.get('stage');
     return requested && (requested === 'you' || STAGES.some((s) => s.key === requested)) ? (requested as Filter) : 'all';
   });
+  // Task 0081: Reports opens the cases with one reason code.
+  const [code, setCode] = useState(() => { const asked = searchParams.get('code'); return isLvCode(asked) ? asked.trim() : null; });
   const [query, setQuery] = useState('');
 
   const { data: packages, error, isLoading, mutate } = usePackages(true);
@@ -81,6 +84,7 @@ export default function Desk({ caps }: { caps: string[] }) {
     const q = query.trim().toLowerCase();
     const matches = all
       .filter((p) => !q || sensitiveMatches.has(p.packageId) || p.businessIdentifiers.some((i) => !i.sensitive && i.value.toLowerCase().includes(q)))
+      .filter((p) => !code || p.stopReasonCode === code)
       .filter((p) => filter === 'all' || (filter === 'you' ? needsYou(p, caps) : tileOf(p) === filter))
       .sort((a, b) => {
         // Task 0073: what waits for a person is Urgent, Normal, Low, the oldest first; the rest is newest first.
@@ -101,7 +105,7 @@ export default function Desk({ caps }: { caps: string[] }) {
       { key: 'stopped', title: CASE_GROUPS.stopped, cases: rest.filter((p) => tileOf(p) === 'stopped') },
       { key: 'delivered', title: CASE_GROUPS.delivered, cases: rest.filter((p) => tileOf(p) === 'delivered') },
     ].filter((g) => g.cases.length > 0);
-  }, [all, caps, filter, query, sensitiveMatches]);
+  }, [all, caps, code, filter, query, sensitiveMatches]);
 
   // Task 0076: bulk approval, only in the Approval stage.
   const waiting = useMemo(() => (filter === 'approval' ? groups.flatMap((g) => g.cases) : []).filter((p) => p.status === 'PENDING_FINAL_APPROVAL' && !isExporting(exportStateOf(p.exportState))), [filter, groups]);
@@ -180,6 +184,13 @@ export default function Desk({ caps }: { caps: string[] }) {
             ) : null}
           </label>
         </div>
+
+        {code && (
+          <p className="cf-desk-code">
+            Only cases with {lvLabel(code)}
+            <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => setCode(null)}>Show all cases</button>
+          </p>
+        )}
 
         {error && !packages && <LoadErrorCard title="Your cases couldn't be loaded" error={error} request="GET /packages" onRetry={() => void mutate()} />}
         {error && packages && <Notice tone="danger">Cases couldn&apos;t be refreshed. They&apos;ll refresh automatically.</Notice>}

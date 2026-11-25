@@ -9,6 +9,7 @@ import com.securedoc.platform.application.operations.model.DashboardStage;
 import com.securedoc.platform.application.compliance.SensitiveTypeNames;
 import com.securedoc.platform.application.operations.TimeSavedRule;
 import com.securedoc.platform.application.operations.model.OperationalReportSnapshot;
+import com.securedoc.platform.application.operations.model.ReportScope;
 import com.securedoc.platform.application.port.out.OperationsReadPort;
 import com.securedoc.platform.domain.identity.TenantId;
 import jakarta.persistence.EntityManager;
@@ -115,6 +116,13 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     @Override
     public OperationalReportSnapshot loadReports(TenantId tenantId, Instant now, Instant from, Instant to,
                                                   String source, String outcome) {
+        return loadReports(tenantId, now, from, to, source, outcome, ReportScope.EVERYTHING);
+    }
+
+    @Override
+    public OperationalReportSnapshot loadReports(TenantId tenantId, Instant now, Instant from, Instant to,
+                                                  String packageType, String outcome, ReportScope scope) {
+        CaseFilter source = new CaseFilter(packageType, scope);
         UUID tenant = tenantId.value();
         DashboardOverview overview = loadReportOverview(tenant, source, outcome);
         long seconds = Math.max(1L, to.getEpochSecond() - from.getEpochSecond());
@@ -332,7 +340,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
 
         return new OperationalReportSnapshot(
                 now,
-                new OperationalReportSnapshot.Period(from, to, previousFrom, from, source, outcome),
+                new OperationalReportSnapshot.Period(from, to, previousFrom, from, source.packageType(), outcome),
                 new OperationalReportSnapshot.Executive(
                         batches, number(previousVolumes[0]), number(periodVolumes[1]), number(periodVolumes[2]),
                         completed, number(previousVolumes[3]), delivered, number(previousVolumes[4]),
@@ -424,7 +432,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
              group by fi.entity_type
             """;
 
-    private OperationalReportSnapshot.TimeSaved timeSaved(UUID tenant, Instant from, Instant to, String source,
+    private OperationalReportSnapshot.TimeSaved timeSaved(UUID tenant, Instant from, Instant to, CaseFilter source,
                                                           String outcome, double minutesPerPage) {
         Query casesQuery = entityManager.createNativeQuery(TIME_SAVED_CASES_SQL.formatted(
                 sourceClause("f", source), outcomeClause("f", outcome)));
@@ -454,7 +462,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
     private static final String UNKNOWN_DIMENSION_VALUE = "Not provided / Unknown";
 
     private List<OperationalReportSnapshot.DimensionBreakdown> dimensionBreakdowns(
-            UUID tenant, Instant from, Instant to, String source, String outcome) {
+            UUID tenant, Instant from, Instant to, CaseFilter source, String outcome) {
         Query definitionQuery = entityManager.createNativeQuery("""
                 select rd.dimension_key, rd.dimension_label, array_to_string(bid.options, chr(10)), rd.display_order
                   from reporting_dimension_definitions rd
@@ -556,7 +564,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 .toList();
     }
 
-    private Object[] periodVolumes(UUID tenant, Instant from, Instant to, String source, String outcome) {
+    private Object[] periodVolumes(UUID tenant, Instant from, Instant to, CaseFilter source, String outcome) {
         String factSource = sourceClause("f", source);
         String factOutcome = outcomeClause("f", outcome);
         String deliveredSource = sourceClause("df", source);
@@ -573,27 +581,38 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                  where f.tenant_id=:tenant and f.received_at>=:from and f.received_at<:to%s%s
                 """.formatted(deliveredSource, deliveredOutcome, factSource, factOutcome));
         query.setParameter("tenant", tenant).setParameter("from", from).setParameter("to", to);
-        if (!"ALL".equals(source)) query.setParameter("source", source);
+        source.bind(query);
         return row(query.getSingleResult());
     }
 
-    private static void bindReport(Query query, UUID tenant, Instant from, Instant to, String source) {
+    private static void bindReport(Query query, UUID tenant, Instant from, Instant to, CaseFilter source) {
         query.setParameter("tenant", tenant).setParameter("from", from).setParameter("to", to);
-        if (!"ALL".equals(source)) query.setParameter("source", source);
+        source.bind(query);
     }
 
-    private static void bindCurrent(Query query, UUID tenant, Instant now, String source) {
+    private static void bindCurrent(Query query, UUID tenant, Instant now, CaseFilter source) {
         bindTenantAndSource(query, tenant, source);
         query.setParameter("now", now);
     }
 
-    private static void bindTenantAndSource(Query query, UUID tenant, String source) {
+    private static void bindTenantAndSource(Query query, UUID tenant, CaseFilter source) {
         query.setParameter("tenant", tenant);
-        if (!"ALL".equals(source)) query.setParameter("source", source);
+        source.bind(query);
     }
 
-    private static String sourceClause(String alias, String source) {
-        return "ALL".equals(source) ? "" : " and " + alias + ".package_type=:source";
+    /** Task 0081: how a case came in, and its source system and level. */
+    private record CaseFilter(String packageType, ReportScope scope) {
+        void bind(Query query) {
+            if (!"ALL".equals(packageType)) query.setParameter("source", packageType);
+            if (!scope.everySource()) query.setParameter("sourceSystem", scope.sourceSystem());
+            if (!scope.everyLevel()) query.setParameter("levelRank", ReportCaseSql.levelRank(scope));
+        }
+    }
+
+    /** {@code alias}: p for document_packages, else a reporting_package_facts row. */
+    private static String sourceClause(String alias, CaseFilter source) {
+        return ("ALL".equals(source.packageType()) ? "" : " and " + alias + ".package_type=:source")
+                + ReportCaseSql.clause(source.scope(), alias, alias + ("p".equals(alias) ? ".id" : ".package_id"));
     }
 
     private static String outcomeClause(String alias, String outcome) {
@@ -608,8 +627,9 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
         };
     }
 
-    private static boolean includeObservations(String source, String outcome) {
-        return "ALL".equals(outcome) && ("ALL".equals(source) || "FOLDER_INTAKE".equals(source));
+    private static boolean includeObservations(CaseFilter source, String outcome) {
+        return "ALL".equals(outcome) && ("ALL".equals(source.packageType()) || "FOLDER_INTAKE".equals(source.packageType()))
+                && source.scope().everyLevel() && (source.scope().everySource() || source.scope().sourceSystem().startsWith("folder:"));
     }
 
     private static double percent(long numerator, long denominator) {
@@ -638,7 +658,7 @@ public class JpaOperationsReadAdapter implements OperationsReadPort {
                 number(counts[4]), number(counts[5]), number(counts[6]));
     }
 
-    private DashboardOverview loadReportOverview(UUID tenant, String source, String outcome) {
+    private DashboardOverview loadReportOverview(UUID tenant, CaseFilter source, String outcome) {
         String filter = sourceClause("p", source) + outcomeClause("p", outcome);
         Query query = entityManager.createNativeQuery("""
                 select count(*),

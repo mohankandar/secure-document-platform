@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page, type Route } from '@playwright/t
 import { crc32, deflateSync } from 'node:zlib';
 import { capabilitiesFor } from '../e2e-oidc/policyCapabilities';
 import { VAULT, chipProblems, exportApi, exportCases, panelLineProblems } from '../e2e-oidc/exportFixtures';
+import { reportTabsAnswer } from '../e2e-oidc/dailyReportFixture';
 
 /**
  * UI task U021: the tablet-friendly screens work by touch in WebKit (Safari's engine) with iPad settings, at the five
@@ -129,6 +130,7 @@ async function mockApi(page: Page, calls: Calls, roles: string[] = ENTITY.roles)
         capabilities: roles === ENTITY.roles ? CAPS : capabilitiesFor(...roles) });
     }
     if (url.pathname === '/api/v1/operations/reports') return json(reports());
+    if (url.pathname.startsWith('/api/v1/operations/reports/')) { const answer = reportTabsAnswer(url.pathname.slice('/api/v1'.length)); if (answer) return json(answer); }
     if (url.pathname === '/api/v1/packages') return json(CASES);
     const one = CASES.find((c) => url.pathname === `/api/v1/packages/${c.packageId}`);
     if (one) return json(one);
@@ -371,6 +373,26 @@ for (const [who, roles] of [['Report viewer', ['REPORT_VIEWER']], ['Business Adm
     expect(await sideways(page)).toBe(0);
   });
 }
+
+test('Reports (Business Administrator): the three tabs by tap, with no sideways scroll; wide tables scroll in their own box', async ({ page }, info) => {
+  await signInAs(page, ['BUSINESS_ADMIN'], '/reports');
+  for (const name of ['Daily intake and delivery', 'Operations', 'Overview']) {
+    const one = page.getByRole('tab', { name });
+    await one.tap();
+    await expect(one).toHaveAttribute('aria-selected', 'true');
+    expect((await one.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(page.locator('.cf-rp-body')).toBeVisible();
+    expect(await sideways(page)).toBe(0);
+  }
+  await page.getByRole('tab', { name: 'Daily intake and delivery' }).tap();
+  const tiles = page.locator('.cf-dr-tile');
+  await expect(tiles).toHaveCount(4);
+  const { width, height } = info.project.use.viewport!;
+  if (width <= 1024 && height > width) {
+    const tops = await tiles.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    expect(new Set(tops).size, '2 + 2').toBe(2);
+  }
+});
 
 /** U022: sign in as `role` and open a page by its address, the way the Reports test above does. */
 async function signInAs(page: Page, roles: string[], path: string, routes?: () => Promise<void>) {

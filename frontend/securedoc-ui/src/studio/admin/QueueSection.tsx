@@ -6,9 +6,10 @@ import { checked } from '../failure';
 import { Loading } from './shared';
 import { durationText, isPipelineQueue, queueHeadline, queueHow, stageEta, stageName } from './platformRules';
 
-/** Admin › Platform operations › Overview (task 0078): the queue of each step and its ETA. Numbers only. */
-export default function QueueSection() {
-  const { data, error, mutate, isValidating } = useSWR<PipelineQueue>('platform-queue', () => checked('GET /platform-admin/queue', apiClient.getPipelineQueue(), isPipelineQueue), { refreshInterval: 10_000, revalidateOnFocus: false });
+/** Admin › Platform operations › Overview (task 0078): the queue of each step and its ETA. Numbers only. `own`: the reader's entity, on Reports (0081). */
+export default function QueueSection({ own = false }: { own?: boolean }) {
+  const { data, error, mutate, isValidating } = useSWR<PipelineQueue>(own ? 'reports-queue' : 'platform-queue', () => (own ? checked('GET /operations/reports/queue', apiClient.getReportQueue(), isPipelineQueue)
+    : checked('GET /platform-admin/queue', apiClient.getPipelineQueue(), isPipelineQueue)), { refreshInterval: 10_000, revalidateOnFocus: false });
   const [how, setHow] = useState(false);
 
   if (!data) return <Loading error={error} retry={() => mutate()} label="Queue" />;
@@ -17,7 +18,7 @@ export default function QueueSection() {
       <header className="cf-ad-card-head">
         <div>
           <h2 id="cf-pq-head">{data.allEntities ? 'Queue, every entity together' : 'Queue'}</h2>
-          <p>{queueHeadline(data)}</p>
+          <p>{queueHeadline(data)}{own && ' The whole queue as it is now; the filters do not change it.'}</p>
         </div>
         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={isValidating} onClick={() => mutate()}>Refresh</button>
       </header>

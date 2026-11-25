@@ -55,7 +55,7 @@ const ACTIVE = {
 const pageErrors: string[] = [];
 test.beforeEach(({ page }) => { pageErrors.length = 0; page.on('pageerror', (e) => pageErrors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(m.text()); }); });
 // Other screens get thin mock answers; only errors from the Sign-in tab count here.
-test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/(packages|operations\/reports|business-admin\/configuration|platform-admin\/overview) returned/.test(e))).toEqual([]); });
+test.afterEach(() => { expect(pageErrors.filter((e) => !/Failed to load resource|GET \/(packages|operations\/reports(?:\/sources)?|business-admin\/configuration|platform-admin\/overview) returned/.test(e))).toEqual([]); });
 
 type Who = { roles: string[]; caps: string[]; overview?: object; test?: () => { status?: number; body: object } };
 

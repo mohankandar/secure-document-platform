@@ -329,6 +329,7 @@ public class ApplicationServiceConfig {
 
     @Bean
     public ExternalIntakeService externalIntakeService(
+            com.securedoc.platform.application.port.out.IntakeRefusalPort intakeRefusals,
             IntegrationConnectionService integrationConnectionService,
             ExternalIntakeRepository externalIntakeRepository,
             PackageRepository packageRepository,
@@ -348,11 +349,12 @@ public class ApplicationServiceConfig {
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase, packageProcessingDispatcher,
                 checksumPort, pdfIntakeValidationPort, auditService, maintenanceService, requestActorDisplayName)
                 .withPdfDecryption(pdfDecryptionPort).withRejections(packageRejectionRepository)
-                .withCaseFields(caseFields);
+                .withCaseFields(caseFields).withRefusals(intakeRefusals);
     }
 
     @Bean
     public PollingIntakeService pollingIntakeService(
+            com.securedoc.platform.application.port.out.IntakeRefusalPort intakeRefusals,
             IntegrationConnectionService integrationConnectionService,
             PollingRunRepository pollingRunRepository,
             PollingSourcePort pollingSourcePort,
@@ -363,7 +365,7 @@ public class ApplicationServiceConfig {
             com.securedoc.platform.application.intake.IntakeGate intakeGate) {
         return new PollingIntakeService(integrationConnectionService, pollingRunRepository, pollingSourcePort,
                 externalIntakeService, auditService).withLicence(intakeLicence).withEntityTimeZones(entityTimeZones)
-                .withGate(intakeGate);
+                .withGate(intakeGate).withRefusals(intakeRefusals);
     }
 
     @Bean
@@ -529,6 +531,20 @@ public class ApplicationServiceConfig {
     @Bean
     public OperationsQueryService operationsQueryService(OperationsReadPort operationsReadPort) {
         return new OperationsQueryService(operationsReadPort);
+    }
+
+    /** Task 0081: Reports › Daily intake and delivery. */
+    @Bean
+    public com.securedoc.platform.application.operations.daily.DailyReportService dailyReportService(
+            com.securedoc.platform.application.port.out.DailyReportPort dailyReportPort,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones,
+            com.securedoc.platform.application.intake.BulkSourceService bulkSources,
+            com.securedoc.platform.infrastructure.intake.WatchedFolderProperties folder,
+            com.securedoc.platform.api.platform.PlatformAdminProperties platformAdmin) {
+        return new com.securedoc.platform.application.operations.daily.DailyReportService(dailyReportPort, entityTimeZones,
+                bulkSources::mayTakeIn, java.time.Clock.systemUTC()).withWatchedFolder(tenant -> folder.isEnabled()
+                && platformAdmin.isWatchedFolderSchedulingEnabled()
+                && tenant.value().toString().equalsIgnoreCase(String.valueOf(platformAdmin.getWatchedFolderTenantId()).trim()));
     }
 
     /** Task 0017: the compliance report PDF. */

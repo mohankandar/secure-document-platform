@@ -8,6 +8,7 @@ import com.securedoc.platform.api.security.UserCapability;
 import com.securedoc.platform.application.intake.BulkSourceService;
 import com.securedoc.platform.application.pipeline.QueueView;
 import com.securedoc.platform.application.port.out.QueueWorkPort;
+import com.securedoc.platform.domain.identity.TenantId;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,9 +52,18 @@ public class PipelineQueueController {
     public Queue queue(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         boolean all = authorization.has(principal, UserCapability.PLATFORM_OPERATIONS);
+        return of(all ? null : principal.tenantId(), all);
+    }
+
+    /** Task 0081: the numbers of one entity, for its reports. */
+    public Queue of(TenantId tenantId) {
+        return of(java.util.Objects.requireNonNull(tenantId), false);
+    }
+
+    private Queue of(TenantId tenantId, boolean all) {
         int window = (int) QueueView.WINDOW.toMinutes();
         if (!capacity.staged()) return new Queue(false, all, window, null, List.of());
-        var view = queue.of(all ? null : principal.tenantId(), bulkSources.openSources());
+        var view = queue.of(tenantId, bulkSources.openSources());
         Map<PipelineStage, ProcessingCapacity.StageState> workers = capacity.stages().stream()
                 .collect(Collectors.toMap(ProcessingCapacity.StageState::stage, Function.identity()));
         return new Queue(true, all, window, view.etaSeconds(), view.stages().stream().map(s -> {
