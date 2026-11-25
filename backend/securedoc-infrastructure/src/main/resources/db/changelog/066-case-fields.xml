@@ -18,7 +18,8 @@
                 END IF;
             END $$;
         ]]></sql>
-        <dropForeignKeyConstraint baseTableName="document_packages" constraintName="fk_document_package_business_record"/>
+        <!-- The move takes it away itself when it joins two records. -->
+        <sql>ALTER TABLE document_packages DROP CONSTRAINT IF EXISTS fk_document_package_business_record</sql>
         <rollback>
             <sql>
                 ALTER TABLE document_packages ADD CONSTRAINT fk_document_package_business_record

@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CaseFieldCarryOverPostgresTest {
     private static final UUID TENANT = UUID.randomUUID();
     private static final Path DEMO = DemoStepTest.REPO.resolve("install/demo");
+    private static UUID entity = TENANT;
     private static ThrowawayDatabase db;
     private static JdbcTemplate jdbc;
     @TempDir
@@ -76,16 +77,16 @@ class CaseFieldCarryOverPostgresTest {
                 + " searchable_flag, extractable_flag, displayable_flag, display_order, active_flag, created_at, updated_at,"
                 + " validation_type, case_normalization" + (more.isEmpty() ? "" : "," + more.split("=")[0]) + ") values (?, ?, ?, ?, ?, ?,"
                 + " true, true, true, 1, ?, now(), now(), ?, 'PRESERVE'" + (more.isEmpty() ? "" : ",'" + more.split("=")[1] + "'") + ")",
-                id, TENANT, key, label, required, primary, active, type);
+                id, entity, key, label, required, primary, active, type);
         return id;
     }
 
     private static UUID record(Object... definitionAndValue) {
         UUID id = UUID.randomUUID();
-        jdbc.update("insert into business_records (id, tenant_id, created_at, updated_at) values (?, ?, now(), now())", id, TENANT);
+        jdbc.update("insert into business_records (id, tenant_id, created_at, updated_at) values (?, ?, now(), now())", id, entity);
         for (int i = 0; i < definitionAndValue.length; i += 2) {
             jdbc.update("insert into business_record_identifiers (id, tenant_id, business_record_id, definition_id, identifier_value,"
-                    + " normalized_value, created_at) values (?, ?, ?, ?, ?, ?, now())", UUID.randomUUID(), TENANT, id,
+                    + " normalized_value, created_at) values (?, ?, ?, ?, ?, ?, now())", UUID.randomUUID(), entity, id,
                     definitionAndValue[i], definitionAndValue[i + 1], definitionAndValue[i + 1]);
         }
         return id;
@@ -94,7 +95,7 @@ class CaseFieldCarryOverPostgresTest {
     private static UUID aCase(UUID record) {
         UUID id = UUID.randomUUID();
         jdbc.update("insert into document_packages (id, tenant_id, package_type, status, created_by, created_at, updated_at,"
-                + " business_record_id) values (?, ?, 'MANUAL_UPLOAD', 'PROCESSING', ?, now(), now(), ?)", id, TENANT, UUID.randomUUID(), record);
+                + " business_record_id) values (?, ?, 'MANUAL_UPLOAD', 'PROCESSING', ?, now(), now(), ?)", id, entity, UUID.randomUUID(), record);
         return id;
     }
 
@@ -115,6 +116,15 @@ class CaseFieldCarryOverPostgresTest {
         jdbc.update("insert into reporting_dimension_definitions (tenant_id, definition_id, dimension_key, dimension_label,"
                 + " enabled_flag, display_order, updated_at) values (?, ?, 'state', 'State', true, 1, now())", TENANT, state);
 
+        // Two records whose main IDs differ only by capitals become one; both cases point to it.
+        UUID otherEntity = UUID.randomUUID();
+        jdbc.update("insert into tenants (id, name, slug, status, created_at, updated_at) values (?, 'Two', 'two', 'ACTIVE', now(), now())", otherEntity);
+        entity = otherEntity;
+        UUID matter = definition("matter", "Matter", "TEXT", true, true, true, "");
+        UUID lower = aCase(record(matter, "ab-1"));
+        UUID upper = aCase(record(matter, "AB-1"));
+        entity = TENANT;
+
         // Anything but the schema step that runs the changelog (an app start) is refused and drops nothing.
         try (Connection c2 = db.connect()) {
             Liquibase liquibase = new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(),
@@ -122,13 +132,13 @@ class CaseFieldCarryOverPostgresTest {
             org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
                     () -> liquibase.update(new Contexts(), new LabelExpression()));
         }
-        assertEquals("3", one("select count(*) from business_records"));
+        assertEquals("5", one("select count(*) from business_records"));
 
         // Without a stored customer nothing is moved and nothing dropped.
         ByteArrayOutputStream refusal = new ByteArrayOutputStream();
         assertEquals(2, schemaStep(refusal));
         assertTrue(refusal.toString(StandardCharsets.UTF_8).contains("CASE_FIELDS_NO_CUSTOMER"), refusal.toString(StandardCharsets.UTF_8));
-        assertEquals("3", one("select count(*) from business_records"));
+        assertEquals("5", one("select count(*) from business_records"));
         for (var run : SchemaStep.PLATFORM_RUNS) SchemaStep.flyway(new InstallDb(db.url, db.user, db.password), run).migrate();
         PrintStream quiet = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8);
         assertEquals(0, new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC(), TestBuild.development()).run(List.of("apply",
@@ -140,7 +150,7 @@ class CaseFieldCarryOverPostgresTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         assertEquals(0, schemaStep(out), out.toString(StandardCharsets.UTF_8));
         String printed = out.toString(StandardCharsets.UTF_8);
-        assertTrue(printed.contains("moved 5 field(s), the values of 2 business record(s); 1 value(s) no longer allowed were left out"), printed);
+        assertTrue(printed.contains("moved 6 field(s), the values of 4 business record(s); 1 value(s) no longer allowed were left out"), printed);
         assertFalse(printed.contains("Quill") || printed.contains("000123"), printed);
 
         assertEquals("t", one("select to_regclass('business_records') is null and to_regclass('business_record_identifiers') is null"
@@ -167,9 +177,13 @@ class CaseFieldCarryOverPostgresTest {
         assertEquals("1", one("select count(*) from fld_value v join fld_record r using (record_uuid) where r.record_id = '" + second + "'"));
         assertEquals("0", one("select count(*) from fld_record where record_id = '" + unused + "'"));
 
+        assertEquals(one("select business_record_id from document_packages where id = '" + lower + "'"),
+                one("select business_record_id from document_packages where id = '" + upper + "'"));
+        assertEquals("1", one("select count(*) from fld_record where entity_uuid = '" + otherEntity + "'"));
+
         // Again, and the rollback makes the old tables again, empty, without losing the cases' links.
         assertEquals(0, schemaStep(new ByteArrayOutputStream()));
-        assertEquals("5", one("select count(*) from fld_field_definition"));
+        assertEquals("6", one("select count(*) from fld_field_definition"));
     }
 
     private static int schemaStep(ByteArrayOutputStream out) {
