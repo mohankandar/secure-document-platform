@@ -661,3 +661,17 @@ test('Cases (Supervisor): every status chip is on one line and whole, with and w
   expect(await panelLineProblems(page)).toEqual([]);
   expect(await sideways(page)).toBe(0);
 });
+
+test('Help › Error codes (task 0082): search, areas and entries by tap, 44 px; nothing scrolls sideways', async ({ page }) => {
+  await signInAs(page, ['REPORT_VIEWER'], '/help/error-codes');
+  await expect(page.getByRole('heading', { level: 1, name: 'Error codes' })).toBeVisible();
+  expect(await smallControls(page)).toEqual([]);
+  for (const link of [page.locator('.cf-help-areas a').first(), page.locator('details[data-code] > summary').first()]) await expectTappable(link);
+  const entry = page.locator('details[data-code="LV-INT-001"]');
+  await entry.locator('summary').tap();
+  await expect(entry).toHaveAttribute('open', '');
+  await page.getByRole('textbox', { name: 'Find a code or words' }).fill('LV-SYS-006');
+  await expect(page.locator('details[data-code]')).toHaveCount(1);
+  await expectTappable(page.locator('details[data-code="LV-SYS-006"] a.cf-lv-link').first());
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});

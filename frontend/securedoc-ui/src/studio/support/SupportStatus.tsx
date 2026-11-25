@@ -9,6 +9,7 @@ import { useToast } from '../toast';
 import { when } from '../admin/shared';
 import { SupportTabs } from './SupportExport';
 import { checkName, sortedChecks, stateTone, stateWord, statusTitle } from './statusRules';
+import { LvText } from '../help/LvCodeLink';
 import '../admin/admin.css';
 import './support.css';
 
@@ -70,8 +71,8 @@ export default function SupportStatus({ caps }: { caps: string[] }) {
                   <span className="cf-ad-health" data-h={stateTone(c.state)} aria-hidden="true" />
                   <div className="cf-ad-conn-main">
                     <div className="cf-ad-conn-name">{checkName(c.name)}</div>
-                    {c.state !== 'WORKING' && <div>{c.cause} · <code className="cf-code">{c.code}</code></div>}
-                    {c.whatToDo && <div className="cf-ad-hint">What to do: {c.whatToDo}</div>}
+                    {c.state !== 'WORKING' && <div>{c.cause} · <LvText className="cf-code">{c.code}</LvText></div>}
+                    {c.whatToDo && <div className="cf-ad-hint">What to do: <LvText>{c.whatToDo}</LvText></div>}
                   </div>
                   <span className="cf-ad-status" data-h={c.state === 'WORKING' ? 'HEALTHY' : c.state === 'DOWN' ? 'UNHEALTHY' : 'DEGRADED'}>{stateWord(c.state)}</span>
                 </li>
@@ -93,8 +94,8 @@ export default function SupportStatus({ caps }: { caps: string[] }) {
                   <li key={f.reference + f.at + f.code} className="cf-ad-conn">
                     <div className="cf-ad-conn-main">
                       <div className="cf-ad-conn-name"><code className="cf-code">{f.reference}</code></div>
-                      <div>{f.cause} · <code className="cf-code">{f.code}</code></div>
-                      <div className="cf-ad-hint">What to do: {f.whatToDo}</div>
+                      <div>{f.cause} · <LvText className="cf-code">{f.code}</LvText></div>
+                      <div className="cf-ad-hint">What to do: <LvText>{f.whatToDo}</LvText></div>
                     </div>
                     <span className="cf-ad-hint">{when(f.at)}</span>
                   </li>

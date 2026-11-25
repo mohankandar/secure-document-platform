@@ -29,6 +29,7 @@ import RoutingRules from './RoutingRules';
 import { useUnsavedWork } from '../unsavedWork';
 import { HelpTip } from './HelpTip';
 import type { HelpKey } from './helpTexts';
+import { LvText } from '../help/LvCodeLink';
 
 type Draft = IntegrationConnectionRequest & { connectionId?: string; secretConfigured?: boolean };
 
@@ -209,7 +210,7 @@ const VIEW_HELP: Record<View, HelpKey> = { INGESTION_SOURCE: 'receiving', DOCUME
 function StatusText({ s }: { s: StatusLine }) {
   return (
     <div className="cf-ad-conn-status">
-      <span data-tone={s.tone}>{s.word}</span>{s.rest.map((r) => <span key={r}> · {r}</span>)}
+      <span data-tone={s.tone}>{s.word}</span>{s.rest.map((r) => <span key={r}> · <LvText>{r}</LvText></span>)}
     </div>
   );
 }
@@ -346,6 +347,7 @@ function SourcePriority({ source }: { source: string }) {
   const [saving, setSaving] = useState(false);
   if (!data) return null;
   async function save(next: PriorityCode) {
+    if (saving) return;
     setSaving(true);
     try {
       await mutate(await apiClient.changeSourcePriority(source, next), { revalidate: false });
@@ -364,7 +366,6 @@ function SourcePriority({ source }: { source: string }) {
         options={PRIORITIES.map((p) => [p, PRIORITY_NAMES[p]] as [PriorityCode, string])}
         onChange={(v) => void save(v)}
         hint={PRIORITY_FIELD.sourceHint}
-        disabled={saving}
       />
     </div>
   );
@@ -493,7 +494,7 @@ function FailedFiles({ items, onChanged }: { items: DerivedDelivery[]; onChanged
         {items.map((d) => (
           <li key={d.derivedDeliveryId} className="cf-ad-conn cf-ad-conn-top">
             <div className="cf-ad-conn-main">
-              <div className="cf-ad-conn-status">{attentionLine(d)}</div>
+              <div className="cf-ad-conn-status"><LvText>{attentionLine(d)}</LvText></div>
               <details className="cf-disclosure">
                 <summary>Technical details</summary>
                 <dl className="cf-ad-facts cf-ad-facts-compact">

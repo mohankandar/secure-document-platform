@@ -69,6 +69,24 @@ The local start scripts, the demo and the test tools need a development build an
 that leaves the machine is always a production build, from `clean` (a target folder of a development build still holds
 its key); `Build-LexaVault-All -Production` fails if a development key is in either jar.
 
+## Error code guide (task 0082)
+
+Every build that runs the tests writes the error code guide to
+`backend/securedoc-infrastructure/target/LexaVault-error-codes.pdf` (`ErrorCodeGuidePdfTest`, which also opens it and checks
+that every code and its texts are in it). Hand it out with the release: it needs no internet. The same texts give the same
+file. `Build-LexaVault-All` fails when it is missing; with `-SkipTests` it is not made. Nothing else copies it yet.
+
+The PDF and the page in the app (the account menu, Help: error codes, `/help/error-codes`) have one source,
+`docs/api/error-codes.md` with the catalogue (`LvErrorCode`). After changing a text, write the generated files again:
+
+```
+cd backend
+mvn -pl securedoc-domain test -Dtest=LvErrorCodeGuideTest -Dlv.codes.write=true
+mvn -pl securedoc-application -am test -Dtest=LvErrorCodeFrontendFileTest -Dsurefire.failIfNoSpecifiedTests=false -Dlv.codes.write=true
+```
+
+A code without its meaning, who acts, what to do or support text fails the build (`LvErrorCodeGuideTest`).
+
 ## Checks
 
 ```

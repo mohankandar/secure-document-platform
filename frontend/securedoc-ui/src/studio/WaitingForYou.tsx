@@ -12,6 +12,7 @@ import {
   RESEND_WORDS, WAITING_WORDS, dayAndTime, destinationLabel, groupCount, groupKind, isSplit, mostFrequentCode,
   resendAllLabel, resendConfirmLabel, resendReasonLines, resendTitle, resendToast, type ExportJobView, type WaitingGroup,
 } from './exportRules';
+import { LvCodeLink } from './help/LvCodeLink';
 
 /**
  * Task 0029, board "Waiting for you (Processor)": the cases a destination refused, one group per destination with one
@@ -46,7 +47,7 @@ export default function WaitingForYou() {
         <DestinationGroup key={group.destinationId ?? `g${i}`} group={group} index={i} now={now} primary={i === 0} onQueued={() => Promise.all([mutate(), refreshKey('export-waiting-for-you-badge')])} />
       ))}
 
-      {data && <p className="cf-wy-foot">{WAITING_WORDS.footnoteBefore}<code className="cf-code">{WAITING_WORDS.footnoteCode}</code>{WAITING_WORDS.footnoteAfter}</p>}
+      {data && <p className="cf-wy-foot">{WAITING_WORDS.footnoteBefore}<LvCodeLink code={WAITING_WORDS.footnoteCode} />{WAITING_WORDS.footnoteAfter}</p>}
     </div>
   );
 }
@@ -96,7 +97,7 @@ function WaitingRow({ job, now }: { job: ExportJobView; now: number }) {
     <li>
       <Link to={`/case/${job.packageId}`} className="cf-wy-row cf-wy-link" data-testid="waiting-row">
         <span className="cf-mono cf-wy-case">{label}</span>
-        <span><CodeLabel code={job.lvCode ?? ''} /></span>
+        <span><CodeLabel code={job.lvCode ?? ''} plain /></span>
         <span className="cf-muted"><time dateTime={job.since ?? undefined}>{dayAndTime(job.since, now)}</time></span>
         <ChevronRight size={16} aria-hidden="true" className="cf-muted" />
       </Link>
@@ -137,7 +138,7 @@ function ResendAllDialog({ open, group, onClose, onQueued }: { open: boolean; gr
       <p className="cf-wy-dialog-text">{RESEND_WORDS.body}</p>
       <ul className="cf-wy-reasons" aria-label="Why they were refused">
         {resendReasonLines(group.countsByCode).map((line) => (
-          <li key={line.code}>{line.lead} <strong>{line.what}</strong> · <code className="cf-code">{line.code}</code></li>
+          <li key={line.code}>{line.lead} <strong>{line.what}</strong> · <LvCodeLink code={line.code} /></li>
         ))}
       </ul>
       <p className="cf-wy-dialog-text">{RESEND_WORDS.check}</p>

@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { useSWRConfig } from 'swr';
+import { LvText } from './help/LvCodeLink';
 
 /* ---------- Answers this screen does not understand ---------- */
 
@@ -104,8 +105,8 @@ export function LoadErrorCard({ title, error, request, onRetry }: {
         <dl className="cf-tech-defs">
           {details.reference && <div><dt>Reference</dt><dd className="cf-mono">{details.reference}</dd></div>}
           {details.request && <div><dt>Request</dt><dd className="cf-mono">{details.request}</dd></div>}
-          <div><dt>Cause</dt><dd className="cf-mono">{details.cause}</dd></div>
-          {details.whatToDo && <div><dt>What to do</dt><dd>{details.whatToDo}</dd></div>}
+          <div><dt>Cause</dt><dd className="cf-mono"><LvText>{details.cause}</LvText></dd></div>
+          {details.whatToDo && <div><dt>What to do</dt><dd><LvText>{details.whatToDo}</LvText></dd></div>}
         </dl>
       </TechnicalDetails>
     </section>

@@ -18,6 +18,7 @@ export default function SourceBulk({ source, name }: { source: string; name: str
   const bulk: BulkSource | undefined = data.sources.find((s) => s.source === source);
 
   async function run(work: () => Promise<BulkSources>, done: string) {
+    if (saving) return;
     setSaving(true);
     try {
       await mutate(await work(), { revalidate: false });
@@ -34,7 +35,7 @@ export default function SourceBulk({ source, name }: { source: string; name: str
   const w = draft ?? (bulk ? { from: bulk.from.slice(0, 5), to: bulk.to.slice(0, 5), weekends: bulk.weekends } : null);
   return (
     <div data-testid="source-bulk">
-      <Toggle label={BULK_WORDS.toggle} hint={BULK_WORDS.hint} checked={!!bulk} disabled={saving}
+      <Toggle label={BULK_WORDS.toggle} hint={BULK_WORDS.hint} checked={!!bulk}
         onChange={(on) => (on ? void run(() => apiClient.markBulkSource(source, {}), BULK_WORDS.on) : setEnding(true))} />
       {bulk && w && (
         <div className="cf-ad-block">

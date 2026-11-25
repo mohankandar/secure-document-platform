@@ -99,7 +99,9 @@ test('Daily intake and delivery: every part, top to bottom', async ({ page }) =>
   // The tile goes to the reasons; a Business Administrator opens no case, so the counts are plain numbers.
   await attention.getByRole('link', { name: '6 cases' }).click();
   await expect(page).toHaveURL(/#cf-dr-reasons$/);
-  await expect(region(page, 'Needs attention, by reason').getByRole('link')).toHaveCount(0);
+  // Task 0082: each code (5) and the note link to the error code guide; no row links to cases.
+  await expect(region(page, 'Needs attention, by reason').locator('a:not([href^="/help/error-codes"])')).toHaveCount(0);
+  await expect(region(page, 'Needs attention, by reason').locator('tbody a[href^="/help/error-codes/LV-"]')).toHaveCount(5);
   await expect(open.getByRole('link')).toHaveCount(0);
   await expect(panel.getByRole('link', { name: 'Open the connection' })).toHaveCount(0);
 });

@@ -7,6 +7,7 @@ import { whatToDo } from '../lvCodes';
 import { Loading } from './shared';
 import { HelpTip } from './HelpTip';
 import { allowanceText, dayText, licenceKind, licenceTerm, licenceTitle, monthText } from './licensingRules';
+import { LvText } from '../help/LvCodeLink';
 
 /**
  * Admin › Licensing (task 0057, Business Admin): the licence in force and this month's use of this entity. Read-only: a
@@ -31,9 +32,9 @@ export default function LicensingArea() {
 
         {data.stopped && (
           <Notice tone="mark">
-            <strong>{data.stopped.title} · {data.stopped.code}</strong>
+            <strong>{data.stopped.title} · <LvText>{data.stopped.code}</LvText></strong>
             <br />New cases are not taken in. Cases already in LexaVault are finished, and viewing and export keep working.
-            <br />What to do: {whatToDo(data.stopped.code)}
+            <br />What to do: <LvText>{whatToDo(data.stopped.code)}</LvText>
           </Notice>
         )}
         {l?.testEnvironment && <Notice>Test environment. This licence is not for production use: every redacted copy is marked “TEST – NOT FOR PRODUCTION USE”, and pages are never billed.</Notice>}

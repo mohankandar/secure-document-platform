@@ -1,45 +1,11 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { APPROVAL_CASE, signInAs } from './harness';
+import { tabTo } from './keys';
 
 /**
  * UI task U026 A2.2: the five main tasks by keyboard only (no mouse after sign-in). Each Tab stop on the way is checked
  * for a visible focus indicator: an outline or a ring of at least 2 px.
  */
-
-interface Focused { name: string; tag: string; ring: number }
-
-/** What has focus, and how thick its visible focus indicator is (outline, or a box-shadow ring). */
-async function focused(page: Page): Promise<Focused> {
-  return page.evaluate(() => {
-    const el = document.activeElement as HTMLElement | null;
-    if (!el || el === document.body) return { name: '', tag: 'body', ring: 0 };
-    const s = getComputedStyle(el);
-    const outline = s.outlineStyle !== 'none' ? parseFloat(s.outlineWidth) : 0;
-    // box-shadow rings: the largest spread among "0 0 0 Npx" parts.
-    const spreads = [...s.boxShadow.matchAll(/(?:^|,)\s*(?:rgba?\([^)]*\)|#\w+|[a-z]+)?\s*0px 0px 0px (\d+(?:\.\d+)?)px/g)].map((m) => parseFloat(m[1]));
-    const inset = /inset/.test(s.boxShadow) ? Math.max(0, ...spreads) : 0;
-    // A focus ring drawn on a sibling (the switch track) counts for the hidden switch input.
-    let sibling = 0;
-    if (el instanceof HTMLInputElement && el.nextElementSibling) {
-      const n = getComputedStyle(el.nextElementSibling);
-      sibling = n.outlineStyle !== 'none' ? parseFloat(n.outlineWidth) : 0;
-    }
-    const label = el instanceof HTMLInputElement ? el.labels?.[0]?.textContent : null;
-    const name = (el.getAttribute('aria-label') || label || el.textContent || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
-    return { name, tag: el.tagName.toLowerCase(), ring: Math.max(outline, inset, sibling, ...spreads) };
-  });
-}
-
-/** Presses Tab until focus is on something whose name matches, checking every stop on the way has a visible ring. */
-async function tabTo(page: Page, name: RegExp, max = 60, key: 'Tab' | 'Shift+Tab' = 'Tab') {
-  for (let i = 0; i < max; i += 1) {
-    await page.keyboard.press(key);
-    const f = await focused(page);
-    if (f.tag !== 'body') expect(f.ring, `focus ring on "${f.name}" (${f.tag})`).toBeGreaterThanOrEqual(2);
-    if (name.test(f.name)) return f;
-  }
-  throw new Error(`No Tab stop matching ${name} within ${max} presses`);
-}
 
 test('open a case: Tab to the row, Enter opens the case panel, Esc closes it', async ({ page }) => {
   await signInAs(page, 'supervisor');

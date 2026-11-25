@@ -25,6 +25,7 @@ import { PRIORITY_FIELD, priorityName, CASE_SECTIONS, PROCESSING_STEP_LINE, SIGN
 import { deliveryLabel, processingStepOf } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
 import { technicalProblemText, technicalReasonCode } from './support/supportRules';
+import { LvText } from './help/LvCodeLink';
 
 export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
   packageId: string; caps: string[]; openFindings: FocusedReviewItem[]; onClose: () => void;
@@ -483,7 +484,7 @@ function DeliveriesSection({ packageId, documents }: { packageId: string; docume
               <span className="cf-doc-meta">
                 {humanize(d.status)} · run {d.exportCycle}
                 {d.deliveredAt && <> · <time dateTime={d.deliveredAt}>{relativeTime(d.deliveredAt)}</time></>}
-                {d.failureCategory && <> · {lvLabel(lvCodeFor(d.failureCategory, d.lvCode))}</>}
+                {d.failureCategory && <> · <LvText>{lvLabel(lvCodeFor(d.failureCategory, d.lvCode))}</LvText></>}
               </span>
             </span>
           </li>

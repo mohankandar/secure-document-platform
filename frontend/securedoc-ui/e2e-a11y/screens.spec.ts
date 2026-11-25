@@ -1,7 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
-import { appendFileSync } from 'node:fs';
+import { test, expect } from '@playwright/test';
 import { APPROVAL_CASE, INCIDENT, LICENSING_STOPPED, STOPPED_CASE, go, mockIdentityProvider, mockApi, signInAs } from './harness';
+import { scan } from './scan';
 
 /**
  * UI task U026 A2.1: axe with the WCAG 2.0 and 2.1 A and AA rules on every main screen and state, in light and dark
@@ -12,24 +11,6 @@ import { APPROVAL_CASE, INCIDENT, LICENSING_STOPPED, STOPPED_CASE, go, mockIdent
  * A11Y_SURVEY=<file> records every violation to that file (JSON lines) and does not fail; the report's "before"
  * counts come from that file.
  */
-
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
-/** A11Y_SURVEY names the file to write to (outside test-results, which Playwright empties on each run). */
-const SURVEY = process.env.A11Y_SURVEY;
-
-async function scan(page: Page, label: string) {
-  // Let entry animations and late answers settle, so axe judges the screen people see.
-  await page.waitForTimeout(250);
-  const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  const found = result.violations.map((v) => ({
-    rule: v.id, impact: v.impact, help: v.help, nodes: v.nodes.map((n) => `${n.target.join(' ')} :: ${n.failureSummary?.replace(/\s+/g, ' ').slice(0, 220)}`),
-  }));
-  if (SURVEY) {
-    appendFileSync(SURVEY, `${JSON.stringify({ screen: label, project: test.info().project.name, count: found.reduce((n, v) => n + v.nodes.length, 0), violations: found })}\n`);
-    return;
-  }
-  expect(found, `axe violations on ${label}`).toEqual([]);
-}
 
 test.describe('sign-in', () => {
   test('sign-in page', async ({ page }) => {
@@ -374,5 +355,31 @@ test.describe('Export screens (task 0029)', () => {
     await card.getByLabel('Archive service').fill('80');
     await expect(card).toContainText('from 1 to 72');
     await scan(page, 'Admin: keeping exported copies');
+  });
+});
+
+test.describe('Help (task 0082)', () => {
+  test('Error codes', async ({ page }) => {
+    await signInAs(page, 'viewer', '/help/error-codes');
+    await expect(page.getByRole('heading', { level: 1, name: 'Error codes' })).toBeVisible();
+    await scan(page, 'Help › Error codes');
+  });
+
+  test('Error codes, one entry open', async ({ page }) => {
+    await signInAs(page, 'viewer', '/help/error-codes/LV-SYS-006');
+    await expect(page.locator('details[data-code="LV-SYS-006"]')).toHaveAttribute('open', '');
+    await scan(page, 'Help › Error codes, one entry');
+  });
+
+  test('Error codes, unknown code', async ({ page }) => {
+    await signInAs(page, 'viewer', '/help/error-codes/LV-XYZ-999');
+    await expect(page.locator('.cf-notice')).toBeVisible();
+    await scan(page, 'Help › Error codes, unknown code');
+  });
+
+  test('Error codes in a tab without a session', async ({ page }) => {
+    await page.goto('/help/error-codes/LV-INT-001');
+    await expect(page.locator('details[data-code="LV-INT-001"]')).toHaveAttribute('open', '');
+    await scan(page, 'Help › Error codes, no session');
   });
 });

@@ -10,6 +10,7 @@ import { useUnsavedWork } from '../unsavedWork';
 import { HelpTip } from './HelpTip';
 import { Loading, NumberField, SelectField, Sheet, TextField, Toggle, when } from './shared';
 import { FREQUENCY_WORDS, ROLE_WORDS, deliveryState, eventTiming, mailForm, mailRequest, needsSecret, peopleText, roleNames, type MailForm } from './notificationRules';
+import { LvText } from '../help/LvCodeLink';
 
 /**
  * Admin › Notifications (task 0059), always for the entity the person is in: the IT Admin sets the e-mail and the technical
@@ -208,7 +209,7 @@ function RecentCard({ recent }: { recent: NotificationItOverview['recent'] }) {
     <section className="cf-ad-card" aria-labelledby="cf-nt-recent">
       <header className="cf-ad-card-head"><div><h2 id="cf-nt-recent">Last messages</h2><p>The last 10 of this entity, with the reason when one could not be sent.</p></div></header>
       {recent.length === 0 ? <p className="cf-muted">None yet.</p> : (
-        <div className="cf-ad-table-wrap">
+        <div className="cf-ad-table-wrap" tabIndex={0} role="group" aria-label="Last messages">
           <table className="cf-ad-table cf-ad-table-left">
             <caption className="cf-sr">Last messages</caption>
             <thead><tr><th scope="col">Message</th><th scope="col">State</th><th scope="col">When</th></tr></thead>
@@ -216,7 +217,7 @@ function RecentCard({ recent }: { recent: NotificationItOverview['recent'] }) {
               {recent.map((r, i) => (
                 <tr key={i}>
                   <th scope="row">{r.event}</th>
-                  <td><span className="cf-ad-tag" data-tone={r.state === 'SENT' ? 'ok' : undefined}>{deliveryState(r.state)}</span>{r.reason && <><br /><span className="cf-muted">{r.reason} ({r.code})</span></>}</td>
+                  <td><span className="cf-ad-tag" data-tone={r.state === 'SENT' ? 'ok' : undefined}>{deliveryState(r.state)}</span>{r.reason && <><br /><span className="cf-muted">{r.reason} (<LvText>{r.code}</LvText>)</span></>}</td>
                   <td>{when(r.at)}</td>
                 </tr>
               ))}
