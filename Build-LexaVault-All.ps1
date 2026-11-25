@@ -97,6 +97,12 @@ finally {
     Pop-Location
 }
 
+# Task 0082: the error code guide for installations without internet, written by the infrastructure module's tests.
+$guidePdf = Join-Path $BackendDir 'securedoc-infrastructure\target\LexaVault-error-codes.pdf'
+if (Test-Path $guidePdf) { Write-Host "  error code guide: $guidePdf" }
+elseif ($SkipTests) { Write-Host "  error code guide (PDF): not made, because the tests were skipped." -ForegroundColor Yellow }
+else { throw "The error code guide was not made: $guidePdf" }
+
 # Task 0041: the app's classpath carries platform-core's identity modules, licensing (task 0057) and nothing else of
 # platform-core. Task 0054 decision 1: and what platform-identity 1.0.0 itself needs (outbound rules, error shape).
 # Setup, with platform-crypto and platform-integration, runs from its own jar (securedoc-setup).

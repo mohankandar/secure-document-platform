@@ -6,6 +6,8 @@ import { lvEntry } from '../lvCodes';
 import { durationText } from '../admin/platformRules';
 import { sensitivityName } from '../words';
 import { CLOSING_LINE, NOT_BY_LEVEL, WHERE_WORDS, cases, count, documents, inPeriod, pages, quietText, reasonLink, usualText, whenText, type Period, type Preset } from './dailyRules';
+import { LvCodeLink } from '../help/LvCodeLink';
+import { HELP_PATH } from '../help/guideRules';
 
 /** Task 0081: Reports › Daily intake and delivery. A count links only where the reader may open what it counts. */
 export default function DailyTab({ r, preset, period, caps, zone }: { r: DailyReport; preset: Preset; period: Period; caps: string[]; zone: string }) {
@@ -53,14 +55,14 @@ export default function DailyTab({ r, preset, period, caps, zone }: { r: DailyRe
         </Tile>
       </div>
 
-      <Block id="cf-dr-reasons" title="Needs attention, by reason" note="Look a code up in the error code guide">
+      <Block id="cf-dr-reasons" title="Needs attention, by reason" note={<>Look a code up in the <a href={HELP_PATH} target="_blank" rel="noopener" title="Opens in a new tab" className="cf-lv-link">error code guide</a></>}>
         {r.reasons.length === 0 ? <Nothing>Nothing needs attention.</Nothing> : (
           <Table label="Needs attention, by reason" heads={['Reason', 'Where it happened', 'Cases']} left={2}>
             {r.reasons.map((x) => {
               const to = reasonLink(x, mayOpenCases);
               return (
                 <tr key={`${x.where} ${x.code}`}>
-                  <th scope="row"><code className="cf-dr-code">{x.code}</code> {lvEntry(x.code).title}</th>
+                  <th scope="row"><LvCodeLink code={x.code} className="cf-dr-code" /> {lvEntry(x.code).title}</th>
                   <td>{WHERE_WORDS[x.where] ?? x.where}</td>
                   <td>{to ? <Link to={to} aria-label={`${cases(x.cases)} with ${x.code}`}>{x.cases.toLocaleString()}</Link> : x.cases.toLocaleString()}</td>
                 </tr>
@@ -144,7 +146,7 @@ function Part({ label, n, to }: { label: string; n: number; to?: string | null }
   return <div><dt>{label}</dt><dd>{to && n > 0 ? <Link to={to} aria-label={`${label}: ${n}`}>{n.toLocaleString()}</Link> : n.toLocaleString()}</dd></div>;
 }
 
-function Block({ id, title, note, children }: { id?: string; title: string; note?: string; children: ReactNode }) {
+function Block({ id, title, note, children }: { id?: string; title: string; note?: ReactNode; children: ReactNode }) {
   return (
     <section id={id} className="cf-rp-section" aria-label={title}>
       <header className="cf-rp-section-head"><h2>{title}</h2>{note && <p>{note}</p>}</header>

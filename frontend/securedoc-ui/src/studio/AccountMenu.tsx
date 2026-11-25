@@ -1,9 +1,11 @@
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import type { CurrentUser } from '../types';
 import { ROLE_OPTIONS } from '../security/uiAuthorization';
 import { useThemePreference, type ThemePreference } from './theme';
 import { initials, secondNameLine } from './userName';
+import { HELP_PATH, HELP_WORDS } from './help/guideRules';
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -26,6 +28,7 @@ export default function AccountMenu({ me, onSignOut, localMode, selectedRole, on
   selectedRole: string;
   onRoleChange: (role: string) => void;
 }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -146,6 +149,7 @@ export default function AccountMenu({ me, onSignOut, localMode, selectedRole, on
               )}
 
               <div className="cf-acct-sep" role="separator" />
+              <Item onSelect={() => { close(); navigate(HELP_PATH); }}>{HELP_WORDS.menu}</Item>
               <Item onSelect={() => { setOpen(false); onSignOut(); }}>Sign out</Item>
             </div>
         </div>

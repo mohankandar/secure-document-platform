@@ -7,6 +7,7 @@ import './admin/admin.css';
 import { Notice } from './atoms';
 import { BULK_WORDS, approveSelectedLabel, blockedReason, confirmTitle, keepSelectable, resultLines, type BulkOffer } from './bulkApproveRules';
 import { caseTitle, errorMessage } from './data';
+import { LvText } from './help/LvCodeLink';
 
 export interface BulkSelection { selected: string[]; toggle: (id: string) => void; blocked: (id: string) => string | null }
 
@@ -62,7 +63,7 @@ export function BulkApproveBar({ selection, waiting, onDone }: { selection: Bulk
         <div role="status">
           <Notice tone={result.failed.length > 0 ? 'danger' : 'mark'}>
             {result.done}
-            {result.failed.length > 0 && <ul>{result.failed.map((line) => <li key={line}>{line}</li>)}</ul>}
+            {result.failed.length > 0 && <ul>{result.failed.map((line) => <li key={line}><LvText>{line}</LvText></li>)}</ul>}
           </Notice>
         </div>
       )}

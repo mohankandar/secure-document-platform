@@ -10,6 +10,7 @@ import { lvCodeFor, lvLabel } from '../studio/lvCodes';
 import { useBranding } from '../branding/BrandingContext';
 import PageScaffold from '../components/ui/PageScaffold';
 import WorkflowStepper from '../components/ui/WorkflowStepper';
+import { LvText } from '../studio/help/LvCodeLink';
 
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -418,7 +419,7 @@ export default function ScanIntakePage() {
               <div className="scan-attention-badge">DELIVERY NEEDS ATTENTION</div>
               <h3>Your scanned PDF is still safely retained locally</h3>
               <p>Technical support can resolve the delivery issue. You may continue with the next physical package.</p>
-              {(session.lastDeliveryErrorCode || session.lastDeliveryLvCode) && <p className="scan-safe-code">{lvLabel(lvCodeFor(session.lastDeliveryErrorCode, session.lastDeliveryLvCode))}{session.lastDeliveryErrorCode && <> · Reference: {session.lastDeliveryErrorCode}</>}</p>}
+              {(session.lastDeliveryErrorCode || session.lastDeliveryLvCode) && <p className="scan-safe-code"><LvText>{lvLabel(lvCodeFor(session.lastDeliveryErrorCode, session.lastDeliveryLvCode))}</LvText>{session.lastDeliveryErrorCode && <> · Reference: {session.lastDeliveryErrorCode}</>}</p>}
               <button className="ui-button primary" onClick={startNext}>Start Next Package</button>
             </div>
           )}

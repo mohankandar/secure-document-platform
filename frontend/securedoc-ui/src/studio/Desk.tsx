@@ -18,6 +18,7 @@ import { nextStepText, rowAction, rowDestination, rowReason, type RowAction } fr
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { ConfirmDialog } from './admin/shared';
 import { CASES_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
+import { LvText } from './help/LvCodeLink';
 
 type Filter = 'all' | 'you' | StageKey;
 
@@ -187,7 +188,7 @@ export default function Desk({ caps }: { caps: string[] }) {
 
         {code && (
           <p className="cf-desk-code">
-            Only cases with {lvLabel(code)}
+            Only cases with <LvText>{lvLabel(code)}</LvText>
             <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" onClick={() => setCode(null)}>Show all cases</button>
           </p>
         )}

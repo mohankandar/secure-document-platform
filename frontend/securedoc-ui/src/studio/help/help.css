@@ -1,0 +1,27 @@
+/* Task 0082: Help › Error codes. */
+.cf-help { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; }
+.cf-help > .cf-page-head { margin-bottom: 16px; }
+.cf-help-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 12px; }
+.cf-help-bar .cf-search { flex: 1 1 300px; max-width: 460px; }
+.cf-help-areas { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 16px; }
+.cf .cf-help-areas a { padding: 4px 0; text-decoration: underline; text-underline-offset: 2px; }
+.cf-help-area { display: flex; flex-direction: column; margin-top: 28px; scroll-margin-top: 72px; }
+.cf .cf-help-area > h2 { margin-bottom: 8px; font-size: 16px; font-weight: 600; }
+.cf-help-entry { scroll-margin-top: 72px; border: 1px solid var(--cf-line); border-bottom-width: 0; background: var(--cf-surface); }
+.cf-help-entry:first-of-type { border-radius: var(--cf-radius) var(--cf-radius) 0 0; }
+.cf-help-entry:last-of-type { border-bottom-width: 1px; border-radius: 0 0 var(--cf-radius) var(--cf-radius); }
+.cf-help-entry:only-of-type { border-radius: var(--cf-radius); }
+.cf-help-entry[data-wanted] { box-shadow: inset 3px 0 0 var(--cf-ink); }
+.cf-help-entry > summary { display: flex; align-items: center; padding: 11px 16px; min-height: 44px; cursor: pointer; list-style: none; }
+.cf-help-entry > summary::-webkit-details-marker { display: none; }
+.cf-help-entry > summary::before { content: '▸'; width: 18px; flex: none; color: var(--cf-muted); }
+.cf-help-entry[open] > summary::before { content: '▾'; }
+.cf-help-entry > summary:hover { background: var(--cf-raised); }
+.cf-help-entry > summary:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: -2px; }
+.cf-help-entry h3 { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 14px; font-weight: 500; min-width: 0; }
+.cf .cf-help-facts { display: flex; flex-direction: column; gap: 10px; padding: 4px 16px 18px 34px; }
+.cf-help-facts > div { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 2px 16px; line-height: 1.45; }
+.cf-help-facts dt { color: var(--cf-muted); }
+.cf .cf-help-facts ol { display: flex; flex-direction: column; gap: 4px; padding-left: 18px; list-style: decimal; }
+@media (max-width: 640px) { .cf-help-facts > div { grid-template-columns: minmax(0, 1fr); } }
+@media (pointer: coarse) { .cf .cf-help-areas a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; } }

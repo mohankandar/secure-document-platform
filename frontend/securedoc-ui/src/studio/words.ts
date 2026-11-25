@@ -42,6 +42,7 @@ export function screenTitle(pathname: string, product: string): string {
   else if (first === 'reports') screen = NAV.reports;
   else if (first === 'admin') screen = second && ADMIN_TITLES[second] ? `${ADMIN_TITLES[second]} · ${NAV.admin}` : NAV.admin;
   else if (first === 'support') screen = second === 'incidents' && third ? `Problem · ${NAV.support}` : second === 'export' ? `Export · ${NAV.support}` : NAV.support;
+  else if (first === 'help') screen = 'Error codes · Help';
   else if (first === 'approvals') screen = 'Delivery approval';
   else if (first === 'technical-exceptions') screen = `Problem · ${NAV.support}`;
   else if (first === 'packages' && third === 'manual-processing') screen = 'Continue manually';

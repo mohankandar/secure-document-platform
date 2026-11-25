@@ -11,6 +11,7 @@ import {
   isSignInGroup, itCasesLine, itGroupTitle, itReason, reachAlertWords, reasonLabel, retryAllLabel, signInBody, signInTitle, supportBadgeCount, triedLine, waitingParts,
   type DestinationView, type ExportTimings, type ItGroup,
 } from '../exportRules';
+import { LvCodeLink, LvText } from '../help/LvCodeLink';
 import './support.css';
 
 /** Support's two places: the processing problems and the export (task 0029). */
@@ -59,7 +60,7 @@ export default function SupportExport({ caps }: { caps: string[] }) {
         <section className="cf-sx-alert" role="alert" aria-labelledby="cf-sx-alert">
           <h2 id="cf-sx-alert">{alertWords.title}</h2>
           {alertWords.line && <p>{alertWords.line}</p>}
-          <p className="cf-muted">{reasonLabel(alert.data.lvCode ?? 'LV-DLV-001')}</p>
+          <p className="cf-muted"><LvText>{reasonLabel(alert.data.lvCode ?? 'LV-DLV-001')}</LvText></p>
         </section>
       )}
 
@@ -131,7 +132,7 @@ function ItCard({ group, now, canRetry, waiting, destinationAnswers, timings, on
     <article className="cf-sx-it" aria-label={title} data-testid="it-group">
       <div className="cf-sx-it-text">
         <p className="cf-sx-it-title">{title}</p>
-        <p>{reason.text} · <code className="cf-code">{reason.code}</code></p>
+        <p>{reason.text} · <LvCodeLink code={reason.code} /></p>
         <p className="cf-muted cf-small">
           {signIn ? signInBody(Math.max(waiting, group.count)) : tried}
           {!signIn && casesLine && <>{tried ? ' ' : ''}<span data-testid="it-cases">{casesLine}</span></>}

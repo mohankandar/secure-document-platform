@@ -173,6 +173,7 @@ test('U026: every screen has its own page title, the product name last', () => {
   assert.equal(screenTitle('/', 'LexaVault'), 'Cases · LexaVault');
   assert.equal(screenTitle('/case/abc', 'LexaVault'), 'Case · Cases · LexaVault');
   assert.equal(screenTitle('/intake', 'LexaVault'), 'New case · LexaVault');
+  assert.equal(screenTitle('/help/error-codes/LV-INT-001', 'LexaVault'), 'Error codes · Help · LexaVault');
   assert.equal(screenTitle('/review', 'LexaVault'), 'Review · LexaVault');
   assert.equal(screenTitle('/reports', 'LexaVault'), 'Reports · LexaVault');
   assert.equal(screenTitle('/admin/policy', 'LexaVault'), 'Redaction & retention · Admin · LexaVault');

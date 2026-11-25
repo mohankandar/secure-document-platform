@@ -1,6 +1,7 @@
 import './theme';
 import './studio.css';
 import { noAccessTitle } from './lvCodes';
+import { LvText } from './help/LvCodeLink';
 
 /**
  * Signed in, but no LexaVault role (UI spec finding 21). One screen for both places it can happen: the Case File
@@ -26,7 +27,7 @@ export default function NoAccess({ who, code, onSignOut, onTryAgain = () => wind
         </span>
       </header>
       <div className="cf-scope" role="main">
-        <h1>{noAccessTitle(code)}</h1>
+        <h1><LvText>{noAccessTitle(code)}</LvText></h1>
         {/* Task 0026: the person's own sign-in, shown only to them (it helps when the wrong account was used).
             Display only: never logged, sent or audited. */}
         {who && <p className="cf-scope-signed-in" data-testid="no-access-who">Signed in as <span className="cf-scope-who">{who}</span></p>}

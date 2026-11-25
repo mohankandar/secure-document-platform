@@ -7,6 +7,7 @@ import { Notice, Spinner } from './atoms';
 import type { IdentityGate } from './Intake';
 import { useUnsavedWork } from './unsavedWork';
 import { countPdfPages, fileProblem, fileProblemText, intakeRulesLine, MAX_UPLOAD_BYTES, tooManyFilesText, tooManyPages, type FileProblem } from './intakeRules';
+import { LvText } from './help/LvCodeLink';
 
 type DraftState = 'ready' | 'uploading' | 'done' | 'error';
 /**
@@ -189,7 +190,7 @@ export default function UploadCapture({ gate, onLock, onCreated }: {
                   <span><span className="cf-ledger-order" aria-hidden="true">{index + 1} · </span>{draft.file.name}</span>
                   {draft.problem
                     ? <span className="cf-ledger-problem">{fileProblemText[draft.problem]}</span>
-                    : draft.state === 'error' && <span className="cf-ledger-problem">{draft.error}</span>}
+                    : draft.state === 'error' && <span className="cf-ledger-problem"><LvText>{draft.error}</LvText></span>}
                 </span>
                 <span className="cf-ledger-size">{formatBytes(draft.file.size)}</span>
                 <span className="cf-ledger-pages">{draft.problem ? '—' : draft.problem === undefined ? 'Reading…' : pagesText(draft.pages ?? null)}</span>

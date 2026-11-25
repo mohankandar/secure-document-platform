@@ -1,12 +1,15 @@
 package com.securedoc.platform.application.error;
 
 import com.securedoc.platform.domain.error.LvErrorCode;
+import com.securedoc.platform.domain.error.LvWhoActs;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,9 +49,11 @@ class LvErrorCodeFrontendFileTest {
         ts.append("// Source of truth: docs/work/lv-error-codes.md. Regenerate: mvn -pl securedoc-application test\n");
         ts.append("//   -Dtest=LvErrorCodeFrontendFileTest -Dlv.codes.write=true\n\n");
         ts.append("export type LvKind = 'REFUSED' | 'WARNING' | 'WAITING' | 'STOPPED' | 'EXPORT_FAILED' | 'NOT_ALLOWED' | 'SET_UP' | 'SYSTEM';\n\n");
+        ts.append("/** Task 0082: who acts, as the guide groups it (LvWhoActs). */\n");
+        ts.append("export type LvWhoActs = ").append(list(Arrays.stream(LvWhoActs.values()).map(LvWhoActs::label).toList(), " | ")).append(";\n\n");
         ts.append("export interface LvCodeEntry {\n");
         ts.append("  code: string;\n  area: string;\n  title: string;\n  description: string;\n  kind: LvKind;\n");
-        ts.append("  whoActs: string;\n  whatToDo: string;\n  httpStatus: number | null;\n  reserved: boolean;\n}\n\n");
+        ts.append("  whoActs: string;\n  whatToDo: string;\n  steps: string[];\n  supportTells: string;\n  whoActsGroups: LvWhoActs[];\n  httpStatus: number | null;\n  reserved: boolean;\n}\n\n");
         ts.append("/** Every LexaVault error code, in area order. */\n");
         ts.append("export const LV_CODES: Record<string, LvCodeEntry> = {\n");
         for (LvErrorCode code : LvErrorCode.values()) {
@@ -59,10 +64,19 @@ class LvErrorCodeFrontendFileTest {
                     .append(", kind: ").append(q(code.kind().name()))
                     .append(", whoActs: ").append(q(code.whoActs()))
                     .append(", whatToDo: ").append(q(code.whatToDo()))
+                    .append(", steps: [").append(list(code.whatToDoSteps(), ", ")).append("]")
+                    .append(", supportTells: ").append(q(code.supportTells()))
+                    .append(", whoActsGroups: [").append(list(code.whoActsGroups().stream().map(LvWhoActs::label).toList(), ", ")).append("]")
                     .append(", httpStatus: ").append(code.httpStatus().map(String::valueOf).orElse("null"))
                     .append(", reserved: ").append(code.reserved()).append(" },\n");
         }
         ts.append("};\n\n");
+        ts.append("/** Task 0082: the areas in the guide's order, with their names. */\n");
+        ts.append("export const LV_AREAS: { key: string; name: string }[] = [\n");
+        for (LvErrorCode.Area area : LvErrorCode.Area.values()) {
+            ts.append("  { key: ").append(q(area.name())).append(", name: ").append(q(LvErrorCode.areaName(area))).append(" },\n");
+        }
+        ts.append("];\n\n");
         ts.append("/** The code a failure gets when it has none of its own. */\n");
         ts.append("export const LV_FALLBACK = ").append(q(LvErrorCode.FALLBACK.code())).append(";\n\n");
         ts.append("/** Internal identifiers (enum names, errorCode values, categories, reasons) and their LexaVault code. */\n");
@@ -79,6 +93,10 @@ class LvErrorCodeFrontendFileTest {
 
     private static void entry(StringBuilder ts, String key, LvErrorCode code) {
         ts.append("  ").append(key).append(": ").append(q(code.code())).append(",\n");
+    }
+
+    private static String list(List<String> values, String separator) {
+        return String.join(separator, values.stream().map(LvErrorCodeFrontendFileTest::q).toList());
     }
 
     private static String q(String value) {
