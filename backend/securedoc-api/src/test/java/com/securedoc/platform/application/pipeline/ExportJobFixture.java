@@ -204,28 +204,40 @@ final class ExportJobFixture {
 
     /** A case whose documents are all redacted, still PROCESSING, with its EXPORT job queued. */
     DocumentPackage caseReadyForExport() {
-        DocumentPackage pkg = finishedCase();
+        return caseReadyForExport(1);
+    }
+
+    DocumentPackage caseReadyForExport(int documentCount) {
+        DocumentPackage pkg = finishedCase(documentCount);
         queue.queueCaseExport(tenant, pkg.id(), 1, CorrelationId.generate());
         return pkg;
     }
 
     /** A case whose documents are all redacted, still PROCESSING, with no job. */
     DocumentPackage finishedCase() {
+        return finishedCase(1);
+    }
+
+    DocumentPackage finishedCase(int documentCount) {
         DocumentPackage pkg = DocumentPackage.create(tenant, PackageType.MANUAL_UPLOAD, ActorId.generate(),
                 PackageMetadata.empty());
         Instant now = Instant.now();
-        Document document = Document.reconstitute(com.securedoc.platform.domain.identity.DocumentId.generate(), tenant,
-                pkg.id(), FileName.of("case.pdf"), MimeType.pdf(), 10, Checksum.sha256("a".repeat(64)),
-                DocumentType.PDF, now, DocumentStatus.PROCESSED, List.of(), now);
-        pkg.addDocument(document);
+        List<Document> made = new ArrayList<>();
+        for (int n = 0; n < documentCount; n++) {
+            Document document = Document.reconstitute(com.securedoc.platform.domain.identity.DocumentId.generate(), tenant,
+                    pkg.id(), FileName.of("case.pdf"), MimeType.pdf(), 10, Checksum.sha256("a".repeat(64)),
+                    DocumentType.PDF, now, DocumentStatus.PROCESSED, List.of(), now);
+            pkg.addDocument(document);
+            Artifact artifact = Artifact.create(tenant, document.id(), ArtifactType.REDACTED, MimeType.pdf(),
+                    STORED_COPY.length, Checksum.sha256(STORED_COPY_SHA256));
+            artifact.markAvailable(ArtifactStorageReference.local("redacted/" + document.id() + ".pdf"));
+            artifacts.put(document.id().toString(), artifact);
+            made.add(document);
+        }
         pkg.submit();
         pkg.startProcessing();
-        Artifact artifact = Artifact.create(tenant, document.id(), ArtifactType.REDACTED, MimeType.pdf(),
-                STORED_COPY.length, Checksum.sha256(STORED_COPY_SHA256));
-        artifact.markAvailable(ArtifactStorageReference.local("redacted/" + document.id() + ".pdf"));
         packages.put(pkg.id(), pkg);
-        documents.put(pkg.id(), List.of(document));
-        artifacts.put(document.id().toString(), artifact);
+        documents.put(pkg.id(), List.copyOf(made));
         return pkg;
     }
 
@@ -288,6 +300,8 @@ final class ExportJobFixture {
         /** Task 0052: every call the destination accepted, also a repeated one, and whether an export job made it. */
         final List<String> acceptedCalls = new ArrayList<>();
         final List<Boolean> acceptedFromJob = new ArrayList<>();
+        /** Task 0086: a real destination that does the work of the calls this one accepts (null: none). */
+        volatile DeliveryPort real;
         /** Task 0052: runs inside a call, before the destination answers. */
         volatile Runnable duringCall = () -> { };
 
@@ -307,6 +321,7 @@ final class ExportJobFixture {
             keys.add(batch.sourceSubmissionId());
             existingReferences.add(batch.existingDestinationSubmissionReference());
             duringCall.run();
+            BatchDeliveryReference done = real == null ? null : real.deliverBatch(batch);
             if (stopServerOnNextCall) {
                 stopServerOnNextCall = false;
                 // The request reached the destination, then LexaVault's server stopped before it saved anything.
@@ -321,6 +336,7 @@ final class ExportJobFixture {
             acceptedCalls.add(batch.sourceSubmissionId());
             acceptedFromJob.add(ExportJobAttempt.running());
             if (stored.add(batch.sourceSubmissionId())) deliveredInOrder.add(batch.packageId());
+            if (done != null) return done;
             List<DeliveryReference> refs = batch.items().stream().map(item -> new DeliveryReference(item.documentId(),
                     item.sourceDocumentId(), "document-store", "remote-" + item.sourceDocumentId(), "store://remote")).toList();
             return new BatchDeliveryReference("document-store", "remote-" + batch.sourceSubmissionId(), refs,

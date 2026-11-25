@@ -447,6 +447,50 @@ class ExportJobServiceTest {
         assertEquals(PackageStatus.COMPLETED, pkg.status());
     }
 
+    /** Task 0086: the real export folder; the server stops after the folder is there and before anything is recorded. */
+    @Test
+    void aServerStoppedBetweenTheExportFolderAndItsRecordIsFinishedByTheNextTry(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
+        ExportJobFixture f = new ExportJobFixture();
+        var properties = new com.securedoc.platform.infrastructure.delivery.LocalDeliveryProperties();
+        properties.setOutputPath(root.toString());
+        f.destination.real = new com.securedoc.platform.infrastructure.delivery.LocalFolderDeliveryAdapter(properties);
+        DocumentPackage pkg = f.caseReadyForExport(2);
+        f.destination.stopServerOnNextCall = true;
+
+        PipelineJob first = f.service.claimNext("server-1").orElseThrow();
+        assertThrows(ExportJobFixture.ServerStopped.class, () -> f.service.run(first));
+        java.util.Map<String, Object> written = exported(root);
+        assertEquals(2, written.size(), "the folder is there");
+        verify(f.lifecycle, org.mockito.Mockito.never()).recordSuccessfulExport(any(), any(),
+                org.mockito.ArgumentMatchers.anyInt(), anyString(), org.mockito.ArgumentMatchers.anyList(), any());
+
+        f.clock.advance(f.settings.claimLease().plusSeconds(1));
+        f.service.releaseExpiredClaims();
+        f.drain();
+
+        assertJob(f, pkg, PipelineJobStatus.DONE, 2, "LV-DLV-009");
+        assertEquals(PackageStatus.COMPLETED, pkg.status());
+        assertEquals(written, exported(root), "the files are the ones of the stopped server, unchanged");
+        verify(f.lifecycle, org.mockito.Mockito.times(1)).recordSuccessfulExport(eq(pkg.id()), any(), eq(1), anyString(),
+                org.mockito.ArgumentMatchers.argThat(documents -> documents.size() == 2), any());
+        verify(f.audit, org.mockito.Mockito.times(2)).recordSuccess(eq(f.tenant), any(), eq(AuditAction.DOCUMENT_EXPORTED),
+                anyString(), anyString(), eq(pkg.id()), any(), anyString());
+        verify(f.audit, org.mockito.Mockito.times(1)).recordSuccess(eq(f.tenant), any(),
+                eq(AuditAction.EXPORT_JOB_STATUS_CHANGED), anyString(), anyString(), eq(pkg.id()), any(), contains("to=DONE"));
+    }
+
+    private static java.util.Map<String, Object> exported(java.nio.file.Path root) throws Exception {
+        java.util.Map<String, Object> files = new java.util.TreeMap<>();
+        try (var paths = java.nio.file.Files.walk(root)) {
+            for (var path : paths.filter(java.nio.file.Files::isRegularFile).toList()) {
+                files.put(root.relativize(path).toString(), java.nio.file.Files.getLastModifiedTime(path) + " "
+                        + ExportJobFixture.sha256(java.nio.file.Files.readAllBytes(path)));
+            }
+        }
+        return files;
+    }
+
     @Test
     void aJobWhoseClaimRunsOutOnItsLastAttemptGoesToItWithPrc008() {
         ExportJobFixture f = new ExportJobFixture();
