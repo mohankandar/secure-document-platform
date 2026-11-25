@@ -32,6 +32,8 @@ Each feature must be evaluated for impact on three audiences:
    - What safe DB/log/trace data can be used?
    - What is the escalation and resolution procedure?
 
+The wording on a screen is right and the guide follows it: use its exact words for screens and buttons, and say what a role can't do.
+
 ## 3. Feature Definition of Done
 
 For every bounded feature/unit:
@@ -42,7 +44,7 @@ For every bounded feature/unit:
 - [ ] Automated tests green
 - [ ] Build green
 - [ ] Security / tenant boundaries verified
-- [ ] Kiro verification performed when the checkpoint materially benefits from local-machine independent review
+- [ ] Independent review performed when the checkpoint benefits from it
 - [ ] Repository continuity / backlog updated
 - [ ] Business training updated if user-visible
 - [ ] Tenant IT guide updated if support/configuration/incident behavior changed
@@ -66,7 +68,7 @@ Do not train customers or support staff from DRAFT or IN VALIDATION sections unl
 ## 5. Screenshot policy
 
 - Use screenshots from an accepted build whenever possible.
-- Use local/demo data only.
+- Use local/demo data only: made-up, and nothing that LexaVault would redact, not even a made-up value. Look at every picture before keeping it.
 - Avoid showing secrets, tokens, production hostnames, personal information, raw sensitive document content, or customer-specific confidential information.
 - If UI wording changes, replace the screenshot rather than accumulating contradictory screenshots.
 - Keep screenshot filenames stable when the conceptual screen remains the same so downstream documentation links remain valid.
