@@ -1,7 +1,7 @@
 # Report 0065: P2b, document summary and case instructions
 
 Date: 2026-11-25
-Branch: `feature/0065-summary-instructions-2`, from `1cb33b5`, with the integration branch (`466906b`) merged in. The first run on 2026-11-24 stopped before any change; its four questions were decided.
+Branch: `feature/0065-summary-instructions-2`, from `1cb33b5`, with the integration branch (`466906b`, then 0094 `05d7eb1`) merged in. The first run on 2026-11-24 stopped before any change; its four questions were decided.
 Outcome: **DONE** (7 questions)
 
 ## It is built differently from the design note, because the note's way does not work
@@ -38,8 +38,8 @@ Prompts tuned on sets A and N, then frozen; B is held out (other people, sentenc
 ## Commands run and results
 | What | Result |
 |---|---|
-| `mvn -B -o -fae -Pdev-build clean test`, throwaway PostgreSQL | before the merge: 87 + 378 + 144 + 158 + 954, 0 failed, 4 skipped; after it: 87 + 379 + 144 + 158 + 968, 0 failed, 5 skipped |
-| `npm run test:standalone` (port base 15375) | before the merge: one failure, an accessibility test (Platform overview, light) that timed out waiting for the sign-in page while the GPU run was on; it passed when run again by itself (light and dark). After the merge: 10 + 238 + 19 + 232 + 105 passed, accessibility 374 passed and **4 failed**: 0089's keyboard walks of the whole Error code guide run over 60 s here. The same two in light (dark not tried) fail with the integration branch's own frontend, so it is not this task; they passed in CI on PR #33. Left for CI |
+| `mvn -B -o -fae -Pdev-build clean test`, throwaway PostgreSQL | before the merge: 87 + 378 + 144 + 158 + 954, 0 failed, 4 skipped; after it: 87 + 379 + 144 + 158 + 968, 0 failed, 5 skipped; after merging 0094 (platform-core 1.1.0): 87 + 379 + 144 + 158 + 969, 0 failed, 5 skipped (a first try failed on a taken database port) |
+| `npm run test:standalone` (port base 15375) | before the merge: one failure, an accessibility test (Platform overview, light) that timed out waiting for the sign-in page while the GPU run was on; it passed when run again by itself (light and dark). After the merge: 10 + 238 + 19 + 232 + 105 passed, accessibility 374 passed and **4 failed**: 0089's keyboard walks of the whole Error code guide run over 60 s here. The same two in light (dark not tried) fail with the integration branch's own frontend, so it is not this task; they passed in CI on PR #33. They passed in CI on this task's PR #39 too (head `73ff8c3`) |
 | Model change gate, one run (setting off) | 119 of 130, 262 of 274, 2 V1 misses, 8 false flags, 0 unread (Ollama 0.40.18): the baseline exactly |
 | `DocumentContextTest#measured` with the real model | tables above |
 | No-redacted-value check | `DocumentContextTest` searches logs, audit records and events for the names and instructions: none, with the stand-in and in the real-model runs; batch files hold places only; audit has the number of characters only |
