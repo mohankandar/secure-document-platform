@@ -254,6 +254,12 @@ const STORAGE = {
 const DEPLOYMENT_BRAND = { id: 'b-1', tenantId: null, applicationName: 'LexaVault', shortName: null, organizationName: 'Northwind Title & Escrow', pageTitle: null,
   secondaryColor: null, primaryLogoDataUrl: null, compactLogoDataUrl: null, faviconDataUrl: null, updatedBy: 'ops', updatedAt: minsAgo(500) };
 const BRANDING = { deployment: DEPLOYMENT_BRAND, tenants: [{ tenantId: 't-nw', tenantName: 'Northwind Commercial', tenantSlug: 'nwc', customBranding: false }] };
+const QUEUE = { staged: true, allEntities: true, windowMinutes: 10, etaSeconds: 2400, stages: [
+  { stage: 'TEXT', waiting: 120, running: 4, held: 0, toCome: 0, workers: 4, highest: 6, oldestWaitingSeconds: 310, perMinute: 40, etaSeconds: 190 },
+  { stage: 'FIND', waiting: 84, running: 5, held: 0, toCome: 124, workers: 5, highest: 5, oldestWaitingSeconds: 540, perMinute: 5.3, etaSeconds: 2400 },
+  { stage: 'VISION', waiting: 0, running: 0, held: 0, toCome: 0, workers: 1, highest: 2, oldestWaitingSeconds: null, perMinute: null, etaSeconds: 0 },
+  { stage: 'REDACT', waiting: 2, running: 1, held: 0, toCome: 210, workers: 1, highest: 6, oldestWaitingSeconds: 4, perMinute: 30, etaSeconds: 2400 },
+  { stage: 'EXPORT', waiting: 0, running: 0, held: 3, toCome: 22, workers: 1, highest: 8, oldestWaitingSeconds: null, perMinute: 4, etaSeconds: 2400 }] };
 const CAPACITY = { staged: true, queueLength: 420, intakeSlowdown: 4, intakeStopped: false, aiMaximum: null,
   stages: ['TEXT', 'FIND', 'VISION', 'REDACT', 'EXPORT'].map((stage) => ({ stage, current: 3, busy: 2, lowest: 1, highest: 7, measured: 7, maximum: null, waiting: 84 })),
   aiServers: [{ number: 1, requestsAtOnce: 5, maximum: 64, learned: true }] };
@@ -417,6 +423,7 @@ export async function mockApi(page: Page, who: Who, options: MockOptions = {}) {
     // Admin › Platform operations
     if (path === '/platform-admin/overview' || path === '/platform-admin/health-check') return json(OVERVIEW);
     if (path === '/platform-admin/capacity') return json(CAPACITY);
+    if (path === '/platform-admin/queue') return json(QUEUE);
     if (path === '/platform/processing-storage') return json(STORAGE);
     if (path === '/platform/branding') return json(BRANDING);
     if (path === '/platform/branding/tenants/t-nw') return json({ tenantId: 't-nw', customBranding: false, configuration: null });

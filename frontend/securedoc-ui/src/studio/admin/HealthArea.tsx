@@ -10,6 +10,7 @@ import { Loading, when } from './shared';
 import { problemReason } from '../words';
 import StorageSection from './StorageSection';
 import CapacitySection from './CapacitySection';
+import QueueSection from './QueueSection';
 import BrandingSection from './BrandingSection';
 import TelemetrySection from './TelemetrySection';
 import { watchedFolderStatus } from './integrationRules';
@@ -36,7 +37,7 @@ export default function HealthArea({ canOperate }: { canOperate: boolean }) {
           </div>
         </div>
       )}
-      {section === 'overview' && <Overview canOperate={canOperate} />}
+      {section === 'overview' && <><Overview canOperate={canOperate} /><QueueSection /></>}
       {section === 'storage' && <StorageSection />}
       {section === 'capacity' && <CapacitySection />}
       {section === 'branding' && <BrandingSection />}

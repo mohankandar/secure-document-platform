@@ -36,6 +36,7 @@ import type {
   OperationalReports,
   DashboardStage,
   PlatformAdminOverview,
+  PipelineQueue,
   ProcessingCapacity,
   ProductTelemetryStatus,
   CurrentUser,
@@ -406,6 +407,10 @@ class ApiClient {
 
   async runPlatformHealthCheck(): Promise<PlatformAdminOverview> {
     return this.request('/platform-admin/health-check', { method: 'POST' });
+  }
+
+  async getPipelineQueue(): Promise<PipelineQueue> {
+    return this.request('/platform-admin/queue');
   }
 
   async getProcessingCapacity(): Promise<ProcessingCapacity> {
