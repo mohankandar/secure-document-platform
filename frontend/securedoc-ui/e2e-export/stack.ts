@@ -242,13 +242,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM tenants WHERE id = nt) THEN RETURN; END IF;
   INSERT INTO tenants (id, name, slug, status, created_at, updated_at, version)
     VALUES (nt, '${name.replace(/'/g, "''")}', '${slug}', 'ACTIVE', now(), now(), 0);
-  FOREACH t IN ARRAY ARRAY['tenant_capabilities','business_identifier_definitions','tenant_redaction_policies','tenant_redaction_catalog'] LOOP
+  FOREACH t IN ARRAY ARRAY['tenant_capabilities','fld_field_definition','tenant_redaction_policies','tenant_redaction_catalog'] LOOP
     SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position),
-           string_agg(CASE WHEN column_name = 'tenant_id' THEN quote_literal(nt) || '::uuid'
-                           WHEN column_name = 'id' AND data_type = 'uuid' THEN 'gen_random_uuid()'
+           string_agg(CASE WHEN column_name IN ('tenant_id','entity_uuid') THEN quote_literal(nt) || '::uuid'
+                           WHEN column_name IN ('id','definition_id') AND data_type = 'uuid' THEN 'gen_random_uuid()'
                            ELSE quote_ident(column_name) END, ', ' ORDER BY ordinal_position)
       INTO cols, sel FROM information_schema.columns WHERE table_schema = 'public' AND table_name = t;
-    EXECUTE format('INSERT INTO %I (%s) SELECT %s FROM %I WHERE tenant_id = %L', t, cols, sel, t, demo);
+    EXECUTE format('INSERT INTO %I (%s) SELECT %s FROM %I WHERE %I = %L', t, cols, sel, t,
+        CASE WHEN t = 'fld_field_definition' THEN 'entity_uuid' ELSE 'tenant_id' END, demo);
   END LOOP;
 END $$;`);
 }

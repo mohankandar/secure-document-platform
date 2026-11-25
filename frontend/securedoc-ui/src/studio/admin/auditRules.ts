@@ -230,6 +230,7 @@ const SENTENCES: Record<string, string> = {
   PIPELINE_JOBS_CLEANED: 'Removed finished export jobs after their keep time',
   UNRECORDED_FILES_CLEANED: 'Removed stored files that no record points to',
   FILES_ERASED: 'Erased stored files (recorded in the erase log)',
+  CASE_FIELDS_ERASED: 'Case field values erased',
   // Staged processing (task 0048)
   PIPELINE_JOB_QUEUED: 'Queued a document for its next processing step',
   PIPELINE_JOB_STATUS_CHANGED: 'A processing step moved on',

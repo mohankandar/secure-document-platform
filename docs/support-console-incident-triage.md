@@ -42,7 +42,7 @@ Results are tenant-scoped and paged.
 
 The query resolves the tenant-configured Primary Business Identifier by joining:
 
-`processing_incidents -> document_packages -> business_record_identifiers -> business_identifier_definitions`
+`processing_incidents -> document_packages -> fld_record -> fld_value` (a sensitive main ID is neither shown nor found)
 
 No Contract Number is copied into `processing_incidents`, and the UI does not hardcode Contract Number.
 

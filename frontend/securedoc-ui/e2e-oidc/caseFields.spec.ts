@@ -120,7 +120,11 @@ test('New case takes every type and sends each field as the server reads it', as
   await open(page, '/intake', ENTITY, sent);
   await expect(page.getByText('Sensitive').first()).toBeVisible();
   await fill(page);
-  if (PROOF) await page.screenshot({ path: `${PROOF}/new-case.png`, fullPage: true });
+  if (PROOF) {
+    await page.setViewportSize({ width: 1280, height: 1180 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `${PROOF}/new-case.png` });
+  }
   await page.getByLabel('Choose PDF files').setInputFiles({ name: 'one.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n', 'latin1') });
   await page.getByRole('button', { name: 'Create case' }).click();
   await expect.poll(() => sent.find((s) => s.path === '/api/v1/packages')?.body?.businessIdentifiers).toEqual({
@@ -154,7 +158,7 @@ test('Cases hides a sensitive value and finds it by the whole value, through the
   await open(page, '/', ENTITY, sent);
   await expect(page.getByText('204860').first()).toBeVisible();
   await expect(page.getByText('Synthetic')).toHaveCount(0);
-  await page.getByRole('searchbox').or(page.getByPlaceholder(/search/i)).first().fill('Synthetic Quill');
+  await page.locator('main input[placeholder]').first().fill('Synthetic Quill');
   await expect.poll(() => sent.some((s) => s.path === '/api/v1/operations/dashboard' && s.search === 'Synthetic Quill')).toBe(true);
   await expect(page.getByText('204860').first()).toBeVisible();
   if (PROOF) await page.screenshot({ path: `${PROOF}/cases.png` });

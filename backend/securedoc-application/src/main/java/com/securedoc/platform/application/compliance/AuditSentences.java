@@ -41,6 +41,7 @@ public final class AuditSentences {
             entry("REDACTED_ARTIFACT_PURGED", "Deleted the redacted copy after its retention period"),
             entry("ORIGINAL_ARTIFACT_PURGED", "Deleted the original after its retention period"),
             entry("FILES_ERASED", "Erased stored files (recorded in the erase log)"),
+            entry("CASE_FIELDS_ERASED", "Erased case field values"),
             entry("RETENTION_SCHEDULED", "Scheduled deletion"),
             entry("RETENTION_HOLD_EXTENDED", "Extended a hold"),
             entry("RETENTION_HOLD_RELEASED", "Released a hold"),

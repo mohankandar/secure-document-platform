@@ -3,7 +3,8 @@
 The schema step is the only thing that changes LexaVault's database. The app never changes the database at startup
 for the platform tables, and the schema step is run by you, before setup and before starting a new release.
 
-It runs five things, in this order. Each keeps its own history table:
+It runs six things. The case fields run first, so that what a database of before held is moved before its old tables are
+dropped (`CASE_FIELDS.md`); the others follow in this order. Each keeps its own history table:
 
 | Run | What it creates | Source in the release | History table |
 |---|---|---|---|
@@ -12,6 +13,7 @@ It runs five things, in this order. Each keeps its own history table:
 | Licensing | The stored licence, usage ledger (`lic_` tables; version 2). Setup stores the licence here; the app checks it at start (`LICENSING.md`) | platform-core Flyway location `db/platform/licensing` | `lic_schema_history` |
 | Notifications | Event settings, outgoing messages, conditions and approval requests (`notif_` tables; version 1, task 0059). The app checks them at start (`NOTIFICATIONS.md`) | platform-core Flyway location `db/platform/notifications` | `notif_schema_history` |
 | Erase log | Where the database stands in the erase log (`erl_` tables; version 3, task 0060). The app checks them at start (`ERASE_LOG.md`) | platform-core Flyway location `db/platform/erase-log` | `erl_schema_history` |
+| Case fields | Field definitions and values (`fld_` tables; version 2, task 0061). Runs first. The app checks them at start (`CASE_FIELDS.md`) | platform-core Flyway location `db/platform/fields` | `fld_schema_history` |
 
 The platform runs start their own history at version 0 in a schema that already holds the app's tables, so their
 version 1 always runs. The identity run always goes to the latest version in the release: a database at identity
@@ -38,16 +40,16 @@ scripts/Invoke-LexaVault-SchemaStep.sh apply [--runtime-user app_user]    (Linux
 
 Both run `com.securedoc.install.SchemaStep` from the backend jar.
 
-- `apply` runs the five steps. With `--runtime-user`, it also sets that database user's rights on the `idn_`,
-  `lic_`, `notif_` and `erl_` tables to exactly what platform-core 0.7.0 lists, and **takes any other right on them away** (for an upgrade
+- `apply` runs the six steps. With `--runtime-user`, it also sets that database user's rights on the `idn_`,
+  `lic_`, `notif_`, `erl_` and `fld_` tables to exactly what platform-core 0.7.0 lists, and **takes any other right on them away** (for an upgrade
   run it with `--runtime-user` once): SELECT, INSERT, UPDATE and DELETE, except
 
   | Table | Rights |
   |---|---|
   | `idn_grant_history`, `idn_login_connection_history`, `idn_machine_binding_history`, `lic_clock_reset` | SELECT, INSERT |
   | `lic_last_seen`, `erl_position` | SELECT, INSERT, UPDATE |
-  | `lic_version_floor`, `idn_schema_version`, `lic_schema_version`, `notif_schema_version`, `erl_schema_version` | SELECT |
-  | `idn_schema_history`, `lic_schema_history`, `notif_schema_history`, `erl_schema_history` (Flyway's) | none |
+  | `lic_version_floor`, `idn_schema_version`, `lic_schema_version`, `notif_schema_version`, `erl_schema_version`, `fld_schema_version` | SELECT |
+  | `idn_schema_history`, `lic_schema_history`, `notif_schema_history`, `erl_schema_history`, `fld_schema_history` (Flyway's) | none |
 
   No DDL rights. A user that owns the tables is refused (`RUNTIME_USER_OWNS_TABLES`): if the app connects as the schema
   owner (the local development setup does), leave the option out.
