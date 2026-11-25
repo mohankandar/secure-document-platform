@@ -13,14 +13,22 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryIteratorException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -32,6 +40,11 @@ import java.util.UUID;
  *
  * <p>Example: {@code application.pdf} →
  * {@code securedoc-output/{tenant}/{packageId}/cycle-{n}/{documentId}/application.pdf}.
+ *
+ * <p>Task 0086: a server killed after the folder was published and before the delivery was recorded leaves a finished
+ * folder. The next try takes it as this delivery only when it is exactly that ({@link #holdsExactly}); anything else is
+ * LV-DLV-010 and not touched. The documents are acknowledged together by the result, never one by one: the export service
+ * saves each single acknowledgement and would ask only for the others next time, which no folder could be compared with.
  */
 @Component
 @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "local")
@@ -40,6 +53,7 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
     private static final Logger log = LoggerFactory.getLogger(LocalFolderDeliveryAdapter.class);
     private static final String DESTINATION_TYPE = "local-folder";
     private static final String STAGING_DIRECTORY = ".staging";
+    private static final int COMPARE_BLOCK = 64 * 1024;
 
     private final Path outputRoot;
 
@@ -97,62 +111,131 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
         Path stagingPackageDir = safeChild(stagingRoot,
                 packageId.value() + "-cycle-" + exportCycle + "-" + UUID.randomUUID(), "staging package");
 
-        if (Files.exists(finalPackageDir)) {
-            throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Package delivery destination already exists").withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_010);
+        // Each document's folder and the one file in it.
+        Map<String, String> expected = new HashMap<>();
+        List<DeliveryReference> finalReferences = new ArrayList<>(items.size());
+        for (DeliveryItem item : items) {
+            String documentFolder = item.documentId().value().toString();
+            String safeName = sanitizeFileName(item.originalFileName());
+            safeChild(safeChild(finalPackageDir, documentFolder, "document"), safeName, "delivery file");
+            expected.put(documentFolder, safeName);
+            // Task 0023 (B4, #200/#201): the recorded location is relative and names no file:
+            // no absolute path and no original file name in the export record or any response.
+            finalReferences.add(new DeliveryReference(
+                    item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE, null,
+                    recordedLocation(packageId, exportCycle, item.documentId())));
         }
 
-        List<DeliveryReference> finalReferences = new ArrayList<>(items.size());
+        if (isThere(finalPackageDir)) return ownFinishedDelivery(batch, finalPackageDir, expected, finalReferences);
         try {
             Files.createDirectories(stagingPackageDir);
             for (DeliveryItem item : items) {
-                String safeName = sanitizeFileName(item.originalFileName());
-                Path stagingDocumentDir = safeChild(stagingPackageDir,
-                        item.documentId().value().toString(), "document");
-                Path stagedFile = safeChild(stagingDocumentDir, safeName, "delivery file");
+                String documentFolder = item.documentId().value().toString();
+                Path stagingDocumentDir = safeChild(stagingPackageDir, documentFolder, "document");
+                Path stagedFile = safeChild(stagingDocumentDir, expected.get(documentFolder), "delivery file");
                 Files.createDirectories(stagingDocumentDir);
-                try (InputStream content = item.contentSource().open()) {
-                    if (content == null) {
-                        throw new IllegalStateException("Delivery content source returned null");
-                    }
+                try (InputStream content = open(item)) {
                     Files.copy(content, stagedFile, StandardCopyOption.REPLACE_EXISTING);
                 }
-
-                Path finalFile = finalPackageDir
-                        .resolve(item.documentId().value().toString())
-                        .resolve(safeName)
-                        .normalize();
-                if (!finalFile.startsWith(finalPackageDir)) {
-                    throw new IllegalArgumentException("Resolved final delivery file escapes package directory");
-                }
-                // Task 0023 (B4, #200/#201): the recorded location is relative and names no file:
-                // no absolute path and no original file name in the export record or any response.
-                finalReferences.add(new DeliveryReference(
-                        item.documentId(), item.sourceDocumentId(), DESTINATION_TYPE, null,
-                        recordedLocation(packageId, exportCycle, item.documentId())));
             }
 
             Files.createDirectories(packageDir);
-            publishAtomically(stagingPackageDir, finalPackageDir);
-            for (DeliveryReference reference : finalReferences) {
-                batch.progressListener().documentAcknowledged(reference);
-            }
-            return new BatchDeliveryReference(DESTINATION_TYPE, null, finalReferences);
+            // Without options the move never replaces: an atomic one puts the folder in place of an empty folder (Linux) or
+            // of a file (Windows) that appeared meanwhile. Staging is on the same disk, so it is one rename either way.
+            Files.move(stagingPackageDir, finalPackageDir);
         } catch (IOException e) {
             deleteStagingBestEffort(stagingPackageDir, packageId, exportCycle);
-            throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Failed to deliver package to local folder", e);
+            // Another server published this case run first.
+            if (isThere(finalPackageDir)) return ownFinishedDelivery(batch, finalPackageDir, expected, finalReferences);
+            throw ioFailure(e);
         } catch (RuntimeException e) {
             deleteStagingBestEffort(stagingPackageDir, packageId, exportCycle);
             throw e;
         }
+        return new BatchDeliveryReference(DESTINATION_TYPE, null, finalReferences);
     }
 
-    private void publishAtomically(Path stagedPackage, Path finalPackage) throws IOException {
+    /** Also a link that points nowhere. */
+    private static boolean isThere(Path path) {
+        return Files.exists(path, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    private static InputStream open(DeliveryItem item) {
+        InputStream content = item.contentSource().open();
+        if (content == null) throw new IllegalStateException("Delivery content source returned null");
+        return content;
+    }
+
+    private static TechnicalDependencyException ioFailure(IOException e) {
+        return new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_IO, true, "Failed to deliver package to local folder", e);
+    }
+
+    /** The folder that is there is this delivery's own finished one (a success, audited with LV-DLV-009), or LV-DLV-010. */
+    private BatchDeliveryReference ownFinishedDelivery(DeliveryBatch batch, Path folder, Map<String, String> expected,
+                                                       List<DeliveryReference> references) {
+        boolean same;
         try {
-            Files.move(stagedPackage, finalPackage, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            // Same-filesystem directory rename is still the publication boundary on platforms that
-            // do not advertise ATOMIC_MOVE. No individual document is copied into finalPackage.
-            Files.move(stagedPackage, finalPackage);
+            same = holdsExactly(folder, batch.items(), expected);
+        } catch (IOException e) {
+            throw ioFailure(e);
+        }
+        if (!same) {
+            throw new TechnicalDependencyException(TechnicalDependency.DELIVERY, TechnicalFailureCode.DELIVERY_DESTINATION_INVALID, false, "Package delivery destination already exists").withLvCode(com.securedoc.platform.domain.error.LvErrorCode.DLV_010);
+        }
+        log.info("LOCAL_DELIVERY_ALREADY_PUBLISHED package={} cycle={} documents={}", batch.packageId().value(),
+                batch.exportCycle(), references.size());
+        return new BatchDeliveryReference(DESTINATION_TYPE, null, references, true);
+    }
+
+    /**
+     * Whether the folder holds exactly these documents: real folders and regular files only (no links), no more and no
+     * fewer, the names as they are stored (capitals count), and every file byte for byte its document's content.
+     */
+    private static boolean holdsExactly(Path folder, List<DeliveryItem> items, Map<String, String> expected) throws IOException {
+        if (!isRealFolder(folder) || !names(folder).equals(expected.keySet())) return false;
+        for (Map.Entry<String, String> document : expected.entrySet()) {
+            Path documentFolder = folder.resolve(document.getKey());
+            if (!isRealFolder(documentFolder) || !names(documentFolder).equals(Set.of(document.getValue()))
+                    || !attributes(documentFolder.resolve(document.getValue())).isRegularFile()) return false;
+        }
+        for (DeliveryItem item : items) {
+            String documentFolder = item.documentId().value().toString();
+            Path file = folder.resolve(documentFolder).resolve(expected.get(documentFolder));
+            try (InputStream content = open(item); InputStream stored = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS)) {
+                if (!sameBytes(content, stored)) return false;
+            }
+        }
+        return true;
+    }
+
+    private static BasicFileAttributes attributes(Path path) throws IOException {
+        return Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    }
+
+    /** A Windows junction counts as a folder of another kind ({@code isOther}). */
+    private static boolean isRealFolder(Path path) throws IOException {
+        BasicFileAttributes attributes = attributes(path);
+        return attributes.isDirectory() && !attributes.isSymbolicLink() && !attributes.isOther();
+    }
+
+    private static Set<String> names(Path folder) throws IOException {
+        Set<String> names = new HashSet<>();
+        try (DirectoryStream<Path> children = Files.newDirectoryStream(folder)) {
+            for (Path child : children) names.add(child.getFileName().toString());
+        } catch (DirectoryIteratorException e) {
+            throw e.getCause();
+        }
+        return names;
+    }
+
+    private static boolean sameBytes(InputStream a, InputStream b) throws IOException {
+        byte[] blockA = new byte[COMPARE_BLOCK];
+        byte[] blockB = new byte[COMPARE_BLOCK];
+        while (true) {
+            int readA = a.readNBytes(blockA, 0, COMPARE_BLOCK);
+            int readB = b.readNBytes(blockB, 0, COMPARE_BLOCK);
+            if (readA != readB || !Arrays.equals(blockA, 0, readA, blockB, 0, readB)) return false;
+            if (readA < COMPARE_BLOCK) return true;
         }
     }
 

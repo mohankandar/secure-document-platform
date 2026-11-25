@@ -2,24 +2,21 @@ import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-  ACTOR, ROLES, as, auditCount, blockCase, call, caseNumbers, dbClockSkewMs, destinationState, doneOrder, ensureEntity, exportedCycles,
-  exportedFiles, folderDown, folderUp, jobOf, jobsOf, localFolderDestination, markRefused, newCase, ok, queueOrder, sentOrder, sha256,
-  sql, sqlRows, startApp, stopApp, tenantFolder, tenantFor, unblockCase, waitFor,
+  ACTOR, ROLES, as, auditCount, blockCase, call, caseNumbers, dbClockSkewMs, destinationState, doneOrder, exportedCycles,
+  exportedFiles, folderDown, folderUp, freshStack, jobOf, jobsOf, localFolderDestination, markRefused, newCase, ok, queueOrder, sentOrder, sha256,
+  sql, sqlRows, startApp, stopApp, TENANT, tenantFolder, unblockCase, waitFor,
 } from './stack';
 
 /**
  * Task 0035 (L5): the P1 export path on a running LexaVault (export-mode=job) with the folder destination, scenarios
- * 1 to 7 of the task, and the L6 proof pictures taken while each state is live. One entity per scenario.
+ * 1 to 7 of the task, and the L6 proof pictures taken while each state is live. A fresh database, folders and app per scenario (task 0086).
  */
 test.describe.configure({ mode: 'serial' });
 
 const PROOF_DIR = process.env.LEXAVAULT_E2E_PROOF_DIR || path.join(process.cwd(), 'test-results', '0035-proof');
 
-test.beforeAll(async () => {
-  fs.mkdirSync(PROOF_DIR, { recursive: true });
-  await startApp();
-  for (let n = 1; n <= 8; n++) ensureEntity(tenantFor(n), `Export e2e ${n}`);
-});
+test.beforeAll(() => { fs.mkdirSync(PROOF_DIR, { recursive: true }); });
+test.beforeEach(async () => { await freshStack(); });
 test.afterAll(async () => { await stopApp(); });
 
 // The database clock against this machine's, before and after each scenario (in the run's results.json).
@@ -77,7 +74,7 @@ const panel = (page: Page) => page.getByRole('complementary', { name: 'Case pane
 // ---------------------------------------------------------------- 1
 
 test('scenario 1: happy path, 3 cases exported to the folder @e2e-export', async ({ page }) => {
-  const tenant = tenantFor(1);
+  const tenant = TENANT;
   const ids = await finishCases(tenant, 'LN-1001', 3);
   await waitFor('all 3 DONE', async () => allDone(tenant, ids), 60_000);
   for (const id of ids) {
@@ -99,7 +96,7 @@ test('scenario 1: happy path, 3 cases exported to the folder @e2e-export', async
 // ---------------------------------------------------------------- 2
 
 test('scenario 2: destination down, health check fails: paused, no attempts, resumed by the probe in order @e2e-export', async ({ page }) => {
-  const tenant = tenantFor(2);
+  const tenant = TENANT;
   const it = as(tenant, ROLES.itAdmin);
   folderDown(tenant);
   const ids = await finishCases(tenant, 'LN-2001', 3);
@@ -167,7 +164,7 @@ test('scenario 2: destination down, health check fails: paused, no attempts, res
 // ---------------------------------------------------------------- 3
 
 test('scenario 3: one case fails while the destination is healthy: its own schedule, one rebuild, then Needs IT @e2e-export', async ({ page }) => {
-  const tenant = tenantFor(3);
+  const tenant = TENANT;
   // The failing case: a plain file stands where its folder would go, so only its write fails; the check passes.
   const [failing] = await finishCases(tenant, 'LN-3001', 1, (id) => blockCase(tenant, id));
   const others = await finishCases(tenant, 'LN-3002', 2);
@@ -202,7 +199,7 @@ test('scenario 3: one case fails while the destination is healthy: its own sched
 // ---------------------------------------------------------------- 4
 
 test('scenario 4: backup rule: 3 different cases failing within 10 minutes pause the destination, the check passing @e2e-export', async () => {
-  const tenant = tenantFor(4);
+  const tenant = TENANT;
   const ids: string[] = [];
   for (let i = 1; i <= 3; i++) ids.push(await newCase(tenant, `LN-4001-${i}`, (id) => blockCase(tenant, id)));
 
@@ -221,7 +218,7 @@ test('scenario 4: backup rule: 3 different cases failing within 10 minutes pause
 // ---------------------------------------------------------------- 5
 
 test('scenario 5a: IT queue: one grouped alert, "Retry all" works @e2e-export', async ({ page }) => {
-  const tenant = tenantFor(5);
+  const tenant = TENANT;
   const ids: string[] = [];
   for (let i = 1; i <= 2; i++) ids.push(await newCase(tenant, `LN-5001-${i}`, (id) => blockCase(tenant, id)));
   await waitFor('both NEEDS_IT', async () => ids.every((id) => statusOf(tenant, id) === 'NEEDS_IT'), 120_000);
@@ -265,7 +262,7 @@ test('scenario 5a: IT queue: one grouped alert, "Retry all" works @e2e-export', 
 });
 
 test('scenario 5b: "Resend all" per destination; who may @e2e-export', async ({ page }) => {
-  const tenant = tenantFor(8);
+  const tenant = TENANT;
   const ids: string[] = [];
   for (let i = 1; i <= 2; i++) ids.push(await newCase(tenant, `LN-8001-${i}`, (id) => blockCase(tenant, id)));
   for (const id of ids) {
@@ -306,7 +303,7 @@ test('scenario 5b: "Resend all" per destination; who may @e2e-export', async ({ 
 // ---------------------------------------------------------------- 6
 
 test('scenario 6: restart while jobs are WAITING_RETRY and PAUSED: nothing lost, nothing sent twice @e2e-export', async () => {
-  const tenant = tenantFor(6);
+  const tenant = TENANT;
   folderDown(tenant);
   const ids = await finishCases(tenant, 'LN-6001', 3);
   await waitFor('destination PAUSED', async () => destinationState(tenant) === 'PAUSED', 60_000);
@@ -342,7 +339,7 @@ test('scenario 6: restart while jobs are WAITING_RETRY and PAUSED: nothing lost,
 // ---------------------------------------------------------------- 7
 
 test('scenario 7: retention: a resend uses the copy kept for the destination; after the window an exported copy is gone @e2e-export', async () => {
-  const tenant = tenantFor(7);
+  const tenant = TENANT;
   const processor = as(tenant, ROLES.processor);
   const ops = as(tenant, ROLES.platformOps);
   const redacted = (id: string) => sqlRows(`select a.status, a.checksum_value from artifacts a join documents d on d.id = a.document_id
