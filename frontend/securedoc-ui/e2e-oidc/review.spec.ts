@@ -314,11 +314,72 @@ test('a vision finding says what found it; a page that was not read asks for the
   await expect(foundBy).toHaveText('Page check');
   await expect(panel(page).getByRole('heading', { name: 'Page to check' })).toBeVisible();
   await expect(panel(page)).toContainText('Nothing on it was passed unread: look over the whole page.');
-  await expect(panel(page)).toContainText('drag one mark that covers all of it');
-  await expect(panel(page).getByRole('button', { name: /^Redact/ }).first()).toBeDisabled();
+  await expect(panel(page)).toContainText('Unreadable: check by hand');
+  await expect(panel(page).getByRole('button', { name: /^Done, nothing to redact/ })).toBeDisabled();
   await expect(queue(page).locator('#cf-q-v3')).not.toContainText('%');
   if (process.env.P0064_PROOF) await page.screenshot({ path: '../../docs/work/0064-proof/review-page-to-check.png' });
   await queue(page).locator('#cf-q-v4').click();
   await expect(panel(page)).not.toContainText('Found by');
   await expect(panel(page)).not.toContainText('SOMETHING_NEW');
+});
+
+test('task 0074: a page to check takes several marks, needs the confirmation, and sends the boxes', async ({ page }) => {
+  const sent: { id: string; body: { reviewed: boolean; boxes: { left: number; top: number; width: number; height: number }[] } }[] = [];
+  const confirmed: string[] = [];
+  const dismissed: string[] = [];
+  const items = [
+    { ...finding('p1', CASE_A.packageId, 'UNREAD_PAGE', null, false), confidence: 0, pageNumber: 2, foundBy: ['PAGE_CHECK'] },
+    { ...finding('p2', CASE_A.packageId, 'UNREAD_PAGE', null, false), confidence: 0, pageNumber: 5, foundBy: ['PAGE_CHECK'] },
+  ];
+  await openReview(page, confirmed, dismissed, items);
+  await page.route('**/api/v1/review-items/*/page-checked', async (route) => {
+    const id = new URL(route.request().url()).pathname.split('/')[4];
+    sent.push({ id, body: JSON.parse(route.request().postData() || '{}') });
+    items.splice(items.findIndex((i) => i.findingId === id), 1);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ findingId: id, packageId: CASE_A.packageId, status: 'DISMISSED', processingResumed: items.length === 0 }) });
+  });
+  await queue(page).locator('#cf-q-p1').click();
+  await expect(panel(page).getByText('Unreadable: check by hand')).toBeVisible();
+  await expect(panel(page).getByRole('button', { name: /^Keep visible/ })).toHaveCount(0);
+  const done = panel(page).locator('.cf-decide');
+  await expect(done).toBeDisabled();
+  const surface = page.locator('.cf-page');
+  await surface.locator('img').evaluate((img: HTMLImageElement) => img.decode());
+  const area = (await surface.boundingBox())!;
+  for (const [x, y] of [[0.1, 0.1], [0.5, 0.4]]) {
+    await page.mouse.move(area.x + area.width * x, area.y + area.height * y);
+    await page.mouse.down();
+    await page.mouse.move(area.x + area.width * (x + 0.2), area.y + area.height * (y + 0.1), { steps: 4 });
+    await page.mouse.up();
+  }
+  await expect(page.locator('.cf-box[data-kind="drawn"]')).toHaveCount(2);
+  await expect(done).toHaveText(/Redact 2 marks/);
+  await expect(done).toBeDisabled();
+  // The keys don't get round the confirmation.
+  await queue(page).locator('#cf-q-p1').focus();
+  await page.keyboard.press('r');
+  await page.keyboard.press('v');
+  await expect(panel(page)).toContainText('Tick “I have reviewed this page” first.');
+  expect(sent).toEqual([]);
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/page-to-check-marks.png` });
+  await panel(page).getByRole('checkbox', { name: 'I have reviewed this page' }).check();
+  if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/page-to-check-confirmed.png` });
+  await done.click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0].id).toBe('p1');
+  expect(sent[0].body.reviewed).toBe(true);
+  expect(sent[0].body.boxes).toHaveLength(2);
+  expect(sent[0].body.boxes[0].left).toBeCloseTo(0.1, 1);
+  // The second page starts with no mark and no tick, and a page with nothing to redact needs the tick too.
+  await expect(panel(page)).toContainText('page 5');
+  await expect(page.locator('.cf-box[data-kind="drawn"]')).toHaveCount(0);
+  await expect(panel(page).getByRole('checkbox', { name: 'I have reviewed this page' })).not.toBeChecked();
+  await expect(done).toBeDisabled();
+  await panel(page).getByRole('checkbox', { name: 'I have reviewed this page' }).check();
+  await expect(done).toHaveText(/Done, nothing to redact/);
+  await done.click();
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1].body.boxes).toEqual([]);
+  expect(confirmed).toEqual([]);
+  expect(dismissed).toEqual([]);
 });

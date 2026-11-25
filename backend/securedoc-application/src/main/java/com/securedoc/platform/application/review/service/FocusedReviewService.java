@@ -26,6 +26,11 @@ import com.securedoc.platform.domain.business.TenantRedactionPolicy;
 import com.securedoc.platform.domain.document.Document;
 import com.securedoc.platform.domain.document.DocumentPackage;
 import com.securedoc.platform.domain.document.PackageStatus;
+import com.securedoc.platform.domain.finding.EntityType;
+import com.securedoc.platform.domain.finding.DetectorSource;
+import com.securedoc.platform.domain.identity.ActorId;
+import com.securedoc.platform.domain.identity.CorrelationId;
+import com.securedoc.platform.domain.vo.Confidence;
 import com.securedoc.platform.domain.finding.Finding;
 import com.securedoc.platform.domain.finding.FindingLocation;
 import com.securedoc.platform.domain.finding.FindingStatus;
@@ -171,6 +176,11 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
             throw new ValidationException(LvErrorCode.REV_002, "Package is not awaiting manual review");
         }
 
+        if (finding.entityType() == EntityType.UNREAD_PAGE) {
+            // Task 0074: only the page check decides it, with "I have reviewed this page".
+            throw new ValidationException(LvErrorCode.REV_004, "Confirm that you have reviewed this page");
+        }
+
         if (command.hasBoundingBoxAdjustment()) {
             FindingLocation current = finding.location();
             FindingLocation.BoundingBox box = FindingLocation.BoundingBox.of(
@@ -206,8 +216,62 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                     command.correlationId(), "Focused review dismissed finding: type=" + finding.entityType());
         }
 
+        return new ResolveReviewItemResult(finding.id(), pkg.id(), finding.status(),
+                resumeWhenDecided(pkg, command.tenantId(), command.actorId(), command.correlationId()));
+    }
+
+    /** The boxes one page check may draw. */
+    private static final int MAX_BOXES = 200;
+
+    /**
+     * Task 0074: a person reviewed an unreadable page by hand and drew any number of boxes on it (none when it holds
+     * nothing to redact). Each box becomes a confirmed finding, so it is redacted as any other; then the "Page to check"
+     * is decided. Run it in one transaction: the boxes are never saved without the decision, nor the decision without
+     * its boxes. The audit record has the page number and the number of boxes, never content.
+     */
+    public ResolveReviewItemResult checkPage(FindingId findingId, TenantId tenantId, ActorId actorId,
+                                             CorrelationId correlationId, boolean reviewed,
+                                             List<FindingLocation.BoundingBox> boxes) {
+        if (!reviewed) throw new ValidationException(LvErrorCode.REV_004, "Confirm that you have reviewed this page");
+        if (boxes.size() > MAX_BOXES) {
+            throw new ValidationException(LvErrorCode.REV_006, "A page can have up to " + MAX_BOXES + " boxes");
+        }
+        Finding page = findingRepository.findByIdAndTenantId(findingId, tenantId)
+                .orElseThrow(() -> new NotFoundException("Finding", findingId.toString()));
+        if (page.status() != FindingStatus.DETECTED) throw new ReviewAlreadyDecidedException();
+        if (page.entityType() != EntityType.UNREAD_PAGE) {
+            throw new ValidationException(LvErrorCode.REV_006, "Only a page to check can be checked by hand");
+        }
+        Document document = documentRepository.findByIdAndTenantId(page.documentId(), tenantId)
+                .orElseThrow(() -> new NotFoundException("Document", page.documentId().toString()));
+        DocumentPackage pkg = packageRepository.findByIdAndTenantId(document.packageId(), tenantId)
+                .orElseThrow(() -> new NotFoundException("DocumentPackage", document.packageId().toString()));
+        if (pkg.status() != PackageStatus.PENDING_REVIEW && pkg.status() != PackageStatus.IN_REVIEW) {
+            throw new ValidationException(LvErrorCode.REV_002, "Package is not awaiting manual review");
+        }
+        List<Finding> drawn = new ArrayList<>();
+        for (FindingLocation.BoundingBox box : boxes) {
+            Finding finding = Finding.create(tenantId, document.id(), EntityType.UNREAD_PAGE,
+                    FindingLocation.withBounds(page.location().pageNumber(), 0, 0, box), Confidence.full(),
+                    DetectorSource.of("review-page-check", "1.0.0"));
+            finding.confirm(actorId, "Drawn by a person on an unreadable page");
+            drawn.add(finding);
+        }
+        if (!drawn.isEmpty()) findingRepository.saveAll(drawn);
+        page.dismiss(actorId, "Page reviewed by hand");
+        saveDecision(page);
+        auditService.recordSuccess(tenantId, actorId, AuditAction.REVIEW_PAGE_CHECKED, "Finding", page.id().toString(),
+                pkg.id(), correlationId, "Unreadable page checked by hand: document=" + document.id()
+                        + ", page=" + page.location().pageNumber() + ", boxes=" + drawn.size());
+        return new ResolveReviewItemResult(page.id(), pkg.id(), page.status(),
+                resumeWhenDecided(pkg, tenantId, actorId, correlationId));
+    }
+
+    /** After the last open finding the case goes on; true when it did. */
+    private boolean resumeWhenDecided(DocumentPackage pkg, TenantId tenantId, ActorId actorId,
+                                      CorrelationId correlationId) {
         boolean processingResumed = false;
-        if (!packageHasPendingFindings(pkg.id(), command.tenantId())) {
+        if (!packageHasPendingFindings(pkg.id(), tenantId)) {
             // The human decision is complete at this point. Move the package out of review immediately
             // and dispatch the potentially slow redaction/verification/export continuation separately so
             // the review HTTP response is not held open while background document work runs.
@@ -216,16 +280,16 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                 // Task 0071: rejected meanwhile. The rejection stands.
                 throw new ValidationException(LvErrorCode.REV_002, "Package is not awaiting manual review");
             }
-            auditService.recordSuccess(command.tenantId(), command.actorId(),
+            auditService.recordSuccess(tenantId, actorId,
                     AuditAction.PACKAGE_PROCESSING_STARTED, "DocumentPackage", pkg.id().toString(),
-                    command.correlationId(), "Package processing resumed after final manual-review decision");
+                    correlationId, "Package processing resumed after final manual-review decision");
 
             packageProcessingDispatcher.dispatch(TriggerPackageProcessingCommand.of(
-                    pkg.id(), command.tenantId(), command.actorId(), command.correlationId()));
+                    pkg.id(), tenantId, actorId, correlationId));
             processingResumed = true;
         }
 
-        return new ResolveReviewItemResult(finding.id(), pkg.id(), finding.status(), processingResumed);
+        return processingResumed;
     }
 
     private ReviewItemSummary toSummary(PackageId packageId, Document document, Finding finding) {
