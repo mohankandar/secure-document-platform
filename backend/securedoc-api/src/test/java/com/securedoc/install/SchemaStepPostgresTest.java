@@ -132,7 +132,9 @@ class SchemaStepPostgresTest {
                 // Task 0059: platform-core 1.0.0, docs/install/notifications.md section 4.
                 Map.entry("notif_tenant", DML), Map.entry("notif_destination", DML), Map.entry("notif_event_settings", DML),
                 Map.entry("notif_outbox", DML), Map.entry("notif_summary_item", DML), Map.entry("notif_condition", DML),
-                Map.entry("notif_approval_request", DML), Map.entry("notif_schema_version", "SELECT")));
+                Map.entry("notif_approval_request", DML), Map.entry("notif_schema_version", "SELECT"),
+                // Task 0060.
+                Map.entry("erl_position", "INSERT,SELECT,UPDATE"), Map.entry("erl_schema_version", "SELECT")));
         // platform-core's own start-up checks pass as this user.
         var ds = new org.springframework.jdbc.datasource.DriverManagerDataSource(db.url, RUNTIME_USER, RUNTIME_PASSWORD);
         com.documentplatform.identity.jdbc.IdentitySchema.verify(ds);

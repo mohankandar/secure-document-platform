@@ -250,6 +250,11 @@ public final class LvErrorCodes {
                 case DELIVERY_DESTINATION_INVALID -> DLV_006;
                 case DELIVERY_SENSITIVITY_REFUSED -> DLV_003;
                 case STORAGE_IO -> SYS_002;
+                case KEY_SERVICE_UNAVAILABLE -> SYS_010;
+                case KEY_SERVICE_REFUSED -> SYS_011;
+                case STORED_FILE_REFUSED -> SYS_012;
+                case ERASE_REPLAY_REQUIRED -> SYS_013;
+                case ERASE_LOG_UNAVAILABLE -> SYS_014;
                 case PROCESSING_DISPATCH_EXHAUSTED -> PRC_008;
                 // The licence status at the stop gives LIC-001 to LIC-004; this is the default.
                 case PROCESSING_LICENSE_DENIED -> LIC_001;
@@ -286,6 +291,8 @@ public final class LvErrorCodes {
                 case CAPABILITY_DISABLED -> AUT_010;
                 case TENANT_INACTIVE -> AUT_005;
                 case STORAGE_UNAVAILABLE -> SYS_002;
+                case KEY_SERVICE_UNAVAILABLE -> SYS_010;
+                case KEY_SERVICE_REFUSED -> SYS_011;
                 case INVALID_FILE -> INT_007;
                 case ACCESS_DENIED -> CFG_007;
                 // Task 0026: a resumed drop that no longer matches its case.

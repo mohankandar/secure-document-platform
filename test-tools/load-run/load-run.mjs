@@ -124,7 +124,7 @@ try {
   }
 
   await new Promise((r) => mock.listen(aiPort, '127.0.0.1', r));
-  app = spawn('java', [`-Xmx${heap}`, '-jar', jar, '--spring.profiles.active=local', `--securedoc.storage.local.root-path=${join(run, 'storage')}`], {
+  app = spawn('java', [`-Xmx${heap}`, '-jar', jar, '--spring.profiles.active=local', `--securedoc.storage.local.root-path=${join(run, 'storage')}`, `--platform.erase-log.location=${join(run, 'erase-log')}`], {
     cwd: run, stdio: ['ignore', openSync(join(run, 'app.log'), 'w'), openSync(join(run, 'app.err'), 'w')],
     env: { ...process.env, SPRING_DATASOURCE_URL: url, SPRING_DATASOURCE_USERNAME: 'securedoc', SPRING_DATASOURCE_PASSWORD: password,
       SERVER_PORT: String(appPort), SECUREDOC_NODE_ID: 'node-load', SECUREDOC_AI_PROVIDER: 'ollama',

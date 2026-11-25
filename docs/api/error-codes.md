@@ -1955,3 +1955,64 @@ Reserved: not used yet.
 
 1. Check the address and HTTP method against LexaVault's API documentation.
 2. Fix the call in the source system and send it again. Nothing was taken in.
+
+### LV-SYS-010 Key service not available
+
+- **Means:** LexaVault can't reach its key service, so it can't open or store documents.
+- **Kind:** System
+- **Who acts:** IT Admin
+- **HTTP status:** 503
+
+**What to do:**
+
+1. Check that the key service is running, unsealed and can be reached from LexaVault. The Support status page names the key service's own code.
+2. Nothing is lost: retry the failed work from Support once it is back, and ask sources to send again anything that was refused.
+
+### LV-SYS-011 Key service refused
+
+- **Means:** The key service refused LexaVault, or the customer's keys are missing or switched off.
+- **Kind:** System
+- **Who acts:** IT Admin
+- **HTTP status:** 503
+
+**What to do:**
+
+1. Check LexaVault's login and policy in the key service, and that setup created the customer's keys (docs/install/KEY_SERVICE.md). The Support status page names the key service's own code.
+2. After a customer exit this is expected: do not create the keys again.
+3. Otherwise retry the failed work from Support.
+
+### LV-SYS-012 Stored file not opened
+
+- **Means:** A stored file has no record of how it is protected, or it was changed, so it was not opened.
+- **Kind:** System
+- **Who acts:** IT Admin
+- **HTTP status:** 502
+
+**What to do:**
+
+1. Don't retry. Find out who or what changed the document storage or its records, for example a partial restore.
+2. Restore the file from a backup that belongs to the same database, or ask the source to send the document again.
+
+### LV-SYS-013 Waiting for the erase replay
+
+- **Means:** The database was restored from a backup: no work is taken until the erase replay has run.
+- **Kind:** System
+- **Who acts:** IT Admin
+- **HTTP status:** 503
+
+**What to do:**
+
+1. Check that the erase log location is mounted.
+2. Run the erase replay once (docs/install/ERASE_LOG.md), then start LexaVault again.
+
+### LV-SYS-014 Erase log not available
+
+- **Means:** LexaVault can't use its erase log, so nothing is erased and no work is taken.
+- **Kind:** System
+- **Who acts:** IT Admin
+- **HTTP status:** 503
+
+**What to do:**
+
+1. Check that the erase log location is mounted and can be written by LexaVault. The Support status page names the erase log's own code (docs/install/ERASE_LOG.md).
+2. Erasures that were waiting are done by themselves once it is back.

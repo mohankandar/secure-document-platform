@@ -50,13 +50,16 @@ installed=$?
 set -e
 if [[ $installed -eq 4 ]]; then
   echo "Local database: the demo step has not run yet, so setup runs with the demo input files (install/demo)..."
+  # Task 0060: a local development start without a key service uses the development roles file, where customer keys are
+  # optional; with PLATFORM_SETUP_VAULT_* setup creates the keys as at an installation.
+  roles=("--product-roles" "$demo/product-roles-development.json" "--no-customer-keys")
+  if [[ -n "${PLATFORM_SETUP_VAULT_ADDR:-}" ]]; then roles=("--product-roles" "$repo_root/install/product-roles.json"); fi
   PLATFORM_SETUP_DB_URL="$db_url" PLATFORM_SETUP_DB_USER="$db_user" PLATFORM_SETUP_DB_PASSWORD="$db_password" \
     java -cp "$setup_jar" -Dloader.main=com.documentplatform.setup.SetupCommand \
       org.springframework.boot.loader.launch.PropertiesLauncher apply --licence "$demo/licence-demo.json" \
       --signin "$demo/signin-demo.json" --product LEXAVAULT \
-      --product-roles "$repo_root/install/product-roles.json" \
-      --config-out "$state_dir/platform-tenant.properties" --run-log "$state_dir/platform-setup-runs.log" \
-      --no-customer-keys
+      "${roles[@]}" \
+      --config-out "$state_dir/platform-tenant.properties" --run-log "$state_dir/platform-setup-runs.log"
 elif [[ $installed -ne 0 ]]; then
   echo "The demo step check failed (exit $installed)." >&2
   exit 1

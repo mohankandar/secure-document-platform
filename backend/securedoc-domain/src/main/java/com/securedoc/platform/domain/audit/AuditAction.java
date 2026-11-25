@@ -219,5 +219,8 @@ public enum AuditAction {
     PIPELINE_JOB_STATUS_CHANGED,
 
     /** Task 0049: stored text and redacted files that no record points to were removed (counts only). */
-    UNRECORDED_FILES_CLEANED
+    UNRECORDED_FILES_CLEANED,
+
+    /** Task 0060: stored files were erased, written to the erase log first. Ids, kind, rule and entry number only. */
+    FILES_ERASED
 }

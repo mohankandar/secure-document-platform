@@ -1,8 +1,10 @@
 package com.securedoc.platform.infrastructure.storage;
 
+import com.securedoc.platform.application.port.out.ErasurePort;
 import com.securedoc.platform.application.port.out.ProcessingStorageConfigurationRepository;
 import com.securedoc.platform.application.port.out.UnrecordedFileSweepPort;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.infrastructure.erasure.LexaVaultErasures;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -50,9 +52,11 @@ public class UnrecordedFileSweepAdapter implements UnrecordedFileSweepPort {
 
     private final ProcessingStorageConfigurationRepository configuration;
     private final NamedParameterJdbcTemplate jdbc;
+    private final LexaVaultErasures erasures;
 
     public UnrecordedFileSweepAdapter(ProcessingStorageConfigurationRepository configuration,
-                                      NamedParameterJdbcTemplate jdbc) {
+                                      NamedParameterJdbcTemplate jdbc, LexaVaultErasures erasures) {
+        this.erasures = erasures;
         this.configuration = configuration;
         this.jdbc = jdbc;
     }
@@ -138,8 +142,10 @@ public class UnrecordedFileSweepAdapter implements UnrecordedFileSweepPort {
             String key = root.relativize(file).toString().replace('\\', '/');
             if (keys.contains(key) || ids.contains(id(file))) continue;
             try {
-                if (!Files.deleteIfExists(file)) continue;
-            } catch (IOException e) {
+                // Task 0060: through the erase log.
+                erasures.eraseUnrecorded(TenantId.of(owner.get(0)), packageId, documentId, id(file),
+                        ErasurePort.Reason.rule("unrecorded-file-sweep"));
+            } catch (RuntimeException e) {
                 log.warn("UNRECORDED_FILE_NOT_REMOVED document={} type={}", documentId, e.getClass().getSimpleName());
                 continue;
             }

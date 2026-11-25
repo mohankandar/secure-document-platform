@@ -68,6 +68,8 @@ public final class DerivedDeliveryService {
         try(java.io.InputStream in=storage.retrieve(artifact.storageReference())){
             byte[] buffer=new byte[8192];
             for(int read;(read=in.read(buffer))!=-1;) digest.update(buffer,0,read);
+        }catch(TechnicalDependencyException exact){
+            throw exact; // Task 0060: the key service's or the file's own code.
         }catch(java.io.IOException|RuntimeException unreadable){
             throw new TechnicalDependencyException(com.securedoc.platform.application.exception.TechnicalDependency.STORAGE,
                     com.securedoc.platform.application.exception.TechnicalFailureCode.STORAGE_IO,true,"Stored split copy could not be read",null);
@@ -97,19 +99,21 @@ public final class DerivedDeliveryService {
         String documentLevel=sourceDocument.sensitivityLevel().name(), caseLevel=pkg.sensitivityLevel().name();
         d.startAttempt(Instant.now()); deliveries.save(d);
         DerivedDeliveryAttempt attempt=DerivedDeliveryAttempt.started(d.id(),d.attemptCount(),c.id(),c.configurationVersion(),Instant.now()); deliveries.saveAttempt(attempt);
+        var source=new com.securedoc.platform.application.export.service.DeliverySource(storage);
         try{
             var receipt=destination.deliver(c,new DerivedDestinationDeliveryPort.DeliveryRequest(
                     d.sourceDerivedDocumentId(),d.fileName(),"application/pdf",artifact.sizeBytes(),artifact.checksum().value(),d.markerValue(),
                     Map.of("packageId",d.packageId().toString(),"sourceDocumentId",d.sourceDocumentId().toString(),"destinationLabel",d.destinationLabel(),"pages",joinPages(d.pageNumbers()),
                             DerivedDestinationDeliveryPort.SENSITIVITY_LEVEL,documentLevel,DerivedDestinationDeliveryPort.CASE_SENSITIVITY_LEVEL,caseLevel),
-                    ()->storage.retrieve(artifact.storageReference())));
+                    ()->source.open(artifact.storageReference())));
             d.markDelivered(receipt.destinationReference(),Instant.now()); deliveries.save(d); deliveries.saveAttempt(attempt.success(Instant.now()));
             connections.save(c.recordOperationalSuccess(Instant.now()));
             audit.recordSuccess(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERED,"DerivedDelivery",d.id().toString(),correlationId,
                     "Derived redacted document delivered to approved destination="+d.destinationLabel()+", pages="+joinPages(d.pageNumbers())
                             +", sensitivityLevel="+documentLevel+", caseSensitivityLevel="+caseLevel);
             return d;
-        }catch(TechnicalDependencyException e){
+        }catch(TechnicalDependencyException reported){
+            TechnicalDependencyException e=source.failureOr(reported);
             d.markFailure(e.failureCode().name(),e.retryable(),Instant.now()); deliveries.save(d); deliveries.saveAttempt(attempt.failure(e.failureCode().name(),Instant.now()));
             connections.save(c.recordOperationalFailure(e.failureCode().name(),Instant.now()));
             audit.recordFailure(tenantId,actorId,AuditAction.DERIVED_DOCUMENT_DELIVERY_FAILED,"DerivedDelivery",d.id().toString(),correlationId,

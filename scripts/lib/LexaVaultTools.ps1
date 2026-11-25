@@ -162,11 +162,14 @@ function Initialize-LexaVaultDatabase {
         }
         $setupArgs = @('apply', '--licence', (Join-Path $demo 'licence-demo.json'), '--signin', $signin,
             '--product', 'LEXAVAULT',
-            '--product-roles', (Join-Path $script:LexaVaultRepoRoot 'install\product-roles.json'),
             '--config-out', (Join-Path $StateDir 'platform-tenant.properties'),
-            '--run-log', (Join-Path $StateDir 'platform-setup-runs.log'),
-            # LexaVault encrypts nothing with platform-core yet: product-roles.json says "customerKeys": "optional".
-            '--no-customer-keys') + $extra
+            '--run-log', (Join-Path $StateDir 'platform-setup-runs.log')) + $extra
+        # Task 0060: a local development start without a key service uses the development roles file, where customer keys
+        # are optional; with PLATFORM_SETUP_VAULT_* setup creates the keys as at an installation.
+        if ($env:PLATFORM_SETUP_VAULT_ADDR) {
+            $setupArgs += @('--product-roles', (Join-Path $script:LexaVaultRepoRoot 'install\product-roles.json'))
+        }
+        else { $setupArgs += @('--product-roles', (Join-Path $demo 'product-roles-development.json'), '--no-customer-keys') }
         $code = Invoke-LexaVaultJarMain -Jar $setupJarPath -MainClass 'com.documentplatform.setup.SetupCommand' -Arguments $setupArgs `
             -Environment (New-LexaVaultDbEnvironment 'PLATFORM_SETUP' $DbUrl $DbUser $DbPassword)
         # Exit 3 with the OIDC start: setup is done and lists the grants kept under the login system this start replaced

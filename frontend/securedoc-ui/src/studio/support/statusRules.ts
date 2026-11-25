@@ -26,6 +26,7 @@ export function checkName(name: string): string {
     case 'storage': return 'Document storage';
     case 'login-system': return 'Login system';
     case 'key-service': return 'Key service';
+    case 'erase-log': return 'Erase log';
     case 'channel-mail': return 'Mail server';
     default: return name.startsWith('folder-') ? `Folder: ${name.slice(7)}` : name.startsWith('service-') ? `Service: ${name.slice(8)}` : name;
   }

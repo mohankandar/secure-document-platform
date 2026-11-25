@@ -93,6 +93,26 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-notifications</artifactId>
         </dependency>
+        <!-- Task 0060: the key service and the stream cipher (platform.crypto.*), the erase log and its start-up guard
+             (platform.erase-log.*). -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-crypto-spring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-erase-log-spring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-crypto-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-erase-log-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Task 0041: the setup command runs from its own jar (securedoc-setup), because it brings platform-crypto and
              platform-integration, which the app's classpath may not carry (task 0041). Here only for the tests that
              run setup before the demo step. -->

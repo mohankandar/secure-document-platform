@@ -6,6 +6,7 @@ import com.securedoc.platform.domain.pipeline.PipelineJob;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import com.securedoc.platform.application.port.out.WorkGate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,13 @@ public class ExportJobWorkers {
     private final ProcessingCapacity capacity;
     private ElasticWorkers workers;
     private ScheduledExecutorService timers;
+    /** Task 0060: nothing is claimed while no work may be taken (after a restore, before the erase replay). */
+    private WorkGate workGate = WorkGate.open();
+
+    @Autowired
+    void workGate(WorkGate gate) {
+        this.workGate = gate;
+    }
 
     public ExportJobWorkers(ExportJobService service, long pollIntervalMs, String nodeId) {
         this(service, pollIntervalMs, nodeId, null);
@@ -75,6 +83,7 @@ public class ExportJobWorkers {
 
     /** In inline mode: the open export jobs, if any (also ones queued or sent again later), are finished. */
     private synchronized void finishOpenJobs() {
+        if (!workGate.mayTakeWork()) return;
         try {
             if (running || stopped || !service.hasOpenJobs()) return;
             log.info("EXPORT_JOB_WORKERS_FINISHING exportMode=inline reasonCode=OPEN_EXPORT_JOBS");
@@ -105,6 +114,7 @@ public class ExportJobWorkers {
     }
 
     private boolean turn(String owner, Runnable started) {
+        if (!workGate.mayTakeWork()) return false;
         try {
             Optional<PipelineJob> job = service.claimNext(owner);
             if (job.isEmpty()) return false;
@@ -139,6 +149,7 @@ public class ExportJobWorkers {
     }
 
     private void maintenance() {
+        if (!workGate.mayTakeWork()) return;
         try {
             service.releaseExpiredClaims();
         } catch (RuntimeException failure) {

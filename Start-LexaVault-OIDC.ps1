@@ -179,6 +179,10 @@ Write-Host "App log level: $LogLevel"
 Write-Host "Rolling file:  $EnableRollingFileLog"
 Write-Host "Scanner mode:  $EffectiveScannerMode"
 if ([string]::IsNullOrWhiteSpace($IssuerUri)) { throw "OIDC issuer URI is required. Pass -IssuerUri or set SECUREDOC_SECURITY_OIDC_ISSUER_URI." }
+# Task 0060: outside the LOCAL mode stored documents are always encrypted; the app does not start without a key service.
+if ([string]::IsNullOrWhiteSpace($env:PLATFORM_CRYPTO_VAULT_ADDRESS) -or [string]::IsNullOrWhiteSpace($env:PLATFORM_SETUP_VAULT_ADDR)) {
+    throw "The OIDC start needs a key service (a development Vault): set PLATFORM_CRYPTO_VAULT_* for the app and PLATFORM_SETUP_VAULT_* for setup, which creates the keys (docs/install/KEY_SERVICE.md)."
+}
 if ([string]::IsNullOrWhiteSpace($Audience)) { throw "OIDC audience is required. Pass -Audience or set SECUREDOC_SECURITY_OIDC_AUDIENCE." }
 Write-Host "OIDC issuer:   $IssuerUri"
 Write-Host "OIDC audience: $Audience"

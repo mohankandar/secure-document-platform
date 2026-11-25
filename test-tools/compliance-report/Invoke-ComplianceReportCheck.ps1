@@ -157,7 +157,7 @@ function Start-App([string] $dbPassword) {
         $p = Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
             -ArgumentList @('-jar', $JarPath, '--spring.profiles.active=local',
                 '--securedoc.lifecycle.purge-scheduler-enabled=false',
-                "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')") `
+                "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')", "--platform.erase-log.location=$(Join-Path $runDir 'erase-log')") `
             -RedirectStandardOutput (Join-Path $runDir 'app.out.log') -RedirectStandardError (Join-Path $runDir 'app.err.log')
     } finally {
         Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue
@@ -514,7 +514,7 @@ values ('$otherTenant', gen_random_uuid(), 'MANUAL_UPLOAD', 'COMPLETED', $T, $T,
         "Regulation packs in force FRCP 5.2 (court filings)", "Last 4 digits kept for: Social Security Number",
         "Regulation pack FRCP 5.2 (court filings) turned on",
         "Social Security Number: remove fully $([char]0x2192) keep the last 4",
-        "Originals kept for 48 hours after delivery", "Stopped cases kept for 7 days", "Supervisor approval before delivery Not required",
+        "Originals kept for 48 hours after delivery", "Stopped cases kept for 7 days", "Backups kept for 35 days", "Supervisor approval before delivery Not required",
         "COMPLIANCE REPORT $([char]0x00B7) SUMMARY EDITION", "$tenantName only. Other entities are never included.",
         # 0018 A4: the lifecycle changes table in section 2.
         "Originals kept for: 72 $([char]0x2192) 48 hours",

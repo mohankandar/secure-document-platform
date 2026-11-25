@@ -64,6 +64,10 @@ public record IntakeFailure(String code, String exceptionType,
         if (failure instanceof CapabilityNotEnabledException) return IntakeRejectionCode.CAPABILITY_DISABLED;
         if (failure instanceof TenantInactiveException) return IntakeRejectionCode.TENANT_INACTIVE;
         if (failure instanceof TechnicalDependencyException technical) {
+            if (technical.dependency() == TechnicalDependency.KEY_SERVICE) {
+                return technical.failureCode() == com.securedoc.platform.application.exception.TechnicalFailureCode.KEY_SERVICE_REFUSED
+                        ? IntakeRejectionCode.KEY_SERVICE_REFUSED : IntakeRejectionCode.KEY_SERVICE_UNAVAILABLE;
+            }
             return technical.dependency() == TechnicalDependency.STORAGE
                     ? IntakeRejectionCode.STORAGE_UNAVAILABLE : IntakeRejectionCode.INTERNAL_ERROR;
         }

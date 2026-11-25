@@ -44,7 +44,7 @@ class LicenceBuildTest {
         Path demo = DemoStepTest.REPO.resolve("install/demo");
         int exit = new SetupCommand(Map.of(), Clock.systemUTC(), build).run(List.of("plan",
                 "--licence", demo.resolve("licence-demo.json").toString(), "--signin", demo.resolve("signin-demo.json").toString(),
-                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
+                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/demo/product-roles-development.json").toString(),
                 "--config-out", work.resolve("t.properties").toString(), "--run-log", work.resolve("runs.log").toString(),
                 "--no-customer-keys"), print, print);
         assertEquals(2, exit);

@@ -288,6 +288,9 @@ public final class DemoStep {
                 "com.documentplatform.notifications.spring.NotificationsAutoConfiguration",
                 "com.documentplatform.licensing.spring.LicensingAutoConfiguration",
                 "com.documentplatform.monitoring.spring.MonitoringAutoConfiguration",
+                // Task 0060: this step stores no files and erases nothing.
+                "com.documentplatform.crypto.spring.CryptoAutoConfiguration",
+                "com.documentplatform.eraselog.spring.EraseLogAutoConfiguration",
                 // Task 0054: the app makes its own outbound rules (OutboundRulesConfig); this step calls nothing out.
                 "com.documentplatform.outbound.spring.OutboundAutoConfiguration"));
         props.put("logging.level.root", "WARN");

@@ -63,7 +63,7 @@ class PackageLifecycleDashboardRetentionTest {
 
         PackageLifecycleService service = new PackageLifecycleService(
                 policies, lifecycles, new CapturingExportRepository(), packages, visibility,
-                documents, artifacts, storage, new AuditService(audit));
+                documents, artifacts, new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audit));
 
         service.recordSuccessfulExport(
                 pkg.id(), tenantId, 1, "LOCAL_FOLDER",
@@ -119,7 +119,7 @@ class PackageLifecycleDashboardRetentionTest {
         CapturingAudit audit = new CapturingAudit();
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 24), lifecycles, new CapturingExportRepository(), packages, visibility,
-                new EmptyDocumentRepository(), new MutableArtifactRepository(), new CapturingStorage(), new AuditService(audit));
+                new EmptyDocumentRepository(), new MutableArtifactRepository(), new com.securedoc.platform.application.port.out.DirectErasure(new MutableArtifactRepository(), new CapturingStorage()), new AuditService(audit));
 
         CorrelationId correlationId = CorrelationId.generate();
         service.recordTechnicalFailure(pkg.id(), tenantId, correlationId);
@@ -165,7 +165,7 @@ class PackageLifecycleDashboardRetentionTest {
         CapturingAudit audit = new CapturingAudit();
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 24), lifecycles, new CapturingExportRepository(), packages, visibility,
-                documents, artifacts, new CapturingStorage(), new AuditService(audit));
+                documents, artifacts, new com.securedoc.platform.application.port.out.DirectErasure(artifacts, new CapturingStorage()), new AuditService(audit));
 
         service.recordSuccessfulExport(
                 pkg.id(), tenantId, 1, "LOCAL_FOLDER",
@@ -230,7 +230,7 @@ class PackageLifecycleDashboardRetentionTest {
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 24), lifecycles, new CapturingExportRepository(),
                 new MutablePackageRepository(pkg), visibility, new MutableDocumentRepository(document),
-                artifacts, storage, new AuditService(audit));
+                artifacts, new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audit));
 
         var result = service.execute(new PurgeDueRetentionCommand(
                 Instant.parse("2026-09-21T12:00:00Z"), 100, actorId, CorrelationId.generate()));
@@ -281,7 +281,7 @@ class PackageLifecycleDashboardRetentionTest {
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 24), lifecycles, new CapturingExportRepository(),
                 new MutablePackageRepository(pkg), visibility, new MutableDocumentRepository(document),
-                artifacts, storage, new AuditService(new CapturingAudit()));
+                artifacts, new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(new CapturingAudit()));
 
         var result = service.execute(new PurgeDueRetentionCommand(
                 Instant.parse("2026-09-21T12:00:00Z"), 100, actorId, CorrelationId.generate()));
@@ -329,7 +329,7 @@ class PackageLifecycleDashboardRetentionTest {
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 24), lifecycles, new CapturingExportRepository(),
                 new MutablePackageRepository(pkg), visibility, new MutableDocumentRepository(document),
-                new MutableArtifactRepository(), storage, new AuditService(new CapturingAudit()));
+                new MutableArtifactRepository(), new com.securedoc.platform.application.port.out.DirectErasure(new MutableArtifactRepository(), storage), new AuditService(new CapturingAudit()));
 
         service.execute(new PurgeDueRetentionCommand(
                 Instant.parse("2026-09-21T12:00:00Z"), 100, actorId, CorrelationId.generate()));
@@ -381,7 +381,7 @@ class PackageLifecycleDashboardRetentionTest {
         PackageLifecycleService service = new PackageLifecycleService(
                 new FixedPolicyRepository(tenantId, 72), lifecycles, new CapturingExportRepository(),
                 new MutablePackageRepository(pkg), new CapturingVisibility(), new MutableDocumentRepository(document),
-                artifacts, storage, new AuditService(audit));
+                artifacts, new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audit));
 
         service.recordSuccessfulExport(pkg.id(), tenantId, 1, "LOCAL_FOLDER",
                 List.of(new PackageExportRecord.ExportedDocument(

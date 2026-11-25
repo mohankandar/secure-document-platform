@@ -19,8 +19,8 @@
     Licence keys (task 0054, platform-core 0.7.0): they are inside the setup jar; no option or file here adds one. The
     demo licence is taken only by a development build (mvn -Pdev-build; Build-LexaVault-All.ps1 without -Production).
 
-    Customer keys: --no-customer-keys is passed. LexaVault encrypts nothing with platform-core yet, and
-    install\product-roles.json says "customerKeys": "optional" (task 0041), so setup accepts it.
+    Customer keys (task 0060): setup creates them in your key service; install\product-roles.json says
+    "customerKeys": "required". Its login, in the environment only: PLATFORM_SETUP_VAULT_* (docs/install/KEY_SERVICE.md).
 
     Not wired yet (placeholders, each comes with its own task):
       - notifications settings: task 0040;
@@ -54,9 +54,7 @@ if (-not $ProductRoles) { $ProductRoles = Join-Path $repoRoot 'install\product-r
 
 $jar = Resolve-LexaVaultSetupJar $JarPath
 $arguments = @($Command, '--licence', $Licence, '--signin', $Signin, '--product', 'LEXAVAULT',
-    '--product-roles', $ProductRoles,
-    # LexaVault encrypts nothing with platform-core yet ("customerKeys": "optional" in product-roles.json).
-    '--no-customer-keys')
+    '--product-roles', $ProductRoles)
 if ($ConfigOut) { $arguments += @('--config-out', $ConfigOut) }
 if ($RunLog) { $arguments += @('--run-log', $RunLog) }
 if ($RemoveUnlistedGrants) { $arguments += '--remove-unlisted-grants' }
