@@ -30,8 +30,8 @@ test('every sensitive type the policy can enable has a name in the vocabulary', 
 });
 
 test('task 0043: every opt-in pattern kind has a name, a plural and a one-line "off by default" description', () => {
-  const kinds = catalogKinds('(?:optIn|image)');
-  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'FACE_PHOTO', 'ITIN', 'PASSPORT_NUMBER', 'SIGNATURE']);
+  const kinds = catalogKinds('(?:optIn|image|aiOnly)');
+  assert.deepEqual([...kinds].sort(), ['BANK_ACCOUNT_NUMBER', 'BANK_ROUTING_NUMBER', 'DRIVERS_LICENSE_NUMBER', 'EIN', 'FACE_PHOTO', 'ITIN', 'PASSPORT_NUMBER', 'PERSON_NAME', 'SIGNATURE']);
   for (const kind of kinds) {
     const known = findSensitiveType(kind);
     assert.ok(known, `${kind} has no name in words.ts`);

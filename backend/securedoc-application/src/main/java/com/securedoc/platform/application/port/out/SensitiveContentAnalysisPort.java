@@ -64,10 +64,14 @@ public interface SensitiveContentAnalysisPort {
                 EntityType.CREDIT_CARD_NUMBER,
                 EntityType.CREDIT_SCORE);
 
+        /** Task 0072: asked for only where the entity turned it on. */
+        private static final Set<EntityType> KNOWN = Set.of(EntityType.SSN, EntityType.DATE_OF_BIRTH,
+                EntityType.CREDIT_CARD_NUMBER, EntityType.CREDIT_SCORE, EntityType.PERSON_NAME);
+
         public AnalysisPolicy {
             Objects.requireNonNull(enabledEntityTypes, "enabledEntityTypes must not be null");
-            if (!V1_TYPES.containsAll(enabledEntityTypes)) {
-                throw new IllegalArgumentException("Analysis policy contains an unsupported V1 entity type");
+            if (!KNOWN.containsAll(enabledEntityTypes)) {
+                throw new IllegalArgumentException("Analysis policy contains an unsupported entity type");
             }
             enabledEntityTypes = Set.copyOf(enabledEntityTypes);
         }

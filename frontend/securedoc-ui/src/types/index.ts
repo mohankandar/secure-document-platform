@@ -86,7 +86,7 @@ export interface SensitiveDataPolicyConfiguration {
 /** Task 0062: the redaction catalog and the regulation packs, the same for every entity. */
 export interface RedactionCatalog {
   kinds: { key: string; name: string; detectionMethod: string; defaultStyle: string; locked: boolean; lastFourAllowed: boolean }[];
-  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[] }[];
+  packs: { key: string; name: string; covers: string; notCovered: string; kinds: string[]; suggestedKinds?: string[] }[];
 }
 
 export interface LifecyclePolicyConfiguration {
