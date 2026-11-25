@@ -392,7 +392,7 @@ class ProfileDestinationDeliveryTest {
         archive.health = 503;
         assertEquals(LvErrorCode.DLV_002, LvErrorCodes.of(assertThrows(TechnicalDependencyException.class, () -> adapter(true).checkDestination(tenant))));
         archive.healthCode = "ARC-BUSY";
-        adapter(true).checkDestination(tenant); // busy is not down
+        assertEquals(LvErrorCode.DLV_002, LvErrorCodes.of(assertThrows(TechnicalDependencyException.class, () -> adapter(true).checkDestination(tenant))), "busy");
     }
 
     @Test

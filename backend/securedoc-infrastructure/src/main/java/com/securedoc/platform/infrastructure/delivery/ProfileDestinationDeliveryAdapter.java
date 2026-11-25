@@ -106,8 +106,8 @@ public final class ProfileDestinationDeliveryAdapter implements DeliveryPort, Do
             throw notUsable(e);
         }
         AttemptResult result = new TestAction(engine, IntegrationAudit.NONE).run(stored(r.config(), c), "lexavault");
-        // Busy is not down (the destination said so itself): a paused destination may go on, at its own pace.
-        if (result.delivered() || result.outcome() == Outcome.BUSY) return;
+        // Busy fails the check too, as a 503 always did: a case that could not be sent then waits without using an attempt.
+        if (result.delivered()) return;
         throw failed(result, c.destination(), "Destination connection test failed");
     }
 
