@@ -177,7 +177,7 @@ public class DeliveryApprovals {
             for (OnTheCase d : jdbc.query("select r.request_id, r.tenant_id, r.package_id, q.requester from delivery_approval_requests r"
                     + " join notif_approval_request q on q.request_id = r.request_id and q.tenant_id = r.tenant_id::text and q.decision is null"
                     + " where r.created_at > now() - interval '2 days' and exists (select 1 from audit_records a where a.tenant_id = r.tenant_id"
-                    + " and a.action = 'PACKAGE_FINAL_APPROVED' and a.resource_id = r.package_id::text and a.occurred_at >= r.created_at"
+                    + " and a.action = 'PACKAGE_FINAL_APPROVED' and a.outcome = 'SUCCESS' and a.resource_id = r.package_id::text and a.occurred_at >= r.created_at"
                     + " and a.actor_id::text <> q.requester) and not exists (select 1 from notification_published n where n.event_type = ?"
                     + " and n.item_id = r.request_id)", (rs, i) -> new OnTheCase(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class),
                             rs.getObject(3, UUID.class), rs.getString(4)), LexaVaultEvents.DELIVERY_APPROVED.value())) {
@@ -361,7 +361,7 @@ public class DeliveryApprovals {
     /** The case was approved on the case itself after the request was made: by whom and when, from the audit log. */
     private Optional<Answer> approvedOnTheCase(TenantId entity, Bound bound, ApprovalRequest request) {
         return jdbc.query("select actor_display_name, occurred_at from audit_records where tenant_id = ? and action ="
-                + " 'PACKAGE_FINAL_APPROVED' and resource_id = ? and occurred_at >= ? order by occurred_at limit 1",
+                + " 'PACKAGE_FINAL_APPROVED' and outcome = 'SUCCESS' and resource_id = ? and occurred_at >= ? order by occurred_at limit 1",
                 (rs, i) -> already("Already approved by " + (rs.getString(1) == null ? "someone" : rs.getString(1)) + " at "
                         + SHOWN.format(rs.getTimestamp(2).toInstant().atZone(zone(entity))) + "."),
                 entity.value(), bound.caseId().value().toString(), Timestamp.from(request.createdAt())).stream().findFirst();

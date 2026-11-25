@@ -1301,6 +1301,18 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 1. Read the ticket.
 2. Send a new case if the ticket says so.
 
+### LV-REV-015 You reviewed this case yourself
+
+- **Means:** In a bulk approval, nobody approves a case they reviewed themselves.
+- **Kind:** Refused
+- **Who acts:** Another supervisor
+- **HTTP status:** 400
+
+**What to do:**
+
+1. Ask another supervisor to approve this case.
+2. Continue with the other cases yourself.
+
 ## DLV: export
 
 ### LV-DLV-001 Destination can't be reached

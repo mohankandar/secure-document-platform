@@ -471,6 +471,25 @@ class NotificationsAppPostgresTest {
 
     @Test
     @Order(8)
+    void aRefusedApprovalOfTheCaseIsNeverToldAsAnApproval() throws Exception {
+        UUID caseId = waitingCase(A, BOB);
+        String token = token(ask(caseId, 1).get("ann@a.example"));
+        int before = smtp.mails().size();
+        // As a refused bulk approval (task 0076) records it.
+        jdbc.update("insert into audit_records (id, tenant_id, actor_id, action, resource_type, resource_id, outcome, correlation_id,"
+                + " occurred_at, created_at) values (?, ?, ?, 'PACKAGE_FINAL_APPROVED', 'DocumentPackage', ?, 'FAILURE', ?, now(), now())",
+                UUID.randomUUID(), A, ANN, caseId.toString(), UUID.randomUUID());
+        app.getBean(DeliveryApprovals.class).tellApprovedOnTheCase();
+        assertEquals(0, jdbc.queryForObject("select count(*) from notification_published n join delivery_approval_requests r"
+                + " on r.request_id = n.item_id where r.package_id = ?", Integer.class, caseId));
+        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "open", token, null).contains("\"state\":\"READY\""));
+        jdbc.update("update document_packages set status = 'REJECTED', version = version + 1 where id = ?", caseId);
+        assertTrue(link(A, ANN, "DOCUMENT_SUPERVISOR", "open", token, null).contains("CASE_CHANGED"));
+        assertEquals(0, mails(before, 0, caseId.toString()).size());
+    }
+
+    @Test
+    @Order(8)
     void aCaseRejectedMeanwhileCannotBeApprovedByItsLink() throws Exception {
         UUID caseId = waitingCase(A, BOB);
         String token = token(ask(caseId, 1).get("ann@a.example"));
