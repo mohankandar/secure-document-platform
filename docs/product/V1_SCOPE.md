@@ -11,7 +11,7 @@ Provide a secure AI-first document-redaction workflow that accepts business-iden
 - Multiple tenant-configured business identifiers with exactly one Primary identifier.
 - AI contextual sensitive-content discovery on every normalized document.
 - Deterministic recognizers/validators as supporting evidence for structured categories.
-- Current V1 baseline categories: SSN, Date of Birth, Credit Card Number, Credit Score.
+- On for a new entity: SSN, date of birth, credit score. Always on: full card number, card security code, PIN. Off until turned on: bank numbers, ITIN, EIN, driver's license, passport, person name, signature, face photo; regulation packs turn on their kinds together.
 - Tenant policy enabling/disabling supported categories and related options such as contextual SSN-last-four masking.
 - Trusted native/OCR geometry for location; no customer-entered X/Y coordinates.
 - Permanent irreversible redaction plus verification.
@@ -20,10 +20,10 @@ Provide a secure AI-first document-redaction workflow that accepts business-iden
 - Classified technical failures with selective technical retry.
 - Local/on-prem-first provider architecture with configurable AI/OCR and tenant-scoped typed Integration Connections for sources/destinations.
 - Temporary original retention, bounded reprocessing, technical holds, retention-owned physical purge, and incomplete machine-intake expiry/cleanup.
-- Production redacted-master delivery boundary to independent SDV; LexaVault does not own customer long-term S3/object-storage choice.
+- Production redacted-master delivery boundary to an independent destination; LexaVault does not own customer long-term S3/object-storage choice.
 - Derived redacted-document split/routing by deterministic BARCODE/QR_CODE/TEXT_PATTERN markers in fixed configured page regions.
-- Shared Dashboard and role/capability-controlled actions.
-- Executive and Operational reporting using tenant-scoped structured data.
+- Shared Cases screen and role/capability-controlled actions.
+- Reports (Overview, Daily intake and delivery, Operations) using tenant-scoped structured data.
 - Production OIDC/JWT identity boundary plus explicit LOCAL/demo mode.
 
 ## Explicitly not V1

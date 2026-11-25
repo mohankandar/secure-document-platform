@@ -36,7 +36,7 @@ They are read at each use: replace one and no restart is needed for a file.
 ## 3. The mail account of an entity (Admin > Notifications, IT Admin)
 
 - **Microsoft 365:** register the app and the mailbox as in platform-core's `docs/install/notifications.md` section 1a.
-  Give the directory ID, the client ID, the sender mailbox, the kind of credential and the secret's name. The app server
+  Give the **Directory (tenant) ID**, **Application (client) ID**, **Sender mailbox**, **Credential** and **Name of the stored secret**. The app server
   needs `login.microsoftonline.com:443` (Java's own proxy options are used there) and `smtp.office365.com:587` directly.
 - **Your own Exchange server or relay:** server, port, security, and a user name with the secret's name, or none for a relay.
   A login is always encrypted (STARTTLS or TLS). Without encryption only a relay without a login, and only where
@@ -44,7 +44,7 @@ They are read at each use: replace one and no restart is needed for a file.
   address. Cloud metadata and link-local addresses are always refused. A certificate from your own authority:
   `platform.outbound.private-ca-file`.
 
-"Send me a test message" goes to the address of the person who clicks it. The last 10 messages show their state and, when
+Switch on **Send messages by e-mail** and save. **Send me a test message** goes to the address of the person who clicks it. **Last messages**: the last 10 show their state and, when
 one was not sent, the reason and its code.
 
 ## 4. Who gets messages

@@ -2,20 +2,20 @@
 
 ## 1. Intake
 
-Normal manual intake is one page containing tenant-configured business identifiers and a PDF queue.
+Normal manual intake is one page, **New case**: the entity's case fields, sensitivity and priority, and a PDF queue.
 
-- Desktop drag/drop and `Browse Files` feed the same manual-upload queue.
+- Drag and drop and **choose files** feed the same manual-upload queue.
 - Multiple PDFs can be queued in one Intake Batch.
 - Every PDF remains a separate document and keeps its original filename.
 - PDFs are never merged as part of intake.
 - Non-PDF files are rejected before package creation.
 - Duplicate local selections are skipped.
-- Processing starts only after explicit `Submit Documents`.
-- Required identifiers and at least one valid PDF are required before submit.
+- Processing starts only after **Create case**.
+- Required fields and at least one valid PDF are required before submit.
 
 Submission uses one tenant-scoped Intake Batch, uploads queued documents while the package is `CREATED`, and submits only after every required upload succeeds.
 
-Scanner-assisted intake is a separate **Scan Documents** entry point using the local Scanner Bridge. It reuses the same tenant-configured business-identifier definitions but does not expose a second `Scan Documents` file-picker action inside manual Upload Documents. One Scanner Intake is one business context plus one physical scan job producing one consolidated multi-page PDF. The operator explicitly submits the READY scan; the bridge durably queues it and may let the operator start the next package immediately while authenticated/idempotent delivery proceeds asynchronously. Accepted scanner submissions use `SCANNER_INTAKE` source classification and then converge on the existing Business Record, validation, processing, Manual Review, approval, delivery/export and Dashboard lifecycle. See `../scanner-bridge/SCANNER_INTAKE_END_TO_END.md`.
+Scanner-assisted intake is the tab **Scan paper** on New case, using the local Scanner Bridge, with the same case fields. One Scanner Intake is one business context plus one physical scan job producing one consolidated multi-page PDF. The operator explicitly submits the READY scan; the bridge durably queues it and may let the operator start the next package immediately while authenticated/idempotent delivery proceeds asynchronously. Accepted scanner submissions use `SCANNER_INTAKE` source classification and then converge on the existing Business Record, validation, processing, Manual Review, approval, delivery/export and Dashboard lifecycle. See `../scanner-bridge/SCANNER_INTAKE_END_TO_END.md`.
 
 API, watched-folder, polling and scanner intake use or will converge on the same downstream document-processing lifecycle while preserving their own trigger/identifier/idempotency contracts.
 
@@ -57,21 +57,22 @@ Manual Review is focused on actionable findings rather than whole-document brows
 - Global Manual Review remains tenant wide.
 - Selected findings render the exact one-based source PDF page.
 - Stored highlight/bounding-box geometry is displayed and may be adjusted where authorized.
-- Confirm/dismiss, redaction adjustment, review submission, and final delivery approval remain separate capabilities/audit meanings.
+- **Redact** / **Keep visible**, redaction adjustment, review submission, and final delivery approval remain separate capabilities/audit meanings.
 - Review counts include only actionable unresolved findings.
+- A page the vision model could not read, or that the second check sent, is a "Page to check": it is finished only with "I have reviewed this page".
+- A reviewer can reject the case with a fixed reason; nothing is exported and it can't be undone. A Supervisor can also do it in Approval.
+- Cases and findings are listed Urgent, Normal, Low, then Bulk, the oldest first.
 - After the last review decision, processing resumes asynchronously; the user action does not wait for the entire redaction/export pipeline.
 
 ## 4. Delivery approval
 
-Tenant lifecycle policy may require final delivery approval. When required, delivery waits for an authorized approval action. Processor, Supervisor, Business Admin, and explicit `ADMIN` currently have that capability.
-
-The capability remains distinct from Manual Review so future separation-of-duties policy can be added without changing the architecture.
+The entity's policy may require approval before delivery (off by default). Delivery then waits for a Supervisor: one case, up to 50 at once, or by a link in an e-mail. Nobody approves a case they reviewed in a bulk approval (four eyes); single approval does not check it.
 
 ## 5. Reprocessing
 
 `Reprocess from Retained Original` is a business lifecycle action for a valid completed/exported package while the retained original still exists.
 
-- Document Supervisor and Business Admin may perform it; Processor may not.
+- The Document Supervisor may perform it (**Process again**); Processor and Business Admin may not.
 - The UI requires explicit confirmation before the request is sent.
 - Once accepted, the package immediately leaves `COMPLETED` and is shown as Processing/Reprocessing while the asynchronous pipeline runs.
 - `canReprocess` is false unless the package is currently `COMPLETED`; refreshing or reopening the page cannot expose a second reprocess action while a cycle is active.
@@ -83,13 +84,13 @@ The capability remains distinct from Manual Review so future separation-of-dutie
 
 `Retry Transient Technical Failure` is for classified retryable technical failures only.
 
-- It is owned by Tenant IT / Platform Operations / explicit `ADMIN`.
+- It is the IT Administrator's (Support, **Retry processing**).
 - It does not grant review, approval, reprocess, or Dashboard-removal authority.
 - Permanent/business/content exceptions are not indiscriminately retried.
 
 ## 7. Dashboard removal
 
-`Remove from Dashboard` means hide from the normal operational Dashboard.
+`Remove from Dashboard` means hide from the normal operational Dashboard. The Case File screens have no button for it; only the API and the older screens do.
 
 - It is allowed only in valid lifecycle state.
 - It does not delete the package/database record.
@@ -101,5 +102,7 @@ The capability remains distinct from Manual Review so future separation-of-dutie
 ## 8. Retention and physical cleanup
 
 The original is retained while needed for processing/review/reprocess according to tenant lifecycle policy. Redacted output is the primary durable delivered artifact.
+
+Keeping times of originals and redacted copies are counted from the export; those of a stopped or rejected case from then.
 
 No business/product role receives a general manual physical-delete capability. Retention/purge processing owns physical cleanup and records the lifecycle outcome.

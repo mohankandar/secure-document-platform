@@ -19,8 +19,11 @@ shown as a problem and never refuses a start. The default AI model is checked; A
 A refused start says one line per check with its code and fix, and one log line
 `LV_STARTUP_FAILED code=LV-... platformCode=...`.
 
-**Database user.** "The login has more rights than it needs" (`MON_DB_USER_TOO_POWERFUL`) is a warning: the app still runs its
-own table changes at start, so today its user owns tables.
+**Database user.** "The login has more rights than it needs" (`MON_DB_USER_TOO_POWERFUL`) is a warning: LexaVault still
+starts. You see it when the app connects as the owner of the tables, as the local development setup does. An installation whose
+schema step has run works with a user that owns no tables (rehearsed, task 0093): give that user SELECT, INSERT, UPDATE and
+DELETE on LexaVault's own tables and USAGE on its sequences, then run the schema step with `--runtime-user` (`SCHEMA_STEP.md`),
+which sets its rights on the platform tables.
 
 **References.** Every answer has the header `X-Request-Id`, and every error answer the same value as `reference`
 (`R-...`). It is in the log (`ref`), in Support, Status (last failures) and in the diagnostic bundle. An `X-Request-Id` you
