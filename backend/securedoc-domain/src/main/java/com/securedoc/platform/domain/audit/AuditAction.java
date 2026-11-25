@@ -170,6 +170,12 @@ public enum AuditAction {
     LICENSE_ENFORCEMENT_DENIED,
     /** Task 0057. */
     DIAGNOSTIC_BUNDLE_DOWNLOADED,
+    // Task 0059: notifications and approval links. Codes, ids and field names only.
+    NOTIFICATION_SETTINGS_CHANGED,
+    NOTIFICATION_EVENT_CHANGED,
+    NOTIFICATION_TEST_SENT,
+    DELIVERY_APPROVAL_LINK_USED,
+    DELIVERY_APPROVAL_LINK_REFUSED,
     BRANDING_CONFIGURATION_CHANGED,
 
     // Derived-document routing

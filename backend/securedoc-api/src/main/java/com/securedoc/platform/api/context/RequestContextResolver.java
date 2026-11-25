@@ -294,6 +294,18 @@ public class RequestContextResolver {
                 normalizeIdentity(jwt).groups()));
     }
 
+    /**
+     * The e-mail address of the verified sign-in (task 0059, for notifications only). Empty when there is none, or when the
+     * login system says the person has not confirmed it. Gives no access.
+     */
+    public java.util.Optional<String> verifiedEmail() {
+        if (securityProperties.getMode() == SecurityMode.LOCAL) return java.util.Optional.empty();
+        var jwt = requireOidcToken().getToken();
+        Object confirmed = jwt.getClaims().get("email_verified");
+        if (confirmed != null && !"true".equalsIgnoreCase(confirmed.toString())) return java.util.Optional.empty();
+        return java.util.Optional.ofNullable(normalizeIdentity(jwt).email());
+    }
+
     private SecurityContextException attributed(SecurityContextException refused, TenantId tenantId,
                                                 org.springframework.security.oauth2.jwt.Jwt jwt) {
         try {

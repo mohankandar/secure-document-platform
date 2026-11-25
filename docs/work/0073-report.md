@@ -1,7 +1,7 @@
 # Report 0073: P4, priority Urgent / Normal / Low
 
 Date: 2026-11-24
-Branch: `feature/0073-priority`, from `dba7715` (0072 merged); 0077 is merged into it
+Branch: `feature/0073-priority`, from `dba7715` (0072 merged); 0077 and 0059 are merged into it (after 0059: the pipeline, intake, review and contract tests again, 4 + 58 + 71 + 124, and test:vocabulary 223, 0 failed)
 Outcome: **DONE** (5 questions, the recommended answer taken in each)
 
 ## What was done

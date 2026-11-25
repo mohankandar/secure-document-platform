@@ -57,6 +57,8 @@
     <include file="db/changelog/060-licence-usage.xml"/>
     <include file="db/changelog/061-person-last-entity.xml"/>
     <include file="db/changelog/062-drop-old-identity-connections.xml"/>
+    <include file="db/changelog/063-notifications.xml"/>
+    <include file="db/changelog/064-notification-published.xml"/>
     <include file="db/changelog/070-redaction-catalog.xml"/>
     <include file="db/changelog/080-vision-routing.xml"/>
     <include file="db/changelog/071-package-rejections.xml"/>

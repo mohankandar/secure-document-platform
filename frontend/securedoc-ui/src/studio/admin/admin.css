@@ -557,3 +557,12 @@ details.cf-sp-section { display: block; }
 .cf-ad-timesaved-title .cf-help { margin-left: 6px; }
 
 @media (max-width: 640px) { .cf-ad-tabs { position: static; } }
+
+/* Task 0059: Admin, Notifications, and the approval page. */
+.cf-nt-people { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 0; }
+.cf-nt-people dt { color: var(--cf-muted); font-size: 12px; }
+.cf-nt-people dd { margin: 2px 0 0; font-weight: 500; }
+.cf-nt-break { overflow-wrap: anywhere; }
+.cf-approval { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.cf-approval h2 { margin: 0; font-size: 17px; }
+.cf-approval p { margin: 0; }

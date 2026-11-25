@@ -137,7 +137,7 @@ class StageJobsMigrationPostgresTest {
             jobs.enqueue(PipelineJob.ready(tenant, PipelineStage.EXPORT, pkg, null, destination, null, 1, Instant.now()));
 
             try (Connection connection = db.connection()) {
-                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 10); // 082, 081, 071, 080, 070, 062, 061, 060, 050, then 049
+                PostgresTestDatabase.rollback(PostgresTestDatabase.liquibase(connection), connection, 12); // 082, 081, 071, 080, 070, 064, 063, 062, 061, 060, 050, then 049
             }
             assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM pipeline_jobs", new MapSqlParameterSource(),
                     Integer.class), "the export job stays; the stage jobs are removed");

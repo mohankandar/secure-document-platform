@@ -84,16 +84,15 @@ Tasks and reports live in `docs/work/`. When the owner says "do the next task", 
 
 The app is at http://localhost:5173 and the backend at http://localhost:8080.
 
-## Known state on 2026-11-17
+## Known state on 2026-11-24
 
 - The full build passes on this machine, with 572 backend tests (domain 51, application 205, scan bridge 47, infrastructure 14, API 255; counted 2026-11-20, task 0018).
 - Frontend: `cd frontend/securedoc-ui; npm run test:standalone` runs every frontend suite that needs no running app (`test:auth` 10, `test:vocabulary` 90, `test:ui-framework` 17, `test:oidc-signin` 69, `test:tablet` 55 in WebKit with iPad settings; counted 2026-11-19, U021 follow-up). `test:tablet` needs Playwright's WebKit once per machine: `npx playwright install webkit`. The standard build does not run it; run it with every frontend change. `test:e2e` still needs the LOCAL app running on 5173.
 - Surefire 3.5.2 is pinned in backend/pom.xml for every module. Before that, the 5 infrastructure test classes ran only where Maven's own default Surefire supported JUnit 5 (Maven 3.9 on Windows did, Maven 3.8.7 on Ubuntu did not).
 - Enterprise Identity is at **0.3.0** (tag `v0.3.0`, entity admission). LexaVault uses 0.3.0; SDV still uses 0.2.0.
 - **Phase 1b is done** (reports 0011 and 0012): the login and entity rules (entity admission, entity choice, group-to-role rules, machine admission, actor ids) now live in the Enterprise Identity library, package `com.documentplatform.identity.admission`. **New login and entity rules are written in the library, not in LexaVault.** LexaVault keeps only its seam: `OidcTenantMembershipResolver`, `TrustedActorResolver`, `ProductEntityRoleCatalog`, `IdentityAdmissionMapping`, its own tables and SQL, roles and capabilities. The library owns no tables and no setting names (`SCHEMA_CONTRACT.md` in the library lists what a product must provide).
-- **Phase 1 is accepted** (reports 0004 to 0009): one login system, two entities, in the isolated environment under `test-tools/phase1-shared-issuer/` (60 scripted checks and the browser script pass; the owner's screen checks pass). Migration 037 was applied there through Liquibase by a test-only changelog; it is still not in the master changelog, and shared-issuer selection is still off by default.
+- **Sign-in (0058):** platform-core identity is the only OIDC path, for one or several entities. The Phase 1 environment (`test-tools/phase1-shared-issuer`) is retired: it needed migration 037 and the old identity tables, which are gone. Reports 0004 to 0009 stay as its record.
 - The newest (Case File) design has the entity switch at the top right (task 0009). The single-entity sign-in race on the dev server is fixed (task 0008).
-- The Phase 1 containers are kept as the regression environment; start the rest again with `test-tools/phase1-shared-issuer/Start-Phase1.ps1 -JarBuiltFromCommit <sha>`, then `Invoke-Phase1Checks.ps1` (60 checks) and `Invoke-Phase1BrowserSignin.mjs`. Tasks and reports are in `docs/work/`.
 - Browser-test ports (task 0068): queue A sets nothing (base 15175), queue B sets `LV_E2E_PORT_BASE=15275`, queue C sets `LV_E2E_PORT_BASE=15375` before any Playwright suite, so the sessions don't wait for each other.
 - There is no automatic build on GitHub.
 

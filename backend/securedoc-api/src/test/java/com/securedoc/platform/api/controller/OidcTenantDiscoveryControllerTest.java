@@ -79,6 +79,31 @@ class OidcTenantDiscoveryControllerTest {
                 .filter(a -> a.tenantId().equals(missing)).findFirst().orElseThrow().detail());
     }
 
+    /** Task 0059: each verified sign-in is written down for notifications, with the address the login system gave. */
+    @Test
+    void aSignInIsWrittenDownForNotificationsAndNeverStopsWithoutThem() {
+        Tenant one = Tenant.create("One", "one");
+        one.activate();
+        ActorId actor = ActorId.generate();
+        Map<TenantId, Set<String>> memberships = Map.of(one.id(), Set.of("DOCUMENT_SUPERVISOR"));
+        RequestContextResolver resolver = mock(RequestContextResolver.class);
+        when(resolver.securityMode()).thenReturn(SecurityMode.OIDC);
+        when(resolver.currentOidcActor()).thenReturn(Optional.of(actor));
+        when(resolver.resolveAvailableOidcTenants()).thenReturn(memberships);
+        when(resolver.verifiedEmail()).thenReturn(Optional.of("ann@example.com"));
+        TenantRepository tenants = mock(TenantRepository.class);
+        when(tenants.findById(one.id())).thenReturn(Optional.of(one));
+        var people = mock(com.securedoc.platform.api.notifications.NotificationPeople.class);
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<com.securedoc.platform.api.notifications.NotificationPeople> provider =
+                mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(people, (com.securedoc.platform.api.notifications.NotificationPeople) null);
+        var controller = new OidcTenantDiscoveryController(resolver, tenants, null, null, provider);
+        assertEquals(1, controller.list(null).getBody().size());
+        org.mockito.Mockito.verify(people).signedIn(actor, "ann@example.com", memberships);
+        assertEquals(1, controller.list(null).getBody().size(), "notifications switched off");
+    }
+
     /** Task 0058: the remembered entity marks one of the allowed choices; it never adds one. */
     @Test
     void theEntityWorkedInLastIsMarkedAndNeverAddedWhenItIsNoLongerAllowed() {

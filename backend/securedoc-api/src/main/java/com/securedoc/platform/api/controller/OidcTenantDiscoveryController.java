@@ -12,6 +12,8 @@ import com.securedoc.platform.infrastructure.identity.LastEntityStore;
 import com.securedoc.platform.api.security.SecurityMode;
 import com.securedoc.platform.api.context.SecurityContextException;
 import jakarta.servlet.http.HttpServletRequest;
+import com.securedoc.platform.api.notifications.NotificationPeople;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -45,6 +47,7 @@ public class OidcTenantDiscoveryController {
     private final TenantRepository tenantRepository;
     private final SecurityContextRefusalRecorder refusals;
     private final LastEntityStore lastEntity;
+    private final ObjectProvider<NotificationPeople> people;
 
     public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository) {
         this(context, tenantRepository, null, null);
@@ -56,9 +59,16 @@ public class OidcTenantDiscoveryController {
         this(context, tenantRepository, refusals, null);
     }
 
-    @Autowired
     public OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository,
                                          SecurityContextRefusalRecorder refusals, LastEntityStore lastEntity) {
+        this(context, tenantRepository, refusals, lastEntity, null);
+    }
+
+    @Autowired
+    OidcTenantDiscoveryController(RequestContextResolver context, TenantRepository tenantRepository,
+                                  SecurityContextRefusalRecorder refusals, LastEntityStore lastEntity,
+                                  ObjectProvider<NotificationPeople> people) {
+        this.people = people;
         this.lastEntity = lastEntity;
         this.context = context;
         this.tenantRepository = tenantRepository;
@@ -85,8 +95,17 @@ public class OidcTenantDiscoveryController {
                 recordLeftOut(request, membership.getKey(), tenant.isPresent() ? TENANT_NOT_ACTIVE : TENANT_MISSING);
             }
         }
+        rememberForNotifications(memberships);
         choices.sort(Comparator.comparing(TenantChoice::tenantId));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(List.copyOf(choices));
+    }
+
+    /** Task 0059: which roles this verified sign-in gave where, for messages to the holders of a role. */
+    private void rememberForNotifications(Map<TenantId, Set<String>> memberships) {
+        NotificationPeople known = people == null ? null : people.getIfAvailable();
+        if (known == null) return;
+        context.currentOidcActor().ifPresent(actor ->
+                known.signedIn(actor, context.verifiedEmail().orElse(null), memberships));
     }
 
     private void recordLeftOut(HttpServletRequest request, TenantId tenantId, String reason) {
