@@ -7,6 +7,7 @@ import type { SupportIncidentSearchPage } from '../../types';
 import { Spinner } from '../atoms';
 import { LoadErrorCard, checked, isRecord } from '../failure';
 import { PROCESSING_STAGE_WORDS, processingStageWords } from '../words';
+import { onArrowKeys } from '../arrowKeys';
 import { SelectField, TextField } from '../admin/shared';
 import {
   STATUS_CHIPS, SUPPORT_CAPS, SUPPORT_PAGE_SIZE, blockingCount, chipCounts, impactChip, inChip, lastSeen, mergeSupportPages,
@@ -135,9 +136,9 @@ export default function SupportList({ caps, entityName }: { caps: string[]; enti
       </header>
 
       <div className="cf-sp-bar">
-        <div className="cf-segment" role="radiogroup" aria-label="Show">
+        <div className="cf-segment" role="radiogroup" aria-label="Show" onKeyDown={onArrowKeys}>
           {STATUS_CHIPS.map((c) => (
-            <button key={c.key} type="button" role="radio" aria-checked={chip === c.key} onClick={() => setChip(c.key)}>
+            <button key={c.key} type="button" role="radio" aria-checked={chip === c.key} tabIndex={chip === c.key ? 0 : -1} onClick={() => setChip(c.key)}>
               {c.label} <span>{data ? counts[c.key] : '·'}</span>
             </button>
           ))}

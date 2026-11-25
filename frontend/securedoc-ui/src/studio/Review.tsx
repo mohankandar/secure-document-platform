@@ -351,7 +351,11 @@ export default function Review({ caps }: { caps: string[] }) {
                     {pageMarks.boxes.map((box, n) => (
                       <li key={`${box.left}-${box.top}-${n}`}>Mark {n + 1}
                         <button type="button" className="cf-btn" data-variant="ghost" data-size="sm" disabled={busy} aria-label={`${UNREAD_PAGE_WORDS.remove} ${n + 1}`}
-                          onClick={() => setMarks({ ...pageMarks, boxes: pageMarks.boxes.filter((_, i) => i !== n) })}>{UNREAD_PAGE_WORDS.remove}</button>
+                          onClick={(e) => {
+                            // Task 0089: the button goes with its mark; focus goes to the confirmation, not to the page's start.
+                            e.currentTarget.closest('.cf-decision')?.querySelector<HTMLElement>('.cf-page-reviewed input')?.focus();
+                            setMarks({ ...pageMarks, boxes: pageMarks.boxes.filter((_, i) => i !== n) });
+                          }}>{UNREAD_PAGE_WORDS.remove}</button>
                       </li>
                     ))}
                   </ul>

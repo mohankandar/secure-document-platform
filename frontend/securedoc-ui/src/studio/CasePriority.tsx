@@ -13,6 +13,7 @@ export default function CasePriority({ packageId, priority, onChanged }: { packa
   const [saving, setSaving] = useState(false);
 
   async function change(next: PriorityCode) {
+    if (saving) return;
     setSaving(true);
     try {
       await apiClient.changeCasePriority(packageId, next);
@@ -28,7 +29,7 @@ export default function CasePriority({ packageId, priority, onChanged }: { packa
   return (
     <div className="cf-field" data-testid="case-priority">
       <label htmlFor={id}><span>{PRIORITY_FIELD.label}</span></label>
-      <select id={id} value={priority === 'BULK' ? 'BULK' : priorityChoice(priority)} disabled={saving} onChange={(e) => void change(e.target.value as PriorityCode)}>
+      <select id={id} value={priority === 'BULK' ? 'BULK' : priorityChoice(priority)} aria-busy={saving} onChange={(e) => void change(e.target.value as PriorityCode)}>
         {priority === 'BULK' && <option value="BULK" disabled>{priorityName('BULK')}</option>}
         {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_NAMES[p]}</option>)}
       </select>
