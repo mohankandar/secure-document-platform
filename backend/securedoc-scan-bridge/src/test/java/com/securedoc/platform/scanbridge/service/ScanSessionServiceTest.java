@@ -194,6 +194,26 @@ class ScanSessionServiceTest {
         assertNull(cancelled.preparedScan().workReference());
     }
 
+    /** Task 0077: the id of a request is an equal id, never the same object; cancelling left the scanner busy for ever. */
+    @Test
+    void anIdFromARequestFreesTheScannerForTheNextScan() throws Exception {
+        Fixture fixture = fixture();
+        var first = fixture.service.start(new StartScanSessionRequest(Map.of("contractNumber", "000900009901")));
+        fixture.service.cancel(UUID.fromString(first.sessionId().toString()));
+        assertNull(fixture.service.activeSessionId());
+
+        var second = fixture.service.start(new StartScanSessionRequest(Map.of("contractNumber", "000900009902")));
+        Path pdf = fixture.store.sessionDirectory(second.sessionId()).resolve("scan.pdf");
+        Files.write(pdf, minimalPdf());
+        fixture.service.markReady(second.sessionId(), new PreparedScan(UUID.randomUUID(), "scan.pdf", Files.size(pdf), "abc",
+                now, second.sessionId() + "/scan.pdf"));
+        fixture.service.queueForSubmission(UUID.fromString(second.sessionId().toString()));
+        assertNull(fixture.service.activeSessionId());
+
+        assertEquals(ScanSessionStatus.WAITING_FOR_SCAN, fixture.service
+                .start(new StartScanSessionRequest(Map.of("contractNumber", "000900009903"))).status());
+    }
+
     @Test
     void oldSubmittedTechnicalStateIsPurgedButAttentionStateIsNeverAutoPurged() throws Exception {
         Fixture fixture = fixture();
