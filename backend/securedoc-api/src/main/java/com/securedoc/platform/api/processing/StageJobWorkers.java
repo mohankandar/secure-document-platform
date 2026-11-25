@@ -3,6 +3,7 @@ package com.securedoc.platform.api.processing;
 import com.securedoc.platform.application.error.LvErrorCodes;
 import com.securedoc.platform.application.processing.service.StagedProcessingService;
 import com.securedoc.platform.domain.pipeline.PipelineJob;
+import com.securedoc.platform.domain.pipeline.PipelinePriority;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -124,17 +125,31 @@ public class StageJobWorkers {
     }
 
     private boolean turn(PipelineStage stage, String owner, Runnable started) {
+        java.util.Set<String> bulk = capacity == null ? java.util.Set.of() : capacity.bulkTurn(stage);
         try {
-            Optional<PipelineJob> job = service.claimNext(stage, owner);
+            Optional<PipelineJob> job = capacity == null ? service.claimNext(stage, owner) : service.claimNext(stage, owner, bulk);
             if (job.isEmpty()) return false;
+            if (job.get().priority() != PipelinePriority.BULK) {
+                // Not a Bulk job: the place kept for one is free again before the job runs.
+                if (capacity != null) capacity.bulkDone(stage, bulk);
+                bulk = java.util.Set.of();
+            }
+            boolean bulkJob = capacity != null && job.get().priority() == PipelinePriority.BULK;
+            if (bulkJob) capacity.bulkStarted(stage);
             started.run();
-            runWithRenewal(job.get());
+            try {
+                runWithRenewal(job.get());
+            } finally {
+                if (bulkJob) capacity.bulkEnded(stage);
+            }
             return true;
         } catch (RuntimeException failure) {
             // The job stays RUNNING until its claim runs out, then goes back to the queue (one attempt).
             log.warn("STAGE_WORKER_FAILED owner={} stage={} type={} code={}", owner, stage,
                     failure.getClass().getSimpleName(), LvErrorCodes.forPlatformFailure(failure).code());
             return false;
+        } finally {
+            if (capacity != null) capacity.bulkDone(stage, bulk);
         }
     }
 

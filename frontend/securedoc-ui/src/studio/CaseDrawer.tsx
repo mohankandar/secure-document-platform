@@ -21,7 +21,7 @@ import { useEntityZone } from './EntityZoneContext';
 import { CONFIRM_COPY, useCaseActionRunner } from './caseActionRunner';
 import { TechnicalDetails } from './failure';
 import CasePriority from './CasePriority';
-import { PRIORITY_FIELD, PRIORITY_NAMES, priorityChoice, CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
+import { PRIORITY_FIELD, priorityName, CASE_SECTIONS, PROCESSING_STEP_LINE, SIGNATURE_REMOVED_LINE, STAGE_NAMES, caseSensitivityLine, destinationName, documentSensitivityNote, fieldNameInSentence, runsLeft } from './words';
 import { deliveryLabel, processingStepOf } from './caseRules';
 import { lvCodeFor, lvLabel } from './lvCodes';
 import { technicalProblemText, technicalReasonCode } from './support/supportRules';
@@ -132,7 +132,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 
           {caps.includes(CAP.review)
             ? <CasePriority packageId={packageId} priority={pkg.priority} onChanged={() => mutate()} />
-            : <p className="cf-muted cf-small" data-testid="case-priority">{PRIORITY_FIELD.label}: {PRIORITY_NAMES[priorityChoice(pkg.priority)]}</p>}
+            : <p className="cf-muted cf-small" data-testid="case-priority">{PRIORITY_FIELD.label}: {priorityName(pkg.priority)}</p>}
 
           <DocumentsSection pkg={pkg} openFindings={openFindings} />
 

@@ -179,8 +179,10 @@ class JdbcCasePriorityPostgresTest {
         priorities.saveSourceDefault(tenant, "folder:installed", LOW);
         priorities.saveSourceDefault(tenant, "folder:installed", URGENT);
         assertEquals(Map.of("folder:installed", URGENT), priorities.sourceDefaults(tenant));
+        assertThrows(IllegalArgumentException.class,
+                () -> priorities.saveNew(tenant, PackageId.generate(), PipelinePriority.BULK, null));
         assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
-                () -> priorities.saveNew(tenant, PackageId.generate(), PipelinePriority.BULK));
+                () -> priorities.saveSourceDefault(tenant, "x", PipelinePriority.BULK));
     }
 
     private TenantId newTenant() {
@@ -197,7 +199,7 @@ class JdbcCasePriorityPostgresTest {
 
     private PackageId queue(TenantId owner, PipelinePriority priority) {
         PackageId pkg = caseRow(owner);
-        priorities.saveNew(owner, pkg, priority);
+        priorities.saveNew(owner, pkg, priority, null);
         assertTrue(jobs.enqueue(job(owner, pkg)));
         return pkg;
     }

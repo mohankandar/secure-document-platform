@@ -38,6 +38,7 @@ import type {
   PlatformAdminOverview,
   ProcessingCapacity,
   SourcePriorities,
+  BulkSources,
   ProductTelemetryStatus,
   CurrentUser,
   TechnicalExceptionDetail,
@@ -415,6 +416,18 @@ class ApiClient {
 
   async changeCasePriority(packageId: string, priority: string): Promise<{ priority: string }> {
     return this.request(`/packages/${packageId}/priority`, { method: 'PUT', body: JSON.stringify({ priority }) });
+  }
+
+  async getBulkSources(): Promise<BulkSources> {
+    return this.request('/bulk-sources');
+  }
+
+  async markBulkSource(source: string, window: { from?: string; to?: string; weekends?: boolean }): Promise<BulkSources> {
+    return this.request(`/bulk-sources/${encodeURIComponent(source)}`, { method: 'PUT', body: JSON.stringify(window) });
+  }
+
+  async unmarkBulkSource(source: string): Promise<BulkSources> {
+    return this.request(`/bulk-sources/${encodeURIComponent(source)}`, { method: 'DELETE' });
   }
 
   async getSourcePriorities(): Promise<SourcePriorities> {

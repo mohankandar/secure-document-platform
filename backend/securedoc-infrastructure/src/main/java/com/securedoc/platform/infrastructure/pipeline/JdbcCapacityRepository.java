@@ -23,9 +23,13 @@ public class JdbcCapacityRepository implements CapacityRepository {
                         WHERE j.stage = s.stage
                           AND j.status IN ('READY', 'WAITING_RETRY')
                           AND (j.status = 'READY' OR j.next_attempt_at <= clock_timestamp())
+                          AND %s
                         LIMIT :most) due) AS jobs
               FROM unnest(string_to_array(:stages, ',')) AS s(stage)
             """;
+    private static final String DUE_LIVE_SQL = DUE_JOBS_SQL.formatted("j.priority <> 'BULK'");
+    private static final String DUE_BULK_SQL = DUE_JOBS_SQL.formatted("j.priority = 'BULK' AND EXISTS (SELECT 1 FROM"
+            + " case_priorities c WHERE c.package_id = j.package_id AND (c.tenant_id || '/' || c.source_key) IN (:open))");
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -71,9 +75,19 @@ public class JdbcCapacityRepository implements CapacityRepository {
 
     @Override
     public Map<PipelineStage, Integer> dueJobs(int most) {
+        return due(DUE_LIVE_SQL, new MapSqlParameterSource("most", most));
+    }
+
+    @Override
+    public Map<PipelineStage, Integer> dueBulkJobs(int most, java.util.Set<String> openBulkSources) {
+        return openBulkSources.isEmpty() ? Map.of()
+                : due(DUE_BULK_SQL, new MapSqlParameterSource("most", most).addValue("open", openBulkSources));
+    }
+
+    private Map<PipelineStage, Integer> due(String sql, MapSqlParameterSource params) {
         String stages = Arrays.stream(PipelineStage.values()).map(Enum::name).collect(Collectors.joining(","));
         Map<PipelineStage, Integer> out = new EnumMap<>(PipelineStage.class);
-        jdbc.query(DUE_JOBS_SQL, new MapSqlParameterSource("most", most).addValue("stages", stages), rs -> {
+        jdbc.query(sql, params.addValue("stages", stages), rs -> {
             int jobs = rs.getInt("jobs");
             if (jobs > 0) out.put(PipelineStage.valueOf(rs.getString("stage")), jobs);
         });

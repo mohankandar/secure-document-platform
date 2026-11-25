@@ -23,11 +23,18 @@ public final class CasePriorityService {
     private final CasePriorityRepository repository;
     private final PackageRepository packages;
     private final AuditService auditService;
+    private BulkSourceService bulk;
 
     public CasePriorityService(CasePriorityRepository repository, PackageRepository packages, AuditService auditService) {
         this.repository = Objects.requireNonNull(repository);
         this.packages = Objects.requireNonNull(packages);
         this.auditService = Objects.requireNonNull(auditService);
+    }
+
+    /** Task 0079: the same service; the cases of a Bulk source are Bulk. */
+    public CasePriorityService withBulk(BulkSourceService bulk) {
+        this.bulk = Objects.requireNonNull(bulk);
+        return this;
     }
 
     /** A watched folder's source key. */
@@ -46,11 +53,12 @@ public final class CasePriorityService {
         };
     }
 
-    /** What was sent, else the source's default, else Normal. */
+    /** Bulk for a Bulk source, whatever was sent; else what was sent, else the source's default, else Normal. */
     public PipelinePriority atIntake(TenantId tenantId, PackageId packageId, PipelinePriority sent, String sourceKey) {
-        PipelinePriority priority = sent != null ? sent : sourceKey == null ? PipelinePriority.NORMAL
+        PipelinePriority priority = bulk != null && bulk.bulk(tenantId, sourceKey) ? PipelinePriority.BULK
+                : sent != null ? sent : sourceKey == null ? PipelinePriority.NORMAL
                 : repository.sourceDefault(tenantId, sourceKey).orElse(PipelinePriority.NORMAL);
-        repository.saveNew(tenantId, packageId, priority);
+        repository.saveNew(tenantId, packageId, priority, sourceKey);
         return priority;
     }
 

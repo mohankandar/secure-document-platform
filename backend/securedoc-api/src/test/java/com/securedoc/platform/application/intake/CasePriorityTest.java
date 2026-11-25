@@ -67,7 +67,7 @@ class CasePriorityTest {
         assertEquals(PipelinePriority.LOW, service.atIntake(tenant, pkg, null, "src"));
         assertEquals(PipelinePriority.NORMAL, service.atIntake(tenant, pkg, null, "other"));
         assertEquals(PipelinePriority.NORMAL, service.atIntake(tenant, pkg, null, null));
-        verify(repository).saveNew(tenant, pkg, PipelinePriority.URGENT);
+        verify(repository).saveNew(tenant, pkg, PipelinePriority.URGENT, "src");
     }
 
     @Test

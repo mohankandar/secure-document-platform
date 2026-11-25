@@ -20,7 +20,7 @@ public class IntakeGateConfig {
 
     @Bean
     IntakeGate intakeGate(ProcessingStorageConfigurationRepository storage, CapacityRepository capacity,
-                          ProcessingCapacity processing,
+                          ProcessingCapacity processing, com.securedoc.platform.application.intake.BulkSourceService bulkSourceService,
                           @Value("${securedoc.intake.space.stop-below-percent:10}") int stopBelow,
                           @Value("${securedoc.intake.space.resume-above-percent:15}") int resumeAbove,
                           @Value("${securedoc.intake.space.retry-after-seconds:300}") int retryAfterSeconds,
@@ -28,7 +28,7 @@ public class IntakeGateConfig {
                           @Value("${securedoc.intake.pacing.long-queue:200}") int longQueue) {
         return new IntakeSpaceGate(new IntakeSpaceGate.Settings(stopBelow, resumeAbove, retryAfterSeconds,
                 databaseSizeGb * 1024 * 1024 * 1024, longQueue), () -> folders(storage), capacity::databaseBytes,
-                processing::queueLength);
+                processing::queueLength).withBulk(bulkSourceService);
     }
 
     /** The document storage in use now. */

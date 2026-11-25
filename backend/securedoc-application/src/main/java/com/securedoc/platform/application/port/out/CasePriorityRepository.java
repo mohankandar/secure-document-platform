@@ -11,8 +11,8 @@ import java.util.Optional;
 /** Task 0073: the priority of cases and the default priority of sources. */
 public interface CasePriorityRepository {
 
-    /** No row is kept for NORMAL on a new case. */
-    void saveNew(TenantId tenantId, PackageId packageId, PipelinePriority priority);
+    /** No row is kept for NORMAL on a new case. The source is kept with BULK (task 0079): its window and progress. */
+    void saveNew(TenantId tenantId, PackageId packageId, PipelinePriority priority, String sourceKey);
 
     /**
      * Changes the case's priority and the priority of its jobs that wait, at once: a job queued at the same moment has
