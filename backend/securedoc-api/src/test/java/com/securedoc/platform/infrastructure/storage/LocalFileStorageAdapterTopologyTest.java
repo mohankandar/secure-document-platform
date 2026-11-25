@@ -59,7 +59,8 @@ class LocalFileStorageAdapterTopologyTest {
     private LocalFileStorageAdapter adapter(ProcessingStorageConfigurationRepository repository) {
         LocalStorageProperties legacy = new LocalStorageProperties();
         legacy.setRootPath(tempDir.toString());
-        return new LocalFileStorageAdapter(legacy, repository);
+        return new LocalFileStorageAdapter(legacy, repository, FileEncryption.developmentPlain(),
+                org.mockito.Mockito.mock(StoredFileRecords.class));
     }
 
     private ProcessingStorageProvider availableProvider(ProcessingStorageProviderType type, Path root) {

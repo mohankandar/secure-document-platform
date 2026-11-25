@@ -26,6 +26,10 @@ public enum IntakeRejectionCode {
     TENANT_INACTIVE,
     /** Task 0023 C2: secure storage could not keep the original. */
     STORAGE_UNAVAILABLE,
+    /** Task 0060: the document could not be stored encrypted; the source may send it again. */
+    DOCUMENT_KEY_UNAVAILABLE,
+    /** Task 0060: as above, because the key service refused the app or the customer has no keys. */
+    DOCUMENT_KEY_REFUSED,
     /** Task 0023 C2: a file was refused (name, type, not a readable PDF, empty). */
     INVALID_FILE,
     /** Task 0023 C2: the intake identity was not allowed to take the drop in. */

@@ -93,6 +93,8 @@ public final class ComplianceReportService {
     private final Clock clock;
     private com.securedoc.platform.application.port.out.EntityTimeZonePort zones = com.securedoc.platform.application.port.out.EntityTimeZonePort.NONE;
 
+    private Integer backupRetentionDays;
+
     /** The customer name of the entity's installed licence (task 0018 A1); empty without a licence. */
     @FunctionalInterface
     public interface CustomerNames {
@@ -133,6 +135,19 @@ public final class ComplianceReportService {
     public ComplianceReportService withEntityTimeZones(com.securedoc.platform.application.port.out.EntityTimeZonePort zones) {
         this.zones = Objects.requireNonNull(zones);
         return this;
+    }
+
+    /** Task 0060: how long this installation keeps its backups (platform.erase-log.backup-retention-days). */
+    public ComplianceReportService withBackupRetention(int days) {
+        this.backupRetentionDays = days;
+        return this;
+    }
+
+    /** The period in force when the report is made, then the erasures of a restored backup are done again (task 0060). */
+    private List<LabelValue> retentionSettings(LabelValue... settings) {
+        List<LabelValue> rows = new ArrayList<>(List.of(settings));
+        if (backupRetentionDays != null) rows.add(new LabelValue("Backups kept for", backupRetentionDays + " days"));
+        return List.copyOf(rows);
     }
 
     private ZoneId zone(TenantId tenantId, String requested) {
@@ -269,7 +284,7 @@ public final class ComplianceReportService {
         ComplianceReportReadPort.RetentionCounts retention = readPort.retention(tenantId, start, end);
         ComplianceReportContent.Retention retentionSection = new ComplianceReportContent.Retention(
                 lifecycleChanges.isEmpty(),
-                List.of(new LabelValue("Originals kept for",
+                retentionSettings(new LabelValue("Originals kept for",
                                 lifecycleAtEnd.originalRetentionHours() + " hours after delivery"),
                         new LabelValue("Redacted copies kept for", PolicyHistory.hoursWords(lifecycleAtEnd.redactedCacheHours())),
                         new LabelValue("Stopped cases kept for", PolicyHistory.hoursWords(lifecycleAtEnd.neverExportedHoldHours())),

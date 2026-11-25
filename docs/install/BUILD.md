@@ -4,7 +4,7 @@ LexaVault's backend uses platform-core's released libraries (task 0057: **1.0.0*
 version is one property, `platform.version` in `backend/pom.xml`, which imports `platform-bom`. In the app:
 `platform-identity-core`, `-jdbc` and `-spring`, `platform-licensing` and `-spring` (live since task 0057, `LICENSING.md`),
 `platform-monitoring` and `-spring` (`MONITORING.md`), `platform-notifications` and `-spring` (`NOTIFICATIONS.md`; with the mail library they need: `angus-mail`,
-`jakarta.mail-api`, `jakarta.activation-api` and `angus-activation`), what identity 1.0.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
+`jakarta.mail-api`, `jakarta.activation-api` and `angus-activation`), `platform-crypto` and `-spring` (task 0060, `KEY_SERVICE.md`), `platform-erase-log` and `-spring` (`ERASE_LOG.md`), what identity 1.0.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
 Apache HttpClient 5), and `platform-setup` in the setup jar (`backend/securedoc-setup`). Never a snapshot, never a private local
 repository.
 

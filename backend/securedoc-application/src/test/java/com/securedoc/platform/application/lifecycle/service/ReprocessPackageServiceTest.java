@@ -75,7 +75,8 @@ class ReprocessPackageServiceTest {
 
         PackageLifecycleService lifecycleService = new PackageLifecycleService(
                 new DefaultPolicyRepository(), lifecycles, new EmptyExportRepository(), packages,
-                (packageId, tenant, actor, hiddenAt) -> { }, documents, artifacts, storage, new AuditService(audit));
+                (packageId, tenant, actor, hiddenAt) -> { }, documents, artifacts,
+                new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audit));
         AuditService auditService = new AuditService(audit);
         ReprocessPackageService service = new ReprocessPackageService(
                 packages, documents, new EmptyFindingRepository(), artifacts,

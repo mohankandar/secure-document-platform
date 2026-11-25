@@ -294,7 +294,8 @@ public final class TriggerPackageProcessingService implements TriggerPackageProc
             for (var artifact : artifacts) {
                 if (artifact.artifactType() != ArtifactType.ORIGINAL
                         && artifact.status() != ArtifactStatus.DELETED) {
-                    lifecycleService.deleteArtifact(artifact);
+                    lifecycleService.deleteArtifact(artifact,
+                            com.securedoc.platform.application.port.out.ErasurePort.Reason.rule("interrupted-processing"));
                 }
             }
             findingRepository.deleteByDocumentIdAndTenantId(document.id(), command.tenantId());

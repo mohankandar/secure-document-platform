@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.storage;
 
+import com.documentplatform.crypto.envelope.EnvelopeInfo;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -18,7 +19,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -39,9 +39,15 @@ public class LocalFileStorageAdapter implements StoragePort {
 
     private final LocalStorageProperties legacyProperties;
     private final ProcessingStorageConfigurationRepository configuration;
+    /** Task 0060: every file goes through it, both ways. */
+    private final FileEncryption encryption;
+    private final StoredFileRecords records;
 
     public LocalFileStorageAdapter(LocalStorageProperties legacyProperties,
-                                   ProcessingStorageConfigurationRepository configuration) {
+                                   ProcessingStorageConfigurationRepository configuration,
+                                   FileEncryption encryption, StoredFileRecords records) {
+        this.encryption = Objects.requireNonNull(encryption);
+        this.records = Objects.requireNonNull(records);
         this.legacyProperties = Objects.requireNonNull(legacyProperties);
         this.configuration = Objects.requireNonNull(configuration);
     }
@@ -50,7 +56,7 @@ public class LocalFileStorageAdapter implements StoragePort {
     public ArtifactStorageReference store(TenantId tenantId, String path,
                                           InputStream content, long sizeBytes, String mimeType) {
         ProcessingStorageProvider provider = effectiveProvider(tenantId);
-        return recorded(storeOn(provider, path, content));
+        return recorded(storeOn(tenantId, provider, path, content));
     }
 
     @Override
@@ -76,7 +82,7 @@ public class LocalFileStorageAdapter implements StoragePort {
                 });
         ProcessingStorageProvider provider = configuration.findProvider(providerId)
                 .orElseThrow(() -> storageFailure(false, "Pinned processing storage provider is unavailable", null));
-        return recorded(storeOn(provider, path, content));
+        return recorded(storeOn(tenantId, provider, path, content));
     }
 
     @Override
@@ -84,8 +90,10 @@ public class LocalFileStorageAdapter implements StoragePort {
         ResolvedReference resolved = resolve(reference);
         Path targetFile = resolved.root().resolve(sanitizePath(reference.key())).normalize();
         guardWithinRoot(resolved.root(), targetFile);
+        StoredFileRecords.StoredFile record = records.find(reference.storageProvider(), reference.key())
+                .orElseThrow(() -> FileEncryption.refused("Stored file has no record of its protection"));
         try {
-            return Files.newInputStream(targetFile);
+            return record.encrypted() ? encryption.read(record.envelope(), targetFile) : Files.newInputStream(targetFile);
         } catch (IOException e) {
             throw storageFailure(true, "Failed to read artifact", e);
         }
@@ -98,6 +106,7 @@ public class LocalFileStorageAdapter implements StoragePort {
         guardWithinRoot(resolved.root(), targetFile);
         try {
             Files.deleteIfExists(targetFile);
+            records.remove(reference.storageProvider(), reference.key());
         } catch (IOException e) {
             throw storageFailure(true, "Failed to delete artifact", e);
         }
@@ -109,7 +118,7 @@ public class LocalFileStorageAdapter implements StoragePort {
         return reference;
     }
 
-    private ArtifactStorageReference storeOn(ProcessingStorageProvider provider, String path, InputStream content) {
+    private ArtifactStorageReference storeOn(TenantId tenantId, ProcessingStorageProvider provider, String path, InputStream content) {
         ensureProviderSafeForCurrentTopology(provider);
         Path root = root(provider);
         ensureConfiguredRootExists(provider, root);
@@ -118,7 +127,13 @@ public class LocalFileStorageAdapter implements StoragePort {
         guardWithinRoot(root, targetFile);
         try {
             Files.createDirectories(targetFile.getParent());
-            Files.copy(content, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            EnvelopeInfo envelope = encryption.write(content, targetFile);
+            try {
+                records.save(provider.id().toString(), safePath, tenantId, envelope);
+            } catch (RuntimeException notRecorded) {
+                Files.deleteIfExists(targetFile);
+                throw notRecorded;
+            }
         } catch (IOException e) {
             throw storageFailure(true, "Failed to store artifact", e);
         }

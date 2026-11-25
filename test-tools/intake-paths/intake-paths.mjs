@@ -200,7 +200,7 @@ async function stop(child) {
 async function startApp(name, { entity = ENTITY, env = {} } = {}) {
   await stop(app);
   app = spawn('java', [`-Djava.io.tmpdir=${join(run, 'tmp')}`, '-jar', jar, '--spring.profiles.active=local',
-    `--securedoc.storage.local.root-path=${join(run, 'storage')}`,
+    `--securedoc.storage.local.root-path=${join(run, 'storage')}`, `--platform.erase-log.location=${join(run, 'erase-log')}`,
     '--securedoc.intake.watched-folder.incomplete-visibility-minutes=0',
     `--securedoc.platform-admin.watched-folder-tenant-id=${entity}`,
     '--securedoc.platform-admin.watched-folder-coordination-enabled=false'], {

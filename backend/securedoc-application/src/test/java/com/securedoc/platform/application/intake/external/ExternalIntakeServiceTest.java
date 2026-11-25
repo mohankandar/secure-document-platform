@@ -52,7 +52,8 @@ class ExternalIntakeServiceTest {
         SubmitPackageUseCase submit = (command, p) -> { throw new AssertionError("submit not expected"); };
         PackageProcessingDispatcher dispatcher = command -> { throw new AssertionError("dispatch not expected"); };
         ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
-                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+                new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new NoopStorage()), auditService, clock);
         ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create, upload,
                 submit, dispatcher, input -> Checksum.sha256("a".repeat(64)), input -> new PdfIntakeValidationPort.PdfInfo(1),
                 auditService, maintenance, names, clock);
@@ -102,7 +103,8 @@ class ExternalIntakeServiceTest {
         ChecksumPort checksum = input -> Checksum.sha256("a".repeat(64));
         PdfIntakeValidationPort pdf = input -> new PdfIntakeValidationPort.PdfInfo(1);
         ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
-                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+                new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new NoopStorage()), auditService, clock);
         ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create, upload,
                 submit, dispatcher, checksum, pdf, auditService, maintenance, clock);
 
@@ -181,7 +183,8 @@ class ExternalIntakeServiceTest {
         ChecksumPort checksum = input -> Checksum.sha256("a".repeat(64));
         PdfIntakeValidationPort pdf = input -> new PdfIntakeValidationPort.PdfInfo(1);
         ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
-                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+                new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new NoopStorage()), auditService, clock);
         ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create,
                 (command, p) -> { throw new AssertionError("upload not expected"); },
                 (command, p) -> { throw new AssertionError("submit not expected"); },
@@ -253,7 +256,8 @@ class ExternalIntakeServiceTest {
         ChecksumPort checksum = input -> Checksum.sha256("a".repeat(64));
         PdfIntakeValidationPort pdf = input -> new PdfIntakeValidationPort.PdfInfo(1);
         ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
-                new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+                new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new NoopStorage()), auditService, clock);
         ExternalIntakeService service = new ExternalIntakeService(connectionService, intakes, packages, create, upload,
                 submit, dispatcher, checksum, pdf, auditService, maintenance, clock);
 
@@ -344,7 +348,8 @@ class ExternalIntakeServiceTest {
                 return UploadDocumentResult.of(DocumentId.generate(), ArtifactId.generate(), DocumentStatus.UPLOADED);
             };
             ExternalIntakeMaintenanceService maintenance = new ExternalIntakeMaintenanceService(intakes, packages,
-                    new EmptyArtifactRepository(), new NoopStorage(), auditService, clock);
+                    new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new NoopStorage()), auditService, clock);
             service = new ExternalIntakeService(new IntegrationConnectionService(connections, auditService), intakes,
                     packages, create, upload, (command, p) -> { }, command -> { },
                     input -> Checksum.sha256("a".repeat(64)), input -> new PdfIntakeValidationPort.PdfInfo(pdfPages),

@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UnrecordedFileSweepPostgresTest {
     private static final ActorId SYSTEM = ActorId.of(new UUID(0, 0));
     @TempDir Path root;
+    private com.documentplatform.eraselog.testkit.InMemoryEraseLogStore logStore;
 
     @Test
     void removesOnlyWhatNoRecordPointsTo() throws Exception {
@@ -93,10 +94,19 @@ class UnrecordedFileSweepPostgresTest {
             assertEquals(1, audits.size());
             assertEquals(AuditAction.UNRECORDED_FILES_CLEANED, audits.get(0).action());
             assertEquals("Files without a record removed: text=4, redacted=2", audits.get(0).detail());
+            assertEquals(6, logStore.size(), "each in the erase log");
+            assertEquals(6, jdbc.getJdbcTemplate().queryForObject("select count(*) from audit_records where action ="
+                    + " 'FILES_ERASED'", Integer.class));
+            logStore.down(true);
+            Path kept2 = file(folder + "REDACTED/" + UUID.randomUUID(), 1000);
+            assertEquals(0, service.run(now.plus(Duration.ofHours(1)), SYSTEM, CorrelationId.generate()));
+            assertTrue(Files.exists(kept2), "the erase log is down: nothing is erased");
+            logStore.down(false);
+            assertEquals(1, service.run(now.plus(Duration.ofHours(2)), SYSTEM, CorrelationId.generate()), "done later");
 
             Path later = file(folder + "REDACTED/" + UUID.randomUUID(), 1000);
             assertEquals(0, service.run(now.plusSeconds(900), SYSTEM, CorrelationId.generate()), "at most once an hour");
-            assertEquals(1, service.run(now.plus(Duration.ofHours(1)).minusSeconds(0), SYSTEM, CorrelationId.generate()));
+            assertEquals(1, service.run(now.plus(Duration.ofHours(3)), SYSTEM, CorrelationId.generate()));
             assertFalse(Files.exists(later));
         }
     }
@@ -118,7 +128,19 @@ class UnrecordedFileSweepPostgresTest {
                             if (method.getName().equals("findAllProviders")) return List.of(provider);
                             throw new UnsupportedOperationException(method.getName());
                         });
-        return new UnrecordedFileSweepService(new UnrecordedFileSweepAdapter(configuration, jdbc),
+        // Task 0060: through the erase log, with the real handlers.
+        var legacy = new com.securedoc.platform.infrastructure.storage.LocalStorageProperties();
+        legacy.setRootPath(root.toString());
+        var files = new com.securedoc.platform.infrastructure.erasure.StoredFileErasure(
+                jdbc.getJdbcTemplate().getDataSource(), configuration, legacy);
+        logStore = new com.documentplatform.eraselog.testkit.InMemoryEraseLogStore();
+        var eraser = new com.documentplatform.eraselog.Eraser(
+                new com.documentplatform.eraselog.EraseLog(logStore, java.time.Clock.systemUTC()),
+                new com.documentplatform.eraselog.testkit.InMemoryErasePosition(),
+                com.documentplatform.eraselog.EraseHandlers.of(
+                        new com.securedoc.platform.infrastructure.erasure.LexaVaultEraseHandlers().unrecordedFileEraseHandler(files)));
+        return new UnrecordedFileSweepService(new UnrecordedFileSweepAdapter(configuration, jdbc,
+                new com.securedoc.platform.infrastructure.erasure.LexaVaultErasures(eraser, jdbc.getJdbcTemplate())),
                 new AuditService(audits::add), 24);
     }
 

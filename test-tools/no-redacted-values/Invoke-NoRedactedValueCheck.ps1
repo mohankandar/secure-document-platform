@@ -201,7 +201,7 @@ try {
     try {
         $appProcess = Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
             -ArgumentList @("-Djava.io.tmpdir=$appTemp", '-jar', $JarPath, '--spring.profiles.active=local',
-                "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')") `
+                "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')", "--platform.erase-log.location=$(Join-Path $runDir 'erase-log')") `
             -RedirectStandardOutput (Join-Path $logDir 'backend.out.log') -RedirectStandardError (Join-Path $logDir 'backend.err.log')
     } finally {
         Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue

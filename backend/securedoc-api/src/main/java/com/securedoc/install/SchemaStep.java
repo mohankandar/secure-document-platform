@@ -28,13 +28,15 @@ import java.util.regex.Pattern;
  *   <li>platform-licensing: Flyway run {@code classpath:db/platform/licensing}, history table {@code lic_schema_history}
  *       (the setup command stores the licence there; LexaVault's own use of it comes with task 0038);</li>
  *   <li>platform-notifications (task 0059): Flyway run {@code classpath:db/platform/notifications}, history table
- *       {@code notif_schema_history}.</li>
+ *       {@code notif_schema_history};</li>
+ *   <li>platform-erase-log (task 0060): Flyway run {@code classpath:db/platform/erase-log}, history table
+ *       {@code erl_schema_history}.</li>
  * </ol>
  *
  * Usage (database settings in the environment only: {@code LEXAVAULT_SCHEMA_DB_URL}, {@code _USER}, {@code _PASSWORD}):
  * <pre>
- * schema-step apply [--runtime-user NAME]   run the four steps; with --runtime-user, give that user exactly the rights
- *                                           platform-core lists on the idn_, lic_ and notif_ tables, taking away any other
+ * schema-step apply [--runtime-user NAME]   run the five steps; with --runtime-user, give that user exactly the rights
+ *                                           platform-core lists on the idn_, lic_, notif_ and erl_ tables, taking away any other
  *                                           right it has on them
  * schema-step status                        print each step's version
  * schema-step customer-installed            exit 0 when setup has stored a customer, 4 when not (for the local start)
@@ -56,7 +58,9 @@ public final class SchemaStep {
             new PlatformRun("licensing", "classpath:db/platform/licensing", "lic_schema_history", "lic_schema_version", "lic_"),
             // Task 0059: the module names no history table of its own; this is the one its install guide proposes.
             new PlatformRun("notifications", "classpath:db/platform/notifications", "notif_schema_history",
-                    "notif_schema_version", "notif_"));
+                    "notif_schema_version", "notif_"),
+            // Task 0060: where the database stands in the erase log (the log itself is kept outside it).
+            new PlatformRun("erase log", "classpath:db/platform/erase-log", "erl_schema_history", "erl_schema_version", "erl_"));
 
     private static final String DML = "select, insert, update, delete";
 
@@ -65,16 +69,18 @@ public final class SchemaStep {
      * 0.7.0, docs/install/identity.md section 1 and licensing.md section 1). Histories and applied clock resets are insert
      * only; the latest time seen moves forward and is never deleted; the version floor is kept by the database itself.
      */
-    static final Map<String, String> NARROWER_RIGHTS = Map.of(
-            "idn_schema_version", "select",
-            "idn_grant_history", "select, insert",
-            "idn_login_connection_history", "select, insert",
-            "idn_machine_binding_history", "select, insert",
-            "lic_schema_version", "select",
-            "notif_schema_version", "select",
-            "lic_version_floor", "select",
-            "lic_last_seen", "select, insert, update",
-            "lic_clock_reset", "select, insert");
+    static final Map<String, String> NARROWER_RIGHTS = Map.ofEntries(
+            Map.entry("idn_schema_version", "select"),
+            Map.entry("idn_grant_history", "select, insert"),
+            Map.entry("idn_login_connection_history", "select, insert"),
+            Map.entry("idn_machine_binding_history", "select, insert"),
+            Map.entry("lic_schema_version", "select"),
+            Map.entry("notif_schema_version", "select"),
+            Map.entry("erl_schema_version", "select"),
+            Map.entry("erl_position", "select, insert, update"),
+            Map.entry("lic_version_floor", "select"),
+            Map.entry("lic_last_seen", "select, insert, update"),
+            Map.entry("lic_clock_reset", "select, insert"));
 
     private static final Pattern ROLE_NAME = Pattern.compile("[a-z_][a-z0-9_]{0,62}");
 

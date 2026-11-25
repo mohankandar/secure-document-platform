@@ -87,15 +87,27 @@ public class StoredNotices {
                     .identifier(RecordIdentifier.of("watched-folder")).build());
         }
 
-        // This server's own checks: each server reports as itself.
+        out.addAll(ownChecks(entity));
+        return out;
+    }
+
+    /** This server's own checks: each server reports as itself. */
+    public List<NotificationEvent> ownChecks(TenantId entity) {
+        List<NotificationEvent> out = new ArrayList<>();
         IntakeGate gate = space.getIfAvailable();
         if (gate != null && gate.full()) {
             out.add(event(entity, LexaVaultEvents.INTAKE_STOPPED, "/support/status").identifier(RecordIdentifier.of(node)).build());
         }
         DependencyStatus checks = health.getIfAvailable();
         for (CheckResult r : checks == null ? List.<CheckResult>of() : checks.results()) {
-            if (r.name().equals("model-server") && r.state() == CheckState.DOWN) {
+            if (r.name().equals(com.securedoc.platform.api.monitoring.ModelServerCheck.NAME) && r.state() == CheckState.DOWN) {
                 out.add(event(entity, LexaVaultEvents.AI_MODEL_DOWN, "/support/status").identifier(RecordIdentifier.of(node)).build());
+            }
+            if (r.name().equals("key-service") && r.state() != CheckState.WORKING) {
+                out.add(event(entity, LexaVaultEvents.KEY_SERVICE_DOWN, "/support/status").identifier(RecordIdentifier.of(node)).build());
+            }
+            if (r.name().equals("erase-log") && r.state() != CheckState.WORKING) {
+                out.add(event(entity, LexaVaultEvents.ERASE_LOG_STOP, "/support/status").identifier(RecordIdentifier.of(node)).build());
             }
             if (r.code() == MonitoringCode.MON_DISK_ALMOST_FULL || r.code() == MonitoringCode.MON_DISK_FULL) {
                 out.add(event(entity, LexaVaultEvents.DISK_ALMOST_FULL, "/support/status").identifier(RecordIdentifier.of(node)).build());
@@ -107,7 +119,8 @@ public class StoredNotices {
     /** Whether a condition of this server's checks is this server's to clear. */
     boolean mine(EventTypeId type, RecordIdentifier identifier) {
         return type != null && !(type.equals(LexaVaultEvents.AI_MODEL_DOWN) || type.equals(LexaVaultEvents.DISK_ALMOST_FULL)
-                || type.equals(LexaVaultEvents.INTAKE_STOPPED))
+                || type.equals(LexaVaultEvents.INTAKE_STOPPED) || type.equals(LexaVaultEvents.KEY_SERVICE_DOWN)
+                || type.equals(LexaVaultEvents.ERASE_LOG_STOP))
                 || identifier != null && identifier.value().equals(node);
     }
 

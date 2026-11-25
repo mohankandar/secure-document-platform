@@ -324,10 +324,10 @@ public class ApplicationServiceConfig {
             ExternalIntakeRepository externalIntakeRepository,
             PackageRepository packageRepository,
             ArtifactRepository artifactRepository,
-            StoragePort storagePort,
+            com.securedoc.platform.application.port.out.ErasurePort erasure,
             AuditService auditService) {
         return new ExternalIntakeMaintenanceService(externalIntakeRepository, packageRepository,
-                artifactRepository, storagePort, auditService);
+                artifactRepository, erasure, auditService);
     }
 
     @Bean
@@ -537,11 +537,14 @@ public class ApplicationServiceConfig {
             AuditService auditService,
             RequestActorDisplayName requestActorDisplayName,
             IntakeLicence intakeLicence,
-            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones) {
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones,
+            // Task 0060: checked by platform-core (30 to 90, else the app does not start).
+            @org.springframework.beans.factory.annotation.Value("${platform.erase-log.backup-retention-days:35}") int backupRetentionDays) {
         return new com.securedoc.platform.application.compliance.ComplianceReportService(complianceReportReadPort,
                 complianceReportPdfPort, operationsQueryService, tenantRepository, tenantRedactionPolicyRepository,
                 tenantLifecyclePolicyRepository, auditService, requestActorDisplayName,
-                tenant -> intakeLicence.customerName(), java.time.Clock.systemUTC()).withEntityTimeZones(entityTimeZones);
+                tenant -> intakeLicence.customerName(), java.time.Clock.systemUTC()).withEntityTimeZones(entityTimeZones)
+                .withBackupRetention(backupRetentionDays);
     }
 
     /** Task 0019: the policy estimate (counts only, read-only). */
@@ -1084,14 +1087,14 @@ public class ApplicationServiceConfig {
             PackageDashboardVisibilityPort packageDashboardVisibilityPort,
             DocumentRepository documentRepository,
             ArtifactRepository artifactRepository,
-            StoragePort storagePort,
+            com.securedoc.platform.application.port.out.ErasurePort erasure,
             AuditService auditService,
             ProcessingIncidentService processingIncidentService,
             ProductTelemetryService productTelemetryService,
             com.securedoc.platform.application.lifecycle.service.ExportRetentionService exportRetentionService) {
         return new PackageLifecycleService(tenantLifecyclePolicyRepository, packageLifecycleRepository,
                 packageExportRecordRepository, packageRepository, packageDashboardVisibilityPort,
-                documentRepository, artifactRepository, storagePort, auditService, processingIncidentService,
+                documentRepository, artifactRepository, erasure, auditService, processingIncidentService,
                 productTelemetryService, exportRetentionService);
     }
 
@@ -1438,12 +1441,14 @@ public class ApplicationServiceConfig {
             TriggerPackageProcessingUseCase triggerPackageProcessingUseCase,
             PackageProcessingDispatchLease packageProcessingDispatchLease,
             ProcessingStorageNodeReadiness processingStorageNodeReadiness,
+            com.securedoc.platform.application.port.out.WorkGate workGate,
             PackageProcessingRecoveryService packageProcessingRecoveryService) {
         // Task 0023 C1: after 3 failed dispatches of the same case (at once for a licence denial),
         // the case is stopped as FAILED with a code and a Support incident instead of looping.
         return new InProcessPackageProcessingDispatcher(
                 reviewResumeTaskExecutor, triggerPackageProcessingUseCase, packageProcessingDispatchLease,
-                processingStorageNodeReadiness::readyFor,
+                // Task 0060: nothing is dispatched while no work may be taken; the recovery takes it up afterwards.
+                tenantId -> workGate.mayTakeWork() && processingStorageNodeReadiness.readyFor(tenantId),
                 (command, failure, failedAttempts, maxAttempts) ->
                         packageProcessingRecoveryService.stopAfterDispatchFailure(
                                 command.packageId(), command.tenantId(), failure, failedAttempts, maxAttempts,
