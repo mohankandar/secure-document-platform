@@ -38,8 +38,12 @@ public class FileProtectionConfig {
     SmartInitializingSingleton plainFilesOnlyInDevelopment(Environment environment, ObjectProvider<LicenceBuild> build) {
         return () -> {
             if (!plain(environment)) return;
-            LicenceBuild thisBuild = build.getIfUnique();
-            if (thisBuild == null || thisBuild.keys().keyIds().stream().noneMatch(thisBuild.keys()::isDevelopmentKey)) throw new IllegalStateException(NO_KEY_SERVICE);
+            // What this build is, is inside its own jar (task 0054); a test gives its own.
+            LicenceBuild given = build.getIfUnique();
+            LicenceBuild thisBuild = given != null ? given : LicenceBuild.load();
+            if (thisBuild.keys().keyIds().stream().noneMatch(thisBuild.keys()::isDevelopmentKey)) {
+                throw new IllegalStateException(NO_KEY_SERVICE);
+            }
             log.warn("DEVELOPMENT_ONLY_PLAIN_FILES stored documents are NOT encrypted: no key service is set up in this local "
                     + "development start. Never use real documents.");
         };

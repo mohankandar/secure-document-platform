@@ -12,7 +12,6 @@ import com.documentplatform.eraselog.ErasedBy;
 import com.documentplatform.eraselog.Eraser;
 import com.documentplatform.eraselog.crypto.KeyServiceChainKey;
 import com.documentplatform.eraselog.file.FileEraseLogStore;
-import com.documentplatform.licensing.LicenceBuild;
 import com.documentplatform.monitoring.CheckState;
 import com.securedoc.install.TestBuild;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
@@ -115,8 +114,6 @@ class ProtectionRulesTest {
         assertDoesNotThrow(() -> config.plainFilesOnlyInDevelopment(local, given(TestBuild.development())).afterSingletonsInstantiated());
         assertThrows(IllegalStateException.class, () -> config.plainFilesOnlyInDevelopment(local,
                 given(TestBuild.production())).afterSingletonsInstantiated(), "a production build never stores plain files");
-        assertThrows(IllegalStateException.class, () -> config.plainFilesOnlyInDevelopment(local,
-                ProtectionRulesTest.<LicenceBuild>given(null)).afterSingletonsInstantiated());
     }
 
     @Test
