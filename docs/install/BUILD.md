@@ -4,7 +4,7 @@ LexaVault's backend uses platform-core's released libraries (task 0057: **1.0.0*
 version is one property, `platform.version` in `backend/pom.xml`, which imports `platform-bom`. In the app:
 `platform-identity-core`, `-jdbc` and `-spring`, `platform-licensing` and `-spring` (live since task 0057, `LICENSING.md`),
 `platform-monitoring` and `-spring` (`MONITORING.md`), `platform-notifications` and `-spring` (`NOTIFICATIONS.md`; with the mail library they need: `angus-mail`,
-`jakarta.mail-api`, `jakarta.activation-api` and `angus-activation`), `platform-crypto` and `-spring` (task 0060, `KEY_SERVICE.md`), `platform-erase-log` and `-spring` (`ERASE_LOG.md`), what identity 1.0.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
+`jakarta.mail-api`, `jakarta.activation-api` and `angus-activation`), `platform-crypto` and `-spring` (task 0060, `KEY_SERVICE.md`), `platform-erase-log` and `-spring` (`ERASE_LOG.md`), `platform-fields` (task 0061, `CASE_FIELDS.md`), what identity 1.0.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
 Apache HttpClient 5), and `platform-setup` in the setup jar (`backend/securedoc-setup`). Never a snapshot, never a private local
 repository.
 
@@ -78,12 +78,13 @@ mvn -B dependency:tree -pl securedoc-api,securedoc-setup -am "-Dincludes=com.doc
 
 - `securedoc-api` (the app): `platform-identity-core`, `platform-identity-jdbc`, `platform-identity-spring`,
   `platform-licensing`, `platform-licensing-spring`, `platform-monitoring`, `platform-monitoring-spring`,
-  `platform-notifications`, `platform-notifications-spring`, `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `1.0.0`, compile scope.
+  `platform-notifications`, `platform-notifications-spring`, `platform-crypto`, `platform-crypto-spring`, `platform-erase-log`, `platform-erase-log-spring`, `platform-fields`,
+  `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `1.0.0`, compile scope.
   `platform-setup` and `platform-identity-testkit` only in test scope. The app still makes its own outbound
   rules (`OutboundRulesConfig`; a proxy with sign-in is allowed since task 0059). HttpClient (5.6.5, core 5.4.4) comes from Spring Boot's BOM,
   the same versions platform-core is built with.
-- `securedoc-setup`: `platform-setup` with `platform-crypto` and `platform-integration` (which bring
-  `platform-notifications` and `platform-fields`). These are never on the app's classpath; `Build-LexaVault-All`
+- `securedoc-setup`: `platform-setup` with `platform-crypto` and `platform-integration`. `platform-setup` and
+  `platform-integration` are never on the app's classpath; `Build-LexaVault-All`
   checks the app jar (`BOOT-INF/lib`) for them.
 
 A `401 Unauthorized` from `maven.pkg.github.com` means the token is missing, expired or lacks `read:packages`, or the

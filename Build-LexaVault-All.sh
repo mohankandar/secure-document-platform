@@ -91,7 +91,7 @@ fi
 printf '\nBACKEND - app jar classpath check (task 0041)\n'
 app_jar="$backend_dir/securedoc-api/target/securedoc-api-0.1.0-SNAPSHOT.jar"
 platform_libs="$(jar tf "$app_jar" | sed -n 's#^BOOT-INF/lib/\(platform-[^/]*\.jar\)$#\1#p')"
-not_allowed="$(printf '%s\n' "$platform_libs" | grep -Ev '^platform-(crypto-spring|crypto|erase-log-spring|erase-log|identity-core|identity-jdbc|identity-spring|licensing-spring|licensing|monitoring-spring|monitoring|notifications-spring|notifications|outbound-spring|outbound|errors)-[0-9][^-]*\.jar$' | grep -v '^$' || true)"
+not_allowed="$(printf '%s\n' "$platform_libs" | grep -Ev '^platform-(crypto-spring|crypto|erase-log-spring|erase-log|fields|identity-core|identity-jdbc|identity-spring|licensing-spring|licensing|monitoring-spring|monitoring|notifications-spring|notifications|outbound-spring|outbound|errors)-[0-9][^-]*\.jar$' | grep -v '^$' || true)"
 if [[ -n "$not_allowed" ]]; then
   printf 'The app jar carries platform-core modules it may not: %s\n' "$not_allowed" >&2
   exit 1
