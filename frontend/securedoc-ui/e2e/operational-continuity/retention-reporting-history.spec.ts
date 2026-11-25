@@ -27,9 +27,9 @@ test.describe('Operational Continuity: retention cleanup preserves Reporting his
     await page.goto('/');
     await expect(page.locator('[data-ui-design-system="1"].modern-app-shell')).toBeVisible();
 
-    // Use an IT-Administrator role (has REPORT_EXECUTIVE_VIEW + dashboard access) and navigate
+    // Use the Report Viewer role (REPORT_EXECUTIVE_VIEW; the IT Administrator has no reports) and navigate
     // client-side to Reporting so the switched role persists.
-    await selectDemoRole(page, 'TENANT_IT_ADMIN');
+    await selectDemoRole(page, 'REPORT_VIEWER');
     await gotoInApp(page, '/reports');
 
     await expect(page.getByRole('heading', { name: 'Permission required' })).toHaveCount(0);

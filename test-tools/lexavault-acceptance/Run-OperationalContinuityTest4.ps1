@@ -303,10 +303,13 @@ try {
     if ($releaseLease.status -ne 'FAILED') { Fail "Release changed package status to $($releaseLease.status); expected FAILED." }
     if ($releaseLease.attemptCount -ne 3) { Fail "Release changed attempt_count to $($releaseLease.attemptCount); expected 3." }
     if ($null -eq $releaseHoldUtc) { Fail "technical_hold_until became null after release; product resets it to the normal window (non-null)." }
-    # Normal retention resumes: the special (far-future) investigation extension is withdrawn, so the
-    # released hold is earlier than the preserved hold, and still in the future.
-    if (-not ($releaseHoldUtc -lt $preserveHoldUtc)) {
-        Fail "Release did not withdraw the investigation extension (release hold $($script:Evidence.afterReleaseHold) not earlier than preserve hold $($script:Evidence.afterPreserveHold))."
+    # Normal retention resumes: the hold is now + the entity's own window again. (Its default, 168 hours, is as long as the
+    # investigation extension, so "earlier than the preserved hold" says nothing.)
+    $windowHours = [int](Get-Scalar "SELECT never_exported_hold_hours FROM tenant_lifecycle_policies WHERE tenant_id = '$($Cfg.TenantId)';")
+    if ($windowHours -le 0) { $windowHours = 168 }
+    $expectedHold = (Get-Date).ToUniversalTime().AddHours($windowHours)
+    if ([math]::Abs(($releaseHoldUtc - $expectedHold).TotalMinutes) -gt 2) {
+        Fail "Release did not reset the hold to now + $windowHours hours (release hold $($script:Evidence.afterReleaseHold))."
     }
     if (-not ($releaseHoldUtc -gt (Get-Date).ToUniversalTime())) {
         Fail "Released technical_hold_until is not in the future ($($script:Evidence.afterReleaseHold))."
