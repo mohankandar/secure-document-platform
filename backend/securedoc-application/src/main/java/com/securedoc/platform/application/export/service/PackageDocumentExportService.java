@@ -1,6 +1,7 @@
 package com.securedoc.platform.application.export.service;
 
 import com.securedoc.platform.domain.error.LvErrorCode;
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.ValidationException;
@@ -41,7 +42,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
 
     private final DocumentRepository documentRepository;
     private final PackageRepository packageRepository;
-    private final BusinessRecordRepository businessRecordRepository;
+    private final CaseFieldService caseFields;
     private final ArtifactRepository artifactRepository;
     private final StoragePort storagePort;
     private final DeliveryPort deliveryPort;
@@ -51,7 +52,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
 
     public PackageDocumentExportService(DocumentRepository documentRepository,
                                         PackageRepository packageRepository,
-                                        BusinessRecordRepository businessRecordRepository,
+                                        CaseFieldService caseFields,
                                         ArtifactRepository artifactRepository,
                                         StoragePort storagePort,
                                         DeliveryPort deliveryPort,
@@ -60,7 +61,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                                         AuditService auditService) {
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
-        this.businessRecordRepository = Objects.requireNonNull(businessRecordRepository);
+        this.caseFields = Objects.requireNonNull(caseFields);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
         this.storagePort = Objects.requireNonNull(storagePort);
         this.deliveryPort = Objects.requireNonNull(deliveryPort);
@@ -152,10 +153,11 @@ public final class PackageDocumentExportService implements ExportPackageDocument
         if (submission.status() != DeliverySubmissionStatus.DELIVERED) {
             BatchDeliveryReference batchReference;
             try {
+                CaseFieldService.Delivery fields = caseFields(pkg);
                 batchReference = deliveryPort.deliverBatch(new DeliveryBatch(command.tenantId(), command.packageId(), exportCycle,
-                        submission.sourceSubmissionId(), submission.destinationSubmissionReference(), businessIdentifiers(pkg),
+                        submission.sourceSubmissionId(), submission.destinationSubmissionReference(), fields.texts(),
                         Map.of("sourceRevision", Integer.toString(exportCycle)), pendingItems, progress,
-                        pkg.sensitivityLevel()));
+                        pkg.sensitivityLevel(), fields.document()));
                 if (batchReference.destinationSubmissionReference() != null) {
                     submission.recordDestinationSubmissionReference(batchReference.destinationSubmissionReference(), Instant.now());
                 }
@@ -284,14 +286,9 @@ public final class PackageDocumentExportService implements ExportPackageDocument
         }
     }
 
-    private Map<String,String> businessIdentifiers(DocumentPackage pkg) {
-        if (pkg.businessRecordId().isEmpty()) return Map.of();
-        return businessRecordRepository.findByIdAndTenantId(pkg.businessRecordId().get(), pkg.tenantId())
-                .map(record -> {
-                    Map<String,String> values = new LinkedHashMap<>();
-                    record.identifiers().forEach(i -> values.put(i.key(), i.value()));
-                    return Map.copyOf(values);
-                }).orElse(Map.of());
+    private CaseFieldService.Delivery caseFields(DocumentPackage pkg) {
+        return pkg.businessRecordId().map(id -> caseFields.forDelivery(id, pkg.tenantId()))
+                .orElseGet(() -> new CaseFieldService.Delivery(Map.of(), null));
     }
     /** Kept in the export record in place of a file name (task 0023 A1/B4): the document id, never the name. */
     static String exportRecordDocumentReference(Document document) { return "document-" + document.id(); }

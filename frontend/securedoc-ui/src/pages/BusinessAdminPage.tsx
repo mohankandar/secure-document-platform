@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import PageScaffold from '../components/ui/PageScaffold';
 import HorizontalTabs from '../components/ui/HorizontalTabs';
+import { withKind } from '../studio/admin/FieldsArea';
 import type {
   ApiError,
   BusinessAdminConfiguration,
@@ -83,7 +84,8 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
       [...result.identifiers]
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .map(({ id, label, required, primary, searchable, extractable, displayable, validationType,
-                exactLength, minLength, maxLength, caseNormalization, stripSeparators, allowedValues, customPattern }) => ({
+                exactLength, minLength, maxLength, caseNormalization, stripSeparators, allowedValues, customPattern, searchMode, sensitive, multiValue, currency, minValue, maxValue, locked }) => ({
+          searchMode, sensitive, multiValue, currency, minValue, maxValue, locked,
           id,
           label,
           required,
@@ -130,7 +132,7 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
       if (lengths.some((value) => value < 1 || value > 512)) return `${item.label || 'Identifier'}: length constraints must be between 1 and 512.`;
       if (item.exactLength != null && (item.minLength != null || item.maxLength != null)) return `${item.label || 'Identifier'}: exact length cannot be combined with min/max length.`;
       if (item.minLength != null && item.maxLength != null && item.minLength > item.maxLength) return `${item.label || 'Identifier'}: minimum length cannot exceed maximum length.`;
-      if (item.validationType === 'ALLOW_LIST' && item.allowedValues.filter((value) => value.trim().length > 0).length === 0) return `${item.label || 'Identifier'}: at least one allowed value is required.`;
+      if (item.validationType === 'DROPDOWN' && item.allowedValues.filter((value) => value.trim().length > 0).length === 0) return `${item.label || 'Identifier'}: at least one allowed value is required.`;
       if (item.validationType === 'CUSTOM_PATTERN' && !item.customPattern?.trim()) return `${item.label || 'Identifier'}: custom pattern is required.`;
     }
     return null;
@@ -228,7 +230,7 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
     if (!configuration) return [];
     const selected = new Set(reportingConfiguration?.dimensions.filter((dimension) => dimension.enabled).map((dimension) => dimension.definitionId) ?? []);
     return configuration.identifiers
-      .filter((identifier) => identifier.allowedValues.length > 0 && identifier.allowedValues.length <= 100)
+      .filter((identifier) => identifier.allowedValues.length > 0 && identifier.allowedValues.length <= 100 && !identifier.sensitive && !identifier.multiValue)
       .map((identifier, index) => ({
         definitionId: identifier.id,
         key: identifier.key,
@@ -539,13 +541,17 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
               <div className="identifier-validation-grid">
                 <div className="form-group">
                   <label>Validation</label>
-                  <select value={item.validationType} onChange={(event) => updateIdentifier(index, { validationType: event.target.value as BusinessAdminIdentifierDraft['validationType'], customPattern: event.target.value === 'CUSTOM_PATTERN' ? item.customPattern : null })}>
+                  <select value={item.validationType} disabled={item.locked} onChange={(event) => updateIdentifier(index, withKind(item, event.target.value))}>
                     <option value="TEXT">Text</option>
-                    <option value="NUMERIC">Numeric (digits only)</option>
-                    <option value="ALPHANUMERIC">Alphanumeric</option>
+                    <option value="NUMBER">Whole number</option>
+                    <option value="DECIMAL">Number with decimals</option>
+                    <option value="MONEY">Amount (USD)</option>
+                    <option value="DATE">Date</option>
+                    <option value="DATE_TIME">Date and time</option>
                     <option value="EMAIL">Email</option>
                     <option value="UUID">UUID</option>
-                    <option value="ALLOW_LIST">Allow list / enum</option>
+                    <option value="DROPDOWN">Dropdown (allowed values)</option>
+                    <option value="ADDRESS">US address</option>
                     <option value="CUSTOM_PATTERN">Custom pattern / regex</option>
                   </select>
                 </div>
@@ -573,8 +579,8 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
                   <input type="checkbox" disabled={!!item.id} checked={item.stripSeparators} onChange={(event) => updateIdentifier(index, { stripSeparators: event.target.checked })} />
                   <span>Remove spaces/hyphens in canonical value{item.id ? ' (fixed after creation)' : ''}</span>
                 </label>
-                <div className="form-group identifier-allowed-values">
-                  <label>Allowed values <span>(optional, one per line or comma-separated)</span></label>
+                {item.validationType === 'DROPDOWN' && <div className="form-group identifier-allowed-values">
+                  <label>Allowed values <span>(one per line or comma-separated)</span></label>
                   <textarea
                     rows={2}
                     value={item.allowedValues.join(', ')}
@@ -586,7 +592,7 @@ export default function BusinessAdminPage({ administrationTabs }: { administrati
                     })}
                     placeholder="e.g. 000, 001, 002"
                   />
-                </div>
+                </div>}
                 {item.validationType === 'CUSTOM_PATTERN' && (
                   <div className="form-group identifier-custom-pattern">
                     <label>Custom regular expression</label>

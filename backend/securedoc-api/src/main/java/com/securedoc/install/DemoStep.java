@@ -13,7 +13,9 @@ import com.documentplatform.licensing.LicenceVerifier;
 import com.documentplatform.licensing.jdbc.PostgresLastSeenStore;
 import com.documentplatform.licensing.jdbc.PostgresLicenceStore;
 import com.documentplatform.licensing.jdbc.PostgresUsageLedger;
-import com.securedoc.platform.application.port.out.BusinessIdentifierDefinitionRepository;
+import com.documentplatform.fields.FieldDefinitions;
+import com.documentplatform.fields.jdbc.PostgresFieldStore;
+import com.documentplatform.fields.jdbc.PostgresValueStore;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
 import com.securedoc.platform.application.port.out.TenantRedactionPolicyRepository;
 import com.securedoc.platform.infrastructure.identity.LexaVaultProduct;
@@ -207,7 +209,7 @@ public final class DemoStep {
         try (ConfigurableApplicationContext ctx = context(db)) {
             new DemoAppRecords(ctx.getBean(SpringDataTenantRepository.class),
                     ctx.getBean(SpringDataTenantCapabilityRepository.class),
-                    ctx.getBean(BusinessIdentifierDefinitionRepository.class),
+                    new FieldDefinitions(new PostgresFieldStore(ds), new PostgresValueStore(ds)),
                     ctx.getBean(TenantRedactionPolicyRepository.class),
                     ctx.getBean(IntegrationConnectionRepository.class),
                     new TransactionTemplate(ctx.getBean(PlatformTransactionManager.class)), out)

@@ -124,7 +124,7 @@ class LvErrorCodeRegistryTest {
     void areaCountsMatchTheDesignTables() {
         Map<LvErrorCode.Area, Integer> expected = new LinkedHashMap<>();
         expected.put(LvErrorCode.Area.INT, 42);
-        expected.put(LvErrorCode.Area.SCN, 21);
+        expected.put(LvErrorCode.Area.SCN, 22); // task 0061: + LV-SCN-022
         expected.put(LvErrorCode.Area.PRC, 10); // task 0053: + LV-PRC-010
         expected.put(LvErrorCode.Area.AI, 8);
         expected.put(LvErrorCode.Area.RED, 5); // task 0044: + LV-RED-005
@@ -132,10 +132,10 @@ class LvErrorCodeRegistryTest {
         expected.put(LvErrorCode.Area.DLV, 15);
         expected.put(LvErrorCode.Area.AUT, 10);
         expected.put(LvErrorCode.Area.LIC, 4);
-        expected.put(LvErrorCode.Area.CFG, 11);
+        expected.put(LvErrorCode.Area.CFG, 15); // task 0061: + LV-CFG-012 to 015
         expected.put(LvErrorCode.Area.SYS, 14); // task 0060: + LV-SYS-010 to 014
         expected.forEach((area, count) -> assertEquals(count, LvErrorCode.inArea(area).size(), area.name()));
         // Task 0026: 129 codes after 0025, plus the 8 added on 2026-11-21; task 0038 adds LV-INT-028 and 029.
-        assertEquals(155, LvErrorCode.values().length); // task 0060: + LV-SYS-010 to 014; // task 0044: + LV-RED-005; task 0053: + LV-PRC-010; 0063: + LV-INT-036, 037; 0064: + LV-AI-008
+        assertEquals(160, LvErrorCode.values().length); // task 0060: + LV-SYS-010 to 014; // task 0044: + LV-RED-005; task 0053: + LV-PRC-010; 0063: + LV-INT-036, 037; 0064: + LV-AI-008
     }
 }

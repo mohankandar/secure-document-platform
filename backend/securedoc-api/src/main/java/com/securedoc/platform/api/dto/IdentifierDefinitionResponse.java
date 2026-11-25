@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.dto;
 
-import java.util.Set;
+import com.documentplatform.fields.FieldDefinition;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 
 public record IdentifierDefinitionResponse(
         String key,
@@ -11,12 +12,11 @@ public record IdentifierDefinitionResponse(
         boolean extractable,
         boolean displayable,
         int displayOrder,
-        String validationType,
-        Integer exactLength,
-        Integer minLength,
-        Integer maxLength,
-        String caseNormalization,
-        boolean stripSeparators,
-        Set<String> allowedValues,
-        String customPattern
-) {}
+        @JsonUnwrapped CaseFieldRules rules
+) {
+    public static IdentifierDefinitionResponse of(FieldDefinition d, boolean extractable) {
+        var spec = d.spec();
+        return new IdentifierDefinitionResponse(d.key().value(), spec.label(), spec.required(), spec.primary(),
+                spec.searchable(), extractable, spec.displayable(), spec.displayOrder(), CaseFieldRules.of(spec));
+    }
+}

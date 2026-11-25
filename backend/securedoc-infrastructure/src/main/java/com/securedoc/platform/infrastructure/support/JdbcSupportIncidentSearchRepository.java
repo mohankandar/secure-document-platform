@@ -19,7 +19,7 @@ import java.util.UUID;
 
 /**
  * Tenant-scoped read-only support projection. Primary business identity is resolved through the
- * existing BusinessRecord identifier model; no domain-specific identifier is copied into incident storage.
+ * case fields of its business record; no domain-specific identifier is copied into incident storage.
  */
 @Repository
 public class JdbcSupportIncidentSearchRepository implements SupportIncidentSearchRepository {
@@ -27,19 +27,18 @@ public class JdbcSupportIncidentSearchRepository implements SupportIncidentSearc
             FROM processing_incidents pi
             LEFT JOIN document_packages dp
               ON dp.id = pi.package_id AND dp.tenant_id = pi.tenant_id
-            LEFT JOIN business_identifier_definitions bid
-              ON bid.tenant_id = pi.tenant_id
-             AND bid.primary_flag = true
-             AND bid.active_flag = true
-            LEFT JOIN business_record_identifiers bri
-              ON bri.business_record_id = dp.business_record_id
-             AND bri.tenant_id = pi.tenant_id
-             AND bri.definition_id = bid.id
+            LEFT JOIN fld_field_definition bid
+              ON bid.entity_uuid = pi.tenant_id AND bid.product_code = 'LEXAVAULT' AND bid.primary_flag AND bid.active
+            LEFT JOIN fld_record r
+              ON r.entity_uuid = pi.tenant_id AND r.product_code = 'LEXAVAULT' AND r.record_type = 'business-record'
+             AND r.record_id = cast(dp.business_record_id as text)
+            LEFT JOIN fld_value bri
+              ON bri.record_uuid = r.record_uuid AND lower(bri.field_key) = lower(bid.field_key) AND bri.position = 0
             """;
 
     private static final String SELECT = """
             SELECT pi.id, pi.tenant_id, pi.package_id, pi.document_id,
-                   dp.status AS package_status, bid.label AS primary_label, bri.identifier_value AS primary_value,
+                   dp.status AS package_status, bid.label AS primary_label, bri.display_value AS primary_value, bri.sensitive AS primary_sensitive,
                    pi.stage, pi.component, pi.reason_code, pi.safe_metadata ->> 'lvCode' AS lv_code, pi.status, pi.business_outcome,
                    pi.business_continuity_used, pi.retryable, pi.attempt_count, pi.correlation_id,
                    pi.first_observed_at, pi.last_observed_at, pi.resolved_at
@@ -89,7 +88,7 @@ public class JdbcSupportIncidentSearchRepository implements SupportIncidentSearc
         predicates.add("pi.tenant_id = :tenantId");
 
         if (c.businessIdentifier() != null) {
-            predicates.add("(LOWER(COALESCE(bri.identifier_value, '')) LIKE :businessIdentifier OR LOWER(COALESCE(bri.normalized_value, '')) LIKE :businessIdentifier)");
+            predicates.add("(LOWER(COALESCE(bri.display_value, '')) LIKE :businessIdentifier OR COALESCE(bri.search_value, '') LIKE :businessIdentifier)");
             params.addValue("businessIdentifier", "%" + c.businessIdentifier().toLowerCase() + "%");
         }
         eq(predicates, params, "pi.id", "incidentId", c.incidentId());
@@ -141,7 +140,9 @@ public class JdbcSupportIncidentSearchRepository implements SupportIncidentSearc
                 rs.getObject("document_id", UUID.class),
                 packageStatus,
                 rs.getString("primary_label"),
-                rs.getString("primary_value"),
+                // Task 0061: a sensitive main ID is neither shown nor found here.
+                rs.getBoolean("primary_sensitive") ? com.securedoc.platform.application.casefields.CaseFieldSnapshot.HIDDEN
+                        : com.securedoc.platform.application.casefields.CaseFieldText.shown(rs.getString("primary_value")),
                 rs.getString("stage"),
                 rs.getString("component"),
                 rs.getString("reason_code"),

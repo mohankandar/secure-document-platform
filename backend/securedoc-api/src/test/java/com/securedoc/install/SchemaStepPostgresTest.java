@@ -134,12 +134,17 @@ class SchemaStepPostgresTest {
                 Map.entry("notif_outbox", DML), Map.entry("notif_summary_item", DML), Map.entry("notif_condition", DML),
                 Map.entry("notif_approval_request", DML), Map.entry("notif_schema_version", "SELECT"),
                 // Task 0060.
-                Map.entry("erl_position", "INSERT,SELECT,UPDATE"), Map.entry("erl_schema_version", "SELECT")));
+                Map.entry("erl_position", "INSERT,SELECT,UPDATE"), Map.entry("erl_schema_version", "SELECT"),
+                // Task 0061.
+                Map.entry("fld_schema_version", "SELECT"), Map.entry("fld_field_definition", DML),
+                Map.entry("fld_field_definition_history", DML), Map.entry("fld_field_extension", DML),
+                Map.entry("fld_record", DML), Map.entry("fld_value", DML)));
         // platform-core's own start-up checks pass as this user.
         var ds = new org.springframework.jdbc.datasource.DriverManagerDataSource(db.url, RUNTIME_USER, RUNTIME_PASSWORD);
         com.documentplatform.identity.jdbc.IdentitySchema.verify(ds);
         com.documentplatform.licensing.jdbc.LicensingSchema.verify(ds);
         com.documentplatform.notifications.jdbc.NotificationSchema.verify(ds);
+        com.documentplatform.fields.jdbc.FieldSchema.verify(ds);
     }
 
     private static final String DML = "DELETE,INSERT,SELECT,UPDATE";

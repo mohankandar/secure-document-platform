@@ -49,6 +49,15 @@
         </dependency>
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-fields</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-fields-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-crypto-testkit</artifactId>
             <scope>test</scope>
         </dependency>

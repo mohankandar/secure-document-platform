@@ -1,5 +1,6 @@
 package com.securedoc.platform.application.export.service;
 
+import com.securedoc.platform.application.casefields.CaseFieldService;
 import com.securedoc.platform.application.exception.TechnicalDependency;
 import com.securedoc.platform.application.exception.TechnicalDependencyException;
 import com.securedoc.platform.application.exception.TechnicalFailureCode;
@@ -61,7 +62,7 @@ class PackageDocumentExportServiceTest {
 
         DocumentRepository documents = mock(DocumentRepository.class);
         PackageRepository packages = mock(PackageRepository.class);
-        BusinessRecordRepository businesses = mock(BusinessRecordRepository.class);
+        CaseFieldService businesses = mock(CaseFieldService.class);
         ArtifactRepository artifacts = mock(ArtifactRepository.class);
         StoragePort storage = mock(StoragePort.class);
         DeliveryPort delivery = mock(DeliveryPort.class);

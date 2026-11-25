@@ -476,6 +476,14 @@
 .cf-field input[readonly], .cf-field select:disabled { background: var(--cf-raised); color: var(--cf-muted); }
 .cf-field[data-invalid] input, .cf-field[data-invalid] select { border-color: var(--cf-danger); }
 .cf-field-hint { font-size: 12px; color: var(--cf-muted); min-height: 18px; }
+/* Task 0061: fields of every type (address parts, an amount with its currency, several values). */
+.cf-address { display: grid; grid-template-columns: 1fr 64px 96px; gap: 6px; }
+.cf-address [data-part='street'], .cf-address [data-part='street2'] { grid-column: 1 / -1; }
+.cf-address input { min-width: 0; }
+.cf-money { display: flex; align-items: center; gap: 8px; }
+.cf-several { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.cf-several-row { display: flex; gap: 6px; width: 100%; align-items: flex-start; }
+.cf-several-row > :first-child { flex: 1; min-width: 0; }
 .cf-intake .cf-field-hint { min-height: 0; }
 .cf-intake .cf-field-hint:empty { display: none; }
 .cf-field[data-invalid] .cf-field-hint { color: var(--cf-danger); }

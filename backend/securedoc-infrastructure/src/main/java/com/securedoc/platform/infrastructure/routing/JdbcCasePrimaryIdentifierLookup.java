@@ -13,20 +13,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Tenant-scoped read of each package's main ID, through the same BusinessRecord join the Support search uses. */
+/** Tenant-scoped read of each package's main ID, from the case fields of its business record. A sensitive main ID is left out. */
 @Repository
 public class JdbcCasePrimaryIdentifierLookup implements CasePrimaryIdentifierLookup {
     private static final String SQL = """
-            SELECT dp.id AS package_id, bid.label AS primary_label, bri.identifier_value AS primary_value
+            SELECT dp.id AS package_id, d.label AS primary_label, v.display_value AS primary_value
             FROM document_packages dp
-            JOIN business_identifier_definitions bid
-              ON bid.tenant_id = dp.tenant_id
-             AND bid.primary_flag = true
-             AND bid.active_flag = true
-            JOIN business_record_identifiers bri
-              ON bri.business_record_id = dp.business_record_id
-             AND bri.tenant_id = dp.tenant_id
-             AND bri.definition_id = bid.id
+            JOIN fld_field_definition d
+              ON d.entity_uuid = dp.tenant_id AND d.product_code = 'LEXAVAULT' AND d.primary_flag AND d.active
+            JOIN fld_record r
+              ON r.entity_uuid = dp.tenant_id AND r.product_code = 'LEXAVAULT' AND r.record_type = 'business-record'
+             AND r.record_id = cast(dp.business_record_id as text)
+            JOIN fld_value v
+              ON v.record_uuid = r.record_uuid AND lower(v.field_key) = lower(d.field_key) AND NOT v.sensitive
             WHERE dp.tenant_id = :tenantId
               AND dp.id IN (:packageIds)
             """;
@@ -45,7 +44,8 @@ public class JdbcCasePrimaryIdentifierLookup implements CasePrimaryIdentifierLoo
         jdbc.query(SQL, new MapSqlParameterSource().addValue("tenantId", tenantId.value()).addValue("packageIds", ids), rs -> {
             String value = rs.getString("primary_value");
             if (value != null && !value.isBlank()) {
-                result.put(PackageId.of(rs.getObject("package_id", UUID.class)), new CasePrimaryIdentifier(rs.getString("primary_label"), value));
+                result.put(PackageId.of(rs.getObject("package_id", UUID.class)), new CasePrimaryIdentifier(rs.getString("primary_label"),
+                        com.securedoc.platform.application.casefields.CaseFieldText.shown(value)));
             }
         });
         return result;

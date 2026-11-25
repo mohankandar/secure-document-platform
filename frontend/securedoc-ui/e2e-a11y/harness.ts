@@ -147,11 +147,11 @@ export function configuration() {
   return {
     identifiers: [
       { id: 'd1', key: 'loan_number', label: 'Loan number', required: true, primary: true, searchable: true, extractable: true, displayable: true, displayOrder: 1,
-        validationType: 'ALPHANUMERIC', exactLength: null, minLength: 6, maxLength: 12, caseNormalization: 'UPPER', stripSeparators: true, allowedValues: [], customPattern: null },
+        validationType: 'TEXT', customPattern: '[A-Za-z0-9]+', exactLength: null, minLength: 6, maxLength: 12, caseNormalization: 'UPPER', stripSeparators: true, allowedValues: [] },
       { id: 'd2', key: 'borrower_name', label: 'Borrower name', required: false, primary: false, searchable: true, extractable: true, displayable: true, displayOrder: 2,
         validationType: 'TEXT', exactLength: null, minLength: null, maxLength: 120, caseNormalization: 'PRESERVE', stripSeparators: false, allowedValues: [], customPattern: null },
       { id: 'd3', key: 'property_state', label: 'Property state', required: false, primary: false, searchable: false, extractable: false, displayable: true, displayOrder: 3,
-        validationType: 'ALLOW_LIST', exactLength: null, minLength: null, maxLength: null, caseNormalization: 'UPPER', stripSeparators: false, allowedValues: ['CA', 'NV', 'AZ', 'OR'], customPattern: null },
+        validationType: 'DROPDOWN', exactLength: null, minLength: null, maxLength: null, caseNormalization: 'UPPER', stripSeparators: false, allowedValues: ['CA', 'NV', 'AZ', 'OR'], customPattern: null },
     ],
     dashboardColumns: [
       { key: 'identifier:loan', label: 'Loan number', kind: 'IDENTIFIER', primary: true, allowed: true, defaultVisible: true, displayOrder: 0 },

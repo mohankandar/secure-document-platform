@@ -14,6 +14,12 @@ public record PollingSourcePackage(
         String caseSensitivityLevel,
         /* Task 0073: as sent, or null. */
         String priority) {
+    /** Task 0061: case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "PollingSourcePackage[" + "fields=" + businessIdentifiers.size() + "]";
+    }
+
     public PollingSourcePackage {
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);

@@ -78,7 +78,7 @@ public class ScannerSubmissionWorker {
                     return;
                 }
                 if ("INCOMPLETE_EXPIRED".equals(status.intakeStatus())) {
-                    var replacement = client.createIntake(current, true);
+                    var replacement = client.createIntake(sessions.withSensitiveValues(current), true);
                     current = sessions.replaceLexaVaultPackageForRetry(current.sessionId(), replacement.packageId());
                     if (accepted(replacement.intakeStatus())) {
                         sessions.markSubmitted(current.sessionId(), replacement.packageId());
@@ -86,14 +86,14 @@ public class ScannerSubmissionWorker {
                     }
                 }
             } else {
-                var created = client.createIntake(current, false);
+                var created = client.createIntake(sessions.withSensitiveValues(current), false);
                 current = sessions.recordLexaVaultPackage(current.sessionId(), created.packageId());
                 if (accepted(created.intakeStatus())) {
                     sessions.markSubmitted(current.sessionId(), created.packageId());
                     return;
                 }
                 if ("INCOMPLETE_EXPIRED".equals(created.intakeStatus())) {
-                    var replacement = client.createIntake(current, true);
+                    var replacement = client.createIntake(sessions.withSensitiveValues(current), true);
                     current = sessions.replaceLexaVaultPackageForRetry(current.sessionId(), replacement.packageId());
                 }
             }

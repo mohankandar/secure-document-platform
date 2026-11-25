@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { apiClient } from '../api/client';
 import { scanBridgeClient } from '../api/scanBridgeClient';
@@ -235,6 +236,24 @@ export function useIdentifierDefinitions(enabled = true) {
   return useSWR(enabled ? 'identifier-definitions' : null,
     () => checked<IdentifierDefinition[]>('GET /intake/identifier-definitions', apiClient.listIdentifierDefinitions(), isArrayOf((d) => isRecord(d) && typeof d.label === 'string')),
     { revalidateOnFocus: false });
+}
+
+/**
+ * Task 0061: the cases whose sensitive field holds exactly this. The values are not on the screen, so the server looks them
+ * up (by keyed fingerprint); nothing is asked when the entity has no such field.
+ */
+export function useSensitiveMatches(query: string, caps: string[]): Set<string> {
+  const { data: definitions } = useIdentifierDefinitions(caps.includes(CAP.intake));
+  const term = query.trim();
+  const [settled, setSettled] = useState(term);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(term), 400);
+    return () => clearTimeout(timer);
+  }, [term]);
+  const ask = settled.length >= 2 && settled === term && !!definitions?.some((d) => d.sensitive && d.searchable);
+  const { data } = useSWR(ask ? ['sensitive-search', settled] : null, () => apiClient.getOperationsDashboard({ search: settled, limit: 100 }),
+    { revalidateOnFocus: false, shouldRetryOnError: false });
+  return useMemo(() => new Set(ask ? (data?.items ?? []).map((item) => item.packageId) : []), [ask, data]);
 }
 
 export function useScannerStatus(enabled: boolean) {

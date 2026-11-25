@@ -1,5 +1,6 @@
 package com.securedoc.platform.scanbridge.service;
 
+import java.util.List;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import com.securedoc.platform.scanbridge.config.ScanBridgeProperties;
@@ -37,6 +38,29 @@ class ScanSessionServiceTest {
         assertNotNull(session.submissionId());
         assertEquals(session.sessionId(), fixture.service.activeSessionId());
         assertTrue(Files.exists(fixture.store.sessionDirectory(session.sessionId()).resolve(FileScanSessionStore.STATE_FILE)));
+    }
+
+    /** Task 0061: a sensitive case field is sent, and never in the state file, the API answer or a text form. */
+    @Test
+    void aSensitiveValueIsKeptInMemoryOnlyAndIsGoneAfterARestart() throws Exception {
+        Fixture fixture = fixture();
+        var session = fixture.service.start(new StartScanSessionRequest(
+                Map.of("contractNumber", "1", "borrower_name", "Synthetic Quill"), null, null, List.of("borrower_name")));
+        assertEquals(com.securedoc.platform.scanbridge.model.ScanSession.HIDDEN, session.businessIdentifiers().get("borrower_name"));
+        assertFalse(Files.readString(fixture.store.sessionDirectory(session.sessionId())
+                .resolve(FileScanSessionStore.STATE_FILE)).contains("Quill"));
+        assertFalse(session.toString().contains("Quill"));
+        var sending = fixture.service.withSensitiveValues(session);
+        assertEquals("Synthetic Quill", sending.businessIdentifiers().get("borrower_name"));
+        assertFalse(sending.toString().contains("Quill"));
+
+        Fixture restarted = fixture();
+        var lost = assertThrows(LexaVaultScannerDeliveryClient.DeliveryException.class,
+                () -> restarted.service.withSensitiveValues(restarted.service.get(session.sessionId())));
+        assertEquals("SENSITIVE_FIELDS_LOST", lost.safeCode());
+        assertFalse(lost.retryable());
+        assertEquals("LV-SCN-022", com.securedoc.platform.scanbridge.model.BridgeLvCodes.forDelivery("SENSITIVE_FIELDS_LOST", null,
+                ScanSessionStatus.ATTENTION_REQUIRED).code());
     }
 
     /** Task 0021: the New case "Sensitivity" choice is carried as sent, survives a restart and every state change. */

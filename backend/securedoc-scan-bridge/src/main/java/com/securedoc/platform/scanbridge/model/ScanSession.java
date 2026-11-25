@@ -57,6 +57,15 @@ public record ScanSession(
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
     }
 
+    /** Task 0061: stands for a sensitive value, which the bridge keeps in memory only (never in this state). */
+    public static final String HIDDEN = "\u2022".repeat(6);
+
+    /** Case field values are in no text form of this. */
+    @Override
+    public String toString() {
+        return "ScanSession[sessionId=" + sessionId + ", status=" + status + "]";
+    }
+
     /** The state as before task 0025, with no LexaVault answer details. */
     public ScanSession(UUID sessionId, UUID submissionId, String tenantId, String bridgeId, String siteId, String scannerId,
                        ScannerCaptureMode captureMode, ScanSessionStatus status, Map<String, String> businessIdentifiers,

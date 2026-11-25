@@ -41,6 +41,24 @@ Example:
 }
 ```
 
+`businessIdentifiers` holds the entity's case fields by their keys (task 0061). A value is a text or a number; a field that
+takes several values takes a list; an address is an object. The same form is read from a watched folder's trigger file and
+from polling answers:
+
+```json
+"businessIdentifiers": {
+  "contract_number": "000642500012",
+  "opened": "2026-11-21",
+  "amount": "1250.50",
+  "borrower_name": ["First Borrower", "Second Borrower"],
+  "property_address": { "street": "1 Elm Street", "street2": "Unit 2", "city": "Springfield", "state": "IL", "zip": "62701" }
+}
+```
+
+A value that breaks its field's rule is refused with `LV-INT-015`, a key the entity does not have with `LV-INT-014`, and a
+value that differs from the business record with the same Primary value with `LV-INT-016`. Values are never echoed. Don't
+repeat field values in `metadata`: it is not encrypted.
+
 The normal tenant-configured mandatory business-identifier rules are enforced before the intake is accepted.
 
 Representative response fields:

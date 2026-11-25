@@ -65,18 +65,18 @@ const field = (p: Partial<Parameters<typeof fieldRule>[0]>) => ({
 });
 
 test('case field rules are spelled out', () => {
-  assert.equal(fieldRule(field({ validationType: 'ALPHANUMERIC', minLength: 6, maxLength: 12, caseNormalization: 'UPPER', stripSeparators: true })),
+  assert.equal(fieldRule(field({ validationType: 'TEXT', customPattern: '[A-Za-z0-9]+', minLength: 6, maxLength: 12, caseNormalization: 'UPPER', stripSeparators: true })),
     'Letters and numbers · 6–12 characters · saved in capitals · spaces and dashes removed');
   assert.equal(fieldRule(field({ maxLength: 120 })), 'Text · up to 120 characters');
-  assert.equal(fieldRule(field({ validationType: 'ALLOW_LIST', allowedValues: ['CA', 'NV', 'AZ', 'OR', ' '], caseNormalization: 'UPPER' })),
+  assert.equal(fieldRule(field({ validationType: 'DROPDOWN', allowedValues: ['CA', 'NV', 'AZ', 'OR', ' '], caseNormalization: 'UPPER' })),
     'One of 4 allowed values · saved in capitals');
-  assert.equal(fieldRule(field({ validationType: 'NUMERIC', exactLength: 12 })), 'Numbers only · exactly 12 characters');
-  assert.equal(fieldRule(field({ validationType: 'NUMERIC', exactLength: 3, allowedValues: ['000', '001'] })), 'Numbers only · exactly 3 characters · one of 2 allowed values');
+  assert.equal(fieldRule(field({ validationType: 'NUMBER', customPattern: '[0-9]+', exactLength: 12 })), 'Numbers only · exactly 12 characters');
+  assert.equal(fieldRule(field({ validationType: 'MONEY', currency: 'USD', multiValue: true, sensitive: true })), 'Amount in USD · several values · sensitive');
   assert.equal(fieldRule(field({ minLength: 1 })), 'Text · at least 1 character');
   assert.equal(fieldRule(field({ minLength: 4, maxLength: 4 })), 'Text · exactly 4 characters');
   assert.equal(fieldRule(field({ validationType: 'EMAIL', caseNormalization: 'LOWER' })), 'Email address · saved in lower case');
   assert.equal(fieldRule(field({ validationType: 'SOMETHING_NEW' })), 'Text');
-  for (const t of ['TEXT', 'NUMERIC', 'ALPHANUMERIC', 'EMAIL', 'UUID', 'ALLOW_LIST', 'CUSTOM_PATTERN']) {
+  for (const t of ['TEXT', 'NUMBER', 'DECIMAL', 'MONEY', 'DATE', 'DATE_TIME', 'EMAIL', 'UUID', 'DROPDOWN', 'ADDRESS', 'CUSTOM_PATTERN']) {
     assert.doesNotMatch(fieldRule(field({ validationType: t, allowedValues: ['A'] })), /[A-Z]{3,}/, `${t} shows no code`);
   }
 });

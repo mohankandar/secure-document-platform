@@ -35,7 +35,8 @@ encryption off: the app then does not start.
 - Sent to a destination: the plain PDF, as before. A destination that is a folder holds plain PDFs (they are the customer's).
 - Short-lived plain files while a document is worked on (temporary folder of the server): uploads, page images for text
   recognition, PDF work files. They are removed right after use, as before. Use an encrypted disk for that folder.
-- The database (case fields, findings without values, audit) and the scanner bridge's own workstation folder are not
+- Sensitive case field values in the database, with the same keys (`CASE_FIELDS.md`, task 0061).
+- The rest of the database (case fields that are not sensitive, findings without values, audit) and the scanner bridge's own workstation folder are not
   covered by these keys.
 
 ## When the key service is down or refuses

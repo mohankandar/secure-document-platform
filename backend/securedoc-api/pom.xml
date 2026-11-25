@@ -103,6 +103,16 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-erase-log-spring</artifactId>
         </dependency>
+        <!-- Task 0061: case fields (the app builds the field objects itself; there is no Spring module). -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-fields</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-fields-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-crypto-testkit</artifactId>

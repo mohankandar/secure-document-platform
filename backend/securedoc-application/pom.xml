@@ -12,7 +12,7 @@
 
     <artifactId>securedoc-application</artifactId>
     <name>SecureDoc - Application</name>
-    <description>Application use cases and orchestration. Depends on domain only.</description>
+    <description>Application use cases and orchestration. Depends on the domain and on platform-core's case fields.</description>
 
     <dependencies>
         <dependency>
@@ -24,6 +24,21 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>2.0.13</version>
+        </dependency>
+        <!-- Task 0061: case fields (definitions, rules, values of business records) are platform-core's. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-fields</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-fields-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-crypto-testkit</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

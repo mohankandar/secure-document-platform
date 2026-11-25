@@ -33,4 +33,9 @@ public final class DirectErasure implements ErasurePort {
         asked.add("CASE " + reason.rule());
         if (refuse != null) throw refuse;
     }
+
+    @Override
+    public int eraseUnusedCaseFields(int limit, Reason reason) {
+        return 0;
+    }
 }

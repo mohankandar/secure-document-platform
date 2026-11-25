@@ -140,7 +140,10 @@ class UnrecordedFileSweepPostgresTest {
                 com.documentplatform.eraselog.EraseHandlers.of(
                         new com.securedoc.platform.infrastructure.erasure.LexaVaultEraseHandlers().unrecordedFileEraseHandler(files)));
         return new UnrecordedFileSweepService(new UnrecordedFileSweepAdapter(configuration, jdbc,
-                new com.securedoc.platform.infrastructure.erasure.LexaVaultErasures(eraser, jdbc.getJdbcTemplate())),
+                new com.securedoc.platform.infrastructure.erasure.LexaVaultErasures(eraser, jdbc.getJdbcTemplate(),
+                        new com.securedoc.platform.infrastructure.erasure.CaseFieldErasure(jdbc.getJdbcTemplate()),
+                        com.securedoc.platform.application.port.out.CaseFieldLock.NONE,
+                        new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbc.getJdbcTemplate().getDataSource()))),
                 new AuditService(audits::add), 24);
     }
 

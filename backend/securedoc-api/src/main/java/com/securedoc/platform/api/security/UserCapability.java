@@ -4,6 +4,8 @@ package com.securedoc.platform.api.security;
 public enum UserCapability {
     DASHBOARD_ACCESS,
     DOCUMENT_INTAKE,
+    /** Task 0061: sees the values of sensitive case fields, on the case itself. Processor and Supervisor, who see its documents. */
+    CASE_FIELD_SENSITIVE_VIEW,
     MANUAL_REVIEW,
     FINDING_DECISION,
     REDACTION_ADJUST,
