@@ -16,95 +16,19 @@ The experience is responsive and touch-first for desktop and iPad. No report int
 
 ## Reporting experiences
 
-### Executive
+Reports has three tabs (task 0081; checked 2026-11-25). One period, one source system filter and one level filter hold for all three.
 
-Audience: `REPORT_VIEWER`, Business Admin, Tenant IT, Platform Operations and explicit Admin when otherwise authorized.
+| Tab | Read by | Holds |
+| --- | --- | --- |
+| Overview | Report Viewer, Business Admin | What LexaVault did for you (with the review time saved, an estimate), the headline, received and delivered per day, service levels |
+| Daily intake and delivery | Report Viewer, Business Admin | Received, exported, not exported yet, needs attention; by reason (LV code), destination, source system, result, sensitivity level; a note for a quiet source |
+| Operations | Business Admin (a Report Viewer sees a line that says so) | The queue and time left, pipeline, backlog age, retention, timing and volume, breakdowns by case field |
 
-Purpose: leadership pulse. It presents aggregate business measures only and does not expose document contents.
+The IT Administrator and Platform Operations have no Reports; the queue is also on Admin › Platform operations. Counts link only for a reader who may open what they count.
 
-Primary measures:
+## Period and filters
 
-- packages received;
-- documents/pages processed;
-- delivered packages and delivery rate;
-- straight-through rate;
-- median/P95 end-to-end turnaround;
-- current attention/backlog and oldest open work;
-- received-versus-delivered trend;
-- intake-source mix;
-- open-work aging;
-- leadership attention by review/approval/technical category.
-
-`REPORT_VIEWER` is intentionally executive/aggregate-only and cannot export or open protected operational records by role alone.
-
-### Business Admin
-
-Audience: `BUSINESS_ADMIN` and explicit Admin.
-
-Purpose: understand workflow performance and business value.
-
-Includes:
-
-- straight-through versus reviewed delivery;
-- active-processing median/P95;
-- end-to-end median/P95;
-- review wait and review handling time;
-- backlog aging;
-- intake quality/duplicates/rejections;
-- reprocessing volume;
-- delivery/export activity;
-- retention lifecycle measures;
-- later tenant-approved reporting dimensions sourced from configured identifiers/metadata.
-
-### Usage & Adoption
-
-Audience: all report viewers with aggregate-report access.
-
-Purpose: show how LexaVault is actually being used.
-
-Includes:
-
-- package/document/page volume;
-- average documents/pages per package;
-- intake-source adoption (manual/API/watched folder/scanner);
-- scanner share;
-- reprocessing volume;
-- reviewed versus touchless volume;
-- usage trend and delivery trend.
-
-### Operational Details
-
-Audience: roles with `REPORT_OPERATIONAL_VIEW`.
-
-Purpose: pipeline investigation and operational risk.
-
-Includes current stage counts, observed-folder health, export activity, retention risk, backlog aging and active-processing time. Where the principal also has Dashboard access, actionable counts may drill into the corresponding filtered Dashboard stage.
-
-## Modern period/filter interaction
-
-The old desktop-style 7/30/90 dropdown is replaced by touch-friendly buttons/popovers.
-
-Presets:
-
-- Today;
-- Yesterday;
-- Last 7 days;
-- Last 30 days;
-- This month;
-- Last month;
-- This quarter;
-- Last quarter;
-- This year;
-- Other.
-
-`Other` supports:
-
-- custom date range;
-- month;
-- quarter;
-- year.
-
-On tablet/mobile the selector behaves as a large bottom-sheet-style control. Intake source and outcome use the same large-tap interaction pattern. Active filters are visible as removable chips.
+Today, Yesterday, 7 days, 30 days, Custom (from and to). Days are in the entity's time zone. Until a period is chosen, Daily shows today and the others the last 30 days. Filters: All source systems or one; All levels or one.
 
 ## Metric definitions
 
@@ -135,15 +59,15 @@ The R1 UX/data candidate expands current structured reporting and timing but doe
 
 ## Business dimensions
 
-Business dimensions must not be hard-coded to the current demo identifiers. A later reporting candidate will let Business Admin select approved tenant-configured identifiers/metadata as report dimensions. Primary and sensitive identifiers are not automatically reportable merely because they exist.
+The Business Admin chooses them in Admin › Redaction & retention, card Report targets, "Break reports down by". Only case fields with 1 to 100 allowed values that are not sensitive and take one value can be chosen. Off for every field by default.
 
 ## SLA/targets
 
-The reporting design supports tenant-configured goals such as delivery-within-target and review-rate targets. V1 must not invent red/green SLA labels until a target has been configured.
+Set by the Business Admin in the same card. The defaults are 4 hours for 95% of cases, 90% needing no review, and 1 hour for 80% of reviews.
 
 ## Export
 
-Roles with `REPORT_EXPORT` can export the active filtered aggregate report. CSV contains source mix, automation/review, turnaround/processing timing, backlog aging and reprocessing counts in addition to the original volume/delivery measures. Executive PDF and spreadsheet-style export remain planned within the reporting unit; scheduled distribution is later work unless explicitly brought into V1.
+Roles with `REPORT_EXPORT` (Business Admin) export the tab shown, with its filters, as CSV; each export is audited. The compliance report (PDF) is made from Reports (summary, Business Admin) or Admin › Audit trail (with the full audit trail, IT Administrator). Scheduled distribution is not part of V1.
 
 ## Explicit exclusions
 

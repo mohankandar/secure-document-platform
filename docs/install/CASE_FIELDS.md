@@ -36,9 +36,9 @@ beside the fields (don't put field values there), and the destination's copy.
 
 ## Rules the Business Admin meets
 
-Exactly one Primary field. A case field and a redaction item exclude each other per entity (LV-CFG-014, both ways); SSN,
-card number, CVV and PIN are never a field (LV-CFG-013). With values, the type, Sensitive, Primary and "several values" of
-a field stay (LV-CFG-015): add a new field. Removing a field switches it off; its values stay.
+On **Admin › Case fields**. Exactly one field is the **Main ID** (Primary). A case field and a redaction item exclude each other per entity (LV-CFG-014, both ways); SSN,
+card number, CVV and PIN are never a field (LV-CFG-013). With values, the type, **Sensitive**, **Main ID** and **Takes several values**
+of a field stay (LV-CFG-015): add a new field. **Remove** switches a field off and **Switch on** brings it back; its values stay.
 
 ## Erasing
 
@@ -58,7 +58,7 @@ and the values of every business record a case points to, under the same record 
   printed).
 - Every moved field is **not** sensitive, as before, and stays so once it has values. For a name or an address that should
   be sensitive, the Business Admin adds a new field and switches the old one off.
-- Search: a moved field is found by the whole value; the Business Admin can choose "its beginning" or "any part".
+- Search: a moved field is found by the whole value; the Business Admin can choose **Found by**: **Its beginning** or **Any part of it**.
 - The main ID no longer tells capitals apart.
 - Only the schema step moves them. An app start of this release on a database that is not moved yet stops ("not moved yet:
   run the schema step") and drops nothing.

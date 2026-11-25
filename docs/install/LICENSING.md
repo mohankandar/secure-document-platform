@@ -60,7 +60,7 @@ counted and never billable. Other licences never mark anything. The demo licence
 ## Notifications
 
 The licensing events are registered with the roles TENANT_IT_ADMIN and BUSINESS_ADMIN. Nothing is sent until notifications
-are set up in LexaVault.
+are set up in LexaVault (`NOTIFICATIONS.md`).
 
 ## Health
 

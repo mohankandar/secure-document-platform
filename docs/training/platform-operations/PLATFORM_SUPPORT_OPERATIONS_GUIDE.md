@@ -1,383 +1,79 @@
-# LexaVault Platform Support / Operations Guide
+# LexaVault guide for Platform Operations and support
 
-**Audience:** Platform Operations, Tier 2/Tier 3 Support, Engineering Support  
-**Current structured-incident foundation status:** VERIFIED / FROZEN.
+**For:** Platform Operations Administrator, second- and third-line support.
+**Checked:** 2026-11-25 against the screens of commit `466906b1` (task 0095). Names in **bold** are the words on the screen.
 
----
+## 1. What Platform Operations can and can't do
 
-## 1. Support objective
+| Can | Can't |
+|---|---|
+| **Support**: read Problems (also of another organization, by **Organization ID** under More filters), Export and Status | Retry, keep or close a problem, or check a destination: that is the customer's IT Administrator |
+| **Admin › Platform operations**: Overview and queue (every entity together), Processing storage, Workers, Branding, Usage data; **Run health checks** | Integrations, Sign-in, Notifications, the diagnostic bundle, the compliance report |
+| **Admin › Audit trail** and its export, of the entity they are in | Cases, New case, Review, Reports, redaction policy, case fields, entities, licensing |
 
-Convert a customer ticket from:
+The role is given for every entity of the organisation (`../../install/SETUP.md`). The screens have no place to change the role rules.
 
-> "This contract failed."
+## 2. Platform operations
 
-into a durable, structured case with:
+| Section | Holds |
+|---|---|
+| **Overview** | Services (Working, Having problems, Down), watched folder, recorded technical incidents, the **Queue** |
+| **Processing storage** | Add storage, test it from every server, make it the default, or give one customer its own. A change is for new work only |
+| **Workers** | Workers of each step, and what each AI server takes at once. **Change maximums** sets a ceiling for every server; empty means LexaVault decides |
+| **Branding** | Names, logos and colours; for everyone or one customer |
+| **Usage data** | What is sent and what never is. Set at installation, not here |
 
-- business identity
-- Incident ID
-- package/document correlation
-- processing stage/component
-- stable reason code
-- attempts/retryability
-- processing fingerprint
-- business impact/outcome
-- event timeline
-- safe links into logs/traces/metrics
+Queue and workers mean something only where documents are processed in steps (`SECUREDOC_PROCESSING_PIPELINE_MODE=staged`; the default is `inline`). The **time left** was within 7% on long loads, and up to 54% too long on loads of about 2 minutes. In steps, the work goes Urgent, Normal, Low, then Bulk (migration sources, in their times, at most half of the workers).
 
-The incident record is the case file. Logs are supporting evidence, not the only source of truth.
+## 3. A case from a ticket
 
----
+1. Ask for the LV code and the reference (`R-...`), or the Main ID of the case, and the time.
+2. **Support › Status › Last failures** finds a reference (since that server started).
+3. **Support › Problems** finds the case by its Main ID, or a problem by its incident number.
+4. Read what happened, what it means for the case, and the timeline. Codes, ids and the processing fingerprint are under **Technical details**.
+5. Look the code up: account menu › **Help: error codes**. "Support tells the customer" is the sentence to use.
+6. Ask the customer's IT Administrator for the diagnostic bundle (Support › Status).
+7. Compare with other problems of the same code. The same code in several organizations at once is a platform problem, not many tickets.
 
-## 2. Core incident entities
+## 4. Business done is not problem solved
 
-### `processing_incidents`
+A case can be finished by hand (**Continue manually**, only after a stopped AI analysis) while its problem stays open: chip **Continued manually** or **Case finished**, status **Watching**. Close a problem only when its cause is gone.
 
-Represents the durable parent incident.
+## 5. The incident record
 
-Key concepts:
-- tenant
-- package/document
-- stage
-- component
-- failure category
-- reason code
-- retryable
-- attempt count
-- correlation ID
-- status
-- business continuity used
-- business outcome
-- safe summary
-- processing fingerprint
-- safe metadata
-- first/last observed
-- resolved at
+Tables `processing_incidents` (one row per problem) and `processing_incident_events` (its history). The incident number is the identity of the problem; a correlation ID belongs to one request and may differ from step to step.
 
-### `processing_incident_events`
+Stages: INTAKE, TEXT_EXTRACTION, OCR, AI_ANALYSIS, SENSITIVE_DETECTION, DOCUMENT_PROFILE, IDENTIFIER_EXTRACTION, MANUAL_REVIEW, REDACTION, VERIFICATION, DERIVED_DOCUMENT_SPLIT, ROUTING, DELIVERY, STORAGE, RETENTION, MIGRATION_REVALIDATION, DOCUMENT_PROCESSING, UNKNOWN. Not every stage has problems today.
 
-Append-oriented incident history.
+Events: FAILURE_RECORDED, RETRY_SCHEDULED, PROCESSING_RECOVERY_EXHAUSTED, BUSINESS_CONTINUITY_STARTED, BUSINESS_CONTINUITY_SUBMITTED, BUSINESS_COMPLETED, INVESTIGATION_HOLD_APPLIED, INVESTIGATION_HOLD_RELEASED, RESOLVED_NO_REPROCESS, SUPERSEDED, AUTO_CLOSED_BY_RETENTION and others.
 
-Events observed in current Business Continuity validation:
+Before an AI problem is recorded LexaVault has already tried: the same pages again, then split, then page by page.
 
-- `FAILURE_RECORDED`
-- `BUSINESS_CONTINUITY_STARTED`
-- `BUSINESS_CONTINUITY_SUBMITTED`
-- `BUSINESS_COMPLETED`
-
-Each event is linked by `incident_id`. Correlation IDs may legitimately differ because separate requests/actions participate in one durable incident lifecycle.
-
----
-
-## 3. Why Incident ID is different from Correlation ID
-
-**Incident ID**
-- durable parent identity
-- survives multiple HTTP/workflow operations
-- used for support case continuity
-
-**Correlation ID**
-- request/operation correlation
-- may change between failure, manual-continuity start, submission, and completion
-- used to pivot to logs/traces for one operation
-
-Never use correlation ID as the parent relationship for the incident timeline.
-
----
-
-## 4. Generic processing stages
-
-The incident architecture is intentionally not AI-specific.
-
-Supported/future stages should use one common model, for example:
-
-- INTAKE
-- TEXT_EXTRACTION
-- OCR
-- AI_ANALYSIS
-- SENSITIVE_DETECTION
-- DOCUMENT_PROFILE
-- IDENTIFIER_EXTRACTION
-- MANUAL_REVIEW
-- REDACTION
-- VERIFICATION
-- DERIVED_DOCUMENT_SPLIT
-- ROUTING
-- DELIVERY
-- STORAGE
-- RETENTION
-- MIGRATION_REVALIDATION
-
-Do not introduce a parallel incident table per processor/provider.
-
----
-
-## 5. Current AI incident example
-
-Classification:
-
-- stage: `AI_ANALYSIS`
-- component: `AI`
-- failure category: `DEPENDENCY_RESPONSE_ERROR`
-- reason code: `AI_INVALID_RESPONSE`
-- retryable: false after safe retry exhaustion
-- attempt count: 2
-
-Automatic resilience occurs before the incident becomes business-blocking:
-
-`same batch retry`
-`-> split fallback`
-`-> page-level retry`
-`-> technical failure`
-
-Detailed provider batch attempts may remain in safe application logs in the current foundation; the durable incident DB records the resulting incident and lifecycle history.
-
----
-
-## 6. Business impact is independent from technical resolution
-
-Critical rule:
-
-`Business COMPLETED != Incident RESOLVED`
-
-Validated example:
-
-- incident status: `BUSINESS_CONTINUED`
-- business continuity used: true
-- business outcome: `COMPLETED`
-- resolved at: NULL
-
-Interpretation:
-- Business safely worked around the failure.
-- The underlying automation defect remains unresolved.
-- Incident should remain available for trend analysis and engineering follow-up.
-
----
-
-## 7. Processing fingerprint
-
-Use the fingerprint to correlate incidents with a processing/intelligence configuration.
-
-Current fields observed:
-- `applicationVersion`
-- `profile`
-- `aiProvider`
-- `aiModel`
-
-Target future fingerprint:
-- applicationVersion
-- provider/model/modelVersion
-- promptVersion
-- detectorVersion
-- ocrVersion
-- documentProfileVersion
-- policyVersion
-- configurationVersion / intelligence-bundle version
-
-This enables questions such as:
-- Did failures increase after a model change?
-- Is one prompt version correlated with malformed responses?
-- Is a document-profile version causing a tenant-specific regression?
-- Which version is the last-known-good baseline?
-
----
-
-## 8. Initial support query patterns
-
-### Find recent incidents
+Direct SQL is for engineering on a local copy; use the screens elsewhere.
 
 ```sql
-SELECT
-    id,
-    tenant_id,
-    package_id,
-    document_id,
-    stage,
-    component,
-    failure_category,
-    reason_code,
-    retryable,
-    attempt_count,
-    correlation_id,
-    status,
-    business_continuity_used,
-    business_outcome,
-    first_observed_at,
-    last_observed_at,
-    resolved_at
+SELECT id, tenant_id, package_id, document_id, stage, component, failure_category, reason_code, retryable, attempt_count,
+       correlation_id, status, business_continuity_used, business_outcome, first_observed_at, last_observed_at, resolved_at
 FROM processing_incidents
 ORDER BY last_observed_at DESC
 LIMIT 100;
-```
 
-### Incident history
-
-```sql
-SELECT
-    incident_id,
-    event_type,
-    attempt_number,
-    scope,
-    reason_code,
-    retryable,
-    correlation_id,
-    safe_metadata,
-    occurred_at
+SELECT incident_id, event_type, attempt_number, scope, reason_code, retryable, correlation_id, safe_metadata, occurred_at
 FROM processing_incident_events
 WHERE incident_id = :incident_id
 ORDER BY occurred_at;
 ```
 
-### Open/unresolved incidents where business completed
+## 6. Logs
 
-```sql
-SELECT
-    id,
-    tenant_id,
-    package_id,
-    stage,
-    reason_code,
-    status,
-    business_outcome,
-    last_observed_at
-FROM processing_incidents
-WHERE resolved_at IS NULL
-  AND business_outcome = 'COMPLETED'
-ORDER BY last_observed_at DESC;
-```
+JSON, one event per line; also the default of local starts (`-LoggingFormat Readable` for plain text, `-LogLevel`, `-EnableRollingFileLog`: daily and 100 MB files, 14 periods, 2 GB).
 
-Use tenant-scoped application/support tooling in production; direct SQL is primarily an engineering/local diagnostic reference until a formal Support Console is completed.
+Fields when known: service, environment, tenantId, actorId, correlationId, ref, requestId, packageId, documentId, incidentId, eventName, stage, component, failureCategory, reasonCode, provider, model, attempt, maxAttempts, retryable, durationMs, status, decision, scope, businessOutcome, and counters such as pageCount, batchCount, providerCalls, pageRetries, findingCount. The list is fixed in `logback-json.xml`.
 
----
+## 7. Privacy
 
-## 9. Ticket workflow
+Never in an incident, log or ticket: prompts, AI answers, text of documents, found values, names, credentials. Safe: ids, codes, stages, counts, times, versions.
 
-1. Receive Contract Number / business reference.
-2. Locate Incident ID.
-3. Determine:
-   - customer blocked?
-   - Business Continuity available/used?
-   - business outcome?
-4. Read stage/reason/attempt evidence.
-5. Read fingerprint.
-6. Review incident timeline.
-7. If required, pivot via correlation IDs into centralized logs/traces.
-8. Compare with similar incidents across tenant/model/version/time.
-9. Escalate with Incident ID as the primary case reference.
-10. Resolve only when the technical condition is actually fixed/closed according to incident-resolution policy.
+## 8. Not there
 
----
-
-## 10. Platform incident detection
-
-Future Support Console/metrics should make it possible to answer:
-
-- incidents by reason code over time
-- incidents by tenant
-- incidents by provider/model/version
-- retry/recovery success rate
-- business-continuity usage rate
-- customer-blocked vs business-completed counts
-- widespread identical errors across tenants
-
-A burst of the same stable reason code across multiple tenants should be treated as a potential platform incident rather than a series of unrelated customer tickets.
-
----
-
-## 11. Privacy / logging policy
-
-Never persist in ordinary incident/support metadata:
-- raw prompt
-- raw provider response
-- OCR body
-- document text
-- matched sensitive text
-- SSN
-- full PAN
-- DOB
-- credit-score value
-
-Safe:
-- IDs
-- stage/component
-- reason code/category
-- attempt counts
-- retryability
-- page/batch numbers when content-free
-- durations
-- timestamps
-- provider/model/version identifiers
-- business outcome
-- sanitized summaries
-
-If raw provider output is ever needed for deep diagnostics, it must be a separate, encrypted, restricted, short-retention, access-audited mechanism. It must not be added casually to `safe_metadata` or normal logs.
-
----
-
-## 12. Current boundary and next observability work
-
-The structured incident foundation is not the entire observability program.
-
-Next related capabilities:
-- Support Console search by Contract Number / Incident ID / correlation ID
-- filters by status, stage, reason, tenant, time
-- clear customer-blocked vs business-continued indicator
-- incident resolution/escalation workflow
-- structured JSON application logging
-- centralized logs/traces
-- operational metrics/SLOs
-- version-aware regression and last-known-good analysis
-
-Do not overload this foundation with every future support feature in one change. Preserve the generic incident model while adding bounded capabilities.
-
----
-
-## 13. Structured JSON logging
-
-**Status:** IN VALIDATION until local and independent verification is complete.
-
-Production/SaaS uses structured JSON console logging by default. Local/demo uses a readable console pattern by default and can be switched to the JSON configuration for smoke testing.
-
-### Stable operational fields
-
-When the context is available, logs can carry:
-- `service`, `environment`
-- `tenantId`, `actorId`
-- `correlationId`
-- `packageId`, `documentId`, `incidentId`
-- `eventName`
-- `stage`, `component`, `failureCategory`, `reasonCode`
-- `provider`, `model`
-- `attempt`, `maxAttempts`, `retryable`
-- `durationMs`, `status`, `decision`, `scope`, `businessOutcome`
-- safe counters: `pageCount`, `batchCount`, `providerCalls`, `pageRetries`, `findingCount`
-
-### Privacy contract
-
-Structured MDC is explicit allow-list only. Do not add document/OCR text, matched values, prompts, raw provider responses, SSNs, PANs, DOBs, credit-score values, credentials, tokens, or document contents to the allow-list.
-
-### Correlation semantics
-
-`incidentId` remains the durable technical case identity. `correlationId` remains an operation/request identity and may differ across failure, Business Continuity, retry, and resolution actions. JSON logging makes it easier to pivot from either ID into centralized logs later; it does not replace the durable incident/event database.
-
-### Logging defaults, levels, and retention ownership
-
-- Default format: JSON.
-- Local readable override: `-LoggingFormat Readable`.
-- Local application-level override: `-LogLevel TRACE|DEBUG|INFO|WARN|ERROR`.
-- SaaS/container: JSON stdout; centralized platform owns rotation/retention.
-- Local/on-prem optional: `-EnableRollingFileLog` adds bounded rotating JSON files.
-- Default application-managed rollover: daily and 100MB, 14 history periods, 2GB total cap.
-
-Do not confuse operational log retention with document/original retention. They are independent policies.
-
-## 13. Support Console — Incident Search & Triage
-
-**Status:** IN VALIDATION
-
-The Support Console is the read-only case-search layer over `processing_incidents` and `processing_incident_events`.
-
-Search supports Primary Business Identifier, Incident ID, Correlation ID, package/document, stage, reason code, status, business outcome, and time range. Platform Operations may supply a tenant ID for an authorized cross-tenant investigation.
-
-Use the Incident ID as the durable case identity and event-level Correlation IDs to pivot to structured logs. A business outcome of COMPLETED does not imply the technical incident is RESOLVED.
-
-The current unit is read-only. Resolution/escalation actions and centralized log deep links are intentionally deferred.
+No links from a problem to a central log system, no reports across customers, no way for Platform Operations to act on a problem, and no screen that assigns a problem to a person.
