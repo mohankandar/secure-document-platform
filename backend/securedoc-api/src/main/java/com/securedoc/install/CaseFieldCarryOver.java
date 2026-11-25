@@ -122,6 +122,8 @@ final class CaseFieldCarryOver {
                         now.version(), ACTOR);
             }
         }
+        // 066 drops the old tables only with this.
+        jdbc.execute("comment on table business_identifier_definitions is 'moved to fld_ (066)'");
         out.println("  case fields      moved " + fields.size() + " field(s), the values of " + counts[0]
                 + " business record(s)" + (counts[1] == 0 ? "" : "; " + counts[1] + " value(s) no longer allowed were left out"));
     }

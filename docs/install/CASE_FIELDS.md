@@ -60,5 +60,7 @@ and the values of every business record a case points to, under the same record 
   be sensitive, the Business Admin adds a new field and switches the old one off.
 - Search: a moved field is found by the whole value; the Business Admin can choose "its beginning" or "any part".
 - The main ID no longer tells capitals apart.
+- Only the schema step moves them. An app start of this release on a database that is not moved yet stops ("not moved yet:
+  run the schema step") and drops nothing.
 - `CASE_FIELDS_NO_CUSTOMER`: no customer is stored yet, so nothing was moved or dropped. Run setup with the release
   installed before, then the schema step again.

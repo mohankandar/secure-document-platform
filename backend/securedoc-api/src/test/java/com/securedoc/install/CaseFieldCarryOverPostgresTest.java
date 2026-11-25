@@ -115,6 +115,15 @@ class CaseFieldCarryOverPostgresTest {
         jdbc.update("insert into reporting_dimension_definitions (tenant_id, definition_id, dimension_key, dimension_label,"
                 + " enabled_flag, display_order, updated_at) values (?, ?, 'state', 'State', true, 1, now())", TENANT, state);
 
+        // Anything but the schema step that runs the changelog (an app start) is refused and drops nothing.
+        try (Connection c2 = db.connect()) {
+            Liquibase liquibase = new Liquibase("db/changelog/db.changelog-master.xml", new ClassLoaderResourceAccessor(),
+                    DatabaseFactory.getInstance().findCorrectDatabaseImplementation(new JdbcConnection(c2)));
+            org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                    () -> liquibase.update(new Contexts(), new LabelExpression()));
+        }
+        assertEquals("3", one("select count(*) from business_records"));
+
         // Without a stored customer nothing is moved and nothing dropped.
         ByteArrayOutputStream refusal = new ByteArrayOutputStream();
         assertEquals(2, schemaStep(refusal));

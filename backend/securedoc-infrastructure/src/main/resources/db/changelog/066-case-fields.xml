@@ -7,6 +7,17 @@
          document_packages.business_record_id stays: it now holds the record id of fld_record. Its foreign key goes, because
          a record's values are erased when no case needs them any more while the case rows stay. -->
     <changeSet id="066-01-cases-point-to-field-records" author="lexavault" dbms="postgresql">
+        <!-- Only the schema step moves them, and it says so on the table: anything else that runs this changelog on a
+             database with case fields is refused here, and nothing is dropped. -->
+        <sql splitStatements="false"><![CDATA[
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM business_identifier_definitions)
+                        AND obj_description('business_identifier_definitions'::regclass) IS DISTINCT FROM 'moved to fld_ (066)' THEN
+                    RAISE EXCEPTION 'The case fields of this database are not moved yet: run the schema step (docs/install/CASE_FIELDS.md)';
+                END IF;
+            END $$;
+        ]]></sql>
         <dropForeignKeyConstraint baseTableName="document_packages" constraintName="fk_document_package_business_record"/>
         <rollback>
             <sql>
