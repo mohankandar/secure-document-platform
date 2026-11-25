@@ -25,7 +25,7 @@ import java.util.Objects;
  */
 public final class ModelServerCheck implements DependencyCheck {
 
-    static final String NAME = "service-model-server";
+    public static final String NAME = "service-model-server";
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
     /** One server: the address of its list of models, the model it must have (blank: any), its key (may be blank). */

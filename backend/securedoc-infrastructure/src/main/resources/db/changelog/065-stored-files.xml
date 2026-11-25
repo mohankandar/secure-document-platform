@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Task 0060: how every stored file is protected. The record decides, never the file: a file without a record is not
+         opened, so an encrypted file can't be replaced by a plain one. The key itself is not here, only its wrapped form,
+         which opens only in the key service. -->
+    <changeSet id="065-01-stored-files" author="lexavault">
+        <createTable tableName="stored_files">
+            <column name="storage_provider" type="VARCHAR(100)"><constraints nullable="false"/></column>
+            <column name="storage_key" type="VARCHAR(1024)"><constraints nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="protection" type="VARCHAR(20)"><constraints nullable="false"/></column>
+            <column name="crypto_format" type="VARCHAR(40)"/>
+            <column name="crypto_version" type="INT"/>
+            <column name="key_service" type="VARCHAR(40)"/>
+            <column name="customer_id" type="UUID"/>
+            <column name="wrapped_key" type="TEXT"/>
+            <column name="key_version" type="INT"/>
+            <column name="encrypted_bytes" type="BIGINT"/>
+            <column name="ciphertext_sha256" type="VARCHAR(64)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="stored_files" columnNames="storage_provider, storage_key" constraintName="pk_stored_files"/>
+        <addForeignKeyConstraint baseTableName="stored_files" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_stored_files_tenant"/>
+        <sql>
+            ALTER TABLE stored_files ADD CONSTRAINT ck_stored_files_protection CHECK (
+                (protection = 'PLAIN' AND crypto_format IS NULL AND crypto_version IS NULL AND key_service IS NULL
+                    AND customer_id IS NULL AND wrapped_key IS NULL AND key_version IS NULL
+                    AND encrypted_bytes IS NULL AND ciphertext_sha256 IS NULL)
+                OR
+                (protection = 'ENCRYPTED' AND crypto_format IS NOT NULL AND crypto_version IS NOT NULL
+                    AND key_service IS NOT NULL AND customer_id IS NOT NULL AND wrapped_key IS NOT NULL
+                    AND key_version IS NOT NULL AND encrypted_bytes IS NOT NULL AND ciphertext_sha256 IS NOT NULL))
+        </sql>
+        <rollback>
+            <dropTable tableName="stored_files"/>
+        </rollback>
+    </changeSet>
+
+    <!-- The files stored before this release are plain and stay readable: each gets its record here, once. -->
+    <changeSet id="065-02-files-stored-before" author="lexavault">
+        <sql>
+            INSERT INTO stored_files (storage_provider, storage_key, tenant_id, protection, created_at)
+            SELECT DISTINCT ON (a.storage_provider, a.storage_key)
+                   a.storage_provider, a.storage_key, a.tenant_id, 'PLAIN', a.created_at
+              FROM artifacts a
+             WHERE a.storage_provider IS NOT NULL AND a.storage_key IS NOT NULL AND a.status &lt;&gt; 'DELETED'
+             ORDER BY a.storage_provider, a.storage_key, a.created_at
+        </sql>
+        <rollback>
+            <sql>DELETE FROM stored_files WHERE protection = 'PLAIN'</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

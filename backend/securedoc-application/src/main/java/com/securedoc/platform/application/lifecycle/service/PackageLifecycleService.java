@@ -16,7 +16,7 @@ import com.securedoc.platform.application.port.out.PackageExportRecordRepository
 import com.securedoc.platform.application.port.out.PackageLifecycleRepository;
 import com.securedoc.platform.application.port.out.PackageDashboardVisibilityPort;
 import com.securedoc.platform.application.port.out.PackageRepository;
-import com.securedoc.platform.application.port.out.StoragePort;
+import com.securedoc.platform.application.port.out.ErasurePort;
 import com.securedoc.platform.application.port.out.TenantLifecyclePolicyRepository;
 import com.securedoc.platform.application.resilience.TechnicalFailureClassifier;
 import com.securedoc.platform.application.service.AuditService;
@@ -59,7 +59,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
     private final PackageDashboardVisibilityPort dashboardVisibilityPort;
     private final DocumentRepository documentRepository;
     private final ArtifactRepository artifactRepository;
-    private final StoragePort storagePort;
+    private final ErasurePort erasure;
     private final AuditService auditService;
     private final ProcessingIncidentService processingIncidentService;
     private final ProductTelemetryService productTelemetryService;
@@ -73,10 +73,10 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                    PackageDashboardVisibilityPort dashboardVisibilityPort,
                                    DocumentRepository documentRepository,
                                    ArtifactRepository artifactRepository,
-                                   StoragePort storagePort,
+                                   ErasurePort erasure,
                                    AuditService auditService) {
         this(policyRepository, lifecycleRepository, exportRecordRepository, packageRepository, dashboardVisibilityPort,
-                documentRepository, artifactRepository, storagePort, auditService, ProcessingIncidentService.noop(),
+                documentRepository, artifactRepository, erasure, auditService, ProcessingIncidentService.noop(),
                 ProductTelemetryService.noop());
     }
 
@@ -87,11 +87,11 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                    PackageDashboardVisibilityPort dashboardVisibilityPort,
                                    DocumentRepository documentRepository,
                                    ArtifactRepository artifactRepository,
-                                   StoragePort storagePort,
+                                   ErasurePort erasure,
                                    AuditService auditService,
                                    ProcessingIncidentService processingIncidentService) {
         this(policyRepository, lifecycleRepository, exportRecordRepository, packageRepository, dashboardVisibilityPort,
-                documentRepository, artifactRepository, storagePort, auditService, processingIncidentService,
+                documentRepository, artifactRepository, erasure, auditService, processingIncidentService,
                 ProductTelemetryService.noop());
     }
 
@@ -102,12 +102,12 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                    PackageDashboardVisibilityPort dashboardVisibilityPort,
                                    DocumentRepository documentRepository,
                                    ArtifactRepository artifactRepository,
-                                   StoragePort storagePort,
+                                   ErasurePort erasure,
                                    AuditService auditService,
                                    ProcessingIncidentService processingIncidentService,
                                    ProductTelemetryService productTelemetryService) {
         this(policyRepository, lifecycleRepository, exportRecordRepository, packageRepository, dashboardVisibilityPort,
-                documentRepository, artifactRepository, storagePort, auditService, processingIncidentService,
+                documentRepository, artifactRepository, erasure, auditService, processingIncidentService,
                 productTelemetryService, ExportCopyRetention.none());
     }
 
@@ -118,7 +118,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
                                    PackageDashboardVisibilityPort dashboardVisibilityPort,
                                    DocumentRepository documentRepository,
                                    ArtifactRepository artifactRepository,
-                                   StoragePort storagePort,
+                                   ErasurePort erasure,
                                    AuditService auditService,
                                    ProcessingIncidentService processingIncidentService,
                                    ProductTelemetryService productTelemetryService,
@@ -130,7 +130,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         this.dashboardVisibilityPort = Objects.requireNonNull(dashboardVisibilityPort);
         this.documentRepository = Objects.requireNonNull(documentRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
-        this.storagePort = Objects.requireNonNull(storagePort);
+        this.erasure = Objects.requireNonNull(erasure);
         this.auditService = Objects.requireNonNull(auditService);
         this.processingIncidentService = Objects.requireNonNull(processingIncidentService);
         this.productTelemetryService = Objects.requireNonNull(productTelemetryService);
@@ -338,7 +338,8 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
         // Each copy is audited on its own (SPLIT_COPY_PURGED); a failure of the whole sweep is logged and retried next time.
         try {
             exportRetention.purgeDueSplitCopies(command.now(), command.limit(), command.actorId(),
-                    command.correlationId(), this::deleteArtifact);
+                    command.correlationId(),
+                    artifact -> deleteArtifact(artifact, ErasurePort.Reason.rule("retention-split-copy")));
         } catch (RuntimeException e) {
             org.slf4j.LoggerFactory.getLogger(PackageLifecycleService.class)
                     .warn("SPLIT_COPY_PURGE_SWEEP_FAILED type={}", e.getClass().getSimpleName());
@@ -423,7 +424,7 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
             for (Artifact artifact : artifactRepository.findByDocumentIdAndTenantId(document.id(), lifecycle.tenantId())) {
                 if (artifact.artifactType() == artifactType && artifact.status() != ArtifactStatus.DELETED
                         && !keep.contains(artifact.id())) {
-                    deleteArtifact(artifact);
+                    deleteArtifact(artifact, ErasurePort.Reason.rule("retention-redacted-copies"));
                 }
             }
         }
@@ -431,19 +432,20 @@ public final class PackageLifecycleService implements GetPackageLifecycleQuery,
 
     /** Deletes every internal artifact of the case, except the split copies still inside their own period. */
     private void purgeAllInternalArtifacts(PackageLifecycle lifecycle, Set<ArtifactId> keep) {
+        // Task 0060: the whole case as one entry (also the parts of it that had been removed before), then each split copy.
+        erasure.eraseCaseFiles(lifecycle.tenantId(), lifecycle.packageId(), ErasurePort.Reason.rule("retention-case"));
         for (Document document : documentRepository.findByPackageIdAndTenantId(lifecycle.packageId(), lifecycle.tenantId())) {
             for (Artifact artifact : artifactRepository.findByDocumentIdAndTenantId(document.id(), lifecycle.tenantId())) {
-                if (artifact.status() != ArtifactStatus.DELETED && !keep.contains(artifact.id())) deleteArtifact(artifact);
+                if (artifact.status() != ArtifactStatus.DELETED && !keep.contains(artifact.id())) {
+                    deleteArtifact(artifact, ErasurePort.Reason.rule("retention-case"));
+                }
             }
         }
     }
 
-    public void deleteArtifact(Artifact artifact) {
-        if (artifact.storageReference() != null) {
-            storagePort.delete(artifact.storageReference());
-        }
-        artifact.delete();
-        artifactRepository.save(artifact);
+    /** Task 0060: through the erase log, like every erasure. */
+    public void deleteArtifact(Artifact artifact, ErasurePort.Reason reason) {
+        erasure.eraseArtifact(artifact, reason);
     }
 
     private DocumentPackage ensurePackageExists(PackageId packageId, TenantId tenantId) {

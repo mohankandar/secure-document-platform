@@ -74,6 +74,7 @@ export async function startApp(): Promise<void> {
     '--spring.profiles.active=local,export-e2e',
     `--spring.config.additional-location=optional:file:${profileDir}`,
     `--securedoc.storage.local.root-path=${path.join(RUN_DIR, 'storage')}`,
+    `--platform.erase-log.location=${path.join(RUN_DIR, 'erase-log')}`,
   ], {
     cwd: RUN_DIR, detached: true, windowsHide: true, stdio: ['ignore', out, err],
     env: {

@@ -7,6 +7,7 @@ import com.securedoc.platform.domain.pipeline.PipelinePriority;
 import com.securedoc.platform.domain.pipeline.PipelineStage;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import com.securedoc.platform.application.port.out.WorkGate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,13 @@ public class StageJobWorkers {
     private final ProcessingCapacity capacity;
     private final List<ElasticWorkers> workers = new ArrayList<>();
     private ScheduledExecutorService timers;
+    /** Task 0060: nothing is claimed while no work may be taken (after a restore, before the erase replay). */
+    private WorkGate workGate = WorkGate.open();
+
+    @Autowired
+    void workGate(WorkGate gate) {
+        this.workGate = gate;
+    }
 
     public StageJobWorkers(StagedProcessingService service, String nodeId) {
         this(service, nodeId, null);
@@ -77,6 +85,7 @@ public class StageJobWorkers {
 
     /** In inline mode: the open staged jobs, if any (also ones a server still staged queued later), are finished. */
     private synchronized void finishOpenJobs() {
+        if (!workGate.mayTakeWork()) return;
         try {
             if (running) return;
             service.runMissedGates();
@@ -125,6 +134,7 @@ public class StageJobWorkers {
     }
 
     private boolean turn(PipelineStage stage, String owner, Runnable started) {
+        if (!workGate.mayTakeWork()) return false;
         java.util.Set<String> bulk = capacity == null ? java.util.Set.of() : capacity.bulkTurn(stage);
         try {
             Optional<PipelineJob> job = capacity == null ? service.claimNext(stage, owner) : service.claimNext(stage, owner, bulk);
@@ -174,6 +184,7 @@ public class StageJobWorkers {
     }
 
     private void sweep() {
+        if (!workGate.mayTakeWork()) return;
         try {
             service.releaseExpiredClaims();
         } catch (RuntimeException failure) {
@@ -183,6 +194,7 @@ public class StageJobWorkers {
     }
 
     private void missedGates() {
+        if (!workGate.mayTakeWork()) return;
         try {
             service.runMissedGates();
         } catch (RuntimeException failure) {

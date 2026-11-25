@@ -95,7 +95,7 @@ foreach ($mode in $Modes) {
         try {
             $app = Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
                 -ArgumentList @('-jar', $JarPath, '--spring.profiles.active=local',
-                    "--securedoc.storage.local.root-path=$(Join-Path $runDir 'storage')") `
+                    "--securedoc.storage.local.root-path=$(Join-Path $runDir 'storage')", "--platform.erase-log.location=$(Join-Path $runDir 'erase-log')") `
                 -RedirectStandardOutput (Join-Path $runDir 'backend.out.log') -RedirectStandardError (Join-Path $runDir 'backend.err.log')
         } finally { Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue }
         $deadline = (Get-Date).AddSeconds(180)

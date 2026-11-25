@@ -140,7 +140,7 @@ function Start-Server([string] $Name, [int] $Port, [string] $DbPassword, [int] $
     try {
         return Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
             -ArgumentList @('-jar', $JarPath, '--spring.profiles.active=local',
-                "--securedoc.storage.local.root-path=$shared") `
+                "--securedoc.storage.local.root-path=$shared", "--platform.erase-log.location=${shared}-erase-log") `
             -RedirectStandardOutput (Join-Path $logDir 'backend.out.log') -RedirectStandardError (Join-Path $logDir 'backend.err.log')
     } finally {
         Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue

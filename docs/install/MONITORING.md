@@ -10,6 +10,8 @@ shared part). Support, Status shows each check as Working, Having problems or Do
 | `login-system` | your login system's published details and keys | no |
 | `service-model-server` | the AI model server answers and has the model (with a pool: every server) | only with `SECUREDOC_MONITORING_MODEL_SERVER_REQUIRED=true` |
 | `storage` | every document storage in use exists and can be read and written; its disk is not nearly full | yes; `SECUREDOC_MONITORING_STORAGE_REQUIRED=false` switches that off (the local profile does) |
+| `key-service` | the key service answers and the customer's keys are there (`KEY_SERVICE.md`); not in a local development start without one | no: the app starts and waits |
+| `erase-log` | the erase log can be used, the database is in step with it, no erasure is stuck (`ERASE_LOG.md`) | no: the app starts and takes no work |
 
 A new installation without a storage starts; the check then shows "having problems" until one is set up. A full disk is
 shown as a problem and never refuses a start. The default AI model is checked; AI settings of single entities are not.

@@ -45,7 +45,7 @@ class ExternalIntakeMaintenanceServiceTest {
         Clock clock = Clock.fixed(created.plus(Duration.ofHours(25)), ZoneOffset.UTC);
 
         ExternalIntakeMaintenanceService service = new ExternalIntakeMaintenanceService(intakes, packages, artifacts,
-                storage, new AuditService(audits::add), clock);
+                new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audits::add), clock);
         boolean changed = service.expireIfDue(intake, actor, CorrelationId.generate());
 
         assertTrue(changed);

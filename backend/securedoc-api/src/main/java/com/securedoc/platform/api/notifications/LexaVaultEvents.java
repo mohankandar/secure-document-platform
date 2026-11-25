@@ -49,6 +49,9 @@ public final class LexaVaultEvents {
     public static final EventTypeId OVER_TARGET = EventTypeId.of("processing.over-target");
     public static final EventTypeId AI_MODEL_DOWN = EventTypeId.of("system.ai-model-down");
     public static final EventTypeId DISK_ALMOST_FULL = EventTypeId.of("system.disk-almost-full");
+    /** Task 0060. */
+    public static final EventTypeId KEY_SERVICE_DOWN = EventTypeId.of("system.key-service-down");
+    public static final EventTypeId ERASE_LOG_STOP = EventTypeId.of("system.erase-log-stop");
     public static final EventTypeId POLICY_CHANGED = EventTypeId.of("security.redaction-policy-changed");
     public static final String FAILURES_IN_AN_HOUR = "failuresInAnHour";
 
@@ -58,7 +61,7 @@ public final class LexaVaultEvents {
     /** What {@link OperationalNotices} raises and clears, each a condition with one Recovered message. */
     public static final List<EventTypeId> OPERATIONAL = List.of(DESTINATION_PAUSED, DESTINATION_NEEDS_IT, DESTINATION_BUSY,
             DESTINATIONS_UNREACHABLE, EXPORTS_NEED_IT, STORAGE_STOPPED, SOURCE_UNREACHABLE, REPEATED_FAILURES, OVER_TARGET,
-            AI_MODEL_DOWN, DISK_ALMOST_FULL, INTAKE_STOPPED);
+            AI_MODEL_DOWN, DISK_ALMOST_FULL, INTAKE_STOPPED, KEY_SERVICE_DOWN, ERASE_LOG_STOP);
 
     /** The technical messages an IT Admin sets per entity. */
     public static final List<EventTypeId> TECHNICAL = Stream.concat(OPERATIONAL.stream(), Stream.of(FILES_REJECTED)).toList();
@@ -100,6 +103,9 @@ public final class LexaVaultEvents {
         c.register(technical(OVER_TARGET, "Cases over the time target").schedule(Schedule.every4Hours()).continuous(LASTING)
                 .count("cases", "Cases").build());
         c.register(technical(AI_MODEL_DOWN, "AI model down").critical().continuous(LASTING).build());
+        c.register(technical(KEY_SERVICE_DOWN, "Key service down or refusing").critical().continuous(LASTING).build());
+        c.register(technical(ERASE_LOG_STOP, "Erase log not usable, or a restore waiting for its replay").critical()
+                .continuous(LASTING).build());
         c.register(technical(DISK_ALMOST_FULL, "Disk almost full").critical().continuous(LASTING).build());
         c.register(work(REVIEW_WAITING, "Cases waiting for review", PROCESSOR, SUPERVISOR));
         c.register(work(REVIEW_PAST_TARGET, "Cases waiting past the review target", PROCESSOR, SUPERVISOR));

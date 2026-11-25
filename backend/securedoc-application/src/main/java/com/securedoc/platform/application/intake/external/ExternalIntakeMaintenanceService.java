@@ -3,7 +3,7 @@ package com.securedoc.platform.application.intake.external;
 import com.securedoc.platform.application.port.out.ArtifactRepository;
 import com.securedoc.platform.application.port.out.ExternalIntakeRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
-import com.securedoc.platform.application.port.out.StoragePort;
+import com.securedoc.platform.application.port.out.ErasurePort;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.artifact.Artifact;
 import com.securedoc.platform.domain.artifact.ArtifactStatus;
@@ -25,29 +25,29 @@ public final class ExternalIntakeMaintenanceService {
     private final ExternalIntakeRepository externalIntakeRepository;
     private final PackageRepository packageRepository;
     private final ArtifactRepository artifactRepository;
-    private final StoragePort storagePort;
+    private final ErasurePort erasure;
     private final AuditService auditService;
     private final Clock clock;
 
     public ExternalIntakeMaintenanceService(ExternalIntakeRepository externalIntakeRepository,
                                             PackageRepository packageRepository,
                                             ArtifactRepository artifactRepository,
-                                            StoragePort storagePort,
+                                            ErasurePort erasure,
                                             AuditService auditService) {
-        this(externalIntakeRepository, packageRepository, artifactRepository, storagePort, auditService,
+        this(externalIntakeRepository, packageRepository, artifactRepository, erasure, auditService,
                 Clock.systemUTC());
     }
 
     ExternalIntakeMaintenanceService(ExternalIntakeRepository externalIntakeRepository,
                                      PackageRepository packageRepository,
                                      ArtifactRepository artifactRepository,
-                                     StoragePort storagePort,
+                                     ErasurePort erasure,
                                      AuditService auditService,
                                      Clock clock) {
         this.externalIntakeRepository = Objects.requireNonNull(externalIntakeRepository);
         this.packageRepository = Objects.requireNonNull(packageRepository);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
-        this.storagePort = Objects.requireNonNull(storagePort);
+        this.erasure = Objects.requireNonNull(erasure);
         this.auditService = Objects.requireNonNull(auditService);
         this.clock = Objects.requireNonNull(clock);
     }
@@ -97,9 +97,7 @@ public final class ExternalIntakeMaintenanceService {
                 for (Artifact artifact : artifactRepository.findByDocumentIdAndTenantId(
                         manifestDocument.receivedDocumentId(), intake.tenantId())) {
                     if (artifact.status() == ArtifactStatus.DELETED) continue;
-                    if (artifact.storageReference() != null) storagePort.delete(artifact.storageReference());
-                    artifact.delete();
-                    artifactRepository.save(artifact);
+                    erasure.eraseArtifact(artifact, ErasurePort.Reason.rule("intake-expired"));
                 }
             }
             intake.markCleanupCompleted(Instant.now(clock));

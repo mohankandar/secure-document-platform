@@ -101,7 +101,7 @@ class NotificationsAppPostgresTest {
         assertEquals(0, new SchemaStep(quiet, quiet).run(new String[] {"apply"}, db.env(SchemaStep.ENV_PREFIX)));
         assertEquals(0, new SetupCommand(db.env("PLATFORM_SETUP"), Clock.systemUTC(), TestBuild.development()).run(List.of("apply",
                 "--licence", DEMO.resolve("licence-demo.json").toString(), "--signin", DEMO.resolve("signin-demo.json").toString(),
-                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/product-roles.json").toString(),
+                "--product", "LEXAVAULT", "--product-roles", DemoStepTest.REPO.resolve("install/demo/product-roles-development.json").toString(),
                 "--config-out", work.resolve("platform-tenant.properties").toString(),
                 "--run-log", work.resolve("platform-setup-runs.log").toString(), "--no-customer-keys"), quiet, quiet));
         assertEquals(0, new DemoStep(quiet, quiet, Clock.systemUTC(), TestBuild::development).run(new String[] {"apply"},
@@ -114,6 +114,7 @@ class NotificationsAppPostgresTest {
                 .profiles("local").run("--spring.datasource.url=" + db.url, "--spring.datasource.username=" + db.user,
                         "--spring.datasource.password=" + db.password, "--server.port=0", "--securedoc.ai.provider=heuristic",
                         "--securedoc.watched-folder.enabled=false", "--securedoc.watched-folder.scheduling-enabled=false",
+                        "--platform.erase-log.location=" + work.resolve("erase-log"),
                         "--securedoc.storage.local.root-path=" + Files.createDirectories(work.resolve("storage")),
                         "--platform.outbound.allow-internal-addresses=true",
                         "--securedoc.notifications.app-base-url=https://lexavault.example",

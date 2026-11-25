@@ -90,7 +90,7 @@ function Start-App([string] $jar, [string] $name, [string] $dbPassword) {
     try {
         $p = Start-Process -FilePath 'java' -PassThru -WindowStyle Hidden -WorkingDirectory $runDir `
             -ArgumentList @('-jar', $jar, '--spring.profiles.active=local',
-                "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')") `
+                "--securedoc.storage.local.root-path=$(Join-Path $runDir 'securedoc-storage')", "--platform.erase-log.location=$(Join-Path $runDir 'erase-log')") `
             -RedirectStandardOutput (Join-Path $runDir "$name.out.log") -RedirectStandardError (Join-Path $runDir "$name.err.log")
     } finally {
         Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue

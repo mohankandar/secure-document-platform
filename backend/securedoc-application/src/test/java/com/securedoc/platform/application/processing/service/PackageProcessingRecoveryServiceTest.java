@@ -54,7 +54,8 @@ class PackageProcessingRecoveryServiceTest {
         PackageLifecycleService lifecycleService = new PackageLifecycleService(
                 new DefaultPolicyRepository(), lifecycles, new EmptyExportRepository(), packages,
                 (packageId, tenant, actor, hiddenAt) -> { }, new EmptyDocumentRepository(),
-                new EmptyArtifactRepository(), new EmptyStorage(), new AuditService(audits::add),
+                new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new EmptyStorage()), new AuditService(audits::add),
                 incidentService, ProductTelemetryService.noop());
 
         PackageProcessingRecoveryService service = new PackageProcessingRecoveryService(
@@ -103,7 +104,8 @@ class PackageProcessingRecoveryServiceTest {
         PackageLifecycleService lifecycleService = new PackageLifecycleService(
                 new DefaultPolicyRepository(), lifecycles, new EmptyExportRepository(), packages,
                 (packageId, tenant, actor, hiddenAt) -> { }, new EmptyDocumentRepository(),
-                new EmptyArtifactRepository(), new EmptyStorage(), new AuditService(audits::add),
+                new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new EmptyStorage()), new AuditService(audits::add),
                 incidentService, ProductTelemetryService.noop());
         PackageProcessingRecoveryService service = new PackageProcessingRecoveryService(
                 packages, lifecycleService, incidentService, new AuditService(audits::add),
@@ -205,7 +207,8 @@ class PackageProcessingRecoveryServiceTest {
             PackageLifecycleService lifecycleService = new PackageLifecycleService(
                     new DefaultPolicyRepository(), lifecycles, new EmptyExportRepository(), packages,
                     (packageId, tenant, actor, hiddenAt) -> { }, new EmptyDocumentRepository(),
-                    new EmptyArtifactRepository(), new EmptyStorage(), new AuditService(lifecycleAudits::add),
+                    new EmptyArtifactRepository(),
+                new com.securedoc.platform.application.port.out.DirectErasure(new EmptyArtifactRepository(), new EmptyStorage()), new AuditService(lifecycleAudits::add),
                     incidentService, ProductTelemetryService.noop());
             service = new PackageProcessingRecoveryService(
                     packages, lifecycleService, incidentService, new AuditService(audits::add),

@@ -38,6 +38,25 @@
             <groupId>com.documentplatform.platform</groupId>
             <artifactId>platform-identity-core</artifactId>
         </dependency>
+        <!-- Task 0060: stored files encrypted with the customer's keys, and the erase log with its handlers. -->
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-crypto</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-erase-log</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-crypto-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.documentplatform.platform</groupId>
+            <artifactId>platform-erase-log-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Task 0037: the idn_ stores (PostgresIdentityLookup, PostgresMachineEntityBindings) behind the sign-in reads. -->
         <dependency>
             <groupId>com.documentplatform.platform</groupId>
