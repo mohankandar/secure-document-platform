@@ -72,7 +72,7 @@ Write-Host "Node: $(& node --version)"
 Write-Host "npm:  $(& npm --version)"
 
 Write-Host ""
-Write-Host "platform-core: released com.documentplatform.platform:platform-bom 1.0.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml, token from GITHUB_PACKAGES_TOKEN; docs/install/BUILD.md)." -ForegroundColor DarkGray
+Write-Host "platform-core: released com.documentplatform.platform:platform-bom 1.1.0 from GitHub Packages (server github-platform-core in ~/.m2/settings.xml, token from GITHUB_PACKAGES_TOKEN; docs/install/BUILD.md)." -ForegroundColor DarkGray
 
 $profileArgs = @()
 if (-not $Production) { $profileArgs += '-Pdev-build' }

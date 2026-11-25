@@ -1,10 +1,10 @@
 # Building LexaVault: platform-core from GitHub Packages
 
-LexaVault's backend uses platform-core's released libraries (task 0057: **1.0.0**, tag `platform-core-v1.0.0`, which needs Spring Boot 4.2 and Java 21). The
+LexaVault's backend uses platform-core's released libraries (task 0094: **1.1.0**, tag `platform-core-v1.1.0`, which needs Spring Boot 4.2 and Java 21). The
 version is one property, `platform.version` in `backend/pom.xml`, which imports `platform-bom`. In the app:
 `platform-identity-core`, `-jdbc` and `-spring`, `platform-licensing` and `-spring` (live since task 0057, `LICENSING.md`),
 `platform-monitoring` and `-spring` (`MONITORING.md`), `platform-notifications` and `-spring` (`NOTIFICATIONS.md`; with the mail library they need: `angus-mail`,
-`jakarta.mail-api`, `jakarta.activation-api` and `angus-activation`), `platform-crypto` and `-spring` (task 0060, `KEY_SERVICE.md`), `platform-erase-log` and `-spring` (`ERASE_LOG.md`), `platform-fields` (task 0061, `CASE_FIELDS.md`), what identity 1.0.0 itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
+`jakarta.mail-api`, `jakarta.activation-api` and `angus-activation`), `platform-crypto` and `-spring` (task 0060, `KEY_SERVICE.md`), `platform-erase-log` and `-spring` (`ERASE_LOG.md`), `platform-fields` (task 0061, `CASE_FIELDS.md`), what identity itself needs (`platform-outbound-spring`, `platform-outbound`, `platform-errors` and
 Apache HttpClient 5), and `platform-setup` in the setup jar (`backend/securedoc-setup`). Never a snapshot, never a private local
 repository.
 
@@ -48,7 +48,7 @@ offline (`mvn -o`).
 | Spring Boot (app, scan bridge, setup jar) | 4.2.0 | `spring-boot.version`, `backend/pom.xml`; its BOM brings Framework 7.1, Security 7.2, Hibernate 7.4, Tomcat 11, Flyway 12 |
 | Jackson | 3.1.8 (Spring Boot's) | `jackson.version` names it for `securedoc-ai`, which does not import the BOM. No Jackson 2 but its annotations, which Jackson 3 uses |
 | Liquibase | 4.29.2, not Spring Boot's 5.0.4 | `liquibase.version`, `backend/pom.xml`. 5.x is FSL-1.1-ALv2, not open source; 4.30 and later report usage to the vendor unless switched off |
-| platform-core | 1.0.0 | `platform.version`, `backend/pom.xml` |
+| platform-core | 1.1.0 | `platform.version`, `backend/pom.xml` |
 
 JSON: `spring.jackson` in both `application.yml` files keeps the app's JSON byte for byte as with Spring Boot 3
 (`JsonSettingsContractTest`). Code that makes its own mapper uses `JsonMapper.builderWithJackson2Defaults()`.
@@ -97,7 +97,7 @@ mvn -B dependency:tree -pl securedoc-api,securedoc-setup -am "-Dincludes=com.doc
 - `securedoc-api` (the app): `platform-identity-core`, `platform-identity-jdbc`, `platform-identity-spring`,
   `platform-licensing`, `platform-licensing-spring`, `platform-monitoring`, `platform-monitoring-spring`,
   `platform-notifications`, `platform-notifications-spring`, `platform-crypto`, `platform-crypto-spring`, `platform-erase-log`, `platform-erase-log-spring`, `platform-fields`,
-  `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `1.0.0`, compile scope.
+  `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `1.1.0`, compile scope.
   `platform-setup` and `platform-identity-testkit` only in test scope. The app still makes its own outbound
   rules (`OutboundRulesConfig`; a proxy with sign-in is allowed since task 0059). HttpClient (5.6.5, core 5.4.4) comes from Spring Boot's BOM,
   the same versions platform-core is built with.
