@@ -6,6 +6,8 @@ import com.documentplatform.crypto.testkit.InMemoryKeyService;
 import com.documentplatform.setup.SetupCommand;
 import com.securedoc.platform.api.SecureDocumentPlatformApplication;
 import com.securedoc.platform.application.casefields.CaseFieldService;
+import com.securedoc.platform.application.exception.TechnicalDependencyException;
+import com.securedoc.platform.domain.identity.BusinessRecordId;
 import com.securedoc.platform.domain.identity.TenantId;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +28,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -44,6 +48,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,10 +82,27 @@ class CaseFieldsAppPostgresTest {
     @TempDir
     static Path work;
 
+    /** Task 0094: the calls that open keys (one by one, or several in one call), and the app's other calls for the customer. */
+    private static final AtomicInteger OPENS = new AtomicInteger();
+    private static final AtomicInteger OTHER_CALLS = new AtomicInteger();
+
+    private static KeyService counted(KeyService keys) {
+        return (KeyService) Proxy.newProxyInstance(KeyService.class.getClassLoader(), new Class<?>[] {KeyService.class},
+                (proxy, method, args) -> {
+                    if (method.getName().startsWith("unwrap")) OPENS.incrementAndGet();
+                    else if (method.getParameterCount() > 0 && method.getParameterTypes()[0] == CustomerId.class) OTHER_CALLS.incrementAndGet();
+                    try {
+                        return method.invoke(keys, args);
+                    } catch (InvocationTargetException refused) {
+                        throw refused.getCause();
+                    }
+                });
+    }
+
     static class Keys {
         @Bean
         KeyService testKeyService() {
-            return KEYS;
+            return counted(KEYS);
         }
     }
 
@@ -321,8 +343,99 @@ class CaseFieldsAppPostgresTest {
         assertEquals(200, call("BUSINESS_ADMIN", "GET", "/api/v1/operations/reports", null).statusCode());
     }
 
+    /**
+     * Task 0094: many cases with sensitive values. No list, search or report opens any of them; only the case itself does,
+     * and the delivery of one case, each with one call. Values that can't be opened are hidden on their own case only.
+     */
     @Test
     @Order(7)
+    void aListOpensNoSensitiveValueAndACaseOrADeliveryOpensItsOwnWithOneCall() throws Exception {
+        List<String> cases = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            HttpResponse<String> made = call("DOCUMENT_PROCESSOR", "POST", "/api/v1/packages", caseBody("3000000000" + (10 + i),
+                    SENSITIVE.replace(",\"amount\":\"1,250.50\"", "")));
+            assertEquals(201, made.statusCode(), made.body());
+            cases.add(made.body().replaceAll("(?s).*\"packageId\":\"([^\"]+)\".*", "$1"));
+        }
+        for (String path : List.of("/api/v1/packages?limit=100", "/api/v1/packages?offset=0&limit=25",
+                "/api/v1/operations/dashboard", "/api/v1/operations/dashboard?stage=NEEDS_REVIEW",
+                "/api/v1/operations/dashboard?stage=NEEDS_APPROVAL",
+                "/api/v1/export-jobs/waiting-for-you", "/api/v1/derived-deliveries/attention",
+                "/api/v1/support/incidents", "/api/v1/support/export-jobs/needs-it", "/api/v1/operations/reports",
+                "/api/v1/operations/reports/export", "/api/v1/operations/reports/daily", "/api/v1/operations/reports/queue",
+                "/api/v1/operations/reports/overview/export", "/api/v1/operations/reports/daily/export",
+                "/api/v1/operations/reports/operations/export", "/api/v1/audit-records", "/api/v1/audit-records/export",
+                "/api/v1/business-admin/configuration", "/api/v1/intake/identifier-definitions")) {
+            boolean answered = false;
+            int before = OPENS.get();
+            for (String role : List.of("DOCUMENT_PROCESSOR", "DOCUMENT_SUPERVISOR", "BUSINESS_ADMIN", "REPORT_VIEWER", "TENANT_IT_ADMIN",
+                    "PLATFORM_OPERATIONS_ADMIN")) {
+                HttpResponse<String> answer = call(role, "GET", path, null);
+                answered |= answer.statusCode() == 200;
+                if (role.equals("DOCUMENT_PROCESSOR") && (path.startsWith("/api/v1/packages") || path.endsWith("/dashboard"))) {
+                    assertTrue(answer.body().contains("•••"), path);
+                }
+                assertFalse(answer.body().contains(MARKER), role + " " + path);
+            }
+            assertEquals(before, OPENS.get(), path);
+            assertTrue(answered, "no role is answered: " + path);
+        }
+        // A search by a sensitive value asks for its fingerprint, however many cases it finds, and opens none.
+        int opens = OPENS.get();
+        int others = OTHER_CALLS.get();
+        assertTrue(found(NAME) >= 25);
+        int calls = OTHER_CALLS.get() - others;
+        assertTrue(calls >= 1 && calls <= 3, "key service calls of one search: " + calls);
+        for (String role : List.of("BUSINESS_ADMIN", "REPORT_VIEWER", "TENANT_IT_ADMIN")) {
+            assertFalse(call(role, "GET", "/api/v1/packages/" + cases.getFirst(), null).body().contains(MARKER));
+        }
+        assertEquals(opens, OPENS.get());
+
+        // Two sensitive fields, one of several parts: still one call, because a record has one envelope.
+        assertEquals(1, opens(() -> {
+            String shown = detail(cases.getFirst());
+            assertTrue(shown.contains(NAME) && shown.contains(STREET), shown);
+        }));
+        CaseFieldService service = app.getBean(CaseFieldService.class);
+        assertEquals(1, opens(() -> assertEquals(NAME,
+                service.forDelivery(recordOf(cases.getFirst()), TenantId.of(ENTITY)).texts().get("borrower_name"))));
+
+        // One case whose values can't be opened: hidden there and not delivered; every other case and the list as before.
+        assertEquals(1, jdbc.update("update fld_record set envelope = (select envelope from fld_record where record_id = ?)"
+                + " where record_id = ?", recordOf(cases.get(1)).toString(), recordOf(cases.get(2)).toString()));
+        String hidden = detail(cases.get(2));
+        assertTrue(hidden.contains("•••") && !hidden.contains(MARKER), hidden);
+        assertThrows(TechnicalDependencyException.class, () -> service.forDelivery(recordOf(cases.get(2)), TenantId.of(ENTITY)));
+        assertTrue(detail(cases.get(1)).contains(NAME));
+        assertTrue(detail(cases.get(3)).contains(NAME));
+        HttpResponse<String> page = call("DOCUMENT_SUPERVISOR", "GET", "/api/v1/packages?limit=100", null);
+        assertEquals(200, page.statusCode(), page.body());
+        assertTrue(cases.stream().allMatch(page.body()::contains), page.body());
+        assertNowhere();
+    }
+
+    private interface Step {
+        void run() throws Exception;
+    }
+
+    private static int opens(Step step) throws Exception {
+        int before = OPENS.get();
+        step.run();
+        return OPENS.get() - before;
+    }
+
+    private static String detail(String caseId) throws Exception {
+        HttpResponse<String> answer = call("DOCUMENT_PROCESSOR", "GET", "/api/v1/packages/" + caseId, null);
+        assertEquals(200, answer.statusCode(), answer.body());
+        return answer.body();
+    }
+
+    private static BusinessRecordId recordOf(String caseId) {
+        return BusinessRecordId.fromString(one("select business_record_id from document_packages where id = '" + caseId + "'"));
+    }
+
+    @Test
+    @Order(8)
     void aSwitchedOffFieldIsKeptAndItsValuesComeBack() throws Exception {
         assertEquals(200, save().statusCode());
         assertEquals("4", one("select count(*) from fld_field_definition where not active"));
@@ -332,7 +445,7 @@ class CaseFieldsAppPostgresTest {
 
     /** Last: the same database in a LOCAL start without a key service. */
     @Test
-    @Order(8)
+    @Order(9)
     void aLocalStartWithoutAKeyServiceRefusesSensitiveFieldsAndValuesAndServesTheRest() throws Exception {
         app.close();
         app = startApp();
