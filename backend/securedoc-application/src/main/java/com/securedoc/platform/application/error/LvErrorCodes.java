@@ -331,6 +331,7 @@ public final class LvErrorCodes {
         m.put("MISSING_PARAMETER", INT_003);
         m.put("INVALID_REQUEST", INT_003);
         m.put("FILE_TOO_LARGE", INT_004);
+        m.put("REQUEST_TOO_LARGE", SYS_015);
         m.put("INVALID_ARGUMENT", CFG_001);
         m.put("AUTHENTICATION_REQUIRED", AUT_001);
         m.put("ACCESS_DENIED", AUT_006);

@@ -1,5 +1,7 @@
 server:
   port: 8080
+  # Task 0055: this machine only, unless an installation says which address it serves (behind its own TLS proxy).
+  address: ${SECUREDOC_SERVER_ADDRESS:127.0.0.1}
   # Task 0056: as with Spring Boot 3.3; Spring Boot 4 would wait for running requests at a stop.
   shutdown: immediate
 

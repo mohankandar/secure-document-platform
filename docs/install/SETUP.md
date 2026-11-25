@@ -130,6 +130,14 @@ These settings are gone and are **ignored** when still set, whatever their value
 that came only from the setting is gone. `securedoc.security.oidc.persistent-connection-enabled=false` refuses everybody.
 A web app on another origin now sends `X-Selected-Tenant-Id`, which the API allows.
 
+## Which address LexaVault serves
+
+LexaVault listens on `127.0.0.1` only (task 0055). Set `SECUREDOC_SERVER_ADDRESS` to the address it should serve, for example
+the server's internal address behind your TLS proxy (`0.0.0.0` for every address, as in a container). With the proxy on the
+same machine nothing needs setting. Two servers that talk to one database each need it when the proxy is elsewhere.
+
+A request body that is not a file is limited to 2 MB (`securedoc.api.max-request-body`, LV-SYS-015).
+
 ## After setup
 
 Your entity slots are stored as `NOT_ACTIVATED`. A Business Admin activates, names,
