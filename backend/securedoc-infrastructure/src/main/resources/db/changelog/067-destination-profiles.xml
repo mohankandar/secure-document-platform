@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0087: delivery to a destination through its published profile.
+          integration_connections.destination_settings   what the installation adds to the profile (JSON): the profile file,
+                                                          token address, client ID, field mapping. No secret.
+          delivery_submissions.destination_progress      how far a delivery got (JSON): calls made, the destination's ids.
+        Existing rows keep null: a connection without settings is refused (LV-DLV-006) until IT chooses its profile, and a
+        delivery begun by an earlier release is not continued (LV-DLV-016). The rollback loses both columns: an older
+        release would not know how far a delivery got, so it is refused while one is half done.
+    -->
+    <changeSet id="067-01-destination-profiles" author="lexavault">
+        <addColumn tableName="integration_connections">
+            <column name="destination_settings" type="TEXT"/>
+        </addColumn>
+        <addColumn tableName="delivery_submissions">
+            <column name="destination_progress" type="TEXT"/>
+        </addColumn>
+        <rollback>
+            <sql splitStatements="false">
+                do $$
+                begin
+                    if exists (select 1 from delivery_submissions
+                               where destination_progress is not null and status &lt;&gt; 'DELIVERED') then
+                        raise exception 'DESTINATION_PROGRESS_OPEN: finish the deliveries that have begun before going back';
+                    end if;
+                end $$;
+            </sql>
+            <dropColumn tableName="delivery_submissions" columnName="destination_progress"/>
+            <dropColumn tableName="integration_connections" columnName="destination_settings"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

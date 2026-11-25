@@ -41,6 +41,14 @@ public final class IntegrationConnectionService {
         return this;
     }
 
+    /** Task 0087: the destinations' profiles, which a document store connection's settings are checked against. */
+    public IntegrationConnectionService withDestinationProfiles(com.securedoc.platform.application.port.out.DestinationProfilePort profiles) {
+        this.destinationProfiles = Objects.requireNonNull(profiles);
+        return this;
+    }
+
+    private com.securedoc.platform.application.port.out.DestinationProfilePort destinationProfiles;
+
     /** A daily schedule without a time zone needs an entity that has one; otherwise it would never run. */
     private void requireZone(TenantId tenantId, ConnectionInput input) {
         boolean none = input.pollingTimeZone() == null || input.pollingTimeZone().isBlank();
@@ -95,11 +103,11 @@ public final class IntegrationConnectionService {
         ensureSingleEnabledDocumentStore(tenantId, input.purpose(), input.enabled(), null);
         requireZone(tenantId, input);
         try {
-            return IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
+            return checkedDestination(IntegrationConnection.create(tenantId, input.name(), input.description(), input.purpose(),
                     input.direction(), input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(),
                     input.fileShareRoot(), input.secretReference(), input.timeoutSeconds(), input.retryMaxAttempts(), input.incompleteWindowHours(), input.maxDocumentsPerIntake(), input.maxPdfSizeBytes(), input.maxPdfPages(),
                     input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
-                    input.acknowledgementMode(), input.enabled(), Instant.now(clock));
+                    input.acknowledgementMode(), input.enabled(), Instant.now(clock)), input.destination());
         } catch (IllegalArgumentException e) {
             throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
@@ -113,11 +121,14 @@ public final class IntegrationConnectionService {
         ensureSingleEnabledDocumentStore(tenantId, input.purpose(), existing.enabled(), id);
         requireZone(tenantId, input);
         try {
-            return existing.updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
+            // A caller that knows nothing of destinations (the old screen) keeps what is stored.
+            return checkedDestination(existing.withDestination(null).updateConfiguration(input.name(), input.description(), input.purpose(), input.direction(),
                     input.providerType(), input.authenticationType(), input.clientPrincipal(), input.endpoint(), input.fileShareRoot(),
                     input.secretReference(), input.preserveSecretReference(), input.timeoutSeconds(), input.retryMaxAttempts(), input.incompleteWindowHours(), input.maxDocumentsPerIntake(), input.maxPdfSizeBytes(), input.maxPdfPages(),
                     input.pollingScheduleType(), input.pollingIntervalMinutes(), input.pollingLocalTime(), input.pollingTimeZone(), input.pollingBatchLimit(),
-                    input.acknowledgementMode(), Instant.now(clock));
+                    input.acknowledgementMode(), Instant.now(clock)),
+                    input.destination() != null || input.purpose() != IntegrationPurpose.DOCUMENT_STORE_DELIVERY
+                            ? input.destination() : existing.destination());
         } catch (IllegalArgumentException e) {
             throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
@@ -131,6 +142,7 @@ public final class IntegrationConnectionService {
         IntegrationConnection updated;
         try {
             updated = existing.setEnabled(enabled, Instant.now(clock));
+            if (enabled) updated = checkedDestination(updated, updated.destination());
         } catch (IllegalArgumentException e) {
             throw new ValidationException(LvErrorCode.CFG_001, e.getMessage());
         }
@@ -192,6 +204,22 @@ public final class IntegrationConnectionService {
         }
     }
 
+    /**
+     * Task 0087: the destination settings as they are stored. They are checked against the profile file; a connection
+     * that is switched on must have them. One that is switched off may wait for its profile. Without the port (no
+     * delivery to a destination in this process) nothing can be checked, so nothing is changed.
+     */
+    private IntegrationConnection checkedDestination(IntegrationConnection connection,
+                                                     com.securedoc.platform.domain.integration.DestinationSettings settings) {
+        IntegrationConnection wanted = connection.withDestination(settings);
+        if (destinationProfiles == null || wanted.purpose() != IntegrationPurpose.DOCUMENT_STORE_DELIVERY) return wanted;
+        if (settings == null) {
+            if (!wanted.enabled()) return wanted;
+            throw new ValidationException(LvErrorCode.CFG_003, "Choose the destination's profile before switching the connection on");
+        }
+        return destinationProfiles.checked(wanted);
+    }
+
     private void ensureSingleEnabledDocumentStore(TenantId tenantId, IntegrationPurpose purpose, boolean enabled, IntegrationConnectionId excludeId) {
         if (!enabled || purpose != IntegrationPurpose.DOCUMENT_STORE_DELIVERY) return;
         boolean another = repository.findByTenantId(tenantId).stream()
@@ -232,7 +260,23 @@ public final class IntegrationConnectionService {
             String pollingTimeZone,
             Integer pollingBatchLimit,
             IntegrationAcknowledgementMode acknowledgementMode,
-            boolean enabled) {
+            boolean enabled,
+            /* Task 0087: null for every connection but a document store's. */
+            com.securedoc.platform.domain.integration.DestinationSettings destination) {
+
+        public ConnectionInput(String name, String description, IntegrationPurpose purpose, IntegrationDirection direction,
+                               IntegrationProviderType providerType, IntegrationAuthenticationType authenticationType,
+                               String clientPrincipal, String endpoint, String fileShareRoot, String secretReference,
+                               boolean preserveSecretReference, Integer timeoutSeconds, Integer retryMaxAttempts,
+                               Integer incompleteWindowHours, Integer maxDocumentsPerIntake, Long maxPdfSizeBytes,
+                               Integer maxPdfPages, IntegrationPollingScheduleType pollingScheduleType,
+                               Integer pollingIntervalMinutes, LocalTime pollingLocalTime, String pollingTimeZone,
+                               Integer pollingBatchLimit, IntegrationAcknowledgementMode acknowledgementMode, boolean enabled) {
+            this(name, description, purpose, direction, providerType, authenticationType, clientPrincipal, endpoint, fileShareRoot,
+                    secretReference, preserveSecretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
+                    maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
+                    pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, null);
+        }
 
         public ConnectionInput(String name, String description, IntegrationPurpose purpose, IntegrationDirection direction,
                                IntegrationProviderType providerType, IntegrationAuthenticationType authenticationType,

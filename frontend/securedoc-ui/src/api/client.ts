@@ -49,6 +49,7 @@ import type {
   SupportIncidentSearchPage,
   SupportIncidentDetail,
   IntegrationConnection,
+  DestinationProfile,
   IntegrationConnectionRequest,
   PollingConnectionStatus,
   PollingRun,
@@ -377,6 +378,11 @@ class ApiClient {
 
   async runPollingNow(connectionId: string): Promise<PollingRun> {
     return this.request(`/integrations/${connectionId}/polling/run-now`, { method: 'POST' });
+  }
+
+  /** Task 0087: the destinations' published profiles in the installation's profile folder. */
+  async listDestinationProfiles(): Promise<DestinationProfile[]> {
+    return this.request('/integrations/destination-profiles');
   }
 
   /** Tests settings before they are saved. With connectionId, an empty key reference reuses that connection's stored key. Saves nothing. */

@@ -1,0 +1,65 @@
+{
+  "format": "platform-integration-profile/1",
+  "name": "records-archive-v1",
+  "version": "1.0.0",
+  "description": "A made-up archive for LexaVault's own tests: open a delivery, then upload each PDF to it.",
+  "api": {"title": "Records Archive API", "version": "1.0.0"},
+  "direction": "OUTBOUND",
+  "kind": "API_PUSH",
+  "steps": [
+    {
+      "name": "open",
+      "method": "POST",
+      "path": "/v1/deliveries",
+      "body": "JSON",
+      "bodyTemplate": "{\"ref\":\"{package.id}\",\"count\":{package.documentCount},\"items\":[{#each doc}{\"ref\":\"{doc.sourceDocumentId}\"}{/each}],\"fields\":{}}",
+      "repeat": "ONCE",
+      "read": {"deliveryId": "/deliveryId", "state": "/state"},
+      "required": ["deliveryId"]
+    },
+    {
+      "name": "upload",
+      "method": "POST",
+      "path": "/v1/deliveries/{step.open.deliveryId}/files",
+      "headers": {
+        "Content-Type": "application/pdf",
+        "X-Archive-File-Name": "{doc.fileName}",
+        "X-Archive-Item-Ref": "{doc.sourceDocumentId}",
+        "X-Archive-Level": "{doc.attr.sensitivityLevel}"
+      },
+      "body": "FILE",
+      "repeat": "EACH_DOCUMENT",
+      "read": {"fileId": "/fileId", "checksum": "/sha256", "bytes": "/size"},
+      "required": ["fileId", "checksum", "bytes"],
+      "integrity": {"sha256Value": "checksum", "sizeValue": "bytes"}
+    }
+  ],
+  "signIn": {"types": ["OAUTH2_CLIENT_CREDENTIALS"], "installationSupplies": ["tokenAddress", "clientId", "credential"]},
+  "health": {
+    "method": "GET",
+    "path": "/ready",
+    "signIn": false,
+    "rules": [
+      {"status": "503", "code": "ARC-BUSY", "outcome": "BUSY", "platformCode": "INT_DESTINATION_BUSY", "attemptUsed": false},
+      {"status": "503", "outcome": "OUTAGE"}
+    ]
+  },
+  "rules": [
+    {"status": "200", "pointer": "/replay", "equals": "true", "outcome": "ALREADY_RECEIVED"},
+    {"status": "400", "code": "ARC-FIELD", "outcome": "REFUSED"},
+    {"status": "400", "code": "ARC-LEVEL-1", "outcome": "REFUSED"},
+    {"status": "401", "code": "ARC-TOKEN", "outcome": "SIGN_IN_FAILED"},
+    {"status": "409", "code": "ARC-CONFLICT", "outcome": "REFUSED"},
+    {"status": "503", "code": "ARC-BUSY", "outcome": "BUSY", "attemptUsed": false},
+    {"status": "503", "code": "ARC-DOWN", "outcome": "OUTAGE"}
+  ],
+  "errorCodePointer": "/code",
+  "sendCorrelationId": true,
+  "testMode": "FULL",
+  "limits": {"maxDocuments": 50, "maxFileBytes": 104857600},
+  "fields": {"step": "open", "object": "fields", "expected": [], "others": true},
+  "documentAttributes": [
+    {"name": "sensitivityLevel", "values": ["STANDARD", "CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"], "default": "STANDARD"}
+  ],
+  "notes": ["Register one client for LexaVault in your login server."]
+}

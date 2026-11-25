@@ -674,9 +674,46 @@ export interface IntegrationConnection {
   lastFailureCategory?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Task 0087: a document store connection's profile and settings; null when IT has not chosen a profile yet. */
+  destination?: DestinationSettings | null;
+}
+
+/** Task 0087: what IT adds to a destination's published profile. No secret. */
+export interface DestinationSettings {
+  profileFile: string;
+  profileName?: string | null;
+  profileVersion?: string | null;
+  tokenAddress?: string | null;
+  clientId?: string | null;
+  scope?: string | null;
+  audience?: string | null;
+  clientSecretBasic: boolean;
+  sendAllFields: boolean;
+  fieldMapping: Record<string, string>;
+  sensitiveFields: string[];
+  caseLevel: 'REFUSE' | 'ON_EACH_DOCUMENT';
+  levelRefusalCodes: string[];
+  settings: Record<string, string>;
+}
+
+/** Task 0087: one profile file of the installation's profile folder. */
+export interface DestinationProfile {
+  file: string;
+  name: string | null;
+  version: string | null;
+  description: string | null;
+  signInTypes: string[];
+  fields: string[];
+  takesFields: boolean;
+  otherFields: boolean;
+  carriesLevel: boolean;
+  carriesCaseLevel: boolean;
+  notes: string[];
+  problems: string[];
 }
 
 export interface IntegrationConnectionRequest {
+  destination?: DestinationSettings;
   name: string;
   description?: string;
   purpose: IntegrationPurpose;

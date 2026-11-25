@@ -34,5 +34,6 @@ public record IntegrationConnectionResponse(
         Instant lastFailureAt,
         String lastFailureCategory,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        com.securedoc.platform.domain.integration.DestinationSettings destination) {
 }

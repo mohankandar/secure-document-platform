@@ -20,8 +20,6 @@ server and mock the API and the identity provider. Not in CI: `test:e2e` and `sc
 
 The product-name guard does not check:
 - `docs/` (history) and `CLAUDE.md` (it states the rule);
-- the known exception `SdvDeliveryAdapter` and its tests (`SdvDeliveryAdapter*Test`), which switch-over part 3
-  removes; other files may name that class, nothing else;
 - database history that can't change: changelog `017` (Liquibase keeps its file name, so the master changelog's line
   naming it is allowed), and migration `046` with its test `DocumentStoreNamesMigrationPostgresTest`, which rename the
   old stored values;

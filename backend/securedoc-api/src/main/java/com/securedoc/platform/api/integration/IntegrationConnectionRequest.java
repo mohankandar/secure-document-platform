@@ -24,5 +24,6 @@ public record IntegrationConnectionRequest(
         String pollingTimeZone,
         Integer pollingBatchLimit,
         String acknowledgementMode,
-        Boolean enabled) {
+        Boolean enabled,
+        com.securedoc.platform.domain.integration.DestinationSettings destination) {
 }

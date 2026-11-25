@@ -71,6 +71,9 @@ public class IntegrationConnectionEntity {
     private Instant lastFailureAt;
     @Column(name = "last_failure_category", length = 120)
     private String lastFailureCategory;
+    /** Task 0087: the destination settings as JSON; no secret. */
+    @Column(name = "destination_settings", columnDefinition = "TEXT")
+    private String destinationSettings;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -134,6 +137,8 @@ public class IntegrationConnectionEntity {
     public void setLastSuccessAt(Instant lastSuccessAt) { this.lastSuccessAt = lastSuccessAt; }
     public Instant getLastFailureAt() { return lastFailureAt; }
     public void setLastFailureAt(Instant lastFailureAt) { this.lastFailureAt = lastFailureAt; }
+    public String getDestinationSettings() { return destinationSettings; }
+    public void setDestinationSettings(String destinationSettings) { this.destinationSettings = destinationSettings; }
     public String getLastFailureCategory() { return lastFailureCategory; }
     public void setLastFailureCategory(String lastFailureCategory) { this.lastFailureCategory = lastFailureCategory; }
     public Instant getCreatedAt() { return createdAt; }

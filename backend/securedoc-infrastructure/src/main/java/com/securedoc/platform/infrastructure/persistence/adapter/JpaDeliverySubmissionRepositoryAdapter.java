@@ -29,6 +29,7 @@ public class JpaDeliverySubmissionRepositoryAdapter implements DeliverySubmissio
         e.setId(s.id()); e.setTenantId(s.tenantId().value()); e.setPackageId(s.packageId().value()); e.setExportCycle(s.exportCycle());
         e.setSourceSubmissionId(s.sourceSubmissionId()); e.setDestinationType(s.destinationType()); e.setStatus(s.status().name());
         e.setAttemptCount(s.attemptCount()); e.setDestinationSubmissionReference(s.destinationSubmissionReference()); e.setLastFailureCategory(s.lastFailureCategory());
+        e.setDestinationProgress(s.destinationProgress());
         e.setCreatedAt(s.createdAt()); e.setUpdatedAt(s.updatedAt()); e.setCompletedAt(s.completedAt()); submissions.save(e);
         Map<UUID,DeliverySubmissionDocumentEntity> existing=new HashMap<>();
         for(var d:documents.findBySubmissionIdOrderByFileNameAsc(s.id())) existing.put(d.getDocumentId(),d);
@@ -51,6 +52,7 @@ public class JpaDeliverySubmissionRepositoryAdapter implements DeliverySubmissio
                 DocumentId.of(d.getDocumentId()), d.getSourceDocumentId(), d.getFileName(), d.getSizeBytes(),
                 Checksum.of(d.getChecksumAlgorithm(),d.getChecksumValue()), d.isAcknowledged(), d.getDestinationDocumentReference(), d.getDestinationLocation(), d.getAcknowledgedAt())).toList();
         return new DeliverySubmission(e.getId(),TenantId.of(e.getTenantId()),PackageId.of(e.getPackageId()),e.getExportCycle(),e.getSourceSubmissionId(),e.getDestinationType(),
-                DeliverySubmissionStatus.valueOf(e.getStatus()),e.getAttemptCount(),e.getDestinationSubmissionReference(),e.getLastFailureCategory(),e.getCreatedAt(),e.getUpdatedAt(),e.getCompletedAt(),docs);
+                DeliverySubmissionStatus.valueOf(e.getStatus()),e.getAttemptCount(),e.getDestinationSubmissionReference(),e.getLastFailureCategory(),e.getCreatedAt(),e.getUpdatedAt(),e.getCompletedAt(),docs)
+                .withStoredProgress(e.getDestinationProgress());
     }
 }

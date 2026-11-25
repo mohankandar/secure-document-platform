@@ -131,6 +131,10 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 submission.acknowledgeDocument(reference.documentId(), reference.destinationDocumentReference(), reference.location(), Instant.now());
                 deliverySubmissionRepository.save(submission);
             }
+            @Override public void progressed(String note) {
+                submission.recordDestinationProgress(note, Instant.now());
+                deliverySubmissionRepository.save(submission);
+            }
         };
 
         // Task 0021: the levels are read from the stored case on every attempt, so a retry carries the same levels.
@@ -139,12 +143,13 @@ public final class PackageDocumentExportService implements ExportPackageDocument
         // Task 0060: a stored copy that can't be opened is not the destination's failure, however the adapter reports it.
         DeliverySource source = new DeliverySource(storagePort);
         List<DeliveryItem> pendingItems = new ArrayList<>();
-        for (DeliverySubmission.DocumentState state : submission.pendingDocuments()) {
+        List<DeliveryItem> acknowledgedItems = new ArrayList<>();
+        for (DeliverySubmission.DocumentState state : submission.documents()) {
             Artifact artifact = artifactByDocumentId.get(state.documentId().toString());
             if (artifact == null) throw new IllegalStateException("Delivery submission refers to an unknown package document");
             var documentLevel = levelByDocumentId.get(state.documentId().toString());
             if (documentLevel == null) throw new IllegalStateException("Delivery submission refers to a document outside the package");
-            pendingItems.add(new DeliveryItem(state.documentId(), state.sourceDocumentId(), state.fileName(),
+            (state.acknowledged() ? acknowledgedItems : pendingItems).add(new DeliveryItem(state.documentId(), state.sourceDocumentId(), state.fileName(),
                     () -> source.open(artifact.storageReference()), artifact.sizeBytes(), PDF_MIME_TYPE,
                     artifact.checksum().algorithm(), artifact.checksum().value(), documentLevel));
         }
@@ -157,7 +162,8 @@ public final class PackageDocumentExportService implements ExportPackageDocument
                 batchReference = deliveryPort.deliverBatch(new DeliveryBatch(command.tenantId(), command.packageId(), exportCycle,
                         submission.sourceSubmissionId(), submission.destinationSubmissionReference(), fields.texts(),
                         Map.of("sourceRevision", Integer.toString(exportCycle)), pendingItems, progress,
-                        pkg.sensitivityLevel(), fields.document()));
+                        pkg.sensitivityLevel(), fields.document(),
+                        new DeliveryPort.DeliveryContext(submission.destinationProgress(), fields.fieldList(), acknowledgedItems)));
                 if (batchReference.destinationSubmissionReference() != null) {
                     submission.recordDestinationSubmissionReference(batchReference.destinationSubmissionReference(), Instant.now());
                 }
@@ -288,7 +294,7 @@ public final class PackageDocumentExportService implements ExportPackageDocument
 
     private CaseFieldService.Delivery caseFields(DocumentPackage pkg) {
         return pkg.businessRecordId().map(id -> caseFields.forDelivery(id, pkg.tenantId()))
-                .orElseGet(() -> new CaseFieldService.Delivery(Map.of(), null));
+                .orElseGet(() -> new CaseFieldService.Delivery(Map.of(), null, null));
     }
     /** Kept in the export record in place of a file name (task 0023 A1/B4): the document id, never the name. */
     static String exportRecordDocumentReference(Document document) { return "document-" + document.id(); }

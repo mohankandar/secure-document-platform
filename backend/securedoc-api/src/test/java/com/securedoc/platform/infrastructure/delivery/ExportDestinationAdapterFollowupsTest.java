@@ -29,45 +29,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-/** Task 0028: a destination's 429 carries its Retry-After to the export job; the local folder has a health check. */
+/** Task 0028: Retry-After values, and the local folder's health check. The document store's are in ProfileDestinationDeliveryTest. */
 class ExportDestinationAdapterFollowupsTest {
     private final TenantId tenant = TenantId.generate();
-
-    @Test
-    void a429IsMarkedWithItsRetryAfterAndKeepsItsCode() throws Exception {
-        HttpClient client = client(new ArrayList<>(), new ArrayDeque<>(List.of(response(429, "{}", "120"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
-                client, true);
-
-        TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
-                () -> adapter.deliverBatch(batch()));
-
-        assertTrue(failure.rateLimited());
-        assertEquals(Duration.ofSeconds(120), failure.retryAfter());
-        assertEquals(LvErrorCode.DLV_002, LvErrorCodes.of(failure), "the code is unchanged");
-        assertTrue(failure.retryable());
-    }
-
-    @Test
-    void aServerErrorIsNotMarkedAsA429() throws Exception {
-        HttpClient client = client(new ArrayList<>(), new ArrayDeque<>(List.of(response(503, "{}", null))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
-                client, true);
-        TechnicalDependencyException failure = assertThrows(TechnicalDependencyException.class,
-                () -> adapter.deliverBatch(batch()));
-        assertFalse(failure.rateLimited());
-    }
-
-    @Test
-    void inlineModeStillRetriesA429InTheAdapterAsBefore() throws Exception {
-        List<HttpRequest> requests = new ArrayList<>();
-        HttpClient client = client(requests, new ArrayDeque<>(List.of(response(429, "{}", "1"), response(429, "{}", "1"),
-                response(429, "{}", "1"))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(2)), JsonMapper.builderWithJackson2Defaults().build(),
-                client);
-        assertThrows(TechnicalDependencyException.class, () -> adapter.deliverBatch(batch()));
-        assertEquals(3, requests.size(), "1 + retryMaxAttempts (2), as before");
-    }
 
     @Test
     void retryAfterIsSecondsOrAnHttpDateCappedAtOneHour() {
@@ -80,18 +44,6 @@ class ExportDestinationAdapterFollowupsTest {
         assertNull(RetryAfter.parse("soon", now));
         assertNull(RetryAfter.parse("0", now));
         assertNull(RetryAfter.parse("-5", now));
-    }
-
-    @Test
-    void theDocumentStoreHealthCheckIsTheSafeConnectionTest() throws Exception {
-        List<HttpRequest> requests = new ArrayList<>();
-        HttpClient client = client(requests, new ArrayDeque<>(List.of(response(200, "{}", null), response(503, "{}", null))));
-        SdvDeliveryAdapter adapter = new SdvDeliveryAdapter(new OneConnection(connection(0)), JsonMapper.builderWithJackson2Defaults().build(),
-                client, true);
-        adapter.checkDestination(tenant);
-        assertTrue(requests.get(0).uri().toString().endsWith("/api/v1/health"));
-        assertEquals("GET", requests.get(0).method());
-        assertThrows(TechnicalDependencyException.class, () -> adapter.checkDestination(tenant));
     }
 
     @Test
@@ -115,51 +67,4 @@ class ExportDestinationAdapterFollowupsTest {
         assertEquals(LvErrorCode.DLV_001, LvErrorCodes.of(failure));
     }
 
-    @SuppressWarnings("unchecked")
-    private static HttpClient client(List<HttpRequest> requests, Deque<HttpResponse<String>> responses) throws Exception {
-        HttpClient client = mock(HttpClient.class);
-        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(invocation -> {
-            requests.add(invocation.getArgument(0));
-            return responses.removeFirst();
-        });
-        return client;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static HttpResponse<String> response(int status, String body, String retryAfter) {
-        HttpResponse<String> response = mock(HttpResponse.class);
-        when(response.statusCode()).thenReturn(status);
-        when(response.body()).thenReturn(body);
-        Map<String, List<String>> headers = retryAfter == null ? Map.of() : Map.of("Retry-After", List.of(retryAfter));
-        when(response.headers()).thenReturn(HttpHeaders.of(headers, (a, b) -> true));
-        return response;
-    }
-
-    private DeliveryPort.DeliveryBatch batch() {
-        byte[] pdf = "%PDF-test".getBytes();
-        var item = new DeliveryPort.DeliveryItem(DocumentId.generate(), "source-doc-1", "redacted.pdf",
-                () -> new ByteArrayInputStream(pdf), pdf.length, "application/pdf", null, null);
-        return new DeliveryPort.DeliveryBatch(tenant, PackageId.generate(), 1, "source-sub-1", null, Map.of(), Map.of(),
-                List.of(item), DeliveryPort.NOOP_PROGRESS);
-    }
-
-    private IntegrationConnection connection(int retryMaxAttempts) {
-        return IntegrationConnection.create(tenant, "Store", null, IntegrationPurpose.DOCUMENT_STORE_DELIVERY,
-                IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.NONE,
-                null, "https://store.example.test", null, null, 5, retryMaxAttempts, 24, 10, 10_000_000L, 100,
-                IntegrationAcknowledgementMode.SUBMISSION_ACK, true, Instant.now());
-    }
-
-    private static final class OneConnection implements IntegrationConnectionRepository {
-        private IntegrationConnection current;
-        private OneConnection(IntegrationConnection current) { this.current = current; }
-        public List<IntegrationConnection> findByTenantId(TenantId tenantId) { return List.of(current); }
-        public Optional<IntegrationConnection> findByTenantIdAndId(TenantId tenantId, IntegrationConnectionId id) { return Optional.of(current); }
-        public Optional<IntegrationConnection> findEnabledPushSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
-        public Optional<IntegrationConnection> findEnabledScannerSourceByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal) { return Optional.empty(); }
-        public Optional<IntegrationConnection> findEnabledDocumentStoreByTenantId(TenantId tenantId) { return Optional.of(current); }
-        public boolean existsByTenantIdAndNameIgnoreCase(TenantId tenantId, String name, IntegrationConnectionId excludeId) { return false; }
-        public boolean existsByTenantIdAndClientPrincipal(TenantId tenantId, String clientPrincipal, IntegrationConnectionId excludeId) { return false; }
-        public void save(IntegrationConnection connection) { current = connection; }
-    }
 }

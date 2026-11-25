@@ -1,0 +1,64 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Records Archive API", "version": "1.0.0"},
+  "paths": {
+    "/ready": {
+      "get": {
+        "operationId": "ready",
+        "responses": {
+          "200": {"description": "ready", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "503": {"description": "busy or down", "x-error-codes": ["ARC-BUSY"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/v1/deliveries": {
+      "post": {
+        "operationId": "open",
+        "parameters": [{"name": "X-Correlation-Id", "in": "header", "required": false, "schema": {"type": "string"}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "required": ["ref", "count", "items"],
+          "properties": {
+            "ref": {"type": "string"},
+            "count": {"type": "integer", "minimum": 1},
+            "items": {"type": "array", "items": {"type": "object", "required": ["ref"], "properties": {"ref": {"type": "string"}}}},
+            "fields": {"type": "object"}
+          }}}}},
+        "responses": {
+          "201": {"description": "opened", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Delivery"}}}},
+          "200": {"description": "already open", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Delivery"}}}},
+          "400": {"description": "refused", "x-error-codes": ["ARC-FIELD"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "401": {"description": "sign-in", "x-error-codes": ["ARC-TOKEN"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "conflict", "x-error-codes": ["ARC-CONFLICT"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "503": {"description": "busy or down", "x-error-codes": ["ARC-BUSY", "ARC-DOWN"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/v1/deliveries/{deliveryId}/files": {
+      "post": {
+        "operationId": "upload",
+        "parameters": [
+          {"name": "deliveryId", "in": "path", "required": true, "schema": {"type": "string"}},
+          {"name": "X-Correlation-Id", "in": "header", "required": false, "schema": {"type": "string"}},
+          {"name": "X-Archive-File-Name", "in": "header", "required": true, "schema": {"type": "string"}},
+          {"name": "X-Archive-Item-Ref", "in": "header", "required": true, "schema": {"type": "string"}},
+          {"name": "X-Archive-Level", "in": "header", "required": false, "schema": {"type": "string", "enum": ["STANDARD", "CONFIDENTIAL", "HIGHLY_CONFIDENTIAL"]}}
+        ],
+        "requestBody": {"required": true, "content": {"application/pdf": {"schema": {"type": "string", "format": "binary"}}}},
+        "responses": {
+          "201": {"description": "received", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/File"}}}},
+          "200": {"description": "already received", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/File"}}}},
+          "400": {"description": "refused", "x-error-codes": ["ARC-LEVEL-1"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "401": {"description": "sign-in", "x-error-codes": ["ARC-TOKEN"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "503": {"description": "busy or down", "x-error-codes": ["ARC-BUSY", "ARC-DOWN"], "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Delivery": {"type": "object", "required": ["deliveryId"], "properties": {"deliveryId": {"type": "string"}, "state": {"type": "string"}, "replay": {"type": "boolean"}}},
+      "File": {"type": "object", "required": ["fileId", "sha256", "size"], "properties": {"fileId": {"type": "string"}, "sha256": {"type": "string"}, "size": {"type": "integer"}, "replay": {"type": "boolean"}}},
+      "Error": {"type": "object", "required": ["code"], "properties": {"code": {"type": "string"}}}
+    }
+  }
+}
