@@ -1,7 +1,7 @@
 # Report 0073: P4, priority Urgent / Normal / Low
 
 Date: 2026-11-24
-Branch: `feature/0073-priority`, from `dba7715` (0072 merged)
+Branch: `feature/0073-priority`, from `dba7715` (0072 merged); 0077 is merged into it
 Outcome: **DONE** (5 questions, the recommended answer taken in each)
 
 ## What was done
@@ -17,7 +17,8 @@ Outcome: **DONE** (5 questions, the recommended answer taken in each)
 | What | Result |
 |---|---|
 | `mvn -B -o -fae -Pdev-build clean package` with a throwaway PostgreSQL | 85 + 319 + 136 + 141 passed; 859 with 2 failed and 1 skipped (a new test's own mistake; an audit detail's order) |
-| After fixing both: `clean package -Dtest=CasePriorityTest,CreatePackage*,Audit*,ExternalIntake*,Package*` | 4 + 47 + 43, 0 failed; the whole set was not run again here |
+| After fixing both: `clean package -Dtest=CasePriorityTest,CreatePackage*,Audit*,ExternalIntake*,Package*` | 4 + 47 + 43, 0 failed |
+| The whole set again, `clean test` with PostgreSQL, after merging 0077 | 85 + 319 + 137 + 141 + 860, 0 failed, 1 skipped |
 | `JdbcCasePriorityPostgresTest` (in the run above) | 8, 0 failed |
 | `npm run test:standalone`, once | 10 + 217 + 19 + 195 + 95 + 168, 0 failed |
 | `load-run.mjs 1000 4g 8192 priority` | 10 of 10 checks |
