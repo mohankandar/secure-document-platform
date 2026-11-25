@@ -462,6 +462,28 @@ test('Admin › Audit trail (IT Administrator): the page and the dialog do not s
   await expect(dialog).toBeHidden();
 });
 
+test('Admin › Integrations (IT Administrator): a destination with its profile can be set up and does not scroll sideways', async ({ page }) => {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await signInAs(page, ['TENANT_IT_ADMIN'], '/admin/integrations', async () => {
+    for (const path of ['derived-deliveries/attention', 'business-admin/routing-rules', 'integrations']) await page.route(`**/api/v1/${path}`, (route) => route.fulfill(json([])));
+    await page.route('**/api/v1/platform-admin/overview', (route) => route.fulfill(json({ generatedAt: '2026-11-25T10:00:00Z', providers: [], watchedFolder: { enabled: false, schedulingEnabled: false },
+      resilience: { maxAttempts: 3, initialBackoffMs: 1000, packageProcessingMaxAttempts: 3, aiSecondaryEnabled: false } })));
+    await page.route('**/api/v1/integrations/destination-profiles', (route) => route.fulfill(json([{ file: 'archive.json', name: 'records-archive-v1', version: '1.0.0',
+      description: 'A made-up archive', signInTypes: ['OAUTH2_CLIENT_CREDENTIALS'], fields: [], takesFields: true, otherFields: true, carriesLevel: true, carriesCaseLevel: false,
+      notes: ['Register one client for LexaVault in your login server.'], problems: [] }])));
+  });
+  await page.getByRole('button', { name: 'Add a connection' }).tap();
+  const sheet = page.getByRole('dialog', { name: 'Add a connection' });
+  await sheet.getByText('Send documents', { exact: true }).tap();
+  await sheet.getByRole('button', { name: 'Next' }).tap();
+  await sheet.getByLabel('Destination’s profile').selectOption('archive.json');
+  await sheet.getByLabel('How LexaVault proves who it is').selectOption('OAUTH2_CLIENT_CREDENTIALS');
+  for (const label of ['Destination’s profile', 'Where the token comes from', 'Client ID', 'Other field names', 'A case above Standard']) {
+    await expect(sheet.getByLabel(label)).toBeVisible();
+  }
+  expect(await sideways(page)).toBe(0);
+});
+
 test('Admin › Redaction & retention (Business Administrator): the Sensitive data card, its preview and the confirm step do not scroll sideways', async ({ page }) => {
   const policy = { enabledEntityTypes: ['SSN', 'DATE_OF_BIRTH', 'CREDIT_CARD_NUMBER', 'CREDIT_SCORE'], autoRedactThreshold: 0.8, reviewMode: 'UNCERTAIN_ONLY', maskSsnLastFour: true };
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });

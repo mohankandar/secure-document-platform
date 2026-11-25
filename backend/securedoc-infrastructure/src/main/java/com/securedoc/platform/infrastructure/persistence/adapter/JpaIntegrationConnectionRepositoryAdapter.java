@@ -14,6 +14,8 @@ import java.util.Optional;
 
 @Component
 public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationConnectionRepository {
+    private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
+
     private final SpringDataIntegrationConnectionRepository repository;
 
     public JpaIntegrationConnectionRepositoryAdapter(SpringDataIntegrationConnectionRepository repository) {
@@ -109,6 +111,7 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
         entity.setLastSuccessAt(connection.lastSuccessAt());
         entity.setLastFailureAt(connection.lastFailureAt());
         entity.setLastFailureCategory(connection.lastFailureCategory());
+        entity.setDestinationSettings(connection.destination() == null ? null : JSON.writeValueAsString(connection.destination()));
         entity.setCreatedAt(connection.createdAt());
         entity.setUpdatedAt(connection.updatedAt());
         repository.save(entity);
@@ -127,6 +130,8 @@ public class JpaIntegrationConnectionRepositoryAdapter implements IntegrationCon
                 IntegrationAcknowledgementMode.valueOf(entity.getAcknowledgementMode()),
                 entity.isEnabled(), entity.getConfigurationVersion(), IntegrationHealthStatus.valueOf(entity.getHealthStatus()),
                 entity.getLastSuccessAt(), entity.getLastFailureAt(), entity.getLastFailureCategory(),
-                entity.getCreatedAt(), entity.getUpdatedAt());
+                entity.getCreatedAt(), entity.getUpdatedAt(),
+                entity.getDestinationSettings() == null ? null
+                        : JSON.readValue(entity.getDestinationSettings(), com.securedoc.platform.domain.integration.DestinationSettings.class));
     }
 }

@@ -24,9 +24,12 @@ public class IntegrationConnectionController {
     private final IntegrationConnectionService service;
     private final DraftConnectionTestService draftTestService;
     private final RequestContextResolver contextResolver;
+    private final com.securedoc.platform.application.port.out.DestinationProfilePort destinationProfiles;
 
     public IntegrationConnectionController(IntegrationConnectionService service, DraftConnectionTestService draftTestService,
-                                           RequestContextResolver contextResolver) {
+                                           RequestContextResolver contextResolver,
+                                           com.securedoc.platform.application.port.out.DestinationProfilePort destinationProfiles) {
+        this.destinationProfiles = destinationProfiles;
         this.service = service;
         this.draftTestService = draftTestService;
         this.contextResolver = contextResolver;
@@ -37,6 +40,13 @@ public class IntegrationConnectionController {
     public ResponseEntity<List<IntegrationConnectionResponse>> list(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);
         return ResponseEntity.ok(service.list(principal.tenantId()).stream().map(this::toResponse).toList());
+    }
+
+    /** Task 0087: the destinations' published profiles in the installation's profile folder (names and codes only). */
+    @GetMapping("/destination-profiles")
+    @RequireCapability(UserCapability.TENANT_INTEGRATION_MANAGE)
+    public ResponseEntity<List<com.securedoc.platform.application.port.out.DestinationProfilePort.Profile>> destinationProfiles() {
+        return ResponseEntity.ok(destinationProfiles.list());
     }
 
     @GetMapping("/{connectionId}")
@@ -116,7 +126,7 @@ public class IntegrationConnectionController {
                 parseOptional(body.pollingScheduleType(), IntegrationPollingScheduleType.class), body.pollingIntervalMinutes(), parseLocalTime(body.pollingLocalTime()),
                 body.pollingTimeZone(), body.pollingBatchLimit(),
                 parse(body.acknowledgementMode(), IntegrationAcknowledgementMode.class, "acknowledgement mode"),
-                Boolean.TRUE.equals(body.enabled()));
+                Boolean.TRUE.equals(body.enabled()), body.destination());
     }
 
     private <E extends Enum<E>> E parse(String raw, Class<E> type, String label) {
@@ -159,6 +169,6 @@ public class IntegrationConnectionController {
                 connection.pollingLocalTime() == null ? null : connection.pollingLocalTime().toString(), connection.pollingTimeZone(), connection.pollingBatchLimit(),
                 connection.acknowledgementMode().name(), connection.enabled(), connection.configurationVersion(),
                 connection.healthStatus().name(), connection.lastSuccessAt(), connection.lastFailureAt(),
-                connection.lastFailureCategory(), connection.createdAt(), connection.updatedAt());
+                connection.lastFailureCategory(), connection.createdAt(), connection.updatedAt(), connection.destination());
     }
 }

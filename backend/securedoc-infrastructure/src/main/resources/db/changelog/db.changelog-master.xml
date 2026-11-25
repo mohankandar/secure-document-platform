@@ -70,4 +70,5 @@
     <include file="db/changelog/084-second-check.xml"/>
     <include file="db/changelog/072-intake-refusals.xml"/>
     <include file="db/changelog/085-document-context.xml"/>
+    <include file="db/changelog/067-destination-profiles.xml"/>
 </databaseChangeLog>

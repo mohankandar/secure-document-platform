@@ -271,12 +271,13 @@ public final class CaseFieldService {
         // Checked without "required": a case from before a field became required is still delivered.
         FieldSet set = FieldSet.of(active.stream().map(d -> d.spec().toBuilder().required(false).build()).toList());
         var valid = set.validate(sent);
-        return new Delivery(Map.copyOf(texts), valid.accepted() && !sent.isEmpty() ? FieldDelivery.write(set, valid) : null);
+        return new Delivery(Map.copyOf(texts), valid.accepted() && !sent.isEmpty() ? FieldDelivery.write(set, valid) : null, set);
     }
 
-    /** @param document platform-core's field delivery document; null when there is nothing to send or a rule has changed since */
-    public record Delivery(Map<String, String> texts, String document) {
-        static final Delivery NONE = new Delivery(Map.of(), null);
+    /** @param fieldList the field list the document was written with (null without values)
+        @param document platform-core's field delivery document; null when there is nothing to send or a rule has changed since */
+    public record Delivery(Map<String, String> texts, String document, FieldSet fieldList) {
+        static final Delivery NONE = new Delivery(Map.of(), null, null);
 
         @Override
         public String toString() {

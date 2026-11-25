@@ -17,6 +17,7 @@ public class DeliverySubmissionEntity {
     @Column(name="attempt_count", nullable=false) private int attemptCount;
     @Column(name="destination_submission_reference", length=255) private String destinationSubmissionReference;
     @Column(name="last_failure_category", length=120) private String lastFailureCategory;
+    @Column(name="destination_progress", columnDefinition="TEXT") private String destinationProgress;
     @Column(name="created_at", nullable=false) private Instant createdAt;
     @Column(name="updated_at", nullable=false) private Instant updatedAt;
     @Column(name="completed_at") private Instant completedAt;
@@ -29,6 +30,7 @@ public class DeliverySubmissionEntity {
     public String getStatus(){return status;} public void setStatus(String v){status=v;}
     public int getAttemptCount(){return attemptCount;} public void setAttemptCount(int v){attemptCount=v;}
     public String getDestinationSubmissionReference(){return destinationSubmissionReference;} public void setDestinationSubmissionReference(String v){destinationSubmissionReference=v;}
+    public String getDestinationProgress(){return destinationProgress;} public void setDestinationProgress(String v){destinationProgress=v;}
     public String getLastFailureCategory(){return lastFailureCategory;} public void setLastFailureCategory(String v){lastFailureCategory=v;}
     public Instant getCreatedAt(){return createdAt;} public void setCreatedAt(Instant v){createdAt=v;}
     public Instant getUpdatedAt(){return updatedAt;} public void setUpdatedAt(Instant v){updatedAt=v;}

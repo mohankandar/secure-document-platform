@@ -96,13 +96,13 @@ mvn -B dependency:tree -pl securedoc-api,securedoc-setup -am "-Dincludes=com.doc
 
 - `securedoc-api` (the app): `platform-identity-core`, `platform-identity-jdbc`, `platform-identity-spring`,
   `platform-licensing`, `platform-licensing-spring`, `platform-monitoring`, `platform-monitoring-spring`,
-  `platform-notifications`, `platform-notifications-spring`, `platform-crypto`, `platform-crypto-spring`, `platform-erase-log`, `platform-erase-log-spring`, `platform-fields`,
+  `platform-notifications`, `platform-notifications-spring`, `platform-crypto`, `platform-crypto-spring`, `platform-erase-log`, `platform-erase-log-spring`, `platform-fields`, `platform-integration` (task 0087, `DESTINATIONS.md`),
   `platform-outbound-spring`, `platform-outbound` and `platform-errors`, all `1.1.0`, compile scope.
   `platform-setup` and `platform-identity-testkit` only in test scope. The app still makes its own outbound
   rules (`OutboundRulesConfig`; a proxy with sign-in is allowed since task 0059). HttpClient (5.6.5, core 5.4.4) comes from Spring Boot's BOM,
   the same versions platform-core is built with.
-- `securedoc-setup`: `platform-setup` with `platform-crypto` and `platform-integration`. `platform-setup` and
-  `platform-integration` are never on the app's classpath; `Build-LexaVault-All`
+- `securedoc-setup`: `platform-setup` with `platform-crypto` and `platform-integration`. `platform-setup` is
+  never on the app's classpath; `Build-LexaVault-All`
   checks the app jar (`BOOT-INF/lib`) for them.
 
 A `401 Unauthorized` from `maven.pkg.github.com` means the token is missing, expired or lacks `read:packages`, or the

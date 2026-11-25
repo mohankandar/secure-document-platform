@@ -189,6 +189,16 @@ test.describe('Admin (IT Administrator)', () => {
     await scan(page, 'Admin: connection editor');
   });
 
+  test('Integrations: a destination with its profile', async ({ page }) => {
+    await signInAs(page, 'it', '/admin/integrations');
+    await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to the document store/ }).click();
+    await page.getByRole('region', { name: 'Sending to the document store' }).getByRole('button', { name: 'Edit' }).click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByLabel('Destination’s profile').selectOption('archive.json');
+    await expect(sheet.getByLabel('A case above Standard')).toBeVisible();
+    await scan(page, 'Admin: a destination with its profile');
+  });
+
   test('Sign-in', async ({ page }) => {
     await signInAs(page, 'it', '/admin/identity');
     await expect(page.getByRole('region', { name: 'Sign-in in use' })).toBeVisible();

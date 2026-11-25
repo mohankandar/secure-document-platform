@@ -6,11 +6,7 @@
 #
 # Not checked, and why:
 #   - docs/            history: task files, reports, designs (they record what was decided, names included);
-#   - CLAUDE.md        the working instructions, which state the rule itself and name the known exception;
-#   - the known exception, to be removed in switch-over part 3 (CLAUDE.md):
-#       backend/securedoc-infrastructure/src/main/java/.../delivery/SdvDeliveryAdapter.java
-#       its tests: backend/securedoc-api/src/test/java/.../delivery/SdvDeliveryAdapter*Test.java
-#     (other files may name the class SdvDeliveryAdapter itself, nothing else);
+#   - CLAUDE.md        the working instructions, which state the rule itself;
 #   - database history that can't change: changelog 017 (Liquibase keeps its file name and checksum, so the master
 #     changelog's line naming that file is allowed too), and migration 046 with its test, which rename the old values;
 #   - the owner's Docker containers sdv-postgres and sdv-vault: safety lists name them so scripts never touch them;
@@ -20,14 +16,12 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 pattern="$(head -n 1 scripts/ci/product-names.txt | tr -d '\r')"
-allowed='SdvDeliveryAdapter|sdv-postgres|sdv-vault|017-sdv-delivery\.xml'
+allowed='sdv-postgres|sdv-vault|017-sdv-delivery\.xml'
 mapfile -t files < <(git ls-files \
   | grep -E '\.(java|kt|ts|tsx|js|mjs|cjs|sql|json|xml|ya?ml|properties|ps1|sh|cmd|csv|html|css|md)$' \
   | grep -vE '^docs/' \
   | grep -vE '^CLAUDE\.md$' \
   | grep -vE '^scripts/ci/check-product-names\.sh$' \
-  | grep -vE '/delivery/SdvDeliveryAdapter\.java$' \
-  | grep -vE '/delivery/SdvDeliveryAdapter[A-Za-z]*Test\.java$' \
   | grep -vE '/db/changelog/017-sdv-delivery\.xml$' \
   | grep -vE '/db/changelog/046-document-store-names\.xml$' \
   | grep -vE '/DocumentStoreNamesMigrationPostgresTest\.java$')

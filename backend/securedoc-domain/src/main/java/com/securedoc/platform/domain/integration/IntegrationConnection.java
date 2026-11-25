@@ -48,7 +48,9 @@ public record IntegrationConnection(
         Instant lastFailureAt,
         String lastFailureCategory,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        /* Task 0087: the destination's profile and what the installation adds to it; null for every other connection. */
+        DestinationSettings destination) {
 
     public static final int DEFAULT_TIMEOUT_SECONDS = 60;
     public static final int DEFAULT_RETRY_MAX_ATTEMPTS = 2;
@@ -122,6 +124,48 @@ public record IntegrationConnection(
         Objects.requireNonNull(updatedAt, "Updated time is required");
         validateCompatibility(purpose, direction, providerType, authenticationType, clientPrincipal, endpoint, fileShareRoot,
                 secretReference, acknowledgementMode, enabled);
+        validateDestination(purpose, authenticationType, destination);
+    }
+
+    /** Without destination settings (every connection that is not a document store's). */
+    public IntegrationConnection(IntegrationConnectionId id, TenantId tenantId, String name, String description,
+                                 IntegrationPurpose purpose, IntegrationDirection direction, IntegrationProviderType providerType,
+                                 IntegrationAuthenticationType authenticationType, String clientPrincipal, String endpoint,
+                                 String fileShareRoot, String secretReference, int timeoutSeconds, int retryMaxAttempts,
+                                 int incompleteWindowHours, int maxDocumentsPerIntake, long maxPdfSizeBytes, int maxPdfPages,
+                                 IntegrationPollingScheduleType pollingScheduleType, Integer pollingIntervalMinutes,
+                                 LocalTime pollingLocalTime, String pollingTimeZone, Integer pollingBatchLimit,
+                                 IntegrationAcknowledgementMode acknowledgementMode, boolean enabled, int configurationVersion,
+                                 IntegrationHealthStatus healthStatus, Instant lastSuccessAt, Instant lastFailureAt,
+                                 String lastFailureCategory, Instant createdAt, Instant updatedAt) {
+        this(id, tenantId, name, description, purpose, direction, providerType, authenticationType, clientPrincipal, endpoint,
+                fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours, maxDocumentsPerIntake,
+                maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime, pollingTimeZone,
+                pollingBatchLimit, acknowledgementMode, enabled, configurationVersion, healthStatus, lastSuccessAt, lastFailureAt,
+                lastFailureCategory, createdAt, updatedAt, null);
+    }
+
+    /** The same connection with these destination settings (checked again). */
+    public IntegrationConnection withDestination(DestinationSettings settings) {
+        return new IntegrationConnection(id, tenantId, name, description, purpose, direction, providerType, authenticationType,
+                clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
+                maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
+                pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion, healthStatus, lastSuccessAt,
+                lastFailureAt, lastFailureCategory, createdAt, updatedAt, settings);
+    }
+
+    private static void validateDestination(IntegrationPurpose purpose, IntegrationAuthenticationType authenticationType,
+                                            DestinationSettings destination) {
+        if (destination != null && purpose != IntegrationPurpose.DOCUMENT_STORE_DELIVERY) {
+            throw new IllegalArgumentException("Only a document store connection has destination settings");
+        }
+        if (destination != null && authenticationType == IntegrationAuthenticationType.OAUTH2_CLIENT_CREDENTIALS
+                && (destination.tokenAddress() == null || destination.clientId() == null)) {
+            throw new IllegalArgumentException("OAuth 2.0 sign-in to a destination needs its token address and client ID");
+        }
+        if (destination != null && authenticationType == IntegrationAuthenticationType.BASIC && destination.clientId() == null) {
+            throw new IllegalArgumentException("Basic sign-in to a destination needs its user name");
+        }
     }
 
     public static IntegrationConnection create(
@@ -209,7 +253,7 @@ public record IntegrationConnection(
                 incompleteWindowHours, maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes,
                 pollingLocalTime, pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion + 1,
                 enabled ? IntegrationHealthStatus.UNKNOWN : IntegrationHealthStatus.DISABLED,
-                lastSuccessAt, lastFailureAt, lastFailureCategory, createdAt, now);
+                lastSuccessAt, lastFailureAt, lastFailureCategory, createdAt, now, destination);
     }
 
     public IntegrationConnection recordOperationalSuccess(Instant now) {
@@ -217,7 +261,7 @@ public record IntegrationConnection(
                 clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
                 maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
                 pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion,
-                enabled ? IntegrationHealthStatus.HEALTHY : IntegrationHealthStatus.DISABLED, now, lastFailureAt, null, createdAt, now);
+                enabled ? IntegrationHealthStatus.HEALTHY : IntegrationHealthStatus.DISABLED, now, lastFailureAt, null, createdAt, now, destination);
     }
 
     public IntegrationConnection recordOperationalFailure(String failureCategory, Instant now) {
@@ -225,7 +269,7 @@ public record IntegrationConnection(
                 clientPrincipal, endpoint, fileShareRoot, secretReference, timeoutSeconds, retryMaxAttempts, incompleteWindowHours,
                 maxDocumentsPerIntake, maxPdfSizeBytes, maxPdfPages, pollingScheduleType, pollingIntervalMinutes, pollingLocalTime,
                 pollingTimeZone, pollingBatchLimit, acknowledgementMode, enabled, configurationVersion,
-                enabled ? IntegrationHealthStatus.DEGRADED : IntegrationHealthStatus.DISABLED, lastSuccessAt, now, failureCategory, createdAt, now);
+                enabled ? IntegrationHealthStatus.DEGRADED : IntegrationHealthStatus.DISABLED, lastSuccessAt, now, failureCategory, createdAt, now, destination);
     }
 
     public boolean pollingSource() {
@@ -309,9 +353,8 @@ public record IntegrationConnection(
             throw new IllegalArgumentException("Document store delivery requires HTTP_API provider in V1");
         }
         if (purpose == IntegrationPurpose.DOCUMENT_STORE_DELIVERY
-                && (authenticationType == IntegrationAuthenticationType.OAUTH2_CLIENT_CREDENTIALS
-                || authenticationType == IntegrationAuthenticationType.MTLS)) {
-            throw new IllegalArgumentException("V1 document store delivery supports NONE, BASIC, API_KEY, or JWT authentication; OAuth2/mTLS require a provider-specific connector");
+                && authenticationType == IntegrationAuthenticationType.MTLS) {
+            throw new IllegalArgumentException("Document store delivery supports NONE, BASIC, API_KEY, JWT or OAUTH2_CLIENT_CREDENTIALS sign-in");
         }
         if (purpose == IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY
                 && providerType != IntegrationProviderType.HTTP_API

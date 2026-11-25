@@ -113,6 +113,11 @@ async function openIntegrations(page: Page, calls: Call[], connections: readonly
     }
     if (url.pathname === '/api/v1/business-admin/routing-rules/destinations') return json([{ connectionId: 'c-title', name: 'Title team folder', providerType: 'FILE_SHARE', enabled: false, healthStatus: 'DISABLED' }]);
     if (url.pathname === '/api/v1/integrations/c-poll/polling') return json({ connectionId: 'c-poll', name: 'Servicing outbox', enabled: true, healthStatus: 'DEGRADED', nextScheduledAt: minsAgo(-10), recentRuns: [] });
+    if (url.pathname === '/api/v1/integrations/destination-profiles') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ file: 'archive.json', name: 'records-archive-v1', version: '1.0.0', description: 'A made-up archive', signInTypes: ['OAUTH2_CLIENT_CREDENTIALS'],
+      fields: ['caseNumber*'], takesFields: true, otherFields: true, carriesLevel: true, carriesCaseLevel: false, notes: ['Register one client for LexaVault.'], problems: [] },
+      { file: 'damaged.json', name: null, version: null, description: null, signInTypes: [], fields: [], takesFields: false, otherFields: false, carriesLevel: false, carriesCaseLevel: false, notes: [], problems: ['INT_PROFILE_SCHEMA /steps'] }]) });
+    }
     if (url.pathname === '/api/v1/integrations/test-draft') {
       const draft = calls.at(-1)!.body as { endpoint?: string };
       return json(draft.endpoint?.includes('169.254.169.254') ? { works: false, reasonCode: 'ADDRESS_NOT_ALLOWED' } : { works: true, reasonCode: null });
@@ -347,6 +352,33 @@ test('Edit a saved connection: Test connection tests the saved settings, and aft
   await expect(sheet.getByText("The connection didn't work: Connection settings not valid · LV-CFG-003. Cloud metadata addresses are always refused.")).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Save' })).toBeEnabled();
   expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+});
+
+test('0087: a destination: choose its profile, its sign-in and its field names; what it can’t carry is said; the draft holds it all', async ({ page }) => {
+  const calls: Call[] = [];
+  await openIntegrations(page, calls);
+  await page.getByRole('group', { name: 'Connection groups' }).getByRole('button', { name: /^Sending to the document store/ }).click();
+  const region = page.getByRole('region', { name: 'Sending to the document store' });
+  await region.getByRole('button', { name: 'Edit' }).click();
+  const sheet = page.getByRole('dialog');
+  await expect(sheet.getByText('damaged.json can’t be used: INT_PROFILE_SCHEMA /steps')).toBeVisible();
+  await sheet.getByLabel('Destination’s profile').selectOption({ label: 'records-archive-v1 1.0.0' });
+  await expect(sheet.getByText('Register one client for LexaVault.')).toBeVisible();
+  await expect(sheet.getByText('This destination takes a level for each document, but none for the whole case.')).toBeVisible();
+  await sheet.getByLabel('Where the token comes from').fill('https://login.northwind.example/token');
+  await sheet.getByLabel('Client ID').fill('lexavault');
+  await sheet.getByLabel('Other field names').fill('loan');
+  await expect(sheet.getByText('“loan” is not “their name=case field key”.')).toBeVisible();
+  await sheet.getByLabel('Other field names').fill('loan=contract_number');
+  await sheet.getByLabel('Sensitive fields that may be sent').fill('member_ref');
+  await sheet.getByLabel('A case above Standard').selectOption('ON_EACH_DOCUMENT');
+  await sheet.getByRole('button', { name: 'Next: test and save' }).click();
+  await expect(sheet.getByText('records-archive-v1 1.0.0')).toBeVisible();
+  await sheet.getByRole('button', { name: 'Test connection' }).click();
+  await expect(sheet.getByText('The connection works.')).toBeVisible();
+  expect(calls.find((c) => c.path === '/api/v1/integrations/test-draft')?.body).toMatchObject({ destination: { profileFile: 'archive.json',
+    tokenAddress: 'https://login.northwind.example/token', clientId: 'lexavault', sendAllFields: true, fieldMapping: { loan: 'contract_number' },
+    sensitiveFields: ['member_ref'], caseLevel: 'ON_EACH_DOCUMENT' } });
 });
 
 test('0039: a receiving connection stops at the case limits (50 files, 500 pages) and says why; a source stored higher shows and saves the cap', async ({ page }) => {
