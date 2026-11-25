@@ -12,7 +12,9 @@ public record CreatePackageRequest(
         @NotBlank(message = "packageType is required") String packageType,
         Map<String,String> businessIdentifiers,
         Map<String,String> metadata,
-        JsonNode sensitivityLevel
+        JsonNode sensitivityLevel,
+        /* Task 0073: URGENT, NORMAL or LOW; optional. */
+        String priority
 ) {
     public CreatePackageRequest {
         RequestValues.requireNoNullValues(businessIdentifiers, "businessIdentifiers");
@@ -22,7 +24,7 @@ public record CreatePackageRequest(
     }
 
     public CreatePackageRequest(String packageType, Map<String,String> businessIdentifiers, Map<String,String> metadata) {
-        this(packageType, businessIdentifiers, metadata, null);
+        this(packageType, businessIdentifiers, metadata, null, null);
     }
 
     /** The level as sent: null when absent or JSON null, the text of a string, otherwise its JSON form. */

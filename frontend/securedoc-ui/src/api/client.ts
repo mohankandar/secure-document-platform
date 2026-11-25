@@ -37,6 +37,7 @@ import type {
   DashboardStage,
   PlatformAdminOverview,
   ProcessingCapacity,
+  SourcePriorities,
   ProductTelemetryStatus,
   CurrentUser,
   TechnicalExceptionDetail,
@@ -410,6 +411,18 @@ class ApiClient {
 
   async runPlatformHealthCheck(): Promise<PlatformAdminOverview> {
     return this.request('/platform-admin/health-check', { method: 'POST' });
+  }
+
+  async changeCasePriority(packageId: string, priority: string): Promise<{ priority: string }> {
+    return this.request(`/packages/${packageId}/priority`, { method: 'PUT', body: JSON.stringify({ priority }) });
+  }
+
+  async getSourcePriorities(): Promise<SourcePriorities> {
+    return this.request('/source-priorities');
+  }
+
+  async changeSourcePriority(source: string, priority: string): Promise<SourcePriorities> {
+    return this.request(`/source-priorities/${encodeURIComponent(source)}`, { method: 'PUT', body: JSON.stringify({ priority }) });
   }
 
   async getProcessingCapacity(): Promise<ProcessingCapacity> {

@@ -6,7 +6,7 @@ import {
   CAP, CASE_TILES, SOURCE_LABEL, STAGES, caseTitle, needsYou, openFindingsByPackage, relativeTime, stageLabel, stageOf, tileOf,
   useCaseFields, usePackages, useReviewQueue, type StageKey,
 } from './data';
-import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits } from './words';
+import { CASE_GROUPS, NAV, STAGE_NAMES, caseSearchPlaceholders, firstThatFits, PRIORITY_NAMES, priorityChoice, priorityRank } from './words';
 import { ExportChip, Kbd, Notice, Spinner, StageChip } from './atoms';
 import { exportNextStep, exportStateOf, exportStatusLabel, isExporting } from './exportRules';
 import CaseDrawer from './CaseDrawer';
@@ -81,7 +81,13 @@ export default function Desk({ caps }: { caps: string[] }) {
     const matches = all
       .filter((p) => !q || p.businessIdentifiers.some((i) => i.value.toLowerCase().includes(q)))
       .filter((p) => filter === 'all' || (filter === 'you' ? needsYou(p, caps) : tileOf(p) === filter))
-      .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+      .sort((a, b) => {
+        // Task 0073: what waits for a person is Urgent, Normal, Low, the oldest first; the rest is newest first.
+        const [youA, youB] = [needsYou(a, caps), needsYou(b, caps)];
+        if (youA !== youB) return youA ? -1 : 1;
+        if (youA) return priorityRank(a.priority) - priorityRank(b.priority) || +new Date(a.createdAt) - +new Date(b.createdAt);
+        return +new Date(b.updatedAt) - +new Date(a.updatedAt);
+      });
 
     if (filter !== 'all') {
       return [{ key: filter, title: filter === 'you' ? CASE_GROUPS.needsYou : stageLabel(filter), cases: matches }];
@@ -278,6 +284,7 @@ function CaseRow({ pkg, caps, open, selected, bulk }: { pkg: PackageSummary; cap
         <span className="cf-case-docs">{pkg.documentCount} {pkg.documentCount === 1 ? 'doc' : 'docs'}</span>
         <span className="cf-case-next" data-stage={stage}>
           {next}
+          {priorityChoice(pkg.priority) !== 'NORMAL' && <span className="cf-case-why">{PRIORITY_NAMES[priorityChoice(pkg.priority)]}</span>}
           {/* Task 0038: why it stopped or waits, and where it goes; codes and the destination's name only. */}
           {reason && <span className="cf-case-why">{reason}</span>}
           {destination && <span className="cf-case-to">{destination}</span>}

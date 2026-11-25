@@ -1,6 +1,6 @@
 package com.securedoc.platform.domain.pipeline;
 
-/** Job priority (design section 7). Stored from task 0027; NORMAL for every job until P4. */
+/** Job priority (design section 7). Task 0073: a case is URGENT, NORMAL or LOW; BULK is for migrations (P5). */
 public enum PipelinePriority {
     URGENT(1),
     NORMAL(2),

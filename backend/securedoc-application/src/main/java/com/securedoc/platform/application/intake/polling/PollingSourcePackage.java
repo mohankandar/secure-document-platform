@@ -11,11 +11,20 @@ public record PollingSourcePackage(
         Map<String,String> businessIdentifiers,
         Map<String,String> metadata,
         List<PollingSourceDocument> documents,
-        String caseSensitivityLevel) {
+        String caseSensitivityLevel,
+        /* Task 0073: as sent, or null. */
+        String priority) {
     public PollingSourcePackage {
         businessIdentifiers = businessIdentifiers == null ? Map.of() : Map.copyOf(businessIdentifiers);
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
         documents = documents == null ? List.of() : List.copyOf(documents);
+    }
+
+    public PollingSourcePackage(String externalSourcePackageId, String sourceRevision, boolean retry,
+                                Map<String,String> businessIdentifiers, Map<String,String> metadata,
+                                List<PollingSourceDocument> documents, String caseSensitivityLevel) {
+        this(externalSourcePackageId, sourceRevision, retry, businessIdentifiers, metadata, documents,
+                caseSensitivityLevel, null);
     }
 
     public PollingSourcePackage(String externalSourcePackageId, String sourceRevision, boolean retry,

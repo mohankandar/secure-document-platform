@@ -65,6 +65,12 @@ Recreating the identical active/accepted source package+revision returns the exi
 
 If a prior identical attempt expired, `retry=true` creates the next internal attempt number while preserving the expired attempt. `retry=true` without any prior matching source identity is rejected.
 
+### Priority (task 0073)
+
+Optional field `priority` on the request: `URGENT`, `NORMAL` or `LOW` (any case). Nothing sent: the default IT set for the source, else `NORMAL`. Anything else is refused with `400` and `LV-INT-015`; nothing is taken in. The priority is part of the request: the same package and revision sent again with another one is `409 SOURCE_REVISION_REUSED`. A reviewer may change it in LexaVault afterwards.
+
+Cases are worked on Urgent, Normal, Low, the oldest first; while several wait, at least one job in five is a lower one's, so none waits for ever. The scanner intake takes the same field; the polling contract too. A watched folder's trigger file may hold `"priority"`; a wrong one makes the drop a malformed trigger (`LV-INT-031`).
+
 ### Sensitivity levels (task 0021)
 
 Optional. The source system sets them; LexaVault keeps them, passes them on unchanged when it exports, and never changes them. They limit nothing inside LexaVault.

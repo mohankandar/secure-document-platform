@@ -117,7 +117,7 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
         return new PollingSourcePackage(p.externalSourcePackageId(), p.sourceRevision(), Boolean.TRUE.equals(p.retry()),
                 p.businessIdentifiers(), p.metadata(), p.documents() == null ? List.of() : p.documents().stream()
                 .map(d -> new PollingSourceDocument(d.externalSourceDocumentId(), d.fileName(), d.sha256(),
-                        sentLevel(d.sensitivityLevel()))).toList(), sentLevel(p.caseSensitivityLevel()));
+                        sentLevel(d.sensitivityLevel()))).toList(), sentLevel(p.caseSensitivityLevel()), sentLevel(p.priority()));
     }
 
     private HttpRequest.Builder authorized(IntegrationConnection c, HttpRequest.Builder builder) {
@@ -176,7 +176,8 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
     private record DiscoveryEnvelope(List<SourcePackage> items) {}
     private record SourcePackage(String externalSourcePackageId, String sourceRevision, Boolean retry,
                                  Map<String,String> businessIdentifiers, Map<String,String> metadata, List<SourceDocument> documents,
-                                 tools.jackson.databind.JsonNode caseSensitivityLevel) {}
+                                 tools.jackson.databind.JsonNode caseSensitivityLevel,
+                                 tools.jackson.databind.JsonNode priority) {}
     private record SourceDocument(String externalSourceDocumentId, String fileName, String sha256,
                                   tools.jackson.databind.JsonNode sensitivityLevel) {}
 
