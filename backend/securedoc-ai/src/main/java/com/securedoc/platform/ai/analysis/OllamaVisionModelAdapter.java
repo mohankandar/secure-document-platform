@@ -49,14 +49,17 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
     private static final Logger log = LoggerFactory.getLogger(OllamaVisionModelAdapter.class);
 
     public static final String PROMPT_VERSION = "vision-prompt-v2";
+    /** Task 0083: the second check's own prompt, asked of the same model. */
+    public static final String SECOND_CHECK_VERSION = "second-check-vision-v1";
     private static final String COORDINATES = "Give each box as [x1, y1, x2, y2] on a 0 to 1000 scale of the image "
             + "width and height, with the origin at the top left.";
     private static final double SCALE = 1000;
     private static final int CONTEXT_TOKENS = 8192;
     private static final int ANSWER_TOKENS = 2048;
     private static final int ATTEMPTS = 2;
-    private static final String PROMPT = prompt();
 
+    private final String promptVersion;
+    private final String prompt;
     private final String model;
     private final String digest;
     private final Duration timeout;
@@ -68,6 +71,13 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
     private final OllamaModelDigests digests;
 
     public OllamaVisionModelAdapter(String baseUrl, String model, String digest, Duration timeout, String keepAlive) {
+        this(baseUrl, model, digest, timeout, keepAlive, PROMPT_VERSION);
+    }
+
+    public OllamaVisionModelAdapter(String baseUrl, String model, String digest, Duration timeout, String keepAlive,
+                                    String promptVersion) {
+        this.promptVersion = promptVersion;
+        this.prompt = prompt(promptVersion);
         String base = Objects.requireNonNull(baseUrl, "baseUrl").trim().replaceAll("/+$", "");
         if (model == null || model.isBlank()) throw new IllegalArgumentException("The vision model must be named");
         String pinned = digest == null ? "" : digest.trim().toLowerCase(Locale.ROOT).replaceFirst("^sha256:", "");
@@ -111,7 +121,7 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
         if (installed.isEmpty()) return notRead(page, LvErrorCode.AI_004, "MODEL_NOT_INSTALLED");
         if (!installed.get().equals(digest)) {
             log.error("VISION_MODEL_REFUSED code={} reasonCode=MODEL_DIGEST_MISMATCH model={} approved={} installed={}",
-                    LvErrorCode.AI_008.code(), model, digest, AiModel.of(model, PROMPT_VERSION, installed.get()).digest());
+                    LvErrorCode.AI_008.code(), model, digest, AiModel.of(model, promptVersion, installed.get()).digest());
             return notRead(page, LvErrorCode.AI_008, "MODEL_DIGEST_MISMATCH");
         }
         return null;
@@ -126,7 +136,7 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
         body.put("model", model);
         body.put("stream", false);
         body.put("keep_alive", keepAlive);
-        body.put("messages", List.of(Map.of("role", "user", "content", PROMPT,
+        body.put("messages", List.of(Map.of("role", "user", "content", prompt,
                 "images", List.of(Base64.getEncoder().encodeToString(image.png())))));
         body.put("options", Map.of("temperature", 0, "num_ctx", CONTEXT_TOKENS, "num_predict", ANSWER_TOKENS));
         HttpRequest request = HttpRequest.newBuilder(chat).timeout(timeout).header("Content-Type", "application/json")
@@ -183,7 +193,7 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
             if (item == null) incomplete = true;
             else if (!found.contains(item)) found.add(item);
         }
-        return VisionPageResult.read(page, AiModel.of(model, PROMPT_VERSION, digest), found, incomplete);
+        return VisionPageResult.read(page, AiModel.of(model, promptVersion, digest), found, incomplete);
     }
 
     private static VisionPageResult.Item item(JsonNode node) {
@@ -225,12 +235,17 @@ public final class OllamaVisionModelAdapter implements VisionModelPort {
     }
 
     static String prompt() {
-        try (InputStream in = OllamaVisionModelAdapter.class.getResourceAsStream("/" + PROMPT_VERSION + ".txt")) {
-            if (in == null) throw new IllegalStateException(PROMPT_VERSION + " is missing");
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8).replace("\r\n", "\n")
+        return prompt(PROMPT_VERSION);
+    }
+
+    static String prompt(String version) {
+        try (InputStream in = OllamaVisionModelAdapter.class.getResourceAsStream("/" + version + ".txt")) {
+            if (in == null) throw new IllegalStateException(version + " is missing");
+            String text = new String(in.readAllBytes(), StandardCharsets.UTF_8).replace("\r\n", "\n")
                     .replace("{COORDINATES}", COORDINATES);
+            return SECOND_CHECK_VERSION.equals(version) ? text.trim() : text;
         } catch (IOException e) {
-            throw new IllegalStateException(PROMPT_VERSION + " could not be read");
+            throw new IllegalStateException(version + " could not be read");
         }
     }
 }

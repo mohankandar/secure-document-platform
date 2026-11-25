@@ -255,6 +255,29 @@ public final class BusinessAdminConfigurationService {
                                                             Set<EntityType> keepLastFour,
                                                             Boolean visionEnabled,
                                                             Double visionOcrThreshold) {
+        return updateSensitiveDataPolicy(tenantId, actorId, correlationId, enabledTypes, autoRedactThreshold,
+                reviewMode, maskSsnLastFour, searchableRedactedPages, pageBatchSize, pageBatchOverlap, packs,
+                keepLastFour, visionEnabled, visionOcrThreshold, null);
+    }
+
+    /**
+     * Task 0083: as above, with the second check of the finished file. Null keeps the stored value, or turns it on with
+     * a pack that asks for it and was not on before.
+     */
+    public TenantRedactionPolicy updateSensitiveDataPolicy(TenantId tenantId, ActorId actorId,
+                                                            CorrelationId correlationId,
+                                                            Set<EntityType> enabledTypes,
+                                                            double autoRedactThreshold,
+                                                            ReviewMode reviewMode,
+                                                            boolean maskSsnLastFour,
+                                                            boolean searchableRedactedPages,
+                                                            Integer pageBatchSize,
+                                                            Integer pageBatchOverlap,
+                                                            Set<RegulationPack> packs,
+                                                            Set<EntityType> keepLastFour,
+                                                            Boolean visionEnabled,
+                                                            Double visionOcrThreshold,
+                                                            Boolean secondCheckEnabled) {
         if (enabledTypes == null || enabledTypes.isEmpty()) {
             throw new ValidationException(LvErrorCode.CFG_001, "At least one sensitive-data category must be enabled");
         }
@@ -292,15 +315,20 @@ public final class BusinessAdminConfigurationService {
             throw new ValidationException(LvErrorCode.CFG_001,
                     "The last four digits can't be kept for a locked item, a date of birth or a credit score");
         }
+        Set<RegulationPack> storedPacks = previous.map(TenantRedactionPolicy::packs).orElse(Set.of());
+        Set<RegulationPack> newPacks = packs != null ? packs : storedPacks;
+        boolean storedCheck = previous.map(TenantRedactionPolicy::secondCheck).orElse(false);
+        boolean secondCheck = secondCheckEnabled != null ? secondCheckEnabled : storedCheck
+                || newPacks.stream().anyMatch(pack -> pack.secondCheck() && !storedPacks.contains(pack));
         TenantRedactionPolicy policy = new TenantRedactionPolicy(
                 tenantId, enabledTypes, autoRedactThreshold, reviewMode, maskSsnLastFour, Instant.now(),
-                searchableRedactedPages, batches,
-                packs != null ? packs : previous.map(TenantRedactionPolicy::packs).orElse(Set.of()), lastFour, true, vision);
+                searchableRedactedPages, batches, newPacks, lastFour, true, vision, secondCheck);
         if (previous.isPresent() && sameSensitiveDataPolicy(previous.get(), policy.enabledEntityTypes(),
                 autoRedactThreshold, reviewMode, maskSsnLastFour)
                 && previous.get().searchableRedactedPages() == searchableRedactedPages
                 && storedBatches.equals(batches)
                 && storedVision.equals(vision)
+                && storedCheck == secondCheck
                 && previous.get().packs().equals(policy.packs())
                 && previous.get().keepLastFour().equals(policy.keepLastFour())
                 && previous.get().lockedItemsOn()) {
@@ -342,6 +370,8 @@ public final class BusinessAdminConfigurationService {
                 + (policy.vision().enabled() ? "" : ", visionEnabled=false")
                 + (policy.vision().ocrThreshold() == VisionSettings.DEFAULTS.ocrThreshold() ? ""
                         : ", visionOcrThreshold=" + String.format(Locale.ROOT, "%.2f", policy.vision().ocrThreshold()))
+                // Task 0083: written only when on.
+                + (policy.secondCheck() ? ", secondCheck=true" : "")
                 // Task 0062: packs and styles, written only when there are any (no key = none).
                 + (policy.packs().isEmpty() ? "" : ", packs=" + sortedNames(policy.packs()))
                 + (policy.keepLastFour().isEmpty() ? "" : ", keepLastFour=" + sortedNames(policy.keepLastFour()));

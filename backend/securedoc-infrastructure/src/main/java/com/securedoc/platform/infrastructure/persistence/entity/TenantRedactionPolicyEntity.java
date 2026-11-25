@@ -41,6 +41,11 @@ public class TenantRedactionPolicyEntity {
 
     @Column(name = "vision_ocr_threshold", nullable = false)
     private double visionOcrThreshold = 0.85;
+
+    /** Migration 084 (task 0083): a second AI reads the finished file. */
+    @Column(name = "second_check_enabled", nullable = false)
+    private boolean secondCheckEnabled;
+
     /** Migration 070 (task 0062): off only for an entity from before the catalog, until its policy is saved. */
     @Column(name = "locked_items_on", nullable = false)
     private boolean lockedItemsOn = true;
@@ -52,6 +57,8 @@ public class TenantRedactionPolicyEntity {
     public void setVisionEnabled(boolean visionEnabled) { this.visionEnabled = visionEnabled; }
     public double getVisionOcrThreshold() { return visionOcrThreshold; }
     public void setVisionOcrThreshold(double visionOcrThreshold) { this.visionOcrThreshold = visionOcrThreshold; }
+    public boolean isSecondCheckEnabled() { return secondCheckEnabled; }
+    public void setSecondCheckEnabled(boolean secondCheckEnabled) { this.secondCheckEnabled = secondCheckEnabled; }
     public boolean isLockedItemsOn() { return lockedItemsOn; }
     public void setLockedItemsOn(boolean lockedItemsOn) { this.lockedItemsOn = lockedItemsOn; }
     public int getPageBatchSize() { return pageBatchSize; }

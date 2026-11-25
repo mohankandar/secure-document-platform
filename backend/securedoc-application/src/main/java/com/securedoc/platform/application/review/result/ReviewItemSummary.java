@@ -24,22 +24,25 @@ public record ReviewItemSummary(
         ReviewReason reason,
         ReviewFoundText foundText,
         /* Task 0064: the path(s) that found it (names only); empty for findings saved before. */
-        java.util.List<String> foundBy
+        java.util.List<String> foundBy,
+        /* Task 0083: the kinds the second check of the finished file found on this page; null for every other item. */
+        java.util.List<String> secondCheck
 ) {
     public ReviewItemSummary {
         foundBy = foundBy == null ? java.util.List.of() : java.util.List.copyOf(foundBy);
+        secondCheck = secondCheck == null ? null : java.util.List.copyOf(secondCheck);
     }
 
     public ReviewItemSummary(FindingId findingId, PackageId packageId, DocumentId documentId, String fileName,
                              EntityType entityType, double confidence, int pageNumber, boolean hasBoundingBox,
                              ReviewBoundingBoxSummary boundingBox, ReviewReason reason, ReviewFoundText foundText) {
         this(findingId, packageId, documentId, fileName, entityType, confidence, pageNumber, hasBoundingBox,
-                boundingBox, reason, foundText, java.util.List.of());
+                boundingBox, reason, foundText, java.util.List.of(), null);
     }
 
     public ReviewItemSummary withFoundText(ReviewFoundText text) {
         return new ReviewItemSummary(findingId, packageId, documentId, fileName, entityType,
-                confidence, pageNumber, hasBoundingBox, boundingBox, reason, text, foundBy);
+                confidence, pageNumber, hasBoundingBox, boundingBox, reason, text, foundBy, secondCheck);
     }
 
     @Override

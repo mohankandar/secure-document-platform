@@ -330,7 +330,8 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                 finding.id(), packageId, document.id(), document.fileName().value(), finding.entityType(),
                 finding.confidence().value(), finding.location().pageNumber(),
                 finding.location().hasBoundingBox(), boxSummary, reason, null,
-                finding.origin().paths().stream().map(Enum::name).toList());
+                finding.origin().paths().stream().map(Enum::name).toList(),
+                com.securedoc.platform.application.secondcheck.SecondCheck.kindsOf(finding));
     }
 
     private boolean packageHasPendingFindings(PackageId packageId, TenantId tenantId) {
