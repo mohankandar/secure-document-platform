@@ -112,8 +112,9 @@ class SearchableRedactedPagesPolicyPostgresTest {
         save(policy(tenant, true, at.plusSeconds(1)));
         TenantRedactionPolicy read = policies.findByTenantId(tenant).orElseThrow();
         assertTrue(read.searchableRedactedPages());
-        assertEquals(EnumSet.of(EntityType.SSN, EntityType.EIN), EnumSet.copyOf(read.enabledEntityTypes()),
-                "the kinds are unchanged by the move");
+        // Task 0099 (changed): a policy from before the catalog has the locked items on too.
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.EIN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV,
+                EntityType.PIN), EnumSet.copyOf(read.enabledEntityTypes()), "the kinds are unchanged by the move");
     }
 
     /** Task 0083. */
@@ -163,8 +164,9 @@ class SearchableRedactedPagesPolicyPostgresTest {
         jdbc.update("INSERT INTO tenant_regulation_packs (tenant_id, pack_key, updated_at) VALUES (?, 'NOT_A_PACK', now())",
                 tenant.value());
         read = policies.findByTenantId(tenant).orElseThrow();
-        assertEquals(EnumSet.of(EntityType.SSN, EntityType.EIN), EnumSet.copyOf(read.enabledEntityTypes()),
-                "an unknown key never switches anything on");
+        // Task 0099 (changed): the locked items are on whatever is stored; nothing else is.
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.EIN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV,
+                EntityType.PIN), EnumSet.copyOf(read.enabledEntityTypes()), "an unknown key never switches anything on");
         assertTrue(read.packs().isEmpty());
     }
 
