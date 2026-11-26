@@ -60,6 +60,22 @@ public class JdbcQueueWork implements QueueWorkPort {
               FROM covered GROUP BY stage
             """.formatted(STAGE, ENTITIES, JdbcPipelineJobRepository.BULK_ALLOWED);
 
+    /**
+     * Task 0098: the most jobs each stage finished in one minute (six 10-second steps, any minute) in the last hour. Every
+     * server together: a finished job no longer says which server ran it.
+     */
+    private static final String BEST_SQL = """
+            WITH steps AS (
+                SELECT %s AS stage, floor(extract(epoch FROM j.updated_at) / 10)::bigint AS step, count(*) AS n
+                  FROM pipeline_jobs j
+                 WHERE j.status = 'DONE' AND j.updated_at > clock_timestamp() - (:bestSeconds * interval '1 second') AND %s
+                 GROUP BY 1, 2),
+            minutes AS (
+                SELECT stage, sum(n) OVER (PARTITION BY stage ORDER BY step RANGE BETWEEN 5 PRECEDING AND CURRENT ROW) AS n
+                  FROM steps)
+            SELECT stage, max(n) AS best FROM minutes GROUP BY stage
+            """.formatted(STAGE, ENTITIES);
+
     /** What will still reach each stage: documents and cases that are not stopped for a person. */
     private static final String TO_COME_SQL = """
             WITH cases AS (
@@ -136,13 +152,18 @@ public class JdbcQueueWork implements QueueWorkPort {
             toCome.put(PipelineStage.REDACT, (double) rs.getInt("redact_documents"));
             toCome.put(PipelineStage.EXPORT, (double) rs.getInt("export_cases"));
         });
+        Map<PipelineStage, Integer> best = new EnumMap<>(PipelineStage.class);
+        jdbc.query(BEST_SQL, new MapSqlParameterSource(params.getValues())
+                .addValue("bestSeconds", QueueView.BEST_WINDOW.toSeconds()), rs -> {
+            best.put(PipelineStage.valueOf(rs.getString("stage")), rs.getInt("best"));
+        });
         Map<PipelineStage, QueueView.Work> out = new EnumMap<>(PipelineStage.class);
         for (PipelineStage stage : toCome.keySet()) {
             Open o = open.getOrDefault(stage, new Open(0, 0, 0, null));
             Pace recent = lately.getOrDefault(stage, none);
             Pace p = recent.done() >= QueueView.ENOUGH_LATELY ? recent : pace.getOrDefault(stage, none);
             out.put(stage, new QueueView.Work(o.waiting(), o.running(), o.held(), o.oldest(),
-                    (int) Math.round(toCome.get(stage)), p.done(), p.busy()));
+                    (int) Math.round(toCome.get(stage)), p.done(), p.busy(), best.getOrDefault(stage, 0)));
         }
         return out;
     }

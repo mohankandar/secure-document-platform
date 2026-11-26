@@ -44,6 +44,40 @@ class QueueViewTest {
         assertEquals(0L, QueueView.view(Map.of(PipelineStage.EXPORT, new Work(0, 0, 7, null, 0, 0, 0))).etaSeconds());
     }
 
+    /*
+     * Task 0098: the slowest stage shares the server with the stages before it; once they are done it goes faster. After
+     * the stages before it are due to finish, its time uses the best pace it had in the last hour, when that is faster.
+     */
+    @Test
+    void afterTheStagesBeforeItTheSlowestStageGoesAtItsBestPaceOfLate() {
+        var view = QueueView.view(Map.of(
+                PipelineStage.TEXT, work(100, 0, 0, 60, 60),                   // 100 left at 1 a second: done at 100 s
+                PipelineStage.REDACT, best(work(300, 0, 0, 60, 60), 120)));    // 300 left at 1 a second, best 2 a second
+        // 100 done by 100 s, the other 200 at 2 a second: 200 s (it said 300 s before).
+        assertEquals(200L, eta(view, PipelineStage.REDACT));
+        assertEquals(200L, view.etaSeconds());
+    }
+
+    @Test
+    void theBestPaceCountsOnlyWhenFasterAndFromEnoughJobsAndNeverForTheFirstStageWithWork() {
+        assertEquals(300L, QueueView.view(Map.of(PipelineStage.TEXT, work(100, 0, 0, 60, 60),
+                PipelineStage.REDACT, work(300, 0, 0, 60, 60))).etaSeconds(), "no best pace known");
+        assertEquals(300L, QueueView.view(Map.of(PipelineStage.TEXT, work(100, 0, 0, 60, 60),
+                PipelineStage.REDACT, best(work(300, 0, 0, 60, 60), 30))).etaSeconds(), "slower than now");
+        assertEquals(300L, QueueView.view(Map.of(PipelineStage.TEXT, work(100, 0, 0, 60, 60),
+                PipelineStage.REDACT, best(work(300, 0, 0, 60, 60), QueueView.ENOUGH_LATELY - 1))).etaSeconds(), "too few jobs");
+        assertEquals(300L, QueueView.view(Map.of(PipelineStage.REDACT, best(work(300, 0, 0, 60, 60), 120))).etaSeconds(),
+                "nothing before it frees the server");
+        assertEquals(100L, QueueView.view(Map.of(PipelineStage.TEXT, work(100, 0, 0, 60, 60),
+                PipelineStage.REDACT, best(work(50, 0, 0, 60, 60), 120))).etaSeconds(),
+                "done before the stages before it: never earlier than them");
+    }
+
+    private static Work best(Work w, int bestDone) {
+        return new Work(w.waiting(), w.running(), w.held(), w.oldestWaitingSeconds(), w.toCome(), w.done(), w.busySeconds(),
+                bestDone);
+    }
+
     private static Work work(int waiting, int running, int toCome, int done, double busy) {
         return new Work(waiting, running, 0, null, toCome, done, busy);
     }

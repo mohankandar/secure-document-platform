@@ -16,7 +16,8 @@ import java.util.Set;
  *
  * <p>A stage's pace: its jobs finished in the last {@link #WINDOW} (the last minute, if busy enough), divided by the time in it in which the stage had any
  * work. Its time: everything still to do there (waiting, running, and what the stages before it will still bring)
- * divided by that pace, and never less than the stage before it. The queue's time is the last one's. With fewer than
+ * divided by that pace, and never less than the stage before it; once the stages before it are due to be done, at its best
+ * pace of the last hour when that is faster (task 0098). The queue's time is the last one's. With fewer than
  * {@link #LEAST_FINISHED} finished jobs the pace is not known, and no time is said.
  */
 public final class QueueView {
@@ -24,6 +25,9 @@ public final class QueueView {
     /** The last minute alone says the pace of a stage that finished this many jobs in it: workers come and go. */
     public static final Duration LATELY = Duration.ofMinutes(1);
     public static final int ENOUGH_LATELY = 20;
+    /** Task 0098: how far back a stage's best pace is looked for, and over how long it is taken. */
+    public static final Duration BEST_WINDOW = Duration.ofHours(1);
+    public static final Duration BEST_SPAN = LATELY;
     static final int LEAST_FINISHED = 5;
     /** In working order. EXPORT stands for both export stages. */
     static final List<PipelineStage> ORDER = List.of(PipelineStage.TEXT, PipelineStage.FIND, PipelineStage.VISION,
@@ -34,10 +38,16 @@ public final class QueueView {
      * @param toCome  jobs the stages before will still bring
      * @param done    finished in the time the pace is taken from
      * @param busySeconds the part of that time in which the stage had work
+     * @param bestDone the most jobs it finished in one {@link #BEST_SPAN} in the last {@link #BEST_WINDOW} (task 0098)
      */
     public record Work(int waiting, int running, int held, Long oldestWaitingSeconds, int toCome, int done,
-                       double busySeconds) {
+                       double busySeconds, int bestDone) {
         public static final Work NONE = new Work(0, 0, 0, null, 0, 0, 0);
+
+        /** Without a best pace of late. */
+        public Work(int waiting, int running, int held, Long oldestWaitingSeconds, int toCome, int done, double busySeconds) {
+            this(waiting, running, held, oldestWaitingSeconds, toCome, done, busySeconds, 0);
+        }
 
         int left() {
             return waiting + running + toCome;
@@ -70,11 +80,25 @@ public final class QueueView {
             Double perSecond = w.done() >= LEAST_FINISHED && w.busySeconds() > 0 ? w.done() / w.busySeconds() : null;
             if (w.left() > 0) {
                 if (perSecond == null) longest = null;
-                else if (longest != null) longest = Math.max(longest, w.left() / perSecond);
+                else if (longest != null) longest = Math.max(longest, finish(w, perSecond, longest));
             }
             Long eta = w.left() == 0 ? Long.valueOf(0) : longest == null ? null : Long.valueOf(Math.round(longest));
             out.add(new Stage(stage, w, perSecond == null ? null : Math.round(perSecond * 600) / 10.0, eta));
         }
         return new View(out, longest == null ? null : Long.valueOf(Math.round(longest)));
+    }
+
+    /**
+     * Task 0098: when a stage is done. Until the stages before it are due to finish ({@code before}) it keeps the pace it has
+     * now; from then on the server is its own, and it goes at its best pace of late when that is faster. Two load runs of
+     * 1,000 documents showed Redact at 80 to 115 a minute while Text and Find ran, and at 145 to 155 alone: the present pace
+     * for the whole drain made the time 26 to 64% too long.
+     */
+    private static double finish(Work w, double perSecond, double before) {
+        double best = w.bestDone() >= ENOUGH_LATELY ? w.bestDone() / (double) BEST_SPAN.toSeconds() : 0;
+        double doneBefore = perSecond * before;
+        // Nothing before it (before = 0) frees the server: then the present pace holds.
+        if (before <= 0 || best <= perSecond || w.left() <= doneBefore) return w.left() / perSecond;
+        return before + (w.left() - doneBefore) / best;
     }
 }

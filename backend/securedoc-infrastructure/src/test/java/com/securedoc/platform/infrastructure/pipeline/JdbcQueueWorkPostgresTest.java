@@ -110,6 +110,30 @@ class JdbcQueueWorkPostgresTest {
         }
     }
 
+    /** Task 0098: the most jobs a stage finished in one minute of the last hour. */
+    @Test
+    void theBestMinuteOfTheLastHourIsCounted() throws Exception {
+        try (PostgresTestDatabase db = PostgresTestDatabase.migrated("queuebest")) {
+            NamedParameterJdbcTemplate jdbc = db.jdbc();
+            TenantId tenant = TenantId.generate();
+            TestRows.tenant(jdbc, tenant);
+            PackageId pkg = PackageId.generate();
+            TestRows.packageRow(jdbc, tenant, pkg);
+            UUID doc = document(jdbc, tenant, pkg, "DETECTING");
+            int page = 1;
+            for (int i = 0; i < 25; i++) job(jdbc, tenant, pkg, doc, "REDACT", "DONE", 1900, 1800 - i, page++); // 25 within 25 s
+            for (int i = 0; i < 10; i++) job(jdbc, tenant, pkg, doc, "REDACT", "DONE", 200, 120 - i, page++);
+            for (int i = 0; i < 40; i++) job(jdbc, tenant, pkg, doc, "REDACT", "DONE", 7300, 7200, page++); // before the hour
+            for (int i = 0; i < 30; i++) job(jdbc, tenant, pkg, doc, "FIND", "DONE", 900, 600 - 10 * i, page++); // 1 per 10 s
+            var work = new JdbcQueueWork(jdbc).work(tenant, QueueView.WINDOW, NONE_MARKED);
+            assertEquals(25, work.get(PipelineStage.REDACT).bestDone());
+            assertEquals(6, work.get(PipelineStage.FIND).bestDone(), 1, "one a step: six in a minute");
+            assertEquals(0, work.get(PipelineStage.TEXT).bestDone());
+            assertEquals(0, new JdbcQueueWork(jdbc).work(TenantId.generate(), QueueView.WINDOW, NONE_MARKED)
+                    .get(PipelineStage.REDACT).bestDone(), "another entity's jobs are not counted");
+        }
+    }
+
     @Test
     void aBulkJobIsHeldUntilItsWindowOpens() throws Exception {
         try (PostgresTestDatabase db = PostgresTestDatabase.migrated("queuebulk")) {

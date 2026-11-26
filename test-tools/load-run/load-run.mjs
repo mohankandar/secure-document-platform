@@ -4,6 +4,8 @@
  *
  *   node test-tools/load-run/load-run.mjs [documents=400] [heap=4g] [memoryLimitMb=8192] [aiMs=120 | priority]
  *
+ * Task 0098: with LOAD_WARMUP_DOCUMENTS=n, n documents are sent and processed first (a server that has worked before).
+ *
  * With "priority" (task 0073): that many Normal cases of one document, and behind them 1 Urgent case and then 30 more.
  * Checks: the first Urgent case is exported before every Normal case that had not started; Normal cases still finish while
  * Urgent ones wait.
@@ -22,7 +24,7 @@ import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { tmpdir } from 'node:os';
+import { cpus, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,6 +50,17 @@ const headers = {
   'X-Actor-Roles': 'DOCUMENT_PROCESSOR,TENANT_IT_ADMIN',
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Task 0098: the whole machine's CPU use since the last call, in percent. */
+let cpuBefore = cpus();
+const cpuUse = () => {
+  const now = cpus();
+  let busy = 0, all = 0;
+  now.forEach((c, i) => { const b = cpuBefore[i].times; const t = c.times;
+    const d = (k) => t[k] - b[k];
+    busy += d('user') + d('nice') + d('sys') + d('irq'); all += d('user') + d('nice') + d('sys') + d('irq') + d('idle'); });
+  cpuBefore = now;
+  return all ? Math.round((busy / all) * 100) : 0;
+};
 const sql = (q) => execFileSync('docker', ['exec', container, 'psql', '-U', 'securedoc', '-d', 'securedoc', '-tA', '-c', q], { encoding: 'utf8' }).trim();
 
 /* ---------- the mock AI server ---------- */
@@ -154,7 +167,7 @@ try {
 
   const cases = Math.ceil(documents / PER_CASE);
   const suffix = String(Math.floor(100000 + Math.random() * 900000));
-  const begin = Date.now();
+  let begin = Date.now();
   let next = 0;
   let sent = 0;
   let sendingDone = false;
@@ -172,6 +185,21 @@ try {
     await api('POST', `/api/v1/packages/${packageId}/submit`);
     return packageId;
   };
+  // Task 0098: LOAD_WARMUP_DOCUMENTS (default none) are sent and processed first, as on a server that has worked before:
+  // the time-left estimate uses each stage's best pace of the last hour.
+  const warmCases = Math.ceil(Number(process.env.LOAD_WARMUP_DOCUMENTS ?? 0) / PER_CASE);
+  if (warmCases > 0) {
+    let w = 0;
+    await Promise.all(Array.from({ length: 4 }, async () => { while (w < warmCases) await send(5000 + w++); }));
+    for (let still = 0; still < 3;) {
+      await sleep(2000);
+      const st = await api('GET', '/api/v1/platform-admin/capacity');
+      still = st.queueLength === 0 && st.stages.every((x) => x.busy === 0) ? still + 1 : 0;
+    }
+    console.log(`warm-up: ${warmCases * PER_CASE} documents processed`);
+    sent = 0;
+    begin = Date.now();
+  }
   const senders = Array.from({ length: 4 }, async () => {
     while (next < cases) {
       const n = next++;
@@ -211,11 +239,12 @@ try {
     }
     const ai = state.aiServers[0]?.requestsAtOnce ?? 0;
     aiMost = Math.max(aiMost, ai);
-    samples.push({ s: Math.round((Date.now() - begin) / 1000), queue: state.queueLength, ai, slowdown: state.intakeSlowdown,
+    samples.push({ s: Math.round((Date.now() - begin) / 1000), at: Date.now(), cpu: cpuUse(), queue: state.queueLength, ai, slowdown: state.intakeSlowdown,
       workers: Object.fromEntries(state.stages.map((s) => [s.stage, s.current])) });
     if (sendingDone) {
       const q = await api('GET', '/api/v1/platform-admin/queue').catch((e) => { errors.push(e.message); return null; });
-      if (q) etas.push({ at: Date.now(), eta: q.etaSeconds ?? null, left: q.stages.map((s) => `${s.stage} ${s.waiting + s.running}+${s.toCome} ${s.etaSeconds ?? '?'}`).join(', ') });
+      // Task 0098: each stage's pace and workers with it, to see where the estimate goes wrong.
+      if (q) etas.push({ at: Date.now(), eta: q.etaSeconds ?? null, left: q.stages.map((s) => `${s.stage} ${s.waiting + s.running}+${s.toCome} ${s.etaSeconds ?? '?'} @${s.perMinute ?? '?'}/min w${s.workers}`).join(', ') });
     }
     if (samples.length % 15 === 0) console.log(JSON.stringify(samples.at(-1)), `sent ${sent}`, JSON.stringify(memoryMost));
     if (sendingDone && state.queueLength === 0 && state.stages.every((s) => s.busy === 0)) {
@@ -243,11 +272,13 @@ try {
     return { part, ok: Math.abs(off) <= 0.2, text: `said ${e.eta} s, was ${Math.round(real)} s (${off >= 0 ? '+' : ''}${Math.round(off * 100)}%)` };
   };
   const etaRows = [0, 0.1, 0.25, 0.5, 0.75].map(etaAt);
+  // Task 0098: when each stage's jobs really ended, in 10-second steps (seconds since the drain began), for the analysis.
+  const finished = sql(`select stage || ' ' || step || ' ' || count(*) from (select stage, floor((extract(epoch from updated_at) * 1000 - ${drainStart}) / 10000)::int * 10 as step from pipeline_jobs where status = 'DONE') x group by stage, step order by stage, step`).split('\n');
   for (const r of etaRows) console.log(`ETA at ${r.part * 100}% of the drain: ${r.text}`);
   const checks = [
     ...(priorityMode ? [] : [['the ETA is within 20% at a quarter and at half of the drain', etaRows[2].ok && etaRows[3].ok, `${etaRows[2].text}; ${etaRows[3].text}`]]),
     ['no request failed', errors.length === 0, errors.slice(0, 3).join('; ') || 'none'],
-    ['every case exported', statuses.length === 1 && statuses[0] === `COMPLETED ${cases + urgent.ids.length}`, statuses.join(', ')],
+    ['every case exported', statuses.length === 1 && statuses[0] === `COMPLETED ${cases + urgent.ids.length + warmCases}`, statuses.join(', ')],
     ['no job twice', doubles === '0', doubles],
     ...(priorityMode ? [
       ['Normal cases still waited when the Urgent ones came', urgent.waitingBefore > 300, `${urgent.waitingBefore} of ${cases}`],
@@ -262,7 +293,7 @@ try {
   ];
   for (const [name, ok, detail] of checks) console.log(ok ? 'PASS' : 'FAIL', name, '-', detail);
   const summary = { documents, cases, seconds: Math.round(((exportedAt ?? Date.now()) - begin) / 1000), most, highest, aiMost, mockMost, memoryMost, checks };
-  writeFileSync(join(run, 'summary.json'), JSON.stringify({ ...summary, samples, etas, etaRows, ended }, null, 1));
+  writeFileSync(join(run, 'summary.json'), JSON.stringify({ ...summary, samples, etas, etaRows, ended, finished }, null, 1));
   console.log(JSON.stringify(summary));
   console.log('Run folder:', run);
   failed = checks.filter((c) => !c[1]).length;
