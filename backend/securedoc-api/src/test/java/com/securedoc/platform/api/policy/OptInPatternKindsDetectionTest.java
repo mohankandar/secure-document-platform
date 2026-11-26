@@ -160,7 +160,8 @@ class OptInPatternKindsDetectionTest {
             storedPolicy = policy(EnumSet.of(EntityType.SSN, kind));
             run();
             assertEquals(EnumSet.of(EntityType.SSN, kind), EnumSet.copyOf(types()), kind + " alone switched on");
-            assertEquals(Set.of(EntityType.SSN), aiRequests.get(0).policy().enabledEntityTypes(),
+            // Task 0099: and for the card number, a locked item that is always on.
+            assertEquals(Set.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER), aiRequests.get(0).policy().enabledEntityTypes(),
                     "the AI is asked only for V1 kinds");
         }
     }
@@ -194,7 +195,8 @@ class OptInPatternKindsDetectionTest {
         run();
         assertFalse(savedFindings.isEmpty());
         assertTrue(savedFindings.stream().allMatch(f -> f.status() == FindingStatus.DETECTED));
-        assertTrue(aiRequests.isEmpty(), "no V1 kind on: the AI has nothing to look for and is not called");
+        // Task 0099 (changed): no V1 kind chosen, but the locked card number is always on, so the AI is asked for it.
+        assertEquals(Set.of(EntityType.CREDIT_CARD_NUMBER), aiRequests.get(0).policy().enabledEntityTypes());
     }
 
     @Test
@@ -277,15 +279,17 @@ class OptInPatternKindsDetectionTest {
     }
 
     /**
-     * Task 0062: an entity from before the catalog keeps exactly its findings (its card switch may be off, CVV and PIN
-     * are not looked for); with the locked items on, the same page also gives the locked items, whatever is chosen.
+     * Task 0062, changed by task 0099: the locked items are found whatever is chosen, also for an entity from before
+     * the catalog whose policy was not saved since (it kept its card switch off and had no CVV or PIN).
      */
     @Test
-    void theLockedItemsAreFoundOnlyOnceTheEntityHasThem() {
+    void theLockedItemsAreFoundAlsoForAnEntityFromBeforeTheCatalog() {
         pageText = "Borrower SSN: " + SSN + "\nCredit card number: 4111 1111 1111 1111\nCVV: 739\nPIN: 8264\nEnd of page";
         Map<EntityType, List<Finding>> before = runWith(EnumSet.of(EntityType.SSN));
-        assertEquals(Set.of(EntityType.SSN), before.keySet(), "before the catalog: exactly what was on");
-        assertEquals(Set.of(EntityType.SSN), aiRequests.get(aiRequests.size() - 1).policy().enabledEntityTypes());
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV, EntityType.PIN),
+                EnumSet.copyOf(before.keySet()), "before the catalog: what was on, and the locked items");
+        assertEquals(Set.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER),
+                aiRequests.get(aiRequests.size() - 1).policy().enabledEntityTypes());
 
         savedFindings.clear();
         storedPolicy = new TenantRedactionPolicy(tenantId, EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY,
@@ -317,7 +321,8 @@ class OptInPatternKindsDetectionTest {
         pageText = NAMES;
         aiAnswer = List.of(name("Delphine Quarrington"), name("Quarrington"), name("412-55-7531"));
         Map<EntityType, List<Finding>> found = runWith(EnumSet.of(EntityType.SSN, EntityType.PERSON_NAME));
-        assertEquals(Set.of(EntityType.SSN, EntityType.PERSON_NAME), aiRequests.get(0).policy().enabledEntityTypes());
+        assertEquals(Set.of(EntityType.SSN, EntityType.PERSON_NAME, EntityType.CREDIT_CARD_NUMBER),
+                aiRequests.get(0).policy().enabledEntityTypes(), "task 0099: the locked card number too");
         List<Finding> names = found.get(EntityType.PERSON_NAME);
         assertEquals(3, names.size(), "both full names and the last name alone; not the town, not the number");
         for (Finding f : names) {

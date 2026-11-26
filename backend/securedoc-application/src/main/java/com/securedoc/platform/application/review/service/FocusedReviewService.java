@@ -331,7 +331,19 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
                 finding.confidence().value(), finding.location().pageNumber(),
                 finding.location().hasBoundingBox(), boxSummary, reason, null,
                 finding.origin().paths().stream().map(Enum::name).toList(),
-                com.securedoc.platform.application.secondcheck.SecondCheck.kindsOf(finding));
+                checkKinds(finding));
+    }
+
+    /** The kinds of a page a check of the finished file sent; the final check's start with FINAL (task 0099). */
+    private static java.util.List<String> checkKinds(Finding finding) {
+        java.util.List<String> second = com.securedoc.platform.application.secondcheck.SecondCheck.kindsOf(finding);
+        if (second != null) return second;
+        java.util.List<String> fin = com.securedoc.platform.application.secondcheck.FinalPatternCheck.kindsOf(finding);
+        if (fin == null) return null;
+        java.util.List<String> kinds = new java.util.ArrayList<>(fin.size() + 1);
+        kinds.add("FINAL");
+        kinds.addAll(fin);
+        return kinds;
     }
 
     private boolean packageHasPendingFindings(PackageId packageId, TenantId tenantId) {

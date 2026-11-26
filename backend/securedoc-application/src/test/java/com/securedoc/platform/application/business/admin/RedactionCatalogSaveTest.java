@@ -74,7 +74,8 @@ class RedactionCatalogSaveTest {
         save(policies.saved.enabledEntityTypes(), Set.of(), Set.of());
         assertTrue(policies.saved.lockedItemsOn());
         assertTrue(lastDetail().startsWith("Sensitive-data policy changed: enabledCount=6"), lastDetail());
-        assertTrue(lastDetail().contains("previous=[enabledCount=4"), lastDetail());
+        // Task 0099 (changed from 0062): the locked items were already on before the save.
+        assertTrue(lastDetail().contains("previous=[enabledCount=6"), lastDetail());
     }
 
     @Test

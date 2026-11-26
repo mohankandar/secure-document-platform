@@ -173,6 +173,7 @@ const SENTENCES: Record<string, string> = {
   DOCUMENT_REDACTION_COMPLETED: 'Redacted a document',
   DOCUMENT_REDACTION_VERIFIED: 'Verified a redacted document',
   DOCUMENT_SECOND_CHECK: 'Checked the finished file a second time',
+  DOCUMENT_FINAL_CHECK: 'Checked the finished file for anything still readable',
   DOCUMENT_SIGNATURE_REMOVED: 'Removed a digital signature by redaction',
   DOCUMENT_PROCESSING_FAILED: 'Could not process a document',
   DOCUMENT_DOWNLOADED: 'Downloaded a document',

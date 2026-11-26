@@ -83,7 +83,8 @@ final class LockedItemDetector {
                 add("PIN", pageNumber, lineStart + alone.start(1), lineStart + alone.end(1), 0.90, results);
             }
         }
-        if (!CVV_HEADER.matcher(header).find()) return;
+        // Task 0099: a line that holds its own code is no header ("... CVV 123" over "Credit score: 742").
+        if (!CVV_HEADER.matcher(header).find() || CVV.matcher(header).find()) return;
         char[] rest = line.toCharArray();
         Matcher card = CARD_NUMBER.matcher(line);
         // 'x' is a word character, so a blanked card number can't lend its digits or its ends to a value.

@@ -21,6 +21,8 @@ class LockedItemDetectorTest {
         assertEquals("CVV=739", found("Visa card ending 1111, security code 739"));
         assertEquals("CVV=739", found("Card number  Exp  CVV\n4111 1111 1111 1111  11/29  739"));
         assertEquals("CVV=739", found("CVV\n739"));
+        // Task 0099: a line that holds its own code is no header, so the next line's number is not a code.
+        assertEquals("CVV=123", found("Paid by card: 4111 1111 1111 1111  exp 08/29  CVV 123\nCredit score (Experian): 742"));
     }
 
     @Test

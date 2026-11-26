@@ -133,7 +133,9 @@ public class HybridPdfTextExtractionAdapter implements TextExtractionPort {
                     // retry and outcome are unchanged.
                     throw failure.page() != null ? failure : failure.withPage(pageNumber);
                 }
-                PageText withFields = PdfFormFieldText.with(document, document.getPage(index), ocrPage.page());
+                // Task 0099: with the page's own text that OCR did not see (white, tiny, covered).
+                PageText withFields = PdfFormFieldText.with(document, document.getPage(index),
+                        HiddenNativeText.with(ocrPage.page(), nativePage));
                 normalizedPages.add(withFields);
                 totalChars += withFields.text().length();
                 usedOcr = true;
