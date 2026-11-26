@@ -214,6 +214,29 @@ class VisionDetectionTest {
         assertTrue(off.detectionDetail().contains("p2:HANDWRITING->PERSON(VISION_OFF)"), off.detectionDetail());
     }
 
+    /**
+     * Task 0100 (R4): a page OCR cannot read (not blank) is never passed on the vision model's word alone, even when it
+     * says it read the page and found nothing: a person checks it. A blank page still passes.
+     */
+    @Test
+    void aPageOcrCannotReadGoesToAPersonEvenWhenTheModelReadIt() {
+        model = (image, page) -> VisionPageResult.read(page, MODEL, List.of(), false);
+        for (boolean asJobs : new boolean[]{false, true}) {
+            Run run = new Run();
+            run.text.execute(run.extractCommand());
+            if (asJobs) run.findAsJobs();
+            else run.find.execute(run.detectCommand());
+            Finding unread = only(run, 4, EntityType.UNREAD_PAGE);
+            assertEquals(FindingStatus.DETECTED, unread.status(), "it waits for a person");
+            assertFalse(unread.location().hasBoundingBox());
+            assertEquals("TEXT_NOT_READABLE", unread.detectorSource().version());
+            assertTrue(run.findings.stream().noneMatch(f -> f.location().pageNumber() == 2
+                    && f.entityType() == EntityType.UNREAD_PAGE), "handwriting the model read is the model's");
+            assertTrue(run.findings.stream().noneMatch(f -> f.location().pageNumber() == 5), "a blank page passes");
+            assertTrue(run.detectionDetail().contains("requiresReview=true"), run.detectionDetail());
+        }
+    }
+
     private static void assertUnread(Run run) {
         for (int page : new int[]{2, 4}) {
             Finding unread = only(run, page, EntityType.UNREAD_PAGE);
@@ -247,7 +270,9 @@ class VisionDetectionTest {
         };
         run.findAsJobs(() -> kinds = EnumSet.of(EntityType.DATE_OF_BIRTH));
         assertEquals(2, asked[0]);
-        assertTrue(run.findings.stream().allMatch(f -> f.entityType() == EntityType.DATE_OF_BIRTH));
+        // Task 0100 (changed): page 4, which OCR cannot read, is also a page to check, whatever kinds are on.
+        assertTrue(run.findings.stream().allMatch(f -> f.entityType() == EntityType.DATE_OF_BIRTH
+                || (f.entityType() == EntityType.UNREAD_PAGE && f.location().pageNumber() == 4)));
         only(run, 4, EntityType.DATE_OF_BIRTH);
     }
 

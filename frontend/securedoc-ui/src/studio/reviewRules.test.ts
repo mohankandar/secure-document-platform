@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth, FIT_MAX_PERCENT } from './reviewRules.ts';
+import { alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkUnplacedNote, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth, FIT_MAX_PERCENT } from './reviewRules.ts';
 import { whyAsked } from './words.ts';
 
 const item = (findingId: string, packageId: string, entityType: string, hasBoundingBox = true) =>
@@ -51,15 +51,15 @@ test('bulk: the confirmation names how many will be redacted and the type', () =
   const selected = item('a', 'case-1', 'SSN');
   const plan = bulkPlan([selected, item('b', 'case-1', 'SSN'), item('c', 'case-1', 'SSN', false)], selected)!;
   assert.equal(bulkConfirmTitle(plan), 'Redact 2 Social Security Number findings?');
-  assert.equal(bulkConfirmBody(plan), 'Each one is redacted and recorded as its own decision. 1 with no place on the page is skipped and stays in the queue.');
+  assert.equal(bulkConfirmBody(plan), 'Each one is redacted and recorded as its own decision. 1 has no place on the page and is not part of this: the case is not delivered until someone marks its place or keeps it visible.');
   const one = bulkPlan([item('x', 'case-1', 'CREDIT_SCORE', false), item('y', 'case-1', 'CREDIT_SCORE')], item('x', 'case-1', 'CREDIT_SCORE', false))!;
   assert.equal(bulkConfirmTitle(one), 'Redact 1 Credit score finding?');
 });
 
 test('bulk: the result says what was skipped and what failed', () => {
   assert.equal(bulkResultText(3, 0, 0), 'Redacted 3 findings.');
-  assert.equal(bulkResultText(1, 1, 0), 'Redacted 1 finding. 1 skipped because its place was not found; it stays in the queue.');
-  assert.equal(bulkResultText(2, 2, 1), 'Redacted 2 findings. 2 skipped because their place was not found; they stay in the queue. 1 could not be saved and stays in the queue.');
+  assert.equal(bulkResultText(1, 1, 0), 'Redacted 1 finding. 1 has no place on the page and is still waiting: the case is not delivered until someone marks its place or keeps it visible.');
+  assert.equal(bulkResultText(2, 2, 1), 'Redacted 2 findings. 2 have no place on the page and are still waiting: the case is not delivered until someone marks their place or keeps them visible. 1 could not be saved and stays in the queue.');
 });
 
 test('queue text: last 4 only from 8 characters; shorter values masked in full', () => {
@@ -122,6 +122,12 @@ test('0023 D5: the message is fixed wording (never the server text)', () => {
 
 test('0023 D5: Redact all like this counts findings someone else already decided on their own', () => {
   assert.equal(bulkResultText(2, 0, 0, 1), 'Redacted 2 findings. 1 was already decided by someone else.');
-  assert.equal(bulkResultText(1, 1, 1, 2), 'Redacted 1 finding. 1 skipped because its place was not found; it stays in the queue. 1 could not be saved and stays in the queue. 2 were already decided by someone else.');
+  assert.equal(bulkResultText(1, 1, 1, 2), 'Redacted 1 finding. 1 has no place on the page and is still waiting: the case is not delivered until someone marks its place or keeps it visible. 1 could not be saved and stays in the queue. 2 were already decided by someone else.');
   assert.equal(bulkResultText(3, 0, 0, 0), 'Redacted 3 findings.');
+});
+
+test('task 0100 (R8): a finding without a place is never skipped: the note says the case waits for it', () => {
+  assert.equal(bulkUnplacedNote(1), '1 of them has no place on the page. The case is not delivered until someone marks its place or keeps it visible.');
+  assert.equal(bulkUnplacedNote(2), '2 of them have no place on the page. The case is not delivered until someone marks their place or keeps them visible.');
+  assert.equal(bulkUnplacedNote(0), null);
 });

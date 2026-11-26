@@ -19,12 +19,18 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
-const files = resolve(process.argv[2] ?? 'C:\\dev\\lexavault\\test-pdfs');
-const backend = resolve(process.argv[3] ?? join(root, 'backend'));
+// --real-ai: the local Ollama (text and vision models) instead of the stand-in; --only=a.pdf,b.pdf: just these files.
+const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const realAi = flags.includes('--real-ai');
+const only = (flags.find((f) => f.startsWith('--only=')) ?? '').slice(7).split(',').filter(Boolean);
+const files = resolve(args[0] ?? 'C:\\dev\\lexavault\\test-pdfs');
+const backend = resolve(args[1] ?? join(root, 'backend'));
 const jar = join(backend, 'securedoc-api', 'target', 'securedoc-api-0.1.0-SNAPSHOT.jar');
 const container = 'lexavault-0099-pg';
 const [dbPort, appPort, aiPort] = [55499, 18099, 11599];
 const base = `http://localhost:${appPort}`;
+const aiUrl = realAi ? 'http://localhost:11434' : `http://localhost:${aiPort}`;
 const ENTITY = '30216241-b724-5a3a-aef3-3034fd546d17';
 const ACTOR = '00000000-0000-0000-0000-000000000099';
 const MODEL = 'qwen3.5:9b';
@@ -73,7 +79,7 @@ async function startApp() {
     cwd: run, stdio: ['ignore', openSync(join(run, 'logs', 'app.log'), 'w'), openSync(join(run, 'logs', 'app.err'), 'w')],
     env: { ...process.env, SPRING_DATASOURCE_URL: `jdbc:postgresql://localhost:${dbPort}/securedoc`, SPRING_DATASOURCE_USERNAME: 'securedoc',
       SPRING_DATASOURCE_PASSWORD: dbPassword, SERVER_PORT: String(appPort), SECUREDOC_NODE_ID: 'node-0099', SECUREDOC_AI_PROVIDER: 'ollama',
-      SECUREDOC_AI_OLLAMA_BASE_URL: `http://localhost:${aiPort}`, SECUREDOC_AI_VISION_BASE_URL: `http://localhost:${aiPort}`,
+      SECUREDOC_AI_OLLAMA_BASE_URL: aiUrl, SECUREDOC_AI_VISION_BASE_URL: aiUrl,
       SECUREDOC_AI_MODEL: MODEL, SECUREDOC_AI_OLLAMA_PRELOAD_ENABLED: 'false', SECUREDOC_WATCHED_FOLDER_ENABLED: 'true',
       SECUREDOC_WATCHED_FOLDER_SCHEDULING_ENABLED: 'true', SECUREDOC_WATCHED_FOLDER_SCAN_INTERVAL_MS: '1000',
       SECUREDOC_WATCHED_FOLDER_ROOT_PATH: watched, SECUREDOC_PROCESSING_PIPELINE_MODE: 'staged', SECUREDOC_PROCESSING_EXPORT_MODE: 'job',
@@ -132,7 +138,11 @@ async function one(file) {
     const values = items.filter((i) => i.entityType !== 'UNREAD_PAGE');
     for (const i of items) review.push(i.entityType === 'UNREAD_PAGE' ? `page ${i.pageNumber} to check${i.secondCheck ? ` [${i.secondCheck.join(',')}]` : ''}` : `${i.entityType} p${i.pageNumber}`);
     if (values.length === 0) break; // only pages to check: a person's
-    for (const i of values) await call('POST', `/api/v1/review-items/${i.findingId}/confirm`, { reason: 'owner-files run: redact' });
+    for (const i of values) {
+      const r = await call('POST', `/api/v1/review-items/${i.findingId}/confirm`, { reason: 'owner-files run: redact' });
+      // A finding without a place can't be redacted without a mark: it stays, and so does the case (task 0100).
+      if (r.status >= 300) review.push(`${i.entityType} p${i.pageNumber}${i.hasBoundingBox ? '' : ' (no place)'} not redacted: ${r.json?.code ?? `HTTP ${r.status}`}`);
+    }
     status = await statusOf(packageId, seconds);
   }
   const delivered = exported().filter((p) => !before.has(p));
@@ -160,11 +170,11 @@ try {
     `. '${join(root, 'scripts', 'lib', 'LexaVaultTools.ps1')}'; Initialize-LexaVaultDatabase -Jar '${jar}' -DbUrl 'jdbc:postgresql://localhost:${dbPort}/securedoc' -DbUser 'securedoc' -DbPassword $env:OWNER_DB_PASSWORD -StateDir '${join(run, 'install')}'`],
     { env: { ...process.env, OWNER_DB_PASSWORD: dbPassword }, encoding: 'utf8' });
   if (init.status !== 0) throw new Error('the install steps failed');
-  await new Promise((r) => ai.listen(aiPort, '127.0.0.1', r));
+  if (!realAi) await new Promise((r) => ai.listen(aiPort, '127.0.0.1', r));
   await startApp();
   const all = [...readdirSync(files).filter((n) => n.endsWith('.pdf')).sort().map((n) => join(files, n)),
     ...(existsSync(join(files, 'long')) ? readdirSync(join(files, 'long')).filter((n) => n.endsWith('.pdf')).sort().map((n) => join(files, 'long', n)) : [])];
-  for (const file of all) {
+  for (const file of all.filter((f) => only.length === 0 || only.includes(basename(f)))) {
     try {
       const row = await one(file);
       rows.push(row);
@@ -185,7 +195,7 @@ try {
   console.error(`STOPPED: ${e.message}`);
 } finally {
   if (app && app.exitCode === null) { const gone = new Promise((r) => app.once('exit', r)); app.kill('SIGKILL'); await gone; }
-  ai.close(); ai.closeAllConnections();
+  if (ai.listening) { ai.close(); ai.closeAllConnections(); }
   if (started) spawnSync('docker', ['rm', '-f', container], { stdio: 'ignore' });
 }
 writeFileSync(join(run, 'summary.json'), JSON.stringify(rows, null, 2));

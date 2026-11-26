@@ -6,7 +6,7 @@ import { apiClient } from '../api/client';
 import type { FocusedReviewItem, FocusedReviewQueue, ReviewBoundingBox, ReviewFoundText } from '../types';
 import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './data';
 import { FINAL_CHECK_WORDS, NAV, REVIEW_WORDS, SECOND_CHECK_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, foundByText, isFinalCheck, secondCheckBanner, sensitiveTypeName, whyAsked } from './words';
-import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
+import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkUnplacedNote, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
 import { PageFailed, sameImage, useObjectUrl } from './pageImage';
 import { ConfirmDialog } from './admin/shared';
@@ -387,7 +387,7 @@ export default function Review({ caps }: { caps: string[] }) {
               <div className="cf-bulk">
                 <p>{bulkWaitingText(bulk)}</p>
                 {bulk.skipped.length > 0 && (
-                  <p className="cf-bulk-note">{bulk.skipped.length} of them {bulk.skipped.length === 1 ? 'has' : 'have'} no place on the page and will be skipped.</p>
+                  <p className="cf-bulk-note">{bulkUnplacedNote(bulk.skipped.length)}</p>
                 )}
                 <button type="button" className="cf-btn" data-size="sm" onClick={() => setConfirmingBulk(true)} disabled={busy || bulk.toRedact.length === 0}>
                   {bulkButtonText(bulk)} <Kbd>Shift R</Kbd>

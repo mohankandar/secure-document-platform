@@ -76,19 +76,32 @@ export function bulkConfirmTitle(plan: BulkPlan<ReviewItemLike>): string {
   return `Redact ${n} ${sensitiveTypeName(plan.all[0].entityType)} ${n === 1 ? 'finding' : 'findings'}?`;
 }
 
+/** Task 0100 (R8): a finding without a place is never skipped; the case is held until a person decides it. */
+function waitsFor(n: number): string {
+  return n === 1
+    ? 'the case is not delivered until someone marks its place or keeps it visible.'
+    : 'the case is not delivered until someone marks their place or keeps them visible.';
+}
+
+/** The note under "Redact all N like this" when some have no place; null when all have one. */
+export function bulkUnplacedNote(n: number): string | null {
+  if (n <= 0) return null;
+  return `${n} of them ${n === 1 ? 'has' : 'have'} no place on the page. The case is not delivered until someone marks ${n === 1 ? 'its place or keeps it' : 'their place or keeps them'} visible.`;
+}
+
 /** What the confirmation says will happen. */
 export function bulkConfirmBody(plan: BulkPlan<ReviewItemLike>): string {
   const skipped = plan.skipped.length;
   const each = 'Each one is redacted and recorded as its own decision.';
   return skipped === 0
     ? each
-    : `${each} ${skipped} with no place on the page ${skipped === 1 ? 'is' : 'are'} skipped and ${skipped === 1 ? 'stays' : 'stay'} in the queue.`;
+    : `${each} ${skipped} ${skipped === 1 ? 'has' : 'have'} no place on the page and ${skipped === 1 ? 'is' : 'are'} not part of this: ${waitsFor(skipped)}`;
 }
 
 /** The sentence after a bulk run: what was redacted, what was skipped, what failed. */
 export function bulkResultText(redacted: number, skipped: number, failed: number, alreadyDecided = 0): string {
   const parts = [`Redacted ${redacted} ${redacted === 1 ? 'finding' : 'findings'}.`];
-  if (skipped > 0) parts.push(`${skipped} skipped because ${skipped === 1 ? 'its place was' : 'their place was'} not found; ${skipped === 1 ? 'it stays' : 'they stay'} in the queue.`);
+  if (skipped > 0) parts.push(`${skipped} ${skipped === 1 ? 'has' : 'have'} no place on the page and ${skipped === 1 ? 'is' : 'are'} still waiting: ${waitsFor(skipped)}`);
   if (failed > 0) parts.push(`${failed} could not be saved and ${failed === 1 ? 'stays' : 'stay'} in the queue.`);
   if (alreadyDecided > 0) parts.push(`${alreadyDecided} ${alreadyDecided === 1 ? 'was' : 'were'} already decided by someone else.`);
   return parts.join(' ');
