@@ -142,6 +142,18 @@ public final class ExternalIntake {
         return true;
     }
 
+    /**
+     * Task 0102: a file of this attempt was refused for good (wrong type, password, too big): the attempt ends now, as at
+     * its deadline, so it takes nothing more and its stored files are cleaned up. False when it is not waiting any more.
+     */
+    public boolean refuse(Instant now) {
+        if (status != ExternalIntakeStatus.AWAITING_DOCUMENTS) return false;
+        status = ExternalIntakeStatus.INCOMPLETE_EXPIRED;
+        expiredAt = Objects.requireNonNull(now);
+        updatedAt = now;
+        return true;
+    }
+
     public void markCleanupCompleted(Instant now) {
         if (status != ExternalIntakeStatus.INCOMPLETE_EXPIRED) {
             throw new IllegalStateException("Cleanup can only complete for an expired incomplete intake");

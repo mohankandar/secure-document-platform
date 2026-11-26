@@ -79,7 +79,8 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
                 while ((read = in.read(buffer)) >= 0) {
                     total += read;
                     if (total > connection.maxPdfSizeBytes()) {
-                        throw new IOException("Retrieved PDF exceeds configured size limit");
+                        // Task 0102: its own code, so polling tells a file too big (final) from a staging fault.
+                        throw technical("RETRIEVAL_TOO_LARGE", "Retrieved PDF exceeds configured size limit", null);
                     }
                     digest.update(buffer, 0, read); out.write(buffer, 0, read);
                 }

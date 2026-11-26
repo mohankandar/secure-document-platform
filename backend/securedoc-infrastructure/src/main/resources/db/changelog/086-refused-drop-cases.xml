@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0102 (owner test U3): a refused folder drop leaves no case. Before this task a drop whose file failed after the
+        case was made (a password-protected PDF) left the case open: CREATED, "Waiting for documents", on the dashboard, and
+        nobody could close it. This step closes each such case as refused at intake: CANCELLED and hidden from the dashboard.
+        The row, the drop's intake-problem record and its audit records are kept for reports.
+
+        Such a case: a folder-intake case still CREATED whose drop's latest intake record is REJECTED (a refused drop's
+        folder is in _problem and is never taken up again, so nothing will fill the case). Data only, no schema change.
+
+        Included after 013 in the master changelog, not at its end: a new database runs it on empty tables, an existing one
+        runs it once like any new change set, and the roll-back tests that count change sets from the end need no new count.
+    -->
+    <changeSet id="086-01-close-refused-drop-cases" author="lexavault">
+        <sql>
+            update document_packages p
+               set status = 'CANCELLED',
+                   dashboard_hidden_at = coalesce(p.dashboard_hidden_at, now()),
+                   updated_at = now(),
+                   version = p.version + 1
+             where p.package_type = 'FOLDER_INTAKE'
+               and p.status = 'CREATED'
+               and p.source_reference is not null
+               and exists (
+                   select 1 from intake_observations o
+                    where o.tenant_id = p.tenant_id
+                      and o.source_reference = p.source_reference
+                      and o.status = 'REJECTED'
+                      and not exists (
+                          select 1 from intake_observations later
+                           where later.tenant_id = o.tenant_id
+                             and later.source_reference = o.source_reference
+                             and later.updated_at > o.updated_at))
+        </sql>
+        <rollback>
+            <!-- The closed cases stay closed: reopening them would put the stuck cases back on the dashboard. -->
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

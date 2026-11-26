@@ -98,6 +98,23 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
         return this;
     }
 
+    /** Task 0102: the readable-PDF check every listed file passes before a case is made. Without it the upload checks alone. */
+    private PdfIntakeValidationPort fileCheck;
+    /** Task 0102: hides a half-made case from the dashboard. Without it a refused drop's case is only cancelled. */
+    private PackageDashboardVisibilityPort dashboardVisibility;
+
+    /** Task 0102: a drop is all or nothing; every listed file is checked before the case is made. */
+    public WatchedFolderIntakeService withFileCheck(PdfIntakeValidationPort fileCheck) {
+        this.fileCheck = Objects.requireNonNull(fileCheck);
+        return this;
+    }
+
+    /** Task 0102: a case a refused drop left half-made is closed out of the dashboard, kept in reports. */
+    public WatchedFolderIntakeService withDashboardVisibility(PackageDashboardVisibilityPort dashboardVisibility) {
+        this.dashboardVisibility = Objects.requireNonNull(dashboardVisibility);
+        return this;
+    }
+
     /** Task 0067: the same service, taking less while the queue is long and nothing while space is short. */
     public WatchedFolderIntakeService withGate(com.securedoc.platform.application.intake.IntakeGate gate) {
         this.gate = Objects.requireNonNull(gate);
@@ -216,6 +233,8 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                 IntakeFailure cause = recoveryConflict
                         ? new IntakeFailure(IntakeRejectionCode.RECOVERY_CONFLICT.name(), e.getClass().getSimpleName())
                         : IntakeFailure.of(e);
+                // Task 0102: before the refusal is recorded and the folder moved, so a crash in between retries both.
+                closeHalfMadeCase(principal, candidate, fingerprint, reason, correlationId);
                 reject(principal,candidate,reason,fingerprint,correlationId,scanLease,cause);
                 continue;
             }
@@ -245,6 +264,8 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
                     com.securedoc.platform.domain.error.LvErrorCode.INT_029, "The folder drop has more than "
                     + CaseLimits.MAX_FILES_PER_CASE + " files");
         }
+        // Task 0102: every listed file must be one the case can take, or no case is made.
+        checkEveryFile(candidate);
         requireCurrentLease(scanLease);
         PackageId createdPackageId;
         try {
@@ -314,6 +335,60 @@ public final class WatchedFolderIntakeService implements ScanWatchedFolderUseCas
             assertExactDocumentSet(current, expected);
         }
         return current.id();
+    }
+
+    /**
+     * Task 0102: the checks the upload makes on a folder file (not empty, a PDF the server can open, no password, at most
+     * {@link CaseLimits#MAX_PAGES_PER_FILE} pages), made on every file before the case exists. The first failure is thrown
+     * as the upload would throw it, so the refusal keeps the same LV code.
+     */
+    private void checkEveryFile(WatchedFolderCandidate candidate) {
+        if (fileCheck == null) return;
+        for (WatchedFolderDocument document : candidate.documents()) {
+            if (document.content().contentLength() < 1) {
+                throw new com.securedoc.platform.application.exception.ValidationException(
+                        com.securedoc.platform.domain.error.LvErrorCode.INT_006, "The file is empty");
+            }
+            int pages;
+            try (InputStream in = document.content().openStream()) {
+                pages = fileCheck.inspect(in).pageCount();
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException("Failed to read a watched-folder file", e);
+            }
+            if (pages > CaseLimits.MAX_PAGES_PER_FILE) {
+                throw new com.securedoc.platform.application.exception.ValidationException(
+                        com.securedoc.platform.domain.error.LvErrorCode.INT_028,
+                        "The PDF has more than " + CaseLimits.MAX_PAGES_PER_FILE + " pages");
+            }
+        }
+    }
+
+    /**
+     * Task 0102: a refused drop leaves no case. One it made before the refusal (a file that failed during upload, a crash
+     * between making the case and taking its files) is still CREATED: it is hidden from the dashboard first, then
+     * cancelled, both repeatable, so a crash between the two is finished by the retry of the claimed drop. Kept for reports.
+     */
+    private void closeHalfMadeCase(AuthenticatedPrincipal principal, WatchedFolderCandidate candidate, String fingerprint,
+                                   IntakeRejectionCode reason, CorrelationId correlationId) {
+        if (fingerprint == null) return;
+        try {
+            Optional<DocumentPackage> made = packageRepository.findByTenantIdAndIntakeFingerprint(principal.tenantId(), fingerprint)
+                    .filter(p -> p.status() == PackageStatus.CREATED && sameWatchedSource(p, candidate));
+            if (made.isEmpty()) return;
+            DocumentPackage halfMade = made.get();
+            if (dashboardVisibility != null) {
+                dashboardVisibility.hide(halfMade.id(), principal.tenantId(), principal.actorId(), Instant.now());
+            }
+            halfMade.cancel();
+            packageRepository.save(halfMade);
+            auditService.recordSuccess(principal.tenantId(), principal.actorId(), AuditAction.PACKAGE_CANCELLED,
+                    "DocumentPackage", halfMade.id().toString(), halfMade.id(), correlationId,
+                    "Refused at intake: reasonCode=" + reason + ", drop=" + dropReference(candidate));
+        } catch (RuntimeException closeFailure) {
+            // The refusal is still recorded; the case stays CREATED and the upgrade step's rule finds it.
+            log.warn("WATCHED_FOLDER_HALF_MADE_CASE_NOT_CLOSED drop={} exceptionType={}", dropReference(candidate),
+                    closeFailure.getClass().getSimpleName());
+        }
     }
 
     private boolean sameWatchedSource(DocumentPackage existing, WatchedFolderCandidate candidate) {

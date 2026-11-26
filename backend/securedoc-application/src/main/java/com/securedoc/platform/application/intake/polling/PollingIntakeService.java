@@ -28,6 +28,8 @@ public final class PollingIntakeService {
     private final PollingRunRepository runRepository;
     private final PollingSourcePort sourcePort;
     private final ExternalIntakeService externalIntakeService;
+    /** Task 0102: source failures that refuse the file itself (its type, its size): the case ends at once. */
+    static final java.util.Set<String> REFUSED_AT_RETRIEVAL = java.util.Set.of("RETRIEVAL_INVALID_CONTENT_TYPE", "RETRIEVAL_TOO_LARGE");
     private final AuditService auditService;
     private final Clock clock;
     private com.securedoc.platform.application.licensing.IntakeLicence licence;
@@ -303,11 +305,32 @@ public final class PollingIntakeService {
             if (intake.intakeStatus() != ExternalIntakeStatus.ACCEPTED_FOR_PROCESSING) {
                 for (PollingSourceDocument document : sourcePackage.documents()) {
                     if (!missing.contains(document.externalSourceDocumentId())) continue;
-                    try (RetrievedPollingDocument retrievedDocument = retrieveWithRetry(source, sourcePackage, document)) {
+                    RetrievedPollingDocument fetched;
+                    try {
+                        fetched = retrieveWithRetry(source, sourcePackage, document);
+                    } catch (PollingSourceException failed) {
+                        // Task 0102: a file of the wrong type or too big is refused for good; anything else may pass later.
+                        if (REFUSED_AT_RETRIEVAL.contains(failed.category())) {
+                            refuseCase(PackageId.of(intake.packageId()), source, principal, correlationId,
+                                    com.securedoc.platform.application.error.LvErrorCodes.forPollingCategory(failed.category()));
+                        }
+                        throw failed;
+                    }
+                    try (RetrievedPollingDocument retrievedDocument = fetched) {
                         String idempotencyKey = idempotencyKey(source, sourcePackage, document);
-                        ExternalDocumentReceipt receipt = externalIntakeService.receivePollingDocument(PackageId.of(intake.packageId()),
-                                document.externalSourceDocumentId(), idempotencyKey, retrievedDocument.sha256(), retrievedDocument.mimeType(),
-                                retrievedDocument.content(), source, principal, correlationId);
+                        ExternalDocumentReceipt receipt;
+                        try {
+                            receipt = externalIntakeService.receivePollingDocument(PackageId.of(intake.packageId()),
+                                    document.externalSourceDocumentId(), idempotencyKey, retrievedDocument.sha256(), retrievedDocument.mimeType(),
+                                    retrievedDocument.content(), source, principal, correlationId);
+                        } catch (com.securedoc.platform.application.exception.ValidationException refused) {
+                            // Task 0102: a file refused for good (type, password, size) ends the whole case now; the
+                            // failure itself is recorded as before.
+                            refuseCase(PackageId.of(intake.packageId()), source, principal, correlationId,
+                                    com.securedoc.platform.application.error.LvErrorCodes.optional(refused)
+                                            .orElse(com.securedoc.platform.domain.error.LvErrorCode.INT_008));
+                            throw refused;
+                        }
                         if (!receipt.duplicateAcknowledgement()) retrieved++;
                     }
                 }
@@ -323,6 +346,19 @@ public final class PollingIntakeService {
             return new PackageOutcome(retrieved, false);
         } catch (RuntimeException failure) {
             throw new PackageProcessingFailure(retrieved, failure);
+        }
+    }
+
+    private void refuseCase(PackageId packageId, IntegrationConnection source, AuthenticatedPrincipal principal,
+                            CorrelationId correlationId,
+                            com.securedoc.platform.domain.error.LvErrorCode reason) {
+        try {
+            externalIntakeService.refusePollingIntake(packageId, source, principal, correlationId, reason);
+        } catch (RuntimeException notClosed) {
+            // The refusal stands; the case then ends at its deadline, as before task 0102.
+            org.slf4j.LoggerFactory.getLogger(PollingIntakeService.class).warn(
+                    "POLLING_REFUSED_CASE_NOT_CLOSED packageId={} exceptionType={}", packageId,
+                    notClosed.getClass().getSimpleName());
         }
     }
 
