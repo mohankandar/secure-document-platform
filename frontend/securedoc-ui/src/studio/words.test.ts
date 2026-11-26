@@ -304,3 +304,13 @@ test('task 0079: Bulk is named, comes last, and a migration says how far it is',
   assert.equal(bulkStateText({ open: false, waiting: 5 }), 'Its cases wait for the next time below.');
   assert.equal(bulkStateText({ open: true, waiting: 5 }), 'Its cases may run now.');
 });
+
+test('task 0099: a page the final check held says so, with its kinds; the second check keeps its words', async () => {
+  const { secondCheckBanner, isFinalCheck } = await import('./words.ts');
+  assert.equal(secondCheckBanner(['FINAL', 'CARD', 'CVV'], 2), 'Still readable in the finished file on page 2: card number, card security code');
+  assert.equal(secondCheckBanner(['FINAL'], 1), 'Still readable in the finished file on page 1');
+  assert.equal(secondCheckBanner(['SSN'], 3), 'Second check found something on page 3: SSN');
+  assert.equal(secondCheckBanner(null, 3), null);
+  assert.equal(isFinalCheck(['FINAL', 'PIN']), true);
+  assert.equal(isFinalCheck(['PIN']), false);
+});

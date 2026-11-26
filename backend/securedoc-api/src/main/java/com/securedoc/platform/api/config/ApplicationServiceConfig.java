@@ -998,6 +998,7 @@ public class ApplicationServiceConfig {
             com.securedoc.platform.api.licensing.PlatformLicence licence,
             SensitiveContentAnalysisPort semanticAnalysisPort,
             com.securedoc.platform.application.port.out.PageImagePort pageImagePort,
+            SensitiveDataDetectionPort detectionPort,
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.base-url}") String visionUrl,
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model}") String visionModel,
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model-digest}") String visionDigest,
@@ -1009,6 +1010,9 @@ public class ApplicationServiceConfig {
                 findingRepository, storagePort, pdfRedactionPort, redactionVerificationPort, checksumPort,
                 eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort)
                 .withUsageMeter(usageMeter).withNonProductionMark(licence::testEnvironment)
+                // Task 0099: the pattern rules search the finished file again, for every entity.
+                .withFinalCheck(new com.securedoc.platform.application.secondcheck.FinalPatternCheck(
+                        textExtractionPort, detectionPort))
                 // Task 0083: the same models, each with the second check's own prompt. Not a bean: Find must never get it.
                 .withSecondCheck(new com.securedoc.platform.application.secondcheck.SecondCheck(textExtractionPort,
                         semanticAnalysisPort, pageImagePort,

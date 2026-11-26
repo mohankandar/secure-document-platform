@@ -53,7 +53,10 @@ class HybridPdfTextExtractionAdapterTest {
         assertEquals(1, output.pages().size());
         assertTrue(output.usedOcr());
         assertEquals(ExtractionSource.OCR, output.pages().get(0).source());
-        assertEquals(ocrText, output.pages().get(0).text());
+        // Task 0099 (changed): this stand-in OCR reads only the picture, so the page's own lines it did not read (the
+        // wrapper title and footer) follow the OCR text, to be searched too.
+        assertEquals(ocrText + "\nScanned Identity Verification Appendix - native wrapper text\n"
+                + "Synthetic precision fixture - page footer\n", output.pages().get(0).text());
     }
 
     private byte[] buildMixedNativeAndRasterPdf() throws Exception {

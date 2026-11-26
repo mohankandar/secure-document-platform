@@ -226,7 +226,8 @@ public class BusinessAdminController {
                 policy.enabledEntityTypes().stream().map(Enum::name).collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
                 policy.autoRedactThreshold(), policy.reviewMode().name(), policy.maskSsnLastFour(),
                 policy.searchableRedactedPages(), policy.pageBatches().size(), policy.pageBatches().overlap(),
-                names(policy.packs()), names(policy.keepLastFour()), policy.lockedItemsOn(),
+                // Task 0099: the locked items are on for every entity.
+                names(policy.packs()), names(policy.keepLastFour()), true,
                 policy.vision().enabled(), policy.vision().ocrThreshold(), policy.secondCheck(),
                 policy.documentContext());
         var lifecycle = configuration.lifecyclePolicy();

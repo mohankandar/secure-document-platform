@@ -213,6 +213,8 @@ const SECOND_CHECK_KINDS: Record<string, string> = {
   ROUTING: 'bank routing number',
   ID: 'ID number',
   FACE: 'face photo',
+  CVV: 'card security code',
+  PIN: 'PIN',
 };
 export const SECOND_CHECK_WORDS = {
   foundBy: 'Second check',
@@ -222,6 +224,18 @@ export const SECOND_CHECK_WORDS = {
   unread: (page: number) => `Second check could not read page ${page}`,
   why: 'The finished file was read a second time. Look over the whole page for anything that is still to be redacted. What was already redacted stays redacted.',
 } as const;
+
+/** Task 0099: the final check of the finished file (always on). Its kinds come after the marker FINAL. */
+export const FINAL_CHECK_WORDS = {
+  foundBy: 'Final check',
+  label: (page: number) => `Still readable in the finished file on page ${page}`,
+  why: 'The finished file was searched again before delivery and something that must be redacted can still be read on this page. It is not delivered until a person decides. Mark what is still to be redacted. What was already redacted stays redacted.',
+} as const;
+
+/** Task 0099: whether a page was sent by the final check rather than the second check. */
+export function isFinalCheck(kinds: readonly string[] | null | undefined): boolean {
+  return Array.isArray(kinds) && kinds[0] === 'FINAL';
+}
 
 /** Task 0065. */
 export const DOCUMENT_CONTEXT_WORDS = {
@@ -240,10 +254,11 @@ export const CASE_INSTRUCTIONS = {
   notSaved: "The instructions couldn't be saved.",
 } as const;
 
-/** The banner of a page the second check sent, or null for any other item. */
+/** The banner of a page the second check or the final check sent, or null for any other item. */
 export function secondCheckBanner(kinds: readonly string[] | null | undefined, page: number): string | null {
   if (!Array.isArray(kinds)) return null;
   const names = kinds.map((k) => SECOND_CHECK_KINDS[k]).filter((name): name is string => Boolean(name));
+  if (isFinalCheck(kinds)) return names.length === 0 ? FINAL_CHECK_WORDS.label(page) : `${FINAL_CHECK_WORDS.label(page)}: ${names.join(', ')}`;
   if (names.length === 0) return kinds.includes('UNREAD') ? SECOND_CHECK_WORDS.unread(page) : SECOND_CHECK_WORDS.label(page);
   return `${SECOND_CHECK_WORDS.label(page)}: ${names.join(', ')}`;
 }

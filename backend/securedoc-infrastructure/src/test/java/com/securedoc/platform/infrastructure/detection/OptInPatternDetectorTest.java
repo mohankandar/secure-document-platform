@@ -296,7 +296,17 @@ class OptInPatternDetectorTest {
             LocalRuleBasedDetectionAdapter adapter = new LocalRuleBasedDetectionAdapter();
             assertEquals(1, count(adapter, "Card number 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
             assertEquals(0, count(adapter, "Card number 4000 0566 5566 5557", "CREDIT_CARD_NUMBER"));
-            assertEquals(0, count(adapter, "Batch 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
+            // Task 0099 (changed from 0043): grouped like a card, with a card's first digits and check digit, a locked
+            // item is found without a label too, with less confidence, so a person decides.
+            assertEquals(List.of(0.75), cardConfidences(adapter, "Batch 4000 0566 5566 5556"));
+            assertEquals(0, count(adapter, "Batch 4000056655665556", "CREDIT_CARD_NUMBER"), "not grouped: not alone");
+            assertEquals(0, count(adapter, "Contract number 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
+        }
+
+        private static List<Double> cardConfidences(LocalRuleBasedDetectionAdapter adapter, String text) {
+            return adapter.detect(List.of(new com.securedoc.platform.application.port.out.SensitiveDataDetectionPort.PageInput(1, text)))
+                    .entities().stream().filter(e -> e.entityType().equals("CREDIT_CARD_NUMBER"))
+                    .map(DetectedEntity::confidence).toList();
         }
 
         private static List<Double> ssnConfidences(LocalRuleBasedDetectionAdapter adapter, String text) {

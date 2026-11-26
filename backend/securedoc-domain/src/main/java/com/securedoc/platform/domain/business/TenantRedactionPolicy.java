@@ -17,9 +17,9 @@ import java.util.Set;
  *
  * <p>Task 0062: the kinds come from the {@link RedactionCatalog}; {@code packs} are the regulation packs in force (they
  * say why kinds are on; {@code enabledEntityTypes} alone decides what is found, so a kind can be fine-tuned);
- * {@code keepLastFour} are the kinds whose last four digits stay visible. With {@code lockedItemsOn} the locked items
- * are always enabled. It is off only for an entity from before the catalog whose policy was not saved since, which
- * keeps exactly the behaviour it had.
+ * {@code keepLastFour} are the kinds whose last four digits stay visible. Task 0099: the locked items are always
+ * enabled, whatever {@code lockedItemsOn} says. That flag is false only for an entity from before the catalog whose
+ * policy was not saved since; it no longer keeps that entity's locked items off (a locked item is never delivered).
  *
  * <p>Task 0083: {@code secondCheck} (off by default) has a second AI read the finished file before it is kept.
  *
@@ -115,7 +115,7 @@ public record TenantRedactionPolicy(
         }
         EnumSet<EntityType> enabled = EnumSet.noneOf(EntityType.class);
         enabled.addAll(enabledEntityTypes);
-        if (lockedItemsOn) enabled.addAll(RedactionCatalog.lockedKinds());
+        enabled.addAll(RedactionCatalog.lockedKinds());
         enabledEntityTypes = Set.copyOf(enabled);
         packs = Set.copyOf(packs);
         keepLastFour = Set.copyOf(keepLastFour);

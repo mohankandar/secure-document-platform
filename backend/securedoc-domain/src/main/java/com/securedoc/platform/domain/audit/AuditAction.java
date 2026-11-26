@@ -66,6 +66,8 @@ public enum AuditAction {
     DOCUMENT_SIGNATURE_REMOVED,
     /** Task 0083: a second AI read the finished file. Pages, kinds and counts only. */
     DOCUMENT_SECOND_CHECK,
+    /** Task 0099: the finished file was searched with the pattern rules again. Pages, kinds and counts only. */
+    DOCUMENT_FINAL_CHECK,
     DOCUMENT_EXPORTED,
     DOCUMENT_EXPORT_FAILED,
     DOCUMENT_PROCESSING_FAILED,

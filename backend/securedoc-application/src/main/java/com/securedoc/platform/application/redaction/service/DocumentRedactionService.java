@@ -154,6 +154,13 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     }
 
     private com.securedoc.platform.application.secondcheck.SecondCheck secondCheck;
+    private com.securedoc.platform.application.secondcheck.FinalPatternCheck finalCheck;
+
+    /** Task 0099: the same service with the final pattern check of the finished file, for every entity. */
+    public DocumentRedactionService withFinalCheck(com.securedoc.platform.application.secondcheck.FinalPatternCheck check) {
+        this.finalCheck = Objects.requireNonNull(check);
+        return this;
+    }
 
     /** Task 0083: the same service with the second check, for entities that switched it on. */
     public DocumentRedactionService withSecondCheck(com.securedoc.platform.application.secondcheck.SecondCheck check) {
@@ -325,7 +332,10 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                                     : ", redactedPagesExtractableText=false"
                                             + (redactedValues.isEmpty() ? "" : ", valuesChecked=" + redactedValues.size())));
 
-            if (secondCheckAsksForAPerson(command, originalArtifact, allFindings, targets, redactedContent::openStream)) {
+            // Task 0099: never kept, and so never delivered, with a locked or enabled value still readable in it.
+            if (finalCheckAsksForAPerson(command, originalArtifact, allFindings, targets, redactedContent::openStream)
+                    || secondCheckAsksForAPerson(command, originalArtifact, allFindings, targets,
+                            redactedContent::openStream)) {
                 // Nothing is stored: the document stays REDACTING and the pages go to Review.
                 return RedactDocumentResult.of(command.documentId(), null, document.status(), 0);
             }
@@ -420,6 +430,32 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
                     command.documentId(), redactedArtifact.id(),
                     document.status(), redactionOutput.redactionsApplied());
         }
+    }
+
+    /**
+     * Task 0099: the finished file is searched with the pattern rules again; a locked or enabled value still found sends
+     * its page to a person. Always, for every entity. True when there is one.
+     */
+    private boolean finalCheckAsksForAPerson(RedactDocumentCommand command, Artifact original, List<Finding> findings,
+                                             List<RedactionTarget> targets,
+                                             com.securedoc.platform.application.secondcheck.SecondCheck.Finished finished) {
+        if (finalCheck == null) return false;
+        TenantRedactionPolicy policy = policyRepository == null ? null
+                : policyRepository.findByTenantId(command.tenantId()).orElse(null);
+        if (policy == null) policy = TenantRedactionPolicy.defaults(command.tenantId());
+        List<Finding> dismissed = findings.stream().filter(f -> f.status() == FindingStatus.DISMISSED).toList();
+        List<String> keptByAPerson = readFoundValues(original, dismissed.stream()
+                .filter(f -> f.location().endOffset() > f.location().startOffset()).toList())
+                .values().stream().map(FoundValue::raw).toList();
+        var result = finalCheck.run(command.tenantId(), command.documentId(), policy, finished, targets, dismissed,
+                keptByAPerson);
+        auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_FINAL_CHECK, "Document",
+                command.documentId().toString(), command.packageId(), command.correlationId(), result.auditDetail());
+        if (result.pagesToCheck().isEmpty()) return false;
+        log.warn("DOCUMENT_FINAL_CHECK_HELD document={} package={} pagesToCheck={}", command.documentId(),
+                command.packageId(), result.pagesToCheck().size());
+        findingRepository.saveAll(result.pagesToCheck());
+        return true;
     }
 
     /**

@@ -54,6 +54,7 @@ public final class AuditSentences {
             entry("DOCUMENT_REDACTION_COMPLETED", "Redacted a document"),
             entry("DOCUMENT_REDACTION_VERIFIED", "Verified a redacted document"),
             entry("DOCUMENT_SECOND_CHECK", "Checked the finished file a second time"),
+            entry("DOCUMENT_FINAL_CHECK", "Checked the finished file for anything still readable"),
             entry("DOCUMENT_SIGNATURE_REMOVED", "Removed a digital signature by redaction"),
             entry("DOCUMENT_PROCESSING_FAILED", "Could not process a document"),
             entry("DOCUMENT_DOWNLOADED", "Downloaded a document"),

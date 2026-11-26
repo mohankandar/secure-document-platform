@@ -43,11 +43,13 @@ class RedactionCatalogTest {
         }
         assertTrue(policy(Set.of(EntityType.SSN), Set.of(), true).enabledEntityTypes().containsAll(locked),
                 "on although not chosen");
-        assertEquals(Set.of(EntityType.SSN), policy(Set.of(EntityType.SSN), Set.of(), false).enabledEntityTypes(),
-                "an entity from before the catalog keeps exactly its kinds");
+        // Task 0099 (changed from 0062): a locked item is never delivered, also for an entity from before the catalog.
+        assertEquals(EnumSet.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV, EntityType.PIN),
+                EnumSet.copyOf(policy(Set.of(EntityType.SSN), Set.of(), false).enabledEntityTypes()),
+                "an entity from before the catalog keeps its kinds, and the locked items are on");
         assertTrue(TenantRedactionPolicy.defaults(TENANT).enabledEntityTypes().containsAll(locked));
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
-                        EntityType.CREDIT_SCORE),
+                        EntityType.CREDIT_SCORE, EntityType.CVV, EntityType.PIN),
                 EnumSet.copyOf(TenantRedactionPolicy.defaultsBeforeCatalog(TENANT).enabledEntityTypes()));
     }
 
