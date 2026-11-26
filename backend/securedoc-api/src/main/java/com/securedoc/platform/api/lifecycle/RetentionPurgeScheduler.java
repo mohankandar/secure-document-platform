@@ -1,6 +1,7 @@
 package com.securedoc.platform.api.lifecycle;
 
 import com.securedoc.platform.application.lifecycle.command.PurgeDueRetentionCommand;
+import com.securedoc.platform.application.lifecycle.service.DeliveryLeftoverService;
 import com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService;
 import com.securedoc.platform.application.pipeline.FinishedJobCleanupService;
 import com.securedoc.platform.application.port.in.PurgeDueRetentionUseCase;
@@ -17,7 +18,8 @@ import java.util.UUID;
 
 /**
  * Minimal in-process V1 retention maintenance. Durable scheduling can replace this later. Task 0034: after the purge,
- * the same run removes finished jobs past their keep time, and (task 0049) stored files without a record (a failure of one never stops the other).
+ * the same run removes finished jobs past their keep time, and (task 0049) stored files without a record, and (task 0097) what a
+ * killed server left of a delivery to a folder (a failure of one never stops the other).
  */
 @Component
 @ConditionalOnProperty(name = "securedoc.lifecycle.purge-scheduler-enabled", havingValue = "true", matchIfMissing = true)
@@ -28,9 +30,11 @@ public class RetentionPurgeScheduler {
     private final PurgeDueRetentionUseCase purgeUseCase;
     private final FinishedJobCleanupService jobCleanup;
     private final UnrecordedFileSweepService fileSweep;
+    private final DeliveryLeftoverService deliveryLeftovers;
 
     public RetentionPurgeScheduler(PurgeDueRetentionUseCase purgeUseCase, FinishedJobCleanupService jobCleanup,
-                                   UnrecordedFileSweepService fileSweep) {
+                                   UnrecordedFileSweepService fileSweep, DeliveryLeftoverService deliveryLeftovers) {
+        this.deliveryLeftovers = deliveryLeftovers;
         this.fileSweep = fileSweep;
         this.purgeUseCase = purgeUseCase;
         this.jobCleanup = jobCleanup;
@@ -63,6 +67,12 @@ public class RetentionPurgeScheduler {
             if (files > 0) log.info("UNRECORDED_FILES_CLEANED files={}", files);
         } catch (RuntimeException e) {
             log.warn("UNRECORDED_FILE_SWEEP_FAILED type={}", e.getClass().getSimpleName());
+        }
+        try {
+            int deliveries = deliveryLeftovers.run(SYSTEM_ACTOR, correlationId);
+            if (deliveries > 0) log.info("DELIVERY_LEFTOVERS_CLEANED deliveries={}", deliveries);
+        } catch (RuntimeException e) {
+            log.warn("DELIVERY_LEFTOVER_CLEANUP_FAILED type={}", e.getClass().getSimpleName());
         }
     }
 }

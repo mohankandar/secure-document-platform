@@ -10,8 +10,9 @@ every other job passed.
 |---|---|---|
 | `backend` | Java 21 (Temurin), `tesseract-ocr`, `mvn -B verify` in `backend/` with the PostgreSQL tests on, against a PostgreSQL 16 service container (`LEXAVAULT_TEST_PG_URL`, `_USER`, `_PASSWORD`). platform-core 1.0.0 from GitHub Packages through a `settings.xml` written in the job | Start a throwaway PostgreSQL (never `securedoc-postgres`), set the three `LEXAVAULT_TEST_PG_*` variables, then `cd backend; mvn -B verify` (the production build, without a development licence key; no test depends on the profile, task 0054) |
 | `frontend` | Node 22, `npm ci`, `npm run build` (typecheck + Vite build), Playwright Chromium and WebKit, `npm run test:standalone` | `cd frontend/securedoc-ui; npm ci; npm run build; npm run test:standalone` |
+| `build-script` | Java 21, Node 22, `bash Build-LexaVault-All.sh --skip-tests`: the build script with its jar checks (task 0097) | `bash Build-LexaVault-All.sh --skip-tests` |
 | `product-names` | `scripts/ci/check-product-names.sh`: fails if another product's name (the list in `scripts/ci/product-names.txt`) is in tracked code, SQL, JSON, XML, YAML, properties, scripts, styles or install guides. Strict since task 0045: no baseline | `bash scripts/ci/check-product-names.sh` (Git Bash on Windows) |
-| `ci-passed` | Needs the three jobs above | |
+| `ci-passed` | Needs the four jobs above | |
 
 `test:standalone` is every frontend suite that runs without the app: `test:auth`, `test:vocabulary`,
 `test:ui-framework`, `test:oidc-signin`, `test:tablet` (WebKit), `test:a11y`. The browser suites start their own Vite

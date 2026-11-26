@@ -62,7 +62,7 @@ public class StoredFileErasure {
     }
 
     @FunctionalInterface
-    private interface Work<T> {
+    interface Work<T> {
         T on(Connection connection) throws SQLException, IOException;
     }
 
@@ -129,7 +129,9 @@ public class StoredFileErasure {
                 drop.executeUpdate();
             }
         }
-        audit(c, entry, packageId);
+        boolean wholeCase = EraseRecord.CASE.equals(entry.request().recordType());
+        audit(c, entry, wholeCase ? "DocumentPackage" : "Artifact", wholeCase ? entry.request().recordId()
+                : EraseRecord.FileId.of(entry.request()).fileId().toString(), packageId);
         return any ? EraseHandler.Applied.ERASED : EraseHandler.Applied.ALREADY_GONE;
     }
 
@@ -175,11 +177,11 @@ public class StoredFileErasure {
     }
 
     /** One audit record per erasure, under the id in the entry; written again when a replay follows a restore. */
-    private static void audit(Connection c, EraseEntry entry, UUID packageId) throws SQLException {
+    static void audit(Connection c, EraseEntry entry, String resourceType, String resourceId, UUID packageId)
+            throws SQLException {
         EraseRequest request = entry.request();
         UUID id = UUID.fromString(request.auditId());
         boolean person = request.by().type() == ErasedBy.Type.PERSON;
-        boolean wholeCase = EraseRecord.CASE.equals(request.recordType());
         try (PreparedStatement insert = c.prepareStatement("""
                 insert into audit_records (id, tenant_id, actor_id, action, resource_type, resource_id, outcome,
                         correlation_id, detail, occurred_at, created_at, case_id)
@@ -190,8 +192,8 @@ public class StoredFileErasure {
             insert.setObject(1, id);
             insert.setObject(2, person ? UUID.fromString(request.by().id()) : new UUID(0, 0));
             insert.setString(3, AuditAction.FILES_ERASED.name());
-            insert.setString(4, wholeCase ? "DocumentPackage" : "Artifact");
-            insert.setString(5, wholeCase ? request.recordId() : EraseRecord.FileId.of(request).fileId().toString());
+            insert.setString(4, resourceType);
+            insert.setString(5, resourceId);
             insert.setObject(6, id);
             insert.setString(7, "Erased: kind=" + request.kind() + (person ? "" : ", rule=" + request.by().id())
                     + ", eraseLogEntry=" + entry.seq());
@@ -363,7 +365,7 @@ public class StoredFileErasure {
     // ------------------------------------------------------------------------------------- transactions
 
     /** On the position's own connection where there is one, so the erasure and the position are one transaction. */
-    private EraseHandler.Applied inTransaction(EraseHandler.Context context, Work<EraseHandler.Applied> work) {
+    EraseHandler.Applied inTransaction(EraseHandler.Context context, Work<EraseHandler.Applied> work) {
         Connection given = context.connection().orElse(null);
         return guarded(() -> {
             if (given != null) {
@@ -403,12 +405,12 @@ public class StoredFileErasure {
     }
 
     @FunctionalInterface
-    private interface Guarded<T> {
+    interface Guarded<T> {
         T run() throws SQLException, IOException;
     }
 
     /** Codes only: an exception's own text can hold a path. */
-    private static <T> T guarded(Guarded<T> work) {
+    static <T> T guarded(Guarded<T> work) {
         try {
             return work.run();
         } catch (IOException e) {

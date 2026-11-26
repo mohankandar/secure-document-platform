@@ -230,6 +230,7 @@ const SENTENCES: Record<string, string> = {
   SPLIT_COPY_PURGED: 'Deleted a split copy after its retention period',
   PIPELINE_JOBS_CLEANED: 'Removed finished export jobs after their keep time',
   UNRECORDED_FILES_CLEANED: 'Removed stored files that no record points to',
+  DELIVERY_LEFTOVERS_CLEANED: 'Removed what an interrupted folder delivery left behind',
   FILES_ERASED: 'Erased stored files (recorded in the erase log)',
   CASE_FIELDS_ERASED: 'Case field values erased',
   // Staged processing (task 0048)

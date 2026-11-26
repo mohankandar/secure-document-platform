@@ -50,6 +50,8 @@
 | **Before a push / release candidate** | Everything above, plus L5 in full, L8 (live with Vero), L9 baseline unchanged or better, and the **AI model change gate** (owner, 2026-11-22: any change to a model, its digest, a prompt or an AI setting re-runs the model test set and must meet the approved pass marks; the result is recorded for the model register, `Model-Governance-Design.md`) |
 | **Before the first customer** | All of the above, plus L10 (pen test), the install checklist (`First-Install-Success-Criteria.md`), and the vision benchmark part B on their samples |
 
+**Tools run at milestones only (task 0097, decided after 0086):** the export end-to-end (`scripts/Test-LexaVault-ExportE2E.ps1`), the two-server check (`test-tools/two-servers`) and the operational continuity tools run at milestones (M1, M2, a release candidate), not for each task or merge. CI keeps its own suites: backend, `test:standalone`, the build script with its jar checks, and the product-name guard.
+
 **The AI model change gate, how it is measured (task 0080, 2026-11-24):**
 - The product benchmark (`test-tools/vision-product`) is run three times on the approved state; a change is compared against the **lowest** of the three. Run-to-run spread measured on 2026-11-24: none on routed pages, one item of 274 overall.
 - **The AI server's own version counts**: an update of it is a model change, also with the same model digest. Record it with the result. (0064: 122 of 130 on Ollama 0.40.17; the same commit and digests: 119 of 130, three times, on 0.40.18.)

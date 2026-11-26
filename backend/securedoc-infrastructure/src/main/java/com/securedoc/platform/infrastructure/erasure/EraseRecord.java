@@ -3,17 +3,19 @@ package com.securedoc.platform.infrastructure.erasure;
 import com.documentplatform.eraselog.EraseHandlerException;
 import com.documentplatform.eraselog.EraseRequest;
 import com.securedoc.platform.domain.artifact.ArtifactType;
+import com.securedoc.platform.infrastructure.delivery.StagingFolder;
 
 import java.util.UUID;
 
 /**
  * Task 0060: LexaVault's erase log entries: the product, the kinds and what the record id holds. Ids only.
- * A case is its id; a file is {@code <case>/<document>/<file>}.
+ * A case is its id; a file is {@code <case>/<document>/<file>}; a folder delivery is {@code <case>/<case run>/<delivery>}.
  */
 public final class EraseRecord {
     public static final String PRODUCT = "LEXAVAULT";
     public static final String CASE = "case";
     public static final String FILE = "file";
+    public static final String FOLDER_DELIVERY = "folder-delivery";
 
     /** Every stored file of a case except its split copies. */
     public static final String CASE_FILES = "case-files";
@@ -27,6 +29,9 @@ public final class EraseRecord {
     public static final String WORKING_FILE = "working-file";
     /** A file no record points to. */
     public static final String UNRECORDED_FILE = "unrecorded-file";
+
+    /** Task 0097: the redacted copies a killed server left of a delivery to a folder. */
+    public static final String DELIVERY_LEFTOVER = "delivery-leftover";
 
     /** Task 0061: the case field values of a business record; platform-core's own kind and handler. */
     public static final String CASE_FIELDS = com.documentplatform.eraselog.fields.CaseFieldsEraseHandler.KIND;
@@ -55,6 +60,17 @@ public final class EraseRecord {
         public String toString() {
             return packageId + "/" + documentId + "/" + fileId;
         }
+    }
+
+    /** {@code <case>/<case run>/<delivery>}: LexaVault's own name of a staging folder, taken apart. */
+    static String folderDelivery(StagingFolder folder) {
+        return folder.packageId() + "/" + folder.exportCycle() + "/" + folder.deliveryId();
+    }
+
+    static StagingFolder folderDelivery(EraseRequest request) {
+        String[] parts = request.recordId().split("/", -1);
+        if (!FOLDER_DELIVERY.equals(request.recordType()) || parts.length != 3 || !parts[1].matches("[1-9][0-9]{0,8}")) throw unknown();
+        return new StagingFolder(id(parts[0]), Integer.parseInt(parts[1]), id(parts[2]));
     }
 
     static UUID caseId(EraseRequest request) {
