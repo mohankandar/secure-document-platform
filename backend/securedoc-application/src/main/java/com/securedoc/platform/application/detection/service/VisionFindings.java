@@ -77,6 +77,14 @@ public final class VisionFindings {
         return found;
     }
 
+    /**
+     * Task 0100 (R4): a page the text reader could not read (not blank). What the vision model said of it stays, and a
+     * person still checks the whole page: its reading can't be trusted, so it is never delivered on the model's word.
+     */
+    public static Candidate untrusted(int page, List<AiModel> models) {
+        return unread(page, "TEXT_NOT_READABLE", models);
+    }
+
     /** A page for a person: it has no place, so it can never be redacted or delivered without a decision. */
     private static Candidate unread(int page, String why, List<AiModel> models) {
         return new Candidate(EntityType.UNREAD_PAGE, FindingLocation.unlocated(page), 0.0,

@@ -410,6 +410,10 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             if (result == null) result = vision.reader().read(document, policy.vision(), route.page());
             if (result.read()) {
                 models.add(result.model());
+                // Task 0100: OCR could not read it at all; the model's reading alone does not pass it.
+                if (route.reasons().contains(PageRoute.Reason.NOT_READABLE)) {
+                    others.add(VisionFindings.untrusted(route.page(), List.of(result.model())));
+                }
             } else {
                 notRead.put(route.page(), result.code() == null ? result.reason() : result.code());
                 others.addAll(VisionFindings.signatures(route, policy.enabledEntityTypes()));

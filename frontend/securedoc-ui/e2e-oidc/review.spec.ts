@@ -178,7 +178,7 @@ test('Redact all like this: confirms first; same type and same case only, one ca
   const confirmed: string[] = [];
   await openReview(page, confirmed);
   await expect(panel(page)).toContainText('2 more Social Security Numbers are waiting in this case.');
-  await expect(panel(page)).toContainText('1 of them has no place on the page and will be skipped.');
+  await expect(panel(page)).toContainText('1 of them has no place on the page. The case is not delivered until someone marks its place or keeps it visible.');
 
   // Shift+R asks first; Cancel sends nothing.
   await page.keyboard.press('Shift+R');
@@ -192,7 +192,7 @@ test('Redact all like this: confirms first; same type and same case only, one ca
   await panel(page).getByRole('button', { name: /Redact all 3 like this/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Redact', exact: true }).click();
-  await expect(page.locator('.cf-toast')).toContainText('Redacted 2 findings. 1 skipped because its place was not found; it stays in the queue.');
+  await expect(page.locator('.cf-toast')).toContainText('Redacted 2 findings. 1 has no place on the page and is still waiting: the case is not delivered until someone marks its place or keeps it visible.');
   expect(confirmed.sort()).toEqual(['f1', 'f2']);
 
   await expect(queue(page)).toContainText('place not found');
@@ -283,7 +283,7 @@ test('0023 D5: Redact all like this counts a finding someone else already decide
   await openReview(page, confirmed, [], queueItems(), { f2: ALREADY });
   await panel(page).getByRole('button', { name: /Redact all 3 like this/ }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Redact', exact: true }).click();
-  await expect(page.locator('.cf-toast')).toContainText('Redacted 1 finding. 1 skipped because its place was not found; it stays in the queue. 1 was already decided by someone else.');
+  await expect(page.locator('.cf-toast')).toContainText('Redacted 1 finding. 1 has no place on the page and is still waiting: the case is not delivered until someone marks its place or keeps it visible. 1 was already decided by someone else.');
   expect(confirmed).toEqual(['f1']);
   await expect(queue(page).locator('.cf-queue-item')).toHaveCount(4);
 });
