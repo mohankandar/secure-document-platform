@@ -8,6 +8,7 @@ import { CAP, caseTitle, errorMessage, usePackages, useReviewQueue } from './dat
 import { NAV, REVIEW_WORDS, SECOND_CHECK_WORDS, UNREAD_PAGE, UNREAD_PAGE_WORDS, foundByText, secondCheckBanner, sensitiveTypeName, whyAsked } from './words';
 import { PREVIEW_PIXELS_PER_CSS_PIXEL, alreadyDecidedText, bulkButtonText, bulkConfirmBody, bulkConfirmTitle, bulkPlan, bulkResultText, bulkWaitingText, isAlreadyDecided, maskFoundText, nextZoom, fitWidth } from './reviewRules';
 import { Kbd, Notice, Spinner } from './atoms';
+import { PageFailed, sameImage, useObjectUrl } from './pageImage';
 import { ConfirmDialog } from './admin/shared';
 import { useToast } from './toast';
 import { RejectCase } from './RejectCase';
@@ -422,9 +423,13 @@ function PageStage({ item, draft, onDraft, boxes, zoom, onZoom, onAlreadyDecided
   onZoom: (zoom: Zoom) => void;
   onAlreadyDecided: () => void;
 }) {
-  const { data, error } = useSWR(['review-preview', item.findingId], () => apiClient.getReviewPagePreview(item.findingId), { revalidateOnFocus: false });
-  const url = useMemo(() => (data ? URL.createObjectURL(data.blob) : null), [data]);
-  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  const { data, error, isValidating, mutate } = useSWR(['review-preview', item.findingId], () => apiClient.getReviewPagePreview(item.findingId), { revalidateOnFocus: false, compare: sameImage });
+  const url = useObjectUrl(data?.blob);
+  // Task 0101: the browser could not show the image it got.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const broken = url !== null && url === brokenUrl;
+  const failed = (Boolean(error) || broken) && !isValidating;
+  const retry = () => { void mutate(); };
   // Task 0023 D5: the preview answers 409 REVIEW_ALREADY_DECIDED when someone else decided this finding. Once only.
   const goneReported = useRef(false);
   useEffect(() => {
@@ -508,9 +513,9 @@ function PageStage({ item, draft, onDraft, boxes, zoom, onZoom, onAlreadyDecided
       </div>
       {/* U026 (WCAG 2.1.1): the page can be scrolled by keyboard when zoomed in. */}
       <div className="cf-viewer-canvas" ref={canvasRef} tabIndex={0} role="group" aria-label={`Page ${item.pageNumber}, scroll with the arrow keys`}>
-        {error && <Notice tone="danger">The page preview is unavailable.</Notice>}
-        {!url && !error && <Spinner label="Rendering page" />}
-        {url && (
+        {failed && <PageFailed onRetry={retry} />}
+        {!failed && (!url || broken) && <Spinner label="Rendering page" />}
+        {url && !broken && !failed && (
           <div
             ref={surfaceRef}
             className="cf-page"
@@ -533,6 +538,7 @@ function PageStage({ item, draft, onDraft, boxes, zoom, onZoom, onAlreadyDecided
               alt={`Page ${item.pageNumber} of ${item.fileName}`}
               draggable={false}
               onLoad={(e) => setNaturalWidth(e.currentTarget.naturalWidth)}
+              onError={() => setBrokenUrl(url)}
             />
             {detected && !draft && <span className="cf-box" data-kind="detected" style={boxStyle(detected)} aria-hidden="true" />}
             {boxes?.map((box, n) => <span key={n} className="cf-box" data-kind="drawn" style={boxStyle(box)} aria-hidden="true" />)}

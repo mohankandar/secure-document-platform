@@ -1,4 +1,6 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
+import { test, expect, type Page, type Route, type TestInfo } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { capabilitiesFor } from './policyCapabilities';
 import { crc32, deflateSync } from 'node:zlib';
 
@@ -89,7 +91,10 @@ function queueItems() {
   ];
 }
 
-async function mockApi(page: Page, confirmed: string[], dismissed: string[], initial = queueItems(), refused: Record<string, { status: number; body: object }> = {}) {
+/** Task 0101: how a page preview is answered; a page by default. */
+type PreviewAnswer = 'page' | 'fail' | 'broken';
+
+async function mockApi(page: Page, confirmed: string[], dismissed: string[], initial = queueItems(), refused: Record<string, { status: number; body: object }> = {}, preview: (findingId: string) => PreviewAnswer = () => 'page') {
   let items = initial;
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
@@ -117,16 +122,18 @@ async function mockApi(page: Page, confirmed: string[], dismissed: string[], ini
       const previewOf = url.pathname.split('/')[4]; // /api/v1/review-items/<id>/page-preview
       const previewRefusal = refused[`preview:${previewOf}`];
       if (previewRefusal) { items = items.filter((i) => i.findingId !== previewOf); return json(previewRefusal.body, previewRefusal.status); }
-      return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'X-Review-Page-Number': '1' }, body: PAGE_PNG });
+      const answer = preview(previewOf);
+      if (answer === 'fail') return json({ errorCode: 'LV-SYS-001', message: 'SERVER-TEXT-MARKER' }, 500);
+      return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'X-Review-Page-Number': '1' }, body: answer === 'broken' ? Buffer.from('not a picture') : PAGE_PNG });
     }
     if (url.pathname === '/api/v1/review-items') return json({ totalItems: items.length, items, autoRedactThreshold: 0.85 });
     return json({});
   });
 }
 
-async function openReview(page: Page, confirmed: string[] = [], dismissed: string[] = [], items = queueItems(), refused: Record<string, { status: number; body: object }> = {}) {
+async function openReview(page: Page, confirmed: string[] = [], dismissed: string[] = [], items = queueItems(), refused: Record<string, { status: number; body: object }> = {}, preview?: (findingId: string) => PreviewAnswer) {
   await mockIdentityProvider(page);
-  await mockApi(page, confirmed, dismissed, items, refused);
+  await mockApi(page, confirmed, dismissed, items, refused, preview);
   await page.goto('/');
   await page.getByRole('button', { name: /sign in/i }).first().click();
   await page.getByRole('link', { name: /^Review/ }).first().click();
@@ -400,4 +407,68 @@ test('task 0074: a page to check takes several marks, needs the confirmation, an
   expect(sent[1].body.boxes).toEqual([]);
   expect(confirmed).toEqual([]);
   expect(dismissed).toEqual([]);
+});
+
+/*
+ * Task 0101 (owner test U1): the page showed once, then only its alt text or a spinner after moving between findings,
+ * cases or leaving Review. The dev server runs React.StrictMode, which mounts every component twice: a page already in
+ * the cache got its object URL revoked by the first unmount while the second still showed it.
+ */
+const pageImage = (page: Page) => page.locator('.cf-viewer .cf-page img');
+
+async function expectPageShown(page: Page) {
+  await expect(pageImage(page)).toBeVisible();
+  await expect.poll(() => pageImage(page).evaluate((el: HTMLImageElement) => (el.complete ? el.naturalWidth : -1))).toBe(1224);
+  await expect(page.getByText('The page could not be loaded.')).toHaveCount(0);
+}
+
+/** The page viewer only (no found value in a picture), attached; also saved as a file when LV_SHOTS_DIR is set (the report). */
+async function shot(page: Page, testInfo: TestInfo, name: string) {
+  const body = await page.locator('.cf-viewer').screenshot();
+  await testInfo.attach(name, { body, contentType: 'image/png' });
+  if (process.env.LV_SHOTS_DIR) writeFileSync(join(process.env.LV_SHOTS_DIR, name + '.png'), body);
+}
+
+const itemWith = (page: Page, text: string) => queue(page).locator('.cf-queue-item').filter({ hasText: text });
+
+test('0101 U1: the page shows every time, between findings and cases and after leaving Review, 10 rounds', async ({ page }, testInfo) => {
+  await openReview(page);
+  for (let round = 1; round <= 10; round += 1) {
+    await expectPageShown(page);
+    await itemWith(page, '7741').click(); // next finding, same document
+    await expectPageShown(page);
+    await itemWith(page, '0193').click(); // back: the page is in the cache now
+    await expectPageShown(page);
+    await itemWith(page, '9184').click(); // the other case's document
+    await expectPageShown(page);
+    await itemWith(page, '0193').click();
+    await expectPageShown(page);
+    // Leave the case's findings and come back.
+    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: /^Cases/ }).click();
+    await expect(page.getByRole('heading', { name: 'Review', level: 1 })).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: /^Review/ }).click();
+    await expect(page.getByRole('heading', { name: 'Review', level: 1 })).toBeVisible();
+  }
+  await expectPageShown(page);
+  await shot(page, testInfo, '0101-page-after-10-rounds');
+});
+
+test('0101: a page that fails to load says so with Try again, never its alt text', async ({ page }, testInfo) => {
+  let calls = 0;
+  await openReview(page, [], [], queueItems(), {}, () => (calls++ === 0 ? 'fail' : 'page'));
+  await expect(page.getByText('The page could not be loaded.')).toBeVisible();
+  await expect(pageImage(page)).toHaveCount(0);
+  await expect(page.getByText('Page 1 of Closing_Disclosure.pdf')).toHaveCount(0);
+  await shot(page, testInfo, '0101-page-failed');
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expectPageShown(page);
+});
+
+test('0101: an image the browser cannot show says so with Try again, never its alt text', async ({ page }) => {
+  let calls = 0;
+  await openReview(page, [], [], queueItems(), {}, () => (calls++ === 0 ? 'broken' : 'page'));
+  await expect(page.getByText('The page could not be loaded.')).toBeVisible();
+  await expect(pageImage(page)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expectPageShown(page);
 });
