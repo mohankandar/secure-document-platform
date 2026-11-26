@@ -105,7 +105,8 @@ class WatchedFolderIntakeServiceRecoveryTest {
 
         assertEquals(1, result.rejected());
         assertEquals(0, result.duplicates());
-        assertEquals(PackageStatus.CREATED, repository.current.status());
+        // Task 0102: the refused drop leaves no open case; the half-made one is closed (CANCELLED) and kept.
+        assertEquals(PackageStatus.CANCELLED, repository.current.status());
         assertEquals(IntakeDisposition.REJECTED, harness.source.disposition);
         assertEquals(IntakeObservationStatus.REJECTED, harness.observations.latest.status());
         assertEquals(IntakeRejectionCode.RECOVERY_CONFLICT, harness.observations.latest.reasonCode(), "task 0023 C2");

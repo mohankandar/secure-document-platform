@@ -58,6 +58,44 @@ class ExternalIntakeMaintenanceServiceTest {
         assertFalse(audits.isEmpty());
     }
 
+    /** Task 0102: a polled case with a file refused for good ends now, before its deadline, out of the dashboard. */
+    @Test
+    void aRefusedAttemptEndsNowItsCaseIsHiddenAndCancelledAndItsFilesErased() {
+        TenantId tenant = TenantId.generate();
+        ActorId actor = ActorId.generate();
+        DocumentPackage pkg = DocumentPackage.create(tenant, PackageType.API_SUBMISSION, actor, PackageMetadata.empty());
+        DocumentId receivedDocumentId = DocumentId.generate();
+        Instant created = Instant.parse("2026-11-26T00:00:00Z");
+        ExternalIntake intake = ExternalIntake.create(pkg.id(), tenant, IntegrationConnectionId.generate(),
+                ExternalIntakeChannel.POLLING, "SRC-779001126006", "1", "f".repeat(64), created,
+                created.plus(Duration.ofHours(24)), List.of(
+                        ExternalManifestDocument.expected("D1", "good.pdf", null),
+                        ExternalManifestDocument.expected("D2", "locked.pdf", null)));
+        intake.recordReceived("D1", receivedDocumentId, "a".repeat(64), "idem-1", created.plusSeconds(10));
+        Artifact artifact = Artifact.create(tenant, receivedDocumentId, ArtifactType.ORIGINAL,
+                MimeType.pdf(), 10, Checksum.sha256("a".repeat(64)));
+        artifact.markAvailable(ArtifactStorageReference.local("tenant/package/document/original"));
+        FakeArtifactRepository artifacts = new FakeArtifactRepository(artifact);
+        FakeStorage storage = new FakeStorage();
+        List<AuditRecord> audits = new ArrayList<>();
+        List<PackageId> hidden = new ArrayList<>();
+        Clock clock = Clock.fixed(created.plus(Duration.ofMinutes(1)), ZoneOffset.UTC);
+        ExternalIntakeMaintenanceService service = new ExternalIntakeMaintenanceService(new FakeExternalIntakeRepository(intake),
+                new FakePackageRepository(pkg), artifacts,
+                new com.securedoc.platform.application.port.out.DirectErasure(artifacts, storage), new AuditService(audits::add), clock)
+                .withDashboardVisibility((id, t, a, at) -> hidden.add(id));
+
+        assertTrue(service.refuseNow(intake, actor, CorrelationId.generate(), "LV-INT-008"));
+
+        assertEquals(ExternalIntakeStatus.INCOMPLETE_EXPIRED, intake.status(), "ended before its deadline");
+        assertEquals(PackageStatus.CANCELLED, pkg.status());
+        assertEquals(List.of(pkg.id()), hidden);
+        assertEquals(ArtifactStatus.DELETED, artifact.status(), "the good file stored first is erased");
+        assertTrue(audits.stream().anyMatch(r -> r.detail() != null && r.detail().startsWith("Refused at intake: code=LV-INT-008")));
+        assertFalse(service.refuseNow(intake, actor, CorrelationId.generate(), "LV-INT-008"), "once only");
+        assertEquals(1, hidden.size(), "repeating changes nothing");
+    }
+
     private static final class FakeExternalIntakeRepository implements ExternalIntakeRepository {
         private ExternalIntake intake;
         FakeExternalIntakeRepository(ExternalIntake intake) { this.intake = intake; }

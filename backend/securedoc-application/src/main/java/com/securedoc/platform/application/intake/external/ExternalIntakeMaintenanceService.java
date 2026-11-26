@@ -72,6 +72,39 @@ public final class ExternalIntakeMaintenanceService {
         return true;
     }
 
+    /** Task 0102: hides a refused attempt's case from the dashboard. Without it the case is only cancelled. */
+    private com.securedoc.platform.application.port.out.PackageDashboardVisibilityPort dashboardVisibility;
+
+    public ExternalIntakeMaintenanceService withDashboardVisibility(
+            com.securedoc.platform.application.port.out.PackageDashboardVisibilityPort dashboardVisibility) {
+        this.dashboardVisibility = Objects.requireNonNull(dashboardVisibility);
+        return this;
+    }
+
+    /**
+     * Task 0102 (owner test U3): a polled case is all or nothing. When one of its files is refused for good the attempt
+     * ends now: its case is hidden from the dashboard first, then cancelled (kept for reports), and the files already
+     * stored are erased as at expiry. Each step can be repeated, so a crash between them is finished by the next refusal
+     * or by the cleanup retry.
+     */
+    public boolean refuseNow(ExternalIntake intake, ActorId actorId, CorrelationId correlationId, String lvCode) {
+        Objects.requireNonNull(intake);
+        Instant now = Instant.now(clock);
+        packageRepository.findByIdAndTenantId(intake.packageId(), intake.tenantId()).ifPresent(pkg -> {
+            if (pkg.status() != PackageStatus.CREATED) return;
+            if (dashboardVisibility != null) dashboardVisibility.hide(pkg.id(), pkg.tenantId(), actorId, now);
+            pkg.cancel();
+            packageRepository.save(pkg);
+        });
+        if (!intake.refuse(now)) return false;
+        externalIntakeRepository.save(intake);
+        auditService.recordSuccess(intake.tenantId(), actorId, AuditAction.EXTERNAL_INTAKE_EXPIRED,
+                "ExternalIntake", intake.packageId().toString(), correlationId,
+                "Refused at intake: code=" + lvCode + ", received=" + intake.receivedCount() + "/" + intake.expectedCount());
+        attemptCleanup(intake, actorId, correlationId);
+        return true;
+    }
+
     /** Expires due intakes and retries cleanup for already-expired intakes whose prior cleanup failed. */
     public MaintenanceResult maintainDue(int limit, ActorId actorId, CorrelationId correlationId) {
         int expired = 0;

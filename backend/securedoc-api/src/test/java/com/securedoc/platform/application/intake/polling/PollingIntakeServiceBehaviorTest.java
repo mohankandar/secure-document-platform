@@ -57,6 +57,51 @@ class PollingIntakeServiceBehaviorTest {
         verify(sourcePort, never()).acknowledgeReceived(any(), any(), anyInt());
     }
 
+    /** Task 0102: a polled file refused for good (here password-protected) ends its whole case at once. */
+    @Test
+    void aRefusedFileEndsTheWholeCaseAtOnceAndAnUnreachableFileDoesNot() {
+        when(connections.get(tenant, source.id())).thenReturn(source);
+        when(connections.recordOperationalFailure(any(), anyString())).thenReturn(source);
+        var pkg = packageWith("DOC-A", "DOC-B");
+        when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of(pkg));
+        UUID packageId = UUID.randomUUID();
+        when(external.createPollingIntake(any(), eq(source), any(), any())).thenReturn(snapshot(packageId,
+                ExternalIntakeStatus.AWAITING_DOCUMENTS, 0, List.of("DOC-A", "DOC-B")));
+        when(sourcePort.retrieveDocument(eq(source), eq(pkg), any())).thenAnswer(i -> retrieved("a"));
+        when(external.receivePollingDocument(eq(PackageId.of(packageId)), eq("DOC-A"), anyString(), anyString(), eq("application/pdf"), any(), eq(source), any(), any()))
+                .thenThrow(new com.securedoc.platform.application.exception.ValidationException(
+                        com.securedoc.platform.domain.error.LvErrorCode.INT_008, "Password-protected file. Send it through the API."));
+
+        PollingRunSnapshot result = service.runNow(tenant, source.id(), ActorId.generate()).orElseThrow();
+
+        assertNotEquals(PollingRunStatus.SUCCESS, result.status());
+        verify(external).refusePollingIntake(eq(PackageId.of(packageId)), eq(source), any(), any(),
+                eq(com.securedoc.platform.domain.error.LvErrorCode.INT_008));
+        verify(external, never()).receivePollingDocument(any(), eq("DOC-B"), anyString(), anyString(), anyString(), any(), any(), any(), any());
+        verify(sourcePort, never()).acknowledgeReceived(any(), any(), anyInt());
+
+        reset(external);
+        when(external.createPollingIntake(any(), eq(source), any(), any())).thenReturn(snapshot(packageId,
+                ExternalIntakeStatus.AWAITING_DOCUMENTS, 0, List.of("DOC-A", "DOC-B")));
+        when(sourcePort.retrieveDocument(eq(source), eq(pkg), any()))
+                .thenThrow(new PollingSourceException("RETRIEVAL_FAILED", "source unavailable"));
+        service.runNow(tenant, source.id(), ActorId.generate());
+        verify(external, never()).refusePollingIntake(any(), any(), any(), any(), any());
+
+        // A file the source sends as another type, or too big, is refused while it is fetched: the case ends too.
+        for (var refusedAtFetch : List.of(java.util.Map.entry("RETRIEVAL_INVALID_CONTENT_TYPE", com.securedoc.platform.domain.error.LvErrorCode.INT_007),
+                java.util.Map.entry("RETRIEVAL_TOO_LARGE", com.securedoc.platform.domain.error.LvErrorCode.INT_004))) {
+            reset(external, sourcePort);
+            when(sourcePort.discoverAvailable(source, source.pollingBatchLimit())).thenReturn(List.of(pkg));
+            when(external.createPollingIntake(any(), eq(source), any(), any())).thenReturn(snapshot(packageId,
+                    ExternalIntakeStatus.AWAITING_DOCUMENTS, 0, List.of("DOC-A", "DOC-B")));
+            when(sourcePort.retrieveDocument(eq(source), eq(pkg), any()))
+                    .thenThrow(new PollingSourceException(refusedAtFetch.getKey(), "refused"));
+            service.runNow(tenant, source.id(), ActorId.generate());
+            verify(external).refusePollingIntake(eq(PackageId.of(packageId)), eq(source), any(), any(), eq(refusedAtFetch.getValue()));
+        }
+    }
+
     /** Task 0021: a polling source's levels reach the shared intake rule as sent (it reads, never refuses, them). */
     @Test
     void pollingPassesTheSourceLevelsOnAsSent() {

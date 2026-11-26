@@ -324,9 +324,10 @@ public class ApplicationServiceConfig {
             PackageRepository packageRepository,
             ArtifactRepository artifactRepository,
             com.securedoc.platform.application.port.out.ErasurePort erasure,
-            AuditService auditService) {
+            AuditService auditService,
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort) {
         return new ExternalIntakeMaintenanceService(externalIntakeRepository, packageRepository,
-                artifactRepository, erasure, auditService);
+                artifactRepository, erasure, auditService).withDashboardVisibility(packageDashboardVisibilityPort);
     }
 
     @Bean
@@ -477,7 +478,9 @@ public class ApplicationServiceConfig {
             com.securedoc.platform.application.casefields.CaseFieldService caseFields,
             IntakeLicence intakeLicence,
             com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService watchedFolderSettings,
-            com.securedoc.platform.application.intake.IntakeGate intakeGate) {
+            com.securedoc.platform.application.intake.IntakeGate intakeGate,
+            PdfIntakeValidationPort pdfIntakeValidationPort,
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort) {
         return new WatchedFolderIntakeService(sourcePort, watchedFolderLeasePort, observationRepository, packageRepository,
                 createPackageUseCase, uploadDocumentUseCase, submitPackageUseCase,
                 packageProcessingDispatcher, auditService,
@@ -485,7 +488,8 @@ public class ApplicationServiceConfig {
                 Duration.ofMillis(Math.max(1000L, properties.getStaleClaimAfterMs())),
                 tenant -> watchedFolderSettings.sensitivityLevel(tenant,
                         com.securedoc.platform.application.intake.watched.WatchedFolderSettingsService.INSTALLED_FOLDER)).withLicence(intakeLicence)
-                .withGate(intakeGate).withCaseFields(caseFields);
+                .withGate(intakeGate).withCaseFields(caseFields)
+                .withFileCheck(pdfIntakeValidationPort).withDashboardVisibility(packageDashboardVisibilityPort);
     }
 
     /** Task 0021: the watched folder's sensitivity level, set by Tenant IT. */

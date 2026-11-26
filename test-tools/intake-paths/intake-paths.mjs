@@ -277,6 +277,19 @@ const writeTrigger = (folder, file) => {
   renameSync(join(folder, 'manifest.tmp'), join(folder, 'manifest.json'));
 };
 const lastAudit = () => sql("select coalesce(max(occurred_at), 'epoch')::text from audit_records");
+/** Task 0102: the cases the dashboard shows. A refused drop or polled case must not add one. */
+const dashboardCases = () => Number(sql('select count(*) from document_packages where dashboard_hidden_at is null'));
+/** Task 0102: one drop with several files; the manifest lists `listed` (a name not written is a missing file). */
+function dropFiles(files, listed) {
+  const name = `drop-${++drops}`;
+  const prepared = join(run, 'prepared', name);
+  mkdirSync(prepared);
+  for (const [file, bytes] of files) writeFileSync(join(prepared, file), bytes);
+  writeFileSync(join(prepared, 'manifest.tmp'), JSON.stringify({ businessIdentifiers: identifiers(), metadata: {}, files: listed }));
+  renameSync(join(prepared, 'manifest.tmp'), join(prepared, 'manifest.json'));
+  renameSync(prepared, join(watched, name));
+  return name;
+}
 async function settled(name, since) {
   const where = await until(`folder drop ${name} to be taken or refused`, () => ['_archive', '_problem'].find((d) => {
     try { return readdirSync(join(watched, d)).some((n) => n === name || n.startsWith(`${name}-`)); } catch { return false; }
@@ -287,9 +300,13 @@ async function settled(name, since) {
 }
 async function watchedWithTrigger() {
   const path = 'Watched folder, with trigger';
+  let left = 0;
   const send = async (file, bytes) => {
     const since = lastAudit();
-    return settled(drop(file, bytes), since);
+    const cases = dashboardCases();
+    const r = await settled(drop(file, bytes), since);
+    if (r.status !== 'ACCEPTED') left += dashboardCases() - cases;
+    return r;
   };
   await attempt(path, 'Accepted', async () => {
     const r = await send('good.pdf', fresh(doc.good));
@@ -299,6 +316,22 @@ async function watchedWithTrigger() {
   await attempt(path, 'Wrong type', async () => refused(path, 'Wrong type', [...(await send('notes.txt', doc.text)).codes, ...(await send('notes.pdf', fresh(doc.text))).codes], ['LV-INT-007', 'LV-INT-008']));
   await attempt(path, 'Too big', async () => refused(path, 'Too big', (await send('pages.pdf', fresh(doc.manyPages))).codes, ['LV-INT-028']));
   await attempt(path, 'Password-protected', async () => refused(path, 'Password-protected', (await send('locked.pdf', fresh(doc.locked))).codes, ['LV-INT-008']));
+  // Task 0102 (owner test U3): a drop is all or nothing; a refused one leaves no case, only its intake problem.
+  for (const [what, files, listed, codes] of [
+    ['a good and a password-protected file', [['good.pdf', fresh(doc.good)], ['locked.pdf', fresh(doc.locked)]], ['good.pdf', 'locked.pdf'], ['LV-INT-008']],
+    ['a listed file missing', [['good.pdf', fresh(doc.good)]], ['good.pdf', 'missing.pdf'], null]]) {
+    try {
+      const since = lastAudit();
+      const cases = dashboardCases();
+      const r = await settled(dropFiles(files, listed), since);
+      const ok = r.where === '_problem' && r.status === 'REJECTED' && dashboardCases() === cases && r.codes.length > 0
+        && (!codes || r.codes.every((c) => codes.includes(c)));
+      also(`${path}: ${what} leaves no case`, ok, `${r.status}, moved to ${r.where}, cases on the dashboard +${dashboardCases() - cases} ${r.codes.join(' ')}`.trim());
+    } catch (e) {
+      also(`${path}: ${what} leaves no case`, false, e.message);
+    }
+  }
+  also(`${path}: refused drops leave no case`, left === 0, `cases on the dashboard +${left}`);
 }
 /** Nothing is taken or judged until the trigger file comes; then each is judged as with a trigger. */
 async function watchedNoTrigger() {
@@ -327,6 +360,7 @@ async function watchedNoTrigger() {
 }
 
 let pollingId;
+let pollingLeft = 0;
 async function polling() {
   const path = 'File polling';
   pollingId = (await must('POST', '/api/v1/integrations', { body: { name: 'Polled source 0077', purpose: 'INGESTION_SOURCE', direction: 'OUTBOUND',
@@ -342,6 +376,10 @@ async function polling() {
     offered = [];
     const codes = sql(`select distinct substring(detail from 'LV-[A-Z]+-[0-9]+') from audit_records where occurred_at > '${since}' and action = 'POLLING_PACKAGE_FAILED' and detail like '%LV-%'`);
     const packageId = sql(`select package_id from external_intakes where external_source_package_id = '${id}'`);
+    // Task 0102: a refused polled case is closed at once (cancelled, off the dashboard).
+    if (packageId && !acknowledged.has(id)) {
+      pollingLeft += Number(sql(`select count(*) from document_packages where id = '${packageId}' and dashboard_hidden_at is null`));
+    }
     return { status: r.status, acknowledged: acknowledged.has(id), codes: codes ? codes.split('\n') : [], packageId };
   };
   await attempt(path, 'Accepted', async () => {
@@ -358,6 +396,7 @@ async function polling() {
   await no('Wrong type', [['notes.txt', doc.text, 'text/plain'], ['notes.pdf', fresh(doc.text)]], ['LV-INT-007', 'LV-INT-008']);
   await no('Too big', [['big.pdf', fresh(doc.overTwoMb)], ['pages.pdf', fresh(doc.manyPages)]], ['LV-INT-004', 'LV-INT-009', 'LV-INT-028']);
   await no('Password-protected', [['locked.pdf', fresh(doc.locked)]], ['LV-INT-008']);
+  also(`${path}: refused cases leave no case`, pollingLeft === 0, `cases on the dashboard +${pollingLeft}`);
   await attempt(path, 'Unknown entity', async () => refused(path, 'Unknown entity',
     codeOf(await call('POST', `/api/v1/integrations/${pollingId}/polling/run-now`, { entity: NO_ENTITY })), ['LV-AUT-003']));
 }

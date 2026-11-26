@@ -364,6 +364,7 @@ public final class LvErrorCodes {
         m.put("POLL_RESPONSE_INVALID", INT_042);
         m.put("RETRIEVAL_INVALID_CONTENT_TYPE", INT_007);
         m.put("RETRIEVAL_STAGING_FAILED", INT_004);
+        m.put("RETRIEVAL_TOO_LARGE", INT_004);
         m.put("SOURCE_ACKNOWLEDGEMENT_FAILED", INT_043);
         m.put("ACK_SERIALIZATION_FAILED", INT_043);
         m.put("POLL_ALREADY_RUNNING", INT_044);

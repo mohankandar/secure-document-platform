@@ -634,6 +634,16 @@ public final class ExternalIntakeService {
         return snapshot(intake);
     }
 
+    /**
+     * Task 0102: a polled file was refused for good; the attempt and its case end now (see
+     * {@link ExternalIntakeMaintenanceService#refuseNow}). The next poll of the same revision takes nothing, as after expiry.
+     */
+    public void refusePollingIntake(PackageId packageId, IntegrationConnection source, AuthenticatedPrincipal principal,
+                                    CorrelationId correlationId, LvErrorCode reason) {
+        ExternalIntake intake = authorizedIntake(principal, source, packageId, ExternalIntakeChannel.POLLING, true);
+        maintenanceService.refuseNow(intake, principal.actorId(), correlationId, reason.code());
+    }
+
     private ExternalIntake authorizedIntake(AuthenticatedPrincipal principal, IntegrationConnection source,
                                             PackageId packageId, ExternalIntakeChannel channel, boolean forUpdate) {
         Optional<ExternalIntake> found = forUpdate
