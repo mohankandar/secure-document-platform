@@ -5,6 +5,7 @@ import { Minus, Plus } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import type { ManualFallbackDetail, ReviewBoundingBox } from '../../types';
 import { Notice, Spinner, StageChip } from '../atoms';
+import { PageFailed, sameImage, useObjectUrl } from '../pageImage';
 import { LoadErrorCard, checked, isRecord } from '../failure';
 import { caseTitle, errorMessage, statusInfo, usePackage } from '../data';
 import { useToast } from '../toast';
@@ -226,11 +227,11 @@ export default function ManualCase() {
 }
 
 function usePagePreview(packageId: string, documentId: string, pageNumber: number, enabled: boolean, version = 0) {
-  const { data, error } = useSWR(enabled ? ['manual-preview', packageId, documentId, pageNumber, version] : null,
-    () => apiClient.getManualFallbackPagePreview(packageId, documentId, pageNumber), { revalidateOnFocus: false });
-  const url = useMemo(() => (data ? URL.createObjectURL(data.blob) : null), [data]);
-  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
-  return { url, error };
+  const { data, error, isValidating, mutate } = useSWR(enabled ? ['manual-preview', packageId, documentId, pageNumber, version] : null,
+    () => apiClient.getManualFallbackPagePreview(packageId, documentId, pageNumber), { revalidateOnFocus: false, compare: sameImage });
+  // Task 0101: made and revoked in one effect (the dev server's double mount revoked a cached page's address).
+  const url = useObjectUrl(data?.blob);
+  return { url, error, isValidating, retry: () => void mutate() };
 }
 
 function Thumb({ packageId, documentId, pageNumber, selected, marks, eager, onSelect }: {
@@ -261,7 +262,11 @@ function PageViewer({ packageId, documentId, fileName, pageNumber, pageCount, ma
   marks: ReadonlyArray<ReviewBoundingBox & { findingId: string }>; draft: ReviewBoundingBox | null; onDraft: (b: ReviewBoundingBox | null) => void;
   zoom: Zoom; onZoom: (z: Zoom) => void; version: number;
 }) {
-  const { url, error } = usePagePreview(packageId, documentId, pageNumber, true, version);
+  const { url, error, isValidating, retry } = usePagePreview(packageId, documentId, pageNumber, true, version);
+  // Task 0101: the browser could not show the image it got.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const broken = url !== null && url === brokenUrl;
+  const failed = (Boolean(error) || broken) && !isValidating;
   const surfaceRef = useRef<HTMLDivElement>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
   const [live, setLive] = useState<ReviewBoundingBox | null>(null);
@@ -306,9 +311,9 @@ function PageViewer({ packageId, documentId, fileName, pageNumber, pageCount, ma
       </div>
       {/* U026 (WCAG 2.1.1): the page can be scrolled by keyboard when zoomed in. */}
       <div className="cf-viewer-canvas" tabIndex={0} role="group" aria-label="Page, scroll with the arrow keys">
-        {error && <Notice tone="danger">The page preview is unavailable.</Notice>}
-        {!url && !error && <Spinner label="Rendering page" />}
-        {url && (
+        {failed && <PageFailed onRetry={retry} />}
+        {!failed && (!url || broken) && <Spinner label="Rendering page" />}
+        {url && !broken && !failed && (
           <div ref={surfaceRef} className="cf-page" style={pageStyle}
             onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); origin.current = point(e); setLive(null); }}
             onPointerMove={(e) => { if (origin.current) setLive(boxFrom(origin.current, point(e))); }}
@@ -319,7 +324,7 @@ function PageViewer({ packageId, documentId, fileName, pageNumber, pageCount, ma
               setLive(null);
               if (box.width > MIN_BOX && box.height > MIN_BOX / 2) onDraft(box);
             }}>
-            <img src={url} alt={`Page ${pageNumber} of ${fileName}`} draggable={false} onLoad={(e) => setNaturalWidth(e.currentTarget.naturalWidth)} />
+            <img src={url} alt={`Page ${pageNumber} of ${fileName}`} draggable={false} onLoad={(e) => setNaturalWidth(e.currentTarget.naturalWidth)} onError={() => setBrokenUrl(url)} />
             {marks.map((m) => <span key={m.findingId} className="cf-box" data-kind="drawn" style={boxStyle(m)} aria-hidden="true" />)}
             {shown && <span className="cf-box" data-kind="detected" style={boxStyle(shown)} aria-hidden="true" />}
           </div>

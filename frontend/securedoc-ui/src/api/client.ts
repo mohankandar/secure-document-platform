@@ -81,6 +81,9 @@ import type {
   NotificationItOverview,
 } from '../types';
 
+/** Task 0101: the longest a page preview may take before it is shown as failed. */
+const PAGE_PREVIEW_TIMEOUT_MS = 60_000;
+
 class ApiClient {
   private baseUrl = API_BASE_URL;
 
@@ -825,6 +828,8 @@ class ApiClient {
     const response = await fetch(url, {
       headers: { ...(await baseHeaders()), Accept: 'image/png, application/json' },
       cache: 'no-store',
+      // Task 0101: a page that never comes is shown as failed, with Try again, not as an endless spinner.
+      signal: AbortSignal.timeout(PAGE_PREVIEW_TIMEOUT_MS),
     });
     if (!response.ok) {
       const raw = await response.text();
@@ -896,6 +901,8 @@ class ApiClient {
     const response = await fetch(url, {
       headers: { ...(await baseHeaders()), Accept: 'image/png, application/json' },
       cache: 'no-store',
+      // Task 0101: a page that never comes is shown as failed, with Try again, not as an endless spinner.
+      signal: AbortSignal.timeout(PAGE_PREVIEW_TIMEOUT_MS),
     });
     if (!response.ok) {
       const raw = await response.text();
