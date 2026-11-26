@@ -1,5 +1,6 @@
 package com.securedoc.platform.infrastructure.erasure;
 
+import com.documentplatform.eraselog.EraseHandler;
 import com.documentplatform.eraselog.EraseLogError;
 import com.documentplatform.eraselog.EraseLogException;
 import com.documentplatform.eraselog.EraseRequest;
@@ -15,6 +16,7 @@ import com.securedoc.platform.domain.artifact.Artifact;
 import com.securedoc.platform.domain.artifact.ArtifactStatus;
 import com.securedoc.platform.domain.identity.PackageId;
 import com.securedoc.platform.domain.identity.TenantId;
+import com.securedoc.platform.infrastructure.delivery.StagingFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -85,14 +87,20 @@ public class LexaVaultErasures implements ErasurePort {
                 new EraseRecord.FileId(packageId, documentId, fileId).toString(), reason);
     }
 
-    private void erase(TenantId tenantId, String kind, String recordType, String recordId, Reason reason) {
+    /** Task 0097: what a killed server left of a delivery to a folder; true when this call erased it. */
+    public boolean eraseDeliveryLeftover(TenantId tenantId, StagingFolder folder, Reason reason) {
+        return erase(tenantId, EraseRecord.DELIVERY_LEFTOVER, EraseRecord.FOLDER_DELIVERY,
+                EraseRecord.folderDelivery(folder), reason) == EraseHandler.Applied.ERASED;
+    }
+
+    private EraseHandler.Applied erase(TenantId tenantId, String kind, String recordType, String recordId, Reason reason) {
         // The audit record is written with the erasure, under this id (also when the erasure is replayed after a restore).
         UUID auditId = UUID.randomUUID();
         ErasedBy by = reason.person() == null ? ErasedBy.rule(reason.rule())
                 : ErasedBy.person(reason.person().value().toString());
         try {
-            eraser.erase(new EraseRequest(tenantId.value(), EraseRecord.PRODUCT, recordType, recordId, kind, Instant.now(),
-                    by, auditId.toString()));
+            return eraser.erase(new EraseRequest(tenantId.value(), EraseRecord.PRODUCT, recordType, recordId, kind,
+                    Instant.now(), by, auditId.toString())).applied();
         } catch (EraseLogException refused) {
             throw failure(refused, kind);
         }

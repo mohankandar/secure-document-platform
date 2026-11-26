@@ -1200,6 +1200,18 @@ public class ApplicationServiceConfig {
                 unrecordedFileSweepPort, auditService, keepHours);
     }
 
+    /** Task 0097: what a killed server left of a delivery to a folder, run by the retention purge scheduler. */
+    @Bean
+    public com.securedoc.platform.application.lifecycle.service.DeliveryLeftoverService deliveryLeftoverService(
+            org.springframework.beans.factory.ObjectProvider<com.securedoc.platform.application.port.out.DeliveryLeftoverPort> deliveryLeftoverPort,
+            AuditService auditService,
+            com.securedoc.platform.application.pipeline.ExportJobSettings exportJobSettings,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.processing.coordination.lease-duration-ms:30000}") long processingLeaseMs) {
+        return new com.securedoc.platform.application.lifecycle.service.DeliveryLeftoverService(
+                java.util.Optional.ofNullable(deliveryLeftoverPort.getIfAvailable()), auditService,
+                java.time.Duration.ofMillis(Math.max(processingLeaseMs, exportJobSettings.claimLease().toMillis())));
+    }
+
     /** Task 0034: the clean-up of finished jobs, run by the retention purge scheduler. */
     @Bean
     public com.securedoc.platform.application.pipeline.FinishedJobCleanupService finishedJobCleanupService(

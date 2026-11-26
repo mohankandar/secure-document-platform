@@ -69,6 +69,32 @@ public class LexaVaultEraseHandlers {
         };
     }
 
+    /** Task 0097. */
+    @Bean
+    public EraseHandler deliveryLeftoverEraseHandler(DeliveryLeftoverErasure leftovers) {
+        return new EraseHandler() {
+            @Override
+            public String kind() {
+                return EraseRecord.DELIVERY_LEFTOVER;
+            }
+
+            @Override
+            public void check(EraseRequest request) {
+                leftovers.check(request);
+            }
+
+            @Override
+            public Applied apply(EraseEntry entry, Context context) {
+                return leftovers.erase(entry, context);
+            }
+
+            @Override
+            public Verified verify(EraseEntry entry) {
+                return leftovers.verify(entry);
+            }
+        };
+    }
+
     private static class FileHandler implements EraseHandler {
         private final String kind;
         private final StoredFileErasure files;

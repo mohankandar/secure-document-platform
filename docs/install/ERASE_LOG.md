@@ -20,7 +20,7 @@ A local development start without the setting uses a folder per database under `
 
 ## What is written
 
-One entry per erasure, ids only: entity, case (or case/document/file), kind, when, the rule or the person's id, the audit
+One entry per erasure, ids only: entity, case (or case/document/file, or case/case run/delivery), kind, when, the rule or the person's id, the audit
 record's id. Never a name, a file name or a value.
 
 | Kind | When |
@@ -31,10 +31,18 @@ record's id. Never a name, a file name or a value.
 | `document` | the originals of an intake that was never completed |
 | `working-file` | text of a case that is processed again |
 | `unrecorded-file` | a stored file no record points to |
+| `delivery-leftover` | the redacted copies a server left under `.staging` in the export location when it was killed in the middle of a folder delivery (task 0097; below) |
 | `case-fields` | every case of a business record has been purged: the record's case field values (task 0061, `CASE_FIELDS.md`) |
 
 Each erasure also gives an audit record `FILES_ERASED` (`CASE_FIELDS_ERASED` for case fields). If the log can't be written, **nothing is erased** (LV-SYS-014); it
 is tried again at the next run.
+
+**Delivery leftovers.** With deliveries to a folder, every server looks for them at its start and with each clean-up (every
+15 minutes by default). One is erased when nothing in it was written for the claim time plus 10 minutes (12 minutes with the
+default settings), its case is in this database and entity, and the case is not being exported. It is first renamed to the
+same name with `.erasing`; if the log can't be written it stays so, with its files, and is erased at a later run. One that
+holds anything else, or that can't be renamed (a program has a file in it open), is kept. One audit record per run and entity,
+counts only (`DELIVERY_LEFTOVERS_CLEANED`). Finished deliveries and the `lexavault-check-*.tmp` files are never touched.
 
 ## Backup retention
 
@@ -72,6 +80,8 @@ again.
   the files that came back. Their protection records are gone, so LexaVault could not open them anyway.
 - **The replay says `ERASE_VERIFY_FAILED`:** something erased can still be read, or a storage folder is missing. Mount every
   storage folder an erased file was in, or make it as an empty folder if that storage is gone for good, and run it again.
+  With deliveries to a folder, the export location counts as one of them. Only the location in the settings is looked at: if it
+  was moved, remove a restored `.staging` at the old one by hand.
 - **A database older than the log keeps entries for** (`ERASE_LOG_GAP`) can't be used.
 
 ## Health and codes

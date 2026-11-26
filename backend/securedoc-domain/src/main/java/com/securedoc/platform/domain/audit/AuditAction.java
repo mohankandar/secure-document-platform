@@ -230,6 +230,9 @@ public enum AuditAction {
     /** Task 0049: stored text and redacted files that no record points to were removed (counts only). */
     UNRECORDED_FILES_CLEANED,
 
+    /** Task 0097: what a killed server left of a delivery to a folder was removed (counts only). */
+    DELIVERY_LEFTOVERS_CLEANED,
+
     /** Task 0060: stored files were erased, written to the erase log first. Ids, kind, rule and entry number only. */
     /** Task 0061: the case field values of a business record erased, through the erase log. */
     CASE_FIELDS_ERASED,
