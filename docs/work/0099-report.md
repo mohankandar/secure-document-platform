@@ -63,7 +63,7 @@ The final check (0050) only looks for values that were found. A value detection 
 | Benchmark gate, `Invoke-VisionProductBenchmark.ps1`, one run | Ollama 0.40.18: routed 127 of 130, all 271 of 274, 1 V1 miss, 4 false flags, 0 unread pages: **equal to the 0092 baseline** |
 
 **Tests changed, and why** (each one held the rule this task changes):
-- `RedactionCatalogTest`, `RedactionCatalogSaveTest`, and 2 tests in `OptInPatternKindsDetectionTest`: an entity from before the catalog no longer "keeps exactly its kinds". The locked items are on for it.
+- `RedactionCatalogTest`, `RedactionCatalogSaveTest`, 2 tests in `OptInPatternKindsDetectionTest`, and 2 in `SearchableRedactedPagesPolicyPostgresTest` (found by CI: the PostgreSQL tests are skipped without a database; then run locally on a throwaway database, all `*PostgresTest` 79 + 117, 0 failed): an entity from before the catalog no longer "keeps exactly its kinds". The locked items are on for it.
 - 2 more in `OptInPatternKindsDetectionTest`: the AI is now always asked for card numbers too. The card is a locked kind that the AI and the patterns both look for.
 - `OptInPatternDetectorTest.cardsNeedTheirCheckDigit`: "Batch 4000 0566 5566 5556" (grouped, Visa, valid) is now found at 0.75 for a person to decide. An ungrouped number or one with a contract label is still not found.
 - `HybridPdfTextExtractionAdapterTest`: its stand-in OCR reads only the picture, so the page's native title and footer now follow the OCR text.
