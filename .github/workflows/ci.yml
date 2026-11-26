@@ -96,6 +96,46 @@ jobs:
       - name: test:standalone
         run: npm run test:standalone
 
+  # Task 0097: the build script that people run, with its checks of the jars (tests run in the jobs above). It was broken
+  # unseen from task 0061 to 0086.
+  build-script:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/securedoc-ui/package-lock.json
+      - name: Maven settings for GitHub Packages (platform-core)
+        env:
+          PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
+        run: |
+          if [ -z "$PLATFORM_CORE_READ_TOKEN" ]; then echo "Secret PLATFORM_CORE_READ_TOKEN is not set." >&2; exit 1; fi
+          mkdir -p ~/.m2
+          # The token stays in the environment; settings.xml only names the variable.
+          cat > ~/.m2/settings.xml <<'EOF'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+            <servers>
+              <server>
+                <id>github-platform-core</id>
+                <username>mohankandar</username>
+                <password>${env.PLATFORM_CORE_READ_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+      - name: Build-LexaVault-All.sh --skip-tests
+        env:
+          PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
+        run: bash Build-LexaVault-All.sh --skip-tests
+
   product-names:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -106,10 +146,10 @@ jobs:
 
   ci-passed:
     if: always()
-    needs: [backend, frontend, product-names]
+    needs: [backend, frontend, build-script, product-names]
     runs-on: ubuntu-24.04
     steps:
       - name: All jobs passed
         run: |
-          echo "backend=${{ needs.backend.result }} frontend=${{ needs.frontend.result }} product-names=${{ needs.product-names.result }}"
-          [ "${{ needs.backend.result }}" = success ] && [ "${{ needs.frontend.result }}" = success ] && [ "${{ needs.product-names.result }}" = success ]
+          echo "backend=${{ needs.backend.result }} frontend=${{ needs.frontend.result }} build-script=${{ needs.build-script.result }} product-names=${{ needs.product-names.result }}"
+          [ "${{ needs.backend.result }}" = success ] && [ "${{ needs.frontend.result }}" = success ] && [ "${{ needs.build-script.result }}" = success ] && [ "${{ needs.product-names.result }}" = success ]

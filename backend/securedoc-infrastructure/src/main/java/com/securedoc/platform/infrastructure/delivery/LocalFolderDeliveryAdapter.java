@@ -52,7 +52,7 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
 
     private static final Logger log = LoggerFactory.getLogger(LocalFolderDeliveryAdapter.class);
     private static final String DESTINATION_TYPE = "local-folder";
-    private static final String STAGING_DIRECTORY = ".staging";
+    private static final String STAGING_DIRECTORY = StagingFolder.DIRECTORY;
     private static final int COMPARE_BLOCK = 64 * 1024;
 
     private final Path outputRoot;
@@ -133,7 +133,9 @@ public class LocalFolderDeliveryAdapter implements DeliveryPort {
                 String documentFolder = item.documentId().value().toString();
                 Path stagingDocumentDir = safeChild(stagingPackageDir, documentFolder, "document");
                 Path stagedFile = safeChild(stagingDocumentDir, expected.get(documentFolder), "delivery file");
-                Files.createDirectories(stagingDocumentDir);
+                // Task 0097: never makes the staging folder again. One the clean-up took as a leftover stays gone, so the
+                // delivery fails and is tried again; a part of it is never published.
+                Files.createDirectory(stagingDocumentDir);
                 try (InputStream content = open(item)) {
                     Files.copy(content, stagedFile, StandardCopyOption.REPLACE_EXISTING);
                 }

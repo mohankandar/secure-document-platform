@@ -20,7 +20,8 @@ class RetentionPurgeSchedulerCleanupTest {
         when(cleanup.run(any(), any(), any())).thenReturn(new FinishedJobCleanupService.Result(0, 0));
 
         new RetentionPurgeScheduler(purge, cleanup,
-                mock(com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService.class)).purgeDueArtifacts();
+                mock(com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService.class),
+                mock(com.securedoc.platform.application.lifecycle.service.DeliveryLeftoverService.class)).purgeDueArtifacts();
 
         var order = inOrder(purge, cleanup);
         var command = org.mockito.ArgumentCaptor.forClass(PurgeDueRetentionCommand.class);
@@ -37,7 +38,8 @@ class RetentionPurgeSchedulerCleanupTest {
         when(cleanup.run(any(), any(), any())).thenThrow(new IllegalStateException("cleanup"));
 
         new RetentionPurgeScheduler(purge, cleanup,
-                mock(com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService.class)).purgeDueArtifacts();
+                mock(com.securedoc.platform.application.lifecycle.service.UnrecordedFileSweepService.class),
+                mock(com.securedoc.platform.application.lifecycle.service.DeliveryLeftoverService.class)).purgeDueArtifacts();
 
         verify(cleanup).run(any(), any(), any());
     }
