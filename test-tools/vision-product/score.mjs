@@ -106,12 +106,15 @@ if (benchmark) {
   const ms = [read(join(second, 'vision-ms.json'))].flat().filter((x) => typeof x === 'number').sort((a, b) => a - b);
   const paths = {};
   for (const f of findings) paths[f.foundBy ?? 'none'] = (paths[f.foundBy ?? 'none'] ?? 0) + 1;
-  const unread = findings.filter((f) => f.type === 'UNREAD_PAGE').length;
+  // Task 0111 (decision 2026-11-26): pages OCR cannot read are held for a person on purpose (task 0100); counted
+  // apart from unread pages so the gate line reads only pages nothing could read.
+  const ocrHeld = findings.filter((f) => f.type === 'UNREAD_PAGE' && f.why === 'TEXT_NOT_READABLE').length;
+  const unread = findings.filter((f) => f.type === 'UNREAD_PAGE').length - ocrHeld;
   const noModel = findings.filter((f) => (f.foundBy ?? '').includes('VISION')
     && !/qwen3-vl:8b-instruct\|vision-prompt-v2\|[0-9a-f]{64}/.test(f.models ?? '')).length;
   const mean = ms.reduce((a, b) => a + b, 0) / Math.max(1, ms.length) / 1000;
   extra = `routing (expected -> product): ${JSON.stringify(table)}\n`
-    + `found by: ${JSON.stringify(paths)}; unread pages: ${unread}; vision findings without model and digest: ${noModel}\n`
+    + `found by: ${JSON.stringify(paths)}; unread pages: ${unread}; pages OCR cannot read, held for a person: ${ocrHeld}; vision findings without model and digest: ${noModel}\n`
     + `vision pages read: ${ms.length}, seconds mean ${mean.toFixed(2)}, median ${((ms[ms.length >> 1] ?? 0) / 1000).toFixed(2)}, p90 ${((ms[Math.floor(ms.length * 0.9)] ?? 0) / 1000).toFixed(2)}\n`
     + `cases: ${cases.map((c) => `${c.sample} ${c.status} ${c.seconds}s`).join('; ')}\n`;
 }

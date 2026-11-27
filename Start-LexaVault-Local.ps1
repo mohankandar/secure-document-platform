@@ -37,22 +37,19 @@ if ($scannerModeCandidate -notin @("SIMULATOR", "PHYSICAL")) {
     throw "Scanner mode must be SIMULATOR, PHYSICAL, or PRINTER."
 }
 $EffectiveScannerMode = $scannerModeCandidate
-$Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:4b" }
+$Model = if ($AiModel) { $AiModel } elseif ($env:SECUREDOC_AI_MODEL) { $env:SECUREDOC_AI_MODEL } elseif ($env:SECUREDOC_AI_OLLAMA_MODEL) { $env:SECUREDOC_AI_OLLAMA_MODEL } else { "qwen3.5:9b" }
 . (Join-Path $PSScriptRoot "scripts\LexaVault-OllamaParallel.ps1")
 $AiRequestsAtOnce = Get-LexaVaultAiRequestsAtOnce
 $AiKeepAlive = if ($env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE) { $env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE } else { "30m" }
 $aiParallelismText = if ($env:SECUREDOC_AI_PARALLELISM) { $env:SECUREDOC_AI_PARALLELISM } else { "2" }
 $AiParallelism = 0
+# Task 0111: the vision model that reads routed pages must be pulled too (same default as application.yml).
+$VisionModel = if ($env:SECUREDOC_AI_VISION_MODEL) { $env:SECUREDOC_AI_VISION_MODEL } else { "qwen3-vl:8b-instruct" }
 if (-not [int]::TryParse($aiParallelismText, [ref]$AiParallelism) -or $AiParallelism -lt 1 -or $AiParallelism -gt 16) {
     throw "SECUREDOC_AI_PARALLELISM must be an integer between 1 and 16."
 }
-$aiPageBatchSizeText = if ($env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE) {
-    $env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE
-} elseif ($Model -eq "qwen3.5:4b") {
-    "4"
-} else {
-    "2"
-}
+# Task 0111: batch size 2 unless set (the validated setting for the default text model).
+$aiPageBatchSizeText = if ($env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE) { $env:SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE } else { "2" }
 $AiPageBatchSize = 0
 if (-not [int]::TryParse($aiPageBatchSizeText, [ref]$AiPageBatchSize) -or $AiPageBatchSize -lt 1 -or $AiPageBatchSize -gt 8) {
     throw "SECUREDOC_AI_OLLAMA_PAGE_BATCH_SIZE must be an integer between 1 and 8."
@@ -258,6 +255,18 @@ if (-not $AiOff) {
         }
     }
     Write-Host "Ollama model $Model is installed." -ForegroundColor Green
+
+    if ($modelNames -notcontains $VisionModel) {
+        if ($PullModelIfMissing) {
+            Write-Host "Pulling vision model $VisionModel ..."
+            & ollama pull $VisionModel
+            if ($LASTEXITCODE -ne 0) { throw "Failed to pull Ollama vision model $VisionModel." }
+        }
+        else {
+            throw "Required Ollama vision model '$VisionModel' is not installed. Run 'ollama pull $VisionModel'."
+        }
+    }
+    Write-Host "Ollama vision model $VisionModel is installed." -ForegroundColor Green
 
     if (-not $SkipAiWarmup) {
         Write-Host "Preloading Ollama model $Model (keep_alive=$AiKeepAlive)..."
