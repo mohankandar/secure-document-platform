@@ -61,6 +61,6 @@ A file is scored only once it is delivered: LexaVault makes the redacted copy on
 
 ## If something fails
 
-- "the container lexavault-0106-pg exists already": another round is running, or one was kept with `--review`. End it with `--after` or `--stop`.
+- "the container lexavault-0106-pg exists already": another round is running, one was kept with `--review`, or one was cut off (the laptop slept, the process was killed). End it with `--after` or `--stop`. Ctrl+C or closing the window ends a round cleanly by itself.
 - "port 8080 is in use": stop LexaVault first (`.\Stop-LexaVault-Local.ps1`); only `--review` needs 8080.
 - The run folder (printed at the start, under `%TEMP%\lexavault-0106\`) holds the logs, the delivered files and what each reading found. It holds made-up test values only.

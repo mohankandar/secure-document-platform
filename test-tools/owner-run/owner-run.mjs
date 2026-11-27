@@ -45,6 +45,7 @@ const DONE = ['COMPLETED', 'VAULTED', 'REJECTED', 'FAILED', 'CANCELLED'];
 const WAITING_FOR_A_PERSON = ['PENDING_REVIEW', 'IN_REVIEW', 'PENDING_FINAL_APPROVAL', 'APPROVED'];
 const workRoot = join(tmpdir(), 'lexavault-0106');
 const keptFile = join(workRoot, 'kept-round.json');
+const activeFile = join(workRoot, 'active-round.json');
 const resultsDir = join(here, 'results');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -247,10 +248,28 @@ async function intakeResults(run, drops) {
 }
 
 /** Waits until every case is done or waits for a person (and every exported case's files are in the export folder). */
+/** Anything that moves while LexaVault works on these cases: their status, their documents and their pipeline jobs. */
+function progress(ids) {
+  const list = ids.map((id) => `'${id}'`).join(',') || 'null';
+  return sql(`select (select string_agg(status || updated_at::text, ',' order by id) from document_packages where id in (${list}))
+    || (select coalesce(max(updated_at)::text, '') from documents where package_id in (${list}))
+    || (select coalesce(max(updated_at)::text, '') || count(*) from pipeline_jobs where package_id in (${list}))`);
+}
+const STUCK_MINUTES = 15;
+
 async function waitForCases(run, drops) {
   const cases = drops.filter((d) => d.packageId);
   const firstSeen = {};
+  for (const c of cases) delete c.stuck;
+  let last = ''; let lastChange = Date.now();
   await until('every case to finish or wait for a person', () => {
+    // A case that shows no change at all for 15 minutes is stuck: it is reported as such, not waited for.
+    const now0 = progress(cases.filter((c) => !firstSeen[c.packageId]).map((c) => c.packageId));
+    if (now0 !== last) { last = now0; lastChange = Date.now(); }
+    if (Date.now() - lastChange > STUCK_MINUTES * 60000) {
+      for (const c of cases.filter((x) => !firstSeen[x.packageId])) c.stuck = statusOf(c.packageId);
+      return true;
+    }
     const now = new Map(rows(`select id::text, status from document_packages where id in (${cases.map((c) => `'${c.packageId}'`).join(',') || 'null'})`));
     for (const c of cases) {
       const status = now.get(c.packageId);
@@ -289,7 +308,7 @@ async function score(run, drops, label) {
   const kinds = enabledKinds();
   const scored = { label, at: new Date().toISOString(), kinds, drops: [], files: [], totals: {} };
   for (const d of drops) {
-    const entry = { name: d.name, files: d.files, contract: d.contract, intake: d.intake, where: d.where, codes: d.codes, packageId: d.packageId };
+    const entry = { name: d.name, files: d.files, contract: d.contract, intake: d.intake, where: d.where, codes: d.codes, packageId: d.packageId, stuck: d.stuck };
     scored.drops.push(entry);
     if (!d.packageId) continue;
     const [pkg] = rows(`select status, extract(epoch from created_at)::bigint from document_packages where id = '${d.packageId}'`);
@@ -359,6 +378,7 @@ async function score(run, drops, label) {
     refused: scored.drops.filter((d) => d.where === '_problem').length,
     waiting: scored.drops.filter((d) => !d.packageId && d.where !== '_problem').length,
     automatic: cases.filter((c) => DONE.includes(c.status) && c.status !== 'FAILED' && !c.findings.toPerson).length,
+    stuck: cases.filter((c) => c.stuck).length,
     casesWaitingForAPerson: cases.filter((c) => WAITING_FOR_A_PERSON.includes(c.status)).length,
     leaks: scored.files.reduce((n, f) => n + f.leaks.length, 0),
     extraWords: scored.files.reduce((n, f) => n + f.extra.reduce((m, e) => m + e.words, 0), 0),
@@ -400,6 +420,7 @@ function markdown(s, before) {
     `| Leaks (values still readable in a delivered file) | **${t.leaks}** |`,
     `| Extra redaction (words covered that are not sensitive) | ${t.extraWords} |`,
     `| Automatic (done before anyone touched it) | ${t.automatic} of ${t.accepted} cases (${t.automaticPercent}%) |`,
+    `| Cases stuck (no change for ${STUCK_MINUTES} minutes) | ${t.stuck} |`,
     `| Cases waiting for a person | ${t.casesWaitingForAPerson} |`,
     `| Findings | ${t.findings} (sent to a person ${t.toPerson}, without a place ${t.withoutPlace}) |`,
     `| Unread pages | ${t.unreadPages} |`,
@@ -435,7 +456,7 @@ function markdown(s, before) {
   lines.push('', '## Intake', '', '| Drop | Files | Result | Code | Case | Status | Time |', '|---|---|---|---|---|---|---|');
   for (const d of s.drops) {
     const result = d.where === '_problem' ? 'refused' : d.packageId ? 'taken' : 'waiting';
-    lines.push(`| ${d.name} | ${d.files.length} | ${result} (${d.intake}) | ${d.codes.join(' ') || '-'} | ${short(d.packageId)} | ${d.status ?? '-'} | ${d.seconds != null ? `${d.seconds} s` : '-'} |`);
+    lines.push(`| ${d.name} | ${d.files.length} | ${result} (${d.intake}) | ${d.codes.join(' ') || '-'} | ${short(d.packageId)} | ${d.status ?? '-'}${d.stuck ? ' (stuck)' : ''} | ${d.seconds != null ? `${d.seconds} s` : '-'} |`);
   }
   lines.push('', '## Findings per case', '', '| Drop | Findings | Kinds | Sent to a person (reasons) | Without a place | Unread pages |', '|---|---|---|---|---|---|');
   for (const d of s.drops.filter((x) => x.packageId)) {
@@ -458,6 +479,7 @@ function consoleSummary(s, file) {
   say(`  Extra redaction:   ${t.extraWords} words`);
   say(`  Automatic:         ${t.automatic} of ${t.accepted} cases (${t.automaticPercent}%); waiting for a person: ${t.casesWaitingForAPerson}`);
   say(`  Findings:          ${t.findings}; sent to a person ${t.toPerson}; without a place ${t.withoutPlace}; unread pages ${t.unreadPages}`);
+  if (t.stuck) say(`  Stuck:             ${t.stuck} case(s), no change for ${STUCK_MINUTES} minutes (${s.drops.filter((d) => d.stuck).map((d) => `${d.name}: ${d.status}`).join(', ')})`);
   say(`  Intake:            ${t.accepted} taken, ${t.refused} refused, ${t.waiting} waiting`);
   say(`Scorecard: ${file}`);
 }
@@ -526,7 +548,12 @@ async function acceptAsProposed(drops) {
       } else break;
       // The next state: processing resumes after the last decision, so give it time.
       await until('the case to move on', () => statusOf(d.packageId) !== status, 1200).catch(() => {});
-      for (let i = 0; i < 600 && ['PROCESSING', 'SUBMITTED', 'APPROVED'].includes(statusOf(d.packageId)); i++) await sleep(2000);
+      let last = ''; let lastChange = Date.now();
+      while (['PROCESSING', 'SUBMITTED', 'APPROVED'].includes(statusOf(d.packageId)) && Date.now() - lastChange < STUCK_MINUTES * 60000) {
+        const now = progress([d.packageId]);
+        if (now !== last) { last = now; lastChange = Date.now(); }
+        await sleep(2000);
+      }
     }
     log.held = [...new Set(log.held)];
   }
@@ -555,6 +582,11 @@ async function round() {
     install(password, run);
     say('Starting the app...');
     app = startApp(password, run);
+    // A round stopped half-way (Ctrl+C, the window closed) still ends its app and its throwaway database; one cut
+    // off harder is ended with --stop.
+    writeFileSync(activeFile, JSON.stringify({ round: roundId, run, pid: app.pid }));
+    const end = () => { stopProcess(app.pid); removeDatabase(); rmSync(activeFile, { force: true }); process.exit(130); };
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(signal, end);
     await waitForApp(app);
     const drops = makeDrops(run, roundId.replace('-', '').slice(4, 13));
     say(`Dropping ${drops.length} folders into the watched folder...`);
@@ -588,10 +620,20 @@ async function round() {
     }
   } finally {
     if (!kept) { stopProcess(app?.pid); removeDatabase(); }
+    rmSync(activeFile, { force: true });
   }
 }
 
 async function after(scoreIt) {
+  if (!existsSync(keptFile) && !scoreIt) {
+    // --stop with no kept round: end one that was cut off, if any.
+    const cut = existsSync(activeFile) ? JSON.parse(readFileSync(activeFile, 'utf8')) : null;
+    stopProcess(cut?.pid);
+    removeDatabase();
+    rmSync(activeFile, { force: true });
+    say(cut ? `Round ${cut.round} ended: app stopped, its throwaway database removed.` : 'No round was running; the throwaway database is gone.');
+    return;
+  }
   if (!existsSync(keptFile)) throw new Error('no round is kept for review (run one with --review first)');
   const kept = JSON.parse(readFileSync(keptFile, 'utf8'));
   try {
