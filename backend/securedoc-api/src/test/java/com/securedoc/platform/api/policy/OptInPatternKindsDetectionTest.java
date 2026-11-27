@@ -106,7 +106,7 @@ class OptInPatternKindsDetectionTest {
 
     /** Found in text; signatures and face photos are found on the page image (task 0064, VisionDetectionTest). */
     private static final Set<EntityType> NEW_KINDS = RedactionCatalog.entries().stream()
-            .filter(e -> !e.onByDefault() && e.detection() == RedactionCatalog.DetectionMethod.PATTERN).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
+            .filter(e -> !e.onByDefault() && e.detection() == RedactionCatalog.DetectionMethod.AI_AND_PATTERN).map(RedactionCatalog.Entry::kind).collect(Collectors.toSet());
 
     private final TenantId tenantId = TenantId.of(UUID.randomUUID());
     private final List<Finding> savedFindings = new CopyOnWriteArrayList<>();
@@ -141,8 +141,7 @@ class OptInPatternKindsDetectionTest {
         storedPolicy = null;
         run();
         assertEquals(Set.of(EntityType.SSN), types(), "only the V1 kinds, as before");
-        assertEquals(Set.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
-                EntityType.CREDIT_SCORE), aiRequests.get(0).policy().enabledEntityTypes());
+        assertEquals(asked(RedactionCatalog.onByDefault()), aiRequests.get(0).policy().enabledEntityTypes());
     }
 
     @Test
@@ -161,8 +160,8 @@ class OptInPatternKindsDetectionTest {
             run();
             assertEquals(EnumSet.of(EntityType.SSN, kind), EnumSet.copyOf(types()), kind + " alone switched on");
             // Task 0099: and for the card number, a locked item that is always on.
-            assertEquals(Set.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER), aiRequests.get(0).policy().enabledEntityTypes(),
-                    "the AI is asked only for V1 kinds");
+            assertEquals(asked(EnumSet.of(EntityType.SSN, kind)), aiRequests.get(0).policy().enabledEntityTypes(),
+                    "task 0103: the AI is asked for every enabled and locked kind");
         }
     }
 
@@ -196,7 +195,7 @@ class OptInPatternKindsDetectionTest {
         assertFalse(savedFindings.isEmpty());
         assertTrue(savedFindings.stream().allMatch(f -> f.status() == FindingStatus.DETECTED));
         // Task 0099 (changed): no V1 kind chosen, but the locked card number is always on, so the AI is asked for it.
-        assertEquals(Set.of(EntityType.CREDIT_CARD_NUMBER), aiRequests.get(0).policy().enabledEntityTypes());
+        assertEquals(asked(NEW_KINDS), aiRequests.get(0).policy().enabledEntityTypes());
     }
 
     @Test
@@ -288,8 +287,7 @@ class OptInPatternKindsDetectionTest {
         Map<EntityType, List<Finding>> before = runWith(EnumSet.of(EntityType.SSN));
         assertEquals(EnumSet.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER, EntityType.CVV, EntityType.PIN),
                 EnumSet.copyOf(before.keySet()), "before the catalog: what was on, and the locked items");
-        assertEquals(Set.of(EntityType.SSN, EntityType.CREDIT_CARD_NUMBER),
-                aiRequests.get(aiRequests.size() - 1).policy().enabledEntityTypes());
+        assertEquals(asked(EnumSet.of(EntityType.SSN)), aiRequests.get(aiRequests.size() - 1).policy().enabledEntityTypes());
 
         savedFindings.clear();
         storedPolicy = new TenantRedactionPolicy(tenantId, EnumSet.of(EntityType.SSN), 0.80, ReviewMode.UNCERTAIN_ONLY,
@@ -321,8 +319,8 @@ class OptInPatternKindsDetectionTest {
         pageText = NAMES;
         aiAnswer = List.of(name("Delphine Quarrington"), name("Quarrington"), name("412-55-7531"));
         Map<EntityType, List<Finding>> found = runWith(EnumSet.of(EntityType.SSN, EntityType.PERSON_NAME));
-        assertEquals(Set.of(EntityType.SSN, EntityType.PERSON_NAME, EntityType.CREDIT_CARD_NUMBER),
-                aiRequests.get(0).policy().enabledEntityTypes(), "task 0099: the locked card number too");
+        assertEquals(asked(EnumSet.of(EntityType.SSN, EntityType.PERSON_NAME)),
+                aiRequests.get(0).policy().enabledEntityTypes(), "task 0099/0103: and every locked kind");
         List<Finding> names = found.get(EntityType.PERSON_NAME);
         assertEquals(3, names.size(), "both full names and the last name alone; not the town, not the number");
         for (Finding f : names) {
@@ -370,6 +368,15 @@ class OptInPatternKindsDetectionTest {
 
     private TenantRedactionPolicy policy(Set<EntityType> enabled) {
         return new TenantRedactionPolicy(tenantId, enabled, 0.80, ReviewMode.UNCERTAIN_ONLY, true, Instant.now());
+    }
+
+    /** Task 0103 (owner's rule 3): what the AI is asked for: the chosen kinds and the locked items, all found in text. */
+    private static Set<EntityType> asked(Set<EntityType> chosen) {
+        EnumSet<EntityType> all = EnumSet.noneOf(EntityType.class);
+        all.addAll(chosen);
+        all.addAll(RedactionCatalog.lockedKinds());
+        all.retainAll(RedactionCatalog.askedOfAi());
+        return all;
     }
 
     private Set<EntityType> types() {

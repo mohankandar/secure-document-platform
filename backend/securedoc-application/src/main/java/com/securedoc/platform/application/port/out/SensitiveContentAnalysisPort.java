@@ -104,9 +104,8 @@ public interface SensitiveContentAnalysisPort {
                 EntityType.CREDIT_CARD_NUMBER,
                 EntityType.CREDIT_SCORE);
 
-        /** Task 0072: asked for only where the entity turned it on. */
-        private static final Set<EntityType> KNOWN = Set.of(EntityType.SSN, EntityType.DATE_OF_BIRTH,
-                EntityType.CREDIT_CARD_NUMBER, EntityType.CREDIT_SCORE, EntityType.PERSON_NAME);
+        /** Task 0072: asked for only where the entity turned it on. Task 0103: every kind found in text. */
+        private static final Set<EntityType> KNOWN = com.securedoc.platform.domain.business.RedactionCatalog.askedOfAi();
 
         public AnalysisPolicy {
             Objects.requireNonNull(enabledEntityTypes, "enabledEntityTypes must not be null");

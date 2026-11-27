@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPort, SensitiveDataValidationPort {
 
     private static final String DETECTOR_NAME = "local-rule-based";
-    private static final String DETECTOR_VERSION = "1.8.0";
+    private static final String DETECTOR_VERSION = "1.9.0"; // 1.9.0: task 0103 (by what a value is)
 
     // SSN pattern: 3 digits, separator, 2 digits, separator, 4 digits
     private static final Pattern SSN_PATTERN = Pattern.compile("\\b(\\d{3})[- ](\\d{2})[- ](\\d{4})\\b");
@@ -269,11 +269,16 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         String text = page.text();
 
         detectSsns(text, page.pageNumber(), results);
+        // Task 0103: by what a value is; labels only raise confidence.
+        detectSsnsByShape(text, page.pageNumber(), results);
         detectPattern(text, EMAIL_PATTERN, "EMAIL_ADDRESS", 0.90, page.pageNumber(), results);
         detectPattern(text, PHONE_PATTERN, "PHONE_NUMBER", 0.85, page.pageNumber(), results);
         detectDatesOfBirth(text, page.pageNumber(), results);
+        detectDatesByShape(text, page.pageNumber(), results);
         detectCreditCards(text, page.pageNumber(), results);
+        detectCardsByShape(text, page.pageNumber(), results);
         detectCreditScores(text, page.pageNumber(), results);
+        detectScoresByLabel(text, page.pageNumber(), results);
         // Task 0043: the opt-in pattern kinds, after the V1 detectors and independent of them. Their findings carry
         // their own detector name, and the detection service drops them unless the entity switched the kind on.
         optInPatterns.detect(text, page.pageNumber(), results);
@@ -314,6 +319,453 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
                     "DATE_OF_BIRTH", pageNumber, matcher.start(1), matcher.end(1), 0.90,
                     DETECTOR_NAME, DETECTOR_VERSION));
         }
+    }
+
+    // ------------------------------------------------------------------------------------------------ task 0103
+
+    /**
+     * Task 0103 (owner's rule): a value is found by what it is. A confidence of {@link #COVER} or more is covered without
+     * a person (the default threshold is 0.80); {@link #PERSON} waits for a person. A label only raises confidence.
+     */
+    static final double COVER = 0.90;
+    static final double PERSON = 0.70;
+    /** A label next to a value that is damaged (an impossible date, a misread digit): a person looks at it. */
+    static final double DAMAGED = 0.60;
+
+    /** SSN labels, also old, short and Spanish ones. */
+    private static final Pattern SSN_LABEL_ANY = Pattern.compile(
+            "(?i)(?<![a-z])(?:ssn|s\\.s\\.n\\.?|ss\\s*(?:#|no\\.?|num)|soc(?:ial|\\.)?\\s*sec(?:urity|\\.)?"
+                    + "(?:\\s*(?:number|no\\.?|num|#))?|(?:n[uú]mero\\s+de\\s+)?seguro\\s+social)(?![a-z])");
+
+    /** 3-2-4, also with an en dash, a dot, a space, a line break after a dash, or OCR's letters for digits. */
+    private static final Pattern SSN_SHAPE_ANY = Pattern.compile(
+            "(?<![\\w-])([0-9OoIl|SB]{3})\\s?([-–. ]|[-–][ \\t]*\\n[ \\t]*)\\s?([0-9OoIl|SB]{2})\\s?"
+                    + "([-–. ]|[-–][ \\t]*\\n[ \\t]*)\\s?([0-9OoIl|SB]{4}|[0-9]{2} [0-9]{2})(?![\\w-])");
+
+    /** Nine digits together, an SSN only next to its label. */
+    private static final Pattern NINE_DIGITS = Pattern.compile("(?<![\\w-])(\\d{9})(?![\\w-])");
+
+    /** Business labels that own the value right after them on the line ("Reference no. 123-45-6789"). */
+    private static final Pattern OTHER_OWNER_LABEL = Pattern.compile(
+            "(?i)(?<![a-z])(?:contract|member|account|acct|loan|reference|ref|form|document|invoice|order|"
+                    + "routing|phone|telephone|fax|tel|servicing|confirmation|reservation|policy|claim|case|"
+                    + "tracking|serial|ticket|employee|student|patient|itin|ein|tin|tax\\s+id|docket|file|batch|part|"
+                    + "lot|item|sku|model|plate|licen[cs]e|permit)"
+                    + "\\.?\\s*(?:number|no\\.?|#|id|num)?[\\s:#.]*$");
+
+    /** Words that make a date something other than a birth date when they are its label. */
+    private static final Pattern NON_BIRTH_DATE_WORDS = Pattern.compile(
+            "(?i)(?<![a-z])(?:date\\s+of\\s+(?:sale|issue|service|loss|death|hire|filing|purchase)|sale|issue[ds]?|"
+                    + "payment|due|closing|effective|authori[sz]ation|expir(?:ation|es|y|ed)|exp|report|signature|"
+                    + "signed|contract|servicing|processing|statement|opened|since|dated|as\\s+of|period|from|"
+                    + "through|thru|filed|recorded|received|posted|maturity|hired|employed|start(?:ed)?|ended|"
+                    + "end|purchase[d]?|delivery|shipped|order(?:ed)?|revised|rev\\.?|printed|updated|created|"
+                    + "modified|deadline|appointment|hearing|invoice|transaction|valid|death|died|deceased|"
+                    + "fecha\\s+de\\s+(?:emisi[oó]n|vencimiento|pago|firma))(?![a-z])");
+
+    /** Birth labels, also old, short and Spanish ones. */
+    private static final Pattern BIRTH_LABEL_ANY = Pattern.compile(
+            "(?i)(?<![a-z])(?:date\\s+of\\s+birth|birth\\s*date|birthdate|b['’]?\\s*date|d\\.?\\s*o\\.?\\s*b\\.?|"
+                    + "born(?:\\s+on)?|birthday|birth|fecha\\s+de\\s+nacimiento|f\\.?\\s*nac\\.?|nacid[oa](?:\\s+el)?|"
+                    + "nacimiento)(?![a-z])");
+
+    private static final String MONTHS = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
+            + "aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|enero|febrero|marzo|abril|"
+            + "mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)";
+
+    /** M/D/Y (or D/M/Y), with /, - or .; a line break may follow the second separator. Letters OCR reads for digits. */
+    private static final Pattern NUMERIC_DATE = Pattern.compile(
+            "(?<![\\w/.-])([0-9OoIl|]{1,2})([/.-])([0-9OoIl|]{1,2})\\2(?:[ \\t]*\\n[ \\t]*)?([0-9OoIl|]{4}|\\d{2})"
+                    + "(?![\\w/-]|\\.\\d)");
+    private static final Pattern ISO_DATE = Pattern.compile("(?<![\\w/.-])(\\d{4})-(\\d{2})-(\\d{2})(?![\\w/-])");
+    private static final Pattern MONTH_FIRST = Pattern.compile(
+            "(?i)(?<![a-z])" + MONTHS + "\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})(?!\\d)");
+    private static final Pattern DAY_FIRST = Pattern.compile(
+            "(?i)(?<![\\w])(\\d{1,2})\\s+(?:de\\s+)?" + MONTHS + "\\.?,?\\s+(?:de(?:l)?\\s+)?(\\d{4})(?!\\d)");
+    /** Labelled and shaped like a date, but not one: OCR damage ("DOB 67/09/1990"). */
+    private static final Pattern DATE_LIKE = Pattern.compile(
+            "(?<![\\w/.-])[0-9OoIl|]{1,2}[/.-][0-9OoIl|]{1,2}[/.-][0-9OoIl|]{2,4}(?![\\w/-])");
+    /** Unlabelled dates count as a birth date from this age on (a document's own dates are recent). */
+    private static final int YOUNGEST_UNLABELLED_AGE = 14;
+    private static final int OLDEST_AGE = 120;
+
+    private static final Pattern SCORE_LABEL_ANY = Pattern.compile(
+            "(?i)(?<![a-z])(?:credit\\s*score|fico(?:\\s*score)?|vantage\\s*score|vantagescore|beacon(?:\\s*score)?|"
+                    + "empirica|credit\\s+rating|score|puntaje(?:\\s+de\\s+cr[eé]dito)?|"
+                    + "puntuaci[oó]n(?:\\s+de\\s+cr[eé]dito)?)(?![a-z])");
+    private static final Pattern LONE_SCORE = Pattern.compile(
+            "(?<![\\w$.,/:(-])([3-8][0-9OoIl|]{2})(?![\\w%/:)-]|[.,]\\d)");
+
+    /** Spanish and short card words; on the number's own line they say it is a card. */
+    private static final Pattern CARD_WORD_ANY = Pattern.compile(
+            "(?i)(?<![a-z])(?:cards?|tarjeta|exp(?:iry|ires|iration)?\\.?|valid\\s+thru|cvv2?|cvc2?|visa|"
+                    + "master\\s*card|amex|discover)(?![a-z])");
+
+    /** Card digits in groups, a line break allowed once between groups; OCR's letters for digits. */
+    private static final Pattern CARD_RUN = Pattern.compile(
+            "(?<![A-Za-z0-9])[0-9lIO|oSB]{2,}(?:(?:[ -]|[ \\t]*\\n[ \\t]*)[0-9lIO|oSB]{1,}){0,6}(?![A-Za-z0-9])");
+
+    private static String digitsOf(String raw) {
+        StringBuilder digits = new StringBuilder(raw.length());
+        for (char c : raw.toCharArray()) {
+            switch (c) {
+                case 'l', 'I', '|' -> digits.append('1');
+                case 'O', 'o' -> digits.append('0');
+                case 'S' -> digits.append('5');
+                case 'B' -> digits.append('8');
+                default -> {
+                    if (Character.isDigit(c)) digits.append(c);
+                }
+            }
+        }
+        return digits.toString();
+    }
+
+    private static int misreads(String raw) {
+        return (int) raw.chars().filter(Character::isLetter).count() + (int) raw.chars().filter(c -> c == '|').count();
+    }
+
+    /** One finding per line of the value, so a value split over two lines gets two small boxes, not one big one. */
+    private static void addLines(List<DetectedEntity> results, String kind, int page, String text, int start, int end,
+                                 double confidence, String detector, String version) {
+        int from = start;
+        while (from < end) {
+            int newline = text.indexOf('\n', from);
+            int to = newline < 0 || newline >= end ? end : newline;
+            int s = from;
+            int e = to;
+            while (s < e && Character.isWhitespace(text.charAt(s))) s++;
+            while (e > s && Character.isWhitespace(text.charAt(e - 1))) e--;
+            if (e > s) {
+                int fs = s;
+                int fe = e;
+                boolean known = results.stream().anyMatch(x -> x.entityType().equals(kind) && x.pageNumber() == page
+                        && x.startOffset() <= fs && fe <= x.endOffset() && x.confidence() >= confidence);
+                if (!known) results.add(new DetectedEntity(kind, page, s, e, confidence, detector, version));
+            }
+            from = to + 1;
+        }
+    }
+
+    /** The text on the value's line before it, back to the line start. */
+    private static String lineBefore(String text, int start) {
+        return text.substring(text.lastIndexOf('\n', Math.max(0, start - 1)) + 1, start);
+    }
+
+    /** The nearest label of the pattern that ends before {@code start}: on the value's line, or on the line above. */
+    private static boolean labelBefore(Pattern label, String text, int start, int window) {
+        int from = Math.max(0, start - window);
+        String before = text.substring(from, start);
+        long breaks = before.chars().filter(c -> c == '\n').count();
+        if (breaks > 1) before = before.substring(before.lastIndexOf('\n', before.lastIndexOf('\n') - 1) + 1);
+        return label.matcher(before).find();
+    }
+
+    /**
+     * Task 0103: every 3-2-4 value in the SSN number ranges is an SSN, with or without a label (owner's rule, locked
+     * like). With its label (nearer than another): 0.95; without: covered at 0.90; another label owning it on its line
+     * ("Reference no. 287-65-4321"): a person decides. Outside the ranges, only with its label, at 0.75 (task 0069).
+     */
+    private void detectSsnsByShape(String text, int pageNumber, List<DetectedEntity> results) {
+        Matcher m = SSN_SHAPE_ANY.matcher(text);
+        while (m.find()) {
+            String raw = m.group();
+            String digits = digitsOf(raw);
+            if (digits.length() != 9) continue;
+            int subs = misreads(raw.replaceAll("[\\s.–-]", ""));
+            int realDigits = (int) raw.chars().filter(Character::isDigit).count();
+            if (subs > 2 || realDigits < 7) continue;
+            boolean separated = !m.group(2).isBlank() && !m.group(4).isBlank();
+            boolean spacesOnly = m.group(2).equals(" ") && m.group(4).equals(" ");
+            String area = digits.substring(0, 3);
+            String group = digits.substring(3, 5);
+            String serial = digits.substring(5);
+            boolean issuable = isIssuable(area, group, serial);
+            boolean labelled = ssnLabelOwns(text, m.start(), m.end());
+            String ownerBefore = lineBefore(text, m.start());
+            boolean otherOwner = !labelled && OTHER_OWNER_LABEL.matcher(ownerBefore).find();
+            double confidence;
+            if (labelled) {
+                confidence = issuable ? 0.95 : 0.75;
+            } else if (!issuable || !separated) {
+                continue;
+            } else if (otherOwner || spacesOnly) {
+                // "123 45 6789" without a label is often a reference written with spaces; a person decides.
+                confidence = PERSON;
+            } else {
+                confidence = COVER;
+            }
+            if (subs > 0) confidence = Math.min(confidence, labelled ? 0.85 : 0.80);
+            if (m.group(5).contains(" ") && !labelled) continue; // "77 31" only next to its label (OCR split)
+            if (itinShaped(digits) && !labelled) continue;       // 9NN-7N..: an ITIN's, never an SSN's
+            addLines(results, "SSN", pageNumber, text, m.start(), m.end(), confidence, DETECTOR_NAME, DETECTOR_VERSION);
+        }
+        Matcher bare = NINE_DIGITS.matcher(text);
+        while (bare.find()) {
+            // Nine digits together are many things; an SSN only with its label on the line, nothing else between.
+            String before = lineBefore(text, bare.start());
+            Matcher label = SSN_LABEL_ANY.matcher(before);
+            int lastEnd = -1;
+            while (label.find()) lastEnd = label.end();
+            if (lastEnd < 0 || !before.substring(lastEnd).matches("[\\s:#.\\-()=]*(?:(?i:number|no\\.?|is)[\\s:#.]*)*")) continue;
+            String d = bare.group(1);
+            addLines(results, "SSN", pageNumber, text, bare.start(1), bare.end(1),
+                    isIssuable(d.substring(0, 3), d.substring(3, 5), d.substring(5)) ? 0.95 : 0.75,
+                    DETECTOR_NAME, DETECTOR_VERSION);
+        }
+    }
+
+    private static boolean itinShaped(String digits) {
+        if (digits.charAt(0) != '9') return false;
+        int group = Integer.parseInt(digits.substring(3, 5));
+        return (group >= 70 && group <= 88) || (group >= 90 && group <= 92) || (group >= 94 && group <= 99);
+    }
+
+    /** An SSN label (any wording) before the value, nearer than another owner, or right after it on its line. */
+    private static boolean ssnLabelOwns(String text, int start, int end) {
+        int ssnBefore = precedingGap(SSN_LABEL_ANY, text, start, 120);
+        int otherBefore = precedingGap(BUSINESS_IDENTIFIER_CONTEXT_PATTERN, text, start, 120);
+        if (ssnBefore >= 0 && (otherBefore < 0 || ssnBefore <= otherBefore)) return true;
+        // "287-65-4321 (SSN)"; a business label right before the value still owns it (task 0099).
+        if (OTHER_OWNER_LABEL.matcher(lineBefore(text, start)).find()) return false;
+        int lineEnd = text.indexOf('\n', end);
+        String after = text.substring(end, Math.min(lineEnd < 0 ? text.length() : lineEnd, end + 25));
+        return after.matches("[\\s(]*(?i:ssn|social\\s+security).*");
+    }
+
+    /**
+     * Task 0103: dates of birth by what they are. A real date with a birth label (any wording) owning it: covered. A
+     * birth label next to something shaped like a date that is not a real one (OCR damage): a person. A real date with no
+     * label, at an age a person can have, that no other date label owns ("Statement date", "opened", "since"...): a person.
+     */
+    private void detectDatesByShape(String text, int pageNumber, List<DetectedEntity> results) {
+        Matcher numeric = NUMERIC_DATE.matcher(text);
+        while (numeric.find()) {
+            String raw = numeric.group();
+            int subs = misreads(raw.replaceAll("[/.\\-\\s]", ""));
+            if (subs > 2) continue;
+            LocalDate date = numericDate(digitsOf(numeric.group(1)), digitsOf(numeric.group(3)), digitsOf(numeric.group(4)));
+            if (numeric.group(4).length() == 2 && !birthLabelOwns(text, numeric.start(), numeric.end())) continue;
+            dobCandidate(text, pageNumber, numeric.start(), numeric.end(), date, subs, results);
+        }
+        Matcher iso = ISO_DATE.matcher(text);
+        while (iso.find()) {
+            LocalDate date = date(Integer.parseInt(iso.group(1)), Integer.parseInt(iso.group(2)), Integer.parseInt(iso.group(3)));
+            if (date == null) continue; // "2026-00417" is a number, not a damaged date
+            dobCandidate(text, pageNumber, iso.start(), iso.end(), date, 0, results);
+        }
+        for (Pattern textual : List.of(MONTH_FIRST, DAY_FIRST)) {
+            Matcher m = textual.matcher(text);
+            while (m.find()) {
+                boolean monthFirst = textual == MONTH_FIRST;
+                int month = month(m.group(monthFirst ? 1 : 2));
+                int day = Integer.parseInt(m.group(monthFirst ? 2 : 1));
+                LocalDate date = date(Integer.parseInt(m.group(3)), month, day);
+                if (date == null) continue;
+                dobCandidate(text, pageNumber, m.start(), m.end(), date, 0, results);
+            }
+        }
+        // A birth label right before something shaped like a date that is not one: OCR damage, for a person.
+        Matcher like = DATE_LIKE.matcher(text);
+        while (like.find()) {
+            int s = like.start();
+            int e = like.end();
+            if (results.stream().anyMatch(r -> "DATE_OF_BIRTH".equals(r.entityType()) && r.pageNumber() == pageNumber
+                    && r.startOffset() < e && s < r.endOffset())) continue;
+            String before = lineBefore(text, s);
+            Matcher label = BIRTH_LABEL_ANY.matcher(before);
+            int lastEnd = -1;
+            while (label.find()) lastEnd = label.end();
+            if (lastEnd < 0 || before.length() - lastEnd > 25) continue;
+            addLines(results, "DATE_OF_BIRTH", pageNumber, text, s, e, DAMAGED, DETECTOR_NAME, DETECTOR_VERSION);
+        }
+    }
+
+    private void dobCandidate(String text, int pageNumber, int start, int end, LocalDate date, int misreads,
+                              List<DetectedEntity> results) {
+        if (date == null) return;
+        LocalDate today = LocalDate.now();
+        if (date.isAfter(today) || date.isBefore(today.minusYears(OLDEST_AGE))) return;
+        boolean labelled = birthLabelOwns(text, start, end);
+        double confidence;
+        if (labelled) {
+            confidence = misreads > 0 ? 0.80 : 0.90;
+        } else {
+            if (date.isAfter(today.minusYears(YOUNGEST_UNLABELLED_AGE))) return;
+            if (otherDateLabelOwns(text, start)) return;
+            confidence = PERSON;
+        }
+        addLines(results, "DATE_OF_BIRTH", pageNumber, text, start, end, confidence, DETECTOR_NAME, DETECTOR_VERSION);
+    }
+
+    /** A birth label before the value (the value's line or the two above), nearer than any other date word. */
+    private static boolean birthLabelOwns(String text, int start, int end) {
+        int birth = precedingGap(BIRTH_LABEL_ANY, text, start, 160);
+        int other = precedingGap(NON_BIRTH_DATE_WORDS, text, start, 160);
+        if (birth >= 0 && (other < 0 || birth <= other)) return true;
+        // "03/14/1979 (date of birth)"
+        int lineEnd = text.indexOf('\n', end);
+        String after = text.substring(end, Math.min(lineEnd < 0 ? text.length() : lineEnd, end + 25));
+        return BIRTH_LABEL_ANY.matcher(after).lookingAt() || after.matches("\\s*[(\\[]?\\s*(?i:dob|date of birth|born).*");
+    }
+
+    /** Another date word is the nearest label before the date on its line, or heads its column on the line above. */
+    private static boolean otherDateLabelOwns(String text, int start) {
+        int other = precedingGap(NON_BIRTH_DATE_WORDS, text, start, 100);
+        if (other < 0) return false;
+        int birth = precedingGap(BIRTH_LABEL_ANY, text, start, 100);
+        return birth < 0 || other < birth;
+    }
+
+    private static LocalDate numericDate(String first, String second, String year) {
+        if (first.isEmpty() || second.isEmpty() || year.isEmpty()) return null;
+        int y = Integer.parseInt(year);
+        if (year.length() == 2) y += y > LocalDate.now().getYear() % 100 ? 1900 : 2000;
+        LocalDate monthFirst = date(y, Integer.parseInt(first), Integer.parseInt(second));
+        return monthFirst != null ? monthFirst : date(y, Integer.parseInt(second), Integer.parseInt(first));
+    }
+
+    private static LocalDate date(int year, int month, int day) {
+        try {
+            return LocalDate.of(year, month, day);
+        } catch (DateTimeException | IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static int month(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        String[][] names = {{"jan", "ene"}, {"feb"}, {"mar"}, {"apr", "abr"}, {"may"}, {"jun"}, {"jul"}, {"aug", "ago"},
+                {"sep", "set"}, {"oct"}, {"nov"}, {"dec", "dic"}};
+        for (int i = 0; i < names.length; i++) {
+            for (String start : names[i]) if (n.startsWith(start)) return i + 1;
+        }
+        return 0;
+    }
+
+    /**
+     * Task 0103: a card number is a card number with or without a label. 13 to 19 digits with a card issuer's first
+     * digits and a valid check digit: covered (0.95 with card words on its line, 0.90 without); another label owning it
+     * on its line: a person. Without the check digit (an OCR misread) but with card words and an issuer's digits: a
+     * person. A line break may split it once; each line gets its own box.
+     */
+    private void detectCardsByShape(String text, int pageNumber, List<DetectedEntity> results) {
+        Matcher run = CARD_RUN.matcher(text);
+        while (run.find()) {
+            // The run's groups; a card is the longest stretch of whole groups with a card's shape (a phone number or a
+            // reference may stand before it in a table row).
+            List<int[]> groups = new ArrayList<>();
+            Matcher g = Pattern.compile("[0-9lIO|oSB]+").matcher(text);
+            g.region(run.start(), run.end());
+            while (g.find()) groups.add(new int[]{g.start(), g.end()});
+            int[] best = null;
+            for (int i = 0; i < groups.size(); i++) {
+                for (int j = groups.size() - 1; j >= i; j--) {
+                    String part = text.substring(groups.get(i)[0], groups.get(j)[1]);
+                    String d = digitsOf(part);
+                    if (d.length() < 13 || d.length() > 19) continue;
+                    if (!isLuhnValid(d) && !hasCardIssuerPrefix(d)) continue;
+                    if (best == null || (groups.get(j)[1] - groups.get(i)[0]) > best[1] - best[0]) {
+                        best = new int[]{groups.get(i)[0], groups.get(j)[1]};
+                    }
+                }
+            }
+            if (best == null) continue;
+            int start = best[0];
+            int end = best[1];
+            String raw = text.substring(start, end);
+            String digits = digitsOf(raw);
+            int subs = misreads(raw.replaceAll("[\\s-]", ""));
+            if (subs > 3 || raw.chars().filter(Character::isDigit).count() < 10) continue;
+            if (raw.indexOf('\n') >= 0 && !cardGrouped(raw)) continue;
+            String line = sameLine(text, start, end);
+            boolean cardWords = CARD_WORD_ANY.matcher(line).find()
+                    || CARD_CONTEXT_PATTERN.matcher(contextWindow(text, start, end, 160)).find();
+            boolean issuer = hasCardIssuerPrefix(digits);
+            boolean luhn = isLuhnValid(digits);
+            boolean otherOwner = OTHER_OWNER_LABEL.matcher(lineBefore(text, start)).find()
+                    && !CARD_WORD_ANY.matcher(lineBefore(text, start)).find();
+            double confidence;
+            if (luhn && cardWords) {
+                confidence = 0.95;
+            } else if (luhn && issuer) {
+                confidence = otherOwner ? 0.75 : COVER;
+            } else if (!luhn && issuer && cardWords && (digits.length() == 15 || digits.length() == 16)) {
+                confidence = DAMAGED;
+            } else {
+                continue;
+            }
+            if (subs > 0) confidence = Math.min(confidence, cardWords ? 0.90 : 0.80);
+            addLines(results, "CREDIT_CARD_NUMBER", pageNumber, text, start, end, confidence, DETECTOR_NAME,
+                    DETECTOR_VERSION);
+        }
+    }
+
+    /** Groups of 4 (or 4-6-5) on each side of the line break: a card set in two lines, not two numbers. */
+    private static boolean cardGrouped(String raw) {
+        for (String part : raw.split("\\s*\\n\\s*")) {
+            if (!part.trim().matches("[0-9lIO|oSB]{4}(?:[ -][0-9lIO|oSB]{4,6})*(?:[ -][0-9lIO|oSB]{1,5})?")) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Task 0103: a credit score under any of its names. Labelled on its line (any words between, up to 40 characters),
+     * or alone on a line in the two under a header with the label (a table): covered. A label up to 250 characters
+     * before, with only a lone number in the score range after it: a person. A number alone cannot tell (see report).
+     */
+    private void detectScoresByLabel(String text, int pageNumber, List<DetectedEntity> results) {
+        Matcher m = LONE_SCORE.matcher(text);
+        while (m.find()) {
+            String raw = m.group(1);
+            String digits = digitsOf(raw);
+            if (digits.length() != 3) continue;
+            int score = Integer.parseInt(digits);
+            if (score < 300 || score > 850) continue;
+            int start = m.start(1);
+            int end = m.end(1);
+            String context = contextWindow(text, start, end, 120);
+            if (isExplanatoryScoreValue(score, digits, context)) continue;
+            String before = lineBefore(text, start);
+            Matcher label = SCORE_LABEL_ANY.matcher(before);
+            int lastEnd = -1;
+            while (label.find()) lastEnd = label.end();
+            int subs = misreads(raw);
+            double confidence;
+            if (lastEnd >= 0 && before.length() - lastEnd <= 40) {
+                confidence = subs > 0 ? DAMAGED : 0.85;
+            } else if (subs > 0) {
+                continue;
+            } else if (underScoreHeader(text, start)) {
+                confidence = 0.85;
+            } else if (precedingGap(SCORE_LABEL_ANY, text, start, 250) >= 0 && lineIsOnly(text, start, end)) {
+                confidence = PERSON;
+            } else {
+                continue;
+            }
+            addLines(results, "CREDIT_SCORE", pageNumber, text, start, end, confidence, DETECTOR_NAME, DETECTOR_VERSION);
+        }
+    }
+
+    /** The header of the column: one of the two lines above has a score label and no number in the score range. */
+    private static boolean underScoreHeader(String text, int start) {
+        int lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+        int above = lineStart - 1;
+        for (int i = 0; i < 2 && above > 0; i++) {
+            int aboveStart = text.lastIndexOf('\n', above - 1) + 1;
+            String header = text.substring(aboveStart, above);
+            if (SCORE_LABEL_ANY.matcher(header).find() && !LONE_SCORE.matcher(header).find()) return true;
+            above = aboveStart - 1;
+        }
+        return false;
+    }
+
+    /** The number is alone on its line. */
+    private static boolean lineIsOnly(String text, int start, int end) {
+        int lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+        int lineEnd = text.indexOf('\n', end);
+        return text.substring(lineStart, start).isBlank()
+                && text.substring(end, lineEnd < 0 ? text.length() : lineEnd).isBlank();
     }
 
     private void detectSsns(String text, int pageNumber, List<DetectedEntity> results) {
@@ -403,11 +855,6 @@ public class LocalRuleBasedDetectionAdapter implements SensitiveDataDetectionPor
         double confidence;
         if (CARD_CONTEXT_PATTERN.matcher(context).find() || CARD_WORD_PATTERN.matcher(sameLine(text, start, end)).find()) {
             confidence = 0.95;
-        } else if (CARD_GROUPING_PATTERN.matcher(value.trim()).matches() && hasCardIssuerPrefix(digits)
-                && !BUSINESS_IDENTIFIER_CONTEXT_PATTERN.matcher(sameLine(text, start, end)).find()) {
-            // Task 0099: a locked item. Grouped like a card, with a card issuer's first digits and a valid check digit,
-            // it is a card even without a label; with less confidence, so a person decides.
-            confidence = 0.75;
         } else {
             // Luhn alone is supporting evidence, not sufficient semantic meaning. This keeps a
             // Luhn-valid contract/member/reference number from becoming a deterministic finding.

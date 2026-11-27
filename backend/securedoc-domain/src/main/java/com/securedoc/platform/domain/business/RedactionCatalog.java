@@ -59,8 +59,8 @@ public final class RedactionCatalog {
             aiOnly(EntityType.PERSON_NAME, "Person name"),
             image(EntityType.SIGNATURE, "Signature or initials"),
             image(EntityType.FACE_PHOTO, "Face photo"),
-            locked(EntityType.CVV, "Card security code (CVV)", DetectionMethod.PATTERN),
-            locked(EntityType.PIN, "PIN", DetectionMethod.PATTERN));
+            locked(EntityType.CVV, "Card security code (CVV)", DetectionMethod.AI_AND_PATTERN),
+            locked(EntityType.PIN, "PIN", DetectionMethod.AI_AND_PATTERN));
 
     private static final Set<EntityType> LOCKED = where(Entry::locked);
     private static final Set<EntityType> ON_BY_DEFAULT = where(Entry::onByDefault);
@@ -112,7 +112,8 @@ public final class RedactionCatalog {
     }
 
     private static Entry optIn(EntityType kind, String name) {
-        return new Entry(kind, name, DetectionMethod.PATTERN, RedactionStyle.REMOVE_FULLY, false, false, true);
+        // Task 0103: the AI reads for these kinds too (owner's rule 3); PATTERN is kept for a kind with no AI reading.
+        return new Entry(kind, name, DetectionMethod.AI_AND_PATTERN, RedactionStyle.REMOVE_FULLY, false, false, true);
     }
 
     private static Entry aiOnly(EntityType kind, String name) {

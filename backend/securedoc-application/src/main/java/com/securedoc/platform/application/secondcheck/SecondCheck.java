@@ -198,7 +198,22 @@ public final class SecondCheck {
 
     private Set<String> readImage(TextExtractionPort.PageText page, TenantRedactionPolicy policy, Finished finished,
                                   List<RedactionTarget> targets, List<Finding> dismissed, Set<AiModel> models) {
-        int number = page.pageNumber();
+        return readImage(images, visionModel, page.pageNumber(), page.text(), policy, finished, targets, dismissed,
+                models);
+    }
+
+    /** The short name a page of the final check gets when the vision model's answer can't be used. */
+    static final String UNREAD_CODE = UNREAD;
+
+    /**
+     * Task 0103: also the final check's reading of a page that was a picture in the original (the owner's run 2: OCR
+     * misread two handwritten dates, so the pattern search of the finished file could not see them either). The model's
+     * findings on the finished page image, less what points at a cover, at digits kept on purpose or at what a person
+     * kept. A model that can't be asked throws, as in the second check.
+     */
+    static Set<String> readImage(PageImagePort images, VisionModelPort visionModel, int number, String text,
+                                 TenantRedactionPolicy policy, Finished finished, List<RedactionTarget> targets,
+                                 List<Finding> dismissed, Set<AiModel> models) {
         PageImagePort.PageImage image;
         try (InputStream in = finished.open()) {
             image = images.render(in, number, VisionModelPort.IMAGE_LONG_SIDE);
@@ -234,7 +249,7 @@ public final class SecondCheck {
         for (VisionPageResult.Item item : items) {
             EntityType type = CODES.containsKey(item.kind())
                     ? VisionFindings.type(item.kind(), policy.enabledEntityTypes()) : null;
-            if (type == null || (item.kind() == Kind.CREDIT_SCORE && !scoreIn(page.text()))) continue;
+            if (type == null || (item.kind() == Kind.CREDIT_SCORE && !scoreIn(text))) continue;
             if (keptDigits(targets, number, item.box()) || keptByAPerson(dismissed, number, type, item.box())) continue;
             if (pixels == null) pixels = decode(image);
             if (pixels == null) return Set.of(UNREAD);

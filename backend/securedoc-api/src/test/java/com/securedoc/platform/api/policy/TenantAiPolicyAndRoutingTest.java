@@ -51,8 +51,9 @@ class TenantAiPolicyAndRoutingTest {
     void thePromptsOfTheOtherKindsAreUnchangedAndNamesHaveTheirOwn() throws Exception {
         SensitiveContentPromptBuilder builder = new SensitiveContentPromptBuilder();
         AnalysisPolicy four = AnalysisPolicy.v1Defaults();
-        assertEquals("864f32ea6faceb6d9f503e1ae1e81f1151b141e00f2ff742f1993a82af1ebdad", sha(builder.buildCompact(four)));
-        assertEquals("32422f7338a07f8174546b71074e8b9839ab545043eddaa00229f9de189a6a05", sha(builder.build(four)));
+        // Task 0103: both prompts changed (every kind, no label needed); the prompt version is 1.4.0 and the gate is the benchmark.
+        assertEquals("6b092f11af0bc8237c66fd661b91881ba97b3bdb6447367bef8bf3db716373b6", sha(builder.buildCompact(four)));
+        assertEquals("863481dd96d0315ba44565602f9364c2983739b51878c3c58dccd670b053adbe", sha(builder.build(four)));
         assertEquals("5c1cc58ac9eaf55ed266eb80a7a6c84d49f5946e337b6fc4c2a77d1e5df9a4a3", sha(builder.buildNames()), "a change of the names prompt needs a new version and the gate");
         assertTrue((SensitiveContentPromptBuilder.NAMES_VERSION + ";validation=NOT_APPLICABLE;plausibility=PASS").length() <= 50,
                 "findings.detector_version");

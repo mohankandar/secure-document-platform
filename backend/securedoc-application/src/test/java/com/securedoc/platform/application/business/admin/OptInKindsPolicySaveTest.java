@@ -45,8 +45,10 @@ class OptInKindsPolicySaveTest {
                 EntityType.SIGNATURE, EntityType.FACE_PHOTO, EntityType.PERSON_NAME),
                 EnumSet.copyOf(RedactionCatalog.entries().stream().filter(e -> !e.onByDefault())
                         .map(RedactionCatalog.Entry::kind).toList()));
-        assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
-                EntityType.CREDIT_SCORE, EntityType.PERSON_NAME), EnumSet.copyOf(RedactionCatalog.askedOfAi()));
+        // Task 0103 (owner's rule 3): the AI is asked for every kind found in text, the opt-in ones too.
+        assertEquals(EnumSet.complementOf(EnumSet.of(EntityType.SIGNATURE, EntityType.FACE_PHOTO)).stream()
+                        .filter(RedactionCatalog.kinds()::contains).collect(java.util.stream.Collectors.toSet()),
+                java.util.Set.copyOf(RedactionCatalog.askedOfAi()));
         assertEquals(15, RedactionCatalog.kinds().size());
     }
 

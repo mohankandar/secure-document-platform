@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveContentAnalysisPort {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaSensitiveContentAnalysisAdapter.class);
-    private static final String VERSION = "1.3.0";
+    private static final String VERSION = "1.4.0"; // 1.4.0: task 0103 (every kind, no label needed)
     private static final int MAX_BATCH_SIZE = 8;
 
     /** Task 0064: how long a model's stated digest is taken as still current. */
@@ -526,7 +526,9 @@ public final class OllamaSensitiveContentAnalysisAdapter implements SensitiveCon
 
     // Task 0091: every answer schema has one fixed order, all the way down. The model answers in the schema's order, and
     // Map.of has another order at every start, so the same page got another request after a restart. Built once.
-    static final Map<String, Object> FIND_SCHEMA = findings("SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE");
+    // Task 0103: every kind found in text (the locked items and the opt-in kinds too).
+    static final Map<String, Object> FIND_SCHEMA = findings("SSN", "DATE_OF_BIRTH", "CREDIT_CARD_NUMBER", "CREDIT_SCORE",
+            "BANK_ROUTING_NUMBER", "BANK_ACCOUNT_NUMBER", "ITIN", "EIN", "DRIVERS_LICENSE_NUMBER", "PASSPORT_NUMBER", "CVV", "PIN");
     static final Map<String, Object> NAMES_SCHEMA = findings("PERSON_NAME");
     static final Map<String, Object> SECOND_CHECK_SCHEMA = object("found", array(object(
             "kind", oneOf(SensitiveContentResponseParser.SECOND_CHECK_KINDS), "value", text())));
