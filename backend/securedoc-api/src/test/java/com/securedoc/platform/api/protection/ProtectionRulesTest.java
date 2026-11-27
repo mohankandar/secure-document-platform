@@ -204,7 +204,8 @@ class ProtectionRulesTest {
             }
         }
         assertTrue(found.containsAll(ScheduledWorkGate.ALWAYS), "named as they are: " + found);
-        assertEquals(11, found.size(), "a new scheduled task is gated by default; decide here if it must run always: " + found);
+        // Task 0111: EmptyCaseExpiryScheduler (12th) changes cases, so it is gated like the others.
+        assertEquals(12, found.size(), "a new scheduled task is gated by default; decide here if it must run always: " + found);
 
         AtomicInteger ran = new AtomicInteger();
         AtomicBoolean open = new AtomicBoolean();
