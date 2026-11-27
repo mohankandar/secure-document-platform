@@ -39,6 +39,20 @@ Outcome: **IN PROGRESS**. The branch is pushed; there is no PR, because the task
 
 Reactor builds only, no `mvn install` (rule 11).
 
+6. **The case side** (`DocumentPackage`):
+   - a delivered case takes its next batch and goes back to SUBMITTED;
+   - a case that is processing or in Review makes the batch wait, never refusing it;
+   - a rejected or cancelled case takes none;
+   - a batch of skipped copies only is not submitted.
+   **The open case of a contract** (`CaseBatchStore.openCaseFor`): the newest case on the record that is not rejected, cancelled or erased, never another contract's or entity's. Tests: `DocumentPackageBatchTest` 4 of 4 (domain module 106 of 106), `JdbcCaseBatchStorePostgresTest` 2 of 2.
+
+## Question before the next step (frozen area)
+**Step 3 changes V1 document processing**, which is frozen (CLAUDE.md: ask first):
+- the staged pipeline and the inline path would process only a batch's new documents;
+- the export would send only them;
+- the export-cycle limit would no longer apply to batches.
+The task asks for exactly this (rules 1, 5 and 7), so I read it as approval. I have **not** changed the pipeline until that is confirmed. Recommended: confirm. Nothing already processed is reprocessed, and the final check (0099) still runs on every new document and version in full.
+
 ## Left (next session, in this order; design section 8)
 1. Find the open case for a case-field record. Let a case take a new batch after delivery, and queue a batch that arrives while a batch is processing or in Review.
 2. Wire the watched folder, then the API and polling (a reused revision or document id becomes a batch or version), then scan (operator's pick).
