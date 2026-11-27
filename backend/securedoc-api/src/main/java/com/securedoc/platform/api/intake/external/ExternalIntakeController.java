@@ -29,6 +29,7 @@ public class ExternalIntakeController {
         this.contextResolver = contextResolver;
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("machine caller, admitted by machine admission")
     @PostMapping
     @Transactional
     public ResponseEntity<ExternalIntakeResponse> create(@RequestBody ExternalIntakeCreateRequest request,
@@ -40,6 +41,7 @@ public class ExternalIntakeController {
                 .body(ExternalIntakeResponse.from(service.createPushIntake(input, principal, correlationId)));
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("machine caller, admitted by machine admission")
     @PostMapping(value = "/{packageId}/documents/{externalSourceDocumentId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     // Task 0023 C6: a 410 keeps the expiry (state and EXTERNAL_INTAKE_EXPIRED audit) it recorded in this request.
     @Transactional(noRollbackFor = com.securedoc.platform.application.exception.IntakeExpiredException.class)
@@ -68,6 +70,7 @@ public class ExternalIntakeController {
         }
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("machine caller, admitted by machine admission")
     @GetMapping("/{packageId}")
     @Transactional
     public ResponseEntity<ExternalIntakeResponse> status(@PathVariable UUID packageId,
