@@ -291,10 +291,12 @@ public class ApplicationServiceConfig {
             IntegrationConnectionRepository integrationConnectionRepository,
             AuditService auditService,
             com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones,
-            com.securedoc.platform.application.port.out.DestinationProfilePort destinationProfiles) {
+            com.securedoc.platform.application.port.out.DestinationProfilePort destinationProfiles,
+            com.securedoc.platform.application.port.out.SecretReferenceRule secretReferences) {
         return new IntegrationConnectionService(integrationConnectionRepository, auditService)
                 .withEntityTimeZones(entityTimeZones)
-                .withDestinationProfiles(destinationProfiles);
+                .withDestinationProfiles(destinationProfiles)
+                .withSecretReferences(secretReferences);
     }
 
     @Bean

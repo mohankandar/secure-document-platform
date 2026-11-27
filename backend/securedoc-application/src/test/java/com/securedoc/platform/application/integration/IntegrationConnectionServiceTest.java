@@ -27,7 +27,26 @@ class IntegrationConnectionServiceTest {
     private final List<AuditRecord> audits = new ArrayList<>();
     private final AuditPort auditPort = audits::add;
     private final IntegrationConnectionService service = new IntegrationConnectionService(repository,
-            new AuditService(auditPort), Clock.fixed(Instant.parse("2026-09-02T20:00:00Z"), ZoneOffset.UTC));
+            new AuditService(auditPort), Clock.fixed(Instant.parse("2026-09-02T20:00:00Z"), ZoneOffset.UTC))
+            // Hardening: secret references limited to approved names; this test's own approved name (the app's rule is
+            // tested in securedoc-api).
+            .withSecretReferences((entity, reference) -> {
+                if (!reference.equals("vault://tenant-a/title-secret")) throw new IllegalArgumentException("refused");
+            });
+
+    /** Hardening: secret references limited to approved names. */
+    @Test
+    void aSecretNameTheRuleRefusesIsNotSavedAndTheErrorNamesOnlyTheField() {
+        var refused = assertThrows(ValidationException.class, () -> service.create(tenantA, actor, correlation,
+                new IntegrationConnectionService.ConnectionInput("Title API", null, IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY,
+                        IntegrationDirection.OUTBOUND, IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.JWT, null,
+                        "https://title.example.test", null, "sys:user.home", false, 60, 2, 24, 50, 262144000L, 500,
+                        IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true)));
+        assertEquals(com.securedoc.platform.domain.error.LvErrorCode.CFG_003, refused.lvCode());
+        assertEquals(com.securedoc.platform.application.port.out.SecretReferenceRule.REFUSED, refused.getMessage());
+        assertTrue(repository.findByTenantId(tenantA).isEmpty());
+        assertTrue(audits.isEmpty());
+    }
 
     @Test
     void tenantScopeIsAppliedToListAndGet() {
