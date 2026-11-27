@@ -396,6 +396,7 @@ async function score(run, drops, label) {
  * The findings of one case: kind, page, status, whether it has a place, and whether it waits for a person and why
  * (the Review queue's reason). The Review answer also carries the found text: only id, kind, page and reason are kept.
  */
+let hasPersonReason;
 async function findingsOf(packageId) {
   const waiting = new Map();
   try {
@@ -403,10 +404,13 @@ async function findingsOf(packageId) {
       'X-Tenant-Id': ENTITY, 'X-Actor-Id': ACTOR, 'X-Actor-Roles': 'DOCUMENT_PROCESSOR,TENANT_IT_ADMIN' } });
     if (res.ok) for (const item of (await res.json()).items ?? []) waiting.set(item.findingId, item.reason ?? 'no reason given');
   } catch { /* the app is gone: the list is empty */ }
-  const list = rows(`select f.id::text, f.entity_type, coalesce(f.page_number::text, ''), f.status, (f.bbox_left is not null)::text
+  // Task 0105's own reason for a person (findings.person_reason), when the build has it; else Review's reason.
+  hasPersonReason ??= sql("select count(*) from information_schema.columns where table_name = 'findings' and column_name = 'person_reason'") === '1';
+  const list = rows(`select f.id::text, f.entity_type, coalesce(f.page_number::text, ''), f.status, (f.bbox_left is not null)::text,
+    ${hasPersonReason ? "coalesce(f.person_reason, '')" : "''"}
     from findings f join documents d on d.id = f.document_id where d.package_id = '${packageId}' order by 3, 2, 1`)
-    .map(([id, kind, page, status, place]) => ({ id, kind, page: Number(page) || null, status, place: place === 'true',
-      toPerson: waiting.has(id), reason: waiting.get(id) ?? '' }));
+    .map(([id, kind, page, status, place, personReason]) => ({ id, kind, page: Number(page) || null, status, place: place === 'true',
+      toPerson: waiting.has(id), reason: waiting.has(id) ? (personReason || waiting.get(id)) : '' }));
   return { list, toPerson: list.filter((f) => f.toPerson).length };
 }
 

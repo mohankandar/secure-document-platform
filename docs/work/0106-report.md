@@ -16,7 +16,7 @@ Test tooling only, under `test-tools/owner-run/`. No product change, no new depe
 2. **The scorecard** (`results/<round>-<label>.md`, plus a console summary). It holds kinds, pages, counts and codes, **never a value**:
    - **leaks** per file and page: a value of a kind that is on (or locked) still readable in the **delivered** file, read three ways: text layer (with form fields and comments), OCR, and the vision model on pages that were images in the original;
    - **extra redaction** per file and page: visible words the page lost, apart from where the expected values stand. Both pages are read by OCR, or by the vision model on image pages, so removed hidden text doesn't count. Words the watermark runs together are not counted, and pages LexaVault holds as unreadable are left out;
-   - automatic %, findings, findings sent to a person **with Review's reason** (from the Review queue; 0105's fields are not merged yet), findings without a place;
+   - automatic %, findings, findings sent to a person **with the reason** (0105's `person_reason`, else Review's reason), findings without a place;
    - intake per drop (taken, refused with `LV-` code, waiting), unread pages, time per case.
    Expected answers: `expected.json` (files 01–13, from `gen.py` and the README) and `long\*-expected.txt`, read as they are.
 3. **Second mode, after the owner's review:** `--review` runs the same round on port 8080 and leaves the app up for the normal screen. `--after` then scores again, lists what changed (per case: status, each finding whose decision changed), and ends the round. `--stop` ends it without scoring.
@@ -46,20 +46,24 @@ On today's merged head (`0a756fc`), Ollama 0.40.18. Final code, two full rounds:
 - A scorecard grep for the test values finds none.
 - Builds: `mvn -Pdev-build -DskipTests package` in `backend` (reactor build, **no `mvn install`**, rule 11). No product code changed, so no Maven or frontend tests were run, per rule 9. `node --check` on the script; the Java helper compiles at each run.
 
-**After merging the newest integration branch** (0103 label-free detection, 0109 hardening; head `349383c`, rebuilt): one more round.
+**After merging the newest integration branch**, rebuilt each time:
+- after 0103 (label-free detection) and 0109 (hardening), head `349383c`: round 20261127-195424 (scorecard not kept, superseded);
+- after 0105 (finding places), head `dcf641c`: round 20261127-203343, kept in `results/`.
 
-| Round 20261127-195424 | Scorecard 1 | Scorecard 2 |
+| Round 20261127-203343 | Scorecard 1 | Scorecard 2 |
 |---|---|---|
-| Leaks / extra words | 0 / 0 | 0 / 1 |
+| Leaks / extra words | 0 / 0 | 0 / 9 (09 p1: 6, 04 p1: 2, 07 p1: 1) |
 | Automatic | 1 of 6 (17%) | (kept from 1) |
-| Findings / to a person / no place / unread pages | 118 / 16 / 5 / 3 | 123 / 2 / 10 / 8 |
-| Cases stuck | 0 | **1: drop-16 (long files), PROCESSING** |
+| Findings / to a person / no place / unread pages | 116 / 13 / 3 / 3 | 121 / 0 / 8 / 8 |
+| Cases waiting for a person / stuck | 5 / 0 | 0 / **1: drop-16 (long files), PROCESSING** |
 
-- **Product fault found (for the design chat, not fixed here: queue A's area):** a case stays **PROCESSING forever** after a person marks checked a page that the *final check* of the finished file held. Seen in both rounds on this head.
+- With 0105, every case except the long files is now delivered by the stand-in. All 12 files of the 13: **no leak**.
+- **0105's reasons** are shown when the column is there (`findings.person_reason`), with Review's reason as the fallback. This round shows GROUP_INCOMPLETE and TEXT_NOT_READABLE beside LOW_CONFIDENCE.
+- **Product fault found (for the design chat, not fixed here: queue A's area):** a case stays **PROCESSING forever** after a person marks checked a page that the *final check* of the finished file held. Seen in both rounds after 0103 (before and after 0105).
   - Sequence: the stand-in confirmed the 6 findings → REDACT done → `DOCUMENT_FINAL_CHECK_HELD pagesToCheck=1` → PENDING_REVIEW → the stand-in marked the new pages to check (long-60 p5, p14, p23, p32) checked → processing resumed (`STAGED_PROCESSING_PLAN … status=PROCESSING`) → **nothing more**.
   - All pipeline jobs DONE, documents REDACTING, no error.
   - Nothing is delivered, so it fails closed, but the owner will meet it in the UI with the long files. So the long-60 DOB leak can't be scored on this head until it is fixed.
-  - Run folder kept: `%TEMP%\lexavault-0106\20261127-195424`.
+  - Run folders kept: `%TEMP%\lexavault-0106\20261127-195424` and `20261127-203343`.
 - For 0103's before/after: the handwritten DOB pages (long-60 p23, p32) are now **pages to check**, not delivered unseen.
 - The tool now reports a case with no change for 15 minutes as **stuck** instead of waiting (90 minutes before).
 - A round stopped half-way cleans up by itself (Ctrl+C, window closed). `--stop` ends one cut off harder: tried by killing the process after start, then `--stop` removed the container.
@@ -72,7 +76,7 @@ Found while building, fixed before the proof:
 
 ## Not done / left
 - Not run: the full proof set (milestone only).
-- 0105's new reason fields: not merged yet. The scorecard uses Review's reason (LOW_CONFIDENCE, LOCATION_UNCERTAIN, POLICY_REVIEW) and can take 0105's once merged.
+- The long files can't be scored as delivered on the newest head until the stuck-case fault is fixed.
 
 ## For the design chat
 - The stuck-PROCESSING fault above: suggest a small task in queue A (the final-check and page-check path, 0099/0100) with a test that marks checked a page the final check held and expects export.
