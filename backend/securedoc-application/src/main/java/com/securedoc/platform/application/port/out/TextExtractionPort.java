@@ -216,8 +216,15 @@ public interface TextExtractionPort {
             double top,
             double width,
             double height,
-            double confidence
+            double confidence,
+            boolean fromField
     ) {
+        /** Task 0105: {@code fromField} true for a form field's or annotation's value, placed by its box (task 0053). */
+        public TextSpan(int startOffset, int endOffset, double left, double top, double width, double height,
+                        double confidence) {
+            this(startOffset, endOffset, left, top, width, height, confidence, false);
+        }
+
         public TextSpan {
             if (startOffset < 0 || endOffset < startOffset) {
                 throw new IllegalArgumentException("Invalid span offsets");

@@ -554,6 +554,15 @@ public class ApplicationServiceConfig {
         return new OperationsQueryService(operationsReadPort);
     }
 
+    /** Task 0105: Reports › Automation. */
+    @Bean
+    public com.securedoc.platform.application.operations.automation.AutomationReportService automationReportService(
+            com.securedoc.platform.application.port.out.AutomationReportPort port,
+            com.securedoc.platform.application.port.out.EntityTimeZonePort entityTimeZones) {
+        return new com.securedoc.platform.application.operations.automation.AutomationReportService(port, entityTimeZones,
+                java.time.Clock.systemUTC());
+    }
+
     /** Task 0081: Reports › Daily intake and delivery. */
     @Bean
     public com.securedoc.platform.application.operations.daily.DailyReportService dailyReportService(

@@ -207,6 +207,9 @@ public final class ManualFallbackService implements StartManualFallbackUseCase, 
                 FindingLocation.withBounds(command.pageNumber(), 0, 0, box), Confidence.full(),
                 DetectorSource.of(MANUAL_DETECTOR, MANUAL_DETECTOR_VERSION));
         finding.confirm(command.actorId(), "Business user selected manual redaction region");
+        // Task 0105: drawn by a person: LexaVault missed it.
+        finding.applyPlacement(com.securedoc.platform.domain.finding.FindingPlacement.drawnBy(command.actorId(),
+                java.time.Instant.now()));
         findingRepository.save(finding);
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),

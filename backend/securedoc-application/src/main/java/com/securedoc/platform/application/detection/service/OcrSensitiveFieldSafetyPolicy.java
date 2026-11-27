@@ -80,6 +80,8 @@ final class OcrSensitiveFieldSafetyPolicy {
             }
 
             Set<EntityType> unresolvedBlankLabels = new LinkedHashSet<>();
+            // Task 0105: where each unresolved label stands, so its field area can be covered.
+            java.util.Map<EntityType, int[]> labelPlaces = new java.util.EnumMap<>(EntityType.class);
 
             // First use the normalized textual representation. This remains the preferred path
             // for ordinary OCR forms where label and value were reconstructed onto one line.
@@ -108,6 +110,7 @@ final class OcrSensitiveFieldSafetyPolicy {
                     // fallback has a chance to recover it; otherwise create a review signal below.
                     if (!hasTypeOnPage(existingEntities, located, type, page.pageNumber())) {
                         unresolvedBlankLabels.add(type);
+                        labelPlaces.putIfAbsent(type, new int[] {matcher.start(1), matcher.end(1)});
                     }
                     continue;
                 }
@@ -154,7 +157,8 @@ final class OcrSensitiveFieldSafetyPolicy {
                 }
 
                 // Any explicit non-empty sensitive field that is not safely resolved must pause.
-                reviewSignals.add(new ReviewSignal(type, page.pageNumber(), REVIEW_SIGNAL_CONFIDENCE));
+                reviewSignals.add(new ReviewSignal(type, page.pageNumber(), REVIEW_SIGNAL_CONFIDENCE, valueStart, valueEnd,
+                        matcher.start(1), matcher.end(1)));
             }
 
             // Second, resolve a credit-score field from OCR geometry. This intentionally does not
@@ -186,8 +190,9 @@ final class OcrSensitiveFieldSafetyPolicy {
             // entity type anywhere on this page, force Manual Review instead of allowing export.
             for (EntityType unresolvedType : unresolvedBlankLabels) {
                 if (!hasTypeOnPage(existingEntities, located, unresolvedType, page.pageNumber())) {
+                    int[] label = labelPlaces.getOrDefault(unresolvedType, new int[] {-1, -1});
                     reviewSignals.add(new ReviewSignal(
-                            unresolvedType, page.pageNumber(), REVIEW_SIGNAL_CONFIDENCE));
+                            unresolvedType, page.pageNumber(), REVIEW_SIGNAL_CONFIDENCE, -1, -1, label[0], label[1]));
                 }
             }
         }
@@ -612,7 +617,14 @@ final class OcrSensitiveFieldSafetyPolicy {
         }
     }
 
-    record ReviewSignal(EntityType entityType, int pageNumber, double confidence) {
+    /**
+     * Task 0105: with the value's place when OCR read one, and the label's; -1 where unknown. Offsets only.
+     */
+    record ReviewSignal(EntityType entityType, int pageNumber, double confidence, int valueStart, int valueEnd,
+                        int labelStart, int labelEnd) {
+        ReviewSignal(EntityType entityType, int pageNumber, double confidence) {
+            this(entityType, pageNumber, confidence, -1, -1, -1, -1);
+        }
     }
 
     record Evaluation(List<DetectedEntity> locatedEntities,

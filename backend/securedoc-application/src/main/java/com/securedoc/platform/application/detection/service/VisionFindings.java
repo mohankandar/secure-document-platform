@@ -10,6 +10,10 @@ import com.securedoc.platform.domain.finding.EntityType;
 import com.securedoc.platform.domain.finding.FindingLocation;
 import com.securedoc.platform.domain.finding.FindingLocation.BoundingBox;
 import com.securedoc.platform.domain.finding.FindingOrigin;
+import com.securedoc.platform.domain.finding.FindingPlacement;
+import com.securedoc.platform.domain.finding.FindingPlacement.How;
+import com.securedoc.platform.domain.finding.FindingPlacement.Method;
+import com.securedoc.platform.domain.finding.FindingPlacement.Reader;
 import com.securedoc.platform.domain.vision.PageRoute;
 import com.securedoc.platform.domain.vision.VisionPageResult;
 
@@ -53,7 +57,8 @@ public final class VisionFindings {
         for (BoundingBox box : route.signatures()) {
             found.add(new Candidate(EntityType.SIGNATURE, FindingLocation.withBounds(route.page(), 0, 0, box),
                     SIGNATURE_CONFIDENCE, new DetectorSource("signature-detector", "1"),
-                    FindingOrigin.of(DetectionPath.SIGNATURE, List.of())));
+                    FindingOrigin.of(DetectionPath.SIGNATURE, List.of()),
+                    FindingPlacement.automatic(Reader.SIGNATURE, Method.PATTERN, How.READER_WORDS)));
         }
         return found;
     }
@@ -64,10 +69,12 @@ public final class VisionFindings {
         for (VisionPageResult.Item item : result.items()) {
             EntityType type = type(item.kind(), policy.enabledEntityTypes());
             if (type == null) continue;
-            found.add(new Candidate(type, FindingLocation.withBounds(result.page(), 0, 0, widened(item.box())),
+            BoundingBox box = widened(item.box());
+            found.add(new Candidate(type, FindingLocation.withBounds(result.page(), 0, 0, box),
                     VISION_CONFIDENCE, item.checkLine() ? new DetectorSource("check-line", "1")
                     : new DetectorSource("vision", result.model().version()),
-                    FindingOrigin.of(DetectionPath.VISION, item.checkLine() ? List.of() : List.of(result.model()))));
+                    FindingOrigin.of(DetectionPath.VISION, item.checkLine() ? List.of() : List.of(result.model())),
+                    modelBox(box, item.checkLine())));
         }
         if (!result.read()) {
             found.add(unread(result.page(), result.code() == null ? result.reason() : result.code(), List.of()));
@@ -88,7 +95,8 @@ public final class VisionFindings {
     /** A page for a person: it has no place, so it can never be redacted or delivered without a decision. */
     private static Candidate unread(int page, String why, List<AiModel> models) {
         return new Candidate(EntityType.UNREAD_PAGE, FindingLocation.unlocated(page), 0.0,
-                new DetectorSource("vision-page-check", why), FindingOrigin.of(DetectionPath.PAGE_CHECK, models));
+                new DetectorSource("vision-page-check", why), FindingOrigin.of(DetectionPath.PAGE_CHECK, models),
+                FindingPlacement.forPerson(Reader.PAGE_CHECK, Method.CHECK, How.PAGE, why == null ? "PAGE_CHECK" : why));
     }
 
     /** The entity's kind for what the model named; null when the entity does not redact it. */
@@ -111,6 +119,22 @@ public final class VisionFindings {
     private static EntityType first(Set<EntityType> enabled, EntityType... types) {
         for (EntityType type : types) if (enabled.contains(type)) return type;
         return null;
+    }
+
+    /** A box smaller than a character or larger than a quarter of the page. */
+    static final double MIN_SIDE = 0.002;
+    static final double MAX_AREA = 0.25;
+    static final String IMPLAUSIBLE_BOX = "MODEL_BOX_IMPLAUSIBLE";
+
+    /**
+     * Task 0105, step 2a: the model's box is its place when it lies on the page (it is kept on it) and has a size a value
+     * can have. Otherwise it is still covered, and a person checks it, with the reason.
+     */
+    static FindingPlacement modelBox(BoundingBox box, boolean checkLine) {
+        Method method = checkLine ? Method.PATTERN : Method.AI_MODEL;
+        boolean plausible = box.width() >= MIN_SIDE && box.height() >= MIN_SIDE && box.width() * box.height() <= MAX_AREA;
+        return plausible ? FindingPlacement.automatic(Reader.VISION, method, How.MODEL_BOX)
+                : FindingPlacement.forPerson(Reader.VISION, method, How.MODEL_BOX, IMPLAUSIBLE_BOX);
     }
 
     private static BoundingBox widened(BoundingBox b) {
@@ -198,7 +222,7 @@ public final class VisionFindings {
         if (agreement) confidence = Math.min(1.0, confidence + AGREEMENT_BOOST);
         return new Candidate(a.type(), FindingLocation.withBounds(a.location().pageNumber(),
                 a.location().startOffset(), a.location().endOffset(), both), confidence, a.source(),
-                a.origin().with(b.origin()));
+                a.origin().with(b.origin()), a.placement() != null ? a.placement() : b.placement());
     }
 
     // -------------------------------------------------------------------------------- the file of one vision job

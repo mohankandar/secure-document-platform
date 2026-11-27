@@ -39,6 +39,8 @@ public final class Finding {
     private Instant updatedAt;
     /** Task 0062: the style in force when the document was searched; a later policy change doesn't reach it. */
     private RedactionStyle redactionStyle = RedactionStyle.REMOVE_FULLY;
+    /** Task 0105: how it was read, found and placed; null for a finding saved before task 0105. */
+    private FindingPlacement placement;
 
     private Finding(FindingId id, TenantId tenantId, DocumentId documentId, EntityType entityType,
                     FindingLocation location, Confidence confidence,
@@ -123,6 +125,40 @@ public final class Finding {
                 detectedAt, status, evidenceHistory, updatedAt, origin);
         if (redactionStyle != null) finding.redactionStyle = redactionStyle;
         return finding;
+    }
+
+    /** Task 0105: how it was read, found and placed; null for a finding saved before task 0105. */
+    public void applyPlacement(FindingPlacement placement) {
+        this.placement = placement;
+    }
+
+    public FindingPlacement placement() {
+        return placement;
+    }
+
+    /**
+     * Task 0105: a person placed or moved the box. Only a box that differs from the one there is a change; the same box
+     * sent again (a plain confirmation) changes nothing and records nobody.
+     *
+     * @return true when the place changed
+     */
+    public boolean placeByPerson(FindingLocation.BoundingBox box, ActorId actor, Instant at) {
+        Objects.requireNonNull(box, "box must not be null");
+        if (same(box, location.boundingBox())) return false;
+        this.location = FindingLocation.withBounds(location.pageNumber(), location.startOffset(), location.endOffset(), box);
+        FindingPlacement before = placement != null ? placement
+                : FindingPlacement.automatic(FindingPlacement.Reader.PERSON, FindingPlacement.Method.PERSON,
+                FindingPlacement.How.PERSON);
+        this.placement = before.placedBy(actor, at);
+        this.updatedAt = at;
+        return true;
+    }
+
+    /** The same box, give or take what a trip through the screen may round. */
+    private static boolean same(FindingLocation.BoundingBox a, FindingLocation.BoundingBox b) {
+        double close = 1e-6;
+        return b != null && Math.abs(a.left() - b.left()) < close && Math.abs(a.top() - b.top()) < close
+                && Math.abs(a.width() - b.width()) < close && Math.abs(a.height() - b.height()) < close;
     }
 
     /** Set once, when the document is searched. */

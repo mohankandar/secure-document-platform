@@ -104,6 +104,7 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
         entity.setFoundBy(finding.origin().encodePaths());
         entity.setAiModels(finding.origin().encodeModels());
         persistBoundingBox(finding.location(), entity);
+        persistPlacement(finding, entity);
         entity.setStatus(finding.status().name());
         entity.setRedactionStyle(finding.redactionStyle().name());
         entity.setDetectedAt(finding.detectedAt());
@@ -115,6 +116,19 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
         entity.setStatus(finding.status().name());
         entity.setUpdatedAt(finding.updatedAt());
         persistBoundingBox(finding.location(), entity);
+        persistPlacement(finding, entity);
+    }
+
+    /** Task 0105: a finding saved before it has none; what is stored is never cleared. */
+    private void persistPlacement(Finding finding, FindingEntity entity) {
+        com.securedoc.platform.domain.finding.FindingPlacement p = finding.placement();
+        if (p == null) return;
+        entity.setReader(p.reader().name());
+        entity.setMethod(p.method().name());
+        entity.setPlacement(p.how().name());
+        entity.setPersonReason(p.reason() == null || p.reason().length() <= 48 ? p.reason() : p.reason().substring(0, 48));
+        entity.setPlacedBy(p.placedBy() == null ? null : p.placedBy().value());
+        entity.setPlacedAt(p.placedAt());
     }
 
     private void persistBoundingBox(FindingLocation location, FindingEntity entity) {
@@ -133,6 +147,28 @@ public class JpaFindingRepositoryAdapter implements FindingRepository {
     }
 
     private Finding toDomain(FindingEntity entity) {
+        Finding finding = reconstitute(entity);
+        finding.applyPlacement(placement(entity));
+        return finding;
+    }
+
+    /** Task 0105: null for a finding saved before it, or with a name this version does not know. */
+    private static com.securedoc.platform.domain.finding.FindingPlacement placement(FindingEntity entity) {
+        if (entity.getReader() == null || entity.getMethod() == null || entity.getPlacement() == null) return null;
+        try {
+            return new com.securedoc.platform.domain.finding.FindingPlacement(
+                    com.securedoc.platform.domain.finding.FindingPlacement.Reader.valueOf(entity.getReader()),
+                    com.securedoc.platform.domain.finding.FindingPlacement.Method.valueOf(entity.getMethod()),
+                    com.securedoc.platform.domain.finding.FindingPlacement.How.valueOf(entity.getPlacement()),
+                    entity.getPersonReason(),
+                    entity.getPlacedBy() == null ? null : com.securedoc.platform.domain.identity.ActorId.of(entity.getPlacedBy()),
+                    entity.getPlacedAt());
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
+    }
+
+    private Finding reconstitute(FindingEntity entity) {
         FindingLocation location = rehydrateLocation(entity);
 
         return Finding.reconstitute(
