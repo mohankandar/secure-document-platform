@@ -80,6 +80,16 @@ public class JpaPackageRepositoryAdapter implements PackageRepository {
     }
 
     @Override
+    public List<DocumentPackage> findEmptyCasesCreatedBefore(java.time.Instant cutoff, int limit) {
+        return packageRepo.findByStatusAndCreatedAtBeforeAndDashboardHiddenAtIsNullOrderByCreatedAtAsc(
+                        com.securedoc.platform.domain.document.PackageStatus.CREATED.name(), cutoff, PageRequest.of(0, Math.max(1, limit)))
+                .stream()
+                .map(this::toDomainWithDocuments)
+                .filter(pkg -> pkg.documentCount() == 0)
+                .toList();
+    }
+
+    @Override
     public List<DocumentPackage> findDashboardCases(TenantId tenantId, int offset, int limit) {
         int page = offset / Math.max(limit, 1);
         return packageRepo.findByTenantIdAndDashboardHiddenAtIsNullOrderByCreatedAtAscIdAsc(tenantId.value(), PageRequest.of(page, limit))

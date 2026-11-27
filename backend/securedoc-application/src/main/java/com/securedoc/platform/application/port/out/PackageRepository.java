@@ -43,6 +43,11 @@ public interface PackageRepository {
         return findByTenantId(tenantId, offset, limit);
     }
 
+    /** Task 0111: candidates for closing as expired: CREATED, not hidden, opened before the cut-off, oldest first. */
+    default List<DocumentPackage> findEmptyCasesCreatedBefore(java.time.Instant cutoff, int limit) {
+        return List.of();
+    }
+
     long countByTenantId(TenantId tenantId);
 
     Optional<DocumentPackage> findByTenantIdAndIntakeFingerprint(TenantId tenantId, String fingerprint);
