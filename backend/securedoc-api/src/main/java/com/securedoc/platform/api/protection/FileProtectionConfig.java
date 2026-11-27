@@ -3,6 +3,7 @@ package com.securedoc.platform.api.protection;
 import com.documentplatform.crypto.CustomerId;
 import com.documentplatform.crypto.envelope.StreamCipher;
 import com.documentplatform.licensing.LicenceBuild;
+import com.securedoc.platform.api.security.DevelopmentBuildOnly;
 import com.securedoc.platform.infrastructure.storage.FileEncryption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,12 +39,8 @@ public class FileProtectionConfig {
     SmartInitializingSingleton plainFilesOnlyInDevelopment(Environment environment, ObjectProvider<LicenceBuild> build) {
         return () -> {
             if (!plain(environment)) return;
-            // What this build is, is inside its own jar (task 0054); a test gives its own.
-            LicenceBuild given = build.getIfUnique();
-            LicenceBuild thisBuild = given != null ? given : LicenceBuild.load();
-            if (thisBuild.keys().keyIds().stream().noneMatch(thisBuild.keys()::isDevelopmentKey)) {
-                throw new IllegalStateException(NO_KEY_SERVICE);
-            }
+            // The same check of what this build is as for LOCAL mode (hardening: LOCAL mode only in development builds).
+            if (!DevelopmentBuildOnly.isDevelopmentBuild(build)) throw new IllegalStateException(NO_KEY_SERVICE);
             log.warn("DEVELOPMENT_ONLY_PLAIN_FILES stored documents are NOT encrypted: no key service is set up in this local "
                     + "development start. Never use real documents.");
         };

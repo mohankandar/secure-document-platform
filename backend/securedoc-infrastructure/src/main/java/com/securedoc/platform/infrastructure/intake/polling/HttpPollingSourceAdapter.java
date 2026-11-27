@@ -7,6 +7,7 @@ import com.securedoc.platform.application.intake.polling.*;
 import com.securedoc.platform.application.port.out.PollingSourcePort;
 import com.securedoc.platform.domain.integration.IntegrationAuthenticationType;
 import com.securedoc.platform.domain.integration.IntegrationConnection;
+import com.securedoc.platform.infrastructure.secrets.IntegrationSecrets;
 import org.springframework.stereotype.Component;
 
 import java.io.*;
@@ -29,15 +30,16 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
     private final HttpClient client;
     private final ObjectMapper mapper;
     private final Path stagingRoot;
+    private final IntegrationSecrets secrets;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public HttpPollingSourceAdapter(ObjectMapper mapper) {
+    public HttpPollingSourceAdapter(ObjectMapper mapper, IntegrationSecrets secrets) {
         this(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(), mapper,
-                Path.of(System.getProperty("java.io.tmpdir"), "lexavault-polling-staging"));
+                Path.of(System.getProperty("java.io.tmpdir"), "lexavault-polling-staging"), secrets);
     }
 
-    HttpPollingSourceAdapter(HttpClient client, ObjectMapper mapper, Path stagingRoot) {
-        this.client = client; this.mapper = mapper; this.stagingRoot = stagingRoot;
+    HttpPollingSourceAdapter(HttpClient client, ObjectMapper mapper, Path stagingRoot, IntegrationSecrets secrets) {
+        this.client = client; this.mapper = mapper; this.stagingRoot = stagingRoot; this.secrets = Objects.requireNonNull(secrets);
     }
 
     @Override
@@ -124,7 +126,7 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
     private HttpRequest.Builder authorized(IntegrationConnection c, HttpRequest.Builder builder) {
         IntegrationAuthenticationType type = c.authenticationType();
         if (type == IntegrationAuthenticationType.NONE) return builder;
-        String secret = resolveSecret(c.secretReference());
+        String secret = resolveSecret(c);
         return switch (type) {
             case BASIC -> builder.header("Authorization", "Basic " + Base64.getEncoder().encodeToString(secret.getBytes(StandardCharsets.UTF_8)));
             case API_KEY -> builder.header("X-API-Key", secret);
@@ -137,19 +139,13 @@ public class HttpPollingSourceAdapter implements PollingSourcePort {
         };
     }
 
-    private String resolveSecret(String ref) {
-        if (ref == null || ref.isBlank()) throw technical("POLL_AUTH_CONFIGURATION_ERROR", "Protected secret reference is missing", null);
-        if (ref.startsWith("env:")) {
-            String value = System.getenv(ref.substring(4));
-            if (value == null || value.isBlank()) throw technical("POLL_AUTH_CONFIGURATION_ERROR", "Configured environment secret is unavailable", null);
-            return value;
+    /** Hardening: secret references limited to approved names; the app's one rule and resolver (LV-CFG-003 when refused). */
+    private String resolveSecret(IntegrationConnection c) {
+        try {
+            return secrets.read(c);
+        } catch (IntegrationSecrets.NotRead e) {
+            throw technical("POLL_AUTH_CONFIGURATION_ERROR", e.getMessage(), null);
         }
-        if (ref.startsWith("sys:")) {
-            String value = System.getProperty(ref.substring(4));
-            if (value == null || value.isBlank()) throw technical("POLL_AUTH_CONFIGURATION_ERROR", "Configured system-property secret is unavailable", null);
-            return value;
-        }
-        throw technical("POLL_AUTH_CONFIGURATION_ERROR", "Unsupported protected secret reference provider", null);
     }
 
     private URI resolve(IntegrationConnection c, String relativePath) {
