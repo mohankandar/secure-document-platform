@@ -129,7 +129,7 @@ export default function Review({ caps }: { caps: string[] }) {
       const result = pageCheck
         ? await apiClient.checkReviewPage(selected.findingId, pageMarks.boxes)
         : kind === 'redact'
-        ? await apiClient.confirmReviewItem(selected.findingId, draft ?? selected.boundingBox ?? undefined)
+        ? await apiClient.confirmReviewItem(selected.findingId, draft ?? undefined)
         : await apiClient.dismissReviewItem(selected.findingId);
       setDecided((n) => n + 1);
       if (pageCheck) setMarks({ findingId: '', boxes: [], reviewed: false });

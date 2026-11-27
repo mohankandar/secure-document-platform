@@ -69,7 +69,7 @@ final class PdfFormFieldText {
                 if (!label.isEmpty()) all.append(label).append(": ");
                 int start = all.length();
                 all.append(value);
-                spans.add(new TextSpan(start, all.length(), place[0], place[1], place[2], place[3]));
+                spans.add(new TextSpan(start, all.length(), place[0], place[1], place[2], place[3], 1.0, true));
                 all.append('\n');
             }
         }

@@ -430,8 +430,10 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         }
         List<Finding> findings = new ArrayList<>();
         for (PageBatchFindings.Candidate candidate : VisionFindings.merge(text, others)) {
-            findings.add(Finding.create(document.tenantId(), document.id(), candidate.type(), candidate.location(),
-                    Confidence.of(candidate.confidence()), candidate.source(), candidate.origin()));
+            Finding finding = Finding.create(document.tenantId(), document.id(), candidate.type(), candidate.location(),
+                    Confidence.of(candidate.confidence()), candidate.source(), candidate.origin());
+            finding.applyPlacement(candidate.placement());
+            findings.add(finding);
         }
         return new AllFindings(findings, routes, notRead, List.copyOf(models));
     }
@@ -536,9 +538,9 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             models.addAll(answered.models());
         }
         List<Finding> findings = createFindings(new DetectionOutput(mergedEntities), document, pagesByNumber,
-                enabledTypes, aiNames, models);
-        findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document, models));
-        findings.addAll(createOcrSafetyReviewFindings(ocrSafety.reviewSignals(), document));
+                enabledTypes, aiNames, models, semanticResolution.matched());
+        findings.addAll(createUnlocatedSemanticFindings(semanticResolution.unlocated(), document, models, pagesByNumber));
+        findings.addAll(createOcrSafetyReviewFindings(ocrSafety.reviewSignals(), document, pagesByNumber));
 
         log.info("FINDING_EVIDENCE_SUMMARY document={} semanticRaw={} semanticLocated={} semanticUnlocated={} deterministic={} ocrGuardLocated={} ocrGuardReview={} ocrGuardStrongLabels={} ocrGuardSpatialScoreCandidates={} merged={} semanticByType={} deterministicByType={} semanticLocatedByPageType={} deterministicByPageType={}",
                 command.documentId(), semanticOutput.findings().size(), semanticResolution.located().size(),
@@ -620,6 +622,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Per-finding policy. Only findings that individually meet confidence AND have a trusted
         // location are auto-confirmed. Low-confidence/unlocated findings remain DETECTED for review.
         for (Finding finding : findings) {
+            // Task 0105: never without a reader.
+            if (finding.placement() == null) finding.applyPlacement(FindingPlacements.fallback(finding));
             // Task 0062: the style of this moment goes with the finding, so a later change reaches new documents only.
             // Task 0064: what the page image showed has no reliable place in the text: it is always removed in full.
             finding.applyStyle(finding.origin().paths().contains(DetectionPath.VISION)
@@ -740,6 +744,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                                                           boolean maskSsnLastFour) {
         List<DetectedEntity> located = new ArrayList<>();
         List<UnlocatedSemanticFinding> unlocated = new ArrayList<>();
+        Set<String> matched = new java.util.HashSet<>();
 
         for (DiscoveredSensitiveContent discovery : discoveries) {
             EntityType type = parseEntityType(discovery.entityType());
@@ -799,12 +804,19 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
             }
 
             if (offsets == null) {
-                // A structurally/contextually plausible candidate may still be ambiguous to locate
-                // when the exact value occurs more than once. Preserve that uncertainty for review,
-                // but only after the plausibility gate above has rejected obvious garbage.
-                unlocated.add(new UnlocatedSemanticFinding(
-                        type, discovery.pageNumber(), effectiveConfidence,
-                        discovery.analyzerName(), analyzerVersion));
+                // Task 0105, step 2b: a value that is not on the page exactly once is placed at every place it
+                // stands, or where it stands as OCR reads it. Only a value found nowhere goes to a person.
+                List<int[]> places = ValuePlaces.of(page.text(), matchedText);
+                if (places.isEmpty()) {
+                    unlocated.add(new UnlocatedSemanticFinding(
+                            type, discovery.pageNumber(), effectiveConfidence,
+                            discovery.analyzerName(), analyzerVersion));
+                }
+                for (int[] place : places) {
+                    matched.add(placeKey(discovery.pageNumber(), place[0], place[1]));
+                    located.add(new DetectedEntity(discovery.entityType(), discovery.pageNumber(), place[0], place[1],
+                            effectiveConfidence, discovery.analyzerName(), analyzerVersion));
+                }
                 continue;
             }
 
@@ -812,7 +824,12 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                     discovery.entityType(), discovery.pageNumber(), offsets[0], offsets[1],
                     effectiveConfidence, discovery.analyzerName(), analyzerVersion));
         }
-        return new SemanticResolution(located, unlocated);
+        return new SemanticResolution(located, unlocated, matched);
+    }
+
+    /** Task 0105: a place on a page, to tell which findings were placed by matching (step 2b). */
+    private static String placeKey(int page, int start, int end) {
+        return page + ":" + start + ":" + end;
     }
 
     private boolean isExposedSsnValue(DiscoveredSensitiveContent discovery) {
@@ -836,39 +853,53 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     }
 
     private List<Finding> createUnlocatedSemanticFindings(List<UnlocatedSemanticFinding> unlocated,
-                                                           Document document, List<AiModel> models) {
+                                                           Document document, List<AiModel> models,
+                                                           Map<Integer, PageText> pagesByNumber) {
         List<Finding> findings = new ArrayList<>(unlocated.size());
         for (UnlocatedSemanticFinding candidate : unlocated) {
-            findings.add(Finding.create(
+            Finding finding = Finding.create(
                     document.tenantId(), document.id(), candidate.entityType(),
                     FindingLocation.unlocated(candidate.pageNumber()),
                     Confidence.of(candidate.confidence()),
                     new DetectorSource(candidate.detectorName(), candidate.detectorVersion()),
-                    FindingOrigin.of(DetectionPath.TEXT, models)));
+                    FindingOrigin.of(DetectionPath.TEXT, models));
+            // Task 0105: steps 2b failed: the value stands nowhere on the page, exactly or as OCR reads it.
+            finding.applyPlacement(com.securedoc.platform.domain.finding.FindingPlacement.forPerson(
+                    FindingPlacements.reader(pagesByNumber.get(candidate.pageNumber())),
+                    com.securedoc.platform.domain.finding.FindingPlacement.Method.AI_MODEL,
+                    com.securedoc.platform.domain.finding.FindingPlacement.How.NONE,
+                    com.securedoc.platform.domain.finding.FindingPlacement.NO_PLACE));
+            findings.add(finding);
         }
         return findings;
     }
 
     private List<Finding> createOcrSafetyReviewFindings(
             List<OcrSensitiveFieldSafetyPolicy.ReviewSignal> reviewSignals,
-            Document document) {
+            Document document, Map<Integer, PageText> pagesByNumber) {
         List<Finding> findings = new ArrayList<>(reviewSignals.size());
         for (OcrSensitiveFieldSafetyPolicy.ReviewSignal signal : reviewSignals) {
-            findings.add(Finding.create(
+            // Task 0105, steps 2b to 2d: the value's own words, else the field area beside its label; a person checks it.
+            FindingPlacements.Placed placed = FindingPlacements.ofUnsureField(pagesByNumber.get(signal.pageNumber()),
+                    signal.pageNumber(), signal.valueStart(), signal.valueEnd(), signal.labelStart(), signal.labelEnd());
+            Finding finding = Finding.create(
                     document.tenantId(), document.id(), signal.entityType(),
-                    FindingLocation.unlocated(signal.pageNumber()),
+                    placed.location(),
                     Confidence.of(signal.confidence()),
                     new DetectorSource("ocr-sensitive-field-guard", "1.4.0;unresolved-field"),
-                    FindingOrigin.of(DetectionPath.TEXT, List.of())));
+                    FindingOrigin.of(DetectionPath.TEXT, List.of()));
+            finding.applyPlacement(placed.placement());
+            findings.add(finding);
         }
         return findings;
     }
 
     private record SemanticResolution(List<DetectedEntity> located,
-                                      List<UnlocatedSemanticFinding> unlocated) {
+                                      List<UnlocatedSemanticFinding> unlocated, Set<String> matched) {
         private SemanticResolution {
             located = List.copyOf(located);
             unlocated = List.copyOf(unlocated);
+            matched = Set.copyOf(matched);
         }
     }
 
@@ -1041,7 +1072,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private List<Finding> createFindings(DetectionOutput output, Document document,
                                          Map<Integer, PageText> pagesByNumber,
                                          Set<EntityType> enabledTypes, Set<String> aiNames,
-                                         List<AiModel> models) {
+                                         List<AiModel> models, Set<String> matched) {
         List<Finding> findings = new ArrayList<>();
         for (DetectedEntity entity : output.entities()) {
             EntityType entityType = parseEntityType(entity.entityType());
@@ -1072,12 +1103,17 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 effectiveConfidence = Math.min(effectiveConfidence, locationConfidence);
             }
 
-            findings.add(Finding.create(
+            boolean byModel = aiNames.stream().anyMatch(entity.detectorName()::contains);
+            Finding finding = Finding.create(
                     document.tenantId(), document.id(), entityType, location,
                     Confidence.of(effectiveConfidence),
                     new DetectorSource(entity.detectorName(), entity.detectorVersion()),
-                    FindingOrigin.of(DetectionPath.TEXT,
-                            aiNames.stream().anyMatch(entity.detectorName()::contains) ? models : List.of())));
+                    FindingOrigin.of(DetectionPath.TEXT, byModel ? models : List.of()));
+            // Task 0105: what read it, how it was found and how it was placed.
+            finding.applyPlacement(FindingPlacements.ofText(page, entity.startOffset(), entity.endOffset(), byModel,
+                    location.hasBoundingBox(), matched.contains(placeKey(entity.pageNumber(), entity.startOffset(),
+                            entity.endOffset()))));
+            findings.add(finding);
         }
         return findings;
     }

@@ -197,13 +197,10 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
             throw new ValidationException(LvErrorCode.REV_004, "Confirm that you have reviewed this page");
         }
 
-        if (command.hasBoundingBoxAdjustment()) {
-            FindingLocation current = finding.location();
-            FindingLocation.BoundingBox box = FindingLocation.BoundingBox.of(
-                    command.left(), command.top(), command.width(), command.height());
-            finding.updateLocation(FindingLocation.withBounds(
-                    current.pageNumber(), current.startOffset(), current.endOffset(), box));
-        }
+        // Task 0105: only a box that differs from the one there is a person's placing; the same box sent with a plain
+        // confirmation changes nothing and is not recorded as moved.
+        boolean moved = command.hasBoundingBoxAdjustment() && finding.placeByPerson(FindingLocation.BoundingBox.of(
+                command.left(), command.top(), command.width(), command.height()), command.actorId(), java.time.Instant.now());
 
         String safeReason = ReviewTextSanitizer.sanitizeReason(command.reason());
         if (command.resolution() == ReviewResolution.CONFIRM) {
@@ -217,7 +214,7 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         // Task 0023 (D5): the decision is saved before it is audited, so a refused (already decided) decision
         // leaves no audit row that claims it was made.
         saveDecision(finding);
-        if (command.hasBoundingBoxAdjustment()) {
+        if (moved) {
             auditService.recordSuccess(command.tenantId(), command.actorId(),
                     AuditAction.FINDING_BOUNDING_BOX_UPDATED, "Finding", finding.id().toString(), pkg.id(),
                     command.correlationId(), "Finding location adjusted during focused review");
@@ -269,7 +266,11 @@ public final class FocusedReviewService implements ListReviewItemsQuery, Resolve
         for (FindingLocation.BoundingBox box : boxes) {
             Finding finding = Finding.create(tenantId, document.id(), EntityType.UNREAD_PAGE,
                     FindingLocation.withBounds(page.location().pageNumber(), 0, 0, box), Confidence.full(),
-                    DetectorSource.of("review-page-check", "1.0.0"));
+                    DetectorSource.of("review-page-check", "1.0.0"),
+                    // Task 0105: a page check, drawn by a person; never without a reader.
+                    com.securedoc.platform.domain.finding.FindingOrigin.of(
+                            com.securedoc.platform.domain.finding.DetectionPath.PAGE_CHECK, List.of()));
+            finding.applyPlacement(com.securedoc.platform.domain.finding.FindingPlacement.drawnBy(actorId, java.time.Instant.now()));
             finding.confirm(actorId, "Drawn by a person on an unreadable page");
             drawn.add(finding);
         }

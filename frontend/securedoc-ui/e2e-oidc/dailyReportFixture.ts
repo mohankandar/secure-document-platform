@@ -37,10 +37,17 @@ export function dailyReport() {
   };
 }
 
+/** Task 0105: Reports, Automation (made-up counts). */
+export const AUTOMATION_REPORT = {
+  period: 'TODAY', from: '2026-11-24T05:00:00Z', to: '2026-11-25T05:00:00Z', automaticPercent: 90,
+  automatic: 103, placedByPerson: 9, drawnByPerson: 2, byText: 92, byVision: 20,
+};
+
 /** The answer of the Reports tabs, or undefined for another path (under /api/v1). */
 export function reportTabsAnswer(path: string, day: () => unknown = dailyReport): unknown {
   if (path === '/operations/reports/daily') return day();
   if (path === '/operations/reports/sources') return REPORT_SOURCES;
   if (path === '/operations/reports/queue') return REPORT_QUEUE;
+  if (path === '/operations/reports/automation') return AUTOMATION_REPORT;
   return undefined;
 }

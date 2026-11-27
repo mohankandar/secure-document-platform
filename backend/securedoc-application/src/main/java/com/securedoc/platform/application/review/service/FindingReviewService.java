@@ -102,11 +102,8 @@ public final class FindingReviewService implements ConfirmFindingUseCase,
         FindingLocation currentLocation = finding.location();
         FindingLocation.BoundingBox newBox = FindingLocation.BoundingBox.of(
                 command.left(), command.top(), command.width(), command.height());
-        FindingLocation updatedLocation = FindingLocation.withBounds(
-                currentLocation.pageNumber(), currentLocation.startOffset(),
-                currentLocation.endOffset(), newBox);
-
-        finding.updateLocation(updatedLocation);
+        // Task 0105: the same box again is no change and is not recorded as a person's placing.
+        if (!finding.placeByPerson(newBox, command.actorId(), java.time.Instant.now())) return;
         findingRepository.save(finding);
 
         auditService.recordSuccess(command.tenantId(), command.actorId(),
