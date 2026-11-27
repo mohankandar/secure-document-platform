@@ -206,6 +206,47 @@ public final class DocumentPackage {
         updatedAt = Instant.now();
     }
 
+    /**
+     * Task 0104: the case can take further batches of its contract: any case not rejected and not cancelled (a batch for
+     * a rejected case makes a new case; an erased case is gone).
+     */
+    public boolean isOpenForBatches() {
+        return status != PackageStatus.REJECTED && status != PackageStatus.CANCELLED;
+    }
+
+    /**
+     * Task 0104: the case can start its next batch now: only between batches, once the batch before is delivered. A
+     * batch arriving while one is processing or in Review waits; it is never refused or merged into the running one.
+     */
+    public boolean takesNextBatchNow() {
+        return status == PackageStatus.COMPLETED;
+    }
+
+    /** Task 0104: adds a document (a new document or a new version) of the next batch to a delivered case. */
+    public void addBatchDocument(Document document) {
+        Objects.requireNonNull(document, "Document must not be null");
+        if (!takesNextBatchNow()) {
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026,
+                    "The case can't take a new batch in status: " + status);
+        }
+        documents.add(document);
+        updatedAt = Instant.now();
+    }
+
+    /** Task 0104: the next batch goes to processing; only with something new in it (a skipped copy is not processed). */
+    public void submitNextBatch() {
+        if (!takesNextBatchNow()) {
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026,
+                    "The case can't take a new batch in status: " + status);
+        }
+        if (documents.stream().noneMatch(d -> d.status() == DocumentStatus.UPLOADED)) {
+            throw new com.securedoc.platform.domain.error.CodedStateException(LvErrorCode.INT_026,
+                    "The batch has no new document to process");
+        }
+        status = PackageStatus.SUBMITTED;
+        updatedAt = Instant.now();
+    }
+
     /** Resets a previously completed intake batch for another business-requested processing/export cycle. */
     public void prepareForReprocessing() {
         if (status != PackageStatus.COMPLETED) {
