@@ -368,3 +368,17 @@ for (const role of ['DOCUMENT_PROCESSOR', 'DOCUMENT_SUPERVISOR', 'TENANT_IT_ADMI
     expect(asked).toBe(0);
   });
 }
+
+test('task 0105: Automation shows the automatic share, the three counts and who found them, for the chosen period', async ({ page }) => {
+  const asked: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('/operations/reports/automation')) asked.push(new URL(r.url()).searchParams.get('period') ?? ''); });
+  await openReports(page, ['BUSINESS_ADMIN'], ADMIN_CAPS);
+  const card = page.getByRole('region', { name: 'Automation' });
+  await expect(card.getByTestId('automation-headline')).toHaveText('Redacted automatically: 90%');
+  await expect(card.getByText('Placed by a person')).toBeVisible();
+  await expect(card.getByText('Drawn by a person')).toBeVisible();
+  await expect(card.getByText("Found by the page's text or OCR: 82%. By the vision model: 18%.")).toBeVisible();
+  await card.getByRole('button', { name: 'This month' }).click();
+  await expect(card.getByRole('button', { name: 'This month' })).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => asked).toContain('MONTH');
+});

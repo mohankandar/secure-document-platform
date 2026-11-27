@@ -7,6 +7,8 @@ import type {
   CaseExport, DestinationView as ExportDestinationView, NeedsIt, ReachabilityAlert, RetentionSettings, WaitingForYou,
 } from '../studio/exportRules';
 import type {
+  AutomationPeriod,
+  AutomationReport,
   PackageSummary,
   PackageDetail,
   CreatePackageRequest,
@@ -335,6 +337,11 @@ class ApiClient {
   /** Task 0081: the source systems of the Reports filter. */
   async getReportSources(): Promise<ReportSource[]> {
     return this.request('/operations/reports/sources');
+  }
+
+  /** Task 0105: Reports › Automation, of this entity. */
+  async getAutomationReport(period: AutomationPeriod): Promise<AutomationReport> {
+    return this.request(`/operations/reports/automation?period=${encodeURIComponent(period)}`);
   }
 
   async getDailyReport(params: ReportFilters): Promise<DailyReport> {

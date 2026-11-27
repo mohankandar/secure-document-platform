@@ -47,6 +47,19 @@ public class FindingEntity {
     /** Task 0064 (migration 080): the path(s) that found it, and the AI model(s) that took part. */
     @Column(name = "found_by", length = 64, updatable = false)
     private String foundBy;
+    /** Task 0105: how it was read, found and placed (FindingPlacement). Kinds only, never a value. */
+    @Column(name = "reader", length = 16)
+    private String reader;
+    @Column(name = "method", length = 16)
+    private String method;
+    @Column(name = "placement", length = 24)
+    private String placement;
+    @Column(name = "person_reason", length = 48)
+    private String personReason;
+    @Column(name = "placed_by")
+    private java.util.UUID placedBy;
+    @Column(name = "placed_at")
+    private java.time.Instant placedAt;
 
     @Column(name = "ai_models", length = 2000, updatable = false)
     private String aiModels;
@@ -117,6 +130,18 @@ public class FindingEntity {
 
     public String getFoundBy() { return foundBy; }
     public void setFoundBy(String foundBy) { this.foundBy = foundBy; }
+    public String getReader() { return reader; }
+    public void setReader(String reader) { this.reader = reader; }
+    public String getMethod() { return method; }
+    public void setMethod(String method) { this.method = method; }
+    public String getPlacement() { return placement; }
+    public void setPlacement(String placement) { this.placement = placement; }
+    public String getPersonReason() { return personReason; }
+    public void setPersonReason(String personReason) { this.personReason = personReason; }
+    public java.util.UUID getPlacedBy() { return placedBy; }
+    public void setPlacedBy(java.util.UUID placedBy) { this.placedBy = placedBy; }
+    public java.time.Instant getPlacedAt() { return placedAt; }
+    public void setPlacedAt(java.time.Instant placedAt) { this.placedAt = placedAt; }
 
     public String getAiModels() { return aiModels; }
     public void setAiModels(String aiModels) { this.aiModels = aiModels; }

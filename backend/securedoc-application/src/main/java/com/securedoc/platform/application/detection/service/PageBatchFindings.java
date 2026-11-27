@@ -29,10 +29,15 @@ final class PageBatchFindings {
 
     /** A finding before the entity's confidence policy. */
     record Candidate(EntityType type, FindingLocation location, double confidence, DetectorSource source,
-                     FindingOrigin origin) {
+                     FindingOrigin origin, com.securedoc.platform.domain.finding.FindingPlacement placement) {
+        /** Task 0105: placement null: decided when the finding is saved, from its origin. */
+        Candidate(EntityType type, FindingLocation location, double confidence, DetectorSource source, FindingOrigin origin) {
+            this(type, location, confidence, source, origin, null);
+        }
+
         static Candidate of(Finding finding) {
             return new Candidate(finding.entityType(), finding.location(), finding.confidence().value(),
-                    finding.detectorSource(), finding.origin());
+                    finding.detectorSource(), finding.origin(), finding.placement());
         }
 
         /** No offsets and no box: a page-level finding for a person. */
@@ -80,6 +85,10 @@ final class PageBatchFindings {
             PageBatchFiles.writeText(out, orEmpty(c.origin().encodeModels()));
         }
         PageBatchFiles.writeText(out, orEmpty(FindingOrigin.encodeModels(result.models())));
+        // Task 0105: at the end, so a result written before it can still be read.
+        for (Candidate c : result.candidates()) {
+            PageBatchFiles.writeText(out, c.placement() == null ? "" : c.placement().encode());
+        }
     }
 
     private static String orEmpty(String text) {
@@ -111,6 +120,13 @@ final class PageBatchFindings {
                         FindingOrigin.decode(PageBatchFiles.readText(in), PageBatchFiles.readText(in))));
             }
             models = FindingOrigin.decodeModels(PageBatchFiles.readText(in));
+        }
+        if (in.available() > 0) {
+            for (int i = 0; i < count; i++) {
+                Candidate c = candidates.get(i);
+                candidates.set(i, new Candidate(c.type(), c.location(), c.confidence(), c.source(), c.origin(),
+                        com.securedoc.platform.domain.finding.FindingPlacement.decode(PageBatchFiles.readText(in))));
+            }
         }
         return new Result(stamp, unlocated, candidates, models);
     }
@@ -172,7 +188,8 @@ final class PageBatchFindings {
                 Math.min(a.location().startOffset(), b.location().startOffset()),
                 Math.max(a.location().endOffset(), b.location().endOffset()),
                 union(a.location().boundingBox(), b.location().boundingBox()));
-        return new Candidate(a.type(), place, surer.confidence(), surer.source(), a.origin().with(b.origin()));
+        return new Candidate(a.type(), place, surer.confidence(), surer.source(), a.origin().with(b.origin()),
+                surer.placement() != null ? surer.placement() : a.placement() != null ? a.placement() : b.placement());
     }
 
     private static BoundingBox union(BoundingBox a, BoundingBox b) {

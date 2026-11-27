@@ -17,6 +17,7 @@ import { useEntityZone, useEntityZoneSet } from '../EntityZoneContext';
 import QueueSection from '../admin/QueueSection';
 import { SENSITIVITY_LEVELS, SENSITIVITY_NAMES } from '../words';
 import DailyTab from './DailyTab';
+import AutomationCard from './AutomationCard';
 import { PRESETS, TABS, defaultPreset, isDailyReport, periodFor, tabFrom, type Preset, type Tab } from './dailyRules';
 import '../admin/admin.css';
 import './reports.css';
@@ -172,6 +173,7 @@ export default function Reports({ caps, entityName }: { caps: string[]; entityNa
         {tab === 'overview' && data && (
           <div className="cf-rp-body" aria-busy={isValidating}>
             {canExecutive && <Card name="What LexaVault did for you"><DidForYou r={data} /></Card>}
+            {canExecutive && <Card name="Automation"><AutomationCard /></Card>}
             <Card name="The headline"><Executive r={data} /></Card>
             <Card name="The trend"><Trend r={data} /></Card>
             <Card name="Service levels"><ServiceLevel r={data} /></Card>

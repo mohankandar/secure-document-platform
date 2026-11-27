@@ -454,6 +454,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         if (result.pagesToCheck().isEmpty()) return false;
         log.warn("DOCUMENT_FINAL_CHECK_HELD document={} package={} pagesToCheck={}", command.documentId(),
                 command.packageId(), result.pagesToCheck().size());
+        pageChecks(result.pagesToCheck());
         findingRepository.saveAll(result.pagesToCheck());
         return true;
     }
@@ -479,6 +480,7 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
         auditService.recordSuccess(command.tenantId(), SYSTEM_ACTOR, AuditAction.DOCUMENT_SECOND_CHECK, "Document",
                 command.documentId().toString(), command.packageId(), command.correlationId(), result.auditDetail());
         if (result.pagesToCheck().isEmpty()) return false;
+        pageChecks(result.pagesToCheck());
         findingRepository.saveAll(result.pagesToCheck());
         return true;
     }
@@ -675,6 +677,17 @@ public final class DocumentRedactionService implements RedactDocumentUseCase {
     private void closeQuietly(InputStream stream) {
         if (stream != null) {
             try { stream.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    /** Task 0105: a page check is never without a reader; the reason is the check that held the page. */
+    private static void pageChecks(List<com.securedoc.platform.domain.finding.Finding> pages) {
+        for (var page : pages) {
+            if (page.placement() != null) continue;
+            page.applyPlacement(com.securedoc.platform.domain.finding.FindingPlacement.forPerson(
+                    com.securedoc.platform.domain.finding.FindingPlacement.Reader.PAGE_CHECK,
+                    com.securedoc.platform.domain.finding.FindingPlacement.Method.CHECK,
+                    com.securedoc.platform.domain.finding.FindingPlacement.How.PAGE, page.detectorSource().detectorName()));
         }
     }
 }

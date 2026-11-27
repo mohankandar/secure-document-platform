@@ -835,6 +835,22 @@ export interface ReportSource { key: string; name: string }
 interface UsualRange { low: number; high: number }
 
 /** Reports › Daily intake and delivery. Counts, LV codes and connection names only. */
+/** Task 0105: Reports › Automation. */
+export type AutomationPeriod = 'TODAY' | 'WEEK' | 'MONTH';
+
+export interface AutomationReport {
+  period: AutomationPeriod;
+  from: string;
+  to: string;
+  /** Whole percent; null when nothing was redacted in the period. */
+  automaticPercent: number | null;
+  automatic: number;
+  placedByPerson: number;
+  drawnByPerson: number;
+  byText: number;
+  byVision: number;
+}
+
 export interface DailyReport {
   generatedAt: string;
   from: string;

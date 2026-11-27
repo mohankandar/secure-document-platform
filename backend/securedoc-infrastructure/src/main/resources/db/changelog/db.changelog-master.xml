@@ -21,6 +21,7 @@
     <include file="db/changelog/013-dashboard-package-visibility.xml"/>
     <!-- Task 0102: data only; here, not at the end, so the change-set counts of the roll-back tests stay (see the file). -->
     <include file="db/changelog/086-refused-drop-cases.xml"/>
+    <include file="db/changelog/087-finding-placement.xml"/>
     <include file="db/changelog/014-integration-connection-foundation.xml"/>
     <include file="db/changelog/015-external-machine-intake.xml"/>
     <include file="db/changelog/016-polling-ingestion.xml"/>
