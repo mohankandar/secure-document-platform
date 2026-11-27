@@ -101,6 +101,30 @@ public final class PackageProcessingRecoveryService {
     }
 
     /**
+     * Task 0112: a staged case in PROCESSING that would never move again (a document waits for redaction, its run
+     * finished, nothing is planned) stops: FAILED (shown as Stopped), a package incident and an audit failure with
+     * LV-PRC-011. Never silently stuck; nothing is delivered.
+     */
+    public boolean stopNothingPlanned(PackageId packageId, TenantId tenantId, CorrelationId correlationId) {
+        var pkg = packageRepository.findByIdAndTenantId(packageId, tenantId).orElse(null);
+        if (pkg == null || pkg.status() != PackageStatus.PROCESSING) return false;
+        pkg.fail();
+        packageRepository.save(pkg);
+        incidentService.recordNothingPlanned(tenantId, packageId, correlationId);
+        try {
+            lifecycleService.recordTechnicalFailure(packageId, tenantId, correlationId);
+        } catch (RuntimeException ignored) {
+            // FAILED + incident state is authoritative; retention scheduling can be retried operationally.
+        }
+        auditService.recordFailure(tenantId, SYSTEM_ACTOR, AuditAction.PACKAGE_PROCESSING_RECOVERY_EXHAUSTED,
+                "DocumentPackage", packageId.toString(), correlationId,
+                "Processing stopped, nothing planned: " + com.securedoc.platform.application.error.LvErrorCodes.auditDetail(
+                        com.securedoc.platform.domain.error.LvErrorCode.PRC_011, "NOTHING_PLANNED",
+                        "documentsWaitingForRedaction"));
+        return true;
+    }
+
+    /**
      * Task 0023 C1: a licence refusal is final for this pass and is not retried automatically.
      * A licence configuration error (the licence service itself is broken, HTTP 503) is not a
      * refusal and is counted like any other dispatch failure.
