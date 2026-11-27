@@ -143,9 +143,10 @@ class SecretReferencesApprovedNamesTest {
     @Test
     void aSavedSourceWithAnApprovedNameSignsInWithItsValue(@TempDir Path staging) throws Exception {
         HttpClient client = mock(HttpClient.class);
-        @SuppressWarnings("unchecked") HttpResponse<String> answer = mock(HttpResponse.class);
+        @SuppressWarnings("unchecked") HttpResponse<java.io.InputStream> answer = mock(HttpResponse.class);
         when(answer.statusCode()).thenReturn(200);
-        when(answer.body()).thenReturn("{\"items\":[]}");
+        // Task 0110: answers are read as a stream, up to the size limit.
+        when(answer.body()).thenReturn(new java.io.ByteArrayInputStream("{\"items\":[]}".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         HttpRequest[] sent = new HttpRequest[1];
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(call -> {
             sent[0] = call.getArgument(0);

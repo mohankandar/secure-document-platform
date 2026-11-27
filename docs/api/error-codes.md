@@ -600,6 +600,20 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 2. Look at the run history for its result.
 3. Start a new run if you still need one.
 
+### LV-INT-045 Source system's answer too large
+
+- **Means:** The source's answer is larger than LexaVault takes, so it was not read. Nothing was stored.
+- **Kind:** Refused
+- **Who acts:** Source system
+- **HTTP status:** —
+- **Support tells the customer:** The source system's answer was larger than LexaVault takes, so it was not read and nothing was stored. Please have the source system send smaller answers (fewer cases per answer).
+
+**What to do:**
+
+1. Ask the source system's team to send fewer cases per answer.
+2. If the answers are expected to be this large, have the IT Admin raise the polling answer limit.
+3. Start a new run.
+
 ## SCN: scanner and Scan Bridge
 
 ### LV-SCN-001 Scan must be one document

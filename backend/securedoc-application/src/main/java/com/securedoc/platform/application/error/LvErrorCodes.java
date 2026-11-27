@@ -362,6 +362,7 @@ public final class LvErrorCodes {
         m.put("POLL_DISCOVERY_FAILED", INT_041);
         m.put("RETRIEVAL_FAILED", INT_041);
         m.put("POLL_RESPONSE_INVALID", INT_042);
+        m.put("POLL_RESPONSE_TOO_LARGE", INT_045); // task 0110
         m.put("RETRIEVAL_INVALID_CONTENT_TYPE", INT_007);
         m.put("RETRIEVAL_STAGING_FAILED", INT_004);
         m.put("RETRIEVAL_TOO_LARGE", INT_004);
