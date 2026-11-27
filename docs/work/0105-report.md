@@ -90,7 +90,32 @@ drop `test-pdfs\watched-drops-run2` (new contract numbers), then run the queries
 check. Until then the "after" table is not measured.
 
 ## Tests
-See "What was run".
+- `FindingPlacementSteps0105Test` (7): a repeated value at both places; OCR confusions and separators; nothing inside a
+  longer number, no too-short or word values; the field area right of and below a label; an unsure OCR field at its value,
+  beside its label, or not placed; the reader (form field, OCR, PDF text) and an unplaced text finding's reason; the model's
+  box check.
+- `FindingPlacement0105Test` (domain, 4): the same box sent with a confirmation is no placing; a moved box records the
+  person and time and keeps the reader; a box for a finding without one; names round-trip, unknown names dropped.
+- `PageBatchPlacement0105Test` (1): placement kept in a page batch's file, older files still read.
+- `AutomationReportServiceTest` (3): day, week (from Monday) and month in the entity's zone; the share; an unknown period.
+- Frontend: `automationRules.test.ts` (4) and `reports.spec.ts` (one new test: headline, counts, line, period picker).
+- No-value check: no test value appears in the build log; the report reads counts only; the new columns hold names only.
+
+## What was run
+- Backend, on the merged head, PostgreSQL tests on (throwaway container, removed):
+  `mvn -o verify -pl securedoc-api -am`: BUILD SUCCESS. domain 91, application 408, infrastructure 216 (2 skipped),
+  API 985 (5 skipped), 0 failures. Migration 087 ran on every fresh test database.
+- One read-only check on the owner's `09-form-fields-and-comments.pdf` (PDF reading only, a temporary test not committed).
+- Frontend: `tsc --noEmit`; one `npm run test:standalone` with `LV_E2E_PORT_BASE=15275`: exit 0 (auth 10, vocabulary 249, ui-framework 19, oidc-signin 237, tablet 110, a11y 380 passed).
+- Shared Maven repository read only; nothing installed.
+- Left: the re-run of run 2 (section 5), and the full proof set at the milestone.
+
+## Questions for the design chat
+1. Step 2b now covers every place of a repeated value (before: a person decided). Confirm.
+2. Vision-only findings stay at confidence 0.75, below auto-redact (0040 answer 2), so each still goes to a person to confirm,
+   now with its box already placed. Raise them to automatic when the box passes step 2a? This is the largest remaining
+   share of person work in the owner's run.
+3. Schedule the run 2 re-run on the GPU (section 5).
 
 ## No other product's name or behaviour in code
 No other product's name or behaviour in code.
