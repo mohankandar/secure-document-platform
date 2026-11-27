@@ -33,8 +33,9 @@ Branch `feature/0109-hardening`, from `origin/feature/lexavault-r1b-tenant-ident
 
 ## Existing integrations with refused names
 - Repository: no seed file, script or test fixture saves a connection with a refused name.
-- The owner's local database: **not checked**. `securedoc-postgres` was stopped and was not started by this session.
-  Read-only query to run (lists names and whether each reference is approved; prints no reference):
+- The owner's local database (`securedoc-postgres`, read-only transaction, 2026-11-27): 2 connections, both
+  "Local Scanner Bridge" (intake sources), neither names a secret. **No saved connection uses a refused name.**
+  The query (lists names and whether each reference is approved; prints no reference):
 
 ```sql
 select tenant_id, name, purpose, enabled,
