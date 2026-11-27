@@ -30,6 +30,8 @@ export const STATUS_INFO: Record<string, { stage: StageKey; label: string; detai
   DELIVERED: { stage: 'delivered', label: STAGE_NAMES.delivered, detail: 'Processing and export completed.' },
   FAILED: { stage: 'stopped', label: 'Stopped', detail: 'Automatic processing stopped. Recovery depends on temporary retention and incident status.' },
   REJECTED: { stage: 'stopped', label: 'Rejected', detail: 'A person rejected this case. Nothing is exported.' },
+  // Task 0111: a cancelled case (also one closed because no documents came in time) is not unrecognised.
+  CANCELLED: { stage: 'stopped', label: 'Cancelled', detail: 'This case was cancelled. Nothing is exported.' },
 };
 
 export const STAGES: { key: StageKey; label: string }[] = (

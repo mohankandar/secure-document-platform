@@ -270,11 +270,14 @@ public class PackageController {
     public ResponseEntity<List<PackageSummaryResponse>> listPackages(
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "20") int limit,
+            // Task 0111: the Case File dashboard pages through every case it shows; the ones it hides are left out.
+            @RequestParam(defaultValue = "false") boolean dashboard,
             HttpServletRequest httpRequest) {
 
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(httpRequest);
 
-        List<PackageSummary> summaries = listPackagesQuery.execute(principal, offset, limit);
+        List<PackageSummary> summaries = dashboard ? listPackagesQuery.executeForDashboard(principal, offset, limit)
+                : listPackagesQuery.execute(principal, offset, limit);
 
         // Task 0029: the page's export states in two queries, as the dashboard (OperationsController) does.
         // Task 0038: with the reason it waits and the destination's name.

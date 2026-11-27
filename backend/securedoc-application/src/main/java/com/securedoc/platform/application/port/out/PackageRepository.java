@@ -38,6 +38,11 @@ public interface PackageRepository {
 
     List<DocumentPackage> findByTenantId(TenantId tenantId, int offset, int limit);
 
+    /** Task 0111: the cases the dashboard lists (none it hides), oldest first, in an order stable across pages. */
+    default List<DocumentPackage> findDashboardCases(TenantId tenantId, int offset, int limit) {
+        return findByTenantId(tenantId, offset, limit);
+    }
+
     long countByTenantId(TenantId tenantId);
 
     Optional<DocumentPackage> findByTenantIdAndIntakeFingerprint(TenantId tenantId, String fingerprint);

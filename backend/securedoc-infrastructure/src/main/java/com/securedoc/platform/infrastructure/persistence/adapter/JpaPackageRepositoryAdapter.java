@@ -80,6 +80,15 @@ public class JpaPackageRepositoryAdapter implements PackageRepository {
     }
 
     @Override
+    public List<DocumentPackage> findDashboardCases(TenantId tenantId, int offset, int limit) {
+        int page = offset / Math.max(limit, 1);
+        return packageRepo.findByTenantIdAndDashboardHiddenAtIsNullOrderByCreatedAtAscIdAsc(tenantId.value(), PageRequest.of(page, limit))
+                .stream()
+                .map(this::toDomainWithDocuments)
+                .toList();
+    }
+
+    @Override
     public long countByTenantId(TenantId tenantId) {
         return packageRepo.countByTenantId(tenantId.value());
     }

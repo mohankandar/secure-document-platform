@@ -671,8 +671,20 @@ class ApiClient {
     });
   }
 
+  /**
+   * Task 0111: every case the dashboard shows (the server leaves out the ones it hides), page by page, so the counts are
+   * true. Stops at 50 pages (5,000 cases); the server lists them oldest first, in an order stable across pages.
+   */
   async listPackages(): Promise<PackageSummary[]> {
-    return this.request('/packages');
+    const pageSize = 100;
+    const all: PackageSummary[] = [];
+    for (let page = 0; page < 50; page += 1) {
+      const batch = await this.request<PackageSummary[]>(`/packages?dashboard=true&offset=${page * pageSize}&limit=${pageSize}`);
+      if (!Array.isArray(batch)) return batch;
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+    }
+    return all;
   }
 
   // --- Export jobs (tasks 0027/0028 API, task 0029 screens) ---

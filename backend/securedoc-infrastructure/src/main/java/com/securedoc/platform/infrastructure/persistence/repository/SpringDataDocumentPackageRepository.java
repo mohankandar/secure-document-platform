@@ -36,6 +36,9 @@ public interface SpringDataDocumentPackageRepository extends JpaRepository<Docum
 
     List<DocumentPackageEntity> findByTenantId(UUID tenantId, Pageable pageable);
 
+    /** Task 0111: the cases the dashboard lists: none it hides (dashboard_hidden_at set), oldest first, stable across pages. */
+    List<DocumentPackageEntity> findByTenantIdAndDashboardHiddenAtIsNullOrderByCreatedAtAscIdAsc(UUID tenantId, Pageable pageable);
+
     long countByTenantId(UUID tenantId);
 
     Optional<DocumentPackageEntity> findByTenantIdAndIntakeFingerprint(UUID tenantId, String intakeFingerprint);
