@@ -75,6 +75,7 @@ public class OidcTenantDiscoveryController {
         this.refusals = refusals;
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("the entities the signed-in person may enter")
     @GetMapping
     public ResponseEntity<List<TenantChoice>> list(HttpServletRequest request) {
         if (context.securityMode() != SecurityMode.OIDC) {

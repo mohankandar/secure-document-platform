@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/documents")
 public class ArtifactDownloadController {
 
+    @com.securedoc.platform.api.security.OpenEndpoint("always refused")
     @GetMapping("/{documentId}/artifacts/redacted/content")
     public void downloadRedacted(@PathVariable String documentId) {
         throw new AccessDeniedException("Document downloads are not permitted");

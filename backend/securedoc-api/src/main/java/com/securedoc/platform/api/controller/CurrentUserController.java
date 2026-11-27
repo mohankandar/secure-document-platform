@@ -28,6 +28,7 @@ public class CurrentUserController {
         this.authorizationPolicy = authorizationPolicy;
     }
 
+    @com.securedoc.platform.api.security.OpenEndpoint("the signed-in person's own identity")
     @GetMapping
     public ResponseEntity<CurrentUserResponse> currentUser(HttpServletRequest request) {
         var principal = contextResolver.resolvePrincipal(request);

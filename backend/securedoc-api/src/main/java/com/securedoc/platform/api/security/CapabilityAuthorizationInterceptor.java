@@ -50,7 +50,18 @@ public class CapabilityAuthorizationInterceptor implements HandlerInterceptor {
         if (!(handler instanceof HandlerMethod handlerMethod)) return true;
 
         RequireCapability annotation = handlerMethod.getMethodAnnotation(RequireCapability.class);
-        if (annotation == null) return true;
+        if (annotation == null) {
+            // Hardening (task 0110): endpoints deny by default. Only an endpoint marked open goes on without a rule.
+            if (handlerMethod.hasMethodAnnotation(OpenEndpoint.class)) return true;
+            AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
+            auditService.recordDenied(principal.tenantId(), principal.actorId(), AuditAction.AUTHORIZATION_FAILED,
+                    RESOURCE_TYPE, routePattern(request), contextResolver.resolveCorrelationId(request),
+                    com.securedoc.platform.application.error.LvErrorCodes.auditDetail(
+                            com.securedoc.platform.domain.error.LvErrorCode.AUT_006, "NO_RULE", null)
+                            + ", method=" + method(request) + ", route=" + routePattern(request));
+            AccessDeniedAuditRecorder.markRecorded(request);
+            throw new AccessDeniedException("Insufficient permissions for this operation");
+        }
 
         AuthenticatedPrincipal principal = contextResolver.resolvePrincipal(request);
         for (UserCapability capability : annotation.value()) {
