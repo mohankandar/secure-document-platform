@@ -41,7 +41,12 @@ class DraftConnectionTestServiceTest {
     private final FakeRepository repository = new FakeRepository();
     private final List<AuditRecord> audits = new ArrayList<>();
     private final AuditService auditService = new AuditService(audits::add);
-    private final IntegrationConnectionService connections = new IntegrationConnectionService(repository, auditService, clock);
+    // Hardening: secret references limited to approved names; this test's own approved name (the app's rule is tested in
+    // securedoc-api).
+    private final IntegrationConnectionService connections = new IntegrationConnectionService(repository, auditService, clock)
+            .withSecretReferences((entity, reference) -> {
+                if (!reference.equals(STORED_REF)) throw new IllegalArgumentException("refused");
+            });
     private final List<IntegrationConnection> storeProbes = new ArrayList<>();
     private RuntimeException storeFailure;
     private final FakePolling polling = new FakePolling();

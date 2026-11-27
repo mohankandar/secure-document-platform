@@ -17,7 +17,9 @@ class DeterministicContextPrecisionTest {
         var output = detector.detect(List.of(new PageInput(1,
                 "Servicing Reference Number: 123-45-6789")));
 
-        assertThat(output.entities()).noneMatch(entity -> entity.entityType().equals("SSN"));
+        // Task 0103 (was: not found): a value in the SSN ranges the document names otherwise goes to a person, never covered.
+        assertThat(output.entities()).filteredOn(entity -> entity.entityType().equals("SSN"))
+                .allMatch(entity -> entity.confidence() < 0.80).isNotEmpty();
     }
 
     @Test
@@ -42,7 +44,8 @@ class DeterministicContextPrecisionTest {
                 "Form Reference: 123-45-6789. This is a synthetic document reference in this notice, "
                         + "not a Social Security Number.")));
 
-        assertThat(output.entities()).noneMatch(entity -> entity.entityType().equals("SSN"));
+        assertThat(output.entities()).filteredOn(entity -> entity.entityType().equals("SSN"))
+                .allMatch(entity -> entity.confidence() < 0.80).isNotEmpty();
     }
 
     @Test
@@ -50,7 +53,9 @@ class DeterministicContextPrecisionTest {
         var output = detector.detect(List.of(new PageInput(1,
                 "Contract Number: 4111111111111111")));
 
-        assertThat(output.entities()).noneMatch(entity -> entity.entityType().equals("CREDIT_CARD_NUMBER"));
+        // Task 0103 (was: not found): a valid card number the document names otherwise goes to a person.
+        assertThat(output.entities()).filteredOn(entity -> entity.entityType().equals("CREDIT_CARD_NUMBER"))
+                .allMatch(entity -> entity.confidence() < 0.80).isNotEmpty();
     }
 
     @Test

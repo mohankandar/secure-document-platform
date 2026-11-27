@@ -680,7 +680,7 @@ function ConnectionEditor({ draft, original, onChange, onClose, onSaved }: {
                 )}
                 {d.authenticationType !== 'NONE' && (
                   <TextField label="Where the key is stored" type="password" value={d.secretReference || ''}
-                    placeholder={d.secretConfigured ? 'A key is stored. Leave empty to keep it.' : method === 'DOCUMENT_STORE' ? 'env:LEXAVAULT_SECRET_…' : 'For example vault:servicing/api-key'}
+                    placeholder={d.secretConfigured ? 'A key is stored. Leave empty to keep it.' : 'env:LEXAVAULT_SECRET_…'}
                     onChange={(v) => set('secretReference', v)} hint="A reference to your secrets store. The key itself is never shown." />
                 )}
                 {method === 'DOCUMENT_STORE' && d.destination && (

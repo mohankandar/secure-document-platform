@@ -4,6 +4,7 @@ import com.securedoc.platform.domain.error.LvErrorCode;
 import com.securedoc.platform.application.exception.NotFoundException;
 import com.securedoc.platform.application.exception.ValidationException;
 import com.securedoc.platform.application.port.out.IntegrationConnectionRepository;
+import com.securedoc.platform.application.port.out.SecretReferenceRule;
 import com.securedoc.platform.application.service.AuditService;
 import com.securedoc.platform.domain.audit.AuditAction;
 import com.securedoc.platform.domain.identity.ActorId;
@@ -48,6 +49,25 @@ public final class IntegrationConnectionService {
     }
 
     private com.securedoc.platform.application.port.out.DestinationProfilePort destinationProfiles;
+
+    /** Hardening: secret references limited to approved names. Without the app's rule, every reference is refused. */
+    public IntegrationConnectionService withSecretReferences(SecretReferenceRule rule) {
+        this.secretReferences = Objects.requireNonNull(rule);
+        return this;
+    }
+
+    private SecretReferenceRule secretReferences = SecretReferenceRule.REFUSE_ALL;
+
+    /** A named secret must be one this entity may use (on create, change and switching on); the error names the field only. */
+    private void checkedSecretReference(IntegrationConnection connection) {
+        String reference = connection.secretReference();
+        if (reference == null || reference.isBlank()) return;
+        try {
+            secretReferences.check(connection.tenantId(), reference);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ValidationException(LvErrorCode.CFG_003, SecretReferenceRule.REFUSED);
+        }
+    }
 
     /** A daily schedule without a time zone needs an entity that has one; otherwise it would never run. */
     private void requireZone(TenantId tenantId, ConnectionInput input) {
@@ -212,6 +232,7 @@ public final class IntegrationConnectionService {
     private IntegrationConnection checkedDestination(IntegrationConnection connection,
                                                      com.securedoc.platform.domain.integration.DestinationSettings settings) {
         IntegrationConnection wanted = connection.withDestination(settings);
+        checkedSecretReference(wanted);
         if (destinationProfiles == null || wanted.purpose() != IntegrationPurpose.DOCUMENT_STORE_DELIVERY) return wanted;
         if (settings == null) {
             if (!wanted.enabled()) return wanted;

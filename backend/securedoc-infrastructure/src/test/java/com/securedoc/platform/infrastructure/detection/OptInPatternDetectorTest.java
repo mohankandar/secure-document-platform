@@ -125,7 +125,8 @@ class OptInPatternDetectorTest {
             String badChecksum = ROUTING.substring(0, 8) + ((ROUTING.charAt(8) - '0' + 1) % 10);
             assertNone(":" + badChecksum + ": " + ACCOUNT + "\" 1042", OptInPatternDetector.ROUTING);
             assertNone("Totals " + ROUTING + " " + ACCOUNT + " 1042 2026", OptInPatternDetector.ROUTING);
-            assertNone("Totals " + ROUTING + " " + ACCOUNT + " 1042 2026", OptInPatternDetector.ACCOUNT);
+            // Task 0103: a 10-digit number nothing names is held for a person (0.70), not taken from a check line.
+            assertHeldForAPerson("Totals " + ROUTING + " " + ACCOUNT + " 1042 2026", OptInPatternDetector.ACCOUNT);
         }
     }
 
@@ -159,7 +160,8 @@ class OptInPatternDetectorTest {
             assertNone("Card account number: 4000 0012 3456 7899", OptInPatternDetector.ACCOUNT);
             assertNone("Account number: 123", OptInPatternDetector.ACCOUNT);
             assertNone("Account number: 123456789012345678", OptInPatternDetector.ACCOUNT); // 18 digits
-            assertNone("Please keep your account details safe. " + ACCOUNT, OptInPatternDetector.ACCOUNT);
+            // Task 0103: an account word in the sentence and an account's shape: a person decides (was: nothing).
+            assertHeldForAPerson("Please keep your account details safe. " + ACCOUNT, OptInPatternDetector.ACCOUNT);
             assertNone("Account summary\nStatement period 10/01/2026", OptInPatternDetector.ACCOUNT);
         }
     }
@@ -242,7 +244,8 @@ class OptInPatternDetectorTest {
 
         @Test
         void driversLicenseNearMisses() {
-            assertNone("K7302215", OptInPatternDetector.DRIVERS_LICENSE); // keyword required
+            // Task 0103: a letter and digits nothing names: a person decides (was: keyword required).
+            assertHeldForAPerson("K7302215", OptInPatternDetector.DRIVERS_LICENSE);
             assertNone("License plate ABC1234", OptInPatternDetector.DRIVERS_LICENSE);
             assertNone("Driver's license expires 10/31/2028", OptInPatternDetector.DRIVERS_LICENSE);
             assertNone("Driver's license number: 1234", OptInPatternDetector.DRIVERS_LICENSE); // too short
@@ -287,7 +290,9 @@ class OptInPatternDetectorTest {
                 assertEquals(List.of(), ssnConfidences(adapter, "Batch " + value), value);
             }
             assertEquals(List.of(0.95), ssnConfidences(adapter, "Borrower SSN: 412-55-7531"));
-            assertEquals(List.of(), ssnConfidences(adapter, "Batch 412-55-7531"));
+            // Task 0103: in the SSN ranges, a value the document calls something else ("Batch") goes to a person.
+            assertEquals(List.of(0.70), ssnConfidences(adapter, "Batch 412-55-7531"));
+            assertEquals(List.of(0.90), ssnConfidences(adapter, "Notes: 412-55-7531"), "no label: covered");
         }
 
         /** Cards: the check digit and a card label, both. */
@@ -295,12 +300,15 @@ class OptInPatternDetectorTest {
         void cardsNeedTheirCheckDigit() {
             LocalRuleBasedDetectionAdapter adapter = new LocalRuleBasedDetectionAdapter();
             assertEquals(1, count(adapter, "Card number 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
-            assertEquals(0, count(adapter, "Card number 4000 0566 5566 5557", "CREDIT_CARD_NUMBER"));
-            // Task 0099 (changed from 0043): grouped like a card, with a card's first digits and check digit, a locked
-            // item is found without a label too, with less confidence, so a person decides.
+            // Task 0103: card words, an issuer's digits, a failed check digit: a person (OCR may have misread one).
+            assertEquals(List.of(0.60), cardConfidences(adapter, "Card number 4000 0566 5566 5557"));
+            assertEquals(0, count(adapter, "Batch 4000 0566 5566 5557", "CREDIT_CARD_NUMBER"), "no card words, no check");
+            // Task 0103 (changed from 0099): a valid card number is a card wherever it stands; one the document names
+            // as something else ("Batch", "Contract number") goes to a person, grouped or not.
             assertEquals(List.of(0.75), cardConfidences(adapter, "Batch 4000 0566 5566 5556"));
-            assertEquals(0, count(adapter, "Batch 4000056655665556", "CREDIT_CARD_NUMBER"), "not grouped: not alone");
-            assertEquals(0, count(adapter, "Contract number 4000 0566 5566 5556", "CREDIT_CARD_NUMBER"));
+            assertEquals(List.of(0.75), cardConfidences(adapter, "Batch 4000056655665556"));
+            assertEquals(List.of(0.75), cardConfidences(adapter, "Contract number 4000 0566 5566 5556"));
+            assertEquals(List.of(0.90), cardConfidences(adapter, "Posted 4000056655665556"));
         }
 
         private static List<Double> cardConfidences(LocalRuleBasedDetectionAdapter adapter, String text) {
@@ -328,7 +336,7 @@ class OptInPatternDetectorTest {
 
         @Test
         void passportNearMisses() {
-            assertNone("X12345678", OptInPatternDetector.PASSPORT);
+            assertHeldForAPerson("X12345678", OptInPatternDetector.PASSPORT); // task 0103: no label, a person decides
             assertNone("Passport photo attached", OptInPatternDetector.PASSPORT);
             assertNone("Passport number: 12345", OptInPatternDetector.PASSPORT);
             assertNone("Passport issued 10/31/2020", OptInPatternDetector.PASSPORT);
@@ -424,6 +432,13 @@ class OptInPatternDetectorTest {
         List<String> spans = spans(text, kind);
         assertEquals(1, spans.size(), () -> "one " + kind + " finding, got " + spans.size());
         assertTrue(spans.get(0).equals(expected), () -> kind + ": the finding covers a different span");
+    }
+
+    /** Task 0103: found for a person to decide (below the 0.80 threshold), never covered on its own. */
+    private void assertHeldForAPerson(String text, String kind) {
+        List<DetectedEntity> found = of(text, kind);
+        assertEquals(1, found.size(), () -> "one " + kind + " finding for a person, got " + found.size());
+        assertTrue(found.get(0).confidence() < 0.80, () -> kind + " is held for a person, not covered");
     }
 
     private void assertNone(String text, String kind) {

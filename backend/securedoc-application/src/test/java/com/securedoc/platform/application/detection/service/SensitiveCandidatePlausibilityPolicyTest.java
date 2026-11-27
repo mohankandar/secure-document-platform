@@ -53,7 +53,8 @@ class SensitiveCandidatePlausibilityPolicyTest {
         var result = evaluate(EntityType.SSN, "123-45-6789",
                 "Reference Number: 123-45-6789", ValidationOutcome.SUPPORTS);
 
-        assertFalse(result.plausible());
+        // Task 0103 (was: rejected): an SSN-shaped value the page names otherwise is kept, for a person.
+        assertTrue(result.plausible() && result.review());
         assertEquals("SSN_BUSINESS_IDENTIFIER_CONTEXT", result.reasonCode());
     }
 
@@ -64,7 +65,7 @@ class SensitiveCandidatePlausibilityPolicyTest {
                         + "Social Security number and income.",
                 ValidationOutcome.SUPPORTS);
 
-        assertFalse(result.plausible());
+        assertTrue(result.plausible() && result.review());
         assertEquals("SSN_BUSINESS_IDENTIFIER_CONTEXT", result.reasonCode());
     }
 
@@ -126,7 +127,8 @@ class SensitiveCandidatePlausibilityPolicyTest {
         var result = evaluate(EntityType.CREDIT_CARD_NUMBER, "4111111111111111",
                 "Contract Number: 4111111111111111", ValidationOutcome.SUPPORTS);
 
-        assertFalse(result.plausible());
+        // Task 0103 (was: rejected): a locked item the page names otherwise is kept, for a person.
+        assertTrue(result.plausible() && result.review());
     }
 
     @Test
@@ -158,9 +160,29 @@ class SensitiveCandidatePlausibilityPolicyTest {
     }
 
     @Test
-    void rejectsBareThreeDigitNumberAsCreditScore() {
-        assertFalse(evaluate(EntityType.CREDIT_SCORE, "720",
-                "Invoice quantity: 720 units", ValidationOutcome.NOT_APPLICABLE).plausible());
+    void aBareThreeDigitNumberTheAiCallsAScoreGoesToAPerson() {
+        // Task 0103 (was: rejected): without score words the AI's reading is kept, for a person to decide.
+        var result = evaluate(EntityType.CREDIT_SCORE, "720", "Invoice quantity: 720 units",
+                ValidationOutcome.NOT_APPLICABLE);
+        assertTrue(result.plausible() && result.review());
+    }
+
+    @Test
+    void aDateWithoutAnyLabelGoesToAPerson() {
+        var result = evaluate(EntityType.DATE_OF_BIRTH, "03/14/1979", "Lucia 03/14/1979",
+                ValidationOutcome.NOT_APPLICABLE);
+        assertTrue(result.plausible() && result.review());
+    }
+
+    @Test
+    void theNewKindsAreCheckedForTheirShapeOnly() {
+        assertTrue(evaluate(EntityType.BANK_ROUTING_NUMBER, "021000021", "", ValidationOutcome.NOT_APPLICABLE).plausible());
+        assertFalse(evaluate(EntityType.BANK_ROUTING_NUMBER, "02100002", "", ValidationOutcome.NOT_APPLICABLE).plausible());
+        assertTrue(evaluate(EntityType.CVV, "734", "", ValidationOutcome.NOT_APPLICABLE).plausible());
+        assertFalse(evaluate(EntityType.CVV, "73", "", ValidationOutcome.NOT_APPLICABLE).plausible());
+        assertTrue(evaluate(EntityType.PIN, "8264", "", ValidationOutcome.NOT_APPLICABLE).plausible());
+        assertTrue(evaluate(EntityType.DRIVERS_LICENSE_NUMBER, "D4417202", "", ValidationOutcome.NOT_APPLICABLE).plausible());
+        assertFalse(evaluate(EntityType.ITIN, "812-78-1234", "", ValidationOutcome.NOT_APPLICABLE).plausible());
     }
 
     private SensitiveCandidatePlausibilityPolicy.Evaluation evaluate(EntityType type,

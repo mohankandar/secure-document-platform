@@ -6,6 +6,7 @@ import com.securedoc.platform.domain.finding.EntityType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Provider-neutral prompt composition from tenant redaction policy.
@@ -79,6 +80,8 @@ public final class SensitiveContentPromptBuilder {
         if (policy.enabledEntityTypes().contains(EntityType.CREDIT_SCORE)) {
             categories.add(creditScoreInstructions());
         }
+        // Task 0103: the other kinds found in text, asked of the AI too.
+        categories.addAll(otherKinds(policy.enabledEntityTypes()));
 
         String requested = categories.isEmpty()
                 ? "No sensitive categories are enabled for this analysis. Return {\"findings\":[]}."
@@ -119,28 +122,30 @@ public final class SensitiveContentPromptBuilder {
         Objects.requireNonNull(policy, "policy must not be null");
 
         List<String> categories = new ArrayList<>();
-        if (policy.enabledEntityTypes().contains(EntityType.SSN)) {
+        Set<EntityType> kinds = policy.enabledEntityTypes();
+        if (kinds.contains(EntityType.SSN)) {
             categories.add(policy.maskSsnLastFour()
-                    ? "SSN: exposed SSN; last-4 only when explicitly labeled SSN. Protect clearly labeled synthetic/test SSNs even when the digits are non-assignable. Reject Form/Reference/Contract numbers and phrases explicitly saying a value is not an SSN. Labels alone are not findings."
-                    : "SSN: exposed full SSN only; protect clearly labeled synthetic/test SSNs even when the digits are non-assignable. Reject Form/Reference/Contract numbers and phrases explicitly saying a value is not an SSN. Do not return last-4/partially masked values or labels alone.");
+                    ? "SSN: an exposed SSN (3-2-4 digits), with or without a label, also an old, short or Spanish label (Soc. Sec., SS#, Seguro Social); last-4 only when labeled SSN. Protect synthetic/test SSNs even when the digits are non-assignable. Skip a value the page explicitly calls a Form/Reference/Contract number or says is not an SSN. Labels alone are not findings."
+                    : "SSN: an exposed full SSN (3-2-4 digits), with or without a label, also an old, short or Spanish label (Soc. Sec., SS#, Seguro Social). Protect synthetic/test SSNs even when the digits are non-assignable. Skip a value the page explicitly calls a Form/Reference/Contract number or says is not an SSN. Do not return last-4/partially masked values or labels alone.");
         }
-        if (policy.enabledEntityTypes().contains(EntityType.DATE_OF_BIRTH)) {
-            categories.add("DATE_OF_BIRTH: actual person's birth date only; matchedText must be the date value, never a person's name; exclude contract, sale, signature, report, payment, effective, expiration, servicing and form dates.");
+        if (kinds.contains(EntityType.DATE_OF_BIRTH)) {
+            categories.add("DATE_OF_BIRTH: a date that is, or may be, a person's birth date, in any format or language (DOB, B'date, Fecha de nacimiento, born on), also without a label; matchedText is the date, never a person's name. Without a label give confidence 0.6. Skip dates the page clearly gives another meaning: contract, sale, signature, report, payment, due, effective, expiration, statement, servicing and form dates.");
         }
-        if (policy.enabledEntityTypes().contains(EntityType.CREDIT_CARD_NUMBER)) {
-            categories.add("CREDIT_CARD_NUMBER: actual full payment-card PAN only (13-19 digits, optional spaces/hyphens); omit masked/last-four-only card displays; exclude account/loan/contract/routing/phone numbers, amounts, dates and barcode/control markers.");
+        if (kinds.contains(EntityType.CREDIT_CARD_NUMBER)) {
+            categories.add("CREDIT_CARD_NUMBER: a full payment-card number (13-19 digits, optional spaces/hyphens), with or without a label; omit masked/last-four-only displays; skip routing/phone numbers, amounts, dates and barcode markers.");
         }
-        if (policy.enabledEntityTypes().contains(EntityType.CREDIT_SCORE)) {
-            categories.add("CREDIT_SCORE: actual consumer credit/FICO score tied to a person/report. In tables, a 'Your credit score' column header applies to the score values in the rows below even when the label is not repeated. Exclude bare 3-digit numbers, explanatory ranges such as 300-850, and examples.");
+        if (kinds.contains(EntityType.CREDIT_SCORE)) {
+            categories.add("CREDIT_SCORE: a consumer credit/FICO/Beacon/Vantage score of a person, also with a Spanish label (puntaje de credito); in tables a 'Your credit score' column header applies to the score values in the rows below. Exclude explanatory ranges such as 300-850 and examples.");
         }
+        categories.addAll(otherKinds(kinds));
 
         String requested = categories.isEmpty() ? "NONE" : String.join("\n", categories);
         return """
-                Extract ONLY tenant-requested sensitive values from each supplied page. Use labels and
-                surrounding meaning; never invent text. matchedText must be the exact value span present
-                on its declared page, not the label. contextText must be a short exact quote containing
-                matchedText. Labels, policy/privacy language, category names, and examples are not
-                sensitive values. If a category is merely discussed or no requested value is exposed, omit it.
+                Extract ONLY tenant-requested sensitive values from each supplied page. Find a value by what it
+                is, with or without a label; a label or meaning raises confidence. Never invent text. matchedText
+                must be the exact value span present on its declared page, not the label. contextText must be a
+                short exact quote containing matchedText. Labels, policy/privacy language, category names, and
+                examples are not sensitive values. If no requested value is exposed, omit it.
 
                 REQUESTED:
                 %s
@@ -185,9 +190,10 @@ public final class SensitiveContentPromptBuilder {
                   form revision dates, or other transaction dates as DOB.
                 - matchedText must be the birth-date VALUE itself. A person's name can never be the
                   matchedText for DATE_OF_BIRTH.
-                - Return DATE_OF_BIRTH only when the page meaning clearly ties that date to a person's
-                  birth (for example 'Date of Birth', 'DOB', 'Birth Date', or a sentence saying the
-                  person was born).
+                - A label ('Date of Birth', 'DOB', 'B'date', 'Fecha de nacimiento', 'born on') makes it
+                  certain, but a missing label never rules a date out: a date that may be a person's
+                  birth date and that the page does not clearly give another meaning is returned with
+                  confidence 0.6, so a person decides.
                 """;
     }
 
@@ -219,5 +225,35 @@ public final class SensitiveContentPromptBuilder {
                 - Do not return score-range examples or explanatory numbers (for example the generic
                   300-to-850 range) unless the number is separately shown as the actual customer's score.
                 """;
+    }
+
+    /** Task 0103: the opt-in kinds and the card codes, one line each. */
+    private static List<String> otherKinds(Set<EntityType> kinds) {
+        List<String> categories = new ArrayList<>();
+        if (kinds.contains(EntityType.BANK_ROUTING_NUMBER)) {
+            categories.add("BANK_ROUTING_NUMBER: a 9-digit bank routing/ABA/transit number, with or without a label (Routing, RTN, Bnk Rte, Numero de ruta), also on a check's bottom line.");
+        }
+        if (kinds.contains(EntityType.BANK_ACCOUNT_NUMBER)) {
+            categories.add("BANK_ACCOUNT_NUMBER: a bank account number (Account, Acct., A/C, Checking, Numero de cuenta), also on a check's bottom line; not loan, order, invoice or policy numbers.");
+        }
+        if (kinds.contains(EntityType.ITIN)) {
+            categories.add("ITIN: a 9-digit individual taxpayer identification number starting with 9 (9NN-NN-NNNN).");
+        }
+        if (kinds.contains(EntityType.EIN)) {
+            categories.add("EIN: a 9-digit employer identification number (NN-NNNNNNN; EIN, FEIN, Federal Tax ID, Fed. Employer No.).");
+        }
+        if (kinds.contains(EntityType.DRIVERS_LICENSE_NUMBER)) {
+            categories.add("DRIVERS_LICENSE_NUMBER: a driver's licence number (DL, Drv. Lic., Licencia de conducir); not business, contractor or marriage licences or plates.");
+        }
+        if (kinds.contains(EntityType.PASSPORT_NUMBER)) {
+            categories.add("PASSPORT_NUMBER: a passport number (Passport, PP No., Pasaporte).");
+        }
+        if (kinds.contains(EntityType.CVV)) {
+            categories.add("CVV: a payment card's 3 or 4 digit security code (CVV, CVC, CSC, CID, security code, Codigo de seguridad), also in a card table or next to a card number without a label.");
+        }
+        if (kinds.contains(EntityType.PIN)) {
+            categories.add("PIN: a 4 to 6 digit personal identification number (PIN, Pin #, NIP, clave), also next to a card number.");
+        }
+        return categories;
     }
 }

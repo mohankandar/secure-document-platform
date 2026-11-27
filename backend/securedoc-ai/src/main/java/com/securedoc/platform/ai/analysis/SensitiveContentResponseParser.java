@@ -281,6 +281,15 @@ final class SensitiveContentResponseParser {
             case "CREDIT_CARD", "CREDIT_CARD_NUMBER" -> "CREDIT_CARD_NUMBER";
             case "CREDIT_SCORE", "FICO_SCORE" -> "CREDIT_SCORE";
             case "PERSON_NAME", "PERSON" -> "PERSON_NAME";
+            // Task 0103: the AI reads for every enabled and locked kind.
+            case "BANK_ROUTING_NUMBER", "ROUTING_NUMBER", "ROUTING" -> "BANK_ROUTING_NUMBER";
+            case "BANK_ACCOUNT_NUMBER", "BANK_ACCOUNT", "ACCOUNT_NUMBER" -> "BANK_ACCOUNT_NUMBER";
+            case "ITIN" -> "ITIN";
+            case "EIN" -> "EIN";
+            case "DRIVERS_LICENSE_NUMBER", "DRIVERS_LICENSE" -> "DRIVERS_LICENSE_NUMBER";
+            case "PASSPORT_NUMBER", "PASSPORT" -> "PASSPORT_NUMBER";
+            case "CVV" -> "CVV";
+            case "PIN" -> "PIN";
             default -> "";
         };
     }

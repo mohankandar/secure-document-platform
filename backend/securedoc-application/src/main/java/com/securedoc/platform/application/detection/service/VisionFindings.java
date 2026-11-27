@@ -92,6 +92,30 @@ public final class VisionFindings {
         return unread(page, "TEXT_NOT_READABLE", models);
     }
 
+    /**
+     * Task 0103 (owner's run 2, long-60 pages 23 and 32): a person's values come together (SSN and date of birth). On a
+     * page the vision model read, when one of them was found (by the model or the text) and another kind of the group
+     * that the entity redacts was not, a person checks the page: the model may have missed it. Null when the group is
+     * whole or absent.
+     */
+    static Candidate groupIncomplete(int page, List<Candidate> text, List<Candidate> vision, Set<EntityType> enabled,
+                                     AiModel model) {
+        Set<EntityType> wanted = java.util.EnumSet.noneOf(EntityType.class);
+        if (enabled.contains(EntityType.SSN) || enabled.contains(EntityType.ITIN)) wanted.add(EntityType.SSN);
+        if (enabled.contains(EntityType.DATE_OF_BIRTH)) wanted.add(EntityType.DATE_OF_BIRTH);
+        if (wanted.size() < 2) return null;
+        Set<EntityType> found = java.util.EnumSet.noneOf(EntityType.class);
+        for (List<Candidate> all : List.of(text, vision)) {
+            for (Candidate c : all) {
+                if (c.location().pageNumber() != page) continue;
+                if (c.type() == EntityType.SSN || c.type() == EntityType.ITIN) found.add(EntityType.SSN);
+                if (c.type() == EntityType.DATE_OF_BIRTH) found.add(EntityType.DATE_OF_BIRTH);
+            }
+        }
+        if (found.isEmpty() || found.containsAll(wanted)) return null;
+        return unread(page, "GROUP_INCOMPLETE", model == null ? List.of() : List.of(model));
+    }
+
     /** A page for a person: it has no place, so it can never be redacted or delivered without a decision. */
     private static Candidate unread(int page, String why, List<AiModel> models) {
         return new Candidate(EntityType.UNREAD_PAGE, FindingLocation.unlocated(page), 0.0,

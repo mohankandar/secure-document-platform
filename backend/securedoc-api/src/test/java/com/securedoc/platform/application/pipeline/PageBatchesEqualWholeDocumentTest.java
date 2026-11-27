@@ -146,8 +146,15 @@ class PageBatchesEqualWholeDocumentTest {
         noOverlap.readInBatches();
         noOverlap.settings = new PageBatchSettings(20, 0);
         noOverlap.find.completeFromBatches(noOverlap.detectCommand(), noOverlap.searchBatches());
-        assertEquals(0, noOverlap.findings.stream().filter(f -> f.entityType() == EntityType.DATE_OF_BIRTH).count(),
-                "without shared pages it would be missed: the overlap is what keeps it");
+        // Task 0103 (was: "without shared pages it would be missed"): the rules now hold a date without its label for a
+        // person, so it is never lost; the shared page is what lets the AI read its label and cover it without one.
+        List<com.securedoc.platform.domain.finding.Finding> alone = noOverlap.findings.stream()
+                .filter(f -> f.location().pageNumber() == 21 && f.entityType() == EntityType.DATE_OF_BIRTH).toList();
+        assertEquals(1, alone.size(), "without shared pages a person still sees it");
+        assertEquals(com.securedoc.platform.domain.finding.FindingStatus.DETECTED, alone.get(0).status());
+        assertEquals(com.securedoc.platform.domain.finding.FindingStatus.CONFIRMED, batched.findings.stream()
+                .filter(f -> f.location().pageNumber() == 21 && f.entityType() == EntityType.DATE_OF_BIRTH)
+                .findFirst().orElseThrow().status(), "with them it is covered");
         assertEquals(whole.findings.stream().filter(f -> f.entityType() == EntityType.DATE_OF_BIRTH).count(),
                 batched.findings.stream().filter(f -> f.entityType() == EntityType.DATE_OF_BIRTH).count());
 
