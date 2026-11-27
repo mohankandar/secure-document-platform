@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0104 (owner approved: migrations 08x): one case per contract, arriving in batches, with document versions
+        (docs/design/CASE_VERSIONS.md, section 2).
+        - case_batches: one arrival into a case.
+        - case_batch_files: every file of every batch, kept for the life of the case (also after its original is purged),
+          so a file arriving months later is still compared against every version ever received. A SHA-256 of the
+          bytes and a hash of the name only: never a name or a value.
+        - documents: the version columns. Hashes only.
+        Every existing case becomes batch 1 of itself, and each of its documents version 1 of its own lineage.
+
+        Included after 087 in the master changelog, not at its end, so the roll-back tests that count change sets from
+        the end need no new count.
+    -->
+    <changeSet id="088-01-case-batches" author="lexavault">
+        <createTable tableName="case_batches">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="batch_number" type="INT"><constraints nullable="false"/></column>
+            <column name="source" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="export_cycle" type="INT"/>
+            <column name="state" type="VARCHAR(24)"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="case_batches" columnNames="package_id, batch_number" constraintName="uq_case_batches_number"/>
+        <createIndex tableName="case_batches" indexName="idx_case_batches_tenant_package">
+            <column name="tenant_id"/><column name="package_id"/>
+        </createIndex>
+        <sql>ALTER TABLE case_batches ADD CONSTRAINT ck_case_batches_number CHECK (batch_number >= 1)</sql>
+        <rollback>
+            <dropTable tableName="case_batches"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="088-02-case-batch-files" author="lexavault">
+        <createTable tableName="case_batch_files">
+            <column name="id" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="tenant_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="package_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="batch_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="sha256" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="size_bytes" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="page_count" type="INT"/>
+            <column name="name_hash" type="VARCHAR(64)"/>
+            <column name="outcome" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="rule" type="VARCHAR(24)"><constraints nullable="false"/></column>
+            <column name="document_id" type="UUID"/>
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="case_batch_files" indexName="idx_case_batch_files_fingerprint">
+            <column name="tenant_id"/><column name="package_id"/><column name="sha256"/>
+        </createIndex>
+        <createIndex tableName="case_batch_files" indexName="idx_case_batch_files_batch">
+            <column name="batch_id"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="case_batch_files"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="088-03-document-versions" author="lexavault">
+        <addColumn tableName="documents">
+            <column name="batch_id" type="UUID"/>
+            <column name="lineage_id" type="UUID"/>
+            <column name="version_number" type="INT" defaultValueNumeric="1"><constraints nullable="false"/></column>
+            <column name="replaces_document_id" type="UUID"/>
+            <column name="possible_version_of" type="UUID"/>
+            <column name="pdf_id_hash" type="VARCHAR(64)"/>
+            <column name="xmp_id_hash" type="VARCHAR(64)"/>
+            <column name="source_document_id_hash" type="VARCHAR(64)"/>
+        </addColumn>
+        <createIndex tableName="documents" indexName="idx_documents_lineage">
+            <column name="package_id"/><column name="lineage_id"/><column name="version_number"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="documents" indexName="idx_documents_lineage"/>
+            <dropColumn tableName="documents" columnName="source_document_id_hash"/>
+            <dropColumn tableName="documents" columnName="xmp_id_hash"/>
+            <dropColumn tableName="documents" columnName="pdf_id_hash"/>
+            <dropColumn tableName="documents" columnName="possible_version_of"/>
+            <dropColumn tableName="documents" columnName="replaces_document_id"/>
+            <dropColumn tableName="documents" columnName="version_number"/>
+            <dropColumn tableName="documents" columnName="lineage_id"/>
+            <dropColumn tableName="documents" columnName="batch_id"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Data only: every existing case is its own batch 1; each document version 1 of its own lineage. -->
+    <changeSet id="088-04-existing-cases-are-batch-one" author="lexavault">
+        <sql>
+            INSERT INTO case_batches (id, tenant_id, package_id, batch_number, source, received_at, export_cycle, state)
+            SELECT p.id, p.tenant_id, p.id, 1, 'EXISTING', p.created_at, NULL, 'RECEIVED' FROM document_packages p;
+            UPDATE documents SET batch_id = package_id, lineage_id = id, version_number = 1;
+            INSERT INTO case_batch_files (id, tenant_id, package_id, batch_id, sha256, size_bytes, page_count, name_hash,
+                                          outcome, rule, document_id, received_at)
+            SELECT d.id, d.tenant_id, d.package_id, d.package_id, lower(d.checksum_value), coalesce(d.size_bytes, 0), d.page_count, NULL,
+                   'NEW_DOCUMENT', 'NONE', d.id, d.created_at
+            FROM documents d WHERE d.checksum_value IS NOT NULL;
+        </sql>
+        <rollback>
+            <sql>DELETE FROM case_batch_files; DELETE FROM case_batches; UPDATE documents SET batch_id = NULL, lineage_id = NULL, version_number = 1;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
