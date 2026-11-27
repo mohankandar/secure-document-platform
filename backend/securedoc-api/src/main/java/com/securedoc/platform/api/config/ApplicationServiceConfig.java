@@ -1003,22 +1003,27 @@ public class ApplicationServiceConfig {
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model}") String visionModel,
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.model-digest}") String visionDigest,
             @org.springframework.beans.factory.annotation.Value("${securedoc.ai.vision.timeout-seconds}") int visionTimeoutSeconds,
-            AiRuntimeProperties ai) {
+            AiRuntimeProperties ai,
+            com.securedoc.platform.application.port.out.PageRouteRepository pageRouteRepository) {
+        // Task 0083: the second check's vision prompt, for a finished file. Not a bean: Find must never get it.
+        com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter finishedFileVision =
+                new com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter(visionUrl, visionModel,
+                        visionDigest, Duration.ofSeconds(Math.max(1, visionTimeoutSeconds)), ai.getOllamaKeepAlive(),
+                        com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter.SECOND_CHECK_VERSION);
         // Task 0044: the entity policy (searchable redacted pages) and the same text extraction as the detection.
         return new DocumentRedactionService(
                 documentRepository, packageRepository, artifactRepository,
                 findingRepository, storagePort, pdfRedactionPort, redactionVerificationPort, checksumPort,
                 eventPublisher, auditService, tenantRedactionPolicyRepository, textExtractionPort)
                 .withUsageMeter(usageMeter).withNonProductionMark(licence::testEnvironment)
-                // Task 0099: the pattern rules search the finished file again, for every entity.
+                // Task 0099: the pattern rules search the finished file again, for every entity. Task 0103: and the
+                // vision model reads the pages that were pictures in the original.
                 .withFinalCheck(new com.securedoc.platform.application.secondcheck.FinalPatternCheck(
-                        textExtractionPort, detectionPort))
-                // Task 0083: the same models, each with the second check's own prompt. Not a bean: Find must never get it.
+                        textExtractionPort, detectionPort).withVision(pageRouteRepository, pageImagePort,
+                        finishedFileVision))
+                // Task 0083: the same models, each with the second check's own prompt.
                 .withSecondCheck(new com.securedoc.platform.application.secondcheck.SecondCheck(textExtractionPort,
-                        semanticAnalysisPort, pageImagePort,
-                        new com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter(visionUrl, visionModel,
-                                visionDigest, Duration.ofSeconds(Math.max(1, visionTimeoutSeconds)), ai.getOllamaKeepAlive(),
-                                com.securedoc.platform.ai.analysis.OllamaVisionModelAdapter.SECOND_CHECK_VERSION)));
+                        semanticAnalysisPort, pageImagePort, finishedFileVision));
     }
 
     @Bean

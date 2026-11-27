@@ -24,8 +24,10 @@ class RedactionCatalogTest {
         assertEquals(15, RedactionCatalog.entries().size());
         assertTrue(Arrays.stream(EntityType.values()).map(Enum::name)
                 .noneMatch(Set.of("FINANCIAL_ACCOUNT", "GOVERNMENT_ID")::contains));
-        assertEquals(EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH, EntityType.CREDIT_CARD_NUMBER,
-                EntityType.CREDIT_SCORE, EntityType.PERSON_NAME), RedactionCatalog.askedOfAi());
+        // Task 0103 (owner's rule 3): the AI is asked for every kind found in text; only the image kinds are not.
+        assertEquals(EnumSet.complementOf(EnumSet.of(EntityType.SIGNATURE, EntityType.FACE_PHOTO)).stream()
+                        .filter(RedactionCatalog.kinds()::contains).collect(java.util.stream.Collectors.toSet()),
+                RedactionCatalog.askedOfAi());
         assertEquals(Set.of(EntityType.PERSON_NAME), RedactionCatalog.alwaysReviewed());
         assertFalse(RedactionCatalog.onByDefault().contains(EntityType.PERSON_NAME), "off until the entity turns it on");
         assertTrue(RedactionCatalog.entries().stream().allMatch(e -> e.defaultStyle() == RedactionStyle.REMOVE_FULLY),

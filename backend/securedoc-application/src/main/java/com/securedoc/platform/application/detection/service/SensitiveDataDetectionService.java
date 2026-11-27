@@ -88,6 +88,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
     private static final Logger log = LoggerFactory.getLogger(SensitiveDataDetectionService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
     private static final double AGREEMENT_CONFIDENCE_BOOST = 0.05;
+    /** Task 0103: below the default threshold (0.80): what only one reader found, or found without its words, waits for a person. */
+    static final double AI_ALONE_CONFIDENCE = 0.75;
     /**
      * Task 0064: an audit detail is cut at 2000 characters (and the compliance appendix at 900), so routed pages are named only while there is room for a
      * whole one; every page's route is in document_page_routes.
@@ -418,7 +420,13 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 notRead.put(route.page(), result.code() == null ? result.reason() : result.code());
                 others.addAll(VisionFindings.signatures(route, policy.enabledEntityTypes()));
             }
-            others.addAll(VisionFindings.of(result, policy));
+            List<PageBatchFindings.Candidate> read = VisionFindings.of(result, policy);
+            others.addAll(read);
+            if (result.read()) {
+                PageBatchFindings.Candidate incomplete = VisionFindings.groupIncomplete(route.page(), text, read,
+                        policy.enabledEntityTypes(), result.model());
+                if (incomplete != null) others.add(incomplete);
+            }
         }
         List<Finding> findings = new ArrayList<>();
         for (PageBatchFindings.Candidate candidate : VisionFindings.merge(text, others)) {
@@ -491,8 +499,8 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
         // Truly blank pages were already safely inspected by native extraction/OCR and do not need
         // a meaningless model call.
         boolean hasTextBearingPage = pagesByNumber.values().stream().anyMatch(page -> !page.text().isBlank());
-        // Task 0043: the semantic analyzer is asked only for the kinds it knows. The pattern kinds
-        // (routing, account, ITIN, EIN, driver's license, passport, CVV, PIN) come from the deterministic detectors only.
+        // Task 0103 (owner's rule 3, replaces 0043's "pattern kinds from the rules only"): the AI is a second reader for
+        // every enabled and locked kind found in text; the locked items are always in the enabled set.
         Set<EntityType> semanticTypes = java.util.EnumSet.noneOf(EntityType.class);
         semanticTypes.addAll(enabledTypes);
         semanticTypes.retainAll(com.securedoc.platform.domain.business.RedactionCatalog.askedOfAi());
@@ -519,6 +527,7 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
         Set<String> aiNames = semanticOutput.findings().stream().map(DiscoveredSensitiveContent::analyzerName)
                 .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
+        mergedEntities = aiAloneGoesToAPerson(mergedEntities, aiNames);
         List<AiModel> models = new ArrayList<>(semanticOutput.models());
         if (!known.forms().isEmpty()) {
             SensitiveContentAnalysisPort.AnalysisOutput answered = knownNames(command, pagesByNumber, known, mergedEntities);
@@ -540,6 +549,24 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
                 buildDetectedEntityPageTypeCounts(semanticResolution.located(), enabledTypes),
                 buildDetectedEntityPageTypeCounts(deterministicOutput.entities(), enabledTypes));
         return new PageFindings(findings, semanticResolution.unlocated().size(), models);
+    }
+
+    /**
+     * Task 0103 (owner's rule 3): the AI and the rules both read every page for the same kinds. A value only the AI
+     * found counts (it is never dropped) but the two disagree, so it goes to a person. Names are the AI's alone and
+     * always go to a person anyway (task 0072).
+     */
+    private static List<DetectedEntity> aiAloneGoesToAPerson(List<DetectedEntity> entities, Set<String> aiNames) {
+        List<DetectedEntity> out = new ArrayList<>(entities.size());
+        for (DetectedEntity e : entities) {
+            boolean aiAlone = aiNames.contains(e.detectorName());
+            boolean name = EntityType.PERSON_NAME.name().equals(e.entityType());
+            out.add(aiAlone && !name && e.confidence() > AI_ALONE_CONFIDENCE
+                    ? new DetectedEntity(e.entityType(), e.pageNumber(), e.startOffset(), e.endOffset(),
+                    AI_ALONE_CONFIDENCE, e.detectorName(), e.detectorVersion())
+                    : e);
+        }
+        return out;
     }
 
     /**
@@ -752,8 +779,10 @@ public final class SensitiveDataDetectionService implements DetectSensitiveDataU
 
             double effectiveConfidence = evidenceConfidencePolicy.effectiveSemanticConfidence(
                     discovery.confidence(), validation.outcome());
+            // Task 0103: the shape fits, the words around it do not say so: kept, for a person.
+            if (plausibility.review()) effectiveConfidence = Math.min(effectiveConfidence, AI_ALONE_CONFIDENCE);
             String analyzerVersion = discovery.analyzerVersion()
-                    + ";validation=" + validation.outcome() + ";plausibility=PASS";
+                    + ";validation=" + validation.outcome() + ";plausibility=" + (plausibility.review() ? "HOLD" : "PASS");
 
             if (type == EntityType.PERSON_NAME) {
                 // Task 0072: the same written name on the page is the same person, so each place is found.

@@ -88,8 +88,31 @@ final class SensitiveCandidatePlausibilityPolicy {
             case CREDIT_CARD_NUMBER -> evaluateCreditCard(value, context, deterministicValidation);
             case CREDIT_SCORE -> evaluateCreditScore(value, context);
             case PERSON_NAME -> evaluateName(value);
+            case BANK_ROUTING_NUMBER, BANK_ACCOUNT_NUMBER, ITIN, EIN, DRIVERS_LICENSE_NUMBER, PASSPORT_NUMBER, CVV, PIN ->
+                    evaluateShape(type, value);
             default -> Evaluation.accept();
         };
+    }
+
+    /**
+     * Task 0103: the kinds the AI is now asked for too. Only the shape is checked (the digits a value of the kind can
+     * have); what it is in the sentence is the AI's reading, and an AI-only finding goes to a person anyway.
+     */
+    private static Evaluation evaluateShape(EntityType type, String value) {
+        int digits = digits(value).length();
+        boolean onlyDigits = value.matches("[0-9 \\-]+");
+        boolean fits = switch (type) {
+            case BANK_ROUTING_NUMBER -> digits == 9 && onlyDigits;
+            case BANK_ACCOUNT_NUMBER -> digits >= 4 && digits <= 17 && onlyDigits;
+            case ITIN -> digits == 9 && onlyDigits && digits(value).startsWith("9");
+            case EIN -> digits == 9 && onlyDigits;
+            case DRIVERS_LICENSE_NUMBER, PASSPORT_NUMBER -> digits >= 4 && value.length() <= 20
+                    && value.matches("[A-Za-z0-9 \\-]+");
+            case CVV -> digits >= 3 && digits <= 4 && onlyDigits;
+            case PIN -> digits >= 4 && digits <= 6 && onlyDigits;
+            default -> true;
+        };
+        return fits ? Evaluation.accept() : Evaluation.reject(type.name() + "_SHAPE");
     }
 
     /** Task 0072: a form of a name: letters, no digits, not a sentence. What it means is the AI's and the person's. */
@@ -108,10 +131,12 @@ final class SensitiveCandidatePlausibilityPolicy {
         int nonBirthDateGap = nearestContextGap(NON_BIRTH_DATE_CONTEXT, value, context);
         if (nonBirthDateGap >= 0 && nonBirthDateGap <= 60
                 && (birthGap < 0 || nonBirthDateGap <= birthGap)) {
+            // The document names the date as another date ("First Payment Date"): clearly something else.
             return Evaluation.reject("DOB_CONTEXT_NOT_BIRTH");
         }
         if (birthGap < 0 || birthGap > 80) {
-            return Evaluation.reject("DOB_CONTEXT_NOT_BIRTH");
+            // Task 0103: no label either way is not "something else": a person decides.
+            return Evaluation.review("DOB_NO_BIRTH_LABEL");
         }
         return Evaluation.accept();
     }
@@ -134,7 +159,7 @@ final class SensitiveCandidatePlausibilityPolicy {
             }
             return explicitSsnContext
                     ? Evaluation.accept()
-                    : Evaluation.reject("SSN_LAST4_WITHOUT_SSN_CONTEXT");
+                    : Evaluation.review("SSN_LAST4_WITHOUT_SSN_CONTEXT");
         }
 
         if (digits.length() != 9) {
@@ -152,14 +177,14 @@ final class SensitiveCandidatePlausibilityPolicy {
         }
         if (nonSsnTaxIdContext
                 && (!explicitSsnContext || nonSsnTaxIdGap <= ssnGap)) {
-            return Evaluation.reject("SSN_NON_PERSON_TAX_ID_CONTEXT");
+            return Evaluation.review("SSN_NON_PERSON_TAX_ID_CONTEXT");
         }
         if (deterministicValidation == ValidationOutcome.CONTRADICTS) {
             return Evaluation.reject("SSN_INVALID_STRUCTURE");
         }
         if (businessIdentifierContext
                 && (!explicitSsnContext || businessIdentifierGap < ssnGap)) {
-            return Evaluation.reject("SSN_BUSINESS_IDENTIFIER_CONTEXT");
+            return Evaluation.review("SSN_BUSINESS_IDENTIFIER_CONTEXT");
         }
         if (explicitSsnContext) {
             return Evaluation.accept();
@@ -170,7 +195,7 @@ final class SensitiveCandidatePlausibilityPolicy {
         boolean classicSsnShape = value.matches("\\d{3}[- ]\\d{2}[- ]\\d{4}");
         return classicSsnShape
                 ? Evaluation.accept()
-                : Evaluation.reject("SSN_UNLABELED_COMPACT_NUMBER");
+                : Evaluation.review("SSN_UNLABELED_COMPACT_NUMBER");
     }
 
     private Evaluation evaluateCreditCard(String value,
@@ -187,7 +212,7 @@ final class SensitiveCandidatePlausibilityPolicy {
         boolean cardContext = cardGap >= 0 && cardGap <= 100;
         boolean businessIdentifierContext = businessIdentifierGap >= 0 && businessIdentifierGap <= 80;
         if (businessIdentifierContext && (!cardContext || businessIdentifierGap < cardGap)) {
-            return Evaluation.reject("CARD_BUSINESS_IDENTIFIER_CONTEXT");
+            return Evaluation.review("CARD_BUSINESS_IDENTIFIER_CONTEXT");
         }
         if (cardContext) {
             // Luhn remains supporting evidence only. A model-found, properly grounded full PAN in
@@ -196,7 +221,7 @@ final class SensitiveCandidatePlausibilityPolicy {
         }
         return deterministicValidation == ValidationOutcome.SUPPORTS
                 ? Evaluation.accept()
-                : Evaluation.reject("CARD_NO_PAYMENT_CONTEXT_OR_LUHN_SUPPORT");
+                : Evaluation.review("CARD_NO_PAYMENT_CONTEXT_OR_LUHN_SUPPORT");
     }
 
     private Evaluation evaluateCreditScore(String value, String context) {
@@ -212,11 +237,12 @@ final class SensitiveCandidatePlausibilityPolicy {
         if (score < 300 || score > 850) {
             return Evaluation.reject("SCORE_OUT_OF_RANGE");
         }
-        if (!hasAssociatedContext(SCORE_CONTEXT, value, context, 120)) {
-            return Evaluation.reject("SCORE_NO_CREDIT_CONTEXT");
-        }
+        // A range the page explains (300 to 850) is clearly not a person's score.
         if (isExplanatoryScoreValue(score, value, context)) {
             return Evaluation.reject("SCORE_EXPLANATORY_RANGE");
+        }
+        if (!hasAssociatedContext(SCORE_CONTEXT, value, context, 120)) {
+            return Evaluation.review("SCORE_NO_CREDIT_CONTEXT");
         }
         return Evaluation.accept();
     }
@@ -312,9 +338,17 @@ final class SensitiveCandidatePlausibilityPolicy {
         return value == null ? "" : value.replaceAll("[^0-9]", "");
     }
 
-    record Evaluation(boolean plausible, String reasonCode) {
+    /**
+     * @param review task 0103: plausible by its shape, but the words around it are missing or point elsewhere; the
+     *               finding is kept and goes to a person (a missing label never drops a value)
+     */
+    record Evaluation(boolean plausible, String reasonCode, boolean review) {
         Evaluation {
             reasonCode = reasonCode == null || reasonCode.isBlank() ? "UNSPECIFIED" : reasonCode;
+        }
+
+        Evaluation(boolean plausible, String reasonCode) {
+            this(plausible, reasonCode, false);
         }
 
         static Evaluation accept() {
@@ -323,6 +357,11 @@ final class SensitiveCandidatePlausibilityPolicy {
 
         static Evaluation reject(String reasonCode) {
             return new Evaluation(false, reasonCode);
+        }
+
+        /** Task 0103: kept, for a person. */
+        static Evaluation review(String reasonCode) {
+            return new Evaluation(true, reasonCode, true);
         }
     }
 }
