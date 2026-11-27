@@ -26,7 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OllamaAnswerSchemaTest {
     private static final String FIND = "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"findings\":{\"type\":\"array\","
             + "\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"pageNumber\":{\"type\":\"integer\",\"minimum\":1},"
-            + "\"entityType\":{\"type\":\"string\",\"enum\":[\"SSN\",\"DATE_OF_BIRTH\",\"CREDIT_CARD_NUMBER\",\"CREDIT_SCORE\"]},"
+            + "\"entityType\":{\"type\":\"string\",\"enum\":[\"SSN\",\"DATE_OF_BIRTH\",\"CREDIT_CARD_NUMBER\",\"CREDIT_SCORE\","
+            // Task 0103: every kind found in text.
+            + "\"BANK_ROUTING_NUMBER\",\"BANK_ACCOUNT_NUMBER\",\"ITIN\",\"EIN\",\"DRIVERS_LICENSE_NUMBER\",\"PASSPORT_NUMBER\",\"CVV\",\"PIN\"]},"
             + "\"matchedText\":{\"type\":\"string\"},\"contextText\":{\"type\":\"string\"},"
             + "\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}},"
             + "\"required\":[\"pageNumber\",\"entityType\",\"matchedText\",\"contextText\",\"confidence\"]}}},\"required\":[\"findings\"]}";

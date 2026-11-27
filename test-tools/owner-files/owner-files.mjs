@@ -206,7 +206,9 @@ const cp = [['org/apache/pdfbox/pdfbox/3.0.8/pdfbox-3.0.8.jar'], ['org/apache/pd
   .map(([p]) => join(m2, ...p.split('/'))).join(process.platform === 'win32' ? ';' : ':');
 const delivered = readdirSync(join(run, 'delivered')).map((n) => join(run, 'delivered', n));
 if (delivered.length) {
-  const check = spawnSync('java', ['-cp', cp, join(here, 'CheckDelivered.java'), ...delivered], { encoding: 'utf8' });
+  // Task 0103: with the originals, so the words covered that are no value (over-redaction) are counted too.
+  const check = spawnSync('java', ['-cp', cp, `-Doriginals=${files}${process.platform === 'win32' ? ';' : ':'}${join(files, 'long')}`,
+    join(here, 'CheckDelivered.java'), ...delivered], { encoding: 'utf8' });
   console.log(check.stdout.split('\n').filter((l) => !l.includes('WARN')).join('\n'));
   if (check.status !== 0) failed = true;
 }

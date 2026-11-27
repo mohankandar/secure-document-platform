@@ -33,7 +33,8 @@ class LockedCardDetectionTest {
         assertEquals("CREDIT_CARD_NUMBER=4lll 1111 1111 1111@0.95", found("Card 4lll 1111 1111 1111 purchase"));
         assertEquals("CREDIT_CARD_NUMBER=4000 O566 5566 5556@0.95", found("Card 4000 O566 5566 5556"));
         assertEquals("", found("Card 4III IIII 1111 1111"), "too many letters: not read as a number");
-        assertEquals("", found("Card 4lll 1111 1111 1112"), "the check digit still decides");
+        // Task 0103: card words and an issuer's digits, but the check digit fails (OCR may have misread one): a person.
+        assertEquals("CREDIT_CARD_NUMBER=4lll 1111 1111 1112@0.6", found("Card 4lll 1111 1111 1112 purchase"));
     }
 
     @Test
@@ -44,15 +45,21 @@ class LockedCardDetectionTest {
     }
 
     @Test
-    void aCardWithoutALabelIsFoundForAPersonToDecide() {
-        assertEquals("CREDIT_CARD_NUMBER=4111 1111 1111 1111@0.75", found("Posted 4111 1111 1111 1111 on 10/02"));
-        assertEquals("CREDIT_CARD_NUMBER=3782 822463 10005@0.75", found("Posted 3782 822463 10005"));
+    void aCardWithoutALabelIsCovered() {
+        // Task 0103 (owner's rule; was "for a person at 0.75" in 0099): covered, with or without a label or grouping.
+        assertEquals("CREDIT_CARD_NUMBER=4111 1111 1111 1111@0.9", found("Posted 4111 1111 1111 1111 on 10/02"));
+        assertEquals("CREDIT_CARD_NUMBER=3782 822463 10005@0.9", found("Posted 3782 822463 10005"));
+        assertEquals("CREDIT_CARD_NUMBER=4111111111111111@0.9", found("Posted 4111111111111111"));
     }
 
     @Test
     void numbersThatAreNoCardAreLeftAlone() {
+        // Task 0103: a valid card number the document calls something else is held for a person, never dropped.
         for (String text : List.of("Contract Number: 4111111111111111", "Ref 4111111111111111",
-                "Contract number 4111 1111 1111 1111", "Account 1234 5678 9012 3456",
+                "Contract number 4111 1111 1111 1111")) {
+            assertTrue(found(text).matches("CREDIT_CARD_NUMBER=[0-9 ]+@0.75"), text);
+        }
+        for (String text : List.of("Account 1234 5678 9012 3456",
                 "Order 12-3456 shipped 3 boxes; invoice 512 34 88", "Tracking 9400 1000 0000 0000 0000 00",
                 "Card on file ending 1111")) {
             assertFalse(found(text).contains("CREDIT_CARD_NUMBER"), text);
@@ -61,8 +68,9 @@ class LockedCardDetectionTest {
 
     @Test
     void anSsnLabelAfterItsValueStillLosesToABusinessLabelBeforeIt() {
-        assertEquals("", found("Form Number 412-55-7531 is not a Social Security Number"));
-        assertEquals("", found("Reference number 412-55-7531 (SSN on file)"));
+        // Task 0103: an SSN-shaped value the document calls something else is held for a person, not dropped.
+        assertEquals("SSN=412-55-7531@0.7", found("Form Number 412-55-7531 is not a Social Security Number"));
+        assertEquals("SSN=412-55-7531@0.7", found("Reference number 412-55-7531 (SSN on file)"));
         assertEquals("SSN=412-55-7531@0.95", found("SSN 412-55-7531 Account 4820193746"));
     }
 

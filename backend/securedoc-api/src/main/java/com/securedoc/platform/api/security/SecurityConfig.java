@@ -4,7 +4,11 @@ import tools.jackson.databind.ObjectMapper;
 import com.documentplatform.identity.IdentityClaimConfig;
 import com.documentplatform.identity.spring.OidcJwtIdentityNormalizer;
 import com.documentplatform.identity.spring.RequiredAudienceValidator;
+import com.documentplatform.licensing.LicenceBuild;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -49,6 +53,17 @@ public class SecurityConfig {
             }
             return accepted;
         }
+    }
+
+    /**
+     * Hardening: LOCAL mode only in development builds. Made whatever the mode, so no spelling of the setting passes it by;
+     * it runs after every bean is made (so a refused licence is told first) and before anything is served.
+     */
+    @Bean
+    static SmartInitializingSingleton localModeOnlyInDevelopmentBuilds(ObjectProvider<SecurityProperties> properties,
+                                                                      Environment environment,
+                                                                      ObjectProvider<LicenceBuild> build) {
+        return () -> DevelopmentBuildOnly.refuseLocalModeOutsideDevelopment(properties.getObject(), environment, build);
     }
 
     @Bean

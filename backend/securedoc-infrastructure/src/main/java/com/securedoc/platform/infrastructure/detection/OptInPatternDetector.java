@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 final class OptInPatternDetector {
 
     static final String DETECTOR_NAME = "local-pattern-kinds";
-    static final String DETECTOR_VERSION = "1.2.0"; // 1.1.0: task 0047 (ITIN or SSN label, driver context); 1.2.0: task 0069 (US state licence formats)
+    static final String DETECTOR_VERSION = "1.3.0"; // 1.3.0: task 0103 (any wording, no label, split, damaged); 1.1.0: task 0047 (ITIN or SSN label, driver context); 1.2.0: task 0069 (US state licence formats)
 
     static final String ROUTING = "BANK_ROUTING_NUMBER";
     static final String ACCOUNT = "BANK_ACCOUNT_NUMBER";
@@ -47,15 +47,21 @@ final class OptInPatternDetector {
 
     // ---------------------------------------------------------------- labels
 
+    // Task 0103: old, short and Spanish wordings too ("Bnk Rte", "Acct.", "Fed. Employer No.", "Numero de cuenta").
     private static final Pattern ROUTING_LABEL = Pattern.compile(
-            "(?i)(?<![a-z])(?:rout(?:ing|1ng|lng|mg|in9)|aba|rtn|r/t|transit\\s+(?:number|no\\.?|#))(?![a-z])");
+            "(?i)(?<![a-z])(?:rout(?:ing|1ng|lng|mg|in9)|aba|rtn|r/t|transit\\s+(?:number|no\\.?|#)|(?:bnk|bank)\\.?\\s*rte|"
+                    + "rte|n[uú]mero\\s+de\\s+ruta|ruta(?:\\s+bancaria)?)(?![a-z])");
     private static final Pattern ACCOUNT_LABEL = Pattern.compile(
-            "(?i)(?<![a-z])(?:account|acc[o0]unt|acct|acc't|a/c|acc(?=\\.?\\s*(?:no\\b|#|number)))(?![a-z])");
+            "(?i)(?<![a-z])(?:account|acc[o0]unt|acct|acc't|a/c|acc(?=\\.?\\s*(?:no\\b|#|number))|cuenta|"
+                    + "checking|savings|chk|sav(?=\\.?\\s*(?:no\\b|#|acct)))(?![a-z])");
     private static final Pattern ITIN_LABEL = Pattern.compile(
-            "(?i)(?<![a-z])(?:itin|individual\\s+taxpayer\\s+identification(?:\\s+number)?)(?![a-z])");
+            "(?i)(?<![a-z])(?:itin|individual\\s+taxpayer\\s+identification(?:\\s+number)?|"
+                    + "indiv(?:idual|\\.)?\\s+taxpayer\\s+id(?:\\.|entification)?(?:\\s+(?:number|no\\.?))?)(?![a-z])");
     private static final Pattern EIN_LABEL = Pattern.compile(
             "(?i)(?<![a-z])(?:e\\.?i\\.?n\\.?|f\\.?e\\.?i\\.?n\\.?|employer\\s+identification(?:\\s+number)?|"
                     + "federal\\s+(?:tax|employer)\\s+id(?:entification)?(?:\\s+number)?|federal\\s+id(?:\\s+number)?|"
+                    + "fed(?:eral|\\.)?\\s*(?:employer|emp\\.?)\\s*(?:no\\.?|id|number|#)|employer\\s+id|"
+                    + "(?:n[uú]mero\\s+de\\s+)?identificaci[oó]n\\s+patronal|"
                     + "tax\\s+id(?:entification)?(?:\\s+number)?|t\\.?i\\.?n\\.?)(?![a-z])");
     /**
      * Task 0047, item 4: a driver's licence label names the driver ("driver's license/licence", "DL", "D.L.", or the
@@ -65,6 +71,7 @@ final class OptInPatternDetector {
     private static final Pattern DRIVERS_LICENSE_LABEL = Pattern.compile(
             "(?i)(?<![a-z])(?:dri[vy][eo]r[\u2019']?s?[\\s-]*(?:licen[cs]e|lic\\.?)|driving\\s+licen[cs]e|"
                     + "(?:operator|chauffeur)[\u2019']?s?\\s+licen[cs]e|d\\.?l\\.?(?:\\s*(?:n[o0]\\.?|#|number))?|"
+                    + "drv\\.?\\s*lic\\.?|licencia\\s+(?:de\\s+)?(?:conducir|manejo)|lic\\.?\\s+de\\s+conducir|"
                     + "dmv\\s*(?:number|n[o0]\\.?|#))(?![a-z])");
     /** "License number", "licence no.", "license #": a driver's licence only with {@link #DRIVER_CONTEXT} near it. */
     private static final Pattern GENERIC_LICENSE_LABEL = Pattern.compile(
@@ -75,7 +82,8 @@ final class OptInPatternDetector {
     private static final Pattern ITIN_OR_SSN_LABEL = Pattern.compile(
             "(?i)(?<![a-z])(?:itin\\s*(?:or|/|&|and)\\s*(?:ssn|social\\s+security(?:\\s+number)?)|"
                     + "(?:ssn|social\\s+security(?:\\s+number)?)\\s*(?:or|/|&|and)\\s*itin)(?![a-z])");
-    private static final Pattern PASSPORT_LABEL = Pattern.compile("(?i)(?<![a-z])passport(?![a-z])");
+    private static final Pattern PASSPORT_LABEL = Pattern.compile(
+            "(?i)(?<![a-z])(?:passport|pasaporte|pp\\.?\\s*(?:no\\.?|#|number)|pass\\.?\\s*no\\.?)(?![a-z])");
 
     private static final Pattern SSN_LABEL = Pattern.compile("(?i)(?<![a-z])(?:ssn|social\\s+security)(?![a-z])");
     private static final Pattern CARD_LABEL = Pattern.compile(
@@ -156,7 +164,188 @@ final class OptInPatternDetector {
         detectDriversLicenses(text, pageNumber, found);
         detectLabelled(text, pageNumber, PASSPORT_VALUE, PASSPORT, PASSPORT_LABEL,
                 OptInPatternDetector::plausiblePassport, found);
+        // Task 0103: what the labels did not find.
+        detectSplitOrDamaged(text, pageNumber, found);
+        detectUnlabelled(text, pageNumber, found, results);
         results.addAll(found);
+    }
+
+    // ---------------------------------------------------------------- task 0103: found by what a value is
+
+    /** A label further away than its own line or the line above, or earlier in a sentence: covered. */
+    private static final double NEAR_LABEL = 0.80;
+    /** The value's shape and validity, and no label of another kind owns it: a person decides. */
+    private static final double SHAPE_ONLY = 0.70;
+    /** A label with a split or damaged value after it: a person decides. */
+    private static final double DAMAGED = 0.60;
+
+    /** Valid first two digits of a routing number (Federal Reserve districts, thrift and electronic ranges). */
+    static boolean routingPrefix(String digits) {
+        int two = Integer.parseInt(digits.substring(0, 2));
+        return two <= 12 || (two >= 21 && two <= 32) || (two >= 61 && two <= 72) || two == 80;
+    }
+
+    private record Kind(String kind, Pattern label, Pattern value, Predicate<String> valid) {
+    }
+
+    private static final Pattern UNLABELLED_ACCOUNT = Pattern.compile("(?<![\\w$.,/\\-:(])(\\d{8,17})(?![\\w/%)]|[.,]\\d|-\\d)");
+    private static final Pattern UNLABELLED_ID = Pattern.compile("(?<![\\w-])([A-Z]{1,2}\\d{6,9})(?![\\w-])");
+    private static final Pattern DASHED_EIN = Pattern.compile("(?<![\\w-])(\\d{2})-(\\d{7})(?![\\w-])");
+
+    private static final List<Kind> SPLIT_KINDS = List.of(
+            new Kind(ROUTING, ROUTING_LABEL, null, v -> v.matches("\\d{9}") && isAbaValid(v)),
+            new Kind(ACCOUNT, ACCOUNT_LABEL, null, v -> v.matches("\\d{6,17}")),
+            new Kind(ITIN, ITIN_LABEL, null, v -> v.matches("9\\d{8}") && isItinShaped(v.substring(0, 3) + "-"
+                    + v.substring(3, 5) + "-" + v.substring(5))),
+            new Kind(EIN, EIN_LABEL, null, v -> v.matches("\\d{9}") && isValidEinPrefix(Integer.parseInt(v.substring(0, 2)))),
+            new Kind(DRIVERS_LICENSE, DRIVERS_LICENSE_LABEL, null, v -> v.length() >= 5 && plausibleLicense(v)),
+            new Kind(PASSPORT, PASSPORT_LABEL, null, v -> plausiblePassport(v)));
+
+    /**
+     * A label, then the value split over two lines ("Routing number: 0210" / "00021"), or with OCR's letters for digits
+     * ("O21OOOO21"): when the joined, corrected value is valid for the label's kind, each part is held for a person.
+     */
+    private void detectSplitOrDamaged(String text, int pageNumber, List<DetectedEntity> found) {
+        for (Kind kind : SPLIT_KINDS) {
+            Matcher label = kind.label().matcher(text);
+            while (label.find()) {
+                int lineEnd = text.indexOf('\n', label.end());
+                if (lineEnd < 0) lineEnd = text.length();
+                Matcher value = Pattern.compile("[\\s:#.\\-()=]*(?:(?i:number|no|num|#|is)[\\s:#.\\-()=]*)*"
+                        + "([A-Za-z0-9|](?:[A-Za-z0-9|\\-]|(?<=\\d) (?=\\d)){0,20})").matcher(text);
+                value.region(label.end(), lineEnd);
+                if (!value.lookingAt()) continue;
+                int start = value.start(1);
+                int end = value.end(1);
+                String first = value.group(1).trim();
+                String corrected = corrected(first.replaceAll("[\\s-]", ""));
+                if (overlaps(found, start, end) && corrected != null && kind.valid().test(corrected)) continue;
+                if (corrected != null && kind.valid().test(corrected) && !first.equals(corrected)
+                        && !first.replaceAll("[\\s-]", "").equals(corrected)) {
+                    add(found, kind.kind(), pageNumber, start, end, DAMAGED);
+                    continue;
+                }
+                // Split: the next line starts with the rest.
+                if (lineEnd >= text.length()) continue;
+                int nextEnd = text.indexOf('\n', lineEnd + 1);
+                if (nextEnd < 0) nextEnd = text.length();
+                Matcher rest = Pattern.compile("[ \\t]*([A-Za-z0-9][A-Za-z0-9\\- ]{0,16}[A-Za-z0-9]|[A-Za-z0-9])")
+                        .matcher(text);
+                rest.region(lineEnd + 1, nextEnd);
+                if (!rest.lookingAt()) continue;
+                String joined = (first + rest.group(1).trim()).replaceAll("[\\s-]", "");
+                String fixed = corrected(joined);
+                if (fixed == null || !kind.valid().test(fixed) || kind.valid().test(corrected == null ? "" : corrected)) continue;
+                add(found, kind.kind(), pageNumber, start, end, DAMAGED);
+                add(found, kind.kind(), pageNumber, rest.start(1), rest.end(1), DAMAGED);
+            }
+        }
+    }
+
+    /** OCR's letters for digits in a digit field, after a leading letter run (a licence's or passport's letters). */
+    private static String corrected(String token) {
+        int lead = 0;
+        while (lead < token.length() && lead < 2 && Character.isUpperCase(token.charAt(lead))
+                && "OISB".indexOf(token.charAt(lead)) < 0) lead++;
+        MappedDigits mapped = mapMisreads(token.substring(lead).replace('|', 'l'));
+        return mapped == null ? null : token.substring(0, lead) + mapped.digits();
+    }
+
+    /**
+     * Values with their kind's shape and validity that no label found. A label of the kind before them within the
+     * label window (a sentence, a far header): covered. No label at all: a person. A label of another kind nearer:
+     * the document says it is something else, so nothing.
+     */
+    private void detectUnlabelled(String text, int pageNumber, List<DetectedEntity> found, List<DetectedEntity> others) {
+        // Routing: 9 digits, the ABA check digit and a valid first two digits.
+        Matcher nine = NINE_DIGIT_LIKE.matcher(text);
+        while (nine.find()) {
+            String token = nine.group(1);
+            if (!token.matches("\\d{9}") || !isAbaValid(token) || !routingPrefix(token)) continue;
+            hold(text, pageNumber, nine.start(1), nine.end(1), token, ROUTING, ROUTING_LABEL, found, others);
+        }
+        Matcher itin = ITIN_VALUE.matcher(text);
+        while (itin.find()) {
+            if (!isItinShaped(itin.group()) || itin.group(2).isEmpty()) continue;
+            hold(text, pageNumber, itin.start(), itin.end(), itin.group(), ITIN, ITIN_LABEL, found, others);
+        }
+        Matcher ein = DASHED_EIN.matcher(text);
+        while (ein.find()) {
+            if (!isValidEinPrefix(Integer.parseInt(ein.group(1)))) continue;
+            hold(text, pageNumber, ein.start(), ein.end(), ein.group(), EIN, EIN_LABEL, found, others);
+        }
+        Matcher account = UNLABELLED_ACCOUNT.matcher(text);
+        while (account.find()) {
+            String value = account.group(1);
+            if (isAbaValid(value) && value.length() == 9) continue;
+            if (value.length() == 8 && plausibleCompactDate(value)) continue;
+            if (value.length() >= 13 && isLuhnValid(value)) continue; // a card's, found as a card
+            if (isAmount(text, account.start(1), account.end(1)) || partOfGroupedNumber(text, account.start(1), account.end(1))) continue;
+            hold(text, pageNumber, account.start(1), account.end(1), value, ACCOUNT, ACCOUNT_LABEL, found, others);
+        }
+        Matcher id = UNLABELLED_ID.matcher(text);
+        while (id.find()) {
+            String value = id.group(1);
+            if (plausibleLicense(value)) {
+                hold(text, pageNumber, id.start(1), id.end(1), value, DRIVERS_LICENSE, DRIVERS_LICENSE_LABEL, found, others);
+            }
+            if (plausiblePassport(value) && value.length() >= 8) {
+                holdAlso(text, pageNumber, id.start(1), id.end(1), value, PASSPORT, PASSPORT_LABEL, found, others);
+            }
+        }
+    }
+
+    private void hold(String text, int pageNumber, int start, int end, String value, String kind, Pattern ownLabel,
+                      List<DetectedEntity> found, List<DetectedEntity> others) {
+        if (overlaps(found, start, end) || overlaps(others, pageNumber, start, end)) return;
+        double confidence = confidenceWithoutBinding(text, start, value, kind, ownLabel);
+        if (confidence > 0) add(found, kind, pageNumber, start, end, confidence);
+    }
+
+    /** The second kind at the same place (a letter and digits can be a licence or a passport). */
+    private void holdAlso(String text, int pageNumber, int start, int end, String value, String kind, Pattern ownLabel,
+                          List<DetectedEntity> found, List<DetectedEntity> others) {
+        if (overlaps(others, pageNumber, start, end)) return;
+        if (found.stream().anyMatch(e -> e.entityType().equals(kind) && e.startOffset() < end && start < e.endOffset())) return;
+        double confidence = confidenceWithoutBinding(text, start, value, kind, ownLabel);
+        if (confidence <= 0) return;
+        found.add(new DetectedEntity(kind, pageNumber, start, end, confidence, DETECTOR_NAME, DETECTOR_VERSION));
+    }
+
+    /** NEAR_LABEL, SHAPE_ONLY, or 0 when a label of another kind owns the value. */
+    private double confidenceWithoutBinding(String text, int start, String value, String kind, Pattern ownLabel) {
+        if (namedBefore(text, start)) return 0;
+        String owner = nearestOwner(text, start, value);
+        if (owner == null) return SHAPE_ONLY;
+        boolean own = owner.equals(kind) || (kind.equals(PASSPORT) && owner.equals(DRIVERS_LICENSE))
+                || (kind.equals(DRIVERS_LICENSE) && owner.equals(PASSPORT));
+        if (!own) return 0;
+        // A check digit or a shape no other number has, with its label near: covered. Account, licence and passport
+        // numbers look like any other number: a person decides.
+        return kind.equals(ROUTING) || kind.equals(ITIN) || kind.equals(EIN) ? NEAR_LABEL : SHAPE_ONLY;
+    }
+
+    /** What the document calls the value right before it ("Batch", "Part", "Reference", "Business license"). */
+    private static final Pattern NAMED_AS_OTHER = Pattern.compile(
+            "(?i)(?<![a-z])(?:reference|ref|order|invoice|loan|policy|claim|case|member|tracking|contract|batch|part|lot|"
+                    + "serial|ticket|confirmation|item|sku|model|plate|licen[cs]e|permit|totals?|quantity|qty|zip|po|"
+                    + "transaction|receipt|employee|student|patient|customer|application|file)"
+                    + "\\.?\\s*(?:number|no\\.?|#|id|num)?[\\s:#.]*$");
+
+    /** On the value's line right before it, or, when the value starts its line, at the end of the line above. */
+    private static boolean namedBefore(String text, int start) {
+        int lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+        String before = text.substring(lineStart, start);
+        if (before.isBlank() && lineStart > 0) {
+            int above = text.lastIndexOf('\n', Math.max(0, lineStart - 2)) + 1;
+            before = text.substring(above, lineStart - 1);
+        }
+        return NAMED_AS_OTHER.matcher(before).find();
+    }
+
+    private static boolean overlaps(List<DetectedEntity> others, int pageNumber, int start, int end) {
+        return others.stream().anyMatch(e -> e.pageNumber() == pageNumber
+                && !e.entityType().equals("PHONE_NUMBER") && !e.entityType().equals("EMAIL_ADDRESS") && e.startOffset() < end && start < e.endOffset());
     }
 
     private void detectRoutingNumbers(String text, int pageNumber, List<DetectedEntity> found) {

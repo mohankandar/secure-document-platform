@@ -51,11 +51,55 @@ public class CheckDelivered {
                 for (String kind : kinds(read.getValue())) where.add(kind + "(" + read.getKey() + ")");
             }
             if (!where.isEmpty()) leaks++;
+            String extra = overRedaction(file, text + "\n" + ocr);
             System.out.println((where.isEmpty() ? "CLEAN " : "LEAK  ") + Path.of(file).getFileName()
-                    + (where.isEmpty() ? "" : " " + where));
+                    + (where.isEmpty() ? "" : " " + where) + extra);
         }
         System.out.println(leaks == 0 ? "ALL CLEAN" : leaks + " WITH A VALUE");
         System.exit(leaks == 0 ? 0 : 1);
+    }
+
+    /**
+     * Task 0103 (both directions): the words of the original's own text that the delivered file no longer has, not
+     * counting words that hold a digit (the values, and what OCR reads differently). A count only, never a word. Pages
+     * that were pictures have no text of their own and are not counted.
+     */
+    static String overRedaction(String delivered, String deliveredText) throws Exception {
+        String name = Path.of(delivered).getFileName().toString().replaceAll("(-\\d+)?\\.pdf$", ".pdf");
+        for (String dir : System.getProperty("originals", "").split(File.pathSeparator)) {
+            if (dir.isBlank()) continue;
+            File original = new File(dir, name);
+            if (!original.isFile()) continue;
+            String text;
+            try (PDDocument doc = Loader.loadPDF(original)) {
+                text = new PDFTextStripper().getText(doc);
+            }
+            Set<String> kept = new LinkedHashSet<>();
+            for (String w : deliveredText.split("\\s+")) kept.add(w.replaceAll("[^0-9A-Za-z]", "").toLowerCase());
+            Set<String> values = new LinkedHashSet<>(List.of("123", "742"));
+            VALUES.values().forEach(v -> v.forEach(x -> values.add(x.replaceAll("[^0-9]", ""))));
+            int words = 0;
+            int lost = 0;
+            int numbers = 0;
+            int numbersLost = 0;
+            for (String w : text.split("\\s+")) {
+                String c = w.replaceAll("[^0-9A-Za-z]", "").toLowerCase();
+                if (c.length() < 2) continue;
+                if (c.chars().anyMatch(Character::isDigit)) {
+                    // A number that is no protected value of the default kinds must stay readable too.
+                    String digits = c.replaceAll("[^0-9]", "");
+                    if (values.stream().anyMatch(v -> v.contains(digits) || digits.contains(v))) continue;
+                    numbers++;
+                    if (!kept.contains(c)) numbersLost++;
+                    continue;
+                }
+                words++;
+                if (!kept.contains(c)) lost++;
+            }
+            return " | not in the delivered file: words " + lost + " of " + words + ", other numbers " + numbersLost
+                    + " of " + numbers;
+        }
+        return "";
     }
 
     static Set<String> kinds(String text) {

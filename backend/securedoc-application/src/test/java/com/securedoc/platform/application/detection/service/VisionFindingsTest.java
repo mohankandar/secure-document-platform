@@ -174,6 +174,31 @@ class VisionFindingsTest {
         assertFalse(RedactionCatalog.kinds().contains(EntityType.UNREAD_PAGE));
     }
 
+    /**
+     * Task 0103 (owner's run 2, long-60 pages 23 and 32): the SSN of a handwritten note was found and the date of birth
+     * next to it was not. One value of a person's group without the other sends the page to a person.
+     */
+    @Test
+    void aVisionPageWithAnSsnAndNoDateOfBirthGoesToAPerson() {
+        Set<EntityType> both = EnumSet.of(EntityType.SSN, EntityType.DATE_OF_BIRTH);
+        Candidate ssn = vision(EntityType.SSN, box(0.1, 0.2, 0.27, 0.03));
+        Candidate dob = vision(EntityType.DATE_OF_BIRTH, box(0.1, 0.29, 0.25, 0.03));
+
+        Candidate held = VisionFindings.groupIncomplete(1, List.of(), List.of(ssn), both, VISION);
+        assertEquals(EntityType.UNREAD_PAGE, held.type());
+        assertEquals(1, held.location().pageNumber());
+        assertFalse(held.location().hasBoundingBox(), "a page for a person, never redacted or delivered by itself");
+        assertEquals("GROUP_INCOMPLETE", held.source().version());
+
+        assertNull(VisionFindings.groupIncomplete(1, List.of(), List.of(ssn, dob), both, VISION), "the group is whole");
+        assertNull(VisionFindings.groupIncomplete(1, List.of(text(EntityType.DATE_OF_BIRTH, box(0.1, 0.29, 0.25, 0.03),
+                0.9)), List.of(ssn), both, VISION), "the text path found the date");
+        assertNull(VisionFindings.groupIncomplete(1, List.of(), List.of(), both, VISION), "nothing of the group");
+        assertNull(VisionFindings.groupIncomplete(1, List.of(), List.of(ssn), EnumSet.of(EntityType.SSN), VISION),
+                "the entity does not redact dates of birth");
+        assertNull(VisionFindings.groupIncomplete(2, List.of(), List.of(ssn), both, VISION), "another page");
+    }
+
     private static TenantRedactionPolicy policy(EntityType first, EntityType... more) {
         return new TenantRedactionPolicy(TenantId.generate(), EnumSet.of(first, more), 0.8, ReviewMode.UNCERTAIN_ONLY,
                 true, Instant.now());

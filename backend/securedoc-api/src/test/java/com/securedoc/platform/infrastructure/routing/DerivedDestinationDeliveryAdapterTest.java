@@ -22,6 +22,52 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class DerivedDestinationDeliveryAdapterTest {
+    /** Hardening: secret references limited to approved names; a saved one that is refused does not run and sends nothing. */
+    @Test
+    void aSavedDestinationWithAnUnapprovedSecretNameDoesNotRunAndSendsNothing() throws Exception {
+        TenantId entity = TenantId.generate();
+        String value = "value-that-must-never-show-0109";
+        String approved = com.securedoc.platform.api.notifications.AppSecretResolver.entityPrefix(entity) + "DEST_KEY";
+        java.util.List<String> looked = new java.util.ArrayList<>();
+        var resolver = new com.securedoc.platform.api.notifications.AppSecretResolver(name -> {
+            looked.add(name);
+            return value;
+        }, "");
+        var secrets = new com.securedoc.platform.infrastructure.secrets.IntegrationSecrets(
+                com.securedoc.platform.api.notifications.AppSecretResolver::entityRef, resolver);
+        HttpClient client = mock(HttpClient.class);
+        var adapter = new DerivedDestinationDeliveryAdapter(JsonMapper.builderWithJackson2Defaults().build(), client, true, secrets);
+        for (String reference : new String[] {"env:PATH", "sys:java.home", "env:" + approved.replace(
+                entity.value().toString().replace("-", "").toUpperCase(java.util.Locale.ROOT), "0".repeat(32))}) {
+            TechnicalDependencyException refused = assertThrows(TechnicalDependencyException.class,
+                    () -> adapter.deliver(securedConnection(entity, reference), request()), reference);
+            assertEquals(com.securedoc.platform.domain.error.LvErrorCode.DLV_005, refused.lvCode());
+            assertFalse(refused.retryable());
+            assertFalse(refused.getMessage().contains(reference) || refused.getMessage().contains(value), refused.getMessage());
+        }
+        verify(client, never()).send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class));
+        assertTrue(looked.isEmpty(), "a refused name is never looked up");
+
+        @SuppressWarnings("unchecked") HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("{\"receiptId\":\"receipt-1\"}");
+        HttpRequest[] sent = new HttpRequest[1];
+        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(call -> {
+            sent[0] = call.getArgument(0);
+            return response;
+        });
+        adapter.deliver(securedConnection(entity, "env:" + approved), request());
+        assertEquals(java.util.Optional.of(value), sent[0].headers().firstValue("X-API-Key"), "an approved name still works");
+    }
+
+    private IntegrationConnection securedConnection(TenantId entity, String reference) {
+        return IntegrationConnection.create(entity, "HTTP", null,
+                IntegrationPurpose.DERIVED_DOCUMENT_DELIVERY, IntegrationDirection.OUTBOUND,
+                IntegrationProviderType.HTTP_API, IntegrationAuthenticationType.API_KEY, null,
+                "https://example.test/derived", null, reference, 3, 0, 24, 10, 10_000_000L, 100,
+                IntegrationAcknowledgementMode.DESTINATION_RECEIPT, true, Instant.now());
+    }
+
     @Test
     void httpDeliveryRequiresDurableReceipt() throws Exception {
         HttpClient client = mock(HttpClient.class);

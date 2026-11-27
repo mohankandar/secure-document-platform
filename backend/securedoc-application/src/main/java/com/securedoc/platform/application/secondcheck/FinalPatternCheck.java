@@ -58,6 +58,47 @@ public final class FinalPatternCheck {
         this.patterns = Objects.requireNonNull(patterns);
     }
 
+    /** Task 0103: null where vision is not wired. */
+    private com.securedoc.platform.application.port.out.PageRouteRepository routes;
+    private com.securedoc.platform.application.port.out.PageImagePort images;
+    private com.securedoc.platform.application.port.out.VisionModelPort vision;
+
+    /**
+     * Task 0103 (owner's run 2): the pages that were a picture in the original (read by OCR or by the vision model)
+     * are also read by the vision model in the finished file, when the entity's vision switch is on. OCR can misread
+     * handwriting, so the pattern search alone can't see what is left there.
+     */
+    public FinalPatternCheck withVision(com.securedoc.platform.application.port.out.PageRouteRepository pageRoutes,
+                                        com.securedoc.platform.application.port.out.PageImagePort pageImages,
+                                        com.securedoc.platform.application.port.out.VisionModelPort model) {
+        this.routes = Objects.requireNonNull(pageRoutes);
+        this.images = Objects.requireNonNull(pageImages);
+        this.vision = Objects.requireNonNull(model);
+        return this;
+    }
+
+    /** What the vision model still sees on the finished page; UNREAD when its answer can't be used or it can't be asked. */
+    private Set<String> readFinishedPage(int page, String text, TenantRedactionPolicy policy, SecondCheck.Finished finished,
+                                         List<RedactionTarget> targets, List<Finding> dismissed) {
+        try {
+            return SecondCheck.readImage(images, vision, page, text, policy, finished, targets, dismissed,
+                    new LinkedHashSet<>());
+        } catch (RuntimeException notAsked) {
+            if (Thread.currentThread().isInterrupted()) throw notAsked;
+            // The model could not be asked: the page is not delivered on the text search alone.
+            return Set.of(SecondCheck.UNREAD_CODE);
+        }
+    }
+
+    /** The pages that were pictures in the original: routed to vision, or read by OCR for routing. */
+    private Set<Integer> picturePages(TenantId tenantId, DocumentId documentId, TenantRedactionPolicy policy) {
+        if (vision == null || !policy.vision().enabled()) return Set.of();
+        return routes.findByDocument(tenantId, documentId).stream()
+                .filter(r -> r.vision() || r.ocrConfidence() != null)
+                .map(com.securedoc.platform.domain.vision.PageRoute::page)
+                .collect(Collectors.toCollection(java.util.TreeSet::new));
+    }
+
     /** @param pagesToCheck one per page, unlocated, with its kinds; never a value */
     public record Result(int pagesChecked, int pagesSkipped, List<Finding> pagesToCheck) {
         public String auditDetail() {
@@ -128,13 +169,26 @@ public final class FinalPatternCheck {
             if (box.isPresent() && keptByAPerson(dismissed, hit.pageNumber(), type, box.get())) continue;
             hits.computeIfAbsent(hit.pageNumber(), p -> new LinkedHashSet<>()).add(CODES.get(type));
         }
+        int visionPages = 0;
+        for (int page : picturePages(tenantId, documentId, policy)) {
+            TextExtractionPort.PageText read = byNumber.get(page);
+            if (read == null) continue; // checked by a person before, or not in the file
+            visionPages++;
+            // The model now and then gives an answer that can't be used (seen on handwritten pages); asked once more.
+            Set<String> seen = readFinishedPage(page, read.text(), policy, finished, targets, dismissed);
+            if (seen.equals(Set.of(SecondCheck.UNREAD_CODE))) {
+                seen = readFinishedPage(page, read.text(), policy, finished, targets, dismissed);
+            }
+            if (!seen.isEmpty()) hits.computeIfAbsent(page, p -> new LinkedHashSet<>()).addAll(seen);
+        }
         List<Finding> toCheck = new ArrayList<>();
         hits.forEach((page, kinds) -> toCheck.add(Finding.create(tenantId, documentId, EntityType.UNREAD_PAGE,
                 FindingLocation.unlocated(page), Confidence.of(0.0), new DetectorSource(SOURCE, inOrder(kinds)),
                 FindingOrigin.of(DetectionPath.PAGE_CHECK, List.of()))));
         // Counts only.
-        log.info("FINAL_CHECK_COMPLETED document={} pages={} skipped={} pagesToCheck={} durationMs={}", documentId,
-                byNumber.size(), skipped, toCheck.size(), (System.nanoTime() - started) / 1_000_000L);
+        log.info("FINAL_CHECK_COMPLETED document={} pages={} skipped={} visionPages={} pagesToCheck={} durationMs={}",
+                documentId, byNumber.size(), skipped, visionPages, toCheck.size(),
+                (System.nanoTime() - started) / 1_000_000L);
         return new Result(byNumber.size(), skipped, List.copyOf(toCheck));
     }
 
@@ -161,6 +215,9 @@ public final class FinalPatternCheck {
 
     private static String inOrder(Set<String> found) {
         List<String> ordered = new ArrayList<>(new LinkedHashSet<>(CODES.values()));
+        // Task 0103: what the vision model can name beyond the patterns, and a page it could not read.
+        ordered.add("FACE");
+        ordered.add(SecondCheck.UNREAD_CODE);
         ordered.retainAll(found);
         return String.join(",", ordered);
     }
