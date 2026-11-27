@@ -17,6 +17,12 @@ public interface CaseBatchStore {
     /** Every document version the case holds or held (also one whose original is purged), as recognition compares them. */
     List<DocumentVersionRecognition.Known> knownVersions(TenantId tenantId, PackageId packageId);
 
+    /**
+     * The open case of a contract: the newest case on this case-field record that is not rejected, not cancelled and not
+     * erased. Empty when there is none: the arrival makes a new case.
+     */
+    java.util.Optional<PackageId> openCaseFor(TenantId tenantId, UUID businessRecordId);
+
     /** Opens the case's next batch and gives it; the first batch of a case is number 1. */
     Batch openBatch(TenantId tenantId, PackageId packageId, String source, Instant receivedAt);
 

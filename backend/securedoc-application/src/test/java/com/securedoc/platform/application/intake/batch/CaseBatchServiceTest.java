@@ -31,6 +31,7 @@ class CaseBatchServiceTest {
             return List.of(new Known(docA, docA, 1, CaseBatchService.sha256("contract v1".getBytes(StandardCharsets.UTF_8)),
                     11, CaseBatchService.nameHash("contract.pdf"), null, null, null));
         }
+        @Override public java.util.Optional<PackageId> openCaseFor(TenantId t, UUID record) { return java.util.Optional.empty(); }
         @Override public Batch openBatch(TenantId t, PackageId p, String source, Instant at) { return new Batch(UUID.randomUUID(), 2); }
         @Override public void recordFile(TenantId t, PackageId p, UUID batchId, ReceivedFile file) { recorded.add(file); }
         @Override public void setVersion(TenantId t, UUID d, UUID b, Result r, String pdf, String xmp, String src) { }

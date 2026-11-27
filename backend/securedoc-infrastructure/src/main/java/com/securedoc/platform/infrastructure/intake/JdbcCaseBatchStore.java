@@ -44,6 +44,20 @@ public class JdbcCaseBatchStore implements CaseBatchStore {
     }
 
     @Override
+    public java.util.Optional<PackageId> openCaseFor(TenantId tenantId, UUID businessRecordId) {
+        if (businessRecordId == null) return java.util.Optional.empty();
+        List<UUID> ids = jdbc.queryForList("""
+                select p.id from document_packages p
+                left join package_lifecycles l on l.package_id = p.id
+                where p.tenant_id = :tenant and p.business_record_id = :record
+                  and p.status not in ('REJECTED', 'CANCELLED') and l.purged_at is null
+                order by p.created_at desc, p.id
+                limit 1
+                """, new MapSqlParameterSource("tenant", tenantId.value()).addValue("record", businessRecordId), UUID.class);
+        return ids.stream().findFirst().map(PackageId::of);
+    }
+
+    @Override
     public Batch openBatch(TenantId tenantId, PackageId packageId, String source, Instant receivedAt) {
         for (int attempt = 0; ; attempt++) {
             UUID id = UUID.randomUUID();
