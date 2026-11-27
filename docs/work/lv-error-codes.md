@@ -108,6 +108,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-PRC-008 | Processing stopped after repeated failures | Processing failed 3 times, so it stopped. | Stopped | IT Admin | — | 346, 347 |
 | LV-PRC-009 | Document already being processed | Another process is working on this document. | Stopped | Nobody | — | 360 |
 | LV-PRC-010 | Form type can't be read | The document is a form made for one PDF viewer (XFA), which LexaVault can't read. It was not processed. | Stopped | Processor | — | task 0053 |
+| LV-PRC-011 | Processing stopped: nothing was planned | A document waited for redaction with no next step planned, so the case stopped. Nothing was delivered. | Stopped | IT Admin | — | task 0112 |
 
 ### AI: AI model (001–019)
 
@@ -239,7 +240,7 @@ Inventory row numbers (`#n`) show where each code comes from.
 | LV-SYS-014 | Erase log not available | LexaVault can't use its erase log, so nothing is erased and no work is taken. | System | IT Admin | 503 | 0060 |
 | LV-SYS-015 | Request too large | The request's data (not a file) is larger than LexaVault takes, so it was not read. | Refused | Source system, IT Admin | 413 | 0055 |
 
-**Totals:** INT 42 · SCN 21 · PRC 10 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **144 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064; LV-SYS-010 to 014 by task 0060; LV-SCN-022 and LV-CFG-012 to 015 by task 0061.)*
+**Totals:** INT 42 · SCN 21 · PRC 11 · AI 8 · RED 5 · REV 9 · DLV 15 · AUT 10 · LIC 4 · CFG 11 · SYS 9 = **145 codes** (2 reserved: LV-DLV-009, LV-DLV-015; LV-INT-027 is in use since task 0067). *(The first version said 124; the tables then held 129. Eight codes were added on 2026-11-21 after task 0025; LV-INT-028 and LV-INT-029 on 2026-11-22 by task 0038, for the case limits; LV-RED-005 by task 0044; LV-PRC-010 by task 0053; LV-PRC-011 by task 0112; LV-INT-036 and 037 by task 0063; LV-AI-008 by task 0064; LV-SYS-010 to 014 by task 0060; LV-SCN-022 and LV-CFG-012 to 015 by task 0061.)*
 
 ## 3. Rows with no code on purpose
 

@@ -716,7 +716,22 @@ public final class StagedProcessingService {
         } catch (RuntimeException failure) {
             throw new StepFailure(ProcessingStage.REDACTION, failure);
         }
-        return null;
+        // Task 0112: the final check (or the second check) held pages for a person and nothing was kept. Said in the
+        // job, so the gate runs it again once a person has checked them (the final check then runs again too).
+        // A run that kept nothing and asked no one is not held: the gate stops its case (LV-PRC-011), never a loop.
+        if (reload(job, document).status() != DocumentStatus.REDACTING) return null;
+        return inline.hasDetectedFindings(document.id(), job.tenantId()) ? HELD_FOR_A_PERSON : "KEPT_NOTHING";
+    }
+
+    /** Task 0112: the REDACT job's detail when its run kept nothing and sent pages to a person. */
+    static final String HELD_FOR_A_PERSON = "HELD_FOR_A_PERSON";
+
+    /**
+     * Task 0112: a finished REDACT run that waited for a person. Once nothing is left for a person, the gate runs it
+     * again. Each run again needs a person's decision in between, so it can never loop by itself.
+     */
+    private static boolean waitedForAPerson(PipelineJob job) {
+        return HELD_FOR_A_PERSON.equals(job.lastDetail()) || "WAITING_FOR_REVIEW".equals(job.lastDetail());
     }
 
     /** As inline: a Support incident for the stage, and the document FAILED with a safe reason. */
@@ -815,14 +830,39 @@ public final class StagedProcessingService {
                 .filter(document -> document.status() == DocumentStatus.REDACTING).toList();
         if (!waitingForRedaction.isEmpty()) {
             int cycle = lifecycleService.nextExportCycle(packageId, tenantId);
+            List<PipelineJob> existing = jobs.findByTenantIdAndPackageId(tenantId, packageId);
+            List<Document> nothingPlanned = new ArrayList<>();
             for (Document document : waitingForRedaction) {
-                queue(PipelineStage.REDACT, tenantId, packageId, document.id(), cycle, correlationId, false);
+                PipelineJob done = pkg.status() != PackageStatus.PROCESSING ? null : existing.stream()
+                        .filter(job -> job.stage() == PipelineStage.REDACT && document.id().equals(job.documentId())
+                                && job.exportCycle() == cycle && job.status() == PipelineJobStatus.DONE)
+                        .findFirst().orElse(null);
+                if (done == null) {
+                    queue(PipelineStage.REDACT, tenantId, packageId, document.id(), cycle, correlationId, false);
+                } else if (waitedForAPerson(done)) {
+                    // Task 0112: the person has checked what the last run held; it runs again, final check included.
+                    queue(PipelineStage.REDACT, tenantId, packageId, document.id(), cycle, correlationId, true);
+                } else {
+                    nothingPlanned.add(document);
+                }
             }
+            if (!nothingPlanned.isEmpty()) stopNothingPlanned(tenantId, packageId, nothingPlanned, correlationId);
             return;
         }
         // Every document is redacted: Ready for export (final approval if the entity asks for it), as inline. The case
         // always ends in an export job, whatever export-mode says now: nothing is sent in this transaction (task 0052).
         inline.completeStagedPackageIfReady(packageId, tenantId, correlationId);
+    }
+
+    /**
+     * Task 0112: a case in PROCESSING whose document waits for redaction, its redaction run finished, and nothing is
+     * planned for it. It would never move again, so it stops (shown as Stopped) with LV-PRC-011 and an error in the log.
+     */
+    private void stopNothingPlanned(TenantId tenantId, PackageId packageId, List<Document> documents,
+                                    CorrelationId correlationId) {
+        log.error("PIPELINE_CASE_NOTHING_PLANNED package={} documents={} lvCode={}", packageId, documents.size(),
+                LvErrorCode.PRC_011.code());
+        recoveryService.stopNothingPlanned(packageId, tenantId, correlationId);
     }
 
     // ------------------------------------------------------------------------------------------- expired claims
