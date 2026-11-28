@@ -193,7 +193,11 @@ async function startApp(label) {
   for (const end = Date.now() + 180_000; Date.now() < end; await sleep(1000)) {
     if (app.exitCode !== null) throw new Error(`the app stopped at start (exit ${app.exitCode}); log: ${tail(log)}`);
     try {
-      if ((await fetch(`${base}/actuator/health/readiness`)).status === 200) return;
+      // Live and answering. Not readiness: with the demo sign-in file its login-system check is down (a placeholder
+      // login system); the sign-in with a throwaway login system is the proof's open part (0114 report).
+      if ((await fetch(`${base}/actuator/health/liveness`)).status === 200
+          && (await fetch(`${base}/api/v1/packages`, { headers: { 'X-Tenant-Id': ENTITY, 'X-Actor-Id': ACTOR,
+            'X-Actor-Roles': 'DOCUMENT_PROCESSOR' } })).status === 200) return;
     } catch { /* not up yet */ }
   }
   throw new Error(`the app was not ready within 180 s; log: ${tail(log)}`);
