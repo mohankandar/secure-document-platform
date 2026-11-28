@@ -1,0 +1,174 @@
+name: Install proof
+
+# Task 0114: LexaVault installed from its package alone, as docs/install/INSTALL.md says, on a clean Linux and a clean
+# Windows runner (model: platform-core's install proof). Runs on every release tag, once a month, by hand, and on a pull
+# request that changes the proof, the package or the install guides. A failed release or monthly run opens (or comments on)
+# one issue with the label install-proof. The package is a development build until the production licence keys exist
+# (0114 question 1), so it installs with the demo licence.
+on:
+  push:
+    tags: ['v*']
+  schedule:
+    - cron: '23 5 4 * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/install-proof.yml'
+      - 'test-tools/install-proof/**'
+      - 'scripts/package/**'
+      - 'docs/install/**'
+      - 'backend/securedoc-api/src/main/java/com/securedoc/install/**'
+
+permissions: {}
+
+concurrency:
+  group: install-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/securedoc-ui/package-lock.json
+      - name: Maven settings for GitHub Packages (platform-core)
+        env:
+          PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
+        run: |
+          if [ -z "$PLATFORM_CORE_READ_TOKEN" ]; then echo "Secret PLATFORM_CORE_READ_TOKEN is not set." >&2; exit 1; fi
+          mkdir -p ~/.m2
+          # The token stays in the environment; settings.xml only names the variable.
+          cat > ~/.m2/settings.xml <<'EOF'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+            <servers>
+              <server>
+                <id>github-platform-core</id>
+                <username>mohankandar</username>
+                <password>${env.PLATFORM_CORE_READ_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+      - name: Build (development build; tests run in the ci workflow)
+        working-directory: backend
+        env:
+          PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
+        run: mvn -B -Pdev-build install -DskipTests
+      - name: Build the screens
+        working-directory: frontend/securedoc-ui
+        run: npm ci && npm run build
+      - name: The package
+        run: bash scripts/package/make-package.sh "$RUNNER_TEMP/lexavault-package"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lexavault-package
+          path: ${{ runner.temp }}/lexavault-package
+          retention-days: 14
+
+  proof:
+    name: install proof (${{ matrix.os }})
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: install-proof-ci-only
+    steps:
+      # Only the proof itself comes from the repository; what it installs is the package.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: test-tools/install-proof
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lexavault-package
+          path: ${{ runner.temp }}/lexavault-package
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      # The runner images carry PostgreSQL as the operating system's own package or installer.
+      - name: PostgreSQL (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -qc "alter user postgres password '$PGPASSWORD'"
+      - name: PostgreSQL (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $s = Get-Service 'postgresql*' | Select-Object -First 1
+          Set-Service $s.Name -StartupType Manual
+          Start-Service $s.Name
+          "$env:PGBIN" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: Windows PostgreSQL password
+        if: runner.os == 'Windows'
+        run: PGPASSWORD=root psql -qc "alter user postgres password '$PGPASSWORD'"
+      - name: The install guide, step by step
+        run: node test-tools/install-proof/install-proof.mjs "$RUNNER_TEMP/lexavault-package"
+
+  issue:
+    name: failure issue
+    needs: [package, proof]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.package.result != 'success' || needs.proof.result != 'success') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    concurrency: install-proof-issue
+    steps:
+      - name: Open the issue, or comment on the open one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -o pipefail
+          repo="repos/${GITHUB_REPOSITORY}"
+          failed="$(gh api --paginate "${repo}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs" --jq '
+            .jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out")
+            | "- job: \(.name), step: \([.steps[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out") | .name] | first // "none named")"')" || failed=""
+          {
+            echo "The LexaVault install proof failed (trigger: ${GITHUB_EVENT_NAME}, ref: ${GITHUB_REF_NAME}, attempt ${GITHUB_RUN_ATTEMPT})."
+            echo
+            echo "${failed:-"- failed job and step: see the run"}"
+            echo
+            echo "Run: ${RUN_URL}"
+          } > "${RUNNER_TEMP}/body.md"
+          gh api "${repo}/labels/install-proof" --silent \
+            || gh api "${repo}/labels" -f name=install-proof -f color=d73a4a -f description="The install proof failed" --silent
+          open="$(gh api "${repo}/issues?state=open&labels=install-proof&per_page=100&sort=created&direction=asc" \
+            --jq '[.[] | select(has("pull_request") | not) | .number] | first // empty')"
+          if [ -n "${open}" ]; then
+            gh api "${repo}/issues/${open}/comments" -F body=@"${RUNNER_TEMP}/body.md" --jq .html_url
+          else
+            gh api "${repo}/issues" -f title="Install proof failed" -f 'labels[]=install-proof' \
+              -F body=@"${RUNNER_TEMP}/body.md" --jq .html_url
+          fi
