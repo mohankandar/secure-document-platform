@@ -176,6 +176,28 @@ class CaseFieldSettingsTest {
         assertEquals(LvErrorCode.CFG_001, refused(primary(null), field(null, "Other", false, "NUMERIC")));
     }
 
+    /** Task 0113 (U10): a dropdown value may have a display name; the code stays what is stored, in the admin's order. */
+    @Test
+    void dropdownValuesCanHaveNamesAndTheCodesStay() {
+        java.util.Set<String> codes = new java.util.LinkedHashSet<>(List.of("000", "001", "002"));
+        java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+        names.put("000", "Club");
+        names.put("001", " Walmart ");
+        Input region = new Input(null, "Region", false, false, true, false, true, "DROPDOWN", null, null, null, "PRESERVE",
+                false, codes, null, null, false, false, null, null, null, names);
+        FieldDefinition saved = save(primary(null), region).stream()
+                .filter(d -> d.spec().label().equals("Region")).findFirst().orElseThrow();
+        assertEquals(List.of("000", "001", "002"), saved.spec().options(), "the codes, in order");
+        assertEquals("Club", saved.spec().displayName("000"));
+        assertEquals("Walmart", saved.spec().displayName("001"));
+        assertEquals("002", saved.spec().displayName("002"), "a value without a name shows its code");
+
+        java.util.Map<String, String> twice = Map.of("000", "Club", "001", "Club");
+        assertEquals(LvErrorCode.CFG_001, refused(primary(null), new Input(null, "Other region", false, false, true,
+                false, true, "DROPDOWN", null, null, null, "PRESERVE", false, codes, null, null, false, false, null, null, null,
+                twice)), "a name used twice in one field is refused");
+    }
+
     @Test
     void aFieldOfAnotherEntityIsRefused() {
         UUID other = settings.save(TenantId.generate(), admin, List.of(primary(null)), () -> redacted).getFirst().id();

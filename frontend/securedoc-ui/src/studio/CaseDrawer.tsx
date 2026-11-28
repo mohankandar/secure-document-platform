@@ -7,8 +7,9 @@ import type { FocusedReviewItem, PackageDetail, PackageLifecycleSummary, Technic
 import {
   CAP, LIFECYCLE, SOURCE_LABEL, caseActions, caseTitle, formatBytes, humanize, isReprocessing,
   errorMessage, relativeTime, stageLabel, stageOf, statusInfo, useCaseExport, useDerivedDeliveries, usePackage,
-  usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
+  useIdentifierDefinitions, usePackageLifecycle, useTechnicalException, type CaseAction, type CaseActionKind, type StageKey,
 } from './data';
+import { valueName } from './identity';
 import {
   CASE_EXPORT_WORDS, DESTINATION_CODE_LABEL, destinationCodeOf, exportStateOf, internalReasonOf, exportStatusLabel, isExporting, jobForState, pausedBody, pausedHeading, refusedHeading,
   refusedWhen, type ExportJobView, type ExportState, type ExportTimings,
@@ -33,6 +34,8 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
 }) {
   const { data: pkg, error, mutate } = usePackage(packageId);
   const canDesk = caps.includes(CAP.desk);
+  // Task 0113 (U10): a dropdown value shows its display name (the definitions need DOCUMENT_INTAKE).
+  const { data: definitions } = useIdentifierDefinitions(caps.includes(CAP.intake));
   const manualEligibility = useSWR(pkg?.status === 'FAILED' && caps.includes(CAP.review)
     ? ['manual-fallback-eligibility', packageId] : null,
     () => apiClient.getManualFallbackEligibility(packageId),
@@ -159,7 +162,7 @@ export default function CaseDrawer({ packageId, caps, openFindings, onClose }: {
               {pkg.businessIdentifiers.map((id) => (
                 <div key={id.key}>
                   <dt>{id.label}</dt>
-                  <dd className={id.primary ? 'cf-mono' : undefined}>{id.value || '—'}</dd>
+                  <dd className={id.primary ? 'cf-mono' : undefined}>{id.value ? shownValue(definitions, id.key, id.value) : '—'}</dd>
                 </div>
               ))}
               <div><dt>Source</dt><dd>{SOURCE_LABEL[pkg.packageType] ?? humanize(pkg.packageType)}</dd></div>
@@ -558,4 +561,11 @@ function relativeFuture(value: string) {
   if (hours < 1) return 'within the hour';
   if (hours < 48) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
   return `in ${Math.round(hours / 24)} days`;
+}
+
+/** Task 0113 (U10): the value's display name where its field gives one, else the value as stored. */
+function shownValue(definitions: { key: string; allowedValueNames?: Record<string, string> }[] | undefined, key: string,
+                    value: string): string {
+  const definition = definitions?.find((d) => d.key === key);
+  return definition ? valueName(definition, value) : value;
 }
