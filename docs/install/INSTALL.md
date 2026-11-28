@@ -57,30 +57,57 @@ java -cp lexavault-setup.jar -Dloader.main=com.documentplatform.setup.SetupComma
 Run `plan` first and read it. Setup writes `platform-tenant.properties`; keep it beside LexaVault (or name it in
 `PLATFORM_TENANT_CONFIG`). Details: `SETUP.md`, `LICENSING.md`, `KEY_SERVICE.md` (customer keys).
 
+Then activate and name the first entity, with LexaVault's settings of step 4 in the environment (it starts, does this and
+ends; running it again with the same values changes nothing):
+
+```
+java -jar lexavault.jar --activate-first-entity --entity-slot=ENT-... --entity-name="Your entity's name"   --server.port=0 --server.address=127.0.0.1
+```
+
+It answers `ACTIVATED` (or `UNCHANGED`). Exit codes: 0 done, 2 refused (the code says why), 1 failed. Details: `SETUP.md`.
+
 ## 4. Start LexaVault with the everyday account
 
 ```
 SPRING_DATASOURCE_URL=jdbc:postgresql://dbhost:5432/lexavault
 SPRING_DATASOURCE_USERNAME=lexavault_app
 SPRING_DATASOURCE_PASSWORD=...
+SECUREDOC_SECURITY_OIDC_ISSUER_URI=https://login.example/realms/yours   # your login system, as in the sign-in file
+SECUREDOC_SECURITY_OIDC_AUDIENCE=...                                    # the sign-in file's apiAudience
+SECUREDOC_SECURITY_OIDC_PROVIDER_ID=...                                 # the sign-in file's providerId
+SECUREDOC_STORAGE_LOCAL_ROOT_PATH=/var/lib/lexavault/storage            # where LexaVault keeps its work files
 java -jar lexavault.jar
 ```
 
-It is ready when `/actuator/health/readiness` answers 200. Its own checks: `MONITORING.md`. Where files go, the delivery and
-the sign-in: `DESTINATIONS.md`, `IDENTITY_MIGRATION.md`, `NOTIFICATIONS.md`.
+The issuer, audience and provider ID must be the sign-in file's: a token of any other login system is refused. It is ready
+when `/actuator/health` answers 200 (UP: every required check is up, the login system and the database too;
+`/actuator/health/readiness` exists only on Kubernetes). Its own checks: `MONITORING.md`. Where files go, the delivery
+(`SECUREDOC_DELIVERY_TYPE`, for a folder `local` with `SECUREDOC_DELIVERY_LOCAL_OUTPUT_PATH`), the AI server and the
+sign-in: `DESTINATIONS.md`, `IDENTITY_MIGRATION.md`, `NOTIFICATIONS.md`, `application.yml`.
 
 ## 5. Check it
 
-Create a case with one document and follow it to its delivery (Cases, or the API). Then stop LexaVault and start it again:
-the case is still there.
+Sign in as a person of the entity, create a case with one document and follow it to its delivery (Cases, or the API),
+deciding what the review shows. Then stop LexaVault and start it again: the case is still there.
 
 ## 6. Backup and restore
 
 Back up the whole database (`pg_dump -Fc`), and restore it to a test copy once to know it works (`backup-and-restore.md`).
 The schema step's `status` reads the copy.
 
+## 7. Upgrade
+
+1. Back up the database (step 6).
+2. Stop every LexaVault server.
+3. Run the new build's schema step with the owner account, as in step 2 (`apply --runtime-user lexavault_app`).
+4. Start the new build as in step 4, and check it (step 5): the cases from before are there.
+
+Setup and the first entity are not run again.
+
 ## The install proof
 
-The proof runs these steps with the demo files and a stand-in AI server (the runners have no GPU), and checks that no secret
-is in the package. It runs on every release tag and once a month; a failure opens an issue labelled `install-proof`. Steps it
-does not prove yet are in `docs/work/0114-report.md`.
+The proof runs these steps with the demo files, a throwaway login system (Keycloak from its own zip, with one person and one
+administrator) and a stand-in AI server (the runners have no GPU), and checks that no secret is in the package. Its case has
+one finding the AI is not sure of, decided in review. It upgrades from the previous build: the previous package installed in
+a database of its own with a case, then steps 7.2 to 7.4 with this package. It runs on every release tag and once a month; a
+failure opens an issue labelled `install-proof`. Results and guide fixes: `docs/work/0114-report.md`.

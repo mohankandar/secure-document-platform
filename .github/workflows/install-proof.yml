@@ -89,15 +89,81 @@ jobs:
           path: ${{ runner.temp }}/lexavault-package
           retention-days: 14
 
+  # The upgrade step's starting point: the previous build, packaged by this build's package script. A release upgrades from
+  # the previous release tag; a monthly or manual run from the latest release tag before it (or the commit before, while
+  # there is none); a pull request from its base.
+  previous:
+    name: previous package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: The previous build's commit
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then prev="$BASE_SHA"
+          else prev="$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_SHA}^" 2>/dev/null || git rev-parse "${GITHUB_SHA}^1")"; fi
+          echo "Previous build: $prev ($(git rev-parse --short=12 "$prev"))"
+          git worktree add --detach "$RUNNER_TEMP/previous" "$prev"
+          mkdir -p "$RUNNER_TEMP/previous/scripts/package"
+          cp scripts/package/make-package.sh "$RUNNER_TEMP/previous/scripts/package/make-package.sh"
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Maven settings for GitHub Packages (platform-core)
+        env:
+          PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
+        run: |
+          if [ -z "$PLATFORM_CORE_READ_TOKEN" ]; then echo "Secret PLATFORM_CORE_READ_TOKEN is not set." >&2; exit 1; fi
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<'EOF2'
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+            <servers>
+              <server>
+                <id>github-platform-core</id>
+                <username>mohankandar</username>
+                <password>${env.PLATFORM_CORE_READ_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF2
+      - name: Build the previous build
+        env:
+          PLATFORM_CORE_READ_TOKEN: ${{ secrets.PLATFORM_CORE_READ_TOKEN }}
+          BUILD_KIND: ${{ inputs.build || 'development' }}
+        run: |
+          cd "$RUNNER_TEMP/previous/backend"
+          if [ "$BUILD_KIND" = production ]; then mvn -B install -DskipTests; else mvn -B -Pdev-build install -DskipTests; fi
+          cd ../frontend/securedoc-ui && npm ci && npm run build
+      - name: The previous package
+        run: bash "$RUNNER_TEMP/previous/scripts/package/make-package.sh" "$RUNNER_TEMP/lexavault-previous-package"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lexavault-previous-package
+          path: ${{ runner.temp }}/lexavault-previous-package
+          retention-days: 14
+
   proof:
     name: install proof (${{ matrix.os }})
-    needs: package
+    needs: [package, previous]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     defaults:
@@ -108,6 +174,10 @@ jobs:
       PGPORT: '5432'
       PGUSER: postgres
       PGPASSWORD: install-proof-ci-only
+      LEXAVAULT_BUILD_KIND: ${{ inputs.build || 'development' }}
+      KC_VERSION: 26.8.2
+      # GitHub's digest of the release's keycloak-26.8.2.zip.
+      KC_SHA256: 321ffee62ec28fab18fe885d8cd62cc814edce72a35cd062dc81b504c1a406b3
     steps:
       # Only the proof itself comes from the repository; what it installs is the package.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,6 +188,10 @@ jobs:
         with:
           name: lexavault-package
           path: ${{ runner.temp }}/lexavault-package
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: lexavault-previous-package
+          path: ${{ runner.temp }}/lexavault-previous-package
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
@@ -125,6 +199,20 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+      # The throwaway login system: Keycloak's own zip (no containers on the Windows runner), checked by its SHA-256.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/keycloak-zip
+          key: keycloak-${{ env.KC_VERSION }}-zip
+      - name: Keycloak (throwaway login system)
+        run: |
+          tmp="$RUNNER_TEMP"; if command -v cygpath >/dev/null; then tmp="$(cygpath -u "$RUNNER_TEMP")"; fi
+          zip="$tmp/keycloak-zip/keycloak-${KC_VERSION}.zip"
+          mkdir -p "$tmp/keycloak-zip"
+          [ -f "$zip" ] || curl -fsSL --retry 3 -o "$zip" "https://github.com/keycloak/keycloak/releases/download/${KC_VERSION}/keycloak-${KC_VERSION}.zip"
+          echo "${KC_SHA256}  $zip" | sha256sum -c -
+          if [ "$RUNNER_OS" = Windows ]; then 7z x -y -bd -o"$RUNNER_TEMP" "$(cygpath -w "$zip")" > /dev/null; else unzip -q "$zip" -d "$tmp"; fi
+          echo "KEYCLOAK_HOME=$RUNNER_TEMP/keycloak-${KC_VERSION}" >> "$GITHUB_ENV"
       # The install guide's "What you need": Tesseract OCR.
       - name: Tesseract OCR (Linux)
         if: runner.os == 'Linux'
@@ -153,12 +241,12 @@ jobs:
         if: runner.os == 'Windows'
         run: PGPASSWORD=root psql -qc "alter user postgres password '$PGPASSWORD'"
       - name: The install guide, step by step
-        run: node test-tools/install-proof/install-proof.mjs "$RUNNER_TEMP/lexavault-package"
+        run: node test-tools/install-proof/install-proof.mjs "$RUNNER_TEMP/lexavault-package" "$RUNNER_TEMP/lexavault-previous-package"
 
   issue:
     name: failure issue
-    needs: [package, proof]
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.package.result != 'success' || needs.proof.result != 'success') }}
+    needs: [package, previous, proof]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.package.result != 'success' || needs.previous.result != 'success' || needs.proof.result != 'success') }}
     runs-on: ubuntu-24.04
     permissions:
       issues: write
