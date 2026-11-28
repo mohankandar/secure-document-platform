@@ -44,7 +44,7 @@ public class DestinationDeliveryConfig {
     @ConditionalOnProperty(name = "securedoc.delivery.type", havingValue = "document-store")
     ProfileDestinationDeliveryAdapter destinationDelivery(IntegrationConnectionRepository connections,
                                                           DestinationProfiles profiles, CallEngine engine,
-                                                          @Value("${securedoc.processing.export-mode:inline}") String exportMode) {
+                                                          @Value("${securedoc.processing.export-mode:}") String exportMode) {
         return new ProfileDestinationDeliveryAdapter(connections, profiles, engine,
                 ExportMode.parse(exportMode) == ExportMode.JOB, Clock.systemUTC());
     }

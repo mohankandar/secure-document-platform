@@ -544,8 +544,11 @@ class NotificationsAppPostgresTest {
         jdbc.update("insert into pipeline_jobs (id, tenant_id, stage, package_id, export_cycle, priority, status, attempts,"
                 + " next_attempt_at, claim_token, last_lv_code, created_at, updated_at) values (?, ?, 'EXPORT', ?, 1, 'NORMAL',"
                 + " 'NEEDS_IT', 1, now(), 0, 'LV-DLV-005', now(), now())", job, A, stuck);
-        jdbc.update("insert into export_reachability_alerts (tenant_id, state, raised_at, updated_at) values (?, 'RAISED', now(), now())"
-                + " on conflict (tenant_id) do update set state = 'RAISED'", A);
+        // Task 0121: the export workers always run now; "just checked" keeps their probe (every 5 minutes) from clearing
+        // this hand-made alert during the test (the local folder answers).
+        jdbc.update("insert into export_reachability_alerts (tenant_id, state, raised_at, last_check_at, updated_at)"
+                + " values (?, 'RAISED', now(), now(), now())"
+                + " on conflict (tenant_id) do update set state = 'RAISED', last_check_at = now()", A);
         jdbc.update("update processing_storage_providers set root_path = root_path || '-gone'");
         for (int i = 0; i < 20 && mails(others, 0, "storage not usable").isEmpty(); i++) {
             Thread.sleep(1000);

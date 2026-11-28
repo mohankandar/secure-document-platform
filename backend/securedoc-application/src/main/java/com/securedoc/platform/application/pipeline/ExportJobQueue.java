@@ -46,27 +46,7 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
     }
 
     @Override
-    public boolean jobMode() {
-        return settings.jobMode();
-    }
-
-    @Override
-    public boolean jobHasCase(TenantId tenantId, PackageId packageId, int exportCycle) {
-        return jobs.findByTenantIdAndPackageId(tenantId, packageId).stream()
-                .anyMatch(job -> job.stage() == PipelineStage.EXPORT && (job.status().open()
-                        || (job.exportCycle() == exportCycle && job.status() != PipelineJobStatus.STOPPED)));
-    }
-
-    @Override
-    public boolean splitsGoInline(TenantId tenantId, PackageId packageId, int exportCycle) {
-        return !settings.jobMode() && jobs.findByTenantIdAndPackageId(tenantId, packageId).stream()
-                .noneMatch(job -> job.stage() == PipelineStage.EXPORT && job.exportCycle() == exportCycle
-                        && job.status() != PipelineJobStatus.STOPPED);
-    }
-
-    @Override
     public void queueCaseExport(TenantId tenantId, PackageId packageId, int exportCycle, CorrelationId correlationId) {
-        if (!settings.jobMode() && !jobs.hasStageJobs(tenantId, packageId)) throw exportJobsOff();
         IntegrationConnectionId destination = masterDestination(tenantId);
         queue(PipelineJob.ready(tenantId, PipelineStage.EXPORT, packageId, null, destination, null, exportCycle,
                 clock.instant()), correlationId);
@@ -76,7 +56,6 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
     public void queueSplitExport(TenantId tenantId, PackageId packageId, DocumentId sourceDocumentId,
                                  UUID derivedDeliveryId, IntegrationConnectionId destinationId, int exportCycle,
                                  CorrelationId correlationId) {
-        if (splitsGoInline(tenantId, packageId, exportCycle)) throw exportJobsOff();
         queue(PipelineJob.ready(tenantId, PipelineStage.SPLIT_EXPORT, packageId, sourceDocumentId, destinationId,
                 Objects.requireNonNull(derivedDeliveryId, "derivedDeliveryId"), exportCycle, clock.instant()),
                 correlationId);
@@ -116,7 +95,4 @@ public final class ExportJobQueue implements ExportJobScheduler, SplitExportSche
         }
     }
 
-    private static IllegalStateException exportJobsOff() {
-        return new IllegalStateException("Export jobs are off (securedoc.processing.export-mode=inline)");
-    }
 }

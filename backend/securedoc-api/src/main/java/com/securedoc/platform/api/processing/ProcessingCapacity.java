@@ -88,7 +88,7 @@ public class ProcessingCapacity {
                               @Value("${securedoc.ai.learn.recheck-ms:3600000}") long aiRecheckMs) {
         this.repository = repository;
         this.everyMs = Math.max(500, everyMs);
-        this.staged = staged.staged();
+        this.staged = true; // Task 0121: staged only
         this.visionServer = URI.create(visionBaseUrl.trim());
         setting(environment, PipelineStage.TEXT.name(), "securedoc.processing.stage-jobs.text-workers");
         setting(environment, PipelineStage.FIND.name(), "securedoc.processing.stage-jobs.find-workers");

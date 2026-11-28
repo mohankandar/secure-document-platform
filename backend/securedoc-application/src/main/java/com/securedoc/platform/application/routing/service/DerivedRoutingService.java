@@ -33,7 +33,7 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
     private final IntegrationConnectionRepository connections; private final DocumentRepository documents;
     private final ArtifactRepository artifacts; private final StoragePort storage; private final RoutingMarkerDetectionPort detector;
     private final DerivedPdfBuilderPort pdfBuilder; private final DerivedDeliveryService deliveryService; private final AuditService audit;
-    /** Task 0027: null sends each split document at once; set, it queues a SPLIT_EXPORT job unless the run's splits go inline (task 0052). */
+    /** Task 0027: set, each split document is a SPLIT_EXPORT job (task 0121: always, in the app); null (tests only) sends it at once. */
     private final com.securedoc.platform.application.pipeline.SplitExportScheduler splitExportScheduler;
     public DerivedRoutingService(RoutingRuleRepository rules, DerivedDeliveryRepository deliveries, IntegrationConnectionRepository connections,
                                  DocumentRepository documents, ArtifactRepository artifacts, StoragePort storage,
@@ -65,7 +65,7 @@ public final class DerivedRoutingService implements ProcessDerivedRoutingUseCase
         }
         List<Document> packageDocuments=documents.findByPackageIdAndTenantId(packageId,tenantId);
         // Task 0052: decided once for the run, before anything is built.
-        boolean byJob=splitExportScheduler!=null&&!splitExportScheduler.splitsGoInline(tenantId,packageId,exportCycle);
+        boolean byJob=splitExportScheduler!=null;
         try{
             for(Document document:packageDocuments) processDocumentRecordingFailure(packageId,tenantId,exportCycle,document,active,byJob,correlationId);
         }finally{

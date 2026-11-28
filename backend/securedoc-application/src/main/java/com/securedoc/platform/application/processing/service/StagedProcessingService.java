@@ -16,6 +16,7 @@ import com.securedoc.platform.application.port.in.ExtractDocumentTextUseCase;
 import com.securedoc.platform.application.port.in.RedactDocumentUseCase;
 import com.securedoc.platform.application.port.in.StartDocumentProcessingUseCase;
 import com.securedoc.platform.application.port.in.StartPackageProcessingUseCase;
+import com.securedoc.platform.application.port.in.TriggerPackageProcessingUseCase;
 import com.securedoc.platform.application.port.out.DocumentRepository;
 import com.securedoc.platform.application.port.out.PackageRepository;
 import com.securedoc.platform.application.port.out.PipelineJobRepository;
@@ -94,7 +95,7 @@ import java.util.function.Function;
  * </ul>
  * Every job status change is audited with ids and codes only; no content.
  */
-public final class StagedProcessingService {
+public final class StagedProcessingService implements TriggerPackageProcessingUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(StagedProcessingService.class);
     private static final ActorId SYSTEM_ACTOR = ActorId.of(UUID.fromString("00000000-0000-0000-0000-000000000000"));
@@ -232,16 +233,10 @@ public final class StagedProcessingService {
 
     // ------------------------------------------------------------------------------------------ routing and planning
 
-    /**
-     * True when this trigger belongs to the staged pipeline: a case that already has stage jobs (whatever the setting
-     * now says, so a staged case is never re-run inline), or, with pipeline-mode staged, a case not started yet.
-     * Every other case, including one started inline before the switch, goes on inline (task item 7).
-     */
-    public boolean handles(TriggerPackageProcessingCommand command) {
-        if (jobs.hasStageJobs(command.tenantId(), command.packageId())) return true;
-        if (!settings.staged()) return false;
-        return packageRepository.findByIdAndTenantId(command.packageId(), command.tenantId())
-                .map(pkg -> pkg.status() == PackageStatus.SUBMITTED).orElse(false);
+    /** Task 0121: staged only. Every processing trigger plans the case as jobs. */
+    @Override
+    public void execute(TriggerPackageProcessingCommand command) {
+        plan(command);
     }
 
     /**
@@ -265,6 +260,9 @@ public final class StagedProcessingService {
             case PROCESSING -> {
                 inline.ensureDocumentIntelligenceSnapshot(command);
                 transactions.inNewTransaction(() -> {
+                    // Task 0121: a case an older version was running inline when it stopped has no stage jobs; the
+                    // documents that run left half done start again from the kept original, then it goes on as jobs.
+                    if (!jobs.hasStageJobs(command.tenantId(), command.packageId())) inline.rewindInterruptedDocuments(command);
                     queueMissingJobs(command.tenantId(), command.packageId(), command.correlationId());
                     return null;
                 });

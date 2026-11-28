@@ -22,9 +22,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Task 0027: the export workers, started with {@code securedoc.processing.export-mode=job}. Task
- * 0052: with inline they start only when export jobs are still open (the setting was switched back, or a staged case
- * finished), with the maintenance, and finish those; new cases export inline. Each worker claims the next due export job, renews its claim while it runs, and saves the result (only if its claim
+ * Task 0027: the export workers. Task 0121: export is always a job, so they always start. Each worker claims the next due export job, renews its claim while it runs, and saves the result (only if its claim
  * is still current). One maintenance task puts jobs whose claim ran out back in the queue and probes paused
  * destinations. Task 0067: the number of workers follows the queue ({@link ProcessingCapacity}); without it (tests) it
  * is fixed.
@@ -36,8 +34,6 @@ public class ExportJobWorkers {
     private final ExportJobService service;
     private final long pollIntervalMs;
     private final String nodeId;
-    /** In inline mode, open export jobs are looked for every this many poll intervals. */
-    static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
     private volatile boolean stopped;
     private final ProcessingCapacity capacity;
@@ -73,26 +69,7 @@ public class ExportJobWorkers {
             thread.setDaemon(true);
             return thread;
         });
-        if (!service.settings().jobMode()) {
-            log.info("EXPORT_JOB_WORKERS_OFF exportMode=inline");
-            timers.scheduleWithFixedDelay(this::finishOpenJobs, 0, pollIntervalMs * OPEN_JOBS_CHECK_POLLS,
-                    TimeUnit.MILLISECONDS);
-            return;
-        }
         startWorkers();
-    }
-
-    /** In inline mode: the open export jobs, if any (also ones queued or sent again later), are finished. */
-    private synchronized void finishOpenJobs() {
-        if (!workGate.mayTakeWork()) return;
-        try {
-            if (running || stopped || !service.hasOpenJobs()) return;
-            log.info("EXPORT_JOB_WORKERS_FINISHING exportMode=inline reasonCode=OPEN_EXPORT_JOBS");
-            startWorkers();
-        } catch (RuntimeException failure) {
-            log.warn("EXPORT_JOB_OPEN_CHECK_FAILED type={} code={}", failure.getClass().getSimpleName(),
-                    LvErrorCodes.forPlatformFailure(failure).code());
-        }
     }
 
     private void startWorkers() {

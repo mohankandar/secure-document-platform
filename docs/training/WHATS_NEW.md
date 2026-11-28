@@ -5,7 +5,7 @@ For the owner's own testing. Commit `466906b1`, 2026-11-25. Each line takes a mi
 **Before you start**
 - Top bar with Cases, New case, Review? Good. A menu at the left with "Dashboard" means the frontend was built without `VITE_CASE_FILE_UI_ENABLED=true`.
 - In a local start the account menu has **Test role · local only**. With real sign-in use one user per role. Two people are needed for four eyes and for approval links.
-- Marked **(steps)**: shows only with `SECUREDOC_PROCESSING_PIPELINE_MODE=staged` and `SECUREDOC_PROCESSING_EXPORT_MODE=job`. The default is `inline` for both.
+- Marked **(steps)**: documents are processed in steps (the staged pipeline). Since task 0121 that is the only way, so these always show.
 - More detail: the guides in the [README](README.md).
 
 ## Document Processor

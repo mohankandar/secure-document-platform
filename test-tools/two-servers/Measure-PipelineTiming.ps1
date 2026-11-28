@@ -1,10 +1,10 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-    Task 0048: how long one case with the benchmark's 60-page package takes, inline and staged (numbers only).
+    Task 0048: how long one case with the benchmark's 60-page package takes (numbers only). Task 0121: staged only.
 
 .DESCRIPTION
-    For each mode (inline, then staged): a THROWAWAY Postgres container (lexavault-0048-t-pg, 127.0.0.1:55450), the
+    For each mode (staged; inline was removed in task 0121): a THROWAWAY Postgres container (lexavault-0048-t-pg, 127.0.0.1:55450), the
     install steps, one server (18050) with export-mode job and the given pipeline-mode, the real local AI model
     (Ollama, default http://localhost:11434), one case holding the package, submitted and timed until it is exported
     (COMPLETED). The step times are read from the audit trail (first text read started to last text read done, and so
@@ -22,7 +22,7 @@ param(
     [int] $AppPort = 18050,
     [string] $Ollama = 'http://localhost:11434',
     [string] $Model = 'qwen3.5:9b',
-    [string[]] $Modes = @('inline', 'staged'),
+    [string[]] $Modes = @('staged'),
     [int] $TimeoutSeconds = 1800,
     # The demo entity's auto-redact threshold for the run (throwaway database only). 0 sends every located finding
     # straight to Redact, so the timing covers Redact and Export too; empty keeps the demo policy (some go to Review).
@@ -146,6 +146,14 @@ foreach ($mode in $Modes) {
         Write-Host ("TIMING_0048 mode={0} pages={1} end={2} submitToEnd={3}s text={4}s find={5}s redact={6}s findings={7}" -f `
             $row.mode, $row.pages, $row.endStatus, $row.submitToEndSeconds, $row.textSeconds,
             $row.textDoneToFindDoneSeconds, $row.findDoneToRedactedSeconds, $row.findings)
+        # Task 0121 part 3a: per stage, from pipeline_jobs (numbers only): jobs, wall time from the first job queued to the
+        # last one done, the slowest job and the sum of all jobs (queued to done; the table keeps no claim start, so
+        # waiting and working are not split here).
+        $stages = Invoke-Sql ("select stage || ' jobs=' || count(*) || ' wall=' || round(extract(epoch from (max(updated_at) - min(created_at)))::numeric, 1)" +
+            " || 's slowest=' || round(max(extract(epoch from (updated_at - created_at)))::numeric, 1)" +
+            " || 's sum=' || round(sum(extract(epoch from (updated_at - created_at)))::numeric, 1) || 's'" +
+            " from pipeline_jobs where package_id = '$id' and status = 'DONE' group by stage order by min(created_at)")
+        foreach ($line in ($stages -split "\r?\n")) { if ($line) { Write-Host "TIMING_0121_STAGE $line" } }
     } finally {
         if ($app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
         if ($started) { docker rm -f $Container | Out-Null }

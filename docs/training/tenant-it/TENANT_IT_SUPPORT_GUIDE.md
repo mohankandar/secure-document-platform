@@ -38,7 +38,7 @@ For a large backlog. Switch on **Migration (Bulk)** at the source.
 - Outside the times files stay at the source, and nothing of it starts. **Check now** and **Collect now** still work.
 - You see how many are done, waiting and stopped, the pace and the expected finish.
 - Switching it off asks first (**End migration**): its waiting cases become Low.
-- The times and the half hold only where documents are processed in steps (`SECUREDOC_PROCESSING_PIPELINE_MODE=staged`). A step with one worker does no Bulk work.
+- The times and the half hold for the steps documents are processed in (the staged pipeline, the only one since task 0121). A step with one worker does no Bulk work.
 
 ## 3. Sign-in
 

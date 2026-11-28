@@ -2,21 +2,22 @@ package com.securedoc.platform.application.pipeline;
 
 import java.util.Locale;
 
-/** {@code securedoc.processing.export-mode} (task 0027). */
+/**
+ * {@code securedoc.processing.export-mode} (task 0027). Task 0121 (owner 2026-11-28): export is always an export job,
+ * with retries by code. Export at the end of processing (inline) is removed.
+ */
 public enum ExportMode {
-    /** Today's behaviour: the case is exported at the end of processing, with the in-adapter retries. Default. */
-    INLINE,
-    /** The case is exported by an export job, with retries by code. */
     JOB;
 
-    /** Blank is the default (inline). Any other value is refused: no silent fallback. */
+    /** Empty or {@code job}. Anything else, {@code inline} included, is refused: no silent fallback. */
     public static ExportMode parse(String value) {
-        if (value == null || value.isBlank()) return INLINE;
-        return switch (value.trim().toLowerCase(Locale.ROOT)) {
-            case "inline" -> INLINE;
-            case "job" -> JOB;
-            default -> throw new IllegalArgumentException(
-                    "securedoc.processing.export-mode must be inline or job");
-        };
+        if (value == null || value.isBlank()) return JOB;
+        String given = value.trim().toLowerCase(Locale.ROOT);
+        if (given.equals("job")) return JOB;
+        if (given.equals("inline")) {
+            throw new IllegalArgumentException("securedoc.processing.export-mode=inline was removed (task 0121): "
+                    + "leave it empty or set job");
+        }
+        throw new IllegalArgumentException("securedoc.processing.export-mode must be job (or empty)");
     }
 }

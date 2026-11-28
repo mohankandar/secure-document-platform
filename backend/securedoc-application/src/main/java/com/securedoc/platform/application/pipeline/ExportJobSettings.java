@@ -92,10 +92,6 @@ public record ExportJobSettings(
                 Duration.ofMinutes(2), 4, 8);
     }
 
-    public boolean jobMode() {
-        return mode == ExportMode.JOB;
-    }
-
     /** Tries a single failing case gets before IT: the first one plus one per delay in the schedule. */
     public int scheduledTries() {
         return retrySchedule.size() + 1;

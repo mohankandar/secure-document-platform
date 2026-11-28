@@ -48,7 +48,7 @@ The runs in [0064] and [0080] were made to check quality while other work ran. T
 
 Redaction and export come afterwards. For this package: redaction 1.98 s, or 8.59 s with searchable pages; final check 0.41 or 0.43 s; reading the pages with findings again 3.04 s [0047]. Export to your own system was not measured.
 
-The runs in [0049] without vision used the mode **staged** (`SECUREDOC_PROCESSING_PIPELINE_MODE=staged` with `SECUREDOC_PROCESSING_EXPORT_MODE=job`). The default mode, `inline`, took 46.6 s for the same package [0049]. Growing workers (section 5) need `staged`.
+The runs in [0049] without vision used the staged pipeline, which is the only one since task 0121 (the earlier `inline` mode took 46.6 s for the same package [0049]; it is removed). Nothing has to be set for it.
 
 ## 4. Pages per day (**draft, laptop-measured**)
 

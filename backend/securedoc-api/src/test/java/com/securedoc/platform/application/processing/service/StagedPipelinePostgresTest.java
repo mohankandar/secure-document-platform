@@ -159,7 +159,7 @@ class StagedPipelinePostgresTest {
     private PageBatchSettings batchSettings = PageBatchSettings.DEFAULTS;
     /** Task 0052: one AI request may cover several pages (then Find batches share pages). */
     private boolean severalPagesPerAiRequest = true;
-    private final ExportPackageDocumentsUseCase inlineExport = mock(ExportPackageDocumentsUseCase.class);
+    private final ArtifactRepository artifacts = mock(ArtifactRepository.class);
     /** Task 0052: where a finished case is handed to export; a test may use the real queue instead of the stand-in. */
     private ExportJobScheduler scheduler = exports;
     private final List<String> batchesRun = new CopyOnWriteArrayList<>();
@@ -228,7 +228,6 @@ class StagedPipelinePostgresTest {
         // One queue for the whole class: every test starts with no job left open by an earlier one.
         jdbc.update("UPDATE pipeline_jobs SET status = 'STOPPED', claim_owner = NULL, claim_until = NULL"
                 + " WHERE status NOT IN ('DONE', 'STOPPED')");
-        when(exports.jobMode()).thenReturn(true);
         when(lifecycle.nextExportCycle(any(), any())).thenReturn(1);
         when(lifecycle.requiresFinalApproval(any(), any())).thenReturn(false);
         AuditService audit = new AuditService(audits::add);
@@ -349,6 +348,14 @@ class StagedPipelinePostgresTest {
                 return null;
             }
             if (keepsNothing.remove(d.id())) return null; // task 0112: a run that keeps nothing and asks no one
+            if (noPlaceFor.remove(d.id())) {
+                // Task 0121 (from the inline test it replaces): what the redaction throws for a confirmed finding
+                // without a place.
+                throw new com.securedoc.platform.application.exception.TechnicalDependencyException(
+                        com.securedoc.platform.application.exception.TechnicalDependency.REDACTION,
+                        com.securedoc.platform.application.exception.TechnicalFailureCode.REDACTION_LOCATION_MISSING,
+                        false, "Redaction location could not be determined");
+            }
             d.completeProcessing();
             documents.save(d);
             // As the real redaction: the final check is audited (ids only).
@@ -357,10 +364,8 @@ class StagedPipelinePostgresTest {
             return null;
         };
         TriggerPackageProcessingService inline = new TriggerPackageProcessingService(packages, documents, findings,
-                mock(ArtifactRepository.class), mock(ProcessingLockPort.class), startPackage, startDocument, extract,
-                detect, redact, inlineExport, mock(ProcessDerivedRoutingUseCase.class),
-                mock(SelectiveRetryExecutor.class), lifecycle, mock(DocumentIntelligenceExecutionService.class), audit,
-                incidents, telemetry, scheduler);
+                artifacts, mock(ProcessingLockPort.class), lifecycle, mock(DocumentIntelligenceExecutionService.class),
+                audit, incidents, scheduler);
         recovery = new PackageProcessingRecoveryService(packages, lifecycle, incidents, audit, telemetry);
         StagedProcessingSettings settings = new StagedProcessingSettings(PipelineMode.STAGED, Duration.ofSeconds(30),
                 3, 1, 1, 1, Duration.ofMillis(200));
@@ -476,6 +481,34 @@ class StagedPipelinePostgresTest {
 
     private final java.util.Set<com.securedoc.platform.domain.identity.DocumentId> keepsNothing =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Set<com.securedoc.platform.domain.identity.DocumentId> noPlaceFor =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Task 0121 (replaces UnlocatedFindingCreatesIncidentTest, which ran inline): a redaction stopped by a finding
+     * without a place is a Support incident of the REDACTION step with its code, the document fails, and so does the
+     * case.
+     */
+    @Test
+    void aRedactionStoppedByAFindingWithoutAPlaceIsASupportIncidentWithItsCode() {
+        DocumentPackage pkg = submittedCase(1);
+        service.plan(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        Document document = documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).get(0);
+        noPlaceFor.add(document.id());
+        runAll(PipelineStage.REDACT);
+
+        verify(incidents).recordFailure(eq(pkg.tenantId()), eq(pkg.id()), eq(document.id()),
+                eq(com.securedoc.platform.domain.processing.ProcessingStage.REDACTION),
+                org.mockito.ArgumentMatchers.argThat(e -> e instanceof com.securedoc.platform.application.exception.TechnicalDependencyException t
+                        && t.failureCode() == com.securedoc.platform.application.exception.TechnicalFailureCode.REDACTION_LOCATION_MISSING),
+                any(), eq("Document redaction failed"), any());
+        assertEquals(DocumentStatus.FAILED, documents.findByIdAndTenantId(document.id(), pkg.tenantId()).orElseThrow().status());
+        assertEquals(PackageStatus.FAILED, status(pkg));
+        assertTrue(audits.stream().anyMatch(a -> a.action() == AuditAction.DOCUMENT_PROCESSING_FAILED
+                && a.detail().contains("code=LV-RED-001, detail=REDACTION_LOCATION_MISSING")));
+    }
 
     /** Task 0119: found from CI (intermittent since 0112). */
     @Test
@@ -705,20 +738,73 @@ class StagedPipelinePostgresTest {
                 .forEach(d -> assertEquals(DocumentStatus.UPLOADED, d.status()));
     }
 
-    /** Item 7: a case started inline before the switch stays inline; only new cases (and staged ones) are staged. */
+    /**
+     * Task 0121: staged only. A case an older version was running inline when it stopped (PROCESSING, no stage jobs,
+     * a document left half read) is not lost: the half-done document starts again from the kept original and the case
+     * finishes as jobs.
+     */
     @Test
-    void onlyNewCasesAndStagedCasesAreStaged() {
-        DocumentPackage fresh = submittedCase(1);
-        assertTrue(service.handles(trigger(fresh)), "a case not started yet is staged");
-        DocumentPackage inlineCase = submittedCase(1);
+    void aCaseLeftByAnInlineRunIsRewoundAndFinishesAsJobs() {
+        DocumentPackage pkg = submittedCase(2);
         tx.executeWithoutResult(s -> {
-            DocumentPackage loaded = packages.findByIdAndTenantId(inlineCase.id(), inlineCase.tenantId()).orElseThrow();
+            DocumentPackage loaded = packages.findByIdAndTenantId(pkg.id(), pkg.tenantId()).orElseThrow();
             loaded.startProcessing();
             packages.save(loaded);
+            Document first = documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).get(0);
+            first.startExtraction(); // UPLOADED -> EXTRACTING, as an inline run that stopped while reading it
+            documents.save(first);
         });
-        assertFalse(service.handles(trigger(inlineCase)), "a case in the middle of an inline run finishes inline");
-        service.plan(trigger(fresh));
-        assertTrue(service.handles(trigger(fresh)), "a staged case stays staged");
+        assertEquals(0, jobsOf(pkg).size(), "no stage job: it was an inline run");
+
+        service.execute(trigger(pkg));
+        runAll(PipelineStage.TEXT);
+        runAll(PipelineStage.FIND);
+        runAll(PipelineStage.REDACT);
+
+        documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId())
+                .forEach(d -> assertEquals(DocumentStatus.PROCESSED, d.status()));
+        verify(exports, times(1)).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1), any()); // Ready for export
+        assertTrue(audits.stream().anyMatch(a -> a.action() == AuditAction.PACKAGE_PROCESSING_RECOVERED));
+    }
+
+    /**
+     * Task 0121 addendum: the race behind the intermittent CI failure (0119 fixed it in the gate), repeated in staged
+     * mode with export jobs: three cases of two documents, two workers per stage finishing together, 50 runs. Every case
+     * ends in exactly one export job, none is stopped, and LV-PRC-011 is never recorded.
+     */
+    @Test
+    void fiftyRunsOfTwoDocumentsFinishingTogetherNeverStopAGoodCase() throws Exception {
+        var deliveryPort = mock(com.securedoc.platform.application.port.out.DeliveryPort.class);
+        when(deliveryPort.describe(any())).thenReturn(
+                new com.securedoc.platform.application.port.out.DeliveryPort.DeliveryDescriptor("LOCAL_FOLDER", null, null));
+        scheduler = new com.securedoc.platform.application.pipeline.ExportJobQueue(jobs, deliveryPort,
+                new AuditService(audits::add), com.securedoc.platform.application.pipeline.ExportJobSettings.defaults(
+                com.securedoc.platform.application.pipeline.ExportMode.JOB), java.time.Clock.systemUTC());
+        wire();
+        StagedProcessingService twoEach = serviceWith.apply(new StagedProcessingSettings(PipelineMode.STAGED,
+                Duration.ofSeconds(30), 3, 2, 2, 2, Duration.ofMillis(100)));
+        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(twoEach, "test");
+        workers.start();
+        try {
+            for (int run = 0; run < 50; run++) {
+                List<DocumentPackage> cases = new ArrayList<>();
+                for (int i = 0; i < 3; i++) {
+                    DocumentPackage pkg = submittedCase(2);
+                    twoEach.plan(trigger(pkg));
+                    cases.add(pkg);
+                }
+                long until = System.currentTimeMillis() + 30_000;
+                while (cases.stream().anyMatch(pkg -> count(pkg, PipelineStage.EXPORT) == 0)
+                        && System.currentTimeMillis() < until) Thread.sleep(50);
+                for (DocumentPackage pkg : cases) {
+                    assertEquals(PackageStatus.PROCESSING, status(pkg), "run " + run + ": Ready for export, not stopped");
+                    assertEquals(1, count(pkg, PipelineStage.EXPORT), "run " + run + ": one export job");
+                }
+            }
+        } finally {
+            workers.stop();
+        }
+        org.mockito.Mockito.verify(incidents, org.mockito.Mockito.never()).recordNothingPlanned(any(), any(), any());
     }
 
     // ------------------------------------------------------------------------------- page batches (task 0049)
@@ -865,99 +951,6 @@ class StagedPipelinePostgresTest {
 
     // --------------------------------------------------------------- switching back to inline (task 0049, step 4)
 
-    @Test
-    void switchedBackToInlineMidRunEveryStagedCaseStillFinishesAndNothingRunsTwice() throws Exception {
-        pages = 60;
-        List<DocumentPackage> cases = new ArrayList<>();
-        for (int i = 0; i < 3; i++) {
-            DocumentPackage pkg = submittedCase(2);
-            service.plan(trigger(pkg));
-            cases.add(pkg);
-        }
-        for (int i = 0; i < 5; i++) runOne(PipelineStage.TEXT); // mid-run
-        // One job was running when that server stopped for the switch: its claim has run out.
-        PipelineJob running = service.claimNext(PipelineStage.TEXT, "server-a/stopped").orElseThrow();
-        jdbc.update("UPDATE pipeline_jobs SET claim_until = clock_timestamp() - interval '1 second' WHERE id = ?",
-                running.id());
-        DocumentPackage later = submittedCase(1);
-
-        StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
-                Duration.ofSeconds(30), 3, 2, 2, 2, Duration.ofMillis(100)));
-        assertFalse(inlineService.handles(trigger(later)), "a new case goes inline");
-        cases.forEach(pkg -> assertTrue(inlineService.handles(trigger(pkg)), "a staged case stays staged"));
-        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test");
-        workers.start();
-        try {
-            long until = System.currentTimeMillis() + 60_000;
-            while ((inlineService.hasOpenJobs() || cases.stream().anyMatch(pkg -> documents
-                    .findByPackageIdAndTenantId(pkg.id(), pkg.tenantId()).stream()
-                    .anyMatch(d -> d.status() != DocumentStatus.PROCESSED))) && System.currentTimeMillis() < until) Thread.sleep(100);
-        } finally {
-            workers.stop();
-        }
-        for (DocumentPackage pkg : cases) {
-            for (Document d : documents.findByPackageIdAndTenantId(pkg.id(), pkg.tenantId())) {
-                assertEquals(DocumentStatus.PROCESSED, d.status());
-            }
-            assertTrue(jobsOf(pkg).stream().allMatch(j -> j.status() == PipelineJobStatus.DONE));
-            verify(exports, org.mockito.Mockito.atLeastOnce()).queueCaseExport(eq(pkg.tenantId()), eq(pkg.id()), eq(1),
-                    any());
-        }
-        // 6 documents: 3 TEXT and 4 FIND batches each (60 pages), one gathering per stage, one final check.
-        assertEquals(6 * 3, batchesRun.stream().filter(b -> b.startsWith("TEXT")).count(), "no batch was read twice");
-        assertEquals(6 * 4, batchesRun.stream().filter(b -> b.startsWith("FIND")).count());
-        assertEquals(6 * 2, gathered.size());
-        assertEquals(6, audits.stream().filter(a -> a.action() == AuditAction.DOCUMENT_REDACTION_VERIFIED).count());
-        assertEquals(PackageStatus.SUBMITTED, status(later), "the stage workers do not touch the new case");
-        assertEquals(0, jobsOf(later).size());
-    }
-
-    /** Task 0052: both modes back to inline. A staged case still ends in an export job; its gate sends nothing. */
-    @Test
-    void withExportModeInlineAStagedCaseStillEndsInOneExportJobAndNothingIsSentFromItsGate() throws Exception {
-        var deliveryPort = mock(com.securedoc.platform.application.port.out.DeliveryPort.class);
-        when(deliveryPort.describe(any())).thenReturn(
-                new com.securedoc.platform.application.port.out.DeliveryPort.DeliveryDescriptor("LOCAL_FOLDER", null, null));
-        scheduler = new com.securedoc.platform.application.pipeline.ExportJobQueue(jobs, deliveryPort,
-                new AuditService(audits::add), com.securedoc.platform.application.pipeline.ExportJobSettings.defaults(
-                com.securedoc.platform.application.pipeline.ExportMode.INLINE), java.time.Clock.systemUTC());
-        wire();
-        List<DocumentPackage> cases = new ArrayList<>();
-        for (int i = 0; i < 3; i++) {
-            DocumentPackage pkg = submittedCase(2);
-            service.plan(trigger(pkg));
-            cases.add(pkg);
-        }
-        runOne(PipelineStage.TEXT); // mid-run
-        StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
-                Duration.ofSeconds(30), 3, 2, 2, 2, Duration.ofMillis(100)));
-        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test");
-        workers.start();
-        try {
-            long until = System.currentTimeMillis() + 60_000;
-            while (cases.stream().anyMatch(pkg -> count(pkg, PipelineStage.EXPORT) == 0)
-                    && System.currentTimeMillis() < until) Thread.sleep(100);
-        } finally {
-            workers.stop();
-        }
-        for (DocumentPackage pkg : cases) {
-            assertEquals(PackageStatus.PROCESSING, status(pkg), "Ready for export, as in job mode");
-            // A late trigger (final approval, a person, a second server) runs the gate again: still one job.
-            inlineService.plan(trigger(pkg));
-            PipelineJob export = jobsOf(pkg).stream().filter(j -> j.stage() == PipelineStage.EXPORT)
-                    .reduce((a, b) -> { throw new AssertionError("two export jobs"); }).orElseThrow();
-            assertEquals(PipelineJobStatus.READY, export.status());
-            assertTrue(scheduler.jobHasCase(pkg.tenantId(), pkg.id(), 1));
-        }
-        org.mockito.Mockito.verifyNoInteractions(inlineExport);
-        assertTrue(jobs.hasOpenExportJobs());
-        // A case that is not staged is never queued while export jobs are off.
-        DocumentPackage notStaged = submittedCase(1);
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> scheduler.queueCaseExport(
-                notStaged.tenantId(), notStaged.id(), 1, CorrelationId.generate()));
-        assertEquals(0, jobsOf(notStaged).size());
-    }
-
     /** Task 0052: Find batches share pages only when one AI request may cover several pages. */
     @Test
     void withOnePagePerAiRequestNoPageIsInTwoFindBatches() {
@@ -1071,18 +1064,6 @@ class StagedPipelinePostgresTest {
     private static long missed(DocumentPackage pkg) {
         return jobs.findCasesWaitingForTheirGate(Duration.ofSeconds(30), 1000).stream()
                 .filter(c -> c.packageId().equals(pkg.id())).count();
-    }
-
-    @Test
-    void inInlineModeWithNoStagedJobsNoWorkerStarts() throws Exception {
-        StagedProcessingService inlineService = serviceWith.apply(new StagedProcessingSettings(PipelineMode.INLINE,
-                Duration.ofSeconds(30), 3, 1, 1, 1, Duration.ofMillis(100)));
-        var workers = new com.securedoc.platform.api.processing.StageJobWorkers(inlineService, "test");
-        workers.start();
-        Thread.sleep(500);
-        assertTrue(Thread.getAllStackTraces().keySet().stream().noneMatch(t -> t.isAlive()
-                && t.getName().matches("stage-worker-\\d+")));
-        workers.stop();
     }
 
     // ----------------------------------------------------------------------------------------------- helpers

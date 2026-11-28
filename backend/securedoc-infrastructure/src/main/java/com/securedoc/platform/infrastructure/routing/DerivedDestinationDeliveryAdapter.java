@@ -30,7 +30,7 @@ public class DerivedDestinationDeliveryAdapter implements DerivedDestinationDeli
     /** Task 0027: with export jobs on, one attempt per call; the export job spaces the tries. */
     private final boolean singleAttempt;
     @Autowired
-    public DerivedDestinationDeliveryAdapter(ObjectMapper mapper,@org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-mode:inline}") String exportMode,
+    public DerivedDestinationDeliveryAdapter(ObjectMapper mapper,@org.springframework.beans.factory.annotation.Value("${securedoc.processing.export-mode:}") String exportMode,
                                              com.securedoc.platform.infrastructure.secrets.IntegrationSecrets secrets){
         this(mapper,HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(),
                 com.securedoc.platform.application.pipeline.ExportMode.parse(exportMode)==com.securedoc.platform.application.pipeline.ExportMode.JOB,secrets);

@@ -119,7 +119,7 @@ class BulkNightPostgresTest {
         bulk = new BulkSourceService(bulkSources, entity -> Optional.of(NEW_YORK), new AuditService(r -> { }), clock);
         bulkSources.save(tenant, "archive", BulkWindow.DEFAULT);
         capacity = new ProcessingCapacity(new JdbcCapacityRepository(jdbc), source,
-                StagedProcessingSettings.defaults(PipelineMode.INLINE), new AiRuntimeProperties(), new MockEnvironment()
+                StagedProcessingSettings.defaults(PipelineMode.STAGED), new AiRuntimeProperties(), new MockEnvironment()
                 .withProperty("securedoc.processing.stage-jobs.text-workers", "" + WORKERS)
                 .withProperty("securedoc.processing.stage-jobs.find-workers", "2"),
                 "http://localhost:1", 5000, 512, 120_000, 3_600_000);
@@ -235,7 +235,9 @@ class BulkNightPostgresTest {
         capacity.setMaximums(Map.of("FIND", 1));
         assertEquals(0, capacity.bulkPlaces(PipelineStage.FIND), "the last AI worker is never Bulk's");
         capacity.setMaximums(Map.of("FIND", 5));
-        assertEquals(2, capacity.bulkPlaces(PipelineStage.FIND));
+        // Task 0121: staged only, so the AI server's places count too: one server not measured yet takes 2 at once
+        // (0067), so Find has 2 places whatever its maximum, and Bulk at most 1 of them.
+        assertEquals(1, capacity.bulkPlaces(PipelineStage.FIND));
     }
 
     @Test

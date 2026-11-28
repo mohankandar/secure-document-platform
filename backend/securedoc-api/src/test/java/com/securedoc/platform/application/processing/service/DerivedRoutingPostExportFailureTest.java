@@ -53,14 +53,11 @@ class DerivedRoutingPostExportFailureTest {
         when(export.execute(any())).thenReturn(ExportPackageDocumentsResult.of(pkg.id(), 1, "local-folder", 3));
         doThrow(new IllegalStateException("routing")).when(routing).processPackage(eq(pkg.id()), eq(tenant), eq(3), any());
 
-        TriggerPackageProcessingService service = new TriggerPackageProcessingService(packages, documents, findings,
-                mock(ArtifactRepository.class), mock(ProcessingLockPort.class), mock(StartPackageProcessingUseCase.class),
-                mock(StartDocumentProcessingUseCase.class), mock(ExtractDocumentTextUseCase.class),
-                mock(DetectSensitiveDataUseCase.class), mock(RedactDocumentUseCase.class), export, routing,
-                new SelectiveRetryExecutor(1, Duration.ZERO), lifecycle, mock(DocumentIntelligenceExecutionService.class),
-                mock(AuditService.class), mock(ProcessingIncidentService.class), mock(ProductTelemetryService.class));
-
-        service.execute(TriggerPackageProcessingCommand.of(pkg.id(), tenant, ActorId.generate(), CorrelationId.generate()));
+        // Task 0121: the export is always an export job; its completion (the master export, then derived routing, then
+        // COMPLETED) is MasterExportCompletion, which the EXPORT job runs. Tested here directly.
+        new com.securedoc.platform.application.pipeline.MasterExportCompletion(packages, routing,
+                mock(ProcessingIncidentService.class), mock(AuditService.class))
+                .complete(pkg, tenant, pkg.id(), export.execute(null), 1, CorrelationId.generate());
 
         verify(routing).recordRoutingFailure(eq(pkg.id()), eq(tenant), eq(3), eq("DERIVED_ROUTING_POST_EXPORT_FAILED"), any());
         assertEquals(PackageStatus.COMPLETED, pkg.status());

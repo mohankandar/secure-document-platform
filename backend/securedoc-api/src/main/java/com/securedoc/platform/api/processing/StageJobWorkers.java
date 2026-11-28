@@ -24,10 +24,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Task 0048: the Text, Find and Redact workers of this server, started with
- * {@code securedoc.processing.pipeline-mode=staged}. Task 0049: with inline they start only when staged jobs are still
- * open (the setting was switched back), and finish those; new cases go inline. Task 0052: whatever export-mode says, a
- * staged case ends in export jobs, which the export workers finish. Each worker claims the next due job of its stage
+ * Task 0048: the Text, Find, Vision and Redact workers of this server. Task 0121: staged only, so they always start;
+ * a case ends in export jobs, which the export workers finish. Each worker claims the next due job of its stage
  * (claim lock, {@code SKIP LOCKED}, queue order), renews its claim every third of the lease while it works, and saves
  * its result only under its current claim number. One sweep puts jobs whose claim ran out back in the queue. Task 0067:
  * the number of workers per stage follows its queue ({@link ProcessingCapacity}); without it (tests) it is fixed.
@@ -38,7 +36,7 @@ public class StageJobWorkers {
 
     private final StagedProcessingService service;
     private final String nodeId;
-    /** In inline mode, open staged jobs are looked for every this many poll intervals. */
+    /** Missed gates are looked for every this many poll intervals. */
     static final int OPEN_JOBS_CHECK_POLLS = 10;
     private volatile boolean running;
     /** Task 0064: a check for open jobs that was under way when the server stopped starts no worker any more. */
@@ -74,28 +72,7 @@ public class StageJobWorkers {
             thread.setDaemon(true);
             return thread;
         });
-        if (!service.settings().staged()) {
-            log.info("STAGE_JOB_WORKERS_OFF pipelineMode=inline");
-            long every = service.settings().pollInterval().toMillis() * OPEN_JOBS_CHECK_POLLS;
-            timers.scheduleWithFixedDelay(this::finishOpenJobs, 0, every, TimeUnit.MILLISECONDS);
-            return;
-        }
         startWorkers();
-    }
-
-    /** In inline mode: the open staged jobs, if any (also ones a server still staged queued later), are finished. */
-    private synchronized void finishOpenJobs() {
-        if (!workGate.mayTakeWork()) return;
-        try {
-            if (running) return;
-            service.runMissedGates();
-            if (!service.hasOpenJobs() || stopped) return;
-            log.info("STAGE_JOB_WORKERS_FINISHING pipelineMode=inline reasonCode=OPEN_STAGE_JOBS");
-            startWorkers();
-        } catch (RuntimeException failure) {
-            log.warn("STAGE_JOB_OPEN_CHECK_FAILED type={} code={}", failure.getClass().getSimpleName(),
-                    LvErrorCodes.forPlatformFailure(failure).code());
-        }
     }
 
     private void startWorkers() {

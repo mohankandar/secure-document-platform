@@ -86,11 +86,20 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
 
     /**
      * Task 0049: fairness between entities. Within a priority, the entity after the one this server served last (by id,
-     * round and round), then queue order within the entity. One entity's flood never holds back another's work.
+     * round and round). One entity's flood never holds back another's work.
+     * Task 0121 (owner 2026-11-28): cases take turns inside the entity the same way: the case after the one this server
+     * served last in that entity (by id, round and round), then queue order within the case. A 5-page case that arrives
+     * while a 120-page case is being read gets workers in between and finishes first. The cases served last come as two
+     * lists (entity ids, case ids, one pair per entity), so the per-row look-up is over a handful of entities only.
+     * Export jobs keep queue order between cases (a case is sent in the order it became ready): {@code :caseTurns} is
+     * false when the claim is for an export stage.
      */
     private static final String FAIR_ORDER = """
             %s,
-            (j.tenant_id <= :lastTenant), j.tenant_id, j.queue_seq""".formatted(RANK);
+            (j.tenant_id <= :lastTenant), j.tenant_id,
+            (:caseTurns AND j.package_id <= COALESCE((SELECT s.p FROM unnest(CAST(string_to_array(:servedTenants, ',') AS uuid[]),
+                    CAST(string_to_array(:servedCases, ',') AS uuid[])) AS s(t, p) WHERE s.t = j.tenant_id), :noCase)),
+            CASE WHEN :caseTurns THEN j.package_id END, j.queue_seq""".formatted(RANK);
 
     private static final UUID NO_TENANT = new UUID(0L, 0L);
 
@@ -270,6 +279,8 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     private final TransactionTemplate enqueue;
     /** Task 0049: the entity served last, per stage (set) claimed together, on this server. */
     private final Map<String, UUID> lastServed = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Task 0121: per stage (set) claimed together, on this server: the case served last in each entity. */
+    private final Map<String, Map<UUID, UUID>> lastCase = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, PriorityTurns> turns = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** For tests: a transaction manager on the template's own data source. */
@@ -381,10 +392,19 @@ public class JdbcPipelineJobRepository implements PipelineJobRepository {
     private Optional<PipelineJob> claimInTurn(MapSqlParameterSource params, String turn) {
         for (int i = 0; i < CLAIM_TRIES; i++) {
             params.addValue("lastTenant", lastServed.getOrDefault(turn, NO_TENANT));
+            Map<UUID, UUID> cases = lastCase.computeIfAbsent(turn, t -> new java.util.concurrent.ConcurrentHashMap<>());
+            List<Map.Entry<UUID, UUID>> served = List.copyOf(cases.entrySet());
+            params.addValue("servedTenants", served.stream().map(e -> e.getKey().toString())
+                            .collect(java.util.stream.Collectors.joining(",")))
+                    .addValue("servedCases", served.stream().map(e -> e.getValue().toString())
+                            .collect(java.util.stream.Collectors.joining(",")))
+                    .addValue("noCase", NO_TENANT)
+                    .addValue("caseTurns", !turn.contains("EXPORT"));
             ClaimTry result = transactions.execute(status -> claimOnce(params));
             if (result == null || result.nothingDue()) return Optional.empty();
             if (result.claimed() != null) {
                 lastServed.put(turn, result.claimed().tenantId().value());
+                cases.put(result.claimed().tenantId().value(), result.claimed().packageId().value());
                 return Optional.of(result.claimed());
             }
             // Its destination was full once the lock was held: look again (the first filter now sees it full).

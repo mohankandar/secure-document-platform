@@ -202,7 +202,7 @@ class StageJobsMigrationPostgresTest {
         }
     }
 
-    /** Task 0049, step 2: entity A queues 200 documents, then B queues 5: they take turns. */
+    /** Task 0049, step 2: entity A queues 200 documents, then B queues 5: they take turns (0121: so do A's cases). */
     @Test
     void entitiesTakeTurnsWithinAStageAndPriorityOldestFirstWithinEach() throws Exception {
         for (boolean export : new boolean[]{false, true}) {
@@ -221,10 +221,19 @@ class StageJobsMigrationPostgresTest {
                 }
                 List<UUID> first10 = claimed.stream().limit(10).map(PipelineJob::id).toList();
                 assertTrue(first10.containsAll(ofB), "B's 5 documents start within the next 10 claims, not after A's 200");
-                assertEquals(ofA, claimed.stream().filter(j -> j.tenantId().equals(a)).map(PipelineJob::id).toList(),
-                        "oldest first within A");
-                assertEquals(ofB, claimed.stream().filter(j -> j.tenantId().equals(b)).map(PipelineJob::id).toList(),
-                        "oldest first within B");
+                if (export) {
+                    // Export jobs keep queue order between cases (a case is sent in the order it became ready).
+                    assertEquals(ofA, claimed.stream().filter(j -> j.tenantId().equals(a)).map(PipelineJob::id).toList(),
+                            "oldest first within A");
+                    assertEquals(ofB, claimed.stream().filter(j -> j.tenantId().equals(b)).map(PipelineJob::id).toList(),
+                            "oldest first within B");
+                } else {
+                    // Task 0121: each job here is its own case, and cases take turns inside an entity (round and
+                    // round by case), so within A the order is by case, not by age; every job is taken once.
+                    assertEquals(new java.util.HashSet<>(ofA), claimed.stream().filter(j -> j.tenantId().equals(a))
+                            .map(PipelineJob::id).collect(java.util.stream.Collectors.toSet()));
+                    assertEquals(200, claimed.stream().filter(j -> j.tenantId().equals(a)).count());
+                }
             }
         }
     }

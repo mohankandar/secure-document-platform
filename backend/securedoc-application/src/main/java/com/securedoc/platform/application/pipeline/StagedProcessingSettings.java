@@ -6,7 +6,7 @@ import java.util.Objects;
 /**
  * Settings of the staged Text / Find / Redact jobs (task 0048).
  *
- * @param mode          inline (default) or staged
+ * @param mode          staged (task 0121: the only pipeline)
  * @param claimLease    how long a claim lasts without renewal; a worker renews it every third of this
  * @param maxAttempts   claims that may run out (a server stopping mid-job) before the case stops with LV-PRC-008
  * @param textWorkers   Text workers on this server
@@ -41,7 +41,4 @@ public record StagedProcessingSettings(PipelineMode mode, Duration claimLease, i
         return new StagedProcessingSettings(mode, Duration.ofMinutes(2), 3, 2, 2, 2, Duration.ofSeconds(1));
     }
 
-    public boolean staged() {
-        return mode == PipelineMode.STAGED;
-    }
 }

@@ -23,7 +23,7 @@ The role is given for every entity of the organisation (`../../install/SETUP.md`
 | **Branding** | Names, logos and colours; for everyone or one customer |
 | **Usage data** | What is sent and what never is. Set at installation, not here |
 
-Queue and workers mean something only where documents are processed in steps (`SECUREDOC_PROCESSING_PIPELINE_MODE=staged`; the default is `inline`). The **time left** was within 7% on long loads, and up to 54% too long on loads of about 2 minutes. In steps, the work goes Urgent, Normal, Low, then Bulk (migration sources, in their times, at most half of the workers).
+Queue and workers: documents are always processed in steps (the staged pipeline; task 0121 removed the `inline` mode). The **time left** was within 7% on long loads, and up to 54% too long on loads of about 2 minutes. In steps, the work goes Urgent, Normal, Low, then Bulk (migration sources, in their times, at most half of the workers).
 
 ## 3. A case from a ticket
 
