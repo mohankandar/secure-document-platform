@@ -76,6 +76,15 @@ else {
 }
 $BannerMode = if ($LoggingFormat -eq "Json") { "off" } else { "console" }
 $AiProvider = if ($AiOff) { "heuristic" } else { "ollama" }
+# Task 0110 (hardening): the text model is pinned by digest, as the vision model is. A model without an approved digest
+# here (or in SECUREDOC_AI_MODEL_DIGEST) is not started; a change of model means the model, its digest and a benchmark.
+$ApprovedTextModelDigests = @{
+    "qwen3.5:9b" = "56671c2ab9385f9cfcb404638e32cd62d88e3501d44822208363c010179a3c90"
+}
+$TextModelDigest = if ($env:SECUREDOC_AI_MODEL_DIGEST) { $env:SECUREDOC_AI_MODEL_DIGEST } elseif ($ApprovedTextModelDigests.ContainsKey($Model)) { $ApprovedTextModelDigests[$Model] } else { "" }
+if (-not $AiOff -and -not $TextModelDigest) {
+    throw "The text model $Model has no approved digest. Use -AiModel qwen3.5:9b, or set SECUREDOC_AI_MODEL_DIGEST to its 64-character digest after its benchmark."
+}
 $AiSummary = if ($AiOff) { "off (heuristic reader, no Ollama)" } else { "Ollama / $Model" }
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
@@ -258,6 +267,12 @@ if (-not $AiOff) {
         }
     }
     Write-Host "Ollama model $Model is installed." -ForegroundColor Green
+    $tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5
+    $installedDigest = @($tags.models | Where-Object { $_.name -eq $Model } | ForEach-Object { $_.digest }) | Select-Object -First 1
+    if (("$installedDigest" -replace "^sha256:", "").ToLowerInvariant() -ne $TextModelDigest.ToLowerInvariant()) {
+        throw "The installed text model $Model is not the approved one (digest differs). Pull the approved model again (ollama pull $Model)."
+    }
+    Write-Host "Ollama model $Model is the approved one (digest checked)." -ForegroundColor Green
 
     if (-not $SkipAiWarmup) {
         Write-Host "Preloading Ollama model $Model (keep_alive=$AiKeepAlive)..."
@@ -318,6 +333,7 @@ Set-Location -LiteralPath '$backendDirEscaped'
 `$env:SECUREDOC_AI_PROVIDER = '$AiProvider'
 `$env:SECUREDOC_AI_OLLAMA_BASE_URL = 'http://localhost:11434'
 `$env:SECUREDOC_AI_OLLAMA_MODEL = '$Model'
+`$env:SECUREDOC_AI_MODEL_DIGEST = '$TextModelDigest'
 `$env:SECUREDOC_AI_OLLAMA_KEEP_ALIVE = '$AiKeepAlive'
 `$env:SECUREDOC_AI_PARALLELISM = '$AiParallelism'
 `$env:SECUREDOC_AI_REQUESTS_AT_ONCE = '$AiRequestsAtOnce'
