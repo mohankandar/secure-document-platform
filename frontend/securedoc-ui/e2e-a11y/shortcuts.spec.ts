@@ -135,7 +135,7 @@ test.describe('Cases shortcuts (A2)', () => {
     await expect(page.locator('li.cf-case-row').first()).toBeVisible();
     await toBody(page);
     await page.keyboard.press('j');
-    await page.getByRole('button', { name: /^All/ }).focus();
+    await page.getByTestId('case-view-button').focus();
     await page.keyboard.press('j');
     await page.getByRole('button', { name: /account menu/i }).focus();
     await page.keyboard.press('k');
@@ -170,9 +170,9 @@ test.describe('Cases shortcuts (A2)', () => {
     await toBody(page);
     await page.keyboard.press('/');
     await expect(filter).not.toBeFocused();
-    await page.getByRole('button', { name: /^All/ }).focus();
+    await page.getByTestId('case-view-button').focus();
     await page.keyboard.press('/');
-    await expect(page.getByRole('button', { name: /^All/ })).toBeFocused();
+    await expect(page.getByTestId('case-view-button')).toBeFocused();
     await page.getByRole('button', { name: /account menu/i }).focus();
     await page.keyboard.press('/');
     await expect(filter).not.toBeFocused();

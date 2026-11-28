@@ -21,5 +21,7 @@ public record PackageSummaryResponse(
         /** Task 0038: the delivery destination's name once one is chosen; null before. */
         String destinationName,
         /** Task 0073: URGENT, NORMAL or LOW. */
-        String priority
+        String priority,
+        /** Task 0108: when the newest document was uploaded (View > Columns > Uploaded); null before any. */
+        Instant uploadedAt
 ) {}

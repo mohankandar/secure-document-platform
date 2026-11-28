@@ -9,11 +9,12 @@ import { answer, openAt } from './states0089';
  */
 const id = (n: number) => `c9c9c9c9-0000-4000-8000-${String(8000 + n).padStart(12, '0')}`;
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
-// Three delivered cases: received in the order B, C, A; last changed in the order A, B, C.
+// Three delivered cases: received in the order B, C, A; last changed in the order A, B, C (all today: only today's
+// exported cases are listed, task 0108).
 const delivered = [
-  { loan: 'LN-7002', received: 300, changed: 30 },
-  { loan: 'LN-7003', received: 200, changed: 20 },
-  { loan: 'LN-7001', received: 100, changed: 90 },
+  { loan: 'LN-7002', received: 300, changed: 3 },
+  { loan: 'LN-7003', received: 200, changed: 2 },
+  { loan: 'LN-7001', received: 100, changed: 9 },
 ].map((c, n) => ({
   ...DELIVERED_CASE, packageId: id(n), createdAt: minsAgo(c.received), updatedAt: minsAgo(c.changed),
   businessIdentifiers: DELIVERED_CASE.businessIdentifiers.map((i) => (i.primary ? { ...i, value: c.loan } : i)),
@@ -37,14 +38,19 @@ async function open(page: Page, saved: { settings: Record<string, unknown> }, pu
   });
 }
 
-const order = (page: Page) => page.locator('section[data-group="delivered"] .cf-case-primary').allTextContents();
+// Exported today starts as one line (approved design): open it, then read its rows.
+const order = async (page: Page) => {
+  const line = page.getByTestId('group-delivered');
+  if ((await line.getAttribute('aria-expanded')) === 'false') await line.click();
+  return page.locator('section[data-group="delivered"] .cf-case-primary').allTextContents();
+};
 
 test('0108: sort re-orders inside a group and is kept on the server', async ({ page }) => {
   const saved = { settings: { sort: 'received', order: 'asc', columns: null, density: 'comfortable' } as Record<string, unknown> };
   const puts: unknown[] = [];
   await open(page, saved, puts);
   await expect.poll(() => order(page)).toEqual(['LN-7002', 'LN-7003', 'LN-7001']);
-  await expect(page.getByTestId('sorted-you')).toHaveText('sorted by received');
+  await expect(page.getByTestId('sorted-you')).toHaveText('sorted by Received, oldest first');
 
   await page.getByTestId('case-view-button').click();
   const menu = page.getByTestId('case-view-menu');
@@ -60,13 +66,14 @@ test('0108: sort re-orders inside a group and is kept on the server', async ({ p
   await page.reload();
   await page.locator('#cf-main h1').first().waitFor();
   await expect.poll(() => order(page)).toEqual(['LN-7001', 'LN-7002', 'LN-7003']);
-  await expect(page.getByTestId('sorted-you')).toHaveText('sorted by waiting longest');
+  await expect(page.getByTestId('sorted-you')).toHaveText('sorted by Waiting longest, oldest first');
 });
 
 test('0108: density and columns', async ({ page }) => {
   const saved = { settings: { sort: 'received', order: 'asc', columns: null, density: 'comfortable' } as Record<string, unknown> };
   const puts: unknown[] = [];
   await open(page, saved, puts);
+  await order(page);
   const desk = page.locator('.cf-desk');
   await expect(desk).toHaveAttribute('data-density', 'comfortable');
   await page.getByTestId('case-view-button').click();

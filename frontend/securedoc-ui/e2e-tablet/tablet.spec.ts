@@ -201,29 +201,30 @@ test('the device is a touch device: coarse pointer, no hover, IBM Plex loaded', 
   expect(facts).toEqual({ coarse: true, hoverNone: true, plex: true });
 });
 
-test('Cases: identifier, next step, stage and action stay visible; every control is 44 px; nothing scrolls sideways', async ({ page }) => {
+// Task 0108: rows carry no next-step text or button (the case card has the one next step); rows are 52 px by touch.
+test('Cases: identifier and stage stay visible; rows 52 px, every control 44 px; nothing scrolls sideways', async ({ page }) => {
   await signIn(page);
   const approval = row(page, 'LN-3002');
   await expect(approval.locator('.cf-case-primary')).toBeVisible();
-  await expect(approval.locator('.cf-case-next')).toHaveText('Redaction done, ready to approve');
-  await expect(approval.locator('.cf-case-next')).toBeVisible();
   await expect(approval.locator('.cf-stage')).toBeVisible();
-  await expect(approval.getByRole('button', { name: 'Approve LN-3002' })).toBeVisible();
+  await expect(approval.getByRole('button')).toHaveCount(0);
+  expect((await approval.locator('a.cf-case').boundingBox())!.height).toBeGreaterThanOrEqual(52);
+  await expect(page.locator('.cf-hint')).toBeHidden();
   expect(await smallControls(page)).toEqual([]);
   expect(await sideways(page)).toBe(0);
 });
 
-test('Cases → Approve by tap: the row button asks, the dialog approves', async ({ page }) => {
+test('Cases → Approve by tap: the row opens the card, its button asks, Confirm approves', async ({ page }) => {
   const calls: Calls = { approvals: [], confirmed: [] };
   await signIn(page, calls);
-  const approve = row(page, 'LN-3002').getByRole('button', { name: 'Approve LN-3002' });
+  await row(page, 'LN-3002').getByRole('link').tap();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  const approve = panel.getByRole('button', { name: 'Approve delivery' });
   await expectTappable(approve);
   await approve.tap();
-  const dialog = page.getByRole('dialog', { name: 'Release redacted documents?' });
-  await expect(dialog).toBeVisible();
-  const confirm = dialog.getByRole('button', { name: 'Approve delivery' });
+  const confirm = panel.getByRole('button', { name: 'Confirm' });
   await expectTappable(confirm);
-  await expectTappable(dialog.getByRole('button', { name: 'Cancel' }));
+  await expectTappable(panel.getByRole('button', { name: 'Cancel' }));
   await confirm.tap();
   await expect.poll(() => calls.approvals.length).toBe(1);
 });
@@ -672,6 +673,11 @@ test('Cases (Supervisor): every status chip is on one line and whole, with and w
   let full: Awaited<ReturnType<typeof exportRoutes>> = [];
   await signInAs(page, ENTITY.roles, '/', async () => { full = await exportRoutes(page); });
   const paused = full.find((c) => c.exportState === 'DESTINATION_PAUSED')!;
+  // Task 0108: In progress and Exported today are one line each until tapped.
+  for (const key of ['motion', 'delivered']) {
+    const line = page.getByTestId(`group-${key}`);
+    if ((await line.getAttribute('aria-expanded')) === 'false') await line.tap();
+  }
   await expect(page.locator(`#cf-row-${paused.packageId} .cf-case-stage`)).toHaveText('Exporting · destination paused');
   expect(await chipProblems(page)).toEqual([]);
   expect(await sideways(page)).toBe(0);

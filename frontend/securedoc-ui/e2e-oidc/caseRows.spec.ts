@@ -85,44 +85,38 @@ async function signIn(page: Page) {
   await page.getByRole('button', { name: /sign in/i }).first().click();
 }
 
+/** Moves inside the app (no reload: the mocked sign-in lives in the page). */
+const inApp = (page: Page, path: string) => page.evaluate((p) => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); }, path);
+
 const row = (page: Page, loan: string) => page.locator('li.cf-case-row').filter({ hasText: loan });
 
-test('each row shows the next step in words and only the action this person can take', async ({ page }) => {
+// Task 0108 (owner 2026-11-26): rows carry no next-step button and no next-step text; the case card has the one next
+// step. These replace the U003 row-button tests.
+test('task 0108: rows carry no next-step text or button; the case card has the one next step', async ({ page }) => {
   await mockIdentityProvider(page);
   await mockApi(page, []);
   await signIn(page);
-  await expect(row(page, 'LN-2001')).toContainText('2 findings to review');
-  await expect(row(page, 'LN-2001').getByRole('button', { name: 'Review LN-2001' })).toBeVisible();
-  await expect(row(page, 'LN-2002')).toContainText('Redaction done, ready to approve');
-  await expect(row(page, 'LN-2002').getByRole('button', { name: 'Approve LN-2002' })).toBeVisible();
-});
-
-test('the Review button opens Review for the case, not the case panel', async ({ page }) => {
-  await mockIdentityProvider(page);
-  await mockApi(page, []);
-  await signIn(page);
-  await row(page, 'LN-2001').getByRole('button', { name: 'Review LN-2001' }).click();
+  await expect(row(page, 'LN-2001')).toBeVisible();
+  await expect(row(page, 'LN-2001')).not.toContainText('2 findings to review');
+  await expect(row(page, 'LN-2002')).not.toContainText('Redaction done, ready to approve');
+  await expect(page.locator('li.cf-case-row button')).toHaveCount(0);
+  await row(page, 'LN-2001').getByRole('link').click();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await panel.getByRole('link', { name: 'Review' }).click();
   await expect(page).toHaveURL((url) => url.pathname === '/review' && url.searchParams.get('case') === REVIEW_CASE.packageId);
-  await expect(page.getByRole('complementary', { name: 'Case panel' })).toHaveCount(0);
 });
 
-test('Approve asks for the same confirmation as the case panel, approves, and does not open the panel', async ({ page }) => {
+test('task 0108: Approve from the case card asks for the confirmation, then approves', async ({ page }) => {
   const approvals: string[] = [];
   await mockIdentityProvider(page);
   await mockApi(page, approvals);
   await signIn(page);
-  await row(page, 'LN-2002').getByRole('button', { name: 'Approve LN-2002' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Release redacted documents?' });
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('cannot be recalled from the destination');
-  await expect(page.getByRole('complementary', { name: 'Case panel' })).toHaveCount(0);
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await row(page, 'LN-2002').getByRole('link').click();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await panel.getByRole('button', { name: 'Approve delivery' }).click();
   expect(approvals).toHaveLength(0);
-
-  await row(page, 'LN-2002').getByRole('button', { name: 'Approve LN-2002' }).click();
-  await page.getByRole('dialog', { name: 'Release redacted documents?' }).getByRole('button', { name: 'Approve delivery' }).click();
+  await panel.getByRole('button', { name: 'Confirm' }).click();
   await expect.poll(() => approvals.length).toBe(1);
-  await expect(page.getByRole('complementary', { name: 'Case panel' })).toHaveCount(0);
 });
 
 test('clicking the rest of the row still opens the case panel', async ({ page }) => {
@@ -139,23 +133,27 @@ test('clicking the rest of the row still opens the case panel', async ({ page })
 const STOPPED_CASE = { ...caseFor('LN-3001', 'FAILED', '0031'), stopReasonCode: 'LV-PRC-004' };
 const WAITING_CASE = { ...caseFor('LN-3002', 'COMPLETED', '0032'), exportState: 'NEEDS_IT', stopReasonCode: 'LV-DLV-004', destinationName: 'Records archive' };
 const REJECTED_CASE = { ...caseFor('LN-3003', 'REJECTED', '0033'), stopReasonCode: null };
-const SENT_CASE = { ...caseFor('LN-3004', 'COMPLETED', '0034'), exportState: 'EXPORTED', destinationName: 'Records archive' };
+const SENT_CASE = { ...caseFor('LN-3004', 'COMPLETED', '0034'), exportState: 'EXPORTED', destinationName: 'Records archive', updatedAt: new Date().toISOString() };
 const ODD_CASE = { ...caseFor('LN-3005', 'FAILED', '0035'), stopReasonCode: 'Jane Doe 123-45-6789' };
 
 test('task 0038: a stopped, waiting or rejected row says why in plain words, and where the case goes', async ({ page }) => {
   await mockIdentityProvider(page);
   await mockApi(page, [], [STOPPED_CASE, WAITING_CASE, REJECTED_CASE, SENT_CASE, ODD_CASE]);
   await signIn(page);
-  await expect(row(page, 'LN-3001').locator('.cf-case-why')).toHaveText('Text reading timed out');
+  // Task 0108: In progress and Exported today open on a click; stopped and rejected cases are not listed on Cases.
+  await page.getByTestId('group-motion').click();
+  await page.getByTestId('group-delivered').click();
   await expect(row(page, 'LN-3002').locator('.cf-case-why')).toHaveText('Destination refused the file');
   await expect(row(page, 'LN-3002').locator('.cf-case-to')).toHaveText('To Records archive');
-  await expect(row(page, 'LN-3003')).toContainText('Rejected, nothing more to do');
-  await expect(row(page, 'LN-3003').locator('.cf-case-why')).toHaveCount(0); // no rejection reason is stored yet
+  for (const hidden of ['LN-3001', 'LN-3003', 'LN-3005']) await expect(row(page, hidden)).toHaveCount(0);
   await expect(row(page, 'LN-3004').locator('.cf-case-why')).toHaveCount(0);
   await expect(row(page, 'LN-3004').locator('.cf-case-to')).toHaveText('To Records archive');
-  await expect(row(page, 'LN-3005').locator('.cf-case-why')).toHaveCount(0); // never text that is no known code
   await expect(page.locator('.cf-desk')).not.toContainText('Jane Doe');
   await expect(row(page, 'LN-2001').locator('.cf-case-why, .cf-case-to')).toHaveCount(0);
+  // From a report link (one code) the stopped case is listed with its reason; a text that is no known code never shows.
+  await inApp(page, '/?code=LV-PRC-004');
+  await expect(row(page, 'LN-3001').locator('.cf-case-why')).toHaveText('Text reading timed out');
+  await expect(page.locator('.cf-desk')).not.toContainText('Jane Doe');
   if (process.env.P0038_PROOF) {
     await page.screenshot({ path: '../../docs/work/0038-proof/cases-stopped-waiting-rejected.png', fullPage: true });
   }
@@ -193,9 +191,13 @@ test('task 0071: Review has Reject case, and the Cases list shows the reason', a
   await mockIdentityProvider(page);
   await mockApi(page, [], [{ ...caseFor('LN-4001', 'REJECTED', '0041'), stopReasonCode: 'LV-REV-010' }]);
   await signIn(page);
+  // Task 0108: a rejected case is final, not on Cases; the report link for its reason lists it with the reason.
+  await expect(row(page, 'LN-2001')).toBeVisible();
+  await expect(row(page, 'LN-4001')).toHaveCount(0);
+  await inApp(page, '/?code=LV-REV-010');
   await expect(row(page, 'LN-4001')).toContainText('Rejected: wrong document');
   if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-list.png` });
-  await row(page, 'LN-2001').getByRole('button', { name: 'Review LN-2001' }).click();
+  await inApp(page, `/review?case=${REVIEW_CASE.packageId}`);
   await page.getByRole('button', { name: 'Reject case' }).click();
   await expect(page.getByRole('dialog', { name: 'Reject case LN-2001?' })).toBeVisible();
   if (process.env.PROOF_DIR) await page.screenshot({ path: `${process.env.PROOF_DIR}/reject-in-review.png` });

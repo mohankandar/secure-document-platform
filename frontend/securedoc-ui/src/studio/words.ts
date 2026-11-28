@@ -89,7 +89,32 @@ export const CASE_GROUPS = {
   delivered: STAGE_NAMES.delivered,
   /** Task 0111: the button under a group that has more cases than it shows. */
   showMore: (next: number, left: number) => `Show ${next} more (${left.toLocaleString()} not shown)`,
+  /** Task 0108: only today's exported cases are listed; older ones are in Find and Reports. */
+  deliveredToday: `${STAGE_NAMES.delivered} today`,
+  deliveredTodayNote: 'Older cases: Find, or Reports',
+  /** Task 0108: a collapsed group's line ends in "Show"; an open one in "Hide". */
+  show: 'Show',
+  hide: 'Hide',
+  /** Task 0108: the floating pill; new cases never jump into the list. */
+  newCases: (n: number) => `${n.toLocaleString()} new ${n === 1 ? 'case' : 'cases'} · Show`,
+  showAll: 'Show all',
 } as const;
+
+/**
+ * Task 0108 (approved "Cases at volume"): the plain sentence for each stage box, shown on hover and in the heading row
+ * when the box is chosen. Stopped cases are worked by IT in Support (owner 2026-11-27 22:00).
+ */
+export const STAGE_HELP: Record<'intake' | 'redacting' | 'review' | 'approval' | 'delivered' | 'stopped', string> = {
+  intake: 'Received, waiting for LexaVault to start.',
+  redacting: 'LexaVault is finding and blacking out sensitive data.',
+  review: 'A person checks what LexaVault could not decide.',
+  approval: 'Redaction is done; a supervisor signs off before sending.',
+  delivered: 'Sent to its destination today, or being sent now.',
+  stopped: 'Processing stopped; IT works on these in Support.',
+};
+
+/** Task 0108: the small tags after a case's name, and the case panel's line for a stopped case. */
+export const CASE_TAGS = { urgent: 'Urgent', sendFailed: 'Send failed', withIt: 'With IT' } as const;
 
 /* ---------- Sensitive types ---------- */
 

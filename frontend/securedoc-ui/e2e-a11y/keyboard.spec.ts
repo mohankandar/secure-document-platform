@@ -20,29 +20,30 @@ test('open a case: Tab to the row, Enter opens the case panel, Esc closes it', a
   await expect(panel).toHaveCount(0);
 });
 
-test('approve: Tab to the row\'s Approve, Enter asks, Tab to Approve delivery, Enter approves', async ({ page }) => {
+// Task 0108: rows carry no button; the row opens the case card, whose Approve delivery asks inline (Confirm / Cancel).
+test('approve: Tab to the row, Enter opens the card, Tab to Approve delivery, Enter asks, Confirm approves', async ({ page }) => {
   const approvals: string[] = [];
   await signInAs(page, 'supervisor');
   await page.route('**/api/v1/packages/*/approve-delivery', (route) => { approvals.push(route.request().url()); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...APPROVAL_CASE, status: 'COMPLETED' }) }); });
   await expect(page.locator('li.cf-case-row').first()).toBeVisible();
   await page.locator('body').focus();
-  await tabTo(page, /^Approve LN-3002$/);
+  await page.locator('li.cf-case-row', { hasText: 'LN-3002' }).locator('a.cf-case').focus();
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: 'Release redacted documents?' });
-  await expect(dialog).toBeVisible();
-  // Focus moves into the dialog and never reaches the page behind it. (It is a native modal dialog: past its last
-  // button, Tab goes to the browser itself, shown here as the body, and then back into the dialog.)
-  expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
-  for (let i = 0; i < 6; i += 1) {
-    await page.keyboard.press('Tab');
-    expect(await dialog.evaluate((d) => d.contains(document.activeElement) || document.activeElement === document.body)).toBe(true);
-  }
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Approve LN-3002' })).toBeFocused();
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await expect(panel).toBeVisible();
+  await tabTo(page, /^Approve delivery$/, 80);
   await page.keyboard.press('Enter');
-  await expect(dialog).toBeVisible();
-  await tabTo(page, /^Approve delivery$/, 10);
+  // The confirmation takes focus (Confirm); Cancel puts it away and nothing is sent.
+  const confirm = panel.getByRole('button', { name: 'Confirm' });
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(confirm).toHaveCount(0);
+  expect(approvals).toHaveLength(0);
+  await panel.getByRole('button', { name: 'Approve delivery' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(confirm).toBeFocused();
   await page.keyboard.press('Enter');
   await expect.poll(() => approvals.length).toBe(1);
 });

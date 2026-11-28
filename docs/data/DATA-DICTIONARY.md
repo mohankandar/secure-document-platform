@@ -6,7 +6,7 @@ Meanings ending in "(to confirm)" are drafted from the code and wait for the own
 
 The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.md).
 
-115 tables, 1096 columns.
+117 tables, 1109 columns.
 
 ## LexaVault tables
 
@@ -20,6 +20,7 @@ The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.
 | [`bulk_sources`](#bulk_sources) | Intake sources an entity has marked as Bulk, with the daily window in which their cases may run (cases from them get priority BULK). |
 | [`capacity_maximums`](#capacity_maximums) | IT's own upper limit per processing stage and for AI requests at once, for the whole installation, no row means no limit set. |
 | [`case_instructions`](#case_instructions) | Where each case's instructions file is stored, one row per case, the text itself is kept encrypted in the file and in no column. |
+| [`case_page_settings`](#case_page_settings) | The entity's Cases-page settings chosen by the Business Admin: when waiting time turns amber and red, and after how many days a case without documents expires. No row: the defaults. |
 | [`case_priorities`](#case_priorities) | A case's priority when it is not the default NORMAL, kept apart from document_packages so processing cannot undo a reviewer's change. |
 | [`dashboard_column_settings`](#dashboard_column_settings) | Per-entity setup of the case list columns: which may be shown, which show by default and in what order. |
 | [`delivery_approval_requests`](#delivery_approval_requests) | Links an approval request sent to supervisors to the case and case version it asks to approve for delivery. Ids only. |
@@ -83,6 +84,7 @@ The links between the main tables are drawn in [RELATIONSHIPS.md](RELATIONSHIPS.
 | [`tenant_redaction_policies`](#tenant_redaction_policies) | An entity's sensitive-data policy: review rules, thresholds and processing switches, one row per entity. |
 | [`tenant_regulation_packs`](#tenant_regulation_packs) | The regulation packs in force for an entity, which explain why kinds are switched on. |
 | [`tenants`](#tenants) | LexaVault's own row per entity (a customer's business unit), mirrored from its platform entity slot at first activation. |
+| [`user_case_view`](#user_case_view) | Each person's View menu choices on the Cases page, per entity: sort, order, columns and density. Field keys only, never a value. |
 | [`vault_entries`](#vault_entries) | Sealed vault entries: one per document and artifact kind kept in the vault, with checksum, retention and legal hold. |
 | [`watched_folder_leases`](#watched_folder_leases) | Lease that lets only one server node scan the watched folder at a time, with a fencing token against stale owners. |
 | [`watched_folder_settings`](#watched_folder_settings) | Sensitivity level each watched folder gives the files it picks up, one row per entity and folder. |
@@ -312,6 +314,23 @@ Where each case's instructions file is stored, one row per case, the text itself
 | `changed_at` | timestamp with time zone | yes |  | When the instructions were last saved. |
 
 - Primary key: `package_id`
+- Foreign keys:
+  - `tenant_id` → `tenants` (id)
+
+### case_page_settings
+
+The entity's Cases-page settings chosen by the Business Admin: when waiting time turns amber and red, and after how many days a case without documents expires. No row: the defaults.
+
+| Column | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `tenant_id` | uuid | yes |  | The entity (tenant) these settings belong to. |
+| `wait_amber_minutes` | integer | yes |  | Minutes a case may wait for a person before its waiting time shows amber (default 240). |
+| `wait_red_minutes` | integer | yes |  | Minutes a case may wait for a person before its waiting time shows red (default 480); always more than the amber time. |
+| `empty_case_expiry_days` | integer | yes |  | Days after which a case a person or a folder opened, still without documents, is closed as expired (kept in Reports). |
+| `updated_at` | timestamp with time zone | yes |  | When the Business Admin last changed these settings. |
+| `updated_by` | uuid | yes |  | The person (actor id) who last changed these settings. |
+
+- Primary key: `tenant_id`
 - Foreign keys:
   - `tenant_id` → `tenants` (id)
 
@@ -1806,7 +1825,25 @@ LexaVault's own row per entity (a customer's business unit), mirrored from its p
 - Primary key: `id`
 - Indexes:
   - `tenants_slug_key` (unique): `btree (slug)`
-- Referenced by: `access_requests`, `artifacts`, `branding_configurations`, `bulk_sources`, `case_instructions`, `case_priorities`, `dashboard_column_settings`, `document_packages`, `document_page_routes`, `documents`, `export_destination_states`, `export_reachability_alerts`, `export_retention_periods`, `findings`, `intake_observations`, `intake_refusals`, `notification_mail_settings`, `notification_people`, `notification_published`, `package_export_records`, `package_lifecycles`, `package_processing_intelligence_snapshots`, `package_processing_leases`, `package_rejections`, `person_last_entity`, `pipeline_jobs`, `processing_storage_assignments`, `processing_storage_cycle_pins`, `reporting_dimension_definitions`, `reporting_package_dimensions`, `reporting_package_events`, `reporting_package_facts`, `reporting_tenant_settings`, `review_tasks`, `source_priorities`, `stored_files`, `tenant_capabilities`, `tenant_document_intelligence_policies`, `tenant_license_assignments`, `tenant_license_records`, `tenant_lifecycle_policies`, `tenant_oidc_group_grants`, `tenant_redaction_catalog`, `tenant_redaction_policies`, `tenant_regulation_packs`, `vault_entries`, `watched_folder_settings`
+- Referenced by: `access_requests`, `artifacts`, `branding_configurations`, `bulk_sources`, `case_instructions`, `case_page_settings`, `case_priorities`, `dashboard_column_settings`, `document_packages`, `document_page_routes`, `documents`, `export_destination_states`, `export_reachability_alerts`, `export_retention_periods`, `findings`, `intake_observations`, `intake_refusals`, `notification_mail_settings`, `notification_people`, `notification_published`, `package_export_records`, `package_lifecycles`, `package_processing_intelligence_snapshots`, `package_processing_leases`, `package_rejections`, `person_last_entity`, `pipeline_jobs`, `processing_storage_assignments`, `processing_storage_cycle_pins`, `reporting_dimension_definitions`, `reporting_package_dimensions`, `reporting_package_events`, `reporting_package_facts`, `reporting_tenant_settings`, `review_tasks`, `source_priorities`, `stored_files`, `tenant_capabilities`, `tenant_document_intelligence_policies`, `tenant_license_assignments`, `tenant_license_records`, `tenant_lifecycle_policies`, `tenant_oidc_group_grants`, `tenant_redaction_catalog`, `tenant_redaction_policies`, `tenant_regulation_packs`, `user_case_view`, `vault_entries`, `watched_folder_settings`
+
+### user_case_view
+
+Each person's View menu choices on the Cases page, per entity: sort, order, columns and density. Field keys only, never a value.
+
+| Column | Type | Required | Default | Meaning |
+|---|---|---|---|---|
+| `tenant_id` | uuid | yes |  | The entity (tenant) the view belongs to. |
+| `actor_id` | uuid | yes |  | The person (actor id) whose view this is. |
+| `sort_key` | character varying(120) | yes |  | Sort by: received, waitingLongest, priority, or field: followed by the key of the entity's primary case field. |
+| `sort_order` | character varying(4) | yes |  | asc or desc (Oldest first / Newest first, Urgent first / Low first, Low to high / High to low). |
+| `columns_list` | text |  |  | The chosen columns (displayable case field keys, received, uploaded, source), one per line; empty means the default columns. |
+| `density` | character varying(16) | yes |  | compact (one line per case) or comfortable (two lines per case). |
+| `updated_at` | timestamp with time zone | yes |  | When the person last changed the view. |
+
+- Primary key: `tenant_id`, `actor_id`
+- Foreign keys:
+  - `tenant_id` → `tenants` (id)
 
 ### vault_entries
 

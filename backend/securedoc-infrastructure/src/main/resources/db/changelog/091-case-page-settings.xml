@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0108 (owner approved, "Cases at volume", addendum 2) and 0111 question 1 (design chat 2026-11-27 18:22):
+        the entity's Cases-page settings, set by the Business Admin. Waiting time on a Needs-you row turns amber after
+        wait_amber_minutes and red after wait_red_minutes (defaults 4 h and 8 h); a case still without documents is closed
+        as expired after empty_case_expiry_days (default: securedoc.cases.empty-case-expiry-days, 7). No row: the defaults.
+        090 is task 0118's comments changelog. Included after 089, not at the end (roll-back tests count from the end).
+    -->
+    <changeSet id="091-01-case-page-settings" author="lexavault">
+        <createTable tableName="case_page_settings"
+                     remarks="The entity's Cases-page settings chosen by the Business Admin: when waiting time turns amber and red, and after how many days a case without documents expires. No row: the defaults.">
+            <column name="tenant_id" type="UUID" remarks="The entity (tenant) these settings belong to.">
+                <constraints primaryKey="true" primaryKeyName="pk_case_page_settings" nullable="false"/>
+            </column>
+            <column name="wait_amber_minutes" type="INTEGER" remarks="Minutes a case may wait for a person before its waiting time shows amber (default 240).">
+                <constraints nullable="false"/>
+            </column>
+            <column name="wait_red_minutes" type="INTEGER" remarks="Minutes a case may wait for a person before its waiting time shows red (default 480); always more than the amber time.">
+                <constraints nullable="false"/>
+            </column>
+            <column name="empty_case_expiry_days" type="INTEGER" remarks="Days after which a case a person or a folder opened, still without documents, is closed as expired (kept in Reports).">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="When the Business Admin last changed these settings.">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID" remarks="The person (actor id) who last changed these settings.">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="case_page_settings" baseColumnNames="tenant_id"
+                                 referencedTableName="tenants" referencedColumnNames="id"
+                                 constraintName="fk_case_page_settings_tenant"/>
+        <sql>
+            alter table case_page_settings add constraint ck_case_page_settings_wait
+                check (wait_amber_minutes between 1 and 10080 and wait_red_minutes between 2 and 10080
+                       and wait_red_minutes > wait_amber_minutes);
+            alter table case_page_settings add constraint ck_case_page_settings_expiry
+                check (empty_case_expiry_days between 1 and 365);
+        </sql>
+        <rollback>
+            <dropTable tableName="case_page_settings"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

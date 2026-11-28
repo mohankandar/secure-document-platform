@@ -26,17 +26,30 @@ public final class CaseViewService {
 
     private final CaseViewStore store;
     private final Function<TenantId, List<FieldDefinition>> activeFields;
+    private final Function<TenantId, Waiting> waiting;
 
     /** @param activeFields the entity's active case fields in the admin's display order */
     public CaseViewService(CaseViewStore store, Function<TenantId, List<FieldDefinition>> activeFields) {
+        this(store, activeFields, tenant -> Waiting.DEFAULT);
+    }
+
+    /** @param waiting the entity's amber and red waiting times (Cases page settings, task 0108) */
+    public CaseViewService(CaseViewStore store, Function<TenantId, List<FieldDefinition>> activeFields,
+                           Function<TenantId, Waiting> waiting) {
         this.store = Objects.requireNonNull(store);
         this.activeFields = Objects.requireNonNull(activeFields);
+        this.waiting = Objects.requireNonNull(waiting);
+    }
+
+    /** When a Needs-you row's waiting time turns amber and red, in minutes (the entity's Business Admin setting). */
+    public record Waiting(int amberMinutes, int redMinutes) {
+        public static final Waiting DEFAULT = new Waiting(240, 480);
     }
 
     /** What the View menu may offer this entity. */
     public record Options(List<String> sorts, List<String> columns) { }
 
-    public record View(CaseViewSettings settings, Options options) { }
+    public record View(CaseViewSettings settings, Options options, Waiting waiting) { }
 
     public View read(TenantId tenantId, ActorId actorId) {
         Options options = options(tenantId);
@@ -46,7 +59,7 @@ public final class CaseViewService {
         String density = "compact".equals(stored.density()) ? "compact" : "comfortable";
         List<String> columns = stored.columns() == null ? null
                 : stored.columns().stream().filter(options.columns()::contains).toList();
-        return new View(new CaseViewSettings(sort, order, columns, density), options);
+        return new View(new CaseViewSettings(sort, order, columns, density), options, waiting.apply(tenantId));
     }
 
     public View save(TenantId tenantId, ActorId actorId, CaseViewSettings requested) {

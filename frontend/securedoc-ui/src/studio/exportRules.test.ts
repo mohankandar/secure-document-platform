@@ -301,8 +301,11 @@ test('0036: Cases page: a case whose chip says "Exporting · …" counts under E
   // The tiles, in order, and the Exporting tile in the Exporting chip's colour family.
   const data = readFileSync(join(here, 'data.ts'), 'utf8');
   assert.match(data, /CASE_TILES: StageKey\[\] = \['intake', 'redacting', 'review', 'approval', 'exporting', 'delivered', 'stopped'\]/);
+  // Task 0108 (approved six stage boxes): the Cases page counts by tileOf, and an exporting case counts in the
+  // Exported box (there is no separate Exporting box on the Cases page any more).
   const desk = readFileSync(join(here, 'Desk.tsx'), 'utf8');
-  assert.match(desk, /byStage\.set\(tileOf\(p\)/, 'the tiles count by tileOf');
+  assert.match(desk, /const tile = tileOf\(pkg\);/, 'the boxes count by tileOf');
+  assert.match(desk, /if \(tile === 'exporting'\) return 'delivered';/, 'an exporting case counts in the Exported box');
   const css = readFileSync(join(here, 'studio.css'), 'utf8');
   const chip = /\.cf-stage\[data-export\] \{ --stage: ([^;]+); --stage-soft: ([^;]+); \}/.exec(css);
   const tile = /\[data-stage='exporting'\] \{ --stage: ([^;]+); --stage-soft: ([^;]+); \}/.exec(css);

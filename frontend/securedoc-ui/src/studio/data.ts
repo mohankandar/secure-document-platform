@@ -102,7 +102,8 @@ export function needsYou(pkg: PackageSummary, caps: string[]): boolean {
   if (isExporting(exportState)) return exportNeedsYou(exportState, caps);
   if (pkg.status === 'PENDING_REVIEW' || pkg.status === 'IN_REVIEW') return caps.includes(CAP.review);
   if (pkg.status === 'PENDING_FINAL_APPROVAL') return caps.includes(CAP.approve);
-  if (pkg.status === 'FAILED') return caps.includes(CAP.technicalRetry) || caps.includes(CAP.review);
+  // Task 0108 (owner 2026-11-27 22:00): Needs you is business work only. A stopped case is worked by IT in Support
+  // (which has its own count), so it no longer counts here for anyone.
   return false;
 }
 

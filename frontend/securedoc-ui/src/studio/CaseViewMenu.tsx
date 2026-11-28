@@ -101,6 +101,7 @@ export default function CaseViewMenu({ view, settings, fieldLabel, onSave }: {
             ))}
           </fieldset>
           {failed && <p className="cf-view-error" role="alert">Your view couldn&apos;t be saved. Try again.</p>}
+          <p className="cf-view-note">Saved with your sign-in</p>
         </div>
       )}
     </div>

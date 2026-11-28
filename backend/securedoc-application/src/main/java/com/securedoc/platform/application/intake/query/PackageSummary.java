@@ -17,12 +17,20 @@ public record PackageSummary(
         Instant createdAt,
         Instant updatedAt,
         /** Task 0038: why a stopped (FAILED) case stopped, as an LV code; null otherwise or when not known. */
-        String stopReasonCode
+        String stopReasonCode,
+        /** Task 0108: when the newest document of the case was uploaded (the Uploaded column); null before any. */
+        Instant uploadedAt
 ) {
     public PackageSummary(PackageId packageId, PackageType packageType, PackageStatus status,
                           List<BusinessIdentifierSummary> businessIdentifiers, int documentCount, Instant createdAt,
+                          Instant updatedAt, String stopReasonCode) {
+        this(packageId, packageType, status, businessIdentifiers, documentCount, createdAt, updatedAt, stopReasonCode, null);
+    }
+
+    public PackageSummary(PackageId packageId, PackageType packageType, PackageStatus status,
+                          List<BusinessIdentifierSummary> businessIdentifiers, int documentCount, Instant createdAt,
                           Instant updatedAt) {
-        this(packageId, packageType, status, businessIdentifiers, documentCount, createdAt, updatedAt, null);
+        this(packageId, packageType, status, businessIdentifiers, documentCount, createdAt, updatedAt, null, null);
     }
 
     public PackageSummary {

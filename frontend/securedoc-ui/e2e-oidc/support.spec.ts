@@ -282,9 +282,14 @@ test('Platform Operations: Support and the problem page, but no Retry and no kee
 async function continueManually(page: Page, role: 'processor' | 'supervisor') {
   const calls = await openAs(page, role);
   await expect(page.getByRole('navigation', { name: 'Workspace' }).getByRole('link', { name: 'Support' })).toHaveCount(0);
-  const row = page.locator('li.cf-case-row').filter({ hasText: 'LN204860' });
-  await row.getByRole('button', { name: /Continue manually/ }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Continue manually' }).click();
+  // Task 0108 (owner 2026-11-27 22:00): a stopped case is not listed on Cases; Find opens its case card, which keeps
+  // Continue manually.
+  await expect(page.locator('li.cf-case-row').filter({ hasText: 'LN204860' })).toHaveCount(0);
+  await page.evaluate((id) => { window.history.pushState({}, '', `/case/${id}`); window.dispatchEvent(new PopStateEvent('popstate')); }, PKG);
+  const panel = page.getByRole('complementary', { name: 'Case panel' });
+  await expect(panel.getByTestId('with-it')).toHaveText('With IT');
+  await panel.getByRole('button', { name: /Continue manually/ }).click();
+  await panel.getByRole('button', { name: 'Confirm' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Continue manually' })).toBeVisible();
   expect(calls.posts.some((p) => p.path.endsWith('/manual-fallback/start'))).toBe(true);
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Cases›LN204860 · Priya Natarajan');

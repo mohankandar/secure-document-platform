@@ -164,9 +164,20 @@ test.describe('Waiting for you (Processor and Supervisor)', () => {
   });
 });
 
+/** Task 0108: In progress and Exported today are one line each until opened (works with the case card open too). */
+async function openGroups(page: Page) {
+  for (const key of ['motion', 'delivered']) {
+    const line = page.getByTestId(`group-${key}`);
+    await line.waitFor();
+    if ((await line.getAttribute('aria-expanded')) === 'false') await line.evaluate((el) => (el as HTMLElement).click());
+    await expect(line).toHaveAttribute('aria-expanded', 'true');
+  }
+}
+
 test.describe('The "Exporting" status', () => {
   test('Cases shows Exporting · <detail> or Exported instead of the review status', async ({ page }) => {
     await signInAs(page, 'processor', '/', { exports: true });
+    await openGroups(page);
     const chip = (loan: string) => page.locator(`#cf-row-${caseOf(loan).packageId}`).locator('.cf-case-stage');
     await expect(chip('LN-7020')).toHaveText('Exporting · ready');
     await expect(chip('LN-7015')).toHaveText('Exporting · destination paused');
@@ -177,15 +188,18 @@ test.describe('The "Exporting" status', () => {
     await expect(page.locator(`#cf-row-c9c9c9c9-0000-4000-8000-000000000001 .cf-case-stage`)).toHaveText('Review');
     // A reviewed case waiting to go out no longer looks like it needs a reviewer; a refusal needs the person who can resend.
     await expect(page.locator(`#cf-row-${caseOf('LN-7004').packageId}`)).toHaveAttribute('data-you', 'true');
-    await expect(page.locator(`#cf-row-${caseOf('LN-7004').packageId} .cf-case-act button`)).toHaveCount(0);
-    // Task 0036: an Exporting tile; every case whose chip says "Exporting · …" counts there, none under Redacting.
+    await expect(page.locator(`#cf-row-${caseOf('LN-7004').packageId} button`)).toHaveCount(0);
+    // Task 0108 (six stage boxes, replacing 0036's Exporting tile): every case whose chip says "Exporting · …" counts
+    // in the Exported box, with today's exported cases; none under Redacting.
     const band = page.getByRole('group', { name: 'Cases by lifecycle stage' });
-    await expect(band.locator('.cf-band-label')).toHaveText(['New', 'Redacting', 'Review', 'Approval', 'Exporting', 'Exported', 'Stopped']);
+    await expect(band.locator('.cf-band-label')).toHaveText(['New', 'Redacting', 'Review', 'Approval', /^Exported/, 'Stopped']);
     const exportingCount = await page.locator('.cf-case-stage', { hasText: /^Exporting · / }).count();
     expect(exportingCount).toBe(7);
-    await expect(band.locator('[data-stage="exporting"] .cf-band-count')).toHaveText(String(exportingCount));
-    await band.locator('[data-stage="exporting"]').click();
-    await expect(page.locator('.cf-case-stage')).toHaveCount(7);
+    const exportedToday = await page.locator('.cf-case-stage', { hasText: /^Exported$/ }).count();
+    expect(exportedToday).toBeGreaterThan(0);
+    await expect(band.locator('[data-stage="delivered"] .cf-band-count')).toHaveText(String(exportingCount + exportedToday));
+    await band.locator('[data-stage="delivered"]').click();
+    await expect(page.locator('.cf-case-stage')).toHaveCount(exportingCount + exportedToday);
     await expect(page.locator('.cf-case-stage', { hasText: /^Exporting · / })).toHaveCount(7);
     await band.locator('[data-stage="redacting"]').click();
     await expect(page.locator('.cf-case-stage', { hasText: /^Exporting · / })).toHaveCount(0);
@@ -217,8 +231,9 @@ test.describe('The "Exporting" status', () => {
     const steps = panel.getByRole('list', { name: 'Stages' }).getByRole('listitem');
     await expect(steps.last()).toHaveText('Exported');
     await expect(panel).not.toContainText('Delivered');
-    // The Cases list names finished cases the same way: the chips, the stage tiles and the line under the title.
-    await expect(page.locator('.cf-lede')).toContainText(/\d+ exported$/);
+    // The Cases list names finished cases the same way: the chips, the stage box and the Exported today line.
+    await expect(page.getByTestId('group-delivered')).toContainText('Exported today');
+    await expect(page.locator('.cf-band [data-stage="delivered"]')).toContainText('Exported');
     await expect(page.locator('.cf-desk-main')).not.toContainText('Delivered');
   });
 
@@ -276,6 +291,7 @@ test.describe('The "Exporting" status', () => {
       test(`status chips stay on one line at ${width} px${withPanel ? ' with the case panel open' : ''}`, async ({ page }) => {
         await page.setViewportSize({ width, height: width > 1024 ? 900 : 768 });
         await signInAs(page, 'processor', withPanel ? `/case/${caseOf('LN-7015').packageId}` : '/', { exports: true });
+        await openGroups(page);
         await expect(page.locator(`#cf-row-${caseOf('LN-7015').packageId} .cf-case-stage`)).toHaveText('Exporting · destination paused');
         for (const loan of ['LN-7020', 'LN-7015', 'LN-7004', 'LN-6990', 'LN-6985']) {
           await expect(page.locator(`#cf-row-${caseOf(loan).packageId} .cf-case-stage .cf-stage`)).toBeVisible();

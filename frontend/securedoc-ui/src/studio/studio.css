@@ -257,7 +257,9 @@
   display: inline-flex; align-items: center; gap: 8px; height: 36px; width: min(320px, 100%); padding: 0 12px;
   font-size: 14px; background: var(--cf-surface); border: 1px solid var(--cf-control-line); border-radius: var(--cf-radius); color: var(--cf-muted);
 }
-.cf-search:focus-within { border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink); } /* U026: a 2 px ring, not a 1 px border */
+.cf-search:focus-within { border-color: var(--cf-ink); box-shadow: 0 0 0 1px var(--cf-ink), 0 0 0 4px color-mix(in srgb, var(--cf-ink) 12%, transparent); } /* U026: a 2 px ring, not a 1 px border; 0108 defect 2: plus the soft outer ring, as the form fields */
+/* 0108 defect 2: one focus ring only, on the box. The input inside draws none (the general :focus-visible outline drew a second one). */
+.cf .cf-search input:focus-visible { outline: none; }
 /* The Cases filter is wider so the configured field names fit (owner's U019 answer 1). */
 .cf-search.cf-search-cases { width: min(360px, 100%); }
 .cf-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: var(--cf-ink); }
@@ -276,7 +278,7 @@
 /* Canvas .row: the divider sits inside the 64 px row, so rows after the first are 63 px plus the line. */
 .cf-cases li + li .cf-case { min-height: 63px; }
 /* A row is the case link (opens the case panel) plus a separate action column (UI task U003). */
-.cf-case-row { display: grid; grid-template-columns: minmax(0, 1fr) 170px; align-items: center; transition: background-color 100ms ease; }
+.cf-case-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; transition: background-color 100ms ease; }
 .cf-case-row:hover { background: var(--cf-raised); }
 .cf-case-row[data-selected] { background: var(--cf-raised); box-shadow: inset 2px 0 0 var(--cf-ink); }
 .cf-case {
@@ -292,9 +294,6 @@
 /* Task 0030: a status chip is never wrapped or cut; its column is wide enough for the longest one. */
 .cf-case { --cf-stage-col: 236px; }
 .cf-case-stage .cf-stage { white-space: nowrap; }
-/* With the case panel open the list is narrower: the source and docs columns give way to the stage. */
-.cf-desk.has-drawer .cf-case { grid-template-columns: 220px minmax(0, 1fr) var(--cf-stage-col) 80px; }
-.cf-desk.has-drawer .cf-case-source, .cf-desk.has-drawer .cf-case-docs { display: none; }
 .cf-case > .cf-case-flag { padding: 0; }
 .cf-case-flag { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
 .cf-case[data-you] .cf-case-flag { background: var(--cf-mark); }
@@ -643,7 +642,7 @@
   .cf-drawer { width: 360px; }
   .cf-case { grid-template-columns: 200px 80px minmax(0, 1fr) var(--cf-stage-col) 76px; }
   .cf-case-docs { display: none; }
-  .cf-case-row { grid-template-columns: minmax(0, 1fr) 150px; }
+  .cf-case-row { grid-template-columns: minmax(0, 1fr); }
   /* Below 1200 px (the documented breakpoint covering the spec's "below 1100 px") the find box is an icon button. */
   .cf-find { width: auto; padding: 0 9px; }
   .cf-find-label, .cf-find-keys { display: none; }
@@ -652,8 +651,6 @@
 @media (max-width: 1024px) {
   .cf-top { gap: 12px; padding: 0 16px; }
   .cf-main { padding: 24px 16px 48px; }
-  .cf-desk.has-drawer .cf-case { grid-template-columns: minmax(0, 1fr) auto; }
-  .cf-desk.has-drawer .cf-case-source, .cf-desk.has-drawer .cf-case-next, .cf-desk.has-drawer .cf-case-time { display: none; }
   .cf-intake-grid { grid-template-columns: 320px minmax(0, 1fr); }
   .cf-band-label { font-size: 12px; }
 }
@@ -687,10 +684,7 @@
 /* ---------- Tablet (U021): looking, deciding and approving by touch ---------- */
 /* A narrow row keeps the identifier, next step, stage and action: the next step goes under the identifier. */
 @media (max-width: 1024px) {
-  .cf-desk.has-drawer .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
   /* With the case panel open the list is narrow: the stage tiles go to two rows of three so their names stay whole. */
-  .cf-desk.has-drawer .cf-band { flex-wrap: wrap; }
-  .cf-desk.has-drawer .cf-band-seg { min-width: calc(33% - 4px); }
 }
 @media (max-width: 768px) {
   .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
@@ -859,9 +853,6 @@
 /* Task 0030: at 1200 px and below, with the case panel open, a row is the identifier and the stage chip (the next step
    under them), as below 1024 px, so the chip stays on one line and whole. */
 @media (max-width: 1200px) {
-  .cf-desk.has-drawer .cf-case { grid-template-columns: minmax(0, 1fr) auto; }
-  .cf-desk.has-drawer .cf-case-time { display: none; }
-  .cf-desk.has-drawer .cf-case-next { display: block; grid-column: 1 / -1; grid-row: 2; }
 }
 
 /* Task 0071: Reject case, above the queue. */
@@ -877,8 +868,8 @@
 /* Task 0076: bulk approval on Cases, Approval. */
 .cf-bulk-approve { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 8px 0; }
 .cf-bulk-approve ul { margin: 4px 0 0; padding-left: 18px; }
-.cf-case-row[data-bulk] { grid-template-columns: 52px minmax(0, 1fr) 150px; }
-@media (max-width: 768px) { .cf-case-row[data-bulk] { grid-template-columns: 52px minmax(0, 1fr) auto; } }
+.cf-case-row[data-bulk] { grid-template-columns: 52px minmax(0, 1fr); }
+@media (max-width: 768px) { .cf-case-row[data-bulk] { grid-template-columns: 52px minmax(0, 1fr); } }
 .cf-case-tick { display: flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; padding-left: 14px; cursor: pointer; }
 .cf-case-tick input { width: 20px; height: 20px; }
 .cf-tick-why { grid-column: 1 / -1; padding: 0 12px 10px 72px; font-size: 12px; color: var(--cf-muted); }
@@ -910,3 +901,110 @@
 .cf-desk[data-density='compact'] .cf-case { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
 .cf-desk[data-density='compact'] .cf-case-id { flex-direction: row; gap: 8px; align-items: baseline; }
 @media (pointer: coarse) { .cf-desk[data-density='compact'] .cf-case { min-height: 52px; } }
+
+/* ---------- Task 0108: Cases at volume (approved round 4) ---------- */
+/* Six slim stage boxes in one row: label, then the number; the sentence on hover. */
+.cf-desk .cf-band { margin: 0 0 6px; }
+.cf-desk .cf-band-seg { position: relative; padding: 8px 14px 7px; border-bottom-width: 3px; color: inherit; text-decoration: none; font: inherit; transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.cf-desk button.cf-band-seg:active { transform: scale(0.98); }
+.cf-desk .cf-band-seg[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--cf-ink); border-color: var(--cf-ink); border-bottom-color: var(--stage, var(--cf-ink)); }
+.cf-desk .cf-band-seg[data-static] { cursor: default; }
+.cf-desk .cf-band-count { margin-top: 2px; font-size: 20px; line-height: 1.25; }
+.cf-band-info { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--cf-line-strong); font-size: 10px; font-weight: 600; font-style: normal; color: var(--cf-muted); }
+.cf-band-tip { position: absolute; left: 12px; right: 12px; top: calc(100% + 6px); z-index: 4; padding: 6px 8px; border-radius: 4px; background: var(--cf-ink); color: var(--cf-surface); font-size: 12px; line-height: 1.35; opacity: 0; pointer-events: none; transform: translateY(-2px); transition: opacity 120ms ease 350ms, transform 120ms ease 350ms; }
+@media (hover: hover) { .cf-band-seg:hover .cf-band-tip { opacity: 1; transform: none; } }
+.cf-band-seg:focus-visible .cf-band-tip { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .cf-band-tip, .cf-desk .cf-band-seg { transition: none; } }
+
+/* "Needs you N · sorted by ..." (or the chosen stage) with Filter by and View at its right end. */
+.cf-desk .cf-desk-tools { margin: 16px 0 10px; gap: 10px; justify-content: flex-start; }
+.cf-desk-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; margin: 0; font-size: 14px; min-width: 0; }
+.cf-desk-heading .cf-mark-text { font-weight: 600; }
+.cf-desk .cf-desk-tools .cf-search-cases { margin-left: auto; width: min(300px, 100%); }
+.cf-desk .cf-desk-tools .cf-view { margin-left: 0; }
+.cf-desk .cf-desk-code { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.cf-plain-link { all: unset; cursor: pointer; font-size: 13px; color: var(--cf-muted); text-decoration: underline; text-underline-offset: 3px; }
+.cf-plain-link:hover { color: var(--cf-ink); }
+.cf-plain-link:focus-visible { outline: 2px solid var(--cf-ink); outline-offset: 2px; border-radius: 2px; }
+
+/* In progress and Exported today: one line with the count until opened. */
+.cf-desk .cf-group { margin-bottom: 0; }
+.cf-desk .cf-group + .cf-group { margin-top: 12px; }
+.cf-group-line { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 16px; margin: 0; background: var(--cf-surface); border: 1px solid var(--cf-line); border-radius: var(--cf-radius); font: inherit; font-size: 14px; color: var(--cf-ink); text-align: left; cursor: pointer; }
+.cf-group-line:hover { border-color: var(--cf-line-strong); }
+.cf-group[data-open] .cf-group-line { margin-bottom: 8px; }
+.cf-group-chevron { flex: none; transition: transform 150ms ease; }
+.cf-group[data-open] .cf-group-chevron { transform: rotate(90deg); }
+.cf-group-more { margin-left: auto; font-size: 13px; color: var(--cf-ink); text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .cf-group-chevron { transition: none; } }
+
+/* Rows: tags after the name; the waiting time turns amber, then red (with words for a screen reader). */
+.cf-case-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cf-tag { flex: none; font-size: 11px; font-weight: 600; line-height: 16px; padding: 1px 6px; border-radius: 3px; }
+.cf-tag[data-tag='urgent'] { background: var(--cf-danger); color: var(--cf-surface); } /* 0108: 5.6:1 (the soft tint was 4.4:1) */
+.cf-tag[data-tag='failed'] { background: var(--cf-surface); color: var(--cf-danger); box-shadow: inset 0 0 0 1px var(--cf-danger); }
+.cf-case-time[data-wait] { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.cf-case-time[data-wait]::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; }
+.cf-case-time[data-wait='late'] { color: var(--cf-warn-ink); }
+.cf-case-time[data-wait='late']::before { background: var(--cf-stage-review); }
+.cf-case-time[data-wait='over'] { color: var(--cf-danger); }
+.cf-case-time[data-wait='over']::before { background: var(--cf-danger); }
+.cf-case-row[data-fresh] { animation: cf-fresh 2s ease-out; }
+@keyframes cf-fresh { from { background: var(--cf-mark-soft); } }
+@media (prefers-reduced-motion: reduce) { .cf-case-row[data-fresh] { animation: none; } }
+
+/* "N new cases · Show": floats over the list; the rows wait. */
+.cf-pill-row { position: sticky; top: 64px; z-index: 6; display: flex; justify-content: center; height: 0; overflow: visible; }
+.cf-new-pill { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 18px; background: var(--cf-ink); color: var(--cf-surface); font-size: 13px; font-weight: 500; box-shadow: 0 6px 20px rgba(10, 11, 13, 0.18); transform: translateY(8px); transition: transform 150ms ease; }
+.cf-new-pill:hover { transform: translateY(7px); }
+.cf-new-pill:focus-visible { outline: 2px solid var(--cf-mark); outline-offset: 2px; }
+.cf-new-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cf-mark); }
+@media (prefers-reduced-motion: reduce) { .cf-new-pill { transition: none; } }
+
+/* The case card slides in OVER the list from the right; the list, boxes and Filter/View row never move or shrink.
+   Nothing behind it is dimmed. The case number and the close button stay at the top while the card scrolls. */
+.cf-desk .cf-drawer {
+  position: fixed; top: 56px; right: 0; bottom: 0; left: auto; z-index: 25;
+  width: 480px; max-width: 100%; max-height: none; flex: none;
+  border: 0; border-left: 1px solid var(--cf-line); border-radius: 0;
+  box-shadow: -16px 0 40px rgba(10, 11, 13, 0.12);
+  padding: 0 24px 24px; overflow-y: auto; overscroll-behavior: contain;
+  animation: cf-card-in 200ms ease-out;
+}
+@keyframes cf-card-in { from { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .cf-desk .cf-drawer { animation: none; } }
+.cf-desk .cf-drawer-head { position: sticky; top: 0; z-index: 2; margin: 0 -24px; padding: 18px 24px 12px; background: var(--cf-surface); border-bottom: 1px solid var(--cf-line); }
+.cf-desk .cf-drawer .cf-btn[data-wide] { width: 100%; justify-content: center; min-height: 44px; }
+.cf-desk .cf-drawer .cf-next-action:has(> .cf-btn[data-wide]) { flex-direction: column; align-items: stretch; }
+
+/* iPad landscape (1180) and smaller desktops. */
+@media (max-width: 1200px) {
+  .cf-desk .cf-drawer { width: 440px; }
+}
+/* iPad portrait (820): boxes 3 x 2, Filter by on its own line, less important columns hidden, a narrower card. */
+@media (max-width: 900px) {
+  .cf-desk .cf-band { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .cf-desk .cf-band-seg { min-width: 0; }
+  .cf-desk .cf-desk-tools .cf-search-cases { flex: 1 1 100%; width: auto; order: 5; margin-left: 0; }
+  .cf-desk .cf-desk-tools .cf-view { margin-left: auto; }
+  .cf-desk .cf-case-source, .cf-desk .cf-case-docs { display: none; }
+  .cf-desk .cf-drawer { width: min(520px, calc(100% - 64px)); }
+  .cf-desk .cf-hint { display: none; }
+}
+@media (max-width: 640px) {
+  .cf-desk .cf-drawer { width: 100%; }
+}
+/* Touch: rows 52 px, targets 44 px, no keyboard hint. */
+@media (pointer: coarse) {
+  .cf-desk .cf-case { min-height: 52px; }
+  .cf-desk .cf-group-line { min-height: 52px; }
+  .cf-desk .cf-band-seg { min-height: 44px; }
+  .cf-desk .cf-new-pill { height: 44px; }
+  .cf-desk .cf-plain-link { min-height: 44px; display: inline-flex; align-items: center; }
+  .cf-desk .cf-hint { display: none; }
+}
+.cf-view-note { margin: 6px 0 0; font-size: 12px; color: var(--cf-muted); }
+/* Task 0108, iPad portrait: with Source and Docs hidden, the row's grid has only the columns it shows. */
+@media (min-width: 769px) and (max-width: 900px) {
+  .cf-desk .cf-case { grid-template-columns: 180px minmax(0, 1fr) var(--cf-stage-col) 76px; }
+}

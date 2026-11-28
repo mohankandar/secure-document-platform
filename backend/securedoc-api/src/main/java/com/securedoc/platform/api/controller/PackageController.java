@@ -300,7 +300,8 @@ public class PackageController {
                         s.stopReasonCode() != null ? s.stopReasonCode()
                                 : exportRows.getOrDefault(s.packageId(), none).reasonCode(),
                         exportRows.getOrDefault(s.packageId(), none).destinationName(),
-                        casePriorities.getOrDefault(s.packageId(), com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL).name()
+                        casePriorities.getOrDefault(s.packageId(), com.securedoc.platform.domain.pipeline.PipelinePriority.NORMAL).name(),
+                        s.uploadedAt()
                 ))
                 .toList();
         return ResponseEntity.ok(response);

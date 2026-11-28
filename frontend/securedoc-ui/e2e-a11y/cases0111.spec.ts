@@ -16,22 +16,30 @@ const CANCELLED = { ...DELIVERED_CASE, packageId: id(99), status: 'CANCELLED',
 const LIST = [REVIEW_CASE, DELIVERED_CASE, CANCELLED, ...delivered];
 
 const open = (page: import('@playwright/test').Page) =>
-  openAt(page, 'processor', '/', (p) => answer(p, '/packages', LIST));
+  openAt(page, 'processor', '/', async (p) => {
+    await answer(p, '/packages', LIST);
+    await answer(p, `/packages/${CANCELLED.packageId}`, { ...CANCELLED, documents: [] });
+  });
 
 test('0111: true counts per group, 25 shown, then Show more', async ({ page }) => {
   await open(page);
   const group = page.locator('section[data-group="delivered"]');
+  // Task 0108: Exported today is one line with its true count until opened.
   await expect(group.locator('.cf-group-count')).toHaveText('31');
+  await expect(group.locator('a.cf-case')).toHaveCount(0);
+  await page.getByTestId('group-delivered').click();
   await expect(group.locator('a.cf-case')).toHaveCount(25);
   await group.getByTestId('show-more-delivered').click();
   await expect(group.locator('a.cf-case')).toHaveCount(31);
   await expect(group.getByTestId('show-more-delivered')).toHaveCount(0);
 });
 
-test('0111: a cancelled case says Cancelled', async ({ page }) => {
+test('0111: a cancelled case says Cancelled (0108: final, so not listed; opened from Find)', async ({ page }) => {
   await open(page);
-  const row = page.locator('a.cf-case', { hasText: 'LN-5999' });
-  await expect(row).toContainText('Cancelled');
+  await page.getByTestId('group-delivered').click();
+  await expect(page.locator('a.cf-case', { hasText: 'LN-5999' })).toHaveCount(0);
+  await page.goto(`/case/${CANCELLED.packageId}`);
+  await expect(page.locator('.cf-drawer')).toContainText('Cancelled');
   await expect(page.getByText('Unrecognized')).toHaveCount(0);
 });
 
@@ -40,6 +48,7 @@ test('0111 U8: a case row opens its panel every time it is clicked', async ({ pa
   const review = page.locator('a.cf-case', { hasText: 'LN-3001' });
   const other = page.locator('a.cf-case', { hasText: 'LN-3004' });
   const close = page.getByRole('button', { name: 'Close case' });
+  await page.getByTestId('group-delivered').click();
   for (let round = 0; round < 3; round += 1) {
     await review.click();
     await expect(close).toBeVisible();

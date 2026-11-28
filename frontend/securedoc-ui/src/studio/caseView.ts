@@ -22,7 +22,11 @@ export interface CaseViewSettings {
 export interface CaseView {
   settings: CaseViewSettings;
   options: { sorts: string[]; columns: string[] };
+  /** When a Needs-you row's waiting time turns amber and red (the entity's Business Admin setting); absent from an older server. */
+  waiting?: { amberMinutes: number; redMinutes: number };
 }
+
+export const DEFAULT_WAITING = { amberMinutes: 240, redMinutes: 480 };
 
 export const DEFAULT_CASE_VIEW: CaseViewSettings = { sort: 'received', order: 'asc', columns: null, density: 'comfortable' };
 
@@ -39,7 +43,7 @@ export function useCaseView(enabled: boolean) {
     () => checked('GET /me/case-view', apiClient.getCaseView(), isCaseView));
   // Shown at once; if the server refuses or cannot be reached, the view goes back to what it was and the caller says so.
   const save = useCallback((next: CaseViewSettings) => mutate(() => apiClient.saveCaseView(next), {
-    optimisticData: (current?: CaseView) => ({ settings: next, options: current?.options ?? { sorts: DEFAULT_SORTS, columns: [] } }),
+    optimisticData: (current?: CaseView) => ({ settings: next, options: current?.options ?? { sorts: DEFAULT_SORTS, columns: [] }, waiting: current?.waiting }),
     rollbackOnError: true, populateCache: true, revalidate: false,
   }), [mutate]);
   return { view: data, settings: data?.settings ?? DEFAULT_CASE_VIEW, error, save };
@@ -88,7 +92,7 @@ export function caseComparator(settings: Pick<CaseViewSettings, 'sort' | 'order'
 
 /**
  * The columns shown while the person has not chosen (the server's null): every column the entity offers except
- * Uploaded, which the case list does not carry yet. So nothing the Cases page showed before task 0108 goes away.
+ * Uploaded (the approved default leaves it unticked). So nothing the Cases page showed before task 0108 goes away.
  */
 export function shownColumns(settings: CaseViewSettings, offered: string[] | undefined): string[] {
   return settings.columns ?? (offered ?? ['received', 'source']).filter((c) => c !== 'uploaded');

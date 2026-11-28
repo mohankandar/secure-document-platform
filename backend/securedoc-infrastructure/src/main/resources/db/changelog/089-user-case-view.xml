@@ -34,4 +34,16 @@
             <dropTable tableName="user_case_view"/>
         </rollback>
     </changeSet>
+
+    <!-- Task 0118 rule: a new table carries its meaning in the schema. Added with 0108 part 2 (before the first merge). -->
+    <changeSet id="089-02-user-case-view-comments" author="lexavault">
+        <setTableRemarks tableName="user_case_view" remarks="Each person's View menu choices on the Cases page, per entity: sort, order, columns and density. Field keys only, never a value."/>
+        <setColumnRemarks tableName="user_case_view" columnName="tenant_id" remarks="The entity (tenant) the view belongs to."/>
+        <setColumnRemarks tableName="user_case_view" columnName="actor_id" remarks="The person (actor id) whose view this is."/>
+        <setColumnRemarks tableName="user_case_view" columnName="sort_key" remarks="Sort by: received, waitingLongest, priority, or field: followed by the key of the entity's primary case field."/>
+        <setColumnRemarks tableName="user_case_view" columnName="sort_order" remarks="asc or desc (Oldest first / Newest first, Urgent first / Low first, Low to high / High to low)."/>
+        <setColumnRemarks tableName="user_case_view" columnName="columns_list" remarks="The chosen columns (displayable case field keys, received, uploaded, source), one per line; empty means the default columns."/>
+        <setColumnRemarks tableName="user_case_view" columnName="density" remarks="compact (one line per case) or comfortable (two lines per case)."/>
+        <setColumnRemarks tableName="user_case_view" columnName="updated_at" remarks="When the person last changed the view."/>
+    </changeSet>
 </databaseChangeLog>

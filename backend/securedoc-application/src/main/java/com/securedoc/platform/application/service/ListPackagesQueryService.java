@@ -35,7 +35,9 @@ public final class ListPackagesQueryService implements ListPackagesQuery {
         List<com.documentplatform.fields.FieldDefinition> fields=caseFields.active(principal.tenantId());
         return packages.stream().map(pkg->new PackageSummary(
                 pkg.id(),pkg.packageType(),pkg.status(),identifiers(pkg,principal,fields),pkg.documentCount(),pkg.createdAt(),pkg.updatedAt(),
-                stopReasonCode(pkg,principal))).toList();
+                stopReasonCode(pkg,principal),
+                pkg.documents().stream().map(com.securedoc.platform.domain.document.Document::uploadedAt)
+                        .filter(java.util.Objects::nonNull).max(java.time.Instant::compareTo).orElse(null))).toList();
     }
     /**
      * Task 0038: the code of the case's latest processing problem, for a FAILED case; a REJECTED one has its reason. Only a code LexaVault knows

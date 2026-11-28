@@ -8,6 +8,7 @@ import type {
   CaseExport, DestinationView as ExportDestinationView, NeedsIt, ReachabilityAlert, RetentionSettings, WaitingForYou,
 } from '../studio/exportRules';
 import type {
+  CasePageSettings,
   AutomationPeriod,
   AutomationReport,
   PackageSummary,
@@ -428,6 +429,15 @@ class ApiClient {
 
   async deleteRoutingRule(ruleId: string): Promise<void> {
     await this.request(`/business-admin/routing-rules/${ruleId}`, { method: 'DELETE' });
+  }
+
+  /** Task 0108: the entity's Cases-page settings (Business Admin): waiting-time colours and empty-case expiry. */
+  async getCasePageSettings(): Promise<CasePageSettings> {
+    return this.request('/business-admin/case-page-settings');
+  }
+
+  async saveCasePageSettings(settings: Omit<CasePageSettings, 'defaultEmptyCaseExpiryDays'>): Promise<CasePageSettings> {
+    return this.request('/business-admin/case-page-settings', { method: 'PUT', body: JSON.stringify(settings) });
   }
 
   async listDerivedDeliveries(packageId: string): Promise<DerivedDelivery[]> {

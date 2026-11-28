@@ -71,7 +71,8 @@ async function mockApi(page: Page, capabilities: string[], broken: Set<string>) 
 function caseFor(loanNumber: string) {
   return {
     packageId: 'c3c3c3c3-0000-4000-8000-000000001001', tenantId: ENTITY.tenantId, packageType: 'MANUAL_UPLOAD', status: 'COMPLETED',
-    documentCount: 1, createdAt: '2026-11-17T12:00:00Z', updatedAt: '2026-11-17T12:00:00Z',
+    // Task 0108: exported today, so it is listed (Exported today); an older one is in Find and Reports only.
+    documentCount: 1, createdAt: '2026-11-17T12:00:00Z', updatedAt: new Date().toISOString(),
     businessIdentifiers: [{ key: 'loan_number', label: 'Loan number', value: loanNumber, primary: true, searchable: true, displayable: true, displayOrder: 1 }],
   };
 }
@@ -111,6 +112,7 @@ test('Reports with an answer of the wrong shape shows the error card; the top ba
   await mockIdentityProvider(page);
   await mockApi(page, ADMIN_CAPS, broken);
   await signIn(page);
+  await page.getByTestId('group-delivered').click();
   await expect(page.getByText('LN-1001')).toBeVisible();
 
   await workspaceNav(page).getByRole('link', { name: 'Reports' }).click();
@@ -135,6 +137,7 @@ test('Reports with an answer of the wrong shape shows the error card; the top ba
 
   // Another screen still works.
   await workspaceNav(page).getByRole('link', { name: 'Cases' }).click();
+  await page.getByTestId('group-delivered').click();
   await expect(page.getByText('LN-1001')).toBeVisible();
 });
 

@@ -325,9 +325,11 @@ public class ApplicationServiceConfig {
     public com.securedoc.platform.application.lifecycle.service.EmptyCaseExpiryService emptyCaseExpiryService(
             PackageRepository packageRepository, AuditService auditService,
             PackageDashboardVisibilityPort packageDashboardVisibilityPort,
-            @org.springframework.beans.factory.annotation.Value("${securedoc.cases.empty-case-expiry-days:7}") int days) {
+            com.securedoc.platform.application.casepage.CasePageSettingsService casePageSettings) {
+        // Task 0108: each entity's own time (Cases page settings); securedoc.cases.empty-case-expiry-days is the default.
         return new com.securedoc.platform.application.lifecycle.service.EmptyCaseExpiryService(packageRepository,
-                packageDashboardVisibilityPort, auditService, java.time.Duration.ofDays(days));
+                packageDashboardVisibilityPort, auditService, casePageSettings::emptyCaseExpiry,
+                casePageSettings::shortestEmptyCaseExpiry);
     }
 
     @Bean
