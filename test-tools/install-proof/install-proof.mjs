@@ -101,6 +101,11 @@ function must(command, args, env = {}, { quiet = false, cwd } = {}) {
   const r = spawnSync(command, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (!quiet && r.stdout) process.stdout.write(r.stdout);
   if (r.stderr) process.stdout.write(r.stderr);
+  if (r.status !== 0 && quiet && r.stdout) {
+    // Why it failed: the error lines only (Spring's start report names the setting or the check, never a password).
+    const why = r.stdout.split(/\r?\n/).filter((l) => /ERROR|Exception|LV[-_][A-Z]|Description:|Reason:|Action:|^\s{2,}\S.*(property|bean|config)/i.test(l));
+    console.log(why.slice(-25).map((l) => l.slice(0, 400)).join('\n'));
+  }
   if (r.status !== 0) throw new Error(`${command} ${args.find((a) => !a.startsWith('-')) ?? ''} exited ${r.status ?? r.error?.code}`);
   return r.stdout ?? '';
 }
