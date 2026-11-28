@@ -67,13 +67,13 @@ class SchemaStepPostgresTest {
         run(2, "customer-installed");  // before the schema step: the identity tables are missing
         String first = run(0, "apply", "--runtime-user", RUNTIME_USER);
         // platform-core 0.7.0 (task 0054): identity V5, licensing V2.
-        assertTrue(first.contains("identity         5 migration(s) run, at version 5"), first);
+        assertTrue(first.contains("identity         6 migration(s) run, at version 6"), first);
         assertTrue(first.contains("licensing        2 migration(s) run, at version 2"), first);
         assertTrue(first.contains("notifications    1 migration(s) run, at version 1"), first); // task 0059
         try (Connection c = db.connect()) {
-            assertEquals(5, count(c, "select count(*) from idn_schema_history where version in ('1','2','3','4','5') and success"));
+            assertEquals(6, count(c, "select count(*) from idn_schema_history where version in ('1','2','3','4','5','6') and success"));
             assertEquals(2, count(c, "select count(*) from lic_schema_history where version in ('1','2') and success"));
-            assertEquals(5, count(c, "select max(version) from idn_schema_version"));
+            assertEquals(6, count(c, "select max(version) from idn_schema_version"));
             assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_platform_grant'"));
             assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_machine_binding'"));
             assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_grant_history'"));
@@ -83,10 +83,10 @@ class SchemaStepPostgresTest {
             assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'tenants'"));
         }
         String second = run(0, "apply");
-        assertTrue(second.contains("identity         0 migration(s) run, at version 5"), second);
+        assertTrue(second.contains("identity         0 migration(s) run, at version 6"), second);
         assertTrue(second.contains("licensing        0 migration(s) run, at version 2"), second);
         String status = run(0, "status");
-        assertTrue(status.contains("identity         version 5") && status.contains("licensing        version 2"), status);
+        assertTrue(status.contains("identity         version 6") && status.contains("licensing        version 2"), status);
         assertEquals(4, exitOf("customer-installed"));
     }
 
@@ -241,7 +241,7 @@ class SchemaStepPostgresTest {
             assertEquals(0, new SchemaStep(print, print).run(new String[] {"apply", "--runtime-user", RUNTIME_USER},
                     v3.env(SchemaStep.ENV_PREFIX)), out.toString(StandardCharsets.UTF_8));
             String text = out.toString(StandardCharsets.UTF_8);
-            assertTrue(text.contains("identity         2 migration(s) run, at version 5"), text);
+            assertTrue(text.contains("identity         3 migration(s) run, at version 6"), text);
             assertTrue(text.contains("licensing        1 migration(s) run, at version 2"), text);
             try (Connection c = v3.connect()) {
                 assertEquals(1, count(c, "select count(*) from idn_customer where tenant_id = 'TEN-OLD'"));
@@ -290,9 +290,9 @@ class SchemaStepPostgresTest {
             PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
             assertEquals(0, new SchemaStep(print, print).run(new String[] {"apply"}, v1.env(SchemaStep.ENV_PREFIX)));
             String text = out.toString(StandardCharsets.UTF_8);
-            assertTrue(text.contains("identity         4 migration(s) run, at version 5"), text);
+            assertTrue(text.contains("identity         5 migration(s) run, at version 6"), text);
             try (Connection c = v1.connect()) {
-                assertEquals(5, count(c, "select max(version) from idn_schema_version"));
+                assertEquals(6, count(c, "select max(version) from idn_schema_version"));
             }
         }
     }
@@ -309,9 +309,9 @@ class SchemaStepPostgresTest {
             PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
             assertEquals(0, new SchemaStep(print, print).run(new String[] {"apply"}, v2.env(SchemaStep.ENV_PREFIX)));
             String text = out.toString(StandardCharsets.UTF_8);
-            assertTrue(text.contains("identity         3 migration(s) run, at version 5"), text);
+            assertTrue(text.contains("identity         4 migration(s) run, at version 6"), text);
             try (Connection c = v2.connect()) {
-                assertEquals(5, count(c, "select max(version) from idn_schema_version"));
+                assertEquals(6, count(c, "select max(version) from idn_schema_version"));
                 assertEquals(1, count(c, "select count(*) from information_schema.tables where table_name = 'idn_grant_history'"));
             }
         }

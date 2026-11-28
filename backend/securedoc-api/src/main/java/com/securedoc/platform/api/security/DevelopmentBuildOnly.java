@@ -26,7 +26,8 @@ public final class DevelopmentBuildOnly {
     public static boolean isDevelopmentBuild(ObjectProvider<LicenceBuild> given) {
         LicenceBuild build = given == null ? null : given.getIfUnique();
         LicenceBuild thisBuild = build != null ? build : LicenceBuild.load();
-        return thisBuild.keys().keyIds().stream().anyMatch(thisBuild.keys()::isDevelopmentKey);
+        // Task 0113: platform-core 1.2.0 says it itself (it was worked out from the trusted keys here).
+        return thisBuild.isDevelopment();
     }
 
     /** LOCAL mode asked for, by the bound setting or by the raw one, whatever its case or spaces. */

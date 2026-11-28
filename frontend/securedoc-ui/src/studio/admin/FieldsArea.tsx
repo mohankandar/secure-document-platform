@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { apiClient } from '../../api/client';
 import type { BusinessAdminIdentifierDraft, BusinessIdentifierValidationType } from '../../types';
 import { Notice } from '../atoms';
 import { SettingsCard, Toggle, Loading, useBusinessAdmin, Sheet, TextField, SelectField, OptionalInt } from './shared';
 import { useUnsavedWork } from '../unsavedWork';
-import { fieldKind, fieldRule } from './adminRules';
+import { fieldKind, fieldRule, splitValueLines, valueLines } from './adminRules';
 import { DIGITS_PATTERN, LETTERS_DIGITS_PATTERN } from '../identity';
 import { dashboardColumnName, fieldNameInSentence } from '../words';
 
@@ -72,7 +72,8 @@ export function identifierIssue(list: BusinessAdminIdentifierDraft[]): string | 
 const toRequest = (list: BusinessAdminIdentifierDraft[]) => list.map((i) => ({
   ...i,
   label: i.label.trim(),
-  allowedValues: i.allowedValues.map((v) => v.trim()).filter(Boolean),
+  // Task 0113 (U10): "000 = Club" lines to the codes and their names.
+  ...splitValueLines(i.allowedValues),
   customPattern: i.customPattern?.trim() || null,
 }));
 
@@ -143,7 +144,7 @@ function IdentifierEditor({ value, isNew, canRemove, sensitiveAvailable, onApply
               <label htmlFor="idf-allowed"><span>Allowed values</span></label>
               <textarea id="idf-allowed" rows={4} aria-describedby="idf-allowed-hint" value={d.allowedValues.join('\n')}
                 onChange={(e) => set({ allowedValues: e.target.value.split(/[\n,]/) })} />
-              <span id="idf-allowed-hint" className="cf-field-hint">One per line or separated by commas. With 1–100 values, Reports can also break down by this field.</span>
+              <span id="idf-allowed-hint" className="cf-field-hint">One per line or separated by commas. To show a name instead of the code, write it after an equals sign, for example <code>000 = Club</code>. The code is what is saved and sent; people pick by the name. With 1–100 values, Reports can also break down by this field.</span>
             </div>
           )}
           {d.validationType === 'CUSTOM_PATTERN' && (
@@ -261,6 +262,10 @@ function IdentifierList({ d, set, switchedOff, sensitiveAvailable }: {
 
 export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifiers: boolean; canColumns: boolean }) {
   const { data, error, mutate } = useBusinessAdmin();
+  // Task 0113 (U10): each allowed value as the admin edits it, "000 = Club" where it has a name.
+  const editable = useMemo(() => ((data?.identifiers ?? []) as BusinessAdminIdentifierDraft[]).map((i) => ({
+    ...i, allowedValues: valueLines(i.allowedValues, (i as { allowedValueNames?: Record<string, string> }).allowedValueNames),
+  })), [data?.identifiers]);
   if (!data) return <Loading error={error} retry={() => mutate()} label="Case fields" />;
 
   return (
@@ -270,7 +275,7 @@ export default function FieldsArea({ canIdentifiers, canColumns }: { canIdentifi
           title="Case fields"
           help="caseFields"
           description="Captured when a case is created. The order here is the order staff see. The main ID names the case everywhere."
-          value={data.identifiers as BusinessAdminIdentifierDraft[]}
+          value={editable}
           savedMessage="Case fields saved."
           onSave={async (d) => {
             const issue = identifierIssue(d);

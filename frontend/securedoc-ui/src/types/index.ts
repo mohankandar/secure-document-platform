@@ -11,6 +11,8 @@ export interface BusinessIdentifierValidationConfiguration {
   caseNormalization: BusinessIdentifierCaseNormalization;
   stripSeparators: boolean;
   allowedValues: string[];
+  /** Task 0113 (U10): display names of the allowed values, by code; a value without one shows its code. */
+  allowedValueNames?: Record<string, string>;
   customPattern?: string | null;
   /** How Cases finds a value; a sensitive field only exactly. */
   searchMode?: CaseFieldSearchMode;

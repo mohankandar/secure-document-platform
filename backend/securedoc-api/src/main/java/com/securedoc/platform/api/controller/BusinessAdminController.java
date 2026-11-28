@@ -80,7 +80,8 @@ public class BusinessAdminController {
                         item.extractable(), item.displayable(), item.validationType(), item.exactLength(),
                         item.minLength(), item.maxLength(), item.caseNormalization(), item.stripSeparators(),
                         item.allowedValues(), item.customPattern(), item.searchMode(), item.sensitive(),
-                        item.multiValue(), item.currency(), item.minValue(), item.maxValue())).toList();
+                        item.multiValue(), item.currency(), item.minValue(), item.maxValue(),
+                        item.allowedValueNames())).toList();
         service.updateIdentifiers(principal.tenantId(), principal.actorId(),
                 contextResolver.resolveCorrelationId(request), inputs);
         return ResponseEntity.ok(toResponse(principal.tenantId(), service.getConfiguration(principal.tenantId())));

@@ -64,7 +64,18 @@ public final class CaseFieldSettings {
     public record Input(UUID id, String label, boolean required, boolean primary, boolean searchable, boolean extractable,
                         boolean displayable, String type, Integer exactLength, Integer minLength, Integer maxLength,
                         String letterCase, Boolean stripSeparators, Set<String> options, String pattern, String searchMode,
-                        Boolean sensitive, Boolean multiValue, String currency, String minValue, String maxValue) {
+                        Boolean sensitive, Boolean multiValue, String currency, String minValue, String maxValue,
+                        java.util.Map<String, String> optionNames) {
+        /** Before task 0113: no names for the allowed values. */
+        public Input(UUID id, String label, boolean required, boolean primary, boolean searchable, boolean extractable,
+                     boolean displayable, String type, Integer exactLength, Integer minLength, Integer maxLength,
+                     String letterCase, Boolean stripSeparators, Set<String> options, String pattern, String searchMode,
+                     Boolean sensitive, Boolean multiValue, String currency, String minValue, String maxValue) {
+            this(id, label, required, primary, searchable, extractable, displayable, type, exactLength, minLength, maxLength,
+                    letterCase, stripSeparators, options, pattern, searchMode, sensitive, multiValue, currency, minValue,
+                    maxValue, null);
+        }
+
         public Input(UUID id, String label, boolean required, boolean primary, boolean searchable, boolean extractable,
                      boolean displayable, String type, Integer exactLength, Integer minLength, Integer maxLength,
                      String letterCase, Boolean stripSeparators, Set<String> options, String pattern) {
@@ -278,7 +289,18 @@ public final class CaseFieldSettings {
         if (input.pattern() != null && !input.pattern().isBlank()) b.pattern(input.pattern().trim());
         Set<String> options = new LinkedHashSet<>();
         if (input.options() != null) input.options().forEach(o -> { if (o != null && !o.isBlank()) options.add(o.trim()); });
-        if (!options.isEmpty()) b.options(List.copyOf(options));
+        if (!options.isEmpty()) {
+            // Task 0113 (U10): an allowed value may have a display name; the code stays what is stored and matched.
+            java.util.Map<String, String> names = input.optionNames() == null ? java.util.Map.of() : input.optionNames();
+            if (names.values().stream().anyMatch(name -> name != null && !name.isBlank())) {
+                b.namedOptions(options.stream().map(code -> {
+                    String name = names.get(code);
+                    return new FieldSpec.Option(code, name == null || name.isBlank() ? null : name.trim());
+                }).toList());
+            } else {
+                b.options(List.copyOf(options));
+            }
+        }
         if (type.takesNormalisation()) {
             b.normalisation(letterCase(input.letterCase()), Boolean.TRUE.equals(input.stripSeparators())
                     ? Normalisation.Strip.SEPARATORS : Normalisation.Strip.NONE);
