@@ -15,6 +15,9 @@ import { RejectCase } from './RejectCase';
 import { useUnsavedWork } from './unsavedWork';
 import { REVIEW_KEY_ZONE, TYPING_OR_DIALOG } from './shortcuts';
 
+/** Task 0111 (U9): why Redact is unavailable on a finding that has no place yet. */
+const REDACT_NEEDS_BOX = 'Draw the box first.';
+
 type Zoom = 'fit' | number;
 
 /** The found text only when the server sent a usable one; anything else hides the row (fail closed). */
@@ -118,7 +121,7 @@ export default function Review({ caps }: { caps: string[] }) {
       return;
     }
     if (!pageCheck && kind === 'redact' && !selected.hasBoundingBox && !draft) {
-      setFailure('Drag across the page to mark what should be redacted.');
+      setFailure(`${REDACT_NEEDS_BOX} Drag across the page to mark what should be redacted.`);
       return;
     }
     setBusy(true);
@@ -375,9 +378,11 @@ export default function Review({ caps }: { caps: string[] }) {
             {failure && <Notice tone="danger">{failure}</Notice>}
 
             <div className="cf-decision-actions">
-              <button type="button" className="cf-btn cf-decide" data-variant="redact" onClick={() => decide('redact')} disabled={busy || needsMark || (pageCheck && !pageMarks.reviewed)}>
+              <button type="button" className="cf-btn cf-decide" data-variant="redact" onClick={() => decide('redact')} disabled={busy || needsMark || (pageCheck && !pageMarks.reviewed)}
+                aria-describedby={needsMark ? 'cf-redact-why' : undefined} title={needsMark ? REDACT_NEEDS_BOX : undefined}>
                 {pageCheck ? UNREAD_PAGE_WORDS.done(pageMarks.boxes.length) : 'Redact'} <Kbd>R</Kbd>
               </button>
+              {needsMark && <span id="cf-redact-why" className="cf-decision-why" data-testid="redact-why">{REDACT_NEEDS_BOX}</span>}
               {!pageCheck && <button type="button" className="cf-btn cf-decide" data-variant="ghost" onClick={() => decide('keep')} disabled={busy}>
                 Keep visible <Kbd>V</Kbd>
               </button>}

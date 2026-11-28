@@ -58,6 +58,7 @@ test('the next step in words', () => {
   assert.equal(nextStepText('REJECTED', 0), 'Rejected, nothing more to do');
   assert.equal(nextStepText('COMPLETED', 0), 'Redacted and sent');
   assert.equal(nextStepText('SOMETHING_NEW', 0), 'Status not recognised');
+  assert.equal(nextStepText('CANCELLED', 0), 'Cancelled, nothing more to do', 'task 0111: a cancelled case is not unrecognised');
 });
 
 /* ---------- Task 0023 B4: the case panel's delivery line never shows a file name ---------- */

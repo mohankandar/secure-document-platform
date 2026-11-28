@@ -888,3 +888,6 @@
 .cf a.cf-lv-link:hover { text-decoration-thickness: 2px; }
 .cf-lv-plain { font: inherit; letter-spacing: inherit; }
 @media (pointer: coarse) { .cf a.cf-lv-link { padding: 15px 0; } }
+.cf-show-more { margin: 8px 0 0; min-height: 44px; padding: 0 16px; border: 1px solid var(--cf-line); border-radius: 8px; background: transparent; color: var(--cf-ink); font: inherit; font-size: 14px; cursor: pointer; }
+.cf-show-more:focus-visible { outline: 2px solid var(--cf-focus); outline-offset: 2px; }
+.cf-decision-why { align-self: center; font-size: 13px; color: var(--cf-muted); }

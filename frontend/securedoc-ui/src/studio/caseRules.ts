@@ -41,6 +41,7 @@ export function nextStepText(status: string, openFindings: number | undefined): 
     case 'DELIVERED': return NEXT_STEP.sent;
     case 'FAILED': return NEXT_STEP.stopped;
     case 'REJECTED': return NEXT_STEP.notAccepted;
+    case 'CANCELLED': return NEXT_STEP.cancelled; // task 0111
     default: return NEXT_STEP.unknown;
   }
 }

@@ -630,7 +630,8 @@ async function exportRoutes(page: Page) {
   await page.route('**/api/v1/export-jobs/waiting-for-you', (route) => route.fulfill(json(api.waiting)));
   await page.route('**/api/v1/export-jobs/resend-all', (route) => route.fulfill(json({ destinationId: VAULT, queued: 3, jobIds: [] })));
   await page.route(/\/api\/v1\/packages\/[^/]+\/export-jobs$/, (route) => route.fulfill(json(api.caseExport(new URL(route.request().url()).pathname.split('/')[4]))));
-  await page.route(/\/api\/v1\/packages(\/[^/]+)?$/, (route) => {
+  // Task 0111: the case list is asked with a query (?dashboard=true&offset=…).
+  await page.route(/\/api\/v1\/packages(\/[^/?]+)?(\?.*)?$/, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/v1/packages') return route.fulfill(json([...full, ...CASES]));
     const one = full.find((c) => path.endsWith(c.packageId));

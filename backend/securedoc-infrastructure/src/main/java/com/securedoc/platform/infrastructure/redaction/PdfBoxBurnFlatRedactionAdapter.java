@@ -113,6 +113,8 @@ public class PdfBoxBurnFlatRedactionAdapter implements PdfRedactionPort {
             PDDocument sourceDoc = staged.document();
             int pageCount = sourceDoc.getNumberOfPages();
             PDFRenderer renderer = new PDFRenderer(sourceDoc);
+            // Task 0111 (R6): the same annotations as on a copied page; a comment note's icon is not drawn.
+            renderer.setAnnotationsFilter(PdfOutputCleaner::drawnIntoThePage);
             int totalRedactions = 0;
 
             for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {

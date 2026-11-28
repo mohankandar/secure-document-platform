@@ -1047,6 +1047,20 @@ The codes are listed by area: INT intake, SCN scanner and Scan Bridge, PRC proce
 2. Open a new case with that file.
 3. If it stops again, give your IT Admin the reference number.
 
+### LV-PRC-011 Processing stopped: nothing was planned
+
+- **Means:** A document waited for redaction with no next step planned, so the case stopped. Nothing was delivered.
+- **Kind:** Stopped
+- **Who acts:** IT Admin
+- **HTTP status:** —
+- **Support tells the customer:** The case stopped because no next step was planned for one of its documents. Nothing was delivered. Please have your IT Admin retry processing and send us the reference number.
+
+**What to do:**
+
+1. Nothing was delivered: the case stopped before its final check could pass.
+2. Retry processing from Support.
+3. Give support the reference number: a case should never stop this way.
+
 ## AI: AI model
 
 ### LV-AI-001 AI model not available

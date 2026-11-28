@@ -11,4 +11,9 @@ import java.util.List;
 public interface ListPackagesQuery {
 
     List<PackageSummary> execute(AuthenticatedPrincipal principal, int offset, int limit);
+
+    /** Task 0111: the cases the dashboard lists: none it hides, oldest first, stable across pages (offset a multiple of limit). */
+    default List<PackageSummary> executeForDashboard(AuthenticatedPrincipal principal, int offset, int limit) {
+        return execute(principal, offset, limit);
+    }
 }

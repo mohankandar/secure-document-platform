@@ -9,9 +9,12 @@ import { dailyReport } from '../e2e-oidc/dailyReportFixture';
  */
 
 /** Answers one API path (under /api/v1) instead of the harness; `hang` never answers (the loading state). */
+// Task 0111: a path without a query also answers it with one (the case list asks /packages?dashboard=true&offset=…).
+const withQuery = (path: string) => (path.includes('?') || path.includes('*') ? `**/api/v1${path}`
+  : (url: URL) => url.pathname === `/api/v1${path}`);
 export const answer = (page: Page, path: string, body: unknown, status = 200) =>
-  page.route(`**/api/v1${path}`, (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }));
-const hang = (page: Page, path: string) => page.route(`**/api/v1${path}`, () => undefined);
+  page.route(withQuery(path), (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }));
+const hang = (page: Page, path: string) => page.route(withQuery(path), () => undefined);
 const BROKEN = { message: 'Something went wrong', correlationId: 'c0ffee00-0000-4000-8000-0000000000ff', code: 'LV-SYS-006' };
 type Answers = (page: Page) => Promise<unknown>;
 

@@ -24,6 +24,9 @@ type Filter = 'all' | 'you' | StageKey;
 
 interface Group { key: string; title: string; note?: string; cases: PackageSummary[] }
 
+/** Task 0111: cases shown per group before "Show more". */
+const GROUP_PAGE = 25;
+
 /**
  * The filter's placeholder: the first of the given texts that fits the box at its current width, otherwise the last
  * ("Filter cases"; U019, owner's U019 answer 1). Measured with the input's own font; measured again when the box
@@ -112,7 +115,10 @@ export default function Desk({ caps }: { caps: string[] }) {
   const waiting = useMemo(() => (filter === 'approval' ? groups.flatMap((g) => g.cases) : []).filter((p) => p.status === 'PENDING_FINAL_APPROVAL' && !isExporting(exportStateOf(p.exportState))), [filter, groups]);
   const bulk = useBulkApprove(filter === 'approval' && caps.includes(CAP.approve), waiting);
 
-  const flat = useMemo(() => groups.flatMap((g) => g.cases), [groups]);
+  // Task 0111: every group has its true count; it shows 25 cases, then 25 more each time "Show more" is pressed.
+  const [shown, setShown] = useState<Record<string, number>>({});
+  const visible = useMemo(() => groups.map((g) => ({ ...g, rows: g.cases.slice(0, shown[g.key] ?? GROUP_PAGE) })), [groups, shown]);
+  const flat = useMemo(() => visible.flatMap((g) => g.rows), [visible]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -207,19 +213,25 @@ export default function Desk({ caps }: { caps: string[] }) {
 
         {bulk.selection && <BulkApproveBar selection={bulk.selection} waiting={waiting} onDone={bulk.clear} />}
 
-        {groups.map((group) => (
+        {visible.map((group) => (
           <section key={group.key} className="cf-group" aria-labelledby={`cf-group-${group.key}`} data-group={group.key}>
             <header className="cf-group-head">
               <h2 id={`cf-group-${group.key}`}>{group.title}</h2>
-              <span className="cf-group-count">{group.cases.length}</span>
+              <span className="cf-group-count">{group.cases.length.toLocaleString()}</span>
               {group.note && <span className="cf-group-note">{group.note}</span>}
             </header>
             <ul className="cf-cases">
-              {group.cases.map((pkg) => (
+              {group.rows.map((pkg) => (
                 <CaseRow key={pkg.packageId} pkg={pkg} caps={caps} open={findings.get(pkg.packageId)?.length ?? 0} selected={pkg.packageId === caseId}
                   bulk={bulk.selection && waiting.includes(pkg) ? bulk.selection : null} />
               ))}
             </ul>
+            {group.rows.length < group.cases.length && (
+              <button type="button" className="cf-show-more" data-testid={`show-more-${group.key}`}
+                onClick={() => setShown((s) => ({ ...s, [group.key]: group.rows.length + GROUP_PAGE }))}>
+                {CASE_GROUPS.showMore(Math.min(GROUP_PAGE, group.cases.length - group.rows.length), group.cases.length - group.rows.length)}
+              </button>
+            )}
           </section>
         ))}
 

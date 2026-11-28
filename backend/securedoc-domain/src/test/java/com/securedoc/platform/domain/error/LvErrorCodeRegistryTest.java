@@ -125,7 +125,7 @@ class LvErrorCodeRegistryTest {
         Map<LvErrorCode.Area, Integer> expected = new LinkedHashMap<>();
         expected.put(LvErrorCode.Area.INT, 42);
         expected.put(LvErrorCode.Area.SCN, 22); // task 0061: + LV-SCN-022
-        expected.put(LvErrorCode.Area.PRC, 10); // task 0053: + LV-PRC-010
+        expected.put(LvErrorCode.Area.PRC, 11); // task 0053: + LV-PRC-010; task 0112: + LV-PRC-011
         expected.put(LvErrorCode.Area.AI, 8);
         expected.put(LvErrorCode.Area.RED, 5); // task 0044: + LV-RED-005
         expected.put(LvErrorCode.Area.REV, 15); // task 0071: + LV-REV-010 to 014; task 0076: + LV-REV-015
@@ -136,6 +136,6 @@ class LvErrorCodeRegistryTest {
         expected.put(LvErrorCode.Area.SYS, 15); // task 0060: + LV-SYS-010 to 014; task 0055: + LV-SYS-015
         expected.forEach((area, count) -> assertEquals(count, LvErrorCode.inArea(area).size(), area.name()));
         // Task 0026: 129 codes after 0025, plus the 8 added on 2026-11-21; task 0038 adds LV-INT-028 and 029.
-        assertEquals(162, LvErrorCode.values().length); // task 0087: + LV-DLV-016; // task 0055: + LV-SYS-015; // task 0060: + LV-SYS-010 to 014; // task 0044: + LV-RED-005; task 0053: + LV-PRC-010; 0063: + LV-INT-036, 037; 0064: + LV-AI-008
+        assertEquals(163, LvErrorCode.values().length); // task 0112: + LV-PRC-011; task 0087: + LV-DLV-016; // task 0055: + LV-SYS-015; // task 0060: + LV-SYS-010 to 014; // task 0044: + LV-RED-005; task 0053: + LV-PRC-010; 0063: + LV-INT-036, 037; 0064: + LV-AI-008
     }
 }

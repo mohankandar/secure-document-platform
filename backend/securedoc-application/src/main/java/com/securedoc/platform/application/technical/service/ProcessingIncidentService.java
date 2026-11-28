@@ -157,6 +157,37 @@ public final class ProcessingIncidentService {
         return incident;
     }
 
+    /**
+     * Task 0112: a staged case that would never move again (its redaction run finished, nothing is planned). The same
+     * kind of package incident as a stop after repeated failures, with its own reason and LV-PRC-011.
+     */
+    public ProcessingIncident recordNothingPlanned(TenantId tenantId, PackageId packageId,
+                                                   CorrelationId correlationId) {
+        Objects.requireNonNull(tenantId);
+        Objects.requireNonNull(packageId);
+        Objects.requireNonNull(correlationId);
+        Instant now = Instant.now();
+        String reasonCode = "NOTHING_PLANNED";
+        ProcessingIncident incident = ProcessingIncident.open(
+                tenantId, packageId, null, ProcessingStage.DOCUMENT_PROCESSING,
+                "PACKAGE_PROCESSING_COORDINATION", "NOTHING_PLANNED", reasonCode,
+                false, 1, correlationId,
+                "Processing stopped: nothing was planned for a document waiting for redaction",
+                sanitizeMap(fingerprintProvider.currentFingerprint(tenantId, packageId)),
+                Map.of("scope", "PACKAGE",
+                        "lvCode", com.securedoc.platform.domain.error.LvErrorCode.PRC_011.code()), now);
+        try {
+            repository.save(incident);
+            repository.saveEvent(ProcessingIncidentEvent.create(
+                    incident.id(), tenantId, ProcessingIncidentEventType.PROCESSING_RECOVERY_EXHAUSTED,
+                    1, "PACKAGE", reasonCode, false, correlationId, Map.of(), now));
+        } catch (RuntimeException saveFailure) {
+            // Support telemetry must never prevent the authoritative package state transition.
+            logSaveFailure("RECORD_NOTHING_PLANNED", tenantId, packageId, reasonCode, saveFailure);
+        }
+        return incident;
+    }
+
     public void markInvestigationHold(PackageId packageId, TenantId tenantId, CorrelationId correlationId,
                                       int holdHours) {
         safelyAdvance(packageId, tenantId, incident -> {

@@ -1,0 +1,1002 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!--
+        Task 0118 (owner 2026-11-27): the meaning of every LexaVault table and column, in the schema itself (COMMENT ON),
+        so nobody has to guess it. docs/data/DATA-DICTIONARY.md is generated from these comments; CI fails when a table
+        or column has none (DataDictionaryPostgresTest).
+
+        Only comments: no table, column, type or data changes. runOnChange: a corrected meaning is edited here and set
+        again on the next schema step. A NEW table or column gets its comment in its own changelog (remarks="..." on
+        createTable / column, or setColumnRemarks), not here.
+
+        Meanings ending in "(to confirm)" are drafted from the code and wait for the owner's word. The platform-core
+        tables (idn_, lic_, notif_, erl_, fld_) are described in db/comments/platform-tables.sql of securedoc-api: most of
+        them do not exist yet when this changelog runs on a new database.
+    -->
+    <changeSet id="090-01-schema-comments" author="lexavault" runOnChange="true">
+
+        <!-- artifacts -->
+        <setTableRemarks tableName="artifacts" remarks="Files LexaVault produced or kept for a document (original, extracted text, findings, redacted copy and others), one row per file."/>
+        <setColumnRemarks tableName="artifacts" columnName="id" remarks="Unique id of the artifact."/>
+        <setColumnRemarks tableName="artifacts" columnName="tenant_id" remarks="The entity (tenant) the artifact belongs to."/>
+        <setColumnRemarks tableName="artifacts" columnName="document_id" remarks="The document this artifact was made from or belongs to."/>
+        <setColumnRemarks tableName="artifacts" columnName="artifact_type" remarks="Kind of file: ORIGINAL, EXTRACTED_TEXT, EXTRACTED_TEXT_BATCH, FINDINGS_BATCH, VISION_PAGE, OCR_TEXT, REDACTED, DERIVED_REDACTED and others."/>
+        <setColumnRemarks tableName="artifacts" columnName="status" remarks="State of the file: GENERATING, AVAILABLE, FAILED or DELETED."/>
+        <setColumnRemarks tableName="artifacts" columnName="storage_provider" remarks="Which file store holds the file, used with storage_key to find it and its stored_files record."/>
+        <setColumnRemarks tableName="artifacts" columnName="storage_bucket" remarks="Bucket or container within the file store, empty when the store has none."/>
+        <setColumnRemarks tableName="artifacts" columnName="storage_key" remarks="Path or key of the file within the store, matched to stored_files to know how it is protected."/>
+        <setColumnRemarks tableName="artifacts" columnName="mime_type" remarks="Media type of the file, for example application/pdf."/>
+        <setColumnRemarks tableName="artifacts" columnName="size_bytes" remarks="Size of the file in bytes."/>
+        <setColumnRemarks tableName="artifacts" columnName="checksum_algorithm" remarks="Algorithm used for checksum_value, for example SHA-256."/>
+        <setColumnRemarks tableName="artifacts" columnName="checksum_value" remarks="Checksum of the file content, used to check it has not changed."/>
+        <setColumnRemarks tableName="artifacts" columnName="created_at" remarks="When the artifact was created."/>
+        <setColumnRemarks tableName="artifacts" columnName="updated_at" remarks="When the artifact row was last changed."/>
+        <setColumnRemarks tableName="artifacts" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+
+        <!-- audit_records -->
+        <setTableRemarks tableName="audit_records" remarks="The audit trail: one row per action a person or machine took, with its outcome, kept for compliance and reports."/>
+        <setColumnRemarks tableName="audit_records" columnName="id" remarks="Unique id of the audit record."/>
+        <setColumnRemarks tableName="audit_records" columnName="tenant_id" remarks="The entity (tenant) the action took place in."/>
+        <setColumnRemarks tableName="audit_records" columnName="actor_id" remarks="The person or machine that performed the action."/>
+        <setColumnRemarks tableName="audit_records" columnName="action" remarks="What was done, as an action code."/>
+        <setColumnRemarks tableName="audit_records" columnName="resource_type" remarks="Kind of object the action was on, for example a case or document."/>
+        <setColumnRemarks tableName="audit_records" columnName="resource_id" remarks="Id of the object the action was on."/>
+        <setColumnRemarks tableName="audit_records" columnName="outcome" remarks="Result of the action: SUCCESS, FAILURE, DENIED or PARTIAL."/>
+        <setColumnRemarks tableName="audit_records" columnName="correlation_id" remarks="Id shared by all records and events from the same request, used to trace one operation."/>
+        <setColumnRemarks tableName="audit_records" columnName="detail" remarks="Extra detail about the action in text form, holding codes, counts and ids rather than document values (to confirm)."/>
+        <setColumnRemarks tableName="audit_records" columnName="occurred_at" remarks="When the action happened."/>
+        <setColumnRemarks tableName="audit_records" columnName="created_at" remarks="When the audit record was written."/>
+        <setColumnRemarks tableName="audit_records" columnName="actor_display_name" remarks="The person's display name at the time of the action, empty for records written before task 0016."/>
+        <setColumnRemarks tableName="audit_records" columnName="case_id" remarks="The case (package) id the Cases page shows, at the time of the action, never a business identifier."/>
+
+        <!-- case_instructions -->
+        <setTableRemarks tableName="case_instructions" remarks="Where each case's instructions file is stored, one row per case, the text itself is kept encrypted in the file and in no column."/>
+        <setColumnRemarks tableName="case_instructions" columnName="package_id" remarks="The case (document package) the instructions belong to."/>
+        <setColumnRemarks tableName="case_instructions" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="case_instructions" columnName="file_id" remarks="Id of the stored instructions file, replaced when the instructions are changed."/>
+        <setColumnRemarks tableName="case_instructions" columnName="storage_provider" remarks="Which file store holds the instructions file."/>
+        <setColumnRemarks tableName="case_instructions" columnName="storage_bucket" remarks="Bucket or container within the file store, empty when the store has none."/>
+        <setColumnRemarks tableName="case_instructions" columnName="storage_key" remarks="Path or key of the instructions file within the store."/>
+        <setColumnRemarks tableName="case_instructions" columnName="changed_at" remarks="When the instructions were last saved."/>
+
+        <!-- case_priorities -->
+        <setTableRemarks tableName="case_priorities" remarks="A case's priority when it is not the default NORMAL, kept apart from document_packages so processing cannot undo a reviewer's change."/>
+        <setColumnRemarks tableName="case_priorities" columnName="package_id" remarks="The case (document package) this priority is for."/>
+        <setColumnRemarks tableName="case_priorities" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="case_priorities" columnName="priority" remarks="The case's priority: URGENT, NORMAL, LOW or BULK."/>
+        <setColumnRemarks tableName="case_priorities" columnName="changed_at" remarks="When the priority was last set."/>
+        <setColumnRemarks tableName="case_priorities" columnName="source_key" remarks="The source the case came from (an integration connection id, or folder:key for a watched folder), used for Bulk sources."/>
+
+        <!-- document_intelligence_bundles -->
+        <setTableRemarks tableName="document_intelligence_bundles" remarks="Catalog of versioned document intelligence bundles (model, prompt, rule and threshold versions), with the frozen baseline as safe fallback."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="version" remarks="Unique version name of the bundle, referenced by entity policies and processing snapshots."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="status" remarks="Lifecycle state of the bundle: CANDIDATE, PROMOTED or RETIRED."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="model_version" remarks="Version of the AI model the bundle uses."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="prompt_version" remarks="Version of the AI prompts the bundle uses."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="detector_version" remarks="Version of the sensitive data detectors the bundle uses."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="ocr_rules_version" remarks="Version of the OCR rules the bundle uses."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="profile_version" remarks="Version of the document profile content the bundle uses, none for the baseline."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="validation_rules_version" remarks="Version of the validation rules the bundle uses."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="thresholds_version" remarks="Version of the confidence thresholds the bundle uses."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="description" remarks="Short human description of the bundle."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="created_at" remarks="When the bundle was added to the catalog."/>
+        <setColumnRemarks tableName="document_intelligence_bundles" columnName="promoted_at" remarks="When the bundle was promoted for use, empty while it is a candidate."/>
+
+        <!-- document_packages -->
+        <setTableRemarks tableName="document_packages" remarks="Cases: one row per document package taken in, grouping its documents through processing, review, export and deletion."/>
+        <setColumnRemarks tableName="document_packages" columnName="id" remarks="Unique id of the case, shown as the case ID on the Cases page."/>
+        <setColumnRemarks tableName="document_packages" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="document_packages" columnName="package_type" remarks="How the case came in: MANUAL_UPLOAD, FOLDER_INTAKE, API_SUBMISSION or SCANNER_INTAKE."/>
+        <setColumnRemarks tableName="document_packages" columnName="status" remarks="Case state, such as CREATED, PROCESSING, PENDING_REVIEW, IN_REVIEW, APPROVED, REJECTED, FAILED or CANCELLED."/>
+        <setColumnRemarks tableName="document_packages" columnName="metadata_json" remarks="Extra key-value metadata of the case (classification, tags, context) as JSON."/>
+        <setColumnRemarks tableName="document_packages" columnName="created_by" remarks="The person or machine actor that created the case."/>
+        <setColumnRemarks tableName="document_packages" columnName="created_at" remarks="When the case was created."/>
+        <setColumnRemarks tableName="document_packages" columnName="updated_at" remarks="When the case row was last changed."/>
+        <setColumnRemarks tableName="document_packages" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+        <setColumnRemarks tableName="document_packages" columnName="business_record_id" remarks="The business record this case is linked to through its business identifiers, empty when not linked."/>
+        <setColumnRemarks tableName="document_packages" columnName="intake_fingerprint" remarks="Hash of the intake source and attempt, unique per entity, used so the same submission is not taken in twice."/>
+        <setColumnRemarks tableName="document_packages" columnName="source_reference" remarks="Reference to where the case came from, such as a sender's package reference or folder path."/>
+        <setColumnRemarks tableName="document_packages" columnName="dashboard_hidden_at" remarks="When a person hid the case from the dashboard, empty while it is shown."/>
+        <setColumnRemarks tableName="document_packages" columnName="dashboard_hidden_by" remarks="The person who hid the case from the dashboard."/>
+        <setColumnRemarks tableName="document_packages" columnName="sensitivity_level" remarks="Level sent by the source and passed on at export, never changed by LexaVault: STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL."/>
+
+        <!-- document_page_routes -->
+        <setTableRemarks tableName="document_page_routes" remarks="How each page of a document is read (fast text path or vision model) and why, deleted with its document, no page text."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="tenant_id" remarks="The entity (tenant) the document belongs to."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="document_id" remarks="The document the page belongs to."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="page_number" remarks="Page number within the document, starting at 1."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="path" remarks="How the page is read: FAST, FAST_SIGNATURE or VISION."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="reasons" remarks="Why the page took its path, names joined by +, such as PICTURE, HANDWRITING, LOW_OCR_CONFIDENCE or CHECK_FAILED."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="ocr_confidence" remarks="Mean OCR word confidence for the page from 0 to 1, empty when the routing checks did not need OCR."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="signature_boxes" remarks="Boxes the signature detector found on the page, each as left,top,width,height, used to cover signatures."/>
+        <setColumnRemarks tableName="document_page_routes" columnName="created_at" remarks="When the page route was recorded."/>
+
+        <!-- documents -->
+        <setTableRemarks tableName="documents" remarks="The documents (PDF files) of each case, with their processing state."/>
+        <setColumnRemarks tableName="documents" columnName="id" remarks="Unique id of the document."/>
+        <setColumnRemarks tableName="documents" columnName="tenant_id" remarks="The entity (tenant) the document belongs to."/>
+        <setColumnRemarks tableName="documents" columnName="package_id" remarks="The case (document package) the document belongs to."/>
+        <setColumnRemarks tableName="documents" columnName="document_type" remarks="Kind of file: PDF, IMAGE, WORD, SPREADSHEET, TEXT, EMAIL or OTHER."/>
+        <setColumnRemarks tableName="documents" columnName="status" remarks="Processing state: UPLOADED, EXTRACTING, DETECTING, REDACTING, PROCESSED or FAILED."/>
+        <setColumnRemarks tableName="documents" columnName="file_name" remarks="File name of the document as received."/>
+        <setColumnRemarks tableName="documents" columnName="mime_type" remarks="Media type of the received file, for example application/pdf."/>
+        <setColumnRemarks tableName="documents" columnName="size_bytes" remarks="Size of the received file in bytes."/>
+        <setColumnRemarks tableName="documents" columnName="checksum_algorithm" remarks="Algorithm used for checksum_value, for example SHA-256."/>
+        <setColumnRemarks tableName="documents" columnName="checksum_value" remarks="Checksum of the received file, used to check its integrity."/>
+        <setColumnRemarks tableName="documents" columnName="page_count" remarks="Number of pages in the document, 0 until it is known."/>
+        <setColumnRemarks tableName="documents" columnName="created_at" remarks="When the document was taken in."/>
+        <setColumnRemarks tableName="documents" columnName="updated_at" remarks="When the document row was last changed."/>
+        <setColumnRemarks tableName="documents" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+        <setColumnRemarks tableName="documents" columnName="sensitivity_level" remarks="Level sent by the source and passed on at export, never changed by LexaVault: STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL."/>
+
+        <!-- findings -->
+        <setTableRemarks tableName="findings" remarks="Sensitive information found in documents, one row per item with its place on the page and review state, never the value itself."/>
+        <setColumnRemarks tableName="findings" columnName="id" remarks="Unique id of the finding."/>
+        <setColumnRemarks tableName="findings" columnName="document_id" remarks="The document the finding is in."/>
+        <setColumnRemarks tableName="findings" columnName="entity_type" remarks="Kind of sensitive information, such as PERSON_NAME, SSN, DATE_OF_BIRTH, ADDRESS, SIGNATURE or UNREAD_PAGE."/>
+        <setColumnRemarks tableName="findings" columnName="page_number" remarks="Page number the finding is on, starting at 1."/>
+        <setColumnRemarks tableName="findings" columnName="start_offset" remarks="Character position where the finding starts in the page text."/>
+        <setColumnRemarks tableName="findings" columnName="end_offset" remarks="Character position where the finding ends in the page text."/>
+        <setColumnRemarks tableName="findings" columnName="confidence" remarks="How sure the detector is, from 0 to 1, used to decide between automatic redaction and review."/>
+        <setColumnRemarks tableName="findings" columnName="detector_name" remarks="Name of the detector or rule that found it."/>
+        <setColumnRemarks tableName="findings" columnName="detector_version" remarks="Version of the detector that found it."/>
+        <setColumnRemarks tableName="findings" columnName="status" remarks="Review state: DETECTED, CONFIRMED, DISMISSED, REDACTED or OVERRIDDEN."/>
+        <setColumnRemarks tableName="findings" columnName="detected_at" remarks="When the finding was detected."/>
+        <setColumnRemarks tableName="findings" columnName="updated_at" remarks="When the finding was last changed."/>
+        <setColumnRemarks tableName="findings" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+        <setColumnRemarks tableName="findings" columnName="tenant_id" remarks="The entity (tenant) the finding belongs to."/>
+        <setColumnRemarks tableName="findings" columnName="bbox_left" remarks="Left edge of the box to redact, as a share of page width from 0 to 1, empty when there is no box."/>
+        <setColumnRemarks tableName="findings" columnName="bbox_top" remarks="Top edge of the box to redact, as a share of page height from 0 to 1, empty when there is no box."/>
+        <setColumnRemarks tableName="findings" columnName="bbox_width" remarks="Width of the box to redact, as a share of page width, empty when there is no box."/>
+        <setColumnRemarks tableName="findings" columnName="bbox_height" remarks="Height of the box to redact, as a share of page height, empty when there is no box."/>
+        <setColumnRemarks tableName="findings" columnName="reader" remarks="What read the value: PDF_TEXT, OCR, VISION, FORM_FIELD, SIGNATURE, PAGE_CHECK or PERSON, empty for findings before task 0105."/>
+        <setColumnRemarks tableName="findings" columnName="method" remarks="How it was found: PATTERN, AI_MODEL, CHECK or PERSON, empty for findings before task 0105."/>
+        <setColumnRemarks tableName="findings" columnName="placement" remarks="How its place on the page was found, such as READER_WORDS, MODEL_BOX, MATCHED_WORDS, GENEROUS_COVER, NONE or PERSON."/>
+        <setColumnRemarks tableName="findings" columnName="person_reason" remarks="Why a person is needed, naming the placement step that failed, empty when no person is needed."/>
+        <setColumnRemarks tableName="findings" columnName="placed_by" remarks="The person who placed or drew the box, empty when LexaVault placed it."/>
+        <setColumnRemarks tableName="findings" columnName="placed_at" remarks="When the person placed or drew the box."/>
+        <setColumnRemarks tableName="findings" columnName="redaction_style" remarks="Redaction style in force when the document was searched, such as KEEP_LAST_FOUR, empty means removed in full."/>
+        <setColumnRemarks tableName="findings" columnName="found_by" remarks="Which path(s) found it, names joined by +, such as TEXT, VISION or SIGNATURE, empty for older and person-drawn findings."/>
+        <setColumnRemarks tableName="findings" columnName="ai_models" remarks="The AI model(s) that took part in finding it, names and versions only, empty when no model took part."/>
+
+        <!-- outbox_events -->
+        <setTableRemarks tableName="outbox_events" remarks="Domain events written in the same transaction as the change that caused them, for later publishing (outbox pattern)."/>
+        <setColumnRemarks tableName="outbox_events" columnName="id" remarks="Unique id of the event."/>
+        <setColumnRemarks tableName="outbox_events" columnName="tenant_id" remarks="The entity (tenant) the event belongs to."/>
+        <setColumnRemarks tableName="outbox_events" columnName="event_type" remarks="Name of the domain event."/>
+        <setColumnRemarks tableName="outbox_events" columnName="aggregate_type" remarks="Kind of object the event is about, for example a case or document."/>
+        <setColumnRemarks tableName="outbox_events" columnName="aggregate_id" remarks="Id of the object the event is about."/>
+        <setColumnRemarks tableName="outbox_events" columnName="correlation_id" remarks="Id shared with the request and audit records that produced the event."/>
+        <setColumnRemarks tableName="outbox_events" columnName="payload_json" remarks="The event itself as JSON."/>
+        <setColumnRemarks tableName="outbox_events" columnName="status" remarks="Publishing state, written as PENDING, and no code in LexaVault moves it further yet (to confirm)."/>
+        <setColumnRemarks tableName="outbox_events" columnName="occurred_at" remarks="When the event happened."/>
+        <setColumnRemarks tableName="outbox_events" columnName="created_at" remarks="When the event row was written."/>
+        <setColumnRemarks tableName="outbox_events" columnName="published_at" remarks="When the event was published, no code writes it yet (to confirm)."/>
+        <setColumnRemarks tableName="outbox_events" columnName="retry_count" remarks="Number of publishing attempts, written as 0 and not changed by any code yet (to confirm)."/>
+        <setColumnRemarks tableName="outbox_events" columnName="last_error" remarks="Error from the last publishing attempt, no code writes it yet (to confirm)."/>
+
+        <!-- package_lifecycles -->
+        <setTableRemarks tableName="package_lifecycles" remarks="Retention and deletion state of each case: exports done, when the original and redacted files are due for deletion, and holds."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="package_id" remarks="The case (document package) this lifecycle is for."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="successful_export_cycles" remarks="Number of successful exports of the case, capped by the lifecycle policy maximum."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="last_exported_at" remarks="When the case was last exported successfully."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="original_delete_at" remarks="When the original files become due for deletion, set from the last successful export."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="redacted_delete_at" remarks="When the stored redacted copies become due for deletion, set from the last successful export."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="technical_hold_until" remarks="Safety hold for a case never exported: its files are kept until this time, then deleted."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="redacted_purged_at" remarks="When the redacted copies were deleted."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="original_purged_at" remarks="When the original files were deleted."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="purged_at" remarks="When the case's files were finally deleted, after which it can no longer be reprocessed."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="final_approval_granted" remarks="Whether a person gave the final delivery approval the entity's policy requires, cleared at each export."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="updated_at" remarks="When the lifecycle row was last changed."/>
+        <setColumnRemarks tableName="package_lifecycles" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+
+        <!-- package_processing_intelligence_snapshots -->
+        <setTableRemarks tableName="package_processing_intelligence_snapshots" remarks="Fixed record of the document intelligence mode and bundle used for each processing cycle of a case, no document content."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="id" remarks="Unique id of the snapshot."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="package_id" remarks="The case (document package) that was processed."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="processing_cycle" remarks="Which processing run of the case this is, starting at 1, unique per case."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="requested_mode" remarks="Intelligence mode the entity's policy asked for: DISABLED, OBSERVE or ENABLED."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="effective_mode" remarks="Intelligence mode actually used: DISABLED, OBSERVE or ENABLED, DISABLED when it fell back to the baseline."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="bundle_version" remarks="The intelligence bundle used, the baseline bundle when disabled or on fallback."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="policy_configuration_version" remarks="Version of the entity's intelligence policy at the time of processing."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="intelligence_execution_allowed" remarks="Whether intelligence modules were allowed to run (mode not DISABLED)."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="decision_influence_allowed" remarks="Whether intelligence could influence decisions (mode ENABLED only)."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="baseline_discovery_required" remarks="Whether the baseline detection path had to run, always true in this version."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="fallback_to_baseline" remarks="Whether processing fell back to the baseline because the requested bundle could not run."/>
+        <setColumnRemarks tableName="package_processing_intelligence_snapshots" columnName="captured_at" remarks="When the snapshot was taken."/>
+
+        <!-- package_processing_leases -->
+        <setTableRemarks tableName="package_processing_leases" remarks="Which server is processing a case right now, so only one server works on a case at a time."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="package_id" remarks="The case (document package) being processed."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="owner_id" remarks="Id of the server instance holding the lease."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="fencing_token" remarks="Number increased on every new lease, so a server with an old lease cannot save results."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="acquired_at" remarks="When the current lease was taken."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="heartbeat_at" remarks="When the holding server last confirmed it is still working."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="lease_expires_at" remarks="When the lease runs out if not renewed, after which another server may take the case."/>
+        <setColumnRemarks tableName="package_processing_leases" columnName="attempt_count" remarks="Number of processing attempts for the case, at least 1, checked against the attempt budget."/>
+
+        <!-- package_rejections -->
+        <setTableRemarks tableName="package_rejections" remarks="Why a person rejected a case, as a reason code, one row per case, never free text."/>
+        <setColumnRemarks tableName="package_rejections" columnName="package_id" remarks="The rejected case (document package)."/>
+        <setColumnRemarks tableName="package_rejections" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="package_rejections" columnName="reason_code" remarks="LV code of the rejection reason: wrong document, unreadable, out of scope, duplicate, or other (see ticket)."/>
+        <setColumnRemarks tableName="package_rejections" columnName="rejected_by" remarks="The person who rejected the case."/>
+        <setColumnRemarks tableName="package_rejections" columnName="rejected_at" remarks="When the case was rejected."/>
+
+        <!-- pipeline_jobs -->
+        <setTableRemarks tableName="pipeline_jobs" remarks="Queue of staged pipeline jobs (TEXT, FIND, VISION, REDACT, EXPORT, SPLIT_EXPORT) per case, with retries and claims, no content."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="id" remarks="Unique id of the job."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="tenant_id" remarks="The entity (tenant) the job belongs to."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="stage" remarks="Pipeline stage of the job: TEXT, FIND, VISION, REDACT, EXPORT or SPLIT_EXPORT."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="package_id" remarks="The case (document package) the job works on."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="document_id" remarks="The document the job works on (for SPLIT_EXPORT its source document), empty for a whole-case job."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="destination_id" remarks="The integration connection the export is sent to, empty for the local export folder."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="item_id" remarks="For SPLIT_EXPORT the derived delivery id, empty otherwise."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="export_cycle" remarks="The case run (export cycle) the job belongs to, starting at 1."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="priority" remarks="Pick-up priority: URGENT, NORMAL, LOW or BULK."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="status" remarks="Job state: READY, RUNNING, WAITING_RETRY, PAUSED, WAITING_FOR_YOU, NEEDS_IT, DONE or STOPPED."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="attempts" remarks="Number of times the job has been tried."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="next_attempt_at" remarks="When the job is next due to run."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="claim_owner" remarks="Id of the server currently running the job, empty when not claimed."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="claim_until" remarks="When the current claim runs out, after which the job can be taken again."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="claim_token" remarks="Fencing token increased on every claim, a result is saved only with the current one."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="last_lv_code" remarks="LV error code of the last failure, empty when none."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="last_detail" remarks="Internal code with detail on the last result, for example DELIVERY_IO or CLAIM_EXPIRED."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="created_at" remarks="When the job was queued."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="updated_at" remarks="When the job was last changed."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="resend" remarks="Whether the next run is a person's resend, which gets one attempt and goes to IT on failure."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="rebuilt" remarks="Whether the export was rebuilt from the stored redacted copies, allowed once per job."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="claim_expiries" remarks="Number of claims that ran out because a server stopped mid-job, the job goes to IT after the maximum."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="first_failed_at" remarks="When the job first failed, empty if it never failed."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="last_failed_at" remarks="When the job last failed, used to count recent failures per destination."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="queue_seq" remarks="Ever-increasing queue number from a sequence, used for pick-up order instead of the clock."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="page_from" remarks="First page of the page batch the job covers, empty with page_to for the whole document."/>
+        <setColumnRemarks tableName="pipeline_jobs" columnName="page_to" remarks="Last page of the page batch the job covers, empty with page_from for the whole document."/>
+
+        <!-- processing_locks -->
+        <setTableRemarks tableName="processing_locks" remarks="Short-lived locks that stop two workers processing the same document at once, released or left to expire."/>
+        <setColumnRemarks tableName="processing_locks" columnName="lock_key" remarks="Name of the lock, built from what is locked, such as a document id."/>
+        <setColumnRemarks tableName="processing_locks" columnName="tenant_id" remarks="The entity (tenant) the locked item belongs to, empty for a lock not tied to one."/>
+        <setColumnRemarks tableName="processing_locks" columnName="owner_id" remarks="Id of the worker holding the lock."/>
+        <setColumnRemarks tableName="processing_locks" columnName="fencing_token" remarks="Token of the current holder, needed to release the lock."/>
+        <setColumnRemarks tableName="processing_locks" columnName="expires_at" remarks="When the lock runs out if not released."/>
+        <setColumnRemarks tableName="processing_locks" columnName="created_at" remarks="When the lock was first taken."/>
+        <setColumnRemarks tableName="processing_locks" columnName="updated_at" remarks="When the lock was last taken or renewed."/>
+
+        <!-- review_tasks -->
+        <setTableRemarks tableName="review_tasks" remarks="Review work items: one per case sent to a person to check its findings before approval."/>
+        <setColumnRemarks tableName="review_tasks" columnName="id" remarks="Unique id of the review task."/>
+        <setColumnRemarks tableName="review_tasks" columnName="tenant_id" remarks="The entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="review_tasks" columnName="package_id" remarks="The case (document package) to review."/>
+        <setColumnRemarks tableName="review_tasks" columnName="status" remarks="Review state: PENDING, ASSIGNED, IN_PROGRESS, APPROVED, REJECTED, ESCALATED or CANCELLED."/>
+        <setColumnRemarks tableName="review_tasks" columnName="assigned_to" remarks="The person the review is assigned to, empty while unassigned."/>
+        <setColumnRemarks tableName="review_tasks" columnName="created_at" remarks="When the review task was created."/>
+        <setColumnRemarks tableName="review_tasks" columnName="updated_at" remarks="When the review task was last changed."/>
+        <setColumnRemarks tableName="review_tasks" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+
+        <!-- stored_files -->
+        <setTableRemarks tableName="stored_files" remarks="How every stored file is protected (plain or encrypted), the record decides and a file without one is not opened, the key itself is never here."/>
+        <setColumnRemarks tableName="stored_files" columnName="storage_provider" remarks="Which file store holds the file, part of the key with storage_key."/>
+        <setColumnRemarks tableName="stored_files" columnName="storage_key" remarks="Path or key of the file within the store, part of the key with storage_provider."/>
+        <setColumnRemarks tableName="stored_files" columnName="tenant_id" remarks="The entity (tenant) the file belongs to."/>
+        <setColumnRemarks tableName="stored_files" columnName="protection" remarks="How the file is stored: PLAIN (development only, and files from before encryption) or ENCRYPTED."/>
+        <setColumnRemarks tableName="stored_files" columnName="crypto_format" remarks="Name of the encryption format of the file, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="crypto_version" remarks="Version of the encryption format, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="key_service" remarks="Which key service can open the wrapped key, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="customer_id" remarks="The customer whose keys encrypted the file, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="wrapped_key" remarks="The file's data key in wrapped form, which only the key service can open, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="key_version" remarks="Version of the customer key used to wrap the data key, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="encrypted_bytes" remarks="Size of the encrypted file in bytes, checked before the file is read, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="ciphertext_sha256" remarks="SHA-256 of the encrypted file, checked before it is read so a changed file is refused, empty when plain."/>
+        <setColumnRemarks tableName="stored_files" columnName="created_at" remarks="When the record was written."/>
+
+        <!-- vault_entries -->
+        <setTableRemarks tableName="vault_entries" remarks="Sealed vault entries: one per document and artifact kind kept in the vault, with checksum, retention and legal hold."/>
+        <setColumnRemarks tableName="vault_entries" columnName="id" remarks="Unique id of the vault entry."/>
+        <setColumnRemarks tableName="vault_entries" columnName="tenant_id" remarks="The entity (tenant) the entry belongs to."/>
+        <setColumnRemarks tableName="vault_entries" columnName="package_id" remarks="The case (document package) the entry belongs to."/>
+        <setColumnRemarks tableName="vault_entries" columnName="document_id" remarks="The document the entry belongs to."/>
+        <setColumnRemarks tableName="vault_entries" columnName="artifact_id" remarks="The artifact (file) the entry keeps."/>
+        <setColumnRemarks tableName="vault_entries" columnName="artifact_type" remarks="Kind of artifact kept, typically REDACTED or ORIGINAL, unique per document."/>
+        <setColumnRemarks tableName="vault_entries" columnName="checksum_algorithm" remarks="Algorithm used for checksum_value, for example SHA-256."/>
+        <setColumnRemarks tableName="vault_entries" columnName="checksum_value" remarks="Checksum registered for the artifact, used to verify its integrity later."/>
+        <setColumnRemarks tableName="vault_entries" columnName="retention_min_days" remarks="Minimum number of days the entry must be kept."/>
+        <setColumnRemarks tableName="vault_entries" columnName="retention_max_days" remarks="Maximum number of days the entry may be kept, empty for no maximum."/>
+        <setColumnRemarks tableName="vault_entries" columnName="legal_hold" remarks="Whether the entry is under legal hold and must not be deleted."/>
+        <setColumnRemarks tableName="vault_entries" columnName="sealed" remarks="Whether the entry is sealed and can no longer be changed."/>
+        <setColumnRemarks tableName="vault_entries" columnName="sealed_at" remarks="When the entry was sealed."/>
+        <setColumnRemarks tableName="vault_entries" columnName="registered_at" remarks="When the entry was registered in the vault."/>
+        <setColumnRemarks tableName="vault_entries" columnName="version" remarks="Optimistic locking counter, increased on every update."/>
+
+        <!-- bulk_sources -->
+        <setTableRemarks tableName="bulk_sources" remarks="Intake sources an entity has marked as Bulk, with the daily window in which their cases may run (cases from them get priority BULK)."/>
+        <setColumnRemarks tableName="bulk_sources" columnName="tenant_id" remarks="Entity (tenant) that marked the source as Bulk."/>
+        <setColumnRemarks tableName="bulk_sources" columnName="source_key" remarks="The source: an integration connection id, or folder:&lt;key&gt; for a watched folder."/>
+        <setColumnRemarks tableName="bulk_sources" columnName="window_from" remarks="Start of the daily window, in the entity's local time, in which this source's Bulk cases may be processed."/>
+        <setColumnRemarks tableName="bulk_sources" columnName="window_to" remarks="End of the daily window, in the entity's local time (never equal to window_from)."/>
+        <setColumnRemarks tableName="bulk_sources" columnName="weekends" remarks="True when Bulk cases of this source may also run all day on weekends, outside the weekday window."/>
+        <setColumnRemarks tableName="bulk_sources" columnName="marked_at" remarks="When the source was marked as Bulk or its window last changed."/>
+
+        <!-- delivery_approval_requests -->
+        <setTableRemarks tableName="delivery_approval_requests" remarks="Links an approval request sent to supervisors to the case and case version it asks to approve for delivery. Ids only."/>
+        <setColumnRemarks tableName="delivery_approval_requests" columnName="request_id" remarks="Id of the approval request held by the platform notifications service."/>
+        <setColumnRemarks tableName="delivery_approval_requests" columnName="tenant_id" remarks="Entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="delivery_approval_requests" columnName="package_id" remarks="The case (document package) awaiting final approval before delivery."/>
+        <setColumnRemarks tableName="delivery_approval_requests" columnName="case_version" remarks="Version of the case the request was raised for, so each version is asked about only once."/>
+        <setColumnRemarks tableName="delivery_approval_requests" columnName="created_at" remarks="When the approval request was created."/>
+
+        <!-- delivery_attempts -->
+        <setTableRemarks tableName="delivery_attempts" remarks="Each attempt to deliver a case submission to the main destination, with its outcome."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="id" remarks="Primary key of the attempt."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="submission_id" remarks="The delivery submission this attempt belongs to."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="attempt_number" remarks="Sequence number of the attempt within its submission, starting at 1."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="connection_id" remarks="Integration connection used for the attempt, null when no connection applies (local export folder)."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="connection_configuration_version" remarks="Configuration version of the connection at the time of the attempt."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="status" remarks="Attempt outcome: STARTED, SUCCEEDED, FAILED_RETRYABLE or FAILED_ATTENTION."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="failure_category" remarks="Category code of the failure when the attempt failed, no content."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="started_at" remarks="When the attempt started."/>
+        <setColumnRemarks tableName="delivery_attempts" columnName="completed_at" remarks="When the attempt finished, null while it runs."/>
+
+        <!-- delivery_submission_documents -->
+        <setTableRemarks tableName="delivery_submission_documents" remarks="Each redacted document included in a delivery submission, with its checksum and the destination's acknowledgement."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="submission_id" remarks="The delivery submission the document belongs to."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="tenant_id" remarks="Entity (tenant) the document belongs to."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="package_id" remarks="The case (document package) being delivered."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="document_id" remarks="The LexaVault document being delivered."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="source_document_id" remarks="Stable id LexaVault sends for this document (doc-&lt;uuid&gt;), used by the destination to recognise repeats."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="file_name" remarks="File name sent with the redacted document."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="size_bytes" remarks="Size in bytes of the redacted file sent."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="checksum_algorithm" remarks="Algorithm of the checksum sent, for example SHA-256."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="checksum_value" remarks="Checksum of the redacted file sent, used by the destination to verify it."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="acknowledged" remarks="True once the destination has acknowledged receiving this document."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="destination_document_reference" remarks="The destination's own id for the received document, when it returned one."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="destination_location" remarks="Where the destination says it stored the document, when it returned one."/>
+        <setColumnRemarks tableName="delivery_submission_documents" columnName="acknowledged_at" remarks="When the destination acknowledged the document."/>
+
+        <!-- delivery_submissions -->
+        <setTableRemarks tableName="delivery_submissions" remarks="One delivery of a case's redacted documents to the main destination per export cycle, with its status and progress."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="id" remarks="Primary key of the submission."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="tenant_id" remarks="Entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="package_id" remarks="The case (document package) being delivered."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="export_cycle" remarks="Export cycle (case run) the submission belongs to, one submission per case and cycle."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="source_submission_id" remarks="Stable id LexaVault sends for the submission (sub-&lt;uuid&gt;), used by the destination to detect repeats."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="destination_type" remarks="Kind of destination delivered to, for example document-store."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="status" remarks="Submission state: PENDING, DELIVERING, PARTIALLY_ACKNOWLEDGED, RETRY_PENDING, DELIVERED or ATTENTION_REQUIRED."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="attempt_count" remarks="Number of delivery attempts made so far."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="destination_submission_reference" remarks="The destination's own id for the submission, when it returned one."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="last_failure_category" remarks="Category code of the latest failure, no content."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="created_at" remarks="When the submission was created."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="updated_at" remarks="When the submission last changed."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="completed_at" remarks="When the submission was fully delivered."/>
+        <setColumnRemarks tableName="delivery_submissions" columnName="destination_progress" remarks="JSON record of how far the delivery got through the destination profile (calls made, the destination's ids), null for older rows."/>
+
+        <!-- derived_deliveries -->
+        <setTableRemarks tableName="derived_deliveries" remarks="Split documents made from pages matched by a routing rule, and their delivery to the rule's destination."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="id" remarks="Primary key of the derived delivery."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="tenant_id" remarks="Entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="package_id" remarks="The case (document package) the pages come from."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="source_document_id" remarks="The LexaVault document whose pages were split out."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="export_cycle" remarks="Export cycle (case run) the derived delivery belongs to."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="routing_rule_id" remarks="Routing rule that matched, set to null if the rule is deleted."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="destination_connection_id" remarks="Integration connection the split document is delivered to."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="connection_config_version" remarks="Configuration version of the destination connection when the delivery was planned."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="destination_label" remarks="Copy of the rule's destination label at the time of the split."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="marker_type" remarks="Copy of the rule's marker type: BARCODE, QR_CODE or TEXT_PATTERN."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="marker_value" remarks="Copy of the rule's marker value that was matched."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="page_numbers" remarks="Page numbers of the source document included in the split document."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="artifact_id" remarks="Stored artifact holding the redacted split document."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="source_derived_document_id" remarks="Stable id LexaVault sends for the split document, its idempotency key at the destination."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="file_name" remarks="File name sent with the split document."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="status" remarks="Delivery state: PENDING, DELIVERING, RETRY_PENDING, DELIVERED or ATTENTION_REQUIRED."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="attempt_count" remarks="Number of delivery attempts made so far."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="last_failure_category" remarks="Category code of the latest failure, no content."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="retryable" remarks="True when a failed delivery may be tried again."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="destination_reference" remarks="The destination's own reference for the delivered document, when it returned one."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="created_at" remarks="When the derived delivery was created."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="updated_at" remarks="When the derived delivery last changed."/>
+        <setColumnRemarks tableName="derived_deliveries" columnName="delivered_at" remarks="When the split document was delivered."/>
+
+        <!-- derived_delivery_attempts -->
+        <setTableRemarks tableName="derived_delivery_attempts" remarks="Each attempt to deliver a split (derived) document, with its outcome."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="id" remarks="Primary key of the attempt."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="derived_delivery_id" remarks="The derived delivery this attempt belongs to."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="attempt_number" remarks="Sequence number of the attempt, starting at 1."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="connection_id" remarks="Integration connection used for the attempt."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="connection_config_version" remarks="Configuration version of the connection at the time of the attempt."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="status" remarks="Attempt outcome: STARTED, SUCCESS or FAILED."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="failure_category" remarks="Category code of the failure when the attempt failed, no content."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="started_at" remarks="When the attempt started."/>
+        <setColumnRemarks tableName="derived_delivery_attempts" columnName="completed_at" remarks="When the attempt finished, null while it runs."/>
+
+        <!-- document_export_records -->
+        <setTableRemarks tableName="document_export_records" remarks="Each document written by a successful case export, with its checksum and where it was put."/>
+        <setColumnRemarks tableName="document_export_records" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="document_export_records" columnName="export_record_id" remarks="The case export record (package_export_records) this document belongs to."/>
+        <setColumnRemarks tableName="document_export_records" columnName="tenant_id" remarks="Entity (tenant) the document belongs to."/>
+        <setColumnRemarks tableName="document_export_records" columnName="package_id" remarks="The case (document package) exported."/>
+        <setColumnRemarks tableName="document_export_records" columnName="document_id" remarks="The LexaVault document exported."/>
+        <setColumnRemarks tableName="document_export_records" columnName="file_name" remarks="File name of the exported redacted document."/>
+        <setColumnRemarks tableName="document_export_records" columnName="size_bytes" remarks="Size in bytes of the exported file."/>
+        <setColumnRemarks tableName="document_export_records" columnName="checksum_algorithm" remarks="Algorithm of the checksum, for example SHA-256."/>
+        <setColumnRemarks tableName="document_export_records" columnName="checksum_value" remarks="Checksum of the exported file."/>
+        <setColumnRemarks tableName="document_export_records" columnName="destination_location" remarks="Where the file was placed at the destination (path or destination reference)."/>
+
+        <!-- export_destination_states -->
+        <setTableRemarks tableName="export_destination_states" remarks="Current health of each export destination used by the export queue (no row means WORKING). Codes, ids and times only."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="connection_id" remarks="Integration connection id of the destination, or an id derived from the tenant id for the local export folder."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="tenant_id" remarks="Entity (tenant) the destination belongs to."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="state" remarks="Destination state: WORKING, PAUSED (transient failures, a probe brings it back) or NEEDS_IT (sign-in refused, waits for IT)."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="paused_at" remarks="When the destination was last paused."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="consecutive_failures" remarks="Number of failures in a row, used to decide when to pause."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="last_probe_at" remarks="When a probe last checked whether a paused destination is back."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="last_lv_code" remarks="LexaVault error code (LV-...) of the latest failure."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="updated_at" remarks="When the row last changed."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="rate_limited_until" remarks="After a rate-limit answer (429), no job for this destination is taken before this time."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="worker_reduction" remarks="Workers taken off this destination after rate limiting, never leaving fewer than one, restored one by one after quiet periods."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="last_rate_limited_at" remarks="When the destination last answered with a rate limit (429)."/>
+        <setColumnRemarks tableName="export_destination_states" columnName="last_check_failed_at" remarks="When the destination's own check last failed, used by the all-destinations-unreachable rule."/>
+
+        <!-- export_reachability_alerts -->
+        <setTableRemarks tableName="export_reachability_alerts" remarks="One row per entity for the alert that LexaVault cannot reach any of its export destinations."/>
+        <setColumnRemarks tableName="export_reachability_alerts" columnName="tenant_id" remarks="Entity (tenant) the alert is for."/>
+        <setColumnRemarks tableName="export_reachability_alerts" columnName="state" remarks="RAISED while every destination fails its check, CLEARED when any check passes."/>
+        <setColumnRemarks tableName="export_reachability_alerts" columnName="raised_at" remarks="When the alert was last raised."/>
+        <setColumnRemarks tableName="export_reachability_alerts" columnName="last_check_at" remarks="When the destinations were last checked for this alert."/>
+        <setColumnRemarks tableName="export_reachability_alerts" columnName="cleared_at" remarks="When the alert was last cleared."/>
+        <setColumnRemarks tableName="export_reachability_alerts" columnName="updated_at" remarks="When the row last changed."/>
+
+        <!-- export_retention_periods -->
+        <setTableRemarks tableName="export_retention_periods" remarks="How long exported copies are kept per export destination (1 to 72 hours), with one master row per entity."/>
+        <setColumnRemarks tableName="export_retention_periods" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="export_retention_periods" columnName="tenant_id" remarks="Entity (tenant) the setting belongs to."/>
+        <setColumnRemarks tableName="export_retention_periods" columnName="destination_id" remarks="Split (routing) destination's connection id, or null for the master destination."/>
+        <setColumnRemarks tableName="export_retention_periods" columnName="retention_hours" remarks="Retention period in hours, between 1 and 72."/>
+        <setColumnRemarks tableName="export_retention_periods" columnName="updated_by" remarks="Actor id of the person who last changed the setting."/>
+        <setColumnRemarks tableName="export_retention_periods" columnName="updated_at" remarks="When the setting last changed."/>
+
+        <!-- external_intake_documents -->
+        <setTableRemarks tableName="external_intake_documents" remarks="Each document announced by an external intake, tracked until its PDF arrives."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="package_id" remarks="The external intake (and case) the document belongs to."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="external_source_document_id" remarks="The sender's own id for the document, unique within the intake."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="original_file_name" remarks="File name given by the sender."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="declared_sha256" remarks="SHA-256 the sender declared for the file, checked on arrival when given."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="received_document_id" remarks="The LexaVault document created when the file arrived."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="received_sha256" remarks="SHA-256 of the file actually received."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="idempotency_key" remarks="Sender's idempotency key for the upload, so a repeated upload is recognised."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="received_at" remarks="When the file arrived."/>
+        <setColumnRemarks tableName="external_intake_documents" columnName="sensitivity_level" remarks="Sensitivity level the document was announced with: STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL."/>
+
+        <!-- external_intakes -->
+        <setTableRemarks tableName="external_intakes" remarks="A case announced by an external sender (push API, polling or scanner), tracked until all its documents arrive or it expires."/>
+        <setColumnRemarks tableName="external_intakes" columnName="package_id" remarks="The case (document package) created for the intake."/>
+        <setColumnRemarks tableName="external_intakes" columnName="tenant_id" remarks="Entity (tenant) the intake belongs to."/>
+        <setColumnRemarks tableName="external_intakes" columnName="integration_connection_id" remarks="Integration connection (source) the intake came through."/>
+        <setColumnRemarks tableName="external_intakes" columnName="channel" remarks="How the intake arrived: PUSH_API, POLLING or SCANNER."/>
+        <setColumnRemarks tableName="external_intakes" columnName="external_source_package_id" remarks="The sender's own id for the package."/>
+        <setColumnRemarks tableName="external_intakes" columnName="source_revision" remarks="The sender's revision of the package, so a changed package is taken as a new intake."/>
+        <setColumnRemarks tableName="external_intakes" columnName="attempt_number" remarks="Attempt number for the same package and revision, starting at 1."/>
+        <setColumnRemarks tableName="external_intakes" columnName="request_fingerprint" remarks="SHA-256 hex fingerprint of the intake request, used to recognise repeats of the same request."/>
+        <setColumnRemarks tableName="external_intakes" columnName="status" remarks="Intake state: AWAITING_DOCUMENTS, ACCEPTED_FOR_PROCESSING or INCOMPLETE_EXPIRED."/>
+        <setColumnRemarks tableName="external_intakes" columnName="created_at" remarks="When the intake was announced."/>
+        <setColumnRemarks tableName="external_intakes" columnName="expires_at" remarks="When an incomplete intake expires (from the connection's incomplete window)."/>
+        <setColumnRemarks tableName="external_intakes" columnName="accepted_at" remarks="When all documents arrived and the case was accepted for processing."/>
+        <setColumnRemarks tableName="external_intakes" columnName="expired_at" remarks="When the intake expired incomplete."/>
+        <setColumnRemarks tableName="external_intakes" columnName="cleanup_completed_at" remarks="When the files of an expired intake were cleaned up."/>
+        <setColumnRemarks tableName="external_intakes" columnName="updated_at" remarks="When the row last changed."/>
+
+        <!-- intake_observations -->
+        <setTableRemarks tableName="intake_observations" remarks="What the watched folder intake saw for each drop: waiting, accepted, refused or duplicate, and why."/>
+        <setColumnRemarks tableName="intake_observations" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="intake_observations" columnName="tenant_id" remarks="Entity (tenant) the drop belongs to."/>
+        <setColumnRemarks tableName="intake_observations" columnName="source_reference" remarks="Reference to the drop in the watched folder (its folder or file name)."/>
+        <setColumnRemarks tableName="intake_observations" columnName="status" remarks="Observation state: WAITING_FOR_TRIGGER, ACCEPTED, REJECTED or DUPLICATE."/>
+        <setColumnRemarks tableName="intake_observations" columnName="reason_code" remarks="Why a drop was refused, an IntakeRejectionCode name such as MISSING_FILE or INVALID_FILE."/>
+        <setColumnRemarks tableName="intake_observations" columnName="fingerprint" remarks="Fingerprint of the drop, so a resumed drop continues its existing case instead of counting as a duplicate."/>
+        <setColumnRemarks tableName="intake_observations" columnName="package_id" remarks="The case (document package) created from the drop, when one was."/>
+        <setColumnRemarks tableName="intake_observations" columnName="first_seen_at" remarks="When the drop was first seen."/>
+        <setColumnRemarks tableName="intake_observations" columnName="visible_after" remarks="Time before which a drop still waiting for its trigger file is left out of the intake list."/>
+        <setColumnRemarks tableName="intake_observations" columnName="updated_at" remarks="When the row last changed."/>
+
+        <!-- intake_refusals -->
+        <setTableRemarks tableName="intake_refusals" remarks="What intake refused or had already taken in, per source system: the LV code and time only. Watched folder drops are in intake_observations."/>
+        <setColumnRemarks tableName="intake_refusals" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="intake_refusals" columnName="tenant_id" remarks="Entity (tenant) the refusal belongs to."/>
+        <setColumnRemarks tableName="intake_refusals" columnName="source_key" remarks="The source: an integration connection id, or type:MANUAL_UPLOAD for manual uploads."/>
+        <setColumnRemarks tableName="intake_refusals" columnName="lv_code" remarks="LexaVault error code (LV-...) of the refusal."/>
+        <setColumnRemarks tableName="intake_refusals" columnName="kind" remarks="REFUSED or DUPLICATE (already taken in)."/>
+        <setColumnRemarks tableName="intake_refusals" columnName="occurred_at" remarks="When the refusal happened."/>
+
+        <!-- integration_connections -->
+        <setTableRemarks tableName="integration_connections" remarks="Each entity's configured connections to senders (intake sources) and destinations (delivery), without any secret value."/>
+        <setColumnRemarks tableName="integration_connections" columnName="id" remarks="Primary key of the connection."/>
+        <setColumnRemarks tableName="integration_connections" columnName="tenant_id" remarks="Entity (tenant) the connection belongs to."/>
+        <setColumnRemarks tableName="integration_connections" columnName="name" remarks="Name of the connection, unique within the entity."/>
+        <setColumnRemarks tableName="integration_connections" columnName="description" remarks="Optional description of the connection."/>
+        <setColumnRemarks tableName="integration_connections" columnName="purpose" remarks="What the connection is for: INGESTION_SOURCE, DOCUMENT_STORE_DELIVERY or DERIVED_DOCUMENT_DELIVERY."/>
+        <setColumnRemarks tableName="integration_connections" columnName="direction" remarks="INBOUND (sender) or OUTBOUND (destination)."/>
+        <setColumnRemarks tableName="integration_connections" columnName="provider_type" remarks="Transport family: PUSH_API, HTTP_API, FILE_SHARE, WATCHED_FOLDER or SCANNER."/>
+        <setColumnRemarks tableName="integration_connections" columnName="authentication_type" remarks="How the connection authenticates: NONE, BASIC, API_KEY, JWT, OAUTH2_CLIENT_CREDENTIALS or MTLS."/>
+        <setColumnRemarks tableName="integration_connections" columnName="client_principal" remarks="Machine client identity the sender signs in with, unique within the entity."/>
+        <setColumnRemarks tableName="integration_connections" columnName="endpoint" remarks="Address of the remote system for HTTP connections."/>
+        <setColumnRemarks tableName="integration_connections" columnName="file_share_root" remarks="Root folder path for file share connections."/>
+        <setColumnRemarks tableName="integration_connections" columnName="secret_reference" remarks="Reference to where the connection's secret is stored outside the database, never the secret itself."/>
+        <setColumnRemarks tableName="integration_connections" columnName="timeout_seconds" remarks="Timeout in seconds for calls to the remote system."/>
+        <setColumnRemarks tableName="integration_connections" columnName="retry_max_attempts" remarks="Maximum number of retries for a failed call."/>
+        <setColumnRemarks tableName="integration_connections" columnName="incomplete_window_hours" remarks="Hours an external intake may wait for its documents before it expires."/>
+        <setColumnRemarks tableName="integration_connections" columnName="max_documents_per_intake" remarks="Most documents one intake from this source may hold, capped at the case limit."/>
+        <setColumnRemarks tableName="integration_connections" columnName="max_pdf_size_bytes" remarks="Largest PDF in bytes accepted from this source."/>
+        <setColumnRemarks tableName="integration_connections" columnName="max_pdf_pages" remarks="Most pages per PDF accepted from this source, capped at the case limit."/>
+        <setColumnRemarks tableName="integration_connections" columnName="acknowledgement_mode" remarks="What counts as acknowledgement: NONE, HTTP_SUCCESS, DESTINATION_RECEIPT, DURABLE_FILE_WRITE, SOURCE_PICKUP_ACK or SUBMISSION_ACK."/>
+        <setColumnRemarks tableName="integration_connections" columnName="enabled" remarks="True when the connection is in use."/>
+        <setColumnRemarks tableName="integration_connections" columnName="configuration_version" remarks="Version number raised on each configuration change, recorded with each delivery attempt."/>
+        <setColumnRemarks tableName="integration_connections" columnName="health_status" remarks="Last known health: UNKNOWN, HEALTHY, DEGRADED, UNAVAILABLE or DISABLED."/>
+        <setColumnRemarks tableName="integration_connections" columnName="last_success_at" remarks="When the connection last worked."/>
+        <setColumnRemarks tableName="integration_connections" columnName="last_failure_at" remarks="When the connection last failed."/>
+        <setColumnRemarks tableName="integration_connections" columnName="last_failure_category" remarks="Category code of the latest failure, no content."/>
+        <setColumnRemarks tableName="integration_connections" columnName="created_at" remarks="When the connection was created."/>
+        <setColumnRemarks tableName="integration_connections" columnName="updated_at" remarks="When the connection last changed."/>
+        <setColumnRemarks tableName="integration_connections" columnName="polling_schedule_type" remarks="For polling sources: INTERVAL or DAILY, null for other connections."/>
+        <setColumnRemarks tableName="integration_connections" columnName="polling_interval_minutes" remarks="For INTERVAL polling: minutes between runs (5 to 1440)."/>
+        <setColumnRemarks tableName="integration_connections" columnName="polling_local_time" remarks="For DAILY polling: local time of day of the run."/>
+        <setColumnRemarks tableName="integration_connections" columnName="polling_time_zone" remarks="Time zone of the daily polling time."/>
+        <setColumnRemarks tableName="integration_connections" columnName="polling_batch_limit" remarks="Most packages taken in one polling run."/>
+        <setColumnRemarks tableName="integration_connections" columnName="destination_settings" remarks="JSON settings added to the destination's published profile (profile, token address, client id, field mapping), no secret."/>
+
+        <!-- package_export_records -->
+        <setTableRemarks tableName="package_export_records" remarks="Each successful export of a case, one row per case and export cycle."/>
+        <setColumnRemarks tableName="package_export_records" columnName="id" remarks="Primary key of the export record."/>
+        <setColumnRemarks tableName="package_export_records" columnName="tenant_id" remarks="Entity (tenant) the case belongs to."/>
+        <setColumnRemarks tableName="package_export_records" columnName="package_id" remarks="The case (document package) exported."/>
+        <setColumnRemarks tableName="package_export_records" columnName="cycle_number" remarks="Export cycle number of the case, unique per case."/>
+        <setColumnRemarks tableName="package_export_records" columnName="destination_type" remarks="Kind of destination exported to: document-store or local."/>
+        <setColumnRemarks tableName="package_export_records" columnName="exported_at" remarks="When the export completed."/>
+        <setColumnRemarks tableName="package_export_records" columnName="correlation_id" remarks="Correlation id of the request that did the export, linking it to logs and audit records."/>
+
+        <!-- polling_runs -->
+        <setTableRemarks tableName="polling_runs" remarks="Each run of a polling intake source, with its counts and outcome."/>
+        <setColumnRemarks tableName="polling_runs" columnName="id" remarks="Primary key of the run."/>
+        <setColumnRemarks tableName="polling_runs" columnName="tenant_id" remarks="Entity (tenant) the run belongs to."/>
+        <setColumnRemarks tableName="polling_runs" columnName="integration_connection_id" remarks="Polling source (integration connection) that was polled."/>
+        <setColumnRemarks tableName="polling_runs" columnName="trigger_type" remarks="What started the run: SCHEDULED or MANUAL."/>
+        <setColumnRemarks tableName="polling_runs" columnName="status" remarks="Run state: RUNNING, SUCCESS, PARTIAL or FAILED."/>
+        <setColumnRemarks tableName="polling_runs" columnName="active_lock_key" remarks="Unique lock set only while RUNNING so a source has one run at a time, cleared when the run ends."/>
+        <setColumnRemarks tableName="polling_runs" columnName="started_at" remarks="When the run started."/>
+        <setColumnRemarks tableName="polling_runs" columnName="completed_at" remarks="When the run finished."/>
+        <setColumnRemarks tableName="polling_runs" columnName="packages_discovered" remarks="Packages found at the source in this run."/>
+        <setColumnRemarks tableName="polling_runs" columnName="documents_expected" remarks="Documents the found packages announced."/>
+        <setColumnRemarks tableName="polling_runs" columnName="documents_retrieved" remarks="Documents actually retrieved."/>
+        <setColumnRemarks tableName="polling_runs" columnName="packages_acknowledged" remarks="Packages acknowledged back to the source as taken."/>
+        <setColumnRemarks tableName="polling_runs" columnName="failure_category" remarks="Category code of the failure when the run failed."/>
+        <setColumnRemarks tableName="polling_runs" columnName="failure_detail" remarks="Short failure description, up to 500 characters."/>
+
+        <!-- routing_rules -->
+        <setTableRemarks tableName="routing_rules" remarks="Rules that split pages carrying a marker (barcode, QR code or text) into separate documents for a destination."/>
+        <setColumnRemarks tableName="routing_rules" columnName="id" remarks="Primary key of the rule."/>
+        <setColumnRemarks tableName="routing_rules" columnName="tenant_id" remarks="Entity (tenant) the rule belongs to."/>
+        <setColumnRemarks tableName="routing_rules" columnName="destination_label" remarks="Name shown for the destination of the split documents."/>
+        <setColumnRemarks tableName="routing_rules" columnName="marker_type" remarks="Kind of marker looked for: BARCODE, QR_CODE or TEXT_PATTERN."/>
+        <setColumnRemarks tableName="routing_rules" columnName="marker_value" remarks="Marker value that triggers the rule."/>
+        <setColumnRemarks tableName="routing_rules" columnName="scan_region" remarks="Where on the page the marker is looked for: TOP_RIGHT, BOTTOM_LEFT or BOTH."/>
+        <setColumnRemarks tableName="routing_rules" columnName="destination_connection_id" remarks="Integration connection the split documents are delivered to."/>
+        <setColumnRemarks tableName="routing_rules" columnName="enabled" remarks="True when the rule is applied."/>
+        <setColumnRemarks tableName="routing_rules" columnName="created_at" remarks="When the rule was created."/>
+        <setColumnRemarks tableName="routing_rules" columnName="updated_at" remarks="When the rule last changed."/>
+
+        <!-- source_priorities -->
+        <setTableRemarks tableName="source_priorities" remarks="Default priority for new cases from each intake source of an entity."/>
+        <setColumnRemarks tableName="source_priorities" columnName="tenant_id" remarks="Entity (tenant) the setting belongs to."/>
+        <setColumnRemarks tableName="source_priorities" columnName="source_key" remarks="The source: an integration connection id, or folder:&lt;key&gt; for a watched folder."/>
+        <setColumnRemarks tableName="source_priorities" columnName="priority" remarks="Default case priority: URGENT, NORMAL or LOW."/>
+        <setColumnRemarks tableName="source_priorities" columnName="changed_at" remarks="When the default last changed."/>
+
+        <!-- watched_folder_leases -->
+        <setTableRemarks tableName="watched_folder_leases" remarks="Lease that lets only one server node scan the watched folder at a time, with a fencing token against stale owners."/>
+        <setColumnRemarks tableName="watched_folder_leases" columnName="lease_name" remarks="Name of the lease (the folder scan it guards)."/>
+        <setColumnRemarks tableName="watched_folder_leases" columnName="owner_id" remarks="Id of the server node that holds the lease."/>
+        <setColumnRemarks tableName="watched_folder_leases" columnName="fencing_token" remarks="Number raised each time the lease changes owner, so a stale owner's work is refused."/>
+        <setColumnRemarks tableName="watched_folder_leases" columnName="acquired_at" remarks="When the current owner took the lease."/>
+        <setColumnRemarks tableName="watched_folder_leases" columnName="heartbeat_at" remarks="When the owner last renewed the lease."/>
+        <setColumnRemarks tableName="watched_folder_leases" columnName="lease_expires_at" remarks="Database time after which another node may take the lease."/>
+
+        <!-- watched_folder_settings -->
+        <setTableRemarks tableName="watched_folder_settings" remarks="Sensitivity level each watched folder gives the files it picks up, one row per entity and folder."/>
+        <setColumnRemarks tableName="watched_folder_settings" columnName="tenant_id" remarks="Entity (tenant) the folder belongs to."/>
+        <setColumnRemarks tableName="watched_folder_settings" columnName="folder_key" remarks="Name of the folder, installed for the installed folder."/>
+        <setColumnRemarks tableName="watched_folder_settings" columnName="sensitivity_level" remarks="Level given to the folder's files: STANDARD, CONFIDENTIAL or HIGHLY_CONFIDENTIAL."/>
+        <setColumnRemarks tableName="watched_folder_settings" columnName="updated_by" remarks="Actor id of the person who last changed the setting."/>
+        <setColumnRemarks tableName="watched_folder_settings" columnName="updated_at" remarks="When the setting last changed."/>
+
+        <!-- access_requests -->
+        <setTableRemarks tableName="access_requests" remarks="Requests by a person for time-limited access to a vaulted artifact, with the decision taken on each request."/>
+        <setColumnRemarks tableName="access_requests" columnName="artifact_id" remarks="The artifact (stored file) the person asks to access."/>
+        <setColumnRemarks tableName="access_requests" columnName="decided_at" remarks="When the request was approved, denied or revoked, empty while it is pending."/>
+        <setColumnRemarks tableName="access_requests" columnName="decided_by" remarks="Actor id of the person who decided the request, empty while it is pending."/>
+        <setColumnRemarks tableName="access_requests" columnName="decision_reason" remarks="The reason the decider gave for the decision, if any."/>
+        <setColumnRemarks tableName="access_requests" columnName="expires_at" remarks="When the request or the access it grants runs out."/>
+        <setColumnRemarks tableName="access_requests" columnName="id" remarks="Primary key of the access request."/>
+        <setColumnRemarks tableName="access_requests" columnName="justification" remarks="The reason the requester gave for needing access."/>
+        <setColumnRemarks tableName="access_requests" columnName="requested_at" remarks="When the request was made."/>
+        <setColumnRemarks tableName="access_requests" columnName="requested_by" remarks="Actor id of the person asking for access."/>
+        <setColumnRemarks tableName="access_requests" columnName="status" remarks="State of the request: PENDING, APPROVED, DENIED, EXPIRED or REVOKED."/>
+        <setColumnRemarks tableName="access_requests" columnName="tenant_id" remarks="The entity the request belongs to."/>
+        <setColumnRemarks tableName="access_requests" columnName="vault_entry_id" remarks="The vault entry that registers the artifact being requested."/>
+        <setColumnRemarks tableName="access_requests" columnName="version" remarks="Optimistic-lock version, raised on every update."/>
+
+        <!-- ai_server_limits -->
+        <setTableRemarks tableName="ai_server_limits" remarks="The number of requests at once each AI server was found to handle, learned at run time and shared by the whole installation."/>
+        <setColumnRemarks tableName="ai_server_limits" columnName="learned_at" remarks="When the limit was last learned."/>
+        <setColumnRemarks tableName="ai_server_limits" columnName="learned_limit" remarks="The requests at once the server handles, between 1 and 64."/>
+        <setColumnRemarks tableName="ai_server_limits" columnName="server" remarks="The AI server as scheme, host and port only (no user name, no path), primary key."/>
+
+        <!-- branding_configurations -->
+        <setTableRemarks tableName="branding_configurations" remarks="Look of the user interface: names, colours and logos, one row per entity plus one installation-wide default row."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="accent_color" remarks="Main accent colour as a hex colour code, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="application_name" remarks="Application name shown in the interface, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="compact_logo" remarks="Small logo image used where space is tight, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="compact_logo_media_type" remarks="Media type of the compact logo image."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="favicon" remarks="Browser tab icon image, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="favicon_media_type" remarks="Media type of the favicon image."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="id" remarks="Primary key of the branding row."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="organization_name" remarks="Organisation name shown in the interface, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="page_title" remarks="Browser page title, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="primary_logo" remarks="Main logo image, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="primary_logo_media_type" remarks="Media type of the main logo image."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="secondary_color" remarks="Secondary colour as a hex colour code, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="short_name" remarks="Short application name for narrow places, empty for the default."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="tenant_id" remarks="The entity this branding is for, empty for the single installation-wide default row."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="updated_at" remarks="When the branding was last changed."/>
+        <setColumnRemarks tableName="branding_configurations" columnName="updated_by" remarks="Actor id of the person who last changed the branding."/>
+
+        <!-- capacity_maximums -->
+        <setTableRemarks tableName="capacity_maximums" remarks="IT's own upper limit per processing stage and for AI requests at once, for the whole installation, no row means no limit set."/>
+        <setColumnRemarks tableName="capacity_maximums" columnName="changed_at" remarks="When the maximum was last set."/>
+        <setColumnRemarks tableName="capacity_maximums" columnName="maximum" remarks="The maximum number at once, between 1 and 64."/>
+        <setColumnRemarks tableName="capacity_maximums" columnName="name" remarks="What the maximum applies to: TEXT, FIND, VISION, REDACT, EXPORT or AI, primary key."/>
+
+        <!-- dashboard_column_settings -->
+        <setTableRemarks tableName="dashboard_column_settings" remarks="Per-entity setup of the case list columns: which may be shown, which show by default and in what order."/>
+        <setColumnRemarks tableName="dashboard_column_settings" columnName="allowed_flag" remarks="Whether the column may be shown to users of the entity at all."/>
+        <setColumnRemarks tableName="dashboard_column_settings" columnName="column_key" remarks="Stable key of the case list column."/>
+        <setColumnRemarks tableName="dashboard_column_settings" columnName="default_visible_flag" remarks="Whether the column is shown when a user has not chosen otherwise."/>
+        <setColumnRemarks tableName="dashboard_column_settings" columnName="display_order" remarks="Position of the column in the list."/>
+        <setColumnRemarks tableName="dashboard_column_settings" columnName="id" remarks="Primary key of the column setting."/>
+        <setColumnRemarks tableName="dashboard_column_settings" columnName="tenant_id" remarks="The entity the setting belongs to."/>
+
+        <!-- databasechangelog -->
+        <setTableRemarks tableName="databasechangelog" remarks="(Liquibase) One row per changeset that has been applied to this database, used to decide which changesets still need to run."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="author" remarks="(Liquibase) Author attribute of the changeset."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="comments" remarks="(Liquibase) Comment text of the changeset, if any."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="contexts" remarks="(Liquibase) Contexts the changeset was limited to, if any."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="dateexecuted" remarks="(Liquibase) When the changeset was applied."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="deployment_id" remarks="(Liquibase) Id shared by all changesets applied in the same update run."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="description" remarks="(Liquibase) Generated summary of the changes in the changeset."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="exectype" remarks="(Liquibase) How the changeset was handled: EXECUTED, RERAN, SKIPPED, FAILED or MARK_RAN."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="filename" remarks="(Liquibase) Path of the changelog file that holds the changeset."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="id" remarks="(Liquibase) Id attribute of the changeset, unique together with author and filename."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="labels" remarks="(Liquibase) Labels the changeset carries, if any."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="liquibase" remarks="(Liquibase) Liquibase version that applied the changeset."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="md5sum" remarks="(Liquibase) Checksum of the changeset, used to detect a changeset edited after it ran."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="orderexecuted" remarks="(Liquibase) Order in which the changesets were applied."/>
+        <setColumnRemarks tableName="databasechangelog" columnName="tag" remarks="(Liquibase) Tag set on this point for rollback, if any."/>
+
+        <!-- databasechangeloglock -->
+        <setTableRemarks tableName="databasechangeloglock" remarks="(Liquibase) Single-row lock that stops two Liquibase runs from updating this database at the same time."/>
+        <setColumnRemarks tableName="databasechangeloglock" columnName="id" remarks="(Liquibase) Primary key of the lock row, always 1."/>
+        <setColumnRemarks tableName="databasechangeloglock" columnName="locked" remarks="(Liquibase) Whether a Liquibase run holds the lock now."/>
+        <setColumnRemarks tableName="databasechangeloglock" columnName="lockedby" remarks="(Liquibase) Host and address of the run that holds the lock."/>
+        <setColumnRemarks tableName="databasechangeloglock" columnName="lockgranted" remarks="(Liquibase) When the current lock was taken."/>
+
+        <!-- enterprise_identity_connection_history -->
+        <setTableRemarks tableName="enterprise_identity_connection_history" remarks="Retired record of changes to the old per-entity sign-in connections, kept as the only history of who changed them, no code reads or writes it."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="api_audience" remarks="The API audience the old connection expected in tokens."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="browser_client_id" remarks="The browser client id of the old connection, if it had one."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="change_type" remarks="What kind of change this row records on the old connection (to confirm)."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="changed_at" remarks="When the change was made."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="changed_by" remarks="Who made the change."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="configuration_version" remarks="Version of the old connection after the change."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="connection_id" remarks="Id of the old sign-in connection that was changed (its table is dropped)."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="history_id" remarks="Primary key of the history row."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="issuer_uri" remarks="The sign-in issuer address of the old connection."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="provider_id" remarks="The identity provider id of the old connection."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="provider_type" remarks="Provider type of the old connection: OIDC, SAML or LDAP_AD."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="status" remarks="Status of the old connection after the change: DRAFT, VALIDATED, ACTIVE or DISABLED."/>
+        <setColumnRemarks tableName="enterprise_identity_connection_history" columnName="tenant_id" remarks="The entity the old connection belonged to."/>
+
+        <!-- licence_metered_documents -->
+        <setTableRemarks tableName="licence_metered_documents" remarks="One row per document whose pages were counted for the licence, so each document is counted once, it outlives the document."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="document_id" remarks="The counted document, primary key, no foreign key so the row survives the document."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="package_id" remarks="The case the document belonged to."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="pages" remarks="Number of pages counted, always more than zero."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="processed_at" remarks="When the document was processed and counted."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="recorded_at" remarks="When the pages were put into the licence usage ledger, empty while that still waits."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="slot_id" remarks="The licence entity slot the usage was recorded against, empty while waiting."/>
+        <setColumnRemarks tableName="licence_metered_documents" columnName="tenant_id" remarks="The entity the document belonged to."/>
+
+        <!-- notification_mail_settings -->
+        <setTableRemarks tableName="notification_mail_settings" remarks="How an entity sends its notification e-mail, one row per entity, secrets are never stored here, only where they are kept."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="client_id" remarks="Application (client) id used to sign in to Microsoft 365, for that mode only."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="credential_type" remarks="How the Microsoft 365 application proves itself: SECRET or CERTIFICATE."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="directory_id" remarks="Microsoft 365 directory (tenant) id, for that mode only."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="enabled" remarks="Whether e-mail notifications are on for the entity."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="from_address" remarks="Sender e-mail address used for notifications."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="from_name" remarks="Sender display name used for notifications, if any."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="host" remarks="Mail server host name, for OWN_SERVER mode."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="mode" remarks="How mail is sent: MICROSOFT_365 or OWN_SERVER."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="port" remarks="Mail server port, for OWN_SERVER mode."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="secret_reference" remarks="Where the password, client secret or certificate is kept (an env or file reference), never the secret itself."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="security" remarks="Connection security to the mail server: STARTTLS, TLS or NONE."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="tenant_id" remarks="The entity the settings belong to, primary key."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="updated_at" remarks="When the settings were last saved."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="updated_by" remarks="Actor id of the person who last saved the settings."/>
+        <setColumnRemarks tableName="notification_mail_settings" columnName="username" remarks="Login name for the mail server or mailbox, if one is needed."/>
+
+        <!-- notification_people -->
+        <setTableRemarks tableName="notification_people" remarks="Who signed in with which roles in which entity, with the e-mail address the login system gave, used to choose notification recipients, never for access."/>
+        <setColumnRemarks tableName="notification_people" columnName="actor_id" remarks="Actor id of the person."/>
+        <setColumnRemarks tableName="notification_people" columnName="email" remarks="The verified e-mail address the login system gave at sign-in."/>
+        <setColumnRemarks tableName="notification_people" columnName="roles" remarks="The person's roles in the entity at the last sign-in, as a comma-delimited list."/>
+        <setColumnRemarks tableName="notification_people" columnName="seen_at" remarks="When the person last signed in, rows too old count for nothing and are removed."/>
+        <setColumnRemarks tableName="notification_people" columnName="tenant_id" remarks="The entity the roles are held in."/>
+
+        <!-- notification_published -->
+        <setTableRemarks tableName="notification_published" remarks="Notifications already sent once, so that several servers send each one only once, rows are removed after 3 days."/>
+        <setColumnRemarks tableName="notification_published" columnName="event_type" remarks="The notification event type that was sent."/>
+        <setColumnRemarks tableName="notification_published" columnName="item_id" remarks="Id of the item the notification was about, such as an audit record or an approval request."/>
+        <setColumnRemarks tableName="notification_published" columnName="published_at" remarks="When the notification was sent."/>
+        <setColumnRemarks tableName="notification_published" columnName="tenant_id" remarks="The entity the notification was for."/>
+
+        <!-- person_last_entity -->
+        <setTableRemarks tableName="person_last_entity" remarks="The entity each person worked in last, so the next sign-in lands there, a convenience that never gives access."/>
+        <setColumnRemarks tableName="person_last_entity" columnName="actor_id" remarks="Actor id of the person, primary key."/>
+        <setColumnRemarks tableName="person_last_entity" columnName="chosen_at" remarks="When the person last chose or switched to this entity."/>
+        <setColumnRemarks tableName="person_last_entity" columnName="tenant_id" remarks="The entity the person worked in last."/>
+
+        <!-- processing_incident_events -->
+        <setTableRemarks tableName="processing_incident_events" remarks="History of each processing incident, one privacy-safe row per step such as a failure, retry, hold or resolution."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="attempt_number" remarks="The processing attempt the event belongs to, if it applies."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="correlation_id" remarks="Correlation id that ties the event to the processing run and its logs."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="event_type" remarks="What happened, for example FAILURE_RECORDED, RETRY_SCHEDULED, INVESTIGATION_HOLD_APPLIED, RESOLVED or ESCALATED."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="id" remarks="Primary key of the event."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="incident_id" remarks="The incident the event belongs to."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="occurred_at" remarks="When the event happened."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="reason_code" remarks="Stable code for the reason of the event, if any."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="retryable" remarks="Whether the failure could be retried, if the event concerns a failure."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="safe_metadata" remarks="Extra privacy-safe details as JSON, never document content or protected values."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="scope" remarks="What the event applies to, PACKAGE (the whole case) or DOCUMENT."/>
+        <setColumnRemarks tableName="processing_incident_events" columnName="tenant_id" remarks="The entity the incident belongs to."/>
+
+        <!-- processing_incidents -->
+        <setTableRemarks tableName="processing_incidents" remarks="Technical failures seen while processing a case, kept privacy-safe for support, with their retry and resolution state."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="attempt_count" remarks="Number of processing attempts made so far."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="business_continuity_used" remarks="Whether the business continued the case another way while the incident was open."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="business_outcome" remarks="Progress of that business continuity: IN_PROGRESS, SUBMITTED or COMPLETED, empty if none."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="component" remarks="The technical component in which the failure happened."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="correlation_id" remarks="Correlation id of the processing run, to find its logs."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="document_id" remarks="The document that failed, empty when the incident concerns the whole case."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="failure_category" remarks="Broad category of the failure."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="first_observed_at" remarks="When the failure was first seen."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="id" remarks="Primary key of the incident."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="last_observed_at" remarks="When the failure was last seen."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="package_id" remarks="The case being processed."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="processing_fingerprint" remarks="Privacy-safe JSON description of the processing setup in use when the failure happened (to confirm)."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="reason_code" remarks="Stable code for the reason of the failure."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="resolved_at" remarks="When the incident was resolved or closed, empty while open."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="retryable" remarks="Whether the failure can be retried."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="safe_metadata" remarks="Extra privacy-safe details as JSON, never document content or protected values."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="safe_summary" remarks="Short privacy-safe summary of the failure for support."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="stage" remarks="The processing stage that failed, for example INTAKE, OCR, AI_ANALYSIS, REDACTION or VERIFICATION."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="status" remarks="State of the incident: OPEN, RETRY_SCHEDULED, INVESTIGATING, BUSINESS_CONTINUED, RESOLVED, AUTO_CLOSED or ESCALATED."/>
+        <setColumnRemarks tableName="processing_incidents" columnName="tenant_id" remarks="The entity the case belongs to."/>
+
+        <!-- processing_storage_assignments -->
+        <setTableRemarks tableName="processing_storage_assignments" remarks="Which processing storage is active, one row for the installation default and at most one override per entity."/>
+        <setColumnRemarks tableName="processing_storage_assignments" columnName="activated_at" remarks="When the storage was made active for this scope."/>
+        <setColumnRemarks tableName="processing_storage_assignments" columnName="activated_by" remarks="Actor id of the person who made it active, if known."/>
+        <setColumnRemarks tableName="processing_storage_assignments" columnName="id" remarks="Primary key of the assignment."/>
+        <setColumnRemarks tableName="processing_storage_assignments" columnName="provider_id" remarks="The processing storage made active."/>
+        <setColumnRemarks tableName="processing_storage_assignments" columnName="scope_key" remarks="What the assignment applies to: DEPLOYMENT for the default, or TENANT: followed by the entity id, unique."/>
+        <setColumnRemarks tableName="processing_storage_assignments" columnName="tenant_id" remarks="The entity of an override, empty for the installation default."/>
+
+        <!-- processing_storage_cycle_pins -->
+        <setTableRemarks tableName="processing_storage_cycle_pins" remarks="The processing storage fixed for one processing cycle of a case, so all of that cycle's files stay in one place."/>
+        <setColumnRemarks tableName="processing_storage_cycle_pins" columnName="created_at" remarks="When the storage was fixed for the cycle."/>
+        <setColumnRemarks tableName="processing_storage_cycle_pins" columnName="package_id" remarks="The case."/>
+        <setColumnRemarks tableName="processing_storage_cycle_pins" columnName="processing_cycle" remarks="The processing cycle number of the case, one more than its successful exports so far."/>
+        <setColumnRemarks tableName="processing_storage_cycle_pins" columnName="provider_id" remarks="The processing storage used for this cycle."/>
+        <setColumnRemarks tableName="processing_storage_cycle_pins" columnName="tenant_id" remarks="The entity the case belongs to."/>
+
+        <!-- processing_storage_node_validations -->
+        <setTableRemarks tableName="processing_storage_node_validations" remarks="The latest check by each running server of whether it can use a processing storage."/>
+        <setColumnRemarks tableName="processing_storage_node_validations" columnName="checked_at" remarks="When the server last checked the storage."/>
+        <setColumnRemarks tableName="processing_storage_node_validations" columnName="failure_code" remarks="Code for why the check failed, empty when healthy."/>
+        <setColumnRemarks tableName="processing_storage_node_validations" columnName="node_id" remarks="The server (node) that made the check."/>
+        <setColumnRemarks tableName="processing_storage_node_validations" columnName="process_instance_id" remarks="The running process on that server that made the check."/>
+        <setColumnRemarks tableName="processing_storage_node_validations" columnName="provider_id" remarks="The processing storage checked."/>
+        <setColumnRemarks tableName="processing_storage_node_validations" columnName="status" remarks="Result of the check: HEALTHY or UNHEALTHY."/>
+
+        <!-- processing_storage_nodes -->
+        <setTableRemarks tableName="processing_storage_nodes" remarks="Running servers and their last heartbeat, used to know which storage checks are current."/>
+        <setColumnRemarks tableName="processing_storage_nodes" columnName="heartbeat_at" remarks="When the server last reported it was alive."/>
+        <setColumnRemarks tableName="processing_storage_nodes" columnName="node_id" remarks="The server (node) id."/>
+        <setColumnRemarks tableName="processing_storage_nodes" columnName="process_instance_id" remarks="The running process on that server, a new one at every start."/>
+
+        <!-- processing_storage_providers -->
+        <setTableRemarks tableName="processing_storage_providers" remarks="Processing storage locations where working files of cases are kept, defined by IT."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="configuration_version" remarks="Version number taken from a shared sequence at each change of the storage."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="created_at" remarks="When the storage was defined."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="created_by" remarks="Actor id of the person who defined it, if known."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="id" remarks="Primary key of the storage."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="name" remarks="Name of the storage shown to IT."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="provider_type" remarks="Kind of storage: LOCAL_FILESYSTEM or SHARED_FILESYSTEM."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="root_path" remarks="The folder path at which the storage begins."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="status" remarks="Lifecycle of the storage: CANDIDATE, AVAILABLE or RETIRED."/>
+        <setColumnRemarks tableName="processing_storage_providers" columnName="updated_at" remarks="When the storage was last changed."/>
+
+        <!-- reporting_dimension_definitions -->
+        <setTableRemarks tableName="reporting_dimension_definitions" remarks="The case fields an entity chose as report breakdowns, with their label and order."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="definition_id" remarks="Id of the case field definition the breakdown uses."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="dimension_key" remarks="Stable key of the case field, unique per entity."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="dimension_label" remarks="Label of the breakdown shown in reports."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="display_order" remarks="Position of the breakdown in reports."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="enabled_flag" remarks="Whether the breakdown is in use."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="tenant_id" remarks="The entity the breakdown belongs to."/>
+        <setColumnRemarks tableName="reporting_dimension_definitions" columnName="updated_at" remarks="When the breakdown was last changed."/>
+
+        <!-- reporting_package_dimensions -->
+        <setTableRemarks tableName="reporting_package_dimensions" remarks="The value of each report breakdown for each case, captured for reports."/>
+        <setColumnRemarks tableName="reporting_package_dimensions" columnName="captured_at" remarks="When the value was captured."/>
+        <setColumnRemarks tableName="reporting_package_dimensions" columnName="dimension_key" remarks="Stable key of the breakdown (case field)."/>
+        <setColumnRemarks tableName="reporting_package_dimensions" columnName="dimension_label" remarks="Label of the breakdown at capture time."/>
+        <setColumnRemarks tableName="reporting_package_dimensions" columnName="dimension_value" remarks="The case field value shown in reports, never a sensitive value."/>
+        <setColumnRemarks tableName="reporting_package_dimensions" columnName="package_id" remarks="The case."/>
+        <setColumnRemarks tableName="reporting_package_dimensions" columnName="tenant_id" remarks="The entity the case belongs to."/>
+
+        <!-- reporting_package_events -->
+        <setTableRemarks tableName="reporting_package_events" remarks="Case events counted in reports, filled by database triggers: REPROCESS_REQUESTED and EXPORT_SUCCEEDED."/>
+        <setColumnRemarks tableName="reporting_package_events" columnName="created_at" remarks="When the row was written."/>
+        <setColumnRemarks tableName="reporting_package_events" columnName="event_id" remarks="Id of the source record (audit record or export record), unique per entity."/>
+        <setColumnRemarks tableName="reporting_package_events" columnName="event_type" remarks="The event: REPROCESS_REQUESTED or EXPORT_SUCCEEDED."/>
+        <setColumnRemarks tableName="reporting_package_events" columnName="occurred_at" remarks="When the event happened."/>
+        <setColumnRemarks tableName="reporting_package_events" columnName="package_id" remarks="The case."/>
+        <setColumnRemarks tableName="reporting_package_events" columnName="tenant_id" remarks="The entity the case belongs to."/>
+
+        <!-- reporting_package_facts -->
+        <setTableRemarks tableName="reporting_package_facts" remarks="One reporting row per case, kept up to date by database triggers and kept after the case is purged."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="active_processing_seconds" remarks="Total seconds spent in processing runs of the case."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="business_record_id" remarks="The business record the case points to, if any."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="created_at" remarks="When the row was written."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="document_count" remarks="Number of documents in the case."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="first_delivered_at" remarks="When the case was first delivered (exported)."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="first_review_completed_at" remarks="When a review of the case was first approved or rejected."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="first_review_created_at" remarks="When the first review task of the case was created."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="first_review_started_at" remarks="When a person first started reviewing the case."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="last_delivered_at" remarks="When the case was last delivered (exported)."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="last_observed_at" remarks="Last update time of the case as seen by reporting."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="last_reprocessed_at" remarks="When reprocessing of the case was last requested."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="package_id" remarks="The case, no foreign key so the row survives the case."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="package_purged_at" remarks="When the case files were purged, empty if not yet."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="package_type" remarks="How the case came in: MANUAL_UPLOAD, FOLDER_INTAKE, API_SUBMISSION or SCANNER_INTAKE."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="page_count" remarks="Total pages of the documents in the case."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="received_at" remarks="When the case was received."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="reprocess_count" remarks="Number of times reprocessing was requested."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="reviewed_flag" remarks="Whether the case went to manual review."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="source_deleted_at" remarks="When the case row itself was deleted, empty while it exists."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="status" remarks="The case status as last seen, for example SUBMITTED, PROCESSING, PENDING_REVIEW, COMPLETED, VAULTED, REJECTED or FAILED."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="successful_export_cycles" remarks="Number of successful deliveries (export cycles) of the case."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="tenant_id" remarks="The entity the case belongs to."/>
+        <setColumnRemarks tableName="reporting_package_facts" columnName="updated_at" remarks="When the row was last changed."/>
+
+        <!-- reporting_tenant_settings -->
+        <setTableRemarks tableName="reporting_tenant_settings" remarks="An entity's report targets (delivery, review pickup, straight-through) and its estimate of manual review time per page."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="delivery_target_minutes" remarks="Target time in minutes from receipt to delivery."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="delivery_target_percent" remarks="Share of cases that should meet the delivery target, in percent."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="minutes_per_page" remarks="Minutes a person would take to check one page by hand, used for the review time saved estimate, 0.5 to 30."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="review_wait_target_minutes" remarks="Target time in minutes for a review to be picked up."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="review_wait_target_percent" remarks="Share of reviews that should be picked up within the target, in percent (0 to 100)."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="straight_through_target_percent" remarks="Target share of cases finished with no person involved, in percent."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="tenant_id" remarks="The entity the settings belong to, primary key."/>
+        <setColumnRemarks tableName="reporting_tenant_settings" columnName="updated_at" remarks="When the settings were last changed."/>
+
+        <!-- tenant_capabilities -->
+        <setTableRemarks tableName="tenant_capabilities" remarks="Features switched on per entity, written with the V1 set when the entity is first activated."/>
+        <setColumnRemarks tableName="tenant_capabilities" columnName="capability" remarks="The feature, for example DOCUMENT_UPLOAD, OCR_PROCESSING, SENSITIVE_DATA_DETECTION, REDACTION, HUMAN_REVIEW, VAULT or AUDIT."/>
+        <setColumnRemarks tableName="tenant_capabilities" columnName="created_at" remarks="When the row was made."/>
+        <setColumnRemarks tableName="tenant_capabilities" columnName="id" remarks="Primary key of the row."/>
+        <setColumnRemarks tableName="tenant_capabilities" columnName="status" remarks="State of the feature: ENABLED, DISABLED, TRIAL or PENDING_CONFIGURATION."/>
+        <setColumnRemarks tableName="tenant_capabilities" columnName="tenant_id" remarks="The entity."/>
+        <setColumnRemarks tableName="tenant_capabilities" columnName="updated_at" remarks="When the row was last changed."/>
+
+        <!-- tenant_document_intelligence_policies -->
+        <setTableRemarks tableName="tenant_document_intelligence_policies" remarks="An entity's setting for optional adaptive document intelligence and which bundle of models and rules it uses."/>
+        <setColumnRemarks tableName="tenant_document_intelligence_policies" columnName="active_bundle_version" remarks="The intelligence bundle version in use for the entity."/>
+        <setColumnRemarks tableName="tenant_document_intelligence_policies" columnName="configuration_version" remarks="Version of the setting, raised at each change."/>
+        <setColumnRemarks tableName="tenant_document_intelligence_policies" columnName="last_known_good_bundle_version" remarks="The last bundle version known to work, used as the rollback target."/>
+        <setColumnRemarks tableName="tenant_document_intelligence_policies" columnName="mode" remarks="DISABLED (baseline only), OBSERVE (runs without affecting decisions) or ENABLED."/>
+        <setColumnRemarks tableName="tenant_document_intelligence_policies" columnName="tenant_id" remarks="The entity, primary key."/>
+        <setColumnRemarks tableName="tenant_document_intelligence_policies" columnName="updated_at" remarks="When the setting was last changed."/>
+
+        <!-- tenant_license_assignments -->
+        <setTableRemarks tableName="tenant_license_assignments" remarks="Retired: the entity's active licence from LexaVault's own former licensing, no code reads or writes it now."/>
+        <setColumnRemarks tableName="tenant_license_assignments" columnName="activated_at" remarks="When the licence was made active."/>
+        <setColumnRemarks tableName="tenant_license_assignments" columnName="activated_by" remarks="Actor id of the person who made it active."/>
+        <setColumnRemarks tableName="tenant_license_assignments" columnName="license_record_id" remarks="The installed licence record made active."/>
+        <setColumnRemarks tableName="tenant_license_assignments" columnName="tenant_id" remarks="The entity, primary key."/>
+
+        <!-- tenant_license_records -->
+        <setTableRemarks tableName="tenant_license_records" remarks="Retired: licences installed under LexaVault's own former licensing, no code reads or writes it now."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="id" remarks="Primary key of the licence record."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="installed_at" remarks="When the licence was installed."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="installed_by" remarks="Actor id of the person who installed it."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="license_id" remarks="Id of the licence, unique per entity."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="payload_sha256" remarks="SHA-256 hash of the licence content."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="signed_token" remarks="The signed licence as installed."/>
+        <setColumnRemarks tableName="tenant_license_records" columnName="tenant_id" remarks="The entity the licence was for."/>
+
+        <!-- tenant_lifecycle_policies -->
+        <setTableRemarks tableName="tenant_lifecycle_policies" remarks="An entity's retention times for internal working files and whether delivery needs a final approval."/>
+        <setColumnRemarks tableName="tenant_lifecycle_policies" columnName="final_approval_required" remarks="Whether a person must give final approval before a case is delivered."/>
+        <setColumnRemarks tableName="tenant_lifecycle_policies" columnName="never_exported_hold_hours" remarks="Hours a case that was never delivered is held before cleanup, 72 to 720, default 168."/>
+        <setColumnRemarks tableName="tenant_lifecycle_policies" columnName="original_retention_hours" remarks="Hours the original files are kept, default 24."/>
+        <setColumnRemarks tableName="tenant_lifecycle_policies" columnName="redacted_cache_hours" remarks="Hours the redacted files are kept internally after processing, 1 to 72, default 24."/>
+        <setColumnRemarks tableName="tenant_lifecycle_policies" columnName="tenant_id" remarks="The entity, primary key."/>
+        <setColumnRemarks tableName="tenant_lifecycle_policies" columnName="updated_at" remarks="When the policy was last changed."/>
+
+        <!-- tenant_oidc_group_grants -->
+        <setTableRemarks tableName="tenant_oidc_group_grants" remarks="Old per-entity rules mapping sign-in groups to roles, now read only by the one-off identity migration, sign-in uses the platform identity tables."/>
+        <setColumnRemarks tableName="tenant_oidc_group_grants" columnName="external_group" remarks="Group name from the login system, compared exactly."/>
+        <setColumnRemarks tableName="tenant_oidc_group_grants" columnName="issuer_uri" remarks="The sign-in issuer the group comes from."/>
+        <setColumnRemarks tableName="tenant_oidc_group_grants" columnName="product_role" remarks="The LexaVault role the group gives in the entity."/>
+        <setColumnRemarks tableName="tenant_oidc_group_grants" columnName="tenant_id" remarks="The entity the grant is for."/>
+
+        <!-- tenant_redaction_catalog -->
+        <setTableRemarks tableName="tenant_redaction_catalog" remarks="An entity's redaction catalog: one row per kind of sensitive item, with its switch and how it is covered."/>
+        <setColumnRemarks tableName="tenant_redaction_catalog" columnName="enabled" remarks="Whether this kind is found and redacted for the entity."/>
+        <setColumnRemarks tableName="tenant_redaction_catalog" columnName="kind_key" remarks="Stable name of the kind, for example SSN, DATE_OF_BIRTH or CREDIT_CARD_NUMBER."/>
+        <setColumnRemarks tableName="tenant_redaction_catalog" columnName="style" remarks="How a found value is covered: REMOVE_FULLY or KEEP_LAST_FOUR (never for locked items)."/>
+        <setColumnRemarks tableName="tenant_redaction_catalog" columnName="tenant_id" remarks="The entity."/>
+        <setColumnRemarks tableName="tenant_redaction_catalog" columnName="updated_at" remarks="When the row was last changed."/>
+
+        <!-- tenant_redaction_policies -->
+        <setTableRemarks tableName="tenant_redaction_policies" remarks="An entity's sensitive-data policy: review rules, thresholds and processing switches, one row per entity."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="auto_redact_threshold" remarks="Confidence from which a finding is redacted without manual review, 0 to 1."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="document_context_enabled" remarks="Whether the names search gets a short summary of the document and the case instructions, off by default."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="locked_items_on" remarks="False only for an entity from before the catalog whose policy was not saved since, locked items are always on now."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="mask_ssn_last_four" remarks="Whether the last four digits of a social security number stay visible, an older setting next to the catalog style."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="page_batch_overlap" remarks="Pages each batch shares with the next one, 0 to 20, default 2."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="page_batch_size" remarks="Pages per batch when large documents are split for text and find, 1 to 500, default 20."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="review_mode" remarks="Which findings go to manual review: UNCERTAIN_ONLY or REVIEW_ALL."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="searchable_redacted_pages" remarks="Whether redacted pages get an invisible text layer so they can be searched, on by default."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="second_check_enabled" remarks="Whether a second AI reads the finished file before it is kept, off by default."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="tenant_id" remarks="The entity, primary key."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="updated_at" remarks="When the policy was last changed."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="vision_enabled" remarks="Whether routed pages are read by the vision model, on by default."/>
+        <setColumnRemarks tableName="tenant_redaction_policies" columnName="vision_ocr_threshold" remarks="Text-reading confidence below which a page is routed to the vision model, 0.50 to 0.99, default 0.85."/>
+
+        <!-- tenant_regulation_packs -->
+        <setTableRemarks tableName="tenant_regulation_packs" remarks="The regulation packs in force for an entity, which explain why kinds are switched on."/>
+        <setColumnRemarks tableName="tenant_regulation_packs" columnName="pack_key" remarks="The pack: GLBA, PCI_DSS, HIPAA or FRCP_5_2."/>
+        <setColumnRemarks tableName="tenant_regulation_packs" columnName="tenant_id" remarks="The entity."/>
+        <setColumnRemarks tableName="tenant_regulation_packs" columnName="updated_at" remarks="When the row was last written."/>
+
+        <!-- tenants -->
+        <setTableRemarks tableName="tenants" remarks="LexaVault's own row per entity (a customer's business unit), mirrored from its platform entity slot at first activation."/>
+        <setColumnRemarks tableName="tenants" columnName="created_at" remarks="When the entity row was made."/>
+        <setColumnRemarks tableName="tenants" columnName="id" remarks="The entity id, the same as the platform entity UUID."/>
+        <setColumnRemarks tableName="tenants" columnName="name" remarks="Display name of the entity."/>
+        <setColumnRemarks tableName="tenants" columnName="slug" remarks="Short unique name of the entity derived from its slot."/>
+        <setColumnRemarks tableName="tenants" columnName="status" remarks="State of the entity: ACTIVE or SUSPENDED as mirrored, PROVISIONING and DEACTIVATED also exist."/>
+        <setColumnRemarks tableName="tenants" columnName="updated_at" remarks="When the row was last changed."/>
+        <setColumnRemarks tableName="tenants" columnName="version" remarks="Optimistic-lock version, raised on every update."/>
+
+        <!-- Only comments: nothing to undo. -->
+        <rollback/>
+    </changeSet>
+</databaseChangeLog>

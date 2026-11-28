@@ -24,8 +24,16 @@ public final class ListPackagesQueryService implements ListPackagesQuery {
     public ListPackagesQueryService withRejections(com.securedoc.platform.application.port.out.PackageRejectionRepository value){rejections=Objects.requireNonNull(value);return this;}
     @Override public List<PackageSummary> execute(AuthenticatedPrincipal principal,int offset,int limit){
         if(offset<0)offset=0;if(limit<=0)limit=20;if(limit>100)limit=100;
+        return summaries(principal,packageRepository.findByTenantId(principal.tenantId(),offset,limit));
+    }
+    /** Task 0111: the dashboard's list leaves out the cases it hides (cancelled, purged, expired); they stay in Reports. */
+    @Override public List<PackageSummary> executeForDashboard(AuthenticatedPrincipal principal,int offset,int limit){
+        if(offset<0)offset=0;if(limit<=0)limit=20;if(limit>100)limit=100;
+        return summaries(principal,packageRepository.findDashboardCases(principal.tenantId(),offset,limit));
+    }
+    private List<PackageSummary> summaries(AuthenticatedPrincipal principal,List<DocumentPackage> packages){
         List<com.documentplatform.fields.FieldDefinition> fields=caseFields.active(principal.tenantId());
-        return packageRepository.findByTenantId(principal.tenantId(),offset,limit).stream().map(pkg->new PackageSummary(
+        return packages.stream().map(pkg->new PackageSummary(
                 pkg.id(),pkg.packageType(),pkg.status(),identifiers(pkg,principal,fields),pkg.documentCount(),pkg.createdAt(),pkg.updatedAt(),
                 stopReasonCode(pkg,principal))).toList();
     }

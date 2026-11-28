@@ -320,6 +320,16 @@ public class ApplicationServiceConfig {
         return new DocumentStoreConnectionTestService(integrationConnectionService, documentStoreConnectionTestPort, auditService);
     }
 
+    /** Task 0111: cases without documents are closed as expired after this many days (default 7). */
+    @Bean
+    public com.securedoc.platform.application.lifecycle.service.EmptyCaseExpiryService emptyCaseExpiryService(
+            PackageRepository packageRepository, AuditService auditService,
+            PackageDashboardVisibilityPort packageDashboardVisibilityPort,
+            @org.springframework.beans.factory.annotation.Value("${securedoc.cases.empty-case-expiry-days:7}") int days) {
+        return new com.securedoc.platform.application.lifecycle.service.EmptyCaseExpiryService(packageRepository,
+                packageDashboardVisibilityPort, auditService, java.time.Duration.ofDays(days));
+    }
+
     @Bean
     public ExternalIntakeMaintenanceService externalIntakeMaintenanceService(
             ExternalIntakeRepository externalIntakeRepository,
